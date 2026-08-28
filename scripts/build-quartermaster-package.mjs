@@ -38,7 +38,7 @@ const PACKAGE_ID = "quartermaster";
 // live this session. Reset this to a clean starting version (0.1.0) in one
 // commit right before this is actually proposed; the intervening bumps are
 // disposable dev-iteration numbers, not real releases.
-const VERSION = "0.5.2";
+const VERSION = "0.6.0";
 // Declared against the exact staging Engine this scaffold was built and tested
 // against. Do not lower this to reach stable users — see CONTRIBUTING.md.
 const ENGINE_MIN = "2.4.4";
@@ -166,7 +166,11 @@ const manifest = {
   //   two — every other package in this repo ships exactly one; Memory Nag
   //   is the precedent for combining UI/storage identity and a real
   //   post_processing pipeline agent under that same single entry.
-  permissions: ["agent-runtime", "chat-read", "chat-write", "routes", "storage", "ui"],
+  // prompt-context: registerPromptContext (server.mjs) feeds a curated,
+  //   location-aware inventory summary to the NARRATOR every generation —
+  //   deliberately separate from agent-runtime's prepareContext, which feeds
+  //   the TRACKER AGENT its own prior state instead. See plan §16.5.
+  permissions: ["agent-runtime", "chat-read", "chat-write", "prompt-context", "routes", "storage", "ui"],
   // The routes permission forces this: getCapabilityPackageInstallIssue in the
   // Engine's package-manager.service.ts rejects install for any package that
   // declares "routes" but restartRequired: false — privileged routes only

@@ -19,6 +19,11 @@
 // entry). See reconcileTrackerOutput's own comment and plan §16 for the
 // design.
 //
+// Also registers a prompt-context contributor (inventorySummaryText) that
+// feeds a curated, location-aware inventory summary to the NARRATOR every
+// generation — separate from the agent's own prepareContext, which feeds the
+// TRACKER AGENT its prior state instead. Plan §16.5.
+//
 // location is one of:
 //   "bag"                 — carried, unequipped
 //   "equipped:<slot>"     — <slot> must be one of EQUIP_SLOTS
@@ -285,6 +290,41 @@ async function reconcileTrackerOutput(documents, persistState, chatId, ownerId, 
   await persistState(chatId, ownerId, state);
 }
 
+// The narrator-facing summary (plan §16.5) — deliberately separate from
+// computeAppearanceText/the {{getvar}} macro above, which stays equipped-only
+// for image generation. This one is location-aware (equipped/carried/stored
+// in one list, since item.location already encodes which) and includes only
+// what the narrator needs to write consistent prose: never reasoning, the
+// raw add/remove mechanics, or (once built) image-generation bookkeeping.
+// Returns null when there's nothing to say, so the prompt-context contributor
+// can skip contributing entirely rather than send an empty block.
+function inventorySummaryText(personaName, items) {
+  if (items.length === 0) return null;
+  const lines = [];
+
+  const equipped = equippedItemNamesText(items);
+  if (equipped) lines.push(`Equipped: ${equipped}`);
+
+  const nameWithQuantity = (item) => (item.quantity > 1 ? `${item.name} ×${item.quantity}` : item.name);
+
+  const carried = items.filter((item) => item.location === "bag");
+  if (carried.length > 0) lines.push(`Carrying: ${carried.map(nameWithQuantity).join(", ")}`);
+
+  const storedByLocation = new Map();
+  for (const item of items) {
+    if (!item.location.startsWith("stored:")) continue;
+    const label = item.location.slice("stored:".length);
+    if (!storedByLocation.has(label)) storedByLocation.set(label, []);
+    storedByLocation.get(label).push(item);
+  }
+  for (const [label, storedItems] of [...storedByLocation.entries()].sort((a, b) => a[0].localeCompare(b[0]))) {
+    lines.push(`Stored (${label}): ${storedItems.map(nameWithQuantity).join(", ")}`);
+  }
+
+  if (lines.length === 0) return null;
+  return `${personaName}'s inventory —\n${lines.join("\n")}`;
+}
+
 // One dynamic variable per owner (quartermaster_appearance_persona for now;
 // quartermaster_appearance_<characterId> once party support lands), written
 // via chatMeta.macroVariables so a user-placed {{getvar::...}} token in that
@@ -361,6 +401,17 @@ async function resolvePersonaAvatarUrl(persistence, resources, chatId) {
   const [persona] = await resources.listPersonas([chat.personaId]);
   const avatarPath = persona && persona.data && typeof persona.data.avatarPath === "string" ? persona.data.avatarPath : null;
   return avatarPath || null;
+}
+
+// Same resolution path as resolvePersonaAvatarUrl, for the prompt-context
+// summary's opening line — falls back to a generic label rather than failing
+// the whole contribution when there's no active persona to name.
+async function resolvePersonaName(persistence, resources, chatId) {
+  const chat = await persistence.getChat(chatId);
+  if (!chat || !chat.personaId) return "The persona";
+  const [persona] = await resources.listPersonas([chat.personaId]);
+  const name = persona && persona.data && typeof persona.data.name === "string" ? persona.data.name.trim() : "";
+  return name || "The persona";
 }
 
 async function saveInventoryState(documents, chatId, ownerId, state) {
@@ -441,6 +492,31 @@ export async function activate(context) {
       }
       return result;
     },
+  });
+
+  // The curated narrator feed (plan §16.5) — separate from, and narrower
+  // than, agent-runtime's prepareContext above: that one feeds the TRACKER
+  // AGENT its own prior state so it can decide what changed; this feeds the
+  // NARRATOR a short, location-aware summary so prose stays consistent with
+  // what's actually equipped/carried. Runs unconditionally on every
+  // generation (registerPromptContext, not gated behind the agent being
+  // enabled) — contributes nothing when the owner has no items yet.
+  // provides.inventory:true hands us the built-in [inventory:] block/command
+  // instead of running both side by side.
+  const releasePromptContext = api.registerPromptContext(async ({ chatId, mode }) => {
+    if (mode !== "roleplay" || !chatId) return null;
+    try {
+      const state = await loadInventoryState(documents, chatId, QM_TRACKER_OWNER_ID);
+      // Skip the persona lookup entirely when there's nothing to report yet —
+      // this runs on every generation, not just once.
+      if (state.items.length === 0) return null;
+      const personaName = await resolvePersonaName(persistence, resources, chatId);
+      const text = inventorySummaryText(personaName, state.items);
+      if (!text) return null;
+      return { text, provides: { inventory: true } };
+    } catch {
+      return null;
+    }
   });
 
   const releaseRoutes = await api.registerPrivilegedRoutes(
@@ -648,5 +724,6 @@ export async function activate(context) {
   return () => {
     releaseRoutes();
     releaseAgentRuntime();
+    releasePromptContext();
   };
 }
