@@ -301,7 +301,7 @@ The window matters at both ends. World-derived ids — a discovered sub-zone, a 
 
 ### P4a. The quest-system REVISIT *(maintainer ruling, 2026-08-25 — scheduled, not open)*
 
-**What:** a second pass over the whole quest layer, deliberately scheduled rather than left to drift, **when three things exist that do not exist yet**: more skills than the one 0.12 shipped, collectible resources worth carrying, and NPCs fleshed out enough to want something specific from a specific person. Today's realistic quest space is fishing plus fetch-and-deliver, which is exactly the shipped verb set — the layer is not thin by oversight, it is as wide as the world under it.
+**What:** a second pass over the whole quest layer, deliberately scheduled rather than left to drift, **when three things exist that do not exist yet**: more skills than the one 0.12 shipped, collectible resources worth carrying, and NPCs fleshed out enough to want something specific from a specific person. Today's realistic quest space is fishing, fetch-and-deliver and go-and-see, which is exactly the shipped verb set — the layer is not thin by oversight, it is as wide as the world under it.
 
 **The item the revisit owns first: `deliver` stops being an errand.** It is an errand today because **no quest-item type exists** and inventing one for a word would be a format change nothing else asks for — so no object moves, and what is delivered is word. **`deliver` stays an ERRAND until collectibles exist**, and item-carrying is part of the revisit rather than a fix that can be brought forward. The rest of the revisit is whatever the three preconditions make askable: a skill quest that is not a fishing quest, a fetch that fetches something, a giver who wants it because of who they are.
 
