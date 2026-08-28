@@ -37,7 +37,7 @@ const PACKAGE_ID = "quartermaster";
 // live this session. Reset this to a clean starting version (0.1.0) in one
 // commit right before this is actually proposed; the intervening bumps are
 // disposable dev-iteration numbers, not real releases.
-const VERSION = "0.4.1";
+const VERSION = "0.5.0";
 // Declared against the exact staging Engine this scaffold was built and tested
 // against. Do not lower this to reach stable users — see CONTRIBUTING.md.
 const ENGINE_MIN = "2.4.4";
@@ -157,7 +157,12 @@ const manifest = {
   //   via updateChatMetadata, so a user-placed {{getvar::...}} token in the
   //   appearance field resolves to the current outfit/equipped items.
   // ui: the roleplay-tracker/tracker-panel client contribution.
-  permissions: ["chat-read", "chat-write", "routes", "storage", "ui"],
+  // agent-runtime: registers "agent-runtime:quartermaster" (server.mjs) so the
+  //   "quartermaster-tracker" pipeline agent's output reconciles into our own
+  //   store instead of native game-state — required by
+  //   assertCapabilityAgentRuntimeServiceRegistration, confirmed against
+  //   capability-agent-runtime.service.ts this session.
+  permissions: ["agent-runtime", "chat-read", "chat-write", "routes", "storage", "ui"],
   // The routes permission forces this: getCapabilityPackageInstallIssue in the
   // Engine's package-manager.service.ts rejects install for any package that
   // declares "routes" but restartRequired: false — privileged routes only

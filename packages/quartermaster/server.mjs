@@ -5,10 +5,14 @@
 //
 // v1 slice: a flat item list for the persona only (name, description,
 // quantity, location), a fixed equip-slot vocabulary, and saved outfits
-// (named snapshots of the equip-slot state). appearanceFeedMode is stored
-// here but not yet acted on — that's the next step, once there's a real
-// outfit description to actually feed into a {{getvar}} appearance macro.
-// No images, locks, or party members yet.
+// (named snapshots of the equip-slot state). No images, locks, or party
+// members yet.
+//
+// Also wires up the "quartermaster-tracker" pipeline agent (agents.json): a
+// post_processing LLM call that reads each turn's narration and returns a
+// full-snapshot description of the owner's current items/equip state, which
+// reconcileTrackerOutput turns into real mutations against this same store —
+// see that function's own comment and plan §16 for the design.
 //
 // location is one of:
 //   "bag"                 — carried, unequipped
@@ -84,9 +88,11 @@ function inventoryDocId(chatId, ownerId) {
   return `${chatId}:${ownerId}`;
 }
 
+// 0 is a valid quantity — "used up but still tracked" (plan §16.3) — so this
+// only rejects genuinely invalid input (non-numeric, negative), not zero.
 function normalizeQuantity(value) {
   const quantity = Math.trunc(Number(value));
-  return Number.isFinite(quantity) && quantity > 0 ? quantity : 1;
+  return Number.isFinite(quantity) && quantity >= 0 ? quantity : 1;
 }
 
 function normalizeText(value, maxLength) {
@@ -173,6 +179,105 @@ function computeAppearanceText(state) {
     return equippedItemNamesText(state.items);
   }
   return "";
+}
+
+// ── Agent-driven inventory sync (plan §16) ──────────────────────────────────
+// A post_processing tracker agent (agents.json's "quartermaster-tracker")
+// reads each turn's narration and returns a full-snapshot JSON description of
+// what the owner currently has/wears. reconcileTrackerOutput (wired up in
+// activate() via the agent-runtime capability) turns that into real mutations
+// against this same persisted state, through the same applyLocation/
+// persistState paths the HTTP routes use — so a change made by the agent and
+// a change made by clicking around the dock are indistinguishable afterward.
+//
+// v1 is persona-only (QM_TRACKER_OWNER_ID is a reserved sentinel, matching
+// the extension's player-subject "id: player" and Character Tracker's own
+// convention of keeping the player out of presentCharacters), but this
+// function takes ownerId as a real parameter rather than assuming it, so
+// adding party members later is a call-site change, not a rewrite.
+const QM_TRACKER_OWNER_ID = "persona";
+
+// Case/separator-insensitive only — "Blue Hat" and "blue-hat" are the same
+// item, but "Blue Hat" and "Hat" are never merged automatically. Matching on
+// meaning (not just formatting) would risk silently merging visually-distinct
+// items once per-item images exist (plan §16.3).
+function qmNormalizeMatchKey(name) {
+  return typeof name === "string" ? name.trim().toLowerCase().replace(/[-_\s]+/g, "") : "";
+}
+
+// Reconciles one tracker-agent turn's raw JSON output into the owner's
+// canonical inventory. `persistState` is passed in rather than imported,
+// since it's a closure defined in activate() (it also syncs the appearance
+// macro — see persistState's own definition there).
+//
+// Full-snapshot semantics, matching every other tracker in this ecosystem
+// (Inventory Tracker/Character Tracker/World State, per plan §16.2/16.3): an
+// item not present in `data.items` this turn is removed. `equipOutfit`, when
+// it matches a saved outfit, is authoritative for equip state and overrides
+// any "equipped:<slot>" location on that outfit's own items — the outfit is
+// the whole point of the shortcut, so its items are also exempt from the
+// full-snapshot deletion rule even if the agent doesn't re-list them.
+async function reconcileTrackerOutput(documents, persistState, chatId, ownerId, data) {
+  if (!data || typeof data !== "object" || Array.isArray(data)) return;
+  const state = await loadInventoryState(documents, chatId, ownerId);
+
+  let outfit = null;
+  if (typeof data.equipOutfit === "string" && data.equipOutfit.trim()) {
+    const key = qmNormalizeMatchKey(data.equipOutfit);
+    outfit = state.outfits.find((candidate) => qmNormalizeMatchKey(candidate.name) === key) || null;
+  }
+  const outfitItemIds = outfit ? new Set(Object.values(outfit.slots)) : null;
+  const seenIds = new Set();
+  if (outfit) {
+    for (const item of state.items) {
+      if (item.location.startsWith("equipped:")) item.location = "bag";
+    }
+    for (const [slot, itemId] of Object.entries(outfit.slots)) {
+      if (!slotGroupVisible(slot, state)) continue;
+      const item = state.items.find((candidate) => candidate.id === itemId);
+      if (item) {
+        item.location = `equipped:${slot}`;
+        seenIds.add(item.id);
+      }
+    }
+  }
+
+  const entries = Array.isArray(data.items) ? data.items : [];
+  for (const entry of entries) {
+    if (!entry || typeof entry !== "object") continue;
+    const name = normalizeText(entry.name, MAX_ITEM_NAME_LENGTH);
+    if (!name) continue;
+    const key = qmNormalizeMatchKey(name);
+
+    let item = state.items.find((candidate) => qmNormalizeMatchKey(candidate.name) === key);
+    if (!item) {
+      item = { id: randomUUID(), name, description: "", quantity: 1, location: "bag", defaultSlot: null };
+      state.items.push(item);
+    }
+    seenIds.add(item.id);
+
+    if (entry.description !== undefined) item.description = normalizeText(entry.description, MAX_ITEM_DESCRIPTION_LENGTH);
+    if (entry.quantity !== undefined) item.quantity = normalizeQuantity(entry.quantity);
+
+    // An item the active outfit already placed keeps that placement,
+    // regardless of what this entry's own location says — the outfit is
+    // authoritative (see the file comment above).
+    if (outfitItemIds && outfitItemIds.has(item.id)) continue;
+    const rawLocation = typeof entry.location === "string" ? entry.location : "bag";
+    const location = normalizeLocation(rawLocation, state);
+    if (location !== null) applyLocation(state.items, item, location);
+  }
+
+  // Full snapshot: anything not re-stated (or covered by the active outfit)
+  // this turn is gone.
+  state.items = state.items.filter((item) => seenIds.has(item.id));
+  for (const savedOutfit of state.outfits) {
+    for (const [slot, itemId] of Object.entries(savedOutfit.slots)) {
+      if (!state.items.some((item) => item.id === itemId)) delete savedOutfit.slots[slot];
+    }
+  }
+
+  await persistState(chatId, ownerId, state);
 }
 
 // One dynamic variable per owner (quartermaster_appearance_persona for now;
@@ -294,6 +399,44 @@ export async function activate(context) {
     await saveInventoryState(documents, chatId, ownerId, state);
     await syncAppearanceMacro(persistence, chatId, ownerId, state);
   }
+
+  // Wires the "quartermaster-tracker" pipeline agent (agents.json) to this
+  // package's own store — see reconcileTrackerOutput's own comment. Keyed
+  // "agent-runtime:<packageId>" per the capability-agent-runtime contract;
+  // requires the "agent-runtime" permission in the manifest.
+  //
+  // prepareContext hands the owner's CURRENT persisted items back into the
+  // agent's own prompt (via <agent_runtime_context>, referenced in the
+  // prompt template) — sourced from our own canonical store rather than
+  // depending on the engine's generic committed-tracker-state carryback,
+  // which isn't confirmed to apply to third-party packages (plan §16.7).
+  const releaseAgentRuntime = api.registerService(`agent-runtime:${PACKAGE_ID}`, {
+    async prepareContext({ context }) {
+      if (context.chatMode !== "roleplay") return null;
+      const state = await loadInventoryState(documents, context.chatId, QM_TRACKER_OWNER_ID);
+      return {
+        items: state.items.map((item) => ({
+          name: item.name,
+          description: item.description || undefined,
+          quantity: item.quantity,
+          location: item.location,
+        })),
+        outfits: state.outfits.map((outfit) => outfit.name),
+      };
+    },
+    async finalizeResult({ context, result }) {
+      if (context.chatMode === "roleplay" && result?.success && result.data && typeof result.data === "object") {
+        try {
+          await reconcileTrackerOutput(documents, persistState, context.chatId, QM_TRACKER_OWNER_ID, result.data);
+        } catch {
+          // A bad or malformed turn must never break generation — the next
+          // turn's full-snapshot output self-corrects, same as every other
+          // tracker in this ecosystem tolerates an occasional bad response.
+        }
+      }
+      return result;
+    },
+  });
 
   const releaseRoutes = await api.registerPrivilegedRoutes(
     async (routes) => {
@@ -499,5 +642,6 @@ export async function activate(context) {
 
   return () => {
     releaseRoutes();
+    releaseAgentRuntime();
   };
 }

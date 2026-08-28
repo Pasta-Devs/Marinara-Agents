@@ -1,4 +1,4 @@
-// Quartermaster 0.4.1 — Marinara Engine roleplay-tracker capability (single-file client bundle)
+// Quartermaster 0.5.0 — Marinara Engine roleplay-tracker capability (single-file client bundle)
 // Built from packages/quartermaster/src (6 modules) by scripts/build-quartermaster-package.mjs. Do not edit; edit src/ and rebuild.
 (() => {
 "use strict";
@@ -1763,7 +1763,10 @@ QM.dock = {
 
     const quantityInput = QM.smallInput("input");
     quantityInput.type = "number";
-    quantityInput.min = "1";
+    // 0 is a legitimate quantity now ("used up but still tracked" — the same
+    // rule the tracker agent follows, plan §16.3), so this no longer floors
+    // at 1 the way a brand-new item's starting quantity still does.
+    quantityInput.min = "0";
     quantityInput.value = String(item.quantity);
     quantityInput.style.width = "48px";
     quantityInput.addEventListener("change", () => QM.state.updateItem(item.id, { quantity: quantityInput.value }));
