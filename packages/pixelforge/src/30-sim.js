@@ -596,9 +596,22 @@ PF.Sim = class {
     }
     // THE WRAP-UP TELL, LAST IN THE JOIN — which puts it after the persona part
     // and before the sender's own action text, where the plan asks for it (§2.6).
-    // It is also the ONLY part of any turn a fishing word can reach the GM
-    // through (M10 as amended): the verb narrates nothing, files ledger lines,
-    // and those lines are told here or not at all.
+    // It is also the ONLY part of any turn a fishing OR A QUEST word can reach
+    // the GM through (M10 as amended, extended by 0.13 §2.5): neither verb family
+    // narrates anything, both file ledger lines, and those lines are told here or
+    // not at all.
+    //
+    // THE QUEST FAMILY WIDENS THE GM-INVISIBLE VERB GAP, and that is worth
+    // stating rather than leaving to be noticed (P7's roadmap enumeration is
+    // where it is tracked). The GM can neither MINT a quest nor PAY one out: the
+    // board is a package fixture reading a sealed pack, the completion pays from
+    // a table this package owns, and nothing in a turn asks the narrator's
+    // permission for either. What the narrator gets is the same day-grain
+    // history the fishing verb gives it — past tense, after the fact, at the
+    // wrap-up boundary Ruling 1 set — and that is deliberately the whole
+    // channel. The one exception is the exception that proves it: a `deliver`
+    // errand finishes on a turn the player was sending anyway, and even then
+    // what the GM sees is a greeting, not a handover.
     const ledger = this._composeLedger();
     if (ledger) parts.push(ledger.text);
     // The ephemeral half of the flush, handed to the sender rather than stored:

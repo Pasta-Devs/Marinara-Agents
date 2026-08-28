@@ -1468,10 +1468,28 @@ intervening staging WIDENS the window, which is a fresh tell carrying the lost o
 divergence.
 
 **Position in the prompt:** last in the compose join — after the persona part, before the sender's
-own action text. It is also **the only part of any turn a fishing word can reach the GM through**
-(maintainer amendment): the verb narrates nothing and files ledger lines, and those lines are told
-here or not at all. Note the honest scope of that claim: it is about **package-authored**
-vocabulary. A brief a player wrote fishing into is theirs, and out of package control.
+own action text. It is also **the only part of any turn a fishing word — or a quest word — can reach
+the GM through** (maintainer amendment, extended when the quest layer landed): neither verb family
+narrates anything, both file ledger lines, and those lines are told here or not at all. Note the
+honest scope of that claim: it is about **package-authored** vocabulary. A brief a player wrote
+fishing or a job board into is theirs, and out of package control.
+
+**The quest family widens the GM-invisible verb gap**, and the honest statement of it is that the GM
+can neither *mint* a quest nor *pay one out*. The board is a package fixture reading a sealed content
+pack; the completion pays from a table this package owns; nothing in a turn asks the narrator's
+permission for either. What the narrator gets is exactly what the fishing verb gives it — past-tense,
+day-grain history at the wrap-up boundary — and that is deliberately the whole channel, not a first
+instalment. The one exception proves the rule: a `deliver` errand finishes on a turn the player was
+sending anyway, and even then what the GM sees is a greeting rather than a handover. The roadmap's
+P7 entry is where the widening gap is tracked.
+
+**The line grammar** (what a quest may put in front of the narrator): a fixed per-theme scaffold with
+slots drawn from **sealed facts only** — the giver's name, the place or zone name, a count, the
+template's title from the pack, the reward — always **past tense**, because the tell is day-grain
+history rather than a report on now ("walked out to The Wood for Ivy", never "Ivy is waiting in The
+Wood"). Names are **known-cast-guarded** at the moment the line is written and the clause is dropped
+on a miss, so a line can never name somebody this world cannot stand up. The covenant is the short
+version: sealed mechanical facts in, invented dialogue and motive out.
 
 **Concurrent senders can tell the same wrap-up twice** in one history — Travel composes and awaits,
 Talk slips into the window and composes the same tell, both accepted. Harmless: both selected over

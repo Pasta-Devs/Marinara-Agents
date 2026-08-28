@@ -16267,6 +16267,34 @@ await withSavePath(async ({ calls, behavior, makeCore }) => {
       );
     }
 
+    // ── AND M10 EXTENDS TO THE QUEST FAMILY (0.13 §2.5) ───────────────────────
+    // Same claim, same shape, one release later: the board narrates nothing and
+    // takes no receipt turn either. A quest word reaches the GM through the
+    // wrap-up or not at all — which is what makes "the GM can neither mint a
+    // quest nor pay one out" a statement about the wire rather than a policy.
+    {
+      const quiet = staged({
+        owed: 0,
+        day: 6,
+        lines: [
+          [5, "Took work from Mira: One good fish."],
+          [5, "Filled Mira's board order — 12 coins."],
+          [5, "Walked out to The Wood for Ivy — 6 coins."],
+        ],
+      });
+      assert.equal(quiet.sim.composePrefix(null), quiet.sim.header(), "nothing owed, so the board said nothing");
+      quiet.sim.intro.ledgerOwed = 5; // what a sleep stages
+      const after = quiet.sim.composePrefix(null);
+      const wrap = after.slice(after.indexOf("[Wrap-up"));
+      for (const word of ["Took work from Mira", "Filled Mira's board order", "Walked out to The Wood"]) {
+        assert.ok(after.includes(word), `after the sleep, "${word}" is in the tell`);
+        assert.ok(wrap.includes(word), `…and inside the wrap-up part, which is the only part that carries it`);
+      }
+      // …AND THE HEADER IS STILL JUST THE WORLD. Nothing about a job list leaks
+      // into the part of the prefix every single turn carries.
+      assert.ok(!/quest|job|board|order/i.test(quiet.sim.header()), `the header says none of it (${quiet.sim.header()})`);
+    }
+
     // ── TRUNCATION DROPS THE NEWEST DAYS, AND THE BURN FOLLOWS IT ─────────────
     // Whole days or none. The tell renders oldest-first until the next day would
     // put it over `ledgerTellChars`, then stops — and the burn advances only
@@ -18347,6 +18375,84 @@ const fire = (node, type) => Promise.all((node.listeners[type] ?? []).map((fn) =
   }
 }
 
+// ── THE REFUSAL MAP IS COMPLETE, AND ONE OF ITS VALUES IS THE BOARD'S OWN ───
+// Slice 3 filed `unknown-id` with the surfaces the board cannot reach. The board
+// reaches it whenever a row leaves quests.active while the menu is standing open
+// — a mint severance parking it, the repair pass dropping a dangling row, a
+// rebuild landing between the draw and the press — and the generic fall-through
+// then answered a vanished ROW with a sentence about the BOARD.
+{
+  const P = loadedPF.player;
+  const pack = loadedPF.pack;
+  const realSetTimeout = globalThis.setTimeout;
+  const realClearTimeout = globalThis.clearTimeout;
+  globalThis.setTimeout = () => 0;
+  globalThis.clearTimeout = () => {};
+  loadedPF.save.reset();
+  loadedPF.spatial.reset();
+  try {
+    const w = world.build(7, "cozy-village", null);
+    const sim = new loadedPF.Sim(w);
+    const core = {
+      chatId: "chat-board-vanish",
+      sim,
+      host: { chatMeta: {} },
+      interact() {},
+      setMode() {},
+      resume() {},
+      markDirty() {},
+    };
+    core.hud = new loadedPF.Hud(new FakeNode("div"), core);
+    const hud = core.hud;
+    const board = w.zones.village.features.find((row) => row.id === loadedPF.world.BOARD_FEATURE_ID);
+    sim.teleport("village", board.rect.x, board.rect.y + 1);
+    sim.step(0, {});
+    hud.update();
+    const offer = pack.boardOffers(core).offers.find((row) => row.state === "open");
+    assert.equal(pack.accept(core, offer.template.id).ok, true, "a job is taken on");
+    const row = P.get(core).quests.active[0];
+    P.quest(core, "progress", { id: row.id, by: row.n });
+    hud.toggleBoard();
+    const handIn = hud.boardMenu.children.find((node) => String(node.textContent).includes("hand it in"));
+    assert.ok(handIn, "the board is showing it as ready to hand in");
+    // AND NOW IT GOES, behind the open menu's back — which is what a severance,
+    // a repair drop and a rebuild all look like from here.
+    P.get(core).quests.active.length = 0;
+    await fire(handIn, "click");
+    assert.equal(
+      hud.toastEl.textContent,
+      "That job is no longer on your list.",
+      "the press answers for the ROW that vanished, not for the board it was on",
+    );
+    assert.notEqual(
+      hud.toastEl.textContent,
+      hud.boardRefusal("something-else-entirely"),
+      "…which is the fall-through it used to take",
+    );
+    // AND THE MENU REDREW ITSELF around the loss rather than sitting on a stale list.
+    assert.ok(
+      !hud.boardMenu.children.some((node) => String(node.textContent).includes("hand it in")),
+      "…and the row it was drawing is gone from the list",
+    );
+    // THE LAST VALUE IN THE ENUMERATION, whose surface is the NEXT slice's: the
+    // mutator has refused unknown ids since 0.11, and the sentence ships with the
+    // rest of the map rather than trailing the tab that will press it. Read
+    // straight off the map, because there is no abandon affordance to drive here
+    // and a lane that invented one would be pinning a surface that does not exist.
+    assert.equal(hud.boardRefusal("abandon-unknown"), "That job is no longer on your list.", "abandon-unknown reads");
+    assert.notEqual(
+      hud.boardRefusal("abandon-unknown"),
+      hud.boardRefusal("something-else-entirely"),
+      "…as its own sentence rather than the generic one",
+    );
+  } finally {
+    globalThis.setTimeout = realSetTimeout;
+    globalThis.clearTimeout = realClearTimeout;
+    loadedPF.save.reset();
+    loadedPF.spatial.reset();
+  }
+}
+
 // ═══ THE VERB SITES (0.13 slice 4) ══════════════════════════════════════════
 // Progress is EVENT-DRIVEN at the verbs (plan §2.3) and never a sweep, never a
 // pouch read, never a grant() hook: the pouch is world-free and compose is pure,
@@ -18695,6 +18801,36 @@ const fire = (node, type) => Promise.all((node.listeners[type] ?? []).map((fn) =
       filedSoFar,
       "…and files nothing either: the rows it would have answered are gone",
     );
+
+    // ── A NAME THE WORLD CANNOT STAND UP IS DROPPED, NOT PRINTED ─────────────
+    // The line grammar's covenant (§2.5): slots come from sealed facts, and a
+    // giver clause is known-cast-guarded at the moment the line is written. A
+    // wrap-up reads these out as history, so a name this world cannot resolve
+    // would be the GM told a fact about somebody who is not there.
+    {
+      assert.equal(
+        P.quest(core, "accept", {
+          id: "b1.d4.ghost",
+          g: `${w.startZone}|Nobody At All`,
+          verb: "visit",
+          target: "wilds",
+          n: 1,
+          r: { money: 6, xp: 0 },
+          day: sim.day,
+        }),
+        true,
+        "a walk from a giver nobody stands up is taken on",
+      );
+      const held = P.get(core).pouch.money;
+      walkThrough("z1", toWood);
+      assert.equal(active().length, 0, "the walk completes all the same");
+      assert.equal(P.get(core).pouch.money, held + 6, "…and pays: the work was done, whoever asked for it");
+      const line = lines().at(-1)[1];
+      assert.ok(!line.includes("Nobody At All"), `…and the line names nobody it cannot stand up (${line})`);
+      assert.ok(line.includes("The Wood"), "…while still saying where the player went");
+      assert.equal(P.get(core).rel[w.startZone]?.["Nobody At All"], undefined, "…and no rapport row was minted");
+      walkThrough("z3", backHome);
+    }
 
     // ── AND THE DRIFT ARM, WHICH IS THE OTHER CALLER ─────────────────────────
     // The GM moved the party. An arrival narrated is an arrival: the player is
@@ -22978,6 +23114,136 @@ const fire = (node, type) => Promise.all((node.listeners[type] ?? []).map((fn) =
     assert.ok(!note.includes("exactly as you left it"), "…while never claiming the chat is untouched");
     assert.notEqual(note, loadedPF.save.gateStageNote("pack"), "the two stages are two sentences");
   }
+}
+
+// ── THE STARTING PURSE PAYS ONCE ACROSS A FAILURE, A RETRY AND A DAY'S PLAY ─
+// Plan §2.2(a). The purse is a property of STATE and not of an instant, and the
+// two-call gate is what nearly cost it: a world that gates for a pack, fails,
+// retries and lifts arrives at play through a door neither of the original two
+// purse sites stands at. Once the first coin is earned or spent the untouched
+// predicate refuses forever, so a purse missed at the lift is a purse missed for
+// the life of the save — and a purse paid TWICE is worse, because nothing after
+// it can tell the difference.
+//
+// Driven end to end rather than by calling the predicate: it is the SEQUENCE
+// that was wrong, not the test inside it.
+{
+  const P = loadedPF.player;
+  const purseBrief = loadedPF.brief.validate(
+    {
+      scale: "village",
+      name: "Pursemere",
+      prosperity: "modest",
+      features: [{ tag: "water-feature", name: "The Millpond" }],
+      cast: [
+        { name: "Perrin Quill", role: "innkeep", kind: "host", tint: "amber", home: "Pursemere", household: 1 },
+        { name: "Wren Ash", role: "miller", kind: "maker", tint: "teal", home: "Pursemere", household: 2 },
+      ],
+    },
+    { theme: "cozy-village", seed: 4242 },
+  );
+  const cast = purseBrief.cast.map((member) => member.name);
+  const whole = {
+    status: 200,
+    body: {
+      ok: true,
+      data: {
+        templates: Array.from({ length: 6 }, (_, i) => ({
+          slug: `w${i}`,
+          giver: cast[i % cast.length],
+          verb: "visit",
+          target: { place: "wilds" },
+          n: 1,
+          title: `Walk out, number ${i}`,
+        })),
+        lines: Array.from({ length: 40 }, (_, i) => ({
+          at: "settlement",
+          when: "day",
+          r: "stranger",
+          text: `A line somebody says, number ${i}.`,
+        })),
+      },
+    },
+  };
+  const meta = {
+    gameSetupConfig: { experienceConfig: { generate: true, seed: 4242, theme: "cozy-village", packWanted: true } },
+    pixelforgeBrief: purseBrief,
+    pixelforgePackWanted: true,
+  };
+  const purseLines = (core) =>
+    P.get(core).ledger.lines.filter(([, text]) => text.includes("Arrived with")).length;
+
+  await withSavePath(async ({ behavior, tick, makeCore }) => {
+    await withGeneration(async ({ responses, postCount }) => {
+      loadedPF.save._packCache.clear();
+      loadedPF.save._packSeenInMeta.clear();
+      loadedPF.save._packWantedSealed.clear();
+      try {
+        behavior.get = async () => ({ available: true, status: 200, body: { exists: false } });
+        // THE FAILURE: a network verdict, so nothing is sealed and the retry is
+        // free — the shape a real player hits, rather than a thin answer.
+        responses.post = async () => {
+          throw new TypeError("network");
+        };
+        const core = makeCore("chat-purse-retry", 4242);
+        core.host.chatMeta = meta;
+        core.sim = loadedPF.save.restore(meta, "chat-purse-retry");
+        assert.equal(core.sim.world.brieved, true, "the chat arrives in its real world with only the pack owed");
+        assert.equal(loadedPF.save.armGate(core, meta), true, "…and the gate holds for it");
+        assert.equal(P.get(core).pouch.money, 0, "a world nobody can play in yet has not been paid");
+        await loadedPF.save.maybeGenerateBrief(core);
+        await tick();
+        assert.equal(postCount(), 1, "the pack call ran");
+        assert.equal(loadedPF.save.gateHolds(core), true, "…and failed, so the gate still holds");
+        assert.equal(P.get(core).pouch.money, 0, "a FAILED call pays nothing either — there is still no play");
+        assert.equal(purseLines(core), 0, "…and files no line about it");
+
+        // THE RETRY, AND THE LIFT UNDER IT.
+        responses.post = async () => whole;
+        assert.equal(loadedPF.save.retryGeneration(core), true, "the retry fires");
+        for (let i = 0; i < 50 && loadedPF.save.gate; i++) await tick();
+        assert.equal(loadedPF.save.gateHolds(core), false, "the gate lifts");
+        assert.equal(P.get(core).pouch.money, loadedPF.economy.STARTING_PURSE, "and THAT is where the purse is paid");
+        assert.equal(purseLines(core), 1, "…once, with one line to say so");
+
+        // …AND THEN THEY PLAY. The first coin earned or spent is what closes the
+        // untouched predicate for good, so every later arrival at this world has
+        // to decline — and the boot after a day out fishing is the ordinary one.
+        const w = core.sim.world;
+        const pond = Object.values(w.zones)
+          .flatMap((zone) => zone.features.map((row) => ({ zone, row })))
+          .find(({ row }) => row.tag === "water-feature");
+        assert.ok(pond, "the world compiled the pond its brief asked for");
+        const z = pond.zone;
+        let standing = false;
+        for (let y = pond.row.rect.y - 1; y <= pond.row.rect.y + pond.row.rect.h && !standing; y++)
+          for (let x = pond.row.rect.x - 1; x <= pond.row.rect.x + pond.row.rect.w && !standing; x++) {
+            if (x < 0 || y < 0 || x >= z.w || y >= z.h) continue;
+            if (z.ground[y * z.w + x] === "water" || z.solid[y * z.w + x]) continue;
+            core.sim.teleport(z.id, x, y);
+            core.sim.step(0, {});
+            standing = core.sim.nearFeature?.id === pond.row.id;
+          }
+        assert.ok(standing, "the player can stand at its bank");
+        P.grant(core, { t: "rod", k: "crude" }, 1);
+        P.equip(core, "fishing", "tool", { t: "rod", k: "crude" });
+        const fished = loadedPF.economy.fish(core, "dusk");
+        assert.equal(fished.ok, true, "a day is spent fishing");
+        assert.ok(P.get(core).pouch.items.length > 1, "…and the bag has something in it");
+
+        // EVERY ARRIVAL AT A PLAYABLE WORLD, ASKED AGAIN. The gate is down, so a
+        // later boot runs armGate's arm; the predicate is what has to refuse.
+        assert.equal(loadedPF.save.armGate(core, core.host.chatMeta), false, "a later boot gates for nothing");
+        assert.equal(loadedPF.economy.grantStartingPurse(core), false, "…and the purse declines: this is a veteran");
+        assert.equal(P.get(core).pouch.money, loadedPF.economy.STARTING_PURSE, "the purse moved exactly once, ever");
+        assert.equal(purseLines(core), 1, "…and said so exactly once");
+      } finally {
+        loadedPF.save._packCache.clear();
+        loadedPF.save._packSeenInMeta.clear();
+        loadedPF.save._packWantedSealed.clear();
+      }
+    });
+  });
 }
 
 console.log("brief validator + compiler: all cases passed");

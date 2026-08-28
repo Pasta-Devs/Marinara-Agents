@@ -1257,6 +1257,28 @@ PF.pack = (() => {
       return { ok: true, reason: null, id: offer.id, title: template.title, reward: offer.reward };
     },
 
+    // ── THE LINE DIET (plan §2.3), and this is where its writers live ────────
+    // ONE LINE PER ACCEPT (accept, above), ONE PER COMPLETION (settle, below),
+    // ONE PER ABANDON (the quest tab's, next slice) and ZERO PER PROGRESS. The
+    // last of those is the one worth stating: an increment is not an event the
+    // wrap-up should read out, and a session of fishing would otherwise file
+    // forty of them and evict the day it happened on.
+    //
+    // AND THE DAY CAN STILL OVERFLOW, which is accepted rather than solved. The
+    // honest sum on a board-heavy day is accepts (up to K) + carryover
+    // completions (up to the ten-quest cap) + abandons + the fishing verb's own
+    // lines + purchases, and that clears `CAPS.ledgerPerDay` (15) without being
+    // an unusual day at all. What the compaction then does is drop the day's
+    // EARLIEST lines, which is the right end to lose: the wrap-up is a story
+    // told at bedtime and the morning is what the player is furthest from
+    // remembering. Raising the cap would buy a longer tell out of the same
+    // #5135 budget the tell is already truncated against — so the cap stays and
+    // the loss is written down here instead of discovered in a playtest.
+    //
+    // EVERY ONE OF THEM IS FILED EVENT-SIDE, AT THE EVENT'S DAY. A job taken on
+    // day 3 and finished on day 9 is two lines under two days, and neither of
+    // them moves because the other happened.
+
     /** THE COMPLETION ITSELF, and it is ONE function because there are now three
      *  places a quest can finish: the board's hand-in press, the zone the `visit`
      *  row named, and the handover a `deliver` errand ends at. Three copies of
