@@ -20190,6 +20190,28 @@ const fire = (node, type) => Promise.all((node.listeners[type] ?? []).map((fn) =
     assert.ok(short.endsWith("Setting: a quiet valley."), "a setting inside the room left is sent whole");
     // …and no setting at all is just the digest.
     assert.equal(pack.composeUserContent("DIGEST", "   "), "DIGEST", "an empty setting adds nothing to send");
+    // AND THE DIGEST ITSELF CLIPS, because the brief it is built from is the
+    // STORED one on the pack-only arm — a round-tripped object off chat metadata,
+    // which 18-brief's byte budget says nothing about. A hand-edited save with a
+    // cast of two hundred would otherwise 400 the route on every attempt and hand
+    // that chat a retry button that can never work.
+    {
+      const huge = pack.digest({
+        name: "Overfull",
+        situation: "",
+        places: [],
+        cast: Array.from({ length: 200 }, (_, i) => ({
+          name: `Somebody Number ${i}`,
+          role: "a role that runs on",
+          home: "Overfull",
+          persona: `A persona long enough to matter, number ${i}, said at some length indeed and then some more.`,
+        })),
+      });
+      assert.ok(huge.length > pack.USER_CONTENT_CAP, `the fixture digest really is over the cap (${huge.length})`);
+      const composed = pack.composeUserContent(huge, "Setting: a valley.");
+      assert.ok(composed.length <= pack.USER_CONTENT_CAP, `the request is still legal (${composed.length} chars)`);
+      assert.ok(composed.startsWith("The settlement is Overfull."), "…and it is still this world's digest");
+    }
   }
 
   // ── GUIDANCE AND SCHEMA STAY INSIDE THEIR OWN WALLS ───────────────────────

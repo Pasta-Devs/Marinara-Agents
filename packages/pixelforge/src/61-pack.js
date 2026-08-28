@@ -307,16 +307,26 @@ PF.pack = (() => {
    *  their own description rather than the whole request.
    *
    *  The brief call clips at a CONSTANT 7,800 because it sends nothing else; this
-   *  one subtracts the digest first, so the same margin is arithmetic here. When
-   *  the digest alone has eaten the cap — which no sealed brief can actually do,
-   *  the caps above being what they are — the preferences drop entirely rather
-   *  than the digest losing its tail. */
+   *  one subtracts the digest first, so the same margin is arithmetic here. The
+   *  preferences are what lose their tail: the digest is the half the pack must
+   *  not contradict, so it is cut only when it is the thing that does not fit.
+   *
+   *  AND IT CAN BE. The brief this composes from is the STORED one on the
+   *  pack-only arm — 60-save hands `_configBrief`'s answer straight through, and
+   *  that is a round-tripped object off chat metadata, not the one the seal
+   *  produced. 18-brief's own byte budget bounds what IT writes; it bounds
+   *  nothing about a hand-edited save or a forward build whose cast cap is
+   *  wider. A digest over the cap would 400 the route on every attempt and hand
+   *  that chat a retry button that can never work, so it clips like everything
+   *  else here and the request stays legal. */
   function composeUserContent(digestText, preferences) {
-    const room = USER_CONTENT_CAP - digestText.length - USER_CONTENT_MARGIN;
+    const headRoom = USER_CONTENT_CAP - USER_CONTENT_MARGIN;
+    const head = digestText.length > headRoom ? digestText.slice(0, headRoom) : digestText;
+    const room = USER_CONTENT_CAP - head.length - USER_CONTENT_MARGIN;
     const prefs = typeof preferences === "string" ? preferences : "";
-    if (!prefs.trim() || room <= 0) return digestText;
+    if (!prefs.trim() || room <= 0) return head;
     const clipped = prefs.length > room ? `${prefs.slice(0, room)}…` : prefs;
-    return `${digestText}\n\nWHAT THE PLAYER ASKED FOR:\n${clipped}`;
+    return `${head}\n\nWHAT THE PLAYER ASKED FOR:\n${clipped}`;
   }
 
   // ── guidance(): the exact text that ships in the second call ────────────────
@@ -1009,8 +1019,12 @@ PF.pack = (() => {
           userContent: composeUserContent(digest(brief), preferences),
           schema: schema(),
         };
-        const seal = (data) =>
-          data && typeof data === "object" && !Array.isArray(data) ? this.validate(data, { theme, seed, brief }) : null;
+        // ONE DOOR. Everything the route hands back that is an object at all goes
+        // through validate(), array roots included — that is the case validate's
+        // own "transport: non-object root replaced" repair is written for, and a
+        // pre-check here that answered it first would be a second reading of the
+        // same shape, one screen from the first.
+        const seal = (data) => (data && typeof data === "object" ? this.validate(data, { theme, seed, brief }) : null);
         let response = await PF.api.postExperienceGeneration(chatId, base, controller.signal);
         if (response.status === 409) {
           // chat_busy ships Retry-After: 15 — wait it out once inside the budget
