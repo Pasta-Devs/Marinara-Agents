@@ -17836,9 +17836,11 @@ const fire = (node, type) => Promise.all((node.listeners[type] ?? []).map((fn) =
     // row again — so the pin is on the consequence rather than on the line order.
     // Read off the RETURN value, which is the one surface the HUD path above
     // never touches: a re-find after the splice hands back no money and no giver.
+    let filledTemplateId = "";
     {
       const open = pack.boardOffers(core).offers.find((offer) => offer.state === "open");
       assert.ok(open, "the board has work open on the day of the hand-in");
+      filledTemplateId = open.template.id;
       assert.equal(pack.accept(core, open.template.id).ok, true, "which is taken on");
       const live = active().find((q) => q.id === open.id);
       P.quest(core, "progress", { id: live.id, by: live.n });
@@ -17857,6 +17859,58 @@ const fire = (node, type) => Promise.all((node.listeners[type] ?? []).map((fn) =
         met + 1,
         "…and the giver it named is the one who remembers it",
       );
+    }
+
+    // ── ONE COMPLETION PER TEMPLATE PER DAY ──────────────────────────────────
+    // The board posts a DAY'S work, so filling it fills it. Slice 3 left
+    // accept → complete → re-accept legal on the same day (the completed
+    // instance leaves `active`, so the dup check misses it and the same
+    // deterministic id re-mints), which is harmless for a catch — the work
+    // genuinely repeats — and a walk-in-circles coin loop for the visit verb the
+    // next slice hooks, which completes on ENTRY. So the rule is uniform and it
+    // is answered at the offer layer, where every refusal on this board is
+    // answered: the row the player just filled renders dimmed and says so.
+    {
+      const filledId = filledTemplateId;
+      const view = pack.boardOffers(core);
+      const again = view.offers.find((offer) => offer.template.id === filledId);
+      assert.ok(again, "the template just handed in is still on today's board");
+      assert.equal(again.state, "filled", "…and reads as filled rather than open");
+      openBoard();
+      const filledRow = rowNamed(again.template.title);
+      assert.equal(filledRow.style.opacity, "0.45", "the row renders dimmed");
+      assert.ok(/filled today/i.test(String(filledRow.textContent)), "…and says which state it is in");
+      const held = active().length;
+      await fire(filledRow, "click");
+      assert.equal(active().length, held, "pressing it takes nothing");
+      assert.equal(
+        hud.toastEl.textContent,
+        "That work is done for today — the board posts it again another day.",
+        "…and the refusal names the day rather than the wall",
+      );
+      // AND IT NEVER REACHES THE WIRE. The receipt is sim-resident by design and
+      // the honest cost of that is recorded in `filledToday`'s own header: a
+      // reload forgets the day's receipts. The pin is that the field is not a
+      // save field — the wire literal is closed, and a set on the sim must never
+      // have talked its way into it.
+      assert.ok(sim._filled && sim._filled.templates.has(filledId), "the receipt is on the sim");
+      assert.ok(
+        !JSON.stringify(loadedPF.save.snapshot(core)).includes("_filled"),
+        "…and nowhere in what the save emits",
+      );
+      // AND IT IS THE DAY'S RECEIPT AND NOT A PERMANENT ONE. Tomorrow's board is
+      // free to post the same work again, which is the whole difference between
+      // this and an eviction.
+      const wasDay = sim.day;
+      sim.day = wasDay + 1;
+      let backOn = 0;
+      for (let day = sim.day; day <= sim.day + 40 && !backOn; day++)
+        if (pack.selection(view.folded, w.seed, day).some((t) => t.id === filledId)) backOn = day;
+      assert.ok(backOn, "the board posts that template again on some later day");
+      sim.day = backOn;
+      const tomorrow = pack.boardOffers(core).offers.find((offer) => offer.template.id === filledId);
+      assert.equal(tomorrow.state, "open", "…and on that day it is open again");
+      sim.day = wasDay;
     }
 
     // ── THE DUPLICATE, WHICH IS A DIFFERENT REFUSAL FROM THE RECEIPT ─────────

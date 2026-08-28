@@ -1127,15 +1127,53 @@ PF.pack = (() => {
     // walk the day's selection and the active list rather than having to be cheap
     // enough for sixty calls a second.
 
+    /** THE DAY'S RECEIPT: which templates have already been FILLED today.
+     *
+     *  ONE COMPLETION PER TEMPLATE PER DAY, uniformly. The board posts a day's
+     *  work and filling it fills it — without the rule, accept → complete →
+     *  re-accept is legal on the same day, because a completed row leaves
+     *  `quests.active` and the dup check has nothing left to see while the
+     *  deterministic instance id re-mints unchanged. For a catch that is merely
+     *  odd (the work really does repeat); for `visit`, which completes on ENTRY,
+     *  it is a walk-in-circles coin loop, and a rule that held for one verb and
+     *  not the others would be a rule the player has to learn per row.
+     *
+     *  KEYED BY TEMPLATE AND NOT BY INSTANCE. An instance id carries its own day,
+     *  so a set of them would be day-scoped for free — and would miss the case
+     *  that matters most: a job taken on day 3 and handed in on day 9 is
+     *  `b1.d3.X`, while today's board is offering `b1.d9.X`. The work is the
+     *  template; the instance is one day's copy of it.
+     *
+     *  SIM-RESIDENT AND NOT SERIALIZED, deliberately, and the cost is stated
+     *  rather than hidden: a reload forgets the day's receipts, so a player who
+     *  reloads mid-day can fill the same template twice. That seam is acceptable
+     *  under the rolling-compat posture — the alternative is a new persisted
+     *  field on the save wire for a rule about one day — and it self-heals at
+     *  midnight. A rewind clears it too, which is the honest answer there: a
+     *  rewind that un-completes the quest should un-file its receipt with it, and
+     *  `_rebuild` replacing the sim wholesale does exactly that. */
+    filledToday(core) {
+      const sim = core?.sim;
+      if (!sim) return null;
+      const day = Math.max(0, Math.trunc(Number(sim.day) || 0));
+      // Rebuilt on the first read of a new day rather than cleared on a clock
+      // tick: the sim has no hook the pack could hang a midnight callback off,
+      // and a set that is rebuilt when it is asked for cannot be stale when it
+      // is read.
+      if (!sim._filled || sim._filled.day !== day) sim._filled = { day, templates: new Set() };
+      return sim._filled;
+    },
+
     /** What this board is offering and what it is holding for you. Describes
      *  only. Returns { available, reason, board, folded, day, offers, jobs }.
      *
      *  `offers` is one row per template in today's selection, each carrying the
      *  STATE the menu renders it in: `open`, `taken` (accepted today — the day's
-     *  receipt, still on the board beside the live job), `dup` (a live row for the
-     *  same template from an earlier day), `at-cap` (nothing can be taken at all).
-     *  The states are answered here so the menu never has to work anything out,
-     *  and re-answered on every press so a two-press race cannot accept twice. */
+     *  receipt, still on the board beside the live job), `filled` (completed
+     *  today — see filledToday), `dup` (a live row for the same template from an
+     *  earlier day), `at-cap` (nothing can be taken at all). The states are
+     *  answered here so the menu never has to work anything out, and re-answered
+     *  on every press so a two-press race cannot accept twice. */
     boardOffers(core) {
       const sim = core?.sim;
       const no = (reason) => ({ available: false, reason, board: null, folded: null, day: 0, offers: [], jobs: [] });
@@ -1153,13 +1191,23 @@ PF.pack = (() => {
       const atCap = jobs.length >= PF.player.CAPS.activeQuests;
       const live = new Set(jobs.map((q) => str(q.id)));
       const liveTemplates = new Set(jobs.map((q) => this.templateOf(q.id)).filter(Boolean));
+      const filled = this.filledToday(core);
       const offers = this.selection(folded, sim.world.seed, day).map((template) => {
         const id = this.instanceId(day, template.id);
-        // TAKEN BEFORE DUP BEFORE AT-CAP, and the order is the honest one: a row
-        // you took an hour ago should say so rather than blaming a full list, and
-        // a full list is only the reason you cannot take work you have not
-        // already got.
-        const state = live.has(id) ? "taken" : liveTemplates.has(template.id) ? "dup" : atCap ? "at-cap" : "open";
+        // TAKEN BEFORE FILLED BEFORE DUP BEFORE AT-CAP, and the order is the
+        // honest one: a row you took an hour ago should say so rather than
+        // blaming a full list, a row you FINISHED an hour ago should say that
+        // rather than that you are on it, and a full list is only the reason you
+        // cannot take work you have not already got.
+        const state = live.has(id)
+          ? "taken"
+          : filled.templates.has(template.id)
+            ? "filled"
+            : liveTemplates.has(template.id)
+              ? "dup"
+              : atCap
+                ? "at-cap"
+                : "open";
         return { template, id, state, reward: this.rewardFor(template.verb, template.n) };
       });
       return { available: true, reason: null, board: sim.nearBoard, folded, day, offers, jobs };
@@ -1209,31 +1257,64 @@ PF.pack = (() => {
       return { ok: true, reason: null, id: offer.id, title: template.title, reward: offer.reward };
     },
 
-    /** Hand one finished job in. The press flow, in the order §2.1 sets out:
-     *    1. RE-FIND the live row by id (buyRod's offer-re-read: the menu drew this
-     *       row a press ago and the row is what pays);
-     *    2. REFUSE unless `have >= n` at THIS read. The mutator pays with no such
-     *       check by design — it trusts its caller — so this line is the check,
-     *       and it is why the lane pins the press side rather than the mutator;
-     *    3. CAPTURE the reward, the giver and the template BEFORE the splice.
-     *       The honest reason, corrected: `quest("complete")` splices the row out
-     *       of `quests.active`, and `row` here is an OBJECT REFERENCE, so reading
+    /** THE COMPLETION ITSELF, and it is ONE function because there are now three
+     *  places a quest can finish: the board's hand-in press, the zone the `visit`
+     *  row named, and the handover a `deliver` errand ends at. Three copies of
+     *  this is how a completion comes to pay at one site and not bump at another,
+     *  or to file its line under the wrong day at the third.
+     *
+     *  The order is §2.1's press flow and cannot half-pay anybody:
+     *    1. CAPTURE the reward, the giver and the template BEFORE the splice.
+     *       The honest reason: `quest("complete")` splices the row out of
+     *       `quests.active`, and `row` here is an OBJECT REFERENCE, so reading
      *       `r` off it afterwards still reads the reward — what is gone is the
      *       row's place in the list, not its fields. What the order buys is that
      *       nothing below has to go looking for it again: a re-find by id after
      *       the splice finds nothing, and `template` is an argument to the call
      *       itself and so could not be read later at all. The lane pins the
-     *       consequence rather than the ordering — the returned money and giver
-     *       are the vanished row's fields, and a re-find would hand back neither;
-     *    4. `quest("complete")` — the splice, the counter and the pay;
-     *    5. `log()` at the sim's day — with the giver's name only when this world
-     *       still stands them up (the fold's `known` set), because a line naming
-     *       somebody the world cannot resolve is a line the wrap-up would read out
-     *       as fact;
-     *    6. `bump({t:1})` — the giver remembers, on the same settlement-scoped key
-     *       every other bump uses, and SKIPPED SILENTLY on the same miss. A quest
-     *       pays money and rapport and nothing else (§2.6, RULED): no verb is
-     *       passed anywhere here, and the row's `r.xp` is zero by construction.
+     *       consequence rather than the ordering — the money and giver handed
+     *       back are the vanished row's fields, and a re-find would hand back
+     *       neither;
+     *    2. `quest("complete")` — the splice, the counter and the pay. NO VERB
+     *       reaches award() from here (§2.6, RULED): a quest pays money and
+     *       rapport and nothing else;
+     *    3. the DAY'S RECEIPT, so the same work cannot be filled twice today;
+     *    4. `log()` at the sim's day — EVENT-SIDE and at the EVENT's day, which
+     *       is what makes a job taken on day 3 and finished on day 9 read as two
+     *       lines in the right two places. The giver's name rides only when this
+     *       world still stands them up (the fold's `known` set), because a line
+     *       naming somebody the world cannot resolve is a line the wrap-up would
+     *       read out as fact;
+     *    5. `bump({t:1})` — the giver remembers, on the same settlement-scoped
+     *       key every other bump uses, and SKIPPED SILENTLY on the same miss.
+     *
+     *  `say` is the caller's own sentence, and it is a CALLBACK rather than a
+     *  string so the guard can decide the shape: it is handed the giver's name or
+     *  null and the money already worded by the theme, and hands back the line.
+     *  Returns { money, giver, template } or null when the mutator refused. */
+    settle(core, row, gen, say) {
+      const sim = core?.sim;
+      const world = sim?.world;
+      if (!world || !row) return null;
+      const money = Math.max(0, Math.round(Number(row.r?.money) || 0));
+      const giver = PF.player.giverOf(row.g);
+      const template = this.templateOf(row.id) ?? str(row.id);
+      if (!PF.player.quest(core, "complete", { id: str(row.id), template }, gen)) return null;
+      const folded = PF.save.packFold(core);
+      const stands = !!giver && !!folded?.known?.has(giver);
+      this.filledToday(core)?.templates.add(template);
+      PF.player.log(core, say(stands ? giver : null, PF.economy.money(world, money)), sim.day, gen);
+      if (stands) PF.player.bump(core, world.startZone, giver, { t: 1 }, gen);
+      return { money, giver: stands ? giver : null, template };
+    },
+
+    /** Hand one finished job in. Two things happen here that `settle` cannot do
+     *  for itself, and they are the reason the press has a function of its own:
+     *    1. RE-FIND the live row by id (buyRod's offer-re-read: the menu drew this
+     *       row a press ago and the row is what pays);
+     *    2. REFUSE unless `have >= n` at THIS read. The mutator pays with no such
+     *       check by design — it trusts its caller — so this line is the check,
+     *       and it is why the lane pins the press side rather than the mutator.
      *  Returns { ok, reason, money, giver, have, n }. */
     turnIn(core, id, gen) {
       const sim = core?.sim;
@@ -1249,22 +1330,11 @@ PF.pack = (() => {
       const n = Math.max(1, Math.round(Number(row.n) || 1));
       const have = Math.max(0, Math.round(Number(row.have) || 0));
       if (have < n) return fail("not-done", { have, n });
-      const world = sim.world;
-      const money = Math.max(0, Math.round(Number(row.r?.money) || 0));
-      const giver = PF.player.giverOf(row.g);
-      const template = this.templateOf(row.id) ?? str(row.id);
-      if (!PF.player.quest(core, "complete", { id: str(id), template }, gen)) return fail("refused", { have, n });
-      const folded = PF.save.packFold(core);
-      const stands = !!giver && !!folded?.known?.has(giver);
-      const paid = PF.economy.money(world, money);
-      PF.player.log(
-        core,
-        stands ? `Filled ${giver}'s board order — ${paid}.` : `Filled the board order — ${paid}.`,
-        sim.day,
-        gen,
+      const done = this.settle(core, row, gen, (giver, paid) =>
+        giver ? `Filled ${giver}'s board order — ${paid}.` : `Filled the board order — ${paid}.`,
       );
-      if (stands) PF.player.bump(core, world.startZone, giver, { t: 1 }, gen);
-      return { ok: true, reason: null, money, giver: stands ? giver : null, have, n };
+      if (!done) return fail("refused", { have, n });
+      return { ok: true, reason: null, money: done.money, giver: done.giver, have, n };
     },
 
     // ── generate(): the second generation call ───────────────────────────────

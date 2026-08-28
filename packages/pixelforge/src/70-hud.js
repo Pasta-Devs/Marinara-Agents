@@ -620,8 +620,20 @@ PF.Hud = class {
         // the ordering rule at the foot of this method), so the receipt was
         // telling the player to look the wrong way at exactly the moment they had
         // something to hand in. The list is named instead of placed.
+        //
+        // TWO OF THE STATES CARRY THEIR OWN WORDS and the other two keep the
+        // price. `taken` and `filled` are things the player DID today, and a row
+        // still quoting its fee after it has been paid out reads as work still on
+        // offer; `dup` and `at-cap` are about the list rather than the row, and
+        // the fee is still the honest label for work that is genuinely open to
+        // somebody with room for it.
+        const state = offer.state;
         const row = this._btn(
-          offer.state === "taken" ? `${offer.template.title} — taken — see your jobs list` : label,
+          state === "taken"
+            ? `${offer.template.title} — taken — see your jobs list`
+            : state === "filled"
+              ? `${offer.template.title} — filled today`
+              : label,
           () => this.acceptWork(offer.template.id),
         );
         row.style.opacity = "0.45";
