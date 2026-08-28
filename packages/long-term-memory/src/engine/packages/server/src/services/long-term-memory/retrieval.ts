@@ -70,7 +70,7 @@ export async function retrieveLongTermMemory(input: RetrieveLongTermMemoryInput)
   const allowed = new Set(
     Object.values(index.metadata.chunks)
       .filter((chunk) => chunk.status !== "archived")
-      .filter((chunk) => input.includeResolved || chunk.status !== "resolved" || chunk.noteType !== "thread")
+      .filter((chunk) => input.includeResolved || chunk.status !== "resolved")
       .filter((chunk) => !input.mode || chunk.modes?.includes(input.mode))
       .filter((chunk) => {
         const hasScope = !isGlobalLtmScope(input.scope) || characterIds.length > 0;

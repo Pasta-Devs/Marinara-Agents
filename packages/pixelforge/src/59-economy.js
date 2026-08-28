@@ -1049,9 +1049,11 @@ PF.economy = {
    *
    *  MID-LOOP GRANT REFUSAL. grant() refuses only a NEW `(t,k)` row at the pouch
    *  cap — merges never refuse — so a session can meet the cap on a variant it
-   *  has not caught before. That window's grant AND its award are skipped and it
-   *  logs nothing; the loop continues, because the cap bounds species DIVERSITY
-   *  and not the session.
+   *  has not caught before. That window's grant, its award AND ITS QUEST PROGRESS
+   *  are skipped and it logs nothing; the loop continues, because the cap bounds
+   *  species DIVERSITY and not the session. All three are one decision: a fish
+   *  that never entered the bag is not a fish you caught, so it pays no
+   *  experience and it fills nobody's order either.
    *
    *  Returns { ok, reason, hint, windows, caught, leveled, days }. */
   fish(core, target, gen) {
@@ -1142,6 +1144,28 @@ PF.economy = {
       if (!PF.player.grant(core, { t: type, k: entry.variant }, 1, gen)) continue;
       const paid = PF.player.award(core, { xp: TUNING.catchXp[type] ?? 0, verb: "fishing" }, gen);
       if (paid?.level > before) leveled = paid.level;
+      // THE CATCH VERB'S QUEST PROGRESS (0.13 §2.3), and it is here rather than
+      // inside grant() on purpose: the pouch is world-free and knows nothing
+      // about quests, and a hook on the item verb would count a fish somebody
+      // handed you. This is the moment a catch HAPPENED, and it is inside the
+      // granted region so a cap-refused one takes the `continue` above with its
+      // award — see the mid-loop paragraph in this function's header.
+      //
+      // A FILTER AND NEVER A FIND: two live orders for the same fish both count
+      // the one that landed. The predicate is 61-pack's SHARED matcher, which the
+      // seal and the default-pack lane call too — role grain matches any yield of
+      // that role, variant grain the exact pair — because three readings of that
+      // is how a role order comes to count a variant catch in one place and not
+      // another. The verb test is this SITE's scope and not a second matcher: an
+      // errand or a walk is not advanced by pulling a fish out of the water, and
+      // a row carrying a verb no site advances (a hostile save's, a forward
+      // build's) is left exactly where 61-pack's renderer says it is.
+      //
+      // Off the per-window live re-read, and `gen` is the one this function was
+      // threaded with — the same fence every other mutator call in the loop uses.
+      for (const quest of live.quests?.active ?? [])
+        if (quest.verb === "catch" && PF.pack.matches(quest.target, { t: type, k: entry.variant }))
+          PF.player.quest(core, "progress", { id: quest.id, by: 1 }, gen);
       tally.caught.push(entry);
       caught.push({ t: type, k: entry.variant });
     }

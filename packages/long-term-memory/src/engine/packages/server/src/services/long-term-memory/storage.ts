@@ -56,7 +56,7 @@ import { quarantineLegacyCapturedTurnSources } from "./legacy-source-quarantine.
 import { isAdditiveLtmSection } from "./draft-projector.js";
 import { logger } from "./package-runtime.js";
 import { ensureLtmActivityIndex } from "./activity-index.js";
-import { manualContribution, renderSectionContributions, sectionContributions } from "./section-contributions.js";
+import { manualContribution, renderSectionContributions } from "./section-contributions.js";
 import { extractionFingerprintForLtmSourceNote, sourceHashForLtmSourceNote } from "./source-hash.js";
 
 export type UpdateLtmNotePatch = Partial<Omit<LtmNote, "id" | "createdAt" | "updatedAt" | "version">> & {
@@ -311,7 +311,10 @@ export class LongTermMemoryStorage {
     const timestamp = nowIso();
     const draft = ltmDraftNoteInputSchema.parse(input);
     assertWritableScope(draft.scope);
+    assertWritableScope(draft.destinationScope);
     const scope = normalizeLtmScope(draft.scope);
+    const destinationScope =
+      draft.destinationScope === undefined ? undefined : normalizeLtmScope(draft.destinationScope);
     if (draft.type !== "source") {
       const availabilityError = validateLtmExplicitAvailability(scope, draft.modes);
       if (availabilityError) throw new LtmServiceError(availabilityError, 400, "ltm_explicit_availability_required");
@@ -329,6 +332,7 @@ export class LongTermMemoryStorage {
     const note = ltmNoteSchema.parse({
       ...draft,
       scope,
+      ...(destinationScope === undefined ? {} : { destinationScope }),
       ...normalizeLtmKeywordIntent({
         ...draft,
         manualKeywords: draft.manualKeywords ?? [],
@@ -407,6 +411,7 @@ export class LongTermMemoryStorage {
       if (!current) throw new LtmServiceError(`Long-term memory note not found: ${id}`, 404, "ltm_note_not_found");
       const { removedSectionKeys = [], ...notePatch } = patch;
       assertWritableScope(notePatch.scope);
+      assertWritableScope(notePatch.destinationScope);
       if (notePatch.type && notePatch.type !== current.type)
         throw new Error("Changing long-term memory note type is not supported by this package version.");
       if (notePatch.scope !== undefined && !isGlobalLtmScope(current.scope) && isGlobalLtmScope(notePatch.scope))
@@ -440,10 +445,17 @@ export class LongTermMemoryStorage {
                 const { contributions: _previousContributions, ...previousFields } = previous ?? {};
                 const { contributions: _nextContributions, ...nextFields } = section;
                 if (previous && JSON.stringify(previousFields) === JSON.stringify(nextFields)) return [key, previous];
+                // A manual edit supersedes the section's accumulated contributions. Keeping prior source
+                // contributions would re-render deleted or rewritten lines above the edit ("ghost" text).
                 return [
                   key,
                   renderSectionContributions(
-                    [...sectionContributions(previous), manualContribution(section)],
+                    [
+                      manualContribution({
+                        ...section,
+                        evidence: section.evidence?.filter((value) => !value.startsWith("source_note:")),
+                      }),
+                    ],
                     isAdditiveLtmSection(current, key),
                   )!,
                 ];
@@ -455,6 +467,9 @@ export class LongTermMemoryStorage {
         ...current,
         ...notePatch,
         ...(notePatch.scope ? { scope: normalizeLtmScope(notePatch.scope) } : {}),
+        ...(notePatch.destinationScope !== undefined
+          ? { destinationScope: normalizeLtmScope(notePatch.destinationScope) }
+          : {}),
         ...normalizeLtmKeywordIntent({ ...current, ...notePatch }),
         ...(sections ? { sections } : {}),
         id: current.id,
@@ -1134,6 +1149,37 @@ export class LongTermMemoryStorage {
       const deletedNotes = notes.filter((note) => deleted.has(note.id));
       const deletedIds = deletedNotes.map((note) => note.id);
       const timestamp = nowIso();
+      const draftFiles: Array<{ path: string; before: unknown; after: unknown }> = [];
+      for (const entry of await readdir(getLongTermMemoryDirectories(this.root).drafts, { withFileTypes: true })) {
+        if (!entry.isFile() || !entry.name.endsWith(".json")) continue;
+        const path = safeJoin(getLongTermMemoryDirectories(this.root).drafts, entry.name);
+        let before: unknown;
+        try {
+          before = JSON.parse(await readFile(path, "utf8"));
+        } catch {
+          continue;
+        }
+        const parsed = ltmExtractionDraftSchema.safeParse(before);
+        if (
+          !parsed.success ||
+          parsed.data.status !== "pending" ||
+          !parsed.data.mutations.some((mutation) =>
+            deleted.has(mutation.kind === "create_note" ? mutation.note.id : mutation.noteId),
+          )
+        )
+          continue;
+        draftFiles.push({
+          path,
+          before,
+          after: ltmExtractionDraftSchema.parse({
+            ...parsed.data,
+            status: "invalidated",
+            invalidatedAt: timestamp,
+            invalidationReason: `A targeted memory was permanently deleted: ${deletedIds.join(", ")}.`,
+            updatedAt: timestamp,
+          }),
+        });
+      }
       const repairs = notes.flatMap((original) => {
         if (deleted.has(original.id)) return [];
         const note = reprojected.get(original.id) ?? original;
@@ -1160,6 +1206,7 @@ export class LongTermMemoryStorage {
             before: lookup.get(note.id)!,
             after: note,
           })),
+          ...draftFiles,
         ],
         events: [
           ...deletedNotes.map((note) =>

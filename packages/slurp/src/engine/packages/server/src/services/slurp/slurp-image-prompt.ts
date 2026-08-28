@@ -4,6 +4,28 @@ function stripCodeFence(value: string): string {
   return match?.[1]?.trim() || trimmed;
 }
 
+/** Select only the visual prompt that can be sent to an image provider. */
+export function selectNoodleImageProviderPrompt(input: {
+  rewrittenPrompt: string | null | undefined;
+  rawPrompt: string;
+  privateContext?: ReadonlyArray<string | null | undefined>;
+}): string {
+  const rewrittenPrompt = input.rewrittenPrompt?.trim();
+  if (!rewrittenPrompt) return input.rawPrompt;
+
+  const normalizedPrompt = rewrittenPrompt.toLocaleLowerCase().replace(/\s+/gu, " ");
+  const hasInternalMarker =
+    /(?:^|[\n<])\s*(?:user[ _]image[ _]instructions|image[ _]prompting[ _]instructions|generation[ _]guidance|personality|character[ _]image[ _]preferences|character[ _]context|art[ _]style[ _]guidance|post[ _]text)\s*[:>]/iu.test(
+      rewrittenPrompt,
+    );
+  const copiesPrivateContext = input.privateContext?.some((value) => {
+    const normalizedValue = value?.trim().toLocaleLowerCase().replace(/\s+/gu, " ");
+    return normalizedValue && normalizedValue.length > 1 && normalizedPrompt.includes(normalizedValue);
+  });
+
+  return hasInternalMarker || copiesPrivateContext ? input.rawPrompt : rewrittenPrompt;
+}
+
 /**
  * Recover the visual idea when a weaker timeline model wraps imagePrompt in
  * JSON or repeats Marinara's legacy prompt-assembly labels inside the field.

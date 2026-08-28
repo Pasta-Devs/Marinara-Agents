@@ -4,6 +4,7 @@ import { createSlurpActivationLifecycle } from "../packages/slurp/src/engine/pac
 import { buildSlurpPostTimingContext } from "../packages/slurp/src/engine/packages/server/src/services/slurp/slurp-post-timing.ts";
 import { runSlurpAutoPostPollOperations } from "../packages/slurp/src/engine/packages/server/src/services/slurp/slurp-autopost-poll.ts";
 import { normalizeSlurpFanActivityRows } from "../packages/slurp/src/engine/packages/server/src/services/slurp/slurp-fan-activity-response.ts";
+import { hasSlurpCreatorPostingIntervalConflict } from "../packages/slurp/src/engine/packages/server/src/services/slurp/slurp-posting-interval.ts";
 
 const storage = readFileSync("packages/slurp/src/engine/packages/server/src/services/storage/slurp.storage.ts", "utf8");
 const refreshScheduler = readFileSync(
@@ -55,8 +56,23 @@ assert.match(storage, /autoPostGenerationMode: z\.enum\(\["pre_generate", "on_de
 assert.match(storage, /autoPostGenerationMode: "pre_generate"/u);
 assert.match(storage, /state: "scheduled"/u);
 assert.match(storage, /ELAPSED_PREPARED_SLOT_MS = 60 \* 60 \* 1000/u);
+assert.match(storage, /ROLLING_DAY_MS = 24 \* 60 \* 60 \* 1000/u);
 assert.match(storage, /Date\.parse\(item\.publishAt\) < at\.getTime\(\) - ELAPSED_PREPARED_SLOT_MS/u);
+assert.match(storage, /slurpCreatorPostingIntervalMs\(settings\.postsPerDay\)/u);
+assert.match(storage, /hasSlurpCreatorPostingIntervalConflict\(activityTimes, publishMs, settings\.postsPerDay\)/u);
+assert.match(
+  storage,
+  /latestCreatorPost\.createdAt\) \+ slurpCreatorPostingIntervalMs\(settings\.postsPerDay\) > at\.getTime\(\)/u,
+);
+const postingInterval = (24 * 60 * 60 * 1000) / 8;
+const candidateAt = Date.parse("2026-08-27T12:00:00.000Z");
+assert.equal(hasSlurpCreatorPostingIntervalConflict([candidateAt - postingInterval], candidateAt, 8), false);
+assert.equal(hasSlurpCreatorPostingIntervalConflict([candidateAt + postingInterval * 2], candidateAt, 8), false);
+assert.equal(hasSlurpCreatorPostingIntervalConflict([candidateAt - postingInterval + 1], candidateAt, 8), true);
 assert.match(routes, /app\.patch\("\/noodler\/auto-post\/schedule\/:slotId"/u);
+assert.match(storage, /item\.id !== current\.id && \(item\.state === "scheduled" \|\| item\.state === "prepared"\)/u);
+assert.match(storage, /hasSlurpCreatorPostingIntervalConflict\(activityTimes, publishMs, settings\.postsPerDay\)/u);
+assert.match(routes, /result === "conflict"/u);
 assert.match(hooks, /slots: SlurpScheduleSlot\[\]/u);
 assert.match(settingsUi, /useUpdateNoodlerScheduleSlot/u);
 assert.match(settingsUi, /type="datetime-local"/u);

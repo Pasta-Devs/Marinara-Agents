@@ -1083,5 +1083,17 @@ PF.brief = (() => {
     schema,
     generate,
     salvageText,
+    // TEXT HYGIENE, EXPORTED — not because this module wants callers inside its
+    // repair passes, but because the CONTENT PACK (61-pack) comes off the same
+    // untrusted generation channel and has the same two needs: cut a model's
+    // string on a grapheme boundary with the tags and markdown already stripped,
+    // and fold a model's word onto a closed vocabulary. `salvageText` is exported
+    // for exactly this reason already (it is schema-agnostic and the pack's
+    // truncation ladder reuses it); these two are the same argument. A second
+    // copy of either is how one artifact comes to sanitize differently from the
+    // other, and the difference would be invisible until something hostile
+    // arrived down whichever channel got the weaker one.
+    capText,
+    foldEnum,
   };
 })();

@@ -25,6 +25,7 @@ import { createPromptOverridesStorage } from "../storage/prompt-overrides.storag
 import { loadPrompt, NOODLE_IMAGE_POST } from "../prompt-overrides/index.js";
 import { generateNoodleImageWithRetry } from "./slurp-image-retry.js";
 import { rewriteNoodleImagePrompt } from "./slurp-image-prompt-rewrite.js";
+import { selectNoodleImageProviderPrompt } from "./slurp-image-prompt.js";
 import { resolveNoodlerImageConnectionId } from "./slurp-image-connections.js";
 import type { ConnectionAdmissionMode } from "../generation/connection-admission.js";
 import {
@@ -204,10 +205,15 @@ export async function generateNoodlePostImage(input: {
   });
   const styleGuidance = resolveImageStyleGuidanceText(imageSettings.styleProfiles, compiledPrompt.profile.id);
   const rawFinalPrompt = input.promptOverride?.prompt.trim() || compiledPrompt.prompt;
-  const imagePromptInstructions = input.imageConnection.imagePromptInstructions?.trim();
-  const instructionLine = imagePromptInstructions
-    ? `User image instructions: ${imagePromptInstructions.replace(/\s+/g, " ").slice(0, 5000)}`
-    : "";
+  const rawProviderPrompt = input.promptOverride?.prompt.trim() || input.draftPrompt.trim();
+  const configuredImageInstructions = input.settings.imageGenerationPrompt.trim();
+  const connectionImageInstructions = input.imageConnection.imagePromptInstructions?.trim() ?? "";
+  const imagePromptInstructions = [
+    configuredImageInstructions && !postPrompt.includes(configuredImageInstructions) ? configuredImageInstructions : "",
+    connectionImageInstructions,
+  ]
+    .filter(Boolean)
+    .join("\n");
   const characterContext = [
     characterDescription ? `Appearance:\n${characterDescription}` : "",
     characterPersonality ? `Personality:\n${characterPersonality}` : "",
@@ -227,11 +233,17 @@ export async function generateNoodlePostImage(input: {
           styleGuidance,
         })
       : null;
-  const finalPrompt =
-    rewrittenPrompt ??
-    (instructionLine && !input.promptOverride && !rawFinalPrompt.includes(instructionLine)
-      ? `${rawFinalPrompt}\n${instructionLine}`
-      : rawFinalPrompt);
+  const finalPrompt = selectNoodleImageProviderPrompt({
+    rewrittenPrompt,
+    rawPrompt: rawProviderPrompt,
+    privateContext: [
+      configuredImageInstructions,
+      connectionImageInstructions,
+      characterPersonality,
+      characterImageInstructions,
+      styleGuidance,
+    ],
+  });
   const finalNegativePrompt = input.promptOverride
     ? input.promptOverride.negativePrompt?.trim() || undefined
     : compiledPrompt.negativePrompt || undefined;

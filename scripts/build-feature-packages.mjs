@@ -154,7 +154,9 @@ const slurpOwnedSourcePaths = [
   "packages/server/src/services/slurp",
   "packages/server/src/services/storage/slurp.storage.ts",
 ];
-const reuseExistingRuntime = process.env.MARINARA_REUSE_FEATURE_RUNTIME === "1";
+// Release builds must bundle the current source; runtime reuse is for explicit non-release verification builds.
+const releaseBuild = process.env.MARINARA_RELEASE_BUILD !== "0";
+const reuseExistingRuntime = !releaseBuild && process.env.MARINARA_REUSE_FEATURE_RUNTIME === "1";
 const rebuiltFeatureClients = new Set(
   String(process.env.MARINARA_REBUILD_FEATURE_CLIENTS || "")
     .split(",")
@@ -261,7 +263,7 @@ async function removeOwnedSourceSnapshots(excludedPaths) {
 const features = [
   {
     id: "noodle",
-    version: "1.2.14",
+    version: "1.2.15",
     minEngineVersion: "2.4.4",
     maxEngineExclusive: MAX_ENGINE_EXCLUSIVE,
     name: "Noodle",
@@ -317,7 +319,7 @@ const features = [
   },
   {
     id: "slurp",
-    version: "1.0.19",
+    version: "1.0.22",
     minEngineVersion: "2.4.3",
     maxEngineExclusive: MAX_ENGINE_EXCLUSIVE,
     name: "Slurp",
@@ -374,7 +376,7 @@ const features = [
   },
   {
     id: "long-term-memory",
-    version: "1.2.14",
+    version: "1.2.17",
     minEngineVersion: "2.4.1",
     maxEngineExclusive: MAX_ENGINE_EXCLUSIVE,
     name: "Long-Term Memory",

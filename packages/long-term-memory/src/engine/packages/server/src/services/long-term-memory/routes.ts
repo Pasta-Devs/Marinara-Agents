@@ -71,7 +71,12 @@ import { getLtmGlobalSettings, updateLtmGlobalSettings } from "./settings.js";
 import type { LongTermMemoryDraftStore } from "./draft-store.js";
 import type { LongTermMemoryStorage } from "./storage.js";
 import { readLongTermMemoryInjectionReceipt } from "./usage.js";
-import { ltmModeForChatMode, normalizeLtmChatCharacterIds, resolveChatLtmScope } from "./chat-scope.js";
+import {
+  ltmModeForChatMode,
+  normalizeLtmChatCharacterIds,
+  resolveChatLtmScope,
+  resolveChatLtmWriteScope,
+} from "./chat-scope.js";
 import { isLtmSourceNote } from "./source-extraction.js";
 import { processLongTermMemorySource } from "./source-processing.js";
 import {
@@ -856,7 +861,7 @@ export function createLongTermMemoryRoutes(runtime: {
             await processLongTermMemorySource({
               sourceNote,
               languageModel,
-              scope: chat ? resolveChatLtmScope(chat) : sourceNote.scope,
+              scope: sourceNote.destinationScope ?? (chat ? resolveChatLtmWriteScope(chat) : sourceNote.scope),
               modes: chat ? [ltmModeForChatMode(chat.mode)] : body.mode ? [body.mode] : undefined,
               mode: body.mode,
               instruction: body.instruction,

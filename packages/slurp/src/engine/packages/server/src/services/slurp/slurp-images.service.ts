@@ -24,6 +24,7 @@ import { characterAppearanceFromRow, characterNoodleImageContextFromRow } from "
 import type { NoodleImagePromptReviewItem, ReviewedNoodleImagePrompt } from "./slurp-public-images.service.js";
 import { characterNameFromRow } from "./slurp-public-support.js";
 import { reviewedNoodlerPhysicalFacts } from "./slurp-prompt-safety.js";
+import { selectNoodleImageProviderPrompt } from "./slurp-image-prompt.js";
 
 const REVIEWED_IMAGE_CLAIM_LEASE_MS = 2 * 60 * 1000;
 const REVIEWED_IMAGE_CLAIM_RENEW_MS = 30 * 1000;
@@ -183,18 +184,17 @@ export async function generateNoodlerPostImage(input: {
   });
   const styleGuidance = resolveImageStyleGuidanceText(imageSettings.styleProfiles, compiledPrompt.profile.id);
   const rawFinalPrompt = redactIdentity(input.promptOverride?.prompt.trim() || compiledPrompt.prompt);
+  const rawProviderPrompt = redactIdentity(input.promptOverride?.prompt.trim() || input.draftPrompt.trim());
   // Custom prompt templates may omit `userInstructions`, so restore configured instructions only
   // when the rendered prompt does not already contain them.
   const configuredImageInstructions = input.settings.imageGenerationPrompt.trim();
+  const connectionImageInstructions = input.imageConnection.imagePromptInstructions?.trim() ?? "";
   const imagePromptInstructions = [
     configuredImageInstructions && !postPrompt.includes(configuredImageInstructions) ? configuredImageInstructions : "",
-    input.imageConnection.imagePromptInstructions?.trim() ?? "",
+    connectionImageInstructions,
   ]
     .filter(Boolean)
     .join("\n");
-  const instructionLine = imagePromptInstructions
-    ? `User image instructions: ${imagePromptInstructions.replace(/\s+/g, " ").slice(0, 5000)}`
-    : "";
   const characterContext = [
     characterDescription ? `Appearance:\n${characterDescription}` : "",
     characterPersonality ? `Personality:\n${characterPersonality}` : "",
@@ -215,10 +215,17 @@ export async function generateNoodlerPostImage(input: {
         })
       : null;
   const finalPromptBase = redactIdentity(
-    rewrittenPrompt ??
-      (instructionLine && !input.promptOverride && !rawFinalPrompt.includes(instructionLine)
-        ? `${rawFinalPrompt}\n${instructionLine}`
-        : rawFinalPrompt),
+    selectNoodleImageProviderPrompt({
+      rewrittenPrompt,
+      rawPrompt: rawProviderPrompt,
+      privateContext: [
+        configuredImageInstructions,
+        connectionImageInstructions,
+        characterPersonality,
+        characterImageInstructions,
+        styleGuidance,
+      ],
+    }),
   );
   const finalPrompt = input.compositionGuard ? `${finalPromptBase}\n\n${input.compositionGuard}` : finalPromptBase;
   const baseNegativePrompt = input.promptOverride

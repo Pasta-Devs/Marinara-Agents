@@ -160,7 +160,13 @@ async function main() {
       );
 
       const importedCharacter = await importPackageInterop(
-        { source: "characters", sourceIds: ["character-import"], extract: false, limit: 100 },
+        {
+          source: "characters",
+          sourceIds: ["character-import"],
+          destinationScope: { characterIds: ["character-import"] },
+          extract: false,
+          limit: 100,
+        },
         join(dataDir, "long-term-memory"),
         new AbortController().signal,
       );
@@ -171,7 +177,14 @@ async function main() {
       );
       assert.equal(characterPreview.samples[0]?.importMode, "roleplay");
       const explicitCharacter = await importPackageInterop(
-        { source: "characters", sourceIds: ["character-import"], mode: "game", extract: false, limit: 100 },
+        {
+          source: "characters",
+          sourceIds: ["character-import"],
+          destinationScope: { characterIds: ["character-import"] },
+          mode: "game",
+          extract: false,
+          limit: 100,
+        },
         join(dataDir, "long-term-memory"),
         new AbortController().signal,
       );

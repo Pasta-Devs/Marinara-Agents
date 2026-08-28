@@ -222,6 +222,11 @@ assert.match(vault, /searchPersonas/u);
 assert.match(vault, /searchChats/u);
 assert.match(vault, /searchBranches/u);
 assert.match(vault, /scope-targets\?includeAllChats=true/u);
+assert.doesNotMatch(workspace, /id: `branch:\$\{chat\.id\}`/u);
+assert.match(workspace, /destinationScopeLimitReached/u);
+assert.match(workspace, /hasDestinationScopeCapacity\(target\.destinationScope\)/u);
+assert.match(workspace, /data-ltm-availability-target/u);
+assert.match(workspace, /data-ltm-scope-picker-popup/u);
 assert.doesNotMatch(vault, /matchesFilters/u);
 assert.match(vault, /data-ltm-memory-scope-target/u);
 assert.match(vault, /characterScopeTargets/u);
@@ -377,6 +382,7 @@ assert.match(vault, /maxHeight: "16rem"/u);
 assert.match(vault, /onInput=\{\(event\) =>/u);
 assert.match(sharedControls, /aria-live="polite"/u);
 assert.match(targetPicker, /<button[\s\S]*type="button"/u);
+assert.match(workspace, /aria-controls=\{listId\}/u);
 assert.doesNotMatch(targetPicker, /role="listbox"|role="option"|aria-activedescendant|ArrowDown|ArrowUp/u);
 assert.doesNotMatch(targetPicker, /className="mari-editor-tab-rail grid w-full grid-cols-4"/u);
 assert.match(targetPicker, /id=\{listId\}\s+role="list"/u);
@@ -460,8 +466,16 @@ assert.match(api, /new URLSearchParams/u);
 assert.match(api, /undefined, signal/u);
 assert.match(api, /const missingIds = requestedIds\.filter/u);
 assert.doesNotMatch(reviewQueue, /requestAllNotes/u);
-assert.match(reviewQueue, /requestNotesByIds<LtmNote>\(contextNoteIds, signal\)/u);
-assert.match(reviewQueue, /"review-context", contextNoteIds/u);
+assert.match(reviewQueue, /requestNotesByIds<LtmNote>\(sourceContextNoteIds, signal\)/u);
+assert.match(reviewQueue, /requestNotesByIds<LtmNote>\([\s\S]*true,/u);
+assert.match(reviewQueue, /"review-context", contextNoteIds, sourceContextNoteIds/u);
+const optionalContextIds = ["shared-note", "optional-target"];
+const sourceContextIds = ["shared-note"];
+assert.notDeepEqual(
+  ["review-context", optionalContextIds, []],
+  ["review-context", optionalContextIds, sourceContextIds],
+  "source/optional context transitions must produce a new review query key even when IDs are unchanged",
+);
 assert.match(reviewQueue, /row\.disposition !== "new"/u);
 assert.match(reviewQueue, /reviewContextReady/u);
 assert.match(reviewQueue, /reviewContextFailed/u);

@@ -59,6 +59,11 @@ const routeSource = readFileSync(
 );
 const browserRegressionSource = readFileSync(new URL("./spatial-context.e2e.ts", import.meta.url), "utf8");
 const packageBuilderSource = readFileSync(new URL("../scripts/build-feature-packages.mjs", import.meta.url), "utf8");
+assert.match(packageBuilderSource, /const releaseBuild = process\.env\.MARINARA_RELEASE_BUILD !== "0";/u);
+assert.match(
+  packageBuilderSource,
+  /const reuseExistingRuntime = !releaseBuild && process\.env\.MARINARA_REUSE_FEATURE_RUNTIME === "1";/u,
+);
 const runtimeBarSource = readFileSync(
   new URL(
     "../packages/hierarchical-maps/src/engine/packages/client/src/features/spatial-context/components/SpatialContextRuntimeBar.tsx",

@@ -98,7 +98,7 @@ export function extractionFingerprintForLtmSourceNote(
     sourceText: section?.text ?? "",
     evidence: section?.evidence,
     provenance: options.provenance ?? note.provenance ?? null,
-    scope: options.scope ?? note.scope,
+    scope: options.scope ?? note.destinationScope ?? note.scope,
     modes: options.modes ?? note.modes,
     extractionMode: options.extractionMode,
   });
