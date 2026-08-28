@@ -19216,6 +19216,28 @@ const fire = (node, type) => Promise.all((node.listeners[type] ?? []).map((fn) =
         assert.equal(loadedPF.save.gate.state, "failed", "…on a retry screen");
         assert.equal(loadedPF.save.gate.failure, "storage", "naming the write that failed");
         assert.equal(loadedPF.save.gate.stage, "pack", "…and the stage it failed at");
+        // …AND THE SCREEN IT PRINTS DOES NOT CONTRADICT ITSELF. Composed the way
+        // 70-hud composes it, because the contradiction was only visible in the
+        // pair: a stage-blind "The world was written, but saving it…" printed
+        // directly above a note that says the setting is written and settled — one
+        // sentence calling the save lost, the other calling it safe, on the one
+        // arm where BOTH are about a world that stored fine a call earlier. What
+        // did not go through here is the work.
+        const screen = `${loadedPF.save.gateReason(loadedPF.save.gate.failure, loadedPF.save.gate.stage)} ${loadedPF.save.gateStageNote(loadedPF.save.gate.stage)}`;
+        assert.ok(
+          screen.includes("The work was written, but saving it to this chat did not go through."),
+          "the pack-storage screen names the WORK as the half that did not store",
+        );
+        assert.ok(
+          !screen.includes("The world was written"),
+          "…and never tells a player their settled world was the thing that was lost",
+        );
+        // The brief stage keeps the sentence it earned: there, the world IS the
+        // thing that did not store, so the fix is a stage split and not a reword.
+        assert.ok(
+          loadedPF.save.gateReason("storage", "brief").includes("The world was written"),
+          "while at the brief stage the world really is what failed to store",
+        );
         assert.equal(
           loadedPF.save.packExpected(core.host.chatMeta, "chat-pack-store"),
           true,

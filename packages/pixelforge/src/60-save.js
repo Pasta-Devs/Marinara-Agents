@@ -869,13 +869,21 @@ PF.save = {
    *  reads would be the one part of the screen nothing could pin.
    *
    *  The kinds are the ladder's own (18-brief `generate`'s `onFailure`) plus
-   *  "storage", which is this module's — the brief generated fine and the PATCH
-   *  that would have stored it did not. "refused" is the one that earns its own
-   *  sentence: a deterministic 400/422 gives the same answer every time, and a
-   *  player pressing a button that will never work deserves to be told so.
+   *  "storage", which is this module's — the artifact generated fine and the
+   *  PATCH that would have stored it did not. "refused" is the one that earns
+   *  its own sentence: a deterministic 400/422 gives the same answer every time,
+   *  and a player pressing a button that will never work deserves to be told so.
    *  Unknown or absent kinds fall back to the honest generic — a throw has no
    *  verdict to report, and a kind a newer ladder invents must not blank the
-   *  panel. */
+   *  panel.
+   *
+   *  TWO KINDS READ BY STAGE, and "storage" is the second of them for the same
+   *  reason "refused" was the first: 0.13 gave it a pack-stage arm and the
+   *  brief-stage sentence stopped being true there. A stage-blind "the world was
+   *  written, but saving it…" prints directly above a pack-stage note that says
+   *  the setting is written and settled, and a screen that says the save failed
+   *  beside a screen that says the world is safe is one a player has to guess
+   *  at. What did not store at the pack stage is the WORK, not the world. */
   gateReason(kind, stage) {
     switch (kind) {
       case "thin":
@@ -901,7 +909,12 @@ PF.save = {
       case "timeout":
         return "It was taking longer than the time set aside for it.";
       case "storage":
-        return "The world was written, but saving it to this chat did not go through.";
+        // WHICH ARTIFACT DID NOT STORE IS THE STAGE'S ANSWER. At the brief stage
+        // it is the world; at the pack stage the world stored one call earlier
+        // and is settled, and what did not go through is the work posted in it.
+        return stage === "pack"
+          ? "The work was written, but saving it to this chat did not go through."
+          : "The world was written, but saving it to this chat did not go through.";
       default:
         return "Something went wrong partway through.";
     }
@@ -911,26 +924,30 @@ PF.save = {
    *  every clause of it has to be true in EVERY state its stage can be in, which is
    *  what 0.13 got wrong twice.
    *
-   *  THE PACK STAGE HAS THREE, not the two the first correction counted. The pack
-   *  call runs while the placeholder is still standing (a chat sealing both
-   *  artifacts in one visit), it runs over a world that is already up (the
-   *  half-sealed chat, matrix cell 3), and — the one that was missed — the stage
-   *  stays stamped AFTER the pack has sealed and stored, because the install or the
-   *  resume under it can still throw and the catch-all inherits the stamp.
+   *  THE PACK STAGE HAS FOUR, not the two the first correction counted and not the
+   *  three the second did. The pack call runs while the placeholder is still
+   *  standing (a chat sealing both artifacts in one visit), it runs over a world
+   *  that is already up (the half-sealed chat, matrix cell 3), the pack SEALS and
+   *  the PATCH that would have stored it does not land (`_failGate(core, "storage",
+   *  "pack")`, three attempts down), and — the one that was missed longest — the
+   *  stage stays stamped AFTER the pack has sealed and stored, because the install
+   *  or the resume under it can still throw and the catch-all inherits the stamp.
    *
    *  So the sentence may not name which call failed. The first version promised the
    *  retry "does not rewrite the world", which is false in state one: the install
    *  had not run and the retry is what runs it. The second said "what failed is the
    *  work posted in it" and "it re-attempts that work", which is false in state
-   *  three: the work is written, stored and safe, the compile is what threw, and
+   *  four: the work is written, stored and safe, the compile is what threw, and
    *  the retry makes NO second pack call at all — `packExpected` is already false
    *  by then, so the button lands on the recompile path.
    *
-   *  What is true in all three is the shape of the thing rather than the name of
+   *  What is true in all four is the shape of the thing rather than the name of
    *  it: the setting is spent and kept, the world compiles deterministically from
    *  it so it comes out the same however many times it compiles, what did not
    *  finish is something downstream of that, and the retry picks up whatever is
-   *  still owed without touching what is already written.
+   *  still owed without touching what is already written. The storage state is the
+   *  one that proves the note cannot carry the whole screen on its own: it is TRUE
+   *  there, and the REASON above it was not until `gateReason` learned the stage.
    *
    *  THE BRIEF STAGE HAS TWO, and that is why it no longer claims the chat is
    *  untouched. The stage is stamped when the brief is owed, but the gate is not
