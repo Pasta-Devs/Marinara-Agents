@@ -405,6 +405,17 @@ PF.pack = (() => {
    *  floor is a seal/fail boundary: a cut that lost the templates fails, holds
    *  the gate, and the retry is free.
    *
+   *  TITLES NAME THE WORK AND NOT ONE ADDRESS, and that line is here rather than
+   *  in the schema because it is a WORDING rule and nothing can validate it. A
+   *  `visit` target is a location HANDLE — the KIND of place — and `visited()`
+   *  settles the row on arrival at ANY zone carrying it, which is the design and
+   *  not a slip: the mechanical fallback line ("travel to wilds") is honest about
+   *  it. A generated title that named one of them instead ("Walk out to North
+   *  Wood") would be the only surface in the package promising an address the row
+   *  never asked for, and the player would fill it somewhere else and be right.
+   *  The default pack already writes titles this way; this is the sentence that
+   *  asks a generated one to.
+   *
    *  TOPIC TAGS ARE CONFINED TO rumor|work HERE, while the SCHEMA seals all four
    *  (plan §2.2c). That gap is deliberate and it is the byte diet: `place` and
    *  `smalltalk` are the tags an Ask tree opens with and the two E7 is not
@@ -433,7 +444,8 @@ PF.pack = (() => {
       '      {"npc": …}     for deliver — the NAME of another person on the list (an errand: a word carried, not an object)',
       `      {"place": …}   for visit — one of ${LOCATIONS.join(" | ")}`,
       "    n: how many to catch, 1-20. Always 1 for deliver and visit.",
-      "    title: what the board row reads, <=48 characters of plain text.",
+      "    title: what the board row reads, <=48 characters of plain text. Name the WORK, not ONE address —",
+      "      any place of the kind named finishes a visit, so a title promising a particular one can mislead.",
       "    NEVER write money, pay, a price, a reward or experience. The game decides what work is worth.",
       "- lines: what somebody standing in a place says, keyed so the right line reaches the right moment.",
       "    Each is {at, when, r, text} plus an optional topic.",

@@ -383,10 +383,6 @@ PF.core = {
     // is silent and costs one extra GM call in a race nobody will see: the quest
     // stays active and the player talks to them again.
     const sentSim = sim;
-    // WHO THE ERRAND WAS RUN TO, captured at SEND. By the time the host answers,
-    // the schedules may have walked this person out of the room — the delivery
-    // was to the person the player greeted, not to whoever is standing there now.
-    const sentTo = npc.name;
     void Promise.resolve(this.host.sendMessage(text))
       .then((ok) => {
         if (ok === false) {
@@ -420,7 +416,20 @@ PF.core = {
           // zero). Gated on the captured generation AND on the sim still being
           // the one the greeting was composed against; on a mismatch nothing is
           // settled and the quest is still there to be finished by talking again.
-          if (sentSim === this.sim) this.hud?.questFilled(PF.pack.delivered(this, sentTo, gen));
+          //
+          // WHO THE ERRAND WAS RUN TO IS `npc`, the binding this whole method was
+          // composed against, and NOT a live proximity read. This used to copy
+          // `npc.name` into a `sentTo` of its own under a comment about the
+          // schedules walking somebody out of the room — which was two claims and
+          // both were wrong: `npc` is a const binding on the object the player
+          // walked up to, so a copy of its name guards nothing the binding does
+          // not, and the schedules cannot rename anybody. The hazard the closure
+          // really does answer is the OTHER shape this line could have taken —
+          // asking `this.sim.nearNpc` HERE, after the await, which is asking who
+          // is standing there now, after the host has had its whole thinking time
+          // for somebody else to wander in. The delivery was to the person the
+          // player greeted.
+          if (sentSim === this.sim) this.hud?.questFilled(PF.pack.delivered(this, npc.name, gen));
         }
       })
       .catch((err) => {

@@ -19181,17 +19181,30 @@ const fire = (node, type) => Promise.all((node.listeners[type] ?? []).map((fn) =
       assert.equal(P.get(core).pouch.money, held + 8, "…and pays");
     }
 
-    // ── THE NAME IS CAPTURED AT SEND ─────────────────────────────────────────
-    // The schedules can walk this person out of the room while the host is
-    // thinking. The errand was run to the person the player greeted.
+    // ── THE HANDOVER READS THE GREETING'S BINDING, NOT LIVE PROXIMITY ────────
+    // The `.then` runs after an await, so `this.sim.nearNpc` at that point is
+    // whoever is standing there NOW — after the host has had its whole thinking
+    // time for somebody else to wander in. What the errand is settled against is
+    // `npc`, the const binding the greeting itself was composed from.
+    //
+    // TWO ERRANDS AND TWO ASSERTIONS, because one of them alone is half a lane: a
+    // live read would finish the WRONG one, so the case has to hold a row for the
+    // person who wandered in as well as for the person greeted. (This replaces a
+    // case that staged the same walk-in against a `sentTo` copy of `npc.name` —
+    // which could not diverge from `npc.name` however the proximity moved, so
+    // deleting the copy left it green. The mutation that reds this one is the
+    // real alternative implementation: read `this.sim.nearNpc.name` in the
+    // `.then`.)
     {
       assert.equal(take("b1.d5.moved", "Mira", "Rook"), true, "one more errand to Rook");
+      assert.equal(take("b1.d5.other", "Mira", "Tam"), true, "…and one to Tam, who is about to walk in");
       const held = P.get(core).pouch.money;
       talkTo(rook);
       sim.nearNpc = tam; // somebody else is standing there by the time it lands
       await settle();
-      assert.equal(P.get(core).quests.active.length, 0, "the errand still reached the person it was greeted at");
-      assert.equal(P.get(core).pouch.money, held + 8, "…and paid");
+      const left = P.get(core).quests.active.map((row) => row.target);
+      assert.deepEqual(left, ["Tam"], `the errand greeted is the errand run (${left.join(", ")})`);
+      assert.equal(P.get(core).pouch.money, held + 8, "…paying for exactly the one that was handed over");
     }
   } finally {
     globalThis.setTimeout = realSetTimeout;
@@ -22507,6 +22520,27 @@ const fire = (node, type) => Promise.all((node.listeners[type] ?? []).map((fn) =
       text.includes("NEVER write money, pay, a price, a reward or experience"),
       "the guidance forbids the model to price its own work",
     );
+    // …AND IT ASKS FOR TITLES THAT NAME THE WORK RATHER THAN ONE ADDRESS, pinned
+    // exactly as the money ban above is and for the same reason: it is a WORDING
+    // rule, so validate() cannot enforce it and the instructions are the only
+    // place it can live. A `visit` target is the KIND of place (the handle), and
+    // `visited()` settles on arrival at any zone carrying it — so a title naming
+    // one of them promises an address the row never asked for.
+    assert.ok(
+      text.includes("Name the WORK, not ONE address"),
+      "the guidance asks for titles that name the work rather than a single place",
+    );
+    // The DEFAULT pack is held to the same rule it asks for, in both themes: no
+    // stock title names a place this world stands up. Not a spelling check — the
+    // zone names come out of the world beside them.
+    for (const theme of loadedPF.art.themeIds()) {
+      const built = world.build(11, theme, null);
+      const zoneNames = Object.values(built.zones).map((zone) => String(zone.name));
+      for (const template of pack.defaults(theme).templates) {
+        const named = zoneNames.find((name) => String(template.title).includes(name));
+        assert.ok(!named, `the stock ${theme} title "${template.title}" names no one place (${named})`);
+      }
+    }
     const serialized = JSON.stringify(pack.schema());
     assert.ok(serialized.length <= pack.SCHEMA_CAP, `the schema fits the route's cap (${serialized.length} chars)`);
     assert.equal(serialized.includes("strictSchema"), false, "and nothing in it asks for a strict mode it cannot have");
