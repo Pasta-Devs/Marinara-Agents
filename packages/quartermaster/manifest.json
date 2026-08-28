@@ -10,7 +10,7 @@
   },
   "id": "quartermaster",
   "name": "Quartermaster",
-  "version": "0.7.2",
+  "version": "0.1.0",
   "description": "A per-chat RPG character sheet and inventory manager for Roleplay mode: equip slots arranged around your persona's portrait, item locations (bag, stored, equipped), and saved outfits, plus an optional tracker agent that keeps equipped items and inventory in sync with the story as you play. Add the Agent in Chat Settings → Agents → Tracker Agents for Roleplay mode.",
   "engine": {
     "min": "2.4.4",
@@ -33,12 +33,12 @@
   "files": [
     {
       "path": "agents.json",
-      "sha256": "54507b52c74eb06bcc94ef47a434d33b8c14e5400938436886536831bae8542f",
+      "sha256": "e9f71fcee57501544c347528d8074604bda19b0528c23b0882dc4cf34328f3bc",
       "bytes": 3473
     },
     {
       "path": "client.js",
-      "sha256": "644a21c8cfb2140637c92a7056343fa5b2a1ad309051cec1c8daf44534847abc",
+      "sha256": "c5a5ead70d7324682b9ba4842dda8c7961fb2c61fc4b0e091f8461920cc24e34",
       "bytes": 90680
     },
     {
