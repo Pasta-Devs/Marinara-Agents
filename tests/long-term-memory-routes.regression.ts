@@ -2424,6 +2424,28 @@ async function main() {
       scopedBranchImport.json().imported.map((item: any) => item.sourceId),
       [branchSourceId],
     );
+    const explicitAllWithChatContext = await app.inject({
+      method: "POST",
+      url: "/api/long-term-memory/import/source-notes",
+      headers,
+      payload: {
+        source: "chats",
+        sourceIds: [branchSourceId],
+        chatId: "chat-a",
+        sourceScope: {},
+        destinationScope: {
+          groupId: "observatory-branches",
+          groupIds: ["observatory-branches"],
+          chatIds: ["chat-a", "game-a"],
+        },
+        extract: false,
+      },
+    });
+    assert.equal(explicitAllWithChatContext.statusCode, 200, explicitAllWithChatContext.body);
+    assert.deepEqual(
+      explicitAllWithChatContext.json().imported.map((item: any) => item.sourceId),
+      [branchSourceId],
+    );
     const gamePreview = await app.inject({
       method: "POST",
       url: "/api/long-term-memory/import/preview",

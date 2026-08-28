@@ -469,7 +469,7 @@ async function candidates(
     const broaderScope = scopeGroupIds.size > 0 || scopeIds.size > 1;
     for (const chat of await getPackagePersistence().listChats()) {
       if (normalizeLtmChatCharacterIds(chat.characterIds).includes(PROFESSOR_MARI_CHARACTER_ID)) continue;
-      if (request.chatId && !broaderScope && chat.id !== request.chatId) continue;
+      if (!request.sourceScope && request.chatId && !broaderScope && chat.id !== request.chatId) continue;
       if (scopeGroupIds.size ? !scopeGroupIds.has(chat.groupId) : scopeIds.size && !scopeIds.has(chat.id)) continue;
       const metadata = object(chat.metadata),
         chatMode = ltmModeForChatMode(chat.mode);

@@ -1133,16 +1133,12 @@ export default function SourcesWorkspace({
           source,
           sourceIds: ids,
           action: effectiveAction,
-          ...(previewScope
-            ? {
-                sourceScope: {
-                  ...previewScope,
-                  ...(previewScope.chatIds ? { chatIds: [...previewScope.chatIds] } : {}),
-                  ...(previewScope.characterIds ? { characterIds: [...previewScope.characterIds] } : {}),
-                  ...(previewScope.personaIds ? { personaIds: [...previewScope.personaIds] } : {}),
-                },
-              }
-            : {}),
+          sourceScope: {
+            ...(previewScope ?? {}),
+            ...(previewScope?.chatIds ? { chatIds: [...previewScope.chatIds] } : {}),
+            ...(previewScope?.characterIds ? { characterIds: [...previewScope.characterIds] } : {}),
+            ...(previewScope?.personaIds ? { personaIds: [...previewScope.personaIds] } : {}),
+          },
           ...(destinationScope
             ? {
                 destinationScope: {
