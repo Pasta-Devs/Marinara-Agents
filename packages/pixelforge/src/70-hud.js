@@ -943,7 +943,13 @@ PF.Hud = class {
     }
     // One surface at a time: both are full-screen, so a second one opening over
     // the first would be a panel nobody can see under a panel nobody closed.
+    // THE BOARD COUNTS AS ONE OF THEM, and it is the one with consequences: the
+    // quest tab can retire the very row a standing board is drawing, and a board
+    // left mounted underneath comes back out showing it. `update`'s nearBoard arm
+    // already closes the list when the player walks away from the fixture; this
+    // is that same rule for the other way they leave it.
     this.closeSheet();
+    this.closeBoard();
     this._journal = true;
     // THESE TWO ARE DEFENSIVE SYMMETRY, and saying so is the point: the CLOSE
     // side is the load-bearing one, and every close routes through
@@ -1380,7 +1386,10 @@ PF.Hud = class {
       this.closeSheet();
       return;
     }
+    // The other full-surface panel, and the board goes down for it too — a rule
+    // that covered only the journal would be a rule waiting for the next tab.
     this.closeJournal();
+    this.closeBoard();
     this._sheet = true;
     this._sheetKey = this._sheetValueKey();
     this._renderSheet();

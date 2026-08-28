@@ -18536,6 +18536,79 @@ const fire = (node, type) => Promise.all((node.listeners[type] ?? []).map((fn) =
   }
 }
 
+// ── ONE SURFACE AT A TIME, AND THE BOARD IS ONE OF THEM ─────────────────────
+// `toggleSheet` already argues it ("both are full-screen, so a second one
+// opening over the first would be a panel nobody can see under a panel nobody
+// closed") and `closePanels` already counts the board among the things Escape
+// has to take down. The one door left open was a full-surface panel opening
+// OVER a standing board: the quest tab can retire the very row the board is
+// drawing, and the board then came back out from under the panel still showing
+// it. Walking away has always closed the list (`update`'s nearBoard arm) — this
+// is the same rule for the other way a player leaves it.
+{
+  const P = loadedPF.player;
+  const pack = loadedPF.pack;
+  const realSetTimeout = globalThis.setTimeout;
+  const realClearTimeout = globalThis.clearTimeout;
+  globalThis.setTimeout = () => 0;
+  globalThis.clearTimeout = () => {};
+  loadedPF.save.reset();
+  loadedPF.spatial.reset();
+  try {
+    const w = world.build(7, "cozy-village", null);
+    const sim = new loadedPF.Sim(w);
+    const core = {
+      chatId: "chat-board-under-panel",
+      sim,
+      host: { chatMeta: {} },
+      interact() {},
+      setMode() {},
+      resume() {},
+      markDirty() {},
+    };
+    core.hud = new loadedPF.Hud(new FakeNode("div"), core);
+    const hud = core.hud;
+    const board = w.zones.village.features.find((row) => row.id === loadedPF.world.BOARD_FEATURE_ID);
+    sim.teleport("village", board.rect.x, board.rect.y + 1);
+    sim.step(0, {});
+    hud.update();
+    const offer = pack.boardOffers(core).offers.find((row) => row.state === "open");
+    assert.equal(pack.accept(core, offer.template.id).ok, true, "a job is taken on");
+    hud.toggleBoard();
+    assert.equal(hud.boardMenu.style.display, "flex", "the board is standing open at the fixture");
+
+    // THE PANEL OPENS OVER IT, and the board goes down with it rather than
+    // waiting underneath for the row it is drawing to be retired behind its back.
+    hud.toggleJournal();
+    assert.equal(hud._journal, true, "the journal opened");
+    assert.equal(hud.boardMenu.style.display, "none", "…and the board went down with it");
+
+    // …and the quest tab's own retirement is now unreachable from a stale list:
+    // set the row aside (armed, then confirmed) and the board has nothing left
+    // standing that could disagree with the block.
+    const row = P.get(core).quests.active[0];
+    hud.setAsideJob(row.id);
+    hud.setAsideJob(row.id);
+    assert.equal(P.get(core).quests.active.length, 0, "the job is set aside from the tab");
+    hud.closeJournal();
+    assert.equal(hud.boardMenu.style.display, "none", "…and no stale board comes back out from under the panel");
+
+    // THE SHEET IS THE SAME DOOR. It is the other full-surface panel, and a rule
+    // that only covered one of them would be a rule waiting for the next tab.
+    hud.toggleBoard();
+    assert.equal(hud.boardMenu.style.display, "flex", "the board opens again");
+    hud.toggleSheet();
+    assert.equal(hud._sheet, true, "the sheet opened");
+    assert.equal(hud.boardMenu.style.display, "none", "…and it takes the board down too");
+    hud.closeSheet();
+  } finally {
+    globalThis.setTimeout = realSetTimeout;
+    globalThis.clearTimeout = realClearTimeout;
+    loadedPF.save.reset();
+    loadedPF.spatial.reset();
+  }
+}
+
 // ═══ THE VERB SITES (0.13 slice 4) ══════════════════════════════════════════
 // Progress is EVENT-DRIVEN at the verbs (plan §2.3) and never a sweep, never a
 // pouch read, never a grant() hook: the pouch is world-free and compose is pure,
