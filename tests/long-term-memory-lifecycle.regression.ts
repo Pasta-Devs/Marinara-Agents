@@ -2843,7 +2843,19 @@ async function main() {
       }
       const blockedBulkChat = bulkBoundary.locator('[data-ltm-availability-target="chat:bulk-chat-99"] input');
       assert.equal(await blockedBulkChat.isDisabled(), true);
-      await bulkBoundary.locator("[data-ltm-bulk-cancel]").click();
+      await bulkBoundary.locator("[data-ltm-bulk-done]").click();
+      assert.match(await page.locator("[data-ltm-additional-destination-summary]").innerText(), /100 additional/u);
+      await destinationScopeTrigger.click();
+      await destinationScopeSearch.fill("Valid group");
+      await destinationScopePicker.locator('[data-ltm-scope-option="group:valid-group"]').click();
+      assert.match(await destinationScopeTrigger.innerText(), /Memory chat/u);
+      assert.equal(await page.getByText(/Some locations cannot be added/u).count(), 1);
+      await addDestination.click();
+      const bulkCleanup = page.locator("[data-ltm-bulk-destination]");
+      const bulkChatChips = bulkCleanup.locator('button[aria-label^="Remove Bulk chat"]');
+      while (await bulkChatChips.count()) await bulkChatChips.first().click({ force: true });
+      await bulkCleanup.locator("[data-ltm-bulk-done]").click();
+      assert.match(await page.locator("[data-ltm-additional-destination-summary]").innerText(), /1 additional/u);
       await addDestination.click();
       const selectedLocations = page
         .locator("[data-ltm-bulk-destination]")
@@ -2879,6 +2891,27 @@ async function main() {
       assert.deepEqual(mergedDestinationRequest.destinationScope, {
         chatId: "memory-chat",
         chatIds: ["memory-chat"],
+        personaId: "persona-a",
+        personaIds: ["persona-a"],
+      });
+      await page.locator("[data-ltm-import-scope-result]").waitFor();
+      await destinationScopeTrigger.click();
+      await destinationScopeSearch.fill("Valid group");
+      await destinationScopePicker.locator('[data-ltm-scope-option="group:valid-group"]').click();
+      assert.match(await destinationScopeTrigger.innerText(), /Valid group/u);
+      await page.locator('[data-ltm-source-select="character-outside-current-chat"]').check();
+      const validGroupRequestPromise = page.waitForRequest(
+        (request) => request.method() === "POST" && request.url().includes("/api/long-term-memory/import/source-notes"),
+      );
+      await page.locator('[data-ltm-source-action="import-selected"]').click();
+      const validGroupRequest = (await validGroupRequestPromise).postDataJSON() as {
+        destinationScope?: unknown;
+      };
+      assert.deepEqual(validGroupRequest.destinationScope, {
+        chatId: "valid-group-chat-0",
+        chatIds: Array.from({ length: 100 }, (_, index) => `valid-group-chat-${index}`),
+        groupId: "valid-group",
+        groupIds: ["valid-group"],
         personaId: "persona-a",
         personaIds: ["persona-a"],
       });
