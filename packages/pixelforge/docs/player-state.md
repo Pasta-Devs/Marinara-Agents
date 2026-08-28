@@ -19,9 +19,16 @@ surface (§7) and a wrap-up lifecycle (§8) that did not exist a release ago. On
 deliberately **outside** the block — `sim.intro.ledgerOwed`, the durable half of the flush — and
 §8.1 says why a field about the player's days is not in the player's block.
 
+**0.13 is the release that finally calls the mutator 0.11 shipped.** `quest()` and the two
+completion maps had been in the block since S5 with no producer and no renderer; the quest layer
+(§9) gives them a board, a second sealed content artifact, three verb sites and a tab — and adds
+**not one field to the wire**, which is the strongest thing this document can say about a release.
+§10.2 measures what it did add, and §12 is the new home for the verification this package cannot do
+for itself.
+
 Companion documents: `brief-schema.md` (the world brief, which the block's stamps hash — and,
 since 0.12, the feature register the fishing verb aims at) and `ROADMAP.md` (why S5 led 0.11, what
-it gates, and what 0.12's rulings put on the list).
+it gates, and what 0.12's and 0.13's rulings put on the list).
 
 ---
 
@@ -34,11 +41,15 @@ it gates, and what 0.12's rulings put on the list).
 | the envelope, the two stores, the decision ladder, the loading gate | `src/60-save.js` (`PF.save`)                |
 | item vocabulary, prices, the berth, the starting purse              | `src/59-economy.js` (`PF.economy`)          |
 | the verbs and their tables: fishing, the rod ladder, sleep          | `src/59-economy.js` (same module — §7)      |
+| the content pack, the board's offers, the quest lifecycle           | `src/61-pack.js` (`PF.pack` — §9)           |
+| the pack's two metadata keys, its fold, and the gate that seals it  | `src/60-save.js` (`packFold`, `packExpected`) |
 | the mint stamp the block compares against                           | `src/20-world.js` (`mintStampOf`, `MINT_V`) |
 | the feature register the fishing verb aims at                       | `src/20-world.js` (`recordFeature`)         |
+| the board fixture every settlement gets                             | `src/20-world.js` (`BOARD_FEATURE_ID`)      |
 | the block's default-init on a fresh sim                             | `src/30-sim.js` (`new PF.Sim`)              |
 | the clock movers, the wrap-up marker, the tell                      | `src/30-sim.js` (`advanceMinutes`, `stageLedgerOwed`, `_composeLedger`) |
-| the journal panel and the character sheet                           | `src/70-hud.js` (`PF.Hud`)                  |
+| the fourth proximity read the board button gates on                 | `src/30-sim.js` (`nearBoard`, inside `step`) |
+| the journal panel, the quest tab and the character sheet            | `src/70-hud.js` (`PF.Hud`)                  |
 | the transport                                                       | `src/00-prelude.js` (`PF.api`)              |
 | every claim below, driven                                           | `test-brief.mjs` cases (q)–(az)             |
 
@@ -119,7 +130,7 @@ it is accepted rather than dressed up: the band's rows are short informational s
 events the player has usually already been told about, the one that matters most is the notice the
 severance is *about to write* (which 60-save appends after the strip, so it survives), and making
 the band restorable would mean parking a field whose whole purpose is to explain the parking.
-Recorded in §10.
+Recorded in §11.
 
 Note what is **not** touched by a severance: `intro.ledgerOwed` (§8.1). It is world-unbound and
 correctly so — the days it owes are days the player lived, whatever world they lived them in.
@@ -136,7 +147,7 @@ below the gate would never be told (`log()` refuses any day the gate covers).
 
 ### 1.2 What the caps do, per cap
 
-The caps are **gameplay and hygiene bounds, not a size budget** (maintainer ruling; see §9). They do
+The caps are **gameplay and hygiene bounds, not a size budget** (maintainer ruling; see §10). They do
 not all behave the same way, and a consumer has to know which calls can come back empty:
 
 | behaviour                                          | caps                                                                                                                                                                                 | what the caller sees         |
@@ -282,7 +293,7 @@ chat gets one spurious rewind toast.
 The literal has been updated **once, deliberately**: S5 slice 3 added the `player` block and nothing
 else moved. That change is sanctioned because the alternative is worse — a pre-S5 save gains the
 default block on its first write, costing one re-write per open chat, and a pre-S5 _build_ reading
-that row deletes the block anyway (§10). Emitting the block conditionally to avoid the churn is the
+that row deletes the block anyway (§11). Emitting the block conditionally to avoid the churn is the
 slice-1 failure with a fresh coat.
 
 Note the all-zero `world` stamps in the literal: a sim built by the CONSTRUCTOR has never been
@@ -770,7 +781,7 @@ without it. `ordinalOf` accepts only a positive safe integer, deliberately the s
 server's own mirror reader applies: a client that accepted a value the server ignores would order its
 writes against a number nothing else agrees with.
 
-**The residual the seam does not close** (§10): a degraded session that sent NO narration leaves the
+**The residual the seam does not close** (§11): a degraded session that sent NO narration leaves the
 anchor unmoved, so the row comes back with `anchorMatched: true` and the anchor guard hands it the
 world. The ordinal cures only the anchor-_moved_ degraded case. This is unchanged from pre-seam
 behaviour, and accepted.
@@ -821,7 +832,7 @@ the two that say the timeline moved and our snapshot is the stale one. Three fur
 The teardown path itself (`flushTeardown`) does not queue behind `_flushChain` — an ordinary flush
 sitting mid-await would swallow the last write of the session — and cannot afford a GET of its own,
 so it spends the last check's verdict instead. It fires both keepalive requests without awaiting
-between them, and sizes the pair against the keepalive quota (§9).
+between them, and sizes the pair against the keepalive quota (§10).
 
 **The damaged row's text.** A row-1 classification at ANY site means the next write repairs the row
 and destroys the only copy of its bytes, so the park is hoisted out of boot and called from every
@@ -933,7 +944,7 @@ so sealing a default is no longer "the world they were already walking in", it i
 decision made on the player's behalf in the one case they cannot undo. The `userContent` clamp
 (cut at 7,800 chars against the route's 8,000 — the sent payload is 7,801, because the ellipsis is
 appended after the slice) also makes a reachable 400 a contract bug rather than a long setting. The
-cost is accepted by choice (§10): a generation failure blocks play behind retry instead of degrading
+cost is accepted by choice (§11): a generation failure blocks play behind retry instead of degrading
 into a sandbox.
 
 ### 6.5 Escape safety
@@ -1340,7 +1351,7 @@ same four dayparts the Wait menu offers, any hour.
 
 **Bed-gated on the home anchor**, which is the same fact `rentBerth` wrote: the anchor IS the
 lodging zone the player holds a berth in, so "in your home zone" and "in a lodging zone you have
-paid for" are **one test and not two**. A homeless player has nowhere to sleep (a §10 never-flush
+paid for" are **one test and not two**. A homeless player has nowhere to sleep (a §11 never-flush
 class, accepted), and a minted `{minted: true}` anchor names no zone to stand in, so it is not one
 either. Walk-mode only, and refused while the host is streaming — not because of the pipeline, but
 because the hours would pass under narration the player has not read yet.
@@ -1384,11 +1395,11 @@ filed its pre-midnight half under the day it happened (§7.6), this owes that da
 since midnight belong to the day still underway. `max` because sleeps accumulate and the marker only
 climbs: a rewind can take the clock backwards and a marker that followed it down would quietly
 un-owe days the player was already promised. Waking hours stage nothing — nobody sits down to look
-back over them — so **Wait never stages**, which is one of the two never-flush classes in §10.
+back over them — so **Wait never stages**, which is one of the two never-flush classes in §11.
 
 `ledgerOwed` is **world-unbound** and a severance does not touch it: the days it owes are days the
 player lived, whatever world they lived them in. That is also what makes the restore-re-tell row in
-§10 work.
+§11 work.
 
 ### 8.2 The invariant, and the guard that enforces it on itself
 
@@ -1410,7 +1421,7 @@ load. So a send resolving over a rewound sim passes the fence and would otherwis
 gate onto the rewound block. The guard reads live, so it refuses instead.
 
 **The senders swallow the refusal**: no toast, no retry. A guard refusal after an accepted send
-leaves the tell in history un-burned and the next compose re-tells it, which is a §10 lost-flush
+leaves the tell in history un-burned and the next compose re-tells it, which is a §11 lost-flush
 cause and not something to interrupt the player about. The boolean return is for the tests.
 
 ### 8.3 The ephemeral half, sender capture, and the band's told flag
@@ -1564,7 +1575,316 @@ all four.
 
 ---
 
-## 9. Sizes: measured, not budgeted
+## 9. The quest layer
+
+0.11 shipped `quest()` and the two completion maps and nothing that called them: a mutator with no
+producer and no renderer. 0.13 gives them both, and the shape it gives them is worth stating before
+the parts: **the block did not change**. `quests.active`, `quests.done_pack` and
+`quests_done_board` were already there, already classed (§1.1), already capped (§1.2), and the whole
+release writes into them through the mutator that was already the only writer. What is new is a
+world fixture, a second sealed artifact, three verb sites and two surfaces — all of it above the
+wire, none of it in it.
+
+### 9.1 The board, and the fourth proximity read
+
+**The board is a compiler FIXTURE, not brief content.** Every settlement gets one, unconditionally,
+under the reserved id `board:settlement` (`20-world.js` `BOARD_FEATURE_ID`) — on a world with no
+content pack behind it exactly as on a world full of work, because the board is the surface that
+says "No work posted here" out loud and a missing fixture cannot say anything. Its tag
+(`notice-board`) is deliberately **not** one of `18-brief`'s `FEATURE_TAGS`: no brief may author a
+board, and the consumer resolves it by the reserved id rather than by tag, so a brief that names a
+feature after it still cannot be one. Its name is word-book data on `ZONE_NAMES`' own pattern — _The
+Notice Board_ in the village, _The Job Terminal_ in the colony — because the fixture has no brief to
+name it.
+
+**It is pushed onto `zone.features` OUTSIDE the `_ids` ordinal walk**, on the `legacy:pond`
+precedent. The ordinals belong to the features the BRIEF wrote, and spending one here would
+renumber promises a sealed brief has already made (§7.5's independent-ordinal rule, read from the
+other side).
+
+**The anchor ladder** runs in order, and every rung is ground people already stand on: the apron row
+beside the gathering place's door → a dense rank's green, then the gaps between market stalls → the
+spine road flanking spawn. A sealed brief can name no gathering place at all, which is why there are
+three rungs and not one. If every rung is occupied the compiler **scans** rather than shrugging: an
+unanchorable brief FEATURE is dropped ("a plainer settlement, never a sealed one"), but the board
+cannot be dropped, because a settlement with no board is a settlement that cannot say it has no
+work. `buildLegacy` carries a hand-laid twin — the ladder's first rung written out as a literal, one
+step west of the inn door — since that layout has no brief and no ladder to run.
+
+**Worlds are derived per load, so every existing save gets its board on the next boot**, with
+nothing migrated and nothing written. That is the same property that makes the feature register
+free (§7.5): the fixture costs zero save bytes because it is recomputed, not stored.
+
+**`nearBoard` is a fourth proximity read** beside `nearNpc`/`nearPortal`/`nearFeature` (`30-sim.js`
+`step`): four-neighbour adjacency against the board's register rect, found by the reserved id,
+null-on-step-away, walk-only. It carries **no water term**, and the absence is reasoned rather than
+saved: §7.5's two-sided test exists because a water rect holds non-water tiles, and it is the water
+that says which pond a bank belongs to. A board rect is a **single tile and IS the fixture**, so the
+rect alone is exact. (The compiler refuses a board rect containing water, and the harness asserts
+it, so the two halves cannot drift apart.)
+
+### 9.2 The content pack: the second sealed artifact
+
+The brief is world IDENTITY; the pack is world CONTENT. They are stored the same way and they mean
+different things, and almost every rule below falls out of that one sentence.
+
+**Two chat-metadata keys, both top-level** (`60-save.js`): `pixelforgePack` holds the sealed pack,
+and `pixelforgePackWanted` holds the SEAL-SIDE marker. Per-key shallow-merge PATCH like every other
+key, so an older client carries the pack across a round trip untouched — it never reads or writes
+that key at all. Unlike the brief, the pack has **no legacy nested home**: `_configBrief` still
+reads one because chats were sealed before the key moved, and the pack has never lived anywhere
+else.
+
+**Why the marker is copied rather than read where the wizard wrote it.** The wizard's answer lives
+in `experienceConfig`, and that object is REWRITABLE — `/game/create`'s reuse-an-existing-chat arm
+replaces `gameSetupConfig` wholesale while the spread preserves top-level keys. A formula reading
+the wizard's own copy could therefore be flipped ON for a veteran chat sealed long ago
+(retro-generation nobody asked for, at a paid call per chat) or OFF for a chat mid-creation with a
+pack call still owed (silently packless forever). So the seal PATCH takes a COPY of the answer and
+stores it beside the brief it sealed, and `packExpected()` reads only that copy, which no
+`setupConfig` rewrite can mint and none can erase.
+
+**A chat sealed before 0.13 carries no copy and is therefore never expected to have a pack.** That
+is the packless-veteran ruling, and §11 records it as a limitation rather than a bug.
+
+**Fold-at-read, and the one invalidation rule that is not free.** `packFold(core)` derives what THIS
+world can offer, once, into a slot on the sim — never saved, rebuilt exactly when `core.sim` is,
+like the feature register and the schedule handles. The rule 0.13 had to add is the GATE'S LIFT: two
+of the three ways out of the loading gate seal a pack under a world that is deliberately NOT
+replaced, and a memo taken while the gate held answers for the pack that was ABSENT then. So the
+fold is rebuilt when the sim is replaced **or when the gate lifts**, and `_liftGate` clears the slot
+because it is the one line every path out of the gate passes through.
+
+**Demotion.** The pack carries the `briefHash` it sealed against; a mismatch means the world under
+it changed, and the SELECTABLE SET falls back to the default pack. **It touches nothing else** — live
+rows stay, render through the shared fallback, complete and abandon normally, and sever and repair
+exactly as before. A demotion is a content fact, not a save event. One guard is worth naming: hash
+**zero is not a brief** (it is what `briefHashOf` answers for a world that has none, and it is the
+default pack's own sentinel), so a brief-less world treats every stored artifact as never-sealed
+rather than adopting a foreign pack as its own.
+
+**The default pack** is a read-time fallback and nothing else: two themes' worth of hand-authored
+dialogue, escalation, overheard lines and generic templates, folded and validated through the same
+door a sealed pack is, boot-asserted like the skins — and **never sealed**, never written to
+metadata, and never the answer to a failed generation (the gate holds and the retry is free).
+
+**The daily selection** hashes `(seed, day, "b1")` over the SORTED SET of surviving template ids and
+never over post-fold ordinals, so two builds that fold the same templates out of the same pack post
+the same board on day 12 whatever order the stored array happens to list them in. It is memoised by
+day. What it deliberately does **not** buy is stability across a CHANGE of that set: the selection
+is a shuffle of the whole pool, so a template folding out reshuffles every day's offers, not only
+the ones it was on. Benign, and of a piece with a demotion — neither touches a live row.
+
+**Counter classes, and the split the tab renders.** `p:<packHash>:<slug>` is WORLD-BOUND (generated
+content belongs to the world it was written for, and is severed with it) and counts into
+`quests.done_pack`; `b:<slug>` is WORLD-FREE — the default pack's generic work means the same thing
+anywhere, true by construction because those rows target catch ROLES rather than variants — and
+counts into `quests_done_board`. `quest("complete")` routes on exactly that prefix, which is why the
+id class is the whole of the rule.
+
+**The seal/fail substance floor.** `validate()` returns **null** below the floor, and null is a
+FAILURE rather than a thin success: the gate holds, the retry screen says the world is safe, and
+nothing is stored. A pack is the one artifact whose absence is survivable, so sealing a hollow one
+would trade a free retry for a permanent nothing. The floor is a pair of `TUNING` rows — three
+templates and twelve dialogue lines — chosen from the truncation arithmetic written out beside them,
+and the ladder gained one failure kind the brief's does not have, `"thin"`, so a 200 that seals to
+null is reported as what it is rather than folded into `"refused"`.
+
+### 9.3 The lifecycle: accept, progress, complete, abandon
+
+**Instance ids carry the template.** `b1.d<day>.<templateId>` is deterministic per (board, day,
+template), so a rewind that replays the same day mints the same id, and a same-day duplicate accept
+refuses **by id inside the mutator** rather than by a check anybody had to remember to write. The
+template rides IN the id because the completion counter is keyed by template and the row does not
+carry one.
+
+Two consequences of that shape, both load-bearing:
+
+- **`_dedupeActive` dedupes board rows at TEMPLATE grain**, which is wider than the id. Two instances
+  of one template taken on different days never collide by id, so the "at most one live instance per
+  template" invariant the offer layer enforces would have no owner below it — and the restore paths
+  are exactly where that bites: a mint severance parks a row, the player takes the same work again
+  tomorrow, and the mint restore CONCATs the parked copy back onto the live list. The preference
+  order does not move (live first, then furthest along); only what counts as "the same quest" widens.
+- The dedupe reads the id convention **through `PF.pack`** rather than re-deriving it, so the dedupe
+  and the counter cannot come to disagree about which template a row belongs to. With no pack layer
+  present the key falls back to the id, which is what this function did before the board existed.
+
+**Accept.** Every effect goes through a shipped mutator in an order that cannot leave a half-taken
+job: re-read the board (the menu's copy is a press old — the player may have walked away, filled
+their list, or taken this very row on the button beside it) → `quest("accept")` → `log()` at the
+event's day. No bump: taking work is not yet a favour done. **`r` is copied into the row here**, off
+`TUNING`'s derivation from `(verb, n)`, which is what makes a retune move future accepts only: an
+accepted deal is honoured.
+
+**The offer states are answered once and re-answered on every press**, so a two-press race cannot
+accept twice, and their precedence is the honest one — `taken` before `filled` before `dup` before
+`at-cap`. A row you took an hour ago should say so rather than blaming a full list; a row you
+FINISHED an hour ago should say that rather than that you are on it; and a full list is only the
+reason you cannot take work you have not already got.
+
+**The day's receipt is TEMPLATE-keyed and lives on the sim, not on the wire.** `filledToday` is a set
+of template ids rebuilt on the first read of a new day (the sim has no hook to hang a midnight
+callback off, and a set rebuilt when it is asked for cannot be stale when it is read). **Two honest
+consequences.** A reload forgets the day's receipts, so a player who reloads mid-day can fill the
+same template twice — accepted under the rolling-compat posture, since the alternative is a new
+persisted field on the save wire for a rule about one day, and it self-heals at midnight. And a
+rewind clears it too, which is the *right* answer there: a rewind that un-completes the quest should
+un-file its receipt with it, and `_rebuild` replacing the sim wholesale does exactly that.
+
+**Progress is EVENT-DRIVEN at the verb sites** — never a pouch read, never a `grant()` hook, never a
+sweep. The catch site is inside `fish()`'s **granted region**, beside `tally.caught.push`, so a
+cap-REFUSED catch takes the `continue` above with its award and does not count. It is a **filter and
+never a find**: two live orders for the same fish are both advanced by the one that landed. The
+predicate is the shared matcher the seal validator and the default-pack lane also call — role grain
+matches any yield of that role, variant grain the exact `(t, k)` pair — because three readings of
+that is how a role order comes to count a variant catch in one place and not another. **Zero ledger
+lines per progress**, deliberately: an increment is not an event a wrap-up should read out, and a
+session of fishing would otherwise file forty of them and evict the day it happened on.
+
+**There is exactly ONE completion path**, `settle()`, and three callers reach it, because three
+copies of a completion is how one comes to pay at one site and not bump at another. Its order:
+
+1. **Capture** the reward, the giver and the template BEFORE the splice — `row` is an object
+   reference so its fields survive, but a re-find by id after the splice finds nothing, and nothing
+   below has to go looking;
+2. `quest("complete")` — the splice, the counter and the pay. **No verb reaches `award()`** (§9.3's
+   reward rule, below);
+3. the day's receipt, so the same work cannot be filled twice today;
+4. `log()` at the sim's day — event-side, at the EVENT's day, which is what makes a job taken on day
+   3 and finished on day 9 read as two lines under two days, neither of which moves because the
+   other happened. The giver's name rides only while this world still stands them up (the fold's
+   `known` set), because a line naming somebody the world cannot resolve is a line the wrap-up would
+   read out as fact;
+5. `bump({t: 1})` — an encounter, on the same settlement-scoped key every other bump uses, skipped
+   silently on the same miss.
+
+**The three sites that call it:**
+
+| verb      | where it finishes                                                      | why there                                                                                                       |
+| --------- | ---------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------- |
+| `catch`   | the board's **hand-it-in** press                                       | counting is what it does, so there is a fraction to carry and a place to bring it                               |
+| `visit`   | **on entry**, from the two real zone-change callers                    | the walk WAS the quest; it matches on the zone's `place` HANDLE, which the compiler stamps and nobody guesses   |
+| `deliver` | **Talk's accepted `.then`**, after the host has taken the turn         | no item moves — it is an ERRAND, and word is delivered by talking                                               |
+
+Three details that are decisions rather than incidents. `visit` has **no mode test**, alone in this
+layer: a drift arrival lands while the player is reading narration — that IS the mode a narrated
+arrival happens in — and refusing it would leave a row nothing can ever complete. Accepting while
+already standing in Y does not instant-complete, and re-entry is idempotent, both because this runs
+on a zone CHANGE and the first arrival splices the row. And `deliver` is fenced **twice**, by the
+captured generation and by the sim's identity (`_rebuild` replaces `core.sim` without moving `_gen`,
+so the generation fence alone cannot see a rewind): on a mismatch the caller simply does not call,
+the quest stays active, and the honest cost is one extra GM call in a race nobody will notice.
+`deliver` is also **the one non-GM-free quest verb** — the handover costs exactly one GM call, which
+is the greeting the player was sending anyway.
+
+**Turn-in** is its own function because two things happen there that `settle` cannot do for itself:
+the live row is **re-found by id** (the menu drew it a press ago, and the row is what pays), and the
+press **refuses unless `have >= n` at THIS read**. The mutator pays with no such check by design — it
+trusts its caller — so that line IS the check, which is why the harness pins the press side rather
+than the mutator.
+
+**The reward rule, ruled by the maintainer and enforced twice.** Rewards in 0.13 are **money and the
+giver's rapport, and nothing else**. Quests **never** grant skill experience: a quest's TASK may
+raise a skill — catching fish for a catch order levels fishing, because the CATCHING does, through
+`fish()`'s own award — but the reward never does. Two halves hold that up and they fail differently.
+The **guarantee** is structural: the reward derivation writes `xp = 0` by construction, so an honest
+row has nothing to pay. The **backstop** is the completion passing NO verb to `award()` — no fallback
+to the row's own — which answers a row that never came from the derivation at all (a hand-edited
+chat metadata blob, a forward build, a save carried in from somewhere else): `accept` stores `r` as
+given, so a planted `r.xp` reaches the completion intact, and `award()` applies the money and drops
+the experience precisely because there is **no verb to key a ladder off**. The wire field stays —
+the row is a closed eight-field literal and dropping `xp` would be a format change for nothing.
+
+**What a severance does to a job, and it is §3's machinery unchanged.** `quests.active` and
+`quests.done_pack` are world-BOUND (§1.1) and `quests_done_board` is world-FREE, so a **brief**
+severance parks every live row and the pack tally in the `stamp` entry and leaves the travelling
+tally alone; a **mint** severance parks only the rows whose giver the mint took away, and its
+restore CONCATs them back onto the live list — which is exactly the case template-grain dedupe was
+widened for. Two smaller things fall out of the same machinery and are worth naming because a reader
+looking for special quest handling will not find any: the **repair pass** drops a row whose giver
+this world cannot stand up at all (gated, and it refuses to act when *every* giver dangles, because
+that is a statement about the world rather than about the quests), and the quest tab shows **one
+dimmed line** when the bag is holding rows for another world, so the list being shorter than the
+player remembers has a reason on screen and not only in the notice band.
+
+**Abandon** is free, player-initiated, and pressed from the quest tab and **only** there: the board
+takes work on and takes it back finished, and an abandon offered there would be an abandon offered
+at the one moment the player is most likely to mis-press. It carries **no board gate and no mode
+gate**, and both absences are deliberate — the panel is open only in walk mode and is closed under
+the loading gate, and the mutator's own `_live` refuses under the gate and under a generation
+mismatch, so a second copy of those guards would be unreachable code standing where a real one used
+to. A row that left the list between the paint and the press is refused by id and comes back as
+`abandon-unknown`; the generation fence answers with the same value on purpose, because from the
+player's side a block that moved under them and a row that was never there are the same fact.
+
+### 9.4 Caps, and the refusals a player can actually reach
+
+The quest caps were already in §1.2's table and none of them moved; what 0.13 adds is a reader who
+can hit them.
+
+| cap                  | value | behaviour                                                                              |
+| -------------------- | ----- | -------------------------------------------------------------------------------------- |
+| `CAPS.activeQuests`  | 10    | **refuse** — `quest("accept")` returns `false`; the board renders the offer `at-cap`    |
+| `CAPS.packDone`      | 40    | **evict** — the least-earned `p:` counter goes to make room                            |
+| `CAPS.boardDone`     | 40    | **evict** — the least-earned `b:` counter goes to make room                            |
+
+Eviction is **least-earned, not oldest**: a completion counter carries no day to sort by, so "oldest
+key" was alphabetical order dressed up as recency, and a counter at 1 is the cheaper loss than one
+the player earned nine times. Both maps are drawn as **bounded tallies** that say so at the bound —
+"Only the last 40 kinds of work are kept." — because a full map is a list that has already lost
+something, and a tally the player could read as a complete history would be lying quietly.
+
+**The refusal map is ONE map, read from both surfaces** (`70-hud.js` `boardRefusal`). Every reason in
+it is a reason about a JOB, and the two places a job can be pressed answer them identically; a second
+map for the tab is how one of them comes to say something the other does not.
+
+| reason            | what the player reads                                                        |
+| ----------------- | ------------------------------------------------------------------------------ |
+| `wrong-mode`      | Not while you're talking — resume walking first                                |
+| `gate-held`       | Not yet — your world is still being written.                                   |
+| `at-cap`          | Your job list is full — finish or set aside a job first.                       |
+| `taken`           | You took that one today — it is on your jobs list.                             |
+| `filled`          | That work is done for today — the board posts it again another day.            |
+| `dup`             | You are already on that one.                                                   |
+| `not-done`        | That one isn't finished yet.                                                   |
+| `unknown-id`      | That job is no longer on your list.                                            |
+| `abandon-unknown` | That job is no longer on your list.                                            |
+| _anything else_   | There is nothing to do at the board just now.                                  |
+
+Two things about that table are deliberate. **The at-cap copy names both reliefs** and both are
+built — finishing is the board's own hand-in, setting aside is the quest tab's per-row confirm — so
+at-cap-as-steady-state is the hoarder's own equilibrium rather than a forced loss: offers cost
+nothing to ignore and never expire. And **`not-at-board` and `no-world` are absent on purpose**, on
+`fishRefusal`'s rule: the button is not on screen where there is no board, so a line for them would
+be copy nobody can reach — which is exactly why the fall-through has to be a real sentence.
+
+### 9.5 What a rewind does to a quest — mode-qualified
+
+Quest state is in the block, and the block rides the route-anchored snapshot, so a quest inherits
+the save's rewind story exactly and adds nothing to it. Stated in the same two halves §11 uses for
+fishing, because a reader who only reads one of them will be wrong:
+
+**Routes mode.** A rewound turn **un-accepts** an accept and **un-completes** a completion, along
+with the money it paid, the counter it incremented and the rapport it bumped — because all four are
+fields of the same block the anchor row carries. The ledger lines go with them. The day's fill
+receipt goes too: `_rebuild` replaces the sim wholesale and the receipt lives on the sim, which is
+the honest pairing (a rewind that un-completes the quest un-files the receipt for it). A same-window
+replay re-mints the **same instance id**, because the id is `(board, day, template)` and none of the
+three moved.
+
+**Metadata mode.** The store does not rewind at all, so the money, the completion counters, the
+rapport and the ledger stay exactly where the play left them while the STORY rewinds around them.
+The journal becomes a permanent record that can diverge from the narration — the same shape 0.12's
+wrap-up carries, inherited from the store rather than introduced here. There is nothing the package
+can do about it from this side; §11 records it, and the Engine gap it names is the same one.
+
+**One thing does NOT rewind in either mode, and it is not a quest field.** A `deliver` errand costs a
+GM call at handover. A rewind can take back the completion; it cannot take back the call.
+
+---
+
+## 10. Sizes: measured, not budgeted
 
 **There is no design budget** (maintainer ruling). The earlier hard "24 KB snapshot / 24 KB bag"
 figures were inherited caution from a mobile-payload worry, and budget-driven caps are what make
@@ -1595,7 +1915,7 @@ Collection caps (§1.2) are gameplay and hygiene bounds chosen for feel — stal
 rollover — never for bytes. Size optimisation is explicitly deferred: if size ever becomes a felt
 problem, that is a later measurement phase, not a reason to shrink the world to fit a number.
 
-### 9.1 What 0.12 added to the wire, measured
+### 10.1 What 0.12 added to the wire, measured
 
 The first release to write into the block is also the first chance to check the "measured, not
 budgeted" claim against something that actually grew:
@@ -1624,9 +1944,45 @@ shard on any write. Delta rows or chunked shard writes would be an engine storag
 the levers are the ones already pulled: small blocks, short keys, caps, and prose held to the capped
 `s` lines.
 
+### 10.2 What 0.13 added to the wire, measured
+
+**The headline is a subtraction.** 0.13 added **no new key** to the player block and none to the
+envelope. `quests_done_board` and `quests.done_pack`/`quests.active` were declared empty by
+`defaultPlayer()` in 0.11 and have been riding the wire ever since; the quest layer is the first
+release to put anything in them. So the pinned wire literal (§2.4) does not move for a block that has
+never taken work, and every number below is growth on a block that has.
+
+| what                          | shape                                                                         | measured                                                                                                                                    |
+| ----------------------------- | ------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------- |
+| one `quests.active` row       | `{id, g, verb, target, n, have, r: {money, xp}, day}` — the closed eight-field literal | **147 bytes** serialized, for a realistic row: a `b1.d12.p:<hash>:<slug>` instance id, a `zoneId\|Giver` handle, a catch role and a derived reward |
+| `quests.active`, at the cap   | `CAPS.activeQuests` 10 rows                                                    | **1,481 bytes** — and the cap REFUSES rather than evicting, so this is a real ceiling and not a preference                                    |
+| one `quests.done_pack` entry  | `"p:<hash>:<slug>": <count>`                                                  | **27 bytes**; at `CAPS.packDone` 40, **791 bytes**                                                                                          |
+| one `quests_done_board` entry | `"b:<slug>": <count>`                                                         | **20 bytes**; at `CAPS.boardDone` 40, **511 bytes** — a theoretical ceiling: only **eight** `b:` templates ship, so forty rows cannot occur in play |
+| ledger lines                  | one per accept, one per completion, one per abandon, **zero per progress**     | no new field and no new cap — they land in `ledger.lines` under `CAPS.ledgerPerDay` 15 and `CAPS.ledgerChars` 200, exactly as fishing's do   |
+
+**Worst case for the whole quest layer inside the block is under 2.8 KB** (10 active rows, both
+completion maps full), against a 262,144-char row cap. That is the same "measured, not defended"
+point §10.1 makes, one release along.
+
+**And the pack is NOT in the block, which is the number that matters most here.** It is a chat
+metadata key of its own (§9.2), so it never enters `snapshot()`, never counts against the Engine's
+per-row cap, and never rides the keepalive pair quota — the two walls at the top of this section
+are untouched by it.
+
+| pack                          | measured                                                                                                     |
+| ----------------------------- | -------------------------------------------------------------------------------------------------------------- |
+| the shipped **default** pack  | **5,475 bytes** (cozy-village) and **5,558 bytes** (sci-fi-colony), each 8 templates, 32 lines, 4 escalation rows and 6 overheard — and neither is ever stored, since the default pack is a read-time fallback |
+| a **sealed** pack, in practice | bounded by the generation fit rather than by a cap: the arithmetic beside `TUNING`'s floors sizes a typical emission at the ~4K-token ceiling, and a floor connection's is smaller still |
+| a sealed pack at every validate cap | **100,654 bytes** — 24 templates, 320 lines, 12 escalation rows, 24 overheard, every string at its own cap. Reachable only by a model emitting ~33K tokens in one reply, which no connection this package talks to will do; the caps are seal-time validate bounds, not a budget |
+
+**There is no storage budget for the pack, deliberately** — the only real budget is the generation
+fit, the caps are what `validate()` refuses above, and **a sealed blob never grows**: it is written
+once and read forever. What a full-cap pack would cost is written down anyway, because a number
+nobody has looked at is how a "no budget" decision turns into a surprise.
+
 ---
 
-## 10. Accepted limitations
+## 11. Accepted limitations
 
 Mirrored from the S5 plan's own table. These are decisions, not oversights.
 
@@ -1661,10 +2017,35 @@ Added by 0.12, and every one of them is a decision the design round took on the 
 | a world sealed **without water** offers no fishing at all — reachable, since the only seal floor is the wilds landmark-stone. `surround: "water"` is prose and density only and paints no water                                                             | accepted; the berth's precedent — no verb has a floor |
 | **`fine` and `masterwork` rods are unobtainable** in 0.12 and mod grading is presence-only, so two tool multipliers and the graded-mod tier are dormant content                                                                                             | by scope                                        |
 | **no rod is ever free**; a rodless player at water sees the button and gets a vendor-pointing refusal. Sci-fi's keeper premium is an **INTERIM** until the device/online-shopping mechanic takes that acquisition                                            | **maintainer ruling (amended)**                 |
-| the purchase is never forced and skippable indefinitely — but 0.12 ships **no income mechanic**, so a player who spends the whole starting purse before buying is priced out of fishing until income lands. No affordability coupling is asserted anywhere    | **maintainer override**; refusable, never broken |
+| the purchase is never forced and skippable indefinitely — but 0.12 ships **no income mechanic**, so a player who spends the whole starting purse before buying is priced out of fishing until income lands. No affordability coupling is asserted anywhere    | **maintainer override**; refusable, never broken. **0.13 unlocks it**: quest completion is the first income mechanic, and nothing couples it to owning a rod — `visit` and `deliver` pay for a walk and a greeting, and half the default pack's eight templates are one or the other. Still no affordability coupling anywhere, which is the point: the way back to the money exists without being arranged |
 | **sci-fi fishing is real fishing** with flavoured variants beside real fish; the well is not a fishing spot                                                                                                                                                 | **maintainer ruling**                           |
 | the character sheet's portrait may render **Tier-0 art for a frame-class window** before assets are ready (self-heals through the value key), and beneath it is a themed generic label until the engine exposes a persona name and avatar                    | accepted; one enumerated Engine FR              |
 | the fishing **trigger UX** and the **journal panel's shape** are ruled *provisionally* — conclusive at the 0.12 playtest                                                                                                                                    | named playtest-checklist items                  |
+
+Added by 0.13, and the same rule holds: every one of them is a decision somebody took on the record.
+
+| limitation (0.13)                                                                                                                                                                                                                                                             | status                                                    |
+| ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------- |
+| **every chat sealed before 0.13 is PACKLESS, permanently.** The seal-side marker is written by the seal PATCH, and a brief sealed by an earlier client wrote none — so no pack is ever expected, no paid call is ever armed, and the board renders its own honest empty state ("No work posted here", never "not yet", never "check back"). The same is true both ways across a mixed-version creation cycle: a pre-0.13 chat sealed by an 0.13 client, and an 0.13 chat sealed by an 0.12 one, are both packless | **maintainer ruling (Q9)** — see the note below this table |
+| the Engine's own Game-Mode **quest tracker is a second, DISJOINT quest surface** reachable in the same chat — it lives in the **Marinara-Engine** repository (`packages/client/src/features/tracker-panel/…/quest-tracker/`), not in this one. Nothing bridges them: a job on this board never appears there, a quest tracked there is invisible here, and neither can complete the other's | **disjoint by design**; bridging is ROADMAP P7's territory  |
+| the day's **fill receipt is sim-resident, not saved**, so a reload mid-day forgets it and the same template can be filled twice that day. It self-heals at midnight, and a rewind clears it deliberately (§9.3)                                                                | accepted; the alternative is a save field for a one-day rule |
+| a **floor connection** (2,048 effective output tokens) whose model writes near the schema's cap on every row comes back under the substance floor on **every** attempt, so the retry screen is that player's steady state rather than a transient. The sizing target is the typical ~4K ceiling, where the same emission clears with room to spare | **accepted** (the degrade ladder's own posture); pinned by the max-shape lane |
+| a truncated response too cut up for `salvageText` to close at all falls through to the ladder's `refused` branch, so the player is told the request was **turned down** when it was answered and lost. "Thin" would be the truer word                                          | **pre-existing**, inherited from the brief's ladder; recorded, not fixed |
+| **`deliver` costs one GM call** at the handover — the one quest verb that is not GM-free. A rewind can take back the completion; it cannot take back the call                                                                                                                  | **by design** (Ruling 1 is "lean", not "zero")             |
+| a template whose **giver is also its target** bumps the same person twice in one turn (once for the conversation, once for the errand)                                                                                                                                        | recorded harmless: a turn that was two things               |
+| **givers are sealed-cast names only.** A city of ~120 souls has at most the sealed cast to post work, because a minted resident has no persona to speak with. Minted givers are E2/OQ11's future                                                                              | by scope                                                    |
+| the verb enum accepts **four words and ships three mechanics** — `gather` folds to `catch` at seal, repair-logged — so a pack asking for gathering gets catching                                                                                                              | by design; the fold is recorded at the seal                 |
+| **rewards are money and rapport only.** Character-level XP, tangible collectibles and reputation each await the system that would make them mean something (ROADMAP P4)                                                                                                        | **maintainer ruling**                                       |
+| a **foreign save's pre-existing skills ladder still renders**, quest-shaped verb rows included. The fence stops this build minting one; it cannot un-mint one that arrived                                                                                                     | pre-existing seam, recorded                                 |
+| **metadata mode**: quest state does not rewind, so money paid, counters incremented and rapport bumped stay where play left them while the story rewinds around them (§9.5)                                                                                                    | mode-qualified; inherited from the store, not new           |
+
+**On the packless row, and it is a posture rather than a debt.** The compatibility window **rolls
+with the game**: legacy grows as the game grows, old-alpha worlds are never re-supported, and at
+full release the floor reaches back at most to late-Beta worlds. So a world-compat row in this
+document is honesty documentation for the CURRENT era's saves and never a promise to older ones. The
+0.14 retro-generation idea — a per-chat, player-initiated "write work for this world?" opt-in, which
+is exactly why the board fixture is unconditional — is a **convenience for recent worlds, not an
+obligation to old ones**, and it is recorded on the roadmap with that caveat attached.
 
 Two of these name **filed** Engine FRs — **#5406** (authoritative write ordering) and **#5407**
 (`rawState` on parse failure). Both are **merged to Engine `staging`** but not yet in a tagged
@@ -1683,3 +2064,93 @@ blocking anything:
   at least put the two in one place for the player — the cheapest honest version of that
   reconciliation, and one that does not require settling the wider narrated-transactions question
   first (ROADMAP P7).
+
+---
+
+## 12. Deferred verification — what is not proven, and who owes it
+
+**This list exists so nothing here is discovered by a player.** Everything above is asserted by the
+harness or read off the source; what follows is the complement — the claims the harness structurally
+cannot reach, gathered in one place instead of scattered across commit messages. **Nothing on this
+list is checked off here.** These are somebody's outstanding items, and the entry says whose.
+
+### 12.1 The live generation ladder — nobody has run it against a real connection
+
+**Every generation lane in the harness is a MOCK driven through the shipped path.** The transport is
+stubbed and the model's reply is staged, which is what makes the ladder's branches — the wait-out on
+a 409, the one same-base re-roll, the salvage of the longest truncated raw, the substance floor's
+seal-versus-fail decision, the `"thin"` kind, the storage failure — testable at all. What no lane
+can produce is the thing itself: a real connection, a real model, real tokens, and a real
+`experience-generation` route answering twice in one creation.
+
+**What is therefore unproven, and it is exactly the two-call shape 0.13 introduced:** that a live
+creation makes the brief call and then the pack call under **one** `_generating` hold; that the
+retry after a pack-stage failure re-enters at the pack call rather than re-rolling the brief; that
+the purse is paid once at the pack-success lift and not twice; and — the one only a real model can
+answer — **whether the guidance actually gets a templates-first emission**, which the floor
+arithmetic leans on as best-effort and says so.
+
+**Owed by:** the maintainer, at the first live 0.13 creation. It is not a code gate; it is the
+first thing a real chat does.
+
+### 12.2 The browser pass
+
+The harness DOM shim has no layout, no scroll and no focus. Seven things about the two 0.13 surfaces
+are therefore asserted only as far as the **write** — that the package sets the property — and the
+part that matters to a player is on the other side of that line:
+
+1. **The scroll reset on a tab switch.** `journalBody.scrollTop = 0` is pinned; the shim has no
+   `scrollTop` that moves a real surface. What wants seeing is a long ledger scrolled halfway, a
+   switch to the jobs tab, and the list arriving at its top rather than two hundred pixels down.
+2. **The abandon confirm's feel.** Two presses, the word changing to "Set it aside?" between them,
+   and — the half no assertion can carry — whether one press reads as *arming* rather than as a
+   press that did nothing.
+3. **The tab strip at mobile width.** Three rows in the panel with the body the sole scroller, and
+   the strip staying on screen when the list under it is long. The strip is built for a third tab it
+   does not yet have, so it wants looking at with two.
+4. **The receipt line's visibility.** A taken or filled offer stays on the board dimmed at opacity
+   0.45; a set-aside sentence renders in the panel rather than a toast, because the panels are opaque
+   and sit above the toast surface. Both are legibility questions, and both are guesses until seen.
+5. **A long job list scrolling.** Ten active jobs plus two done groups at their tallies is the
+   quest tab's realistic maximum; nothing has drawn it at a real height.
+6. **The tally glyphs.** `×2` beside a title, and the "Only the last 40 kinds of work are kept."
+   line under a full group — the multiplication sign and the em dashes at the panel's font size.
+7. **Tab focus and Escape.** The tabs are buttons and carry no dialog furniture deliberately (which
+   the harness pins); what it cannot pin is keyboard focus moving through the strip, and Escape
+   closing the whole panel from a focused tab rather than only from the body.
+
+Beside them, the **retry screen's strings**, which are pinned as strings and never seen at their
+real width: the pack-stage title (_"This world didn't finish opening."_), the waiting body (_"The
+settlement is written. One more call is filling in what its people say and the work they have to
+offer."_), and the failed-state body, which is a `gateReason` sentence and a `gateStageNote`
+sentence printed one after the other — the longest combination is the pack-stage note, and it has
+never been measured against the panel it sits in.
+
+**Owed by:** whoever runs the browser lane before the release goes out — the maintainer, or a
+contributor doing it on their behalf. This package ships no browser test that covers these.
+
+### 12.3 The maintainer's 0.12 playtest, still outstanding
+
+**Two 0.12 rulings are still PROVISIONAL and 0.13 built on both of them, knowingly.** The fishing
+**trigger UX** (M5 — a proximity-gated button rather than a verb menu) and the **journal panel's
+shape** (M11) were ruled provisionally, to be settled at a maintainer playtest that has not yet
+happened. 0.13's board button copies M5's pattern exactly, and 0.13's tab strip lives inside M11's
+panel.
+
+The exposure was deliberately contained rather than bet on: the board's trigger is **trigger-only**,
+so a post-playtest reshape moves the census entry and the gating and touches neither the menu nor
+the pack; and the strip is a thin list mechanism, so a reshape moves the shell and not the tabs.
+That containment is a claim about the code, and it is true today — but it is not a substitute for
+the playtest.
+
+**Owed by:** the maintainer. Until it happens both rulings stay provisional, and a reshape after it
+is a scheduled cost rather than a regression.
+
+### 12.4 Two release-prep items, noted so they are not missed
+
+- **The shipped-history table in `ROADMAP.md` stops at 0.11.** Neither 0.12 nor 0.13 has a row; the
+  release bullets carry what landed. Adding both rows is release-prep work and wants the maintainer's
+  own summary of 0.12, which this document cannot write on their behalf.
+- **The version constant is bumped and the build output is not.** `VERSION` reads 0.13.0;
+  `manifest.json`, `client.js` and the artifact zip are rebuild output and regenerate at release
+  prep, which is the same discipline the 0.11 and 0.12 cycle-opens state.
