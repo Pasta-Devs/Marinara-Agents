@@ -2686,9 +2686,16 @@ async function main() {
       const personaScopeOption = destinationScopePicker.locator('[data-ltm-scope-option="persona:persona-a"]');
       assert.equal(await personaScopeOption.count(), 1);
       assert.match(await personaScopeOption.innerText(), /Space explorer/u);
-      await destinationScopeSearch.press("Escape");
-      await destinationScopePicker.locator('[role="listbox"]').waitFor({ state: "detached" });
+      await personaScopeOption.click();
+      assert.match(await destinationScopeTrigger.innerText(), /Space explorer/u);
       await destinationScopeTrigger.click();
+      await destinationScopeSearch.fill("Private detective");
+      const alternatePersonaScopeOption = destinationScopePicker.locator('[data-ltm-scope-option="persona:persona-b"]');
+      assert.equal(await alternatePersonaScopeOption.count(), 1);
+      await alternatePersonaScopeOption.click();
+      assert.match(await destinationScopeTrigger.innerText(), /Private detective/u);
+      await destinationScopeTrigger.click();
+      await destinationScopeSearch.fill("Memory chat");
       await destinationScopePicker.locator('[role="option"][data-ltm-scope-option="chat:memory-chat"]').click();
       assert.match((await destinationScopeTrigger.innerText()).trim(), /Memory chat/u);
       const addDestination = page.locator("[data-ltm-add-destination]");

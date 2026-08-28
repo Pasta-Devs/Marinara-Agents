@@ -208,13 +208,18 @@ function ScopeTargetPicker({
           }
         }}
       >
-        <span
-          className="min-w-0 flex-1 truncate"
-          title={selectedTarget ? targetDisplayLabel(selectedTarget, destination) : undefined}
-        >
-          {selectedTarget
-            ? targetDisplayLabel(selectedTarget, destination)
-            : localizeUi("ui.longTermMemory.sourcesworkspace.chooseDestination")}
+        <span className="min-w-0 flex-1">
+          <span
+            className="block truncate"
+            title={selectedTarget ? targetDisplayLabel(selectedTarget, destination) : undefined}
+          >
+            {selectedTarget
+              ? targetDisplayLabel(selectedTarget, destination)
+              : localizeUi("ui.longTermMemory.sourcesworkspace.chooseDestination")}
+          </span>
+          {selectedTarget?.comment ? (
+            <span className="block truncate text-xs text-[var(--muted-foreground)]">{selectedTarget.comment}</span>
+          ) : null}
         </span>
         <ChevronDown
           aria-hidden="true"
