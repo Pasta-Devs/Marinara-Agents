@@ -2154,12 +2154,9 @@ the playtest.
 **Owed by:** the maintainer. Until it happens both rulings stay provisional, and a reshape after it
 is a scheduled cost rather than a regression.
 
-### 12.4 One release-prep item, noted so it is not missed
+### 12.4 Release prep — nothing currently owed
 
-- **The shipped-history table in `ROADMAP.md` stops at 0.11.** Neither 0.12 nor 0.13 has a row; the
-  release bullets carry what landed. Adding both rows is release-prep work and wants the maintainer's
-  own summary of 0.12, which this document cannot write on their behalf.
-
-**The build output is no longer among them.** `VERSION`, `manifest.json`, `client.js` and the
-artifact zip are all at 0.13.0 and were regenerated in this cycle rather than deferred to release
-prep — so the only thing this section still owes is the two table rows above.
+Both items this section carried are resolved in-cycle: the build output (`VERSION`,
+`manifest.json`, `client.js`, the artifact zip) was regenerated at 0.13.0 rather than deferred, and
+the shipped-history table's missing 0.12 and 0.13 rows were written with the maintainer's explicit
+authorization (2026-08-28). The header stays so the next release's prep has a place to land.
