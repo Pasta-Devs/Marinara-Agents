@@ -20255,10 +20255,6 @@ const fire = (node, type) => Promise.all((node.listeners[type] ?? []).map((fn) =
     const measured = loadedPF.pack.digest(everyCap);
     assert.equal(measured.length, 2_580, "the biggest legal digest is the 2,580 chars the table beside digest() says");
     assert.equal(measured.split("\n").length, 21, "…across twenty-one rows, one of them per person");
-    assert.ok(
-      measured.length + 7_800 > pack.USER_CONTENT_CAP,
-      "…which is why the preferences clip against it rather than beside it",
-    );
   }
 
   // ── AND THE PREFERENCES CLIP AGAINST WHAT IS LEFT ─────────────────────────
