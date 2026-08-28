@@ -943,8 +943,11 @@ PF.Hud = class {
     this._journal = true;
     // THESE TWO ARE DEFENSIVE SYMMETRY, and saying so is the point: the CLOSE
     // side is the load-bearing one, and every close routes through
-    // `closeJournal` — the chip, Escape via `closePanels`, the mode change — so
-    // nothing can reach this line with a press still armed or a slot still held.
+    // `closeJournal` — the chip, and Escape via `closePanels` — so nothing can
+    // reach this line with a press still armed or a slot still held. (Leaving
+    // the world is NOT one of them: `update` HIDES the journal and leaves
+    // `_journal` true, so the panel comes back as it was on the next in-world
+    // frame. It never reaches this line at all.)
     // They are unkillable by construction and a mutation test will never red on
     // them; they stay because an open that assumed a clean slot would be resting
     // on a guarantee written in another method.
@@ -1194,16 +1197,18 @@ PF.Hud = class {
    *  `,`, and the sections with `~`. THREE SEPARATORS ARE NOT THREE FENCES, and
    *  the earlier claim here that a value carrying one could not forge a boundary
    *  above it was simply wrong: `g` is `"zoneId|Name"` and carries the field
-   *  separator in every row that exists, and a board or zone name with a `~` in
-   *  it lands at the top level. What makes that harmless is not the separators
-   *  but what happens to the key afterwards — NOTHING PARSES IT. It is built,
-   *  compared whole against the last one, and thrown away; no reader ever splits
-   *  it back into fields, so there is no structure for a forged boundary to
-   *  mislead. The only failure a separator in a value could ever buy is a
-   *  COLLISION — two different blocks rendering the same string — which takes a
-   *  row hand-built to collide (the numeric fields go through `_num` and cannot
-   *  carry one), and which costs exactly one missed repaint: a line left stale
-   *  until the next thing moves. Not a wrong render, not a lost mutation. */
+   *  separator in every row this build mints (58-player's `giverOf` still
+   *  tolerates a bar-less legacy value, which is the only kind that does not),
+   *  and a board or zone name with a `~` in it lands at the top level. What
+   *  makes that harmless is not the separators but what happens to the key
+   *  afterwards — NOTHING PARSES IT. It is built, compared whole against the
+   *  last one, and thrown away; no reader ever splits it back into fields, so
+   *  there is no structure for a forged boundary to mislead. The only failure a
+   *  separator in a value could ever buy is a COLLISION — two different blocks
+   *  rendering the same string — which takes a row hand-built to collide (the
+   *  numeric fields go through `_num` and cannot carry one), and which costs
+   *  exactly one missed repaint: a line left stale until the next thing moves.
+   *  Not a wrong render, not a lost mutation. */
   _questValueKey() {
     const player = PF.player.get(this.core);
     const world = this.core.sim?.world;

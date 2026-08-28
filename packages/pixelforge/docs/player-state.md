@@ -1678,9 +1678,11 @@ the ones it was on. Benign, and of a piece with a demotion — neither touches a
 **Counter classes, and the split the tab renders.** `p:<packHash>:<slug>` is WORLD-BOUND (generated
 content belongs to the world it was written for, and is severed with it) and counts into
 `quests.done_pack`; `b:<slug>` is WORLD-FREE — the default pack's generic work means the same thing
-anywhere, true by construction because those rows target catch ROLES rather than variants — and
-counts into `quests_done_board`. `quest("complete")` routes on exactly that prefix, which is why the
-id class is the whole of the rule.
+anywhere, true by construction because the four rows that target a CATCH name a role rather than a
+variant (a role means the same thing in every theme), and the other four name stock-cast residents
+and generic place handles every world stands up — and counts into `quests_done_board`.
+`quest("complete")` routes on exactly that prefix, which is why the id class is the whole of the
+rule.
 
 **The seal/fail substance floor.** `validate()` returns **null** below the floor, and null is a
 FAILURE rather than a thin success: the gate holds, the retry screen says the world is safe, and
@@ -1888,8 +1890,10 @@ GM call at handover. A rewind can take back the completion; it cannot take back 
 
 **There is no design budget** (maintainer ruling). The earlier hard "24 KB snapshot / 24 KB bag"
 figures were inherited caution from a mobile-payload worry, and budget-driven caps are what make
-settlements feel tiny. Sizes are **measured** — harness case (ah) prints them on every run — and
-asserted only against the walls that are real:
+settlements feel tiny. Sizes are **measured** — harness case (ah) prints a saturated world's block,
+snapshot and teardown-pair bytes against the two save walls on every run, and the per-release tables
+below are measured the same way, off the shipped serializer and the shipped seal — and asserted only
+against the walls that are real:
 
 | wall                           | value                                                                            | why it is real                                                                                                                             |
 | ------------------------------ | -------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------ |
@@ -1954,15 +1958,19 @@ never taken work, and every number below is growth on a block that has.
 
 | what                          | shape                                                                         | measured                                                                                                                                    |
 | ----------------------------- | ------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------- |
-| one `quests.active` row       | `{id, g, verb, target, n, have, r: {money, xp}, day}` — the closed eight-field literal | **147 bytes** serialized, for a realistic row: a `b1.d12.p:<hash>:<slug>` instance id, a `zoneId\|Giver` handle, a catch role and a derived reward |
-| `quests.active`, at the cap   | `CAPS.activeQuests` 10 rows                                                    | **1,481 bytes** — and the cap REFUSES rather than evicting, so this is a real ceiling and not a preference                                    |
-| one `quests.done_pack` entry  | `"p:<hash>:<slug>": <count>`                                                  | **27 bytes**; at `CAPS.packDone` 40, **791 bytes**                                                                                          |
-| one `quests_done_board` entry | `"b:<slug>": <count>`                                                         | **20 bytes**; at `CAPS.boardDone` 40, **511 bytes** — a theoretical ceiling: only **eight** `b:` templates ship, so forty rows cannot occur in play |
+| one `quests.active` row       | `{id, g, verb, target, n, have, r: {money, xp}, day}` — the closed eight-field literal | **147 bytes** serialized for a REPRESENTATIVE row — a `b1.d12.p:<hash>:<slug>` instance id, a `zoneId\|Giver` handle, a catch role and a derived reward. Not a constant: the id, the giver's name and the day are what vary, and legal rows run **123-201 bytes** across them |
+| `quests.active`, at the cap   | `CAPS.activeQuests` 10 rows                                                    | **1,481 bytes** on that representative row — 10 × 147, plus the 11 the array itself costs (two brackets, nine commas) — and the cap REFUSES rather than evicting, so this is a real ceiling and not a preference |
+| one `quests.done_pack` entry  | `"p:<hash>:<slug>": <count>`                                                  | **27 bytes** at the exemplar key shape — a 6-char pack hash and a 14-char slug, which is what `catch-common-3` measures; at `CAPS.packDone` 40 of that shape, **1,121 bytes** |
+| one `quests_done_board` entry | `"b:<slug>": <count>`                                                         | **20 bytes** at the same 14-char slug; at `CAPS.boardDone` 40, **841 bytes** — a theoretical ceiling: only **eight** `b:` templates ship, so forty rows cannot occur in play |
 | ledger lines                  | one per accept, one per completion, one per abandon, **zero per progress**     | no new field and no new cap — they land in `ledger.lines` under `CAPS.ledgerPerDay` 15 and `CAPS.ledgerChars` 200, exactly as fishing's do   |
 
-**Worst case for the whole quest layer inside the block is under 2.8 KB** (10 active rows, both
-completion maps full), against a 262,144-char row cap. That is the same "measured, not defended"
-point §10.1 makes, one release along.
+**Worst case for the whole quest layer inside the block is ~3.4 KB** — 1,481 + 1,121 + 841 = **3,443
+bytes** with 10 active rows and both completion maps full, of which 3,437 is GROWTH, since the three
+empty keys ride the wire already. Against a 262,144-char row cap that is **1.3%**. Every cell above
+shares ONE key shape, which is what this table got wrong before: the at-cap figures were measured on
+a narrower slug than the per-entry figures beside them, so the two halves of the same row disagreed
+by 330 bytes each. The thesis never needed the smaller number — it is the same "measured, not
+defended" point §10.1 makes, one release along.
 
 **And the pack is NOT in the block, which is the number that matters most here.** It is a chat
 metadata key of its own (§9.2), so it never enters `snapshot()`, never counts against the Engine's
@@ -1973,7 +1981,7 @@ are untouched by it.
 | ----------------------------- | -------------------------------------------------------------------------------------------------------------- |
 | the shipped **default** pack  | **5,475 bytes** (cozy-village) and **5,558 bytes** (sci-fi-colony), each 8 templates, 32 lines, 4 escalation rows and 6 overheard — and neither is ever stored, since the default pack is a read-time fallback |
 | a **sealed** pack, in practice | bounded by the generation fit rather than by a cap: the arithmetic beside `TUNING`'s floors sizes a typical emission at the ~4K-token ceiling, and a floor connection's is smaller still |
-| a sealed pack at every validate cap | **100,654 bytes** — 24 templates, 320 lines, 12 escalation rows, 24 overheard, every string at its own cap. Reachable only by a model emitting ~33K tokens in one reply, which no connection this package talks to will do; the caps are seal-time validate bounds, not a budget |
+| a sealed pack at every validate cap | **93-107 KB** — 24 templates, 320 lines, 12 escalation rows, 24 overheard, every string at its own cap, sealed clean with no repair lines. It is a BAND rather than a number because the caps bound the STRINGS and leave the enum and grain words free: 93,003 bytes at the cheapest legal ones (a `visit` at a `place`; `hall`/`day`/`friend` index rows carrying neither optional axis) and 107,303 at the widest (`deliver`, a 24-char giver, a 24-char cast name as the target; `settlement`/`night`/`stranger` rows carrying both), with the briefHash's own digit count worth ~80 bytes inside either. Reachable only by a model emitting ~31-36K tokens in one reply, which no connection this package talks to will do; the caps are seal-time validate bounds, not a budget |
 
 **There is no storage budget for the pack, deliberately** — the only real budget is the generation
 fit, the caps are what `validate()` refuses above, and **a sealed blob never grows**: it is written
