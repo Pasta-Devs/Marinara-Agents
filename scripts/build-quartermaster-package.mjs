@@ -37,7 +37,7 @@ const PACKAGE_ID = "quartermaster";
 // live this session. Reset this to a clean starting version (0.1.0) in one
 // commit right before this is actually proposed; the intervening bumps are
 // disposable dev-iteration numbers, not real releases.
-const VERSION = "0.5.0";
+const VERSION = "0.5.1";
 // Declared against the exact staging Engine this scaffold was built and tested
 // against. Do not lower this to reach stable users — see CONTRIBUTING.md.
 const ENGINE_MIN = "2.4.4";
@@ -48,7 +48,7 @@ const BUILT_AGAINST = Object.freeze({
   engineCommit: "5c5a0bc8e7e4a6ef213dee45bf37fc7fba589e33",
 });
 const BASE_DESCRIPTION =
-  "A per-chat RPG character sheet and inventory manager: equip slots, item locations, saved outfits, portrait and item images, and a read-only stat display. Early scaffold — most features are not yet implemented.";
+  "A per-chat RPG character sheet and inventory manager: equip slots, item locations, saved outfits, portrait and item images, and a read-only stat display, with an optional tracker agent that syncs equipped items and inventory from the story. Early scaffold — most features are not yet implemented.";
 // Local/fork dev testing (installing an unpublished build via a self-hosted
 // catalog — see CONTRIBUTING.md's MARINARA_CATALOG_INCLUDE_INCOMPLETE note)
 // needs the artifact to resolve from wherever it's actually pushed, not the
@@ -158,10 +158,13 @@ const manifest = {
   //   appearance field resolves to the current outfit/equipped items.
   // ui: the roleplay-tracker/tracker-panel client contribution.
   // agent-runtime: registers "agent-runtime:quartermaster" (server.mjs) so the
-  //   "quartermaster-tracker" pipeline agent's output reconciles into our own
-  //   store instead of native game-state — required by
+  //   "quartermaster" agent's own post_processing output reconciles into our
+  //   own store instead of native game-state — required by
   //   assertCapabilityAgentRuntimeServiceRegistration, confirmed against
-  //   capability-agent-runtime.service.ts this session.
+  //   capability-agent-runtime.service.ts this session. One agent def, not
+  //   two — every other package in this repo ships exactly one; Memory Nag
+  //   is the precedent for combining UI/storage identity and a real
+  //   post_processing pipeline agent under that same single entry.
   permissions: ["agent-runtime", "chat-read", "chat-write", "routes", "storage", "ui"],
   // The routes permission forces this: getCapabilityPackageInstallIssue in the
   // Engine's package-manager.service.ts rejects install for any package that

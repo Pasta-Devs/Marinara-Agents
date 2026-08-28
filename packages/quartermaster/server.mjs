@@ -8,11 +8,16 @@
 // (named snapshots of the equip-slot state). No images, locks, or party
 // members yet.
 //
-// Also wires up the "quartermaster-tracker" pipeline agent (agents.json): a
-// post_processing LLM call that reads each turn's narration and returns a
-// full-snapshot description of the owner's current items/equip state, which
-// reconcileTrackerOutput turns into real mutations against this same store —
-// see that function's own comment and plan §16 for the design.
+// Also wires up agents.json's single "quartermaster" entry as a real
+// post_processing pipeline agent — an LLM call that reads each turn's
+// narration and returns a full-snapshot description of the owner's current
+// items/equip state, which reconcileTrackerOutput turns into real mutations
+// against this same store. One agent def doing both UI/storage identity and
+// the real LLM call, not two — every other package in this repo ships
+// exactly one (Memory Nag is the precedent for this exact hybrid shape:
+// client+server+routes AND a real post_processing agent, all under one
+// entry). See reconcileTrackerOutput's own comment and plan §16 for the
+// design.
 //
 // location is one of:
 //   "bag"                 — carried, unequipped
@@ -182,7 +187,7 @@ function computeAppearanceText(state) {
 }
 
 // ── Agent-driven inventory sync (plan §16) ──────────────────────────────────
-// A post_processing tracker agent (agents.json's "quartermaster-tracker")
+// The single "quartermaster" agent (agents.json), running post_processing,
 // reads each turn's narration and returns a full-snapshot JSON description of
 // what the owner currently has/wears. reconcileTrackerOutput (wired up in
 // activate() via the agent-runtime capability) turns that into real mutations
@@ -400,7 +405,7 @@ export async function activate(context) {
     await syncAppearanceMacro(persistence, chatId, ownerId, state);
   }
 
-  // Wires the "quartermaster-tracker" pipeline agent (agents.json) to this
+  // Wires the "quartermaster" agent's post_processing pipeline run to this
   // package's own store — see reconcileTrackerOutput's own comment. Keyed
   // "agent-runtime:<packageId>" per the capability-agent-runtime contract;
   // requires the "agent-runtime" permission in the manifest.

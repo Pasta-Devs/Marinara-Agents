@@ -2,25 +2,7 @@
   {
     "id": "quartermaster",
     "name": "Quartermaster",
-    "description": "A per-chat RPG character sheet and inventory manager: equip slots, item locations, saved outfits, portrait and item images, and a read-only stat display. Early scaffold — most features are not yet implemented.",
-    "author": "Pasta Devs",
-    "phase": "pre_generation",
-    "enabledByDefault": false,
-    "category": "tracker",
-    "runtimeDisabled": true,
-    "libraryHidden": false,
-    "modeAllowlist": [
-      "roleplay"
-    ],
-    "defaultTools": [],
-    "defaultSettings": {},
-    "defaultPromptTemplate": "",
-    "execution": "feature"
-  },
-  {
-    "id": "quartermaster-tracker",
-    "name": "Quartermaster Tracker",
-    "description": "Reads the latest message and updates the persona's equipped items and inventory to match — equipping/unequipping, adding/removing items, and adjusting quantities and storage locations. Add the Agent in Chat Settings → Agents → Tracker Agents for Roleplay mode.",
+    "description": "A per-chat RPG character sheet and inventory manager: equip slots, item locations, saved outfits, portrait and item images, and a read-only stat display, with an optional tracker agent that syncs equipped items and inventory from the story. Early scaffold — most features are not yet implemented.",
     "author": "Pasta Devs",
     "phase": "post_processing",
     "enabledByDefault": false,
