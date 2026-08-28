@@ -20194,6 +20194,73 @@ const fire = (node, type) => Promise.all((node.listeners[type] ?? []).map((fn) =
     assert.ok(text.length < 3_000, `the worst-case digest stays about 2.5K (${text.length} chars)`);
   }
 
+  // ── THE WORST-CASE NUMBER IS MEASURED, NOT ESTIMATED ──────────────────────
+  // The fixture above is at the cast and place caps, but its roles and homes are
+  // shorter than 24 — so it is not the biggest LEGAL digest, and the table beside
+  // digest() states a number for the biggest one. This is that brief.
+  //
+  // THE FIELDS ARE SOLID TOKENS ON PURPOSE. `capText` cuts on the last space past
+  // half the cap, so a spaced phrase seals a character or two SHORT of the cap and
+  // a fixture written in prose measures under the real maximum — which is how a
+  // worst-case table comes to understate its own worst case. Nothing with a space
+  // near the cut reaches the cap exactly.
+  {
+    const solid = (n, seed) => `${seed}${"x".repeat(n)}`.slice(0, n);
+    // The place HANDLES are the only free term left in a place row, and these four
+    // are the longest the vocabulary and the place caps allow between them (one
+    // gathering, one sanctuary, and workshops are not rationed).
+    const everyCap = brief.validate(
+      {
+        scale: "city",
+        name: solid(24, "Wrenfallowmere"),
+        surround: "water",
+        prosperity: "thriving",
+        situation: solid(240, "Theford"),
+        places: ["gathering", "workshop", "workshop", "sanctuary"].map((kind, i) => ({
+          kind,
+          name: solid(24, `Place${i}`),
+        })),
+        cast: Array.from({ length: 10 }, (_, i) => ({
+          name: solid(24, `Person${i}`),
+          role: solid(24, `Role${i}`),
+          kind: "folk",
+          tint: "blue",
+          home: solid(24, `Home${i}`),
+          household: i + 1,
+          persona: solid(100, `Persona${i}`),
+        })),
+      },
+      { theme: "cozy-village", seed: 4242 },
+    );
+    assert.equal(everyCap.name.length, 24, "the every-cap fixture's settlement name is AT the cap, not near it");
+    assert.equal(everyCap.situation.length, 240, "…and its situation");
+    assert.ok(
+      everyCap.places.length === 4 && everyCap.places.every((place) => place.name.length === 24),
+      "…and four places, each named to the cap",
+    );
+    assert.equal(
+      everyCap.places.reduce((sum, place) => sum + place.kind.length, 0),
+      34,
+      "…carrying the longest handles four legal places can (9 + 8 + 8 + 9)",
+    );
+    assert.ok(
+      everyCap.cast.length === 10 &&
+        everyCap.cast.every((m) => m.name.length === 24 && m.role.length === 24 && m.home.length === 24),
+      "…and ten people whose names, roles and homes are all at 24",
+    );
+    assert.ok(
+      everyCap.cast.every((m) => m.persona.length === 100),
+      "…with personas at the full 100, which a spaced phrase never reaches",
+    );
+    const measured = loadedPF.pack.digest(everyCap);
+    assert.equal(measured.length, 2_580, "the biggest legal digest is the 2,580 chars the table beside digest() says");
+    assert.equal(measured.split("\n").length, 21, "…across twenty-one rows, one of them per person");
+    assert.ok(
+      measured.length + 7_800 > pack.USER_CONTENT_CAP,
+      "…which is why the preferences clip against it rather than beside it",
+    );
+  }
+
   // ── AND THE PREFERENCES CLIP AGAINST WHAT IS LEFT ─────────────────────────
   // The route 400s past 8,000 characters. 18-brief clips at a constant 7,800
   // because it sends nothing else; here the digest is subtracted first, so the
@@ -20234,6 +20301,73 @@ const fire = (node, type) => Promise.all((node.listeners[type] ?? []).map((fn) =
       assert.ok(composed.length <= pack.USER_CONTENT_CAP, `the request is still legal (${composed.length} chars)`);
       assert.ok(composed.startsWith("The settlement is Overfull."), "…and it is still this world's digest");
     }
+  }
+
+  // ── AND EVERY FIELD IT READS GOES THROUGH THE BRIEF'S OWN CAPS ────────────
+  // Same door, same reason, one level down: the composed request being legal is
+  // not the same claim as the ROWS being legal. This brief is what a hand-edited
+  // save or a forward build with a wider cap hands back — a persona nine thousand
+  // characters long, a tag fragment, raw control bytes, and an embedded NEWLINE —
+  // and each of those is a different kind of damage. The length is what the
+  // worst-case table beside digest() is a bound on; the tag and the control bytes
+  // are what `capText` exists for; and the newline is the structural one, because
+  // the section header promises the model ONE ROW PER PERSON and a raw newline in
+  // a persona is a second row with nobody's name on it.
+  {
+    const hostile = pack.digest({
+      name: `Sharp${String.fromCharCode(7)}town <script>alert(1)</script> and then a great deal more name than this`,
+      situation: `A situation ${"that runs on and on ".repeat(60)}`,
+      places: [{ kind: "gathering", name: `The Inn\nof Two Rows and a name far past the cap it is allowed` }],
+      cast: [
+        {
+          name: `Wren Ash\nSecond Row`,
+          role: `miller${String.fromCharCode(0)} and a role description that is much too long to be one`,
+          home: `The Mill <b>bold</b> and a home address longer than any cap`,
+          persona: `Wants the ford rebuilt.\nAnd hides who let it go. ${"Padding to nine thousand. ".repeat(360)}`,
+        },
+      ],
+    });
+    const rows = hostile.split("\n");
+    // ONE ROW PER PERSON, and counted STRUCTURALLY — everything after the PEOPLE
+    // header is the cast section, so a newline that survived any of the four
+    // fields shows up here as a row too many rather than as text in the wrong
+    // place. A cast of one is one row; the brief gave four chances to make it two.
+    const people = rows.slice(rows.findIndex((row) => row.startsWith("PEOPLE —")) + 1);
+    assert.equal(people.length, 1, "one hostile cast member is exactly one row, whatever their fields carried");
+    assert.ok(people[0].startsWith("- Wren Ash Second Row,"), "…with the newline in the name folded to a space");
+    // THE ROW STAYS INSIDE THE PER-PERSON BOUND the worst-case table costs:
+    // 24 + 24 + 24 + 100 and the 18 characters of joining punctuation, so 190.
+    assert.ok(
+      people[0].length <= 190,
+      `every field on the row is inside its own cap, so the row is inside 190 (${people[0].length})`,
+    );
+    assert.ok(
+      hostile.length <= 2_580,
+      `…and the whole digest is inside the table's bound off a 9,000-char input (${hostile.length} chars)`,
+    );
+    // NOTHING A TAG OR A CONTROL BYTE CAN BE REASSEMBLED FROM.
+    assert.ok(!/[<>]/.test(hostile), "no angle bracket survives, so no tag fragment can");
+    // Every control byte but the newline the rows are JOINED with.
+    assert.ok(
+      [...hostile].every((ch) => ch.charCodeAt(0) === 10 || ch.charCodeAt(0) >= 32),
+      "and no control byte rides into userContent",
+    );
+    // THE CAPS ARE THE BRIEF'S OWN NUMBERS, checked on the fields the worst-case
+    // table costs: a name, a place name, a role and a home at 24, a persona at 100.
+    const nameRow = rows[0];
+    assert.ok(nameRow.length <= "The settlement is ".length + 24 + 1, `the settlement name clips at 24 (${nameRow})`);
+    const placeRow = rows.find((row) => row.includes("— gathering"));
+    assert.ok(placeRow.length <= 2 + 24 + 3 + "gathering".length, `the place name clips at 24 (${placeRow})`);
+    assert.ok(hostile.includes("What is unresolved right now: A situation"), "the situation is still there");
+    const lead = "What is unresolved right now: ";
+    const situationLength = rows.find((row) => row.startsWith(lead)).length - lead.length;
+    // CLIPPED, NOT DROPPED. This is a read door, and #566's seam posture is that
+    // read time may only fold — the seal is where an over-length hook degrades to
+    // nothing, because that is where it would be kept forever.
+    assert.ok(
+      situationLength > 200 && situationLength <= 240,
+      `the situation clips at the brief's own 240 rather than being dropped (${situationLength})`,
+    );
   }
 
   // ── GUIDANCE AND SCHEMA STAY INSIDE THEIR OWN WALLS ───────────────────────

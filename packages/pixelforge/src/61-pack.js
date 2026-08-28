@@ -283,15 +283,38 @@ PF.pack = (() => {
    *  also the single biggest field here (100 chars × a cast of ten), which is why
    *  the worst case is measured rather than hoped at:
    *
-   *    the settlement's name and the section headers ....................  ~150
-   *    the situation (18-brief caps it) .................................    240
-   *    the zone list: the root plus 4 places × (name 24 + kind + dashes) .  ~180
-   *    the cast: 10 × (name 24 + role 24 + home 24 + persona 100 + ~20) .  1,920
+   *    the settlement's name row and the two section headers ............    201
+   *    the situation, with its lead-in (18-brief caps the field at 240) .    270
+   *    the zone list: the root plus 4 places × (name 24 + kind + dashes) .    189
+   *    the cast: 10 × (name 24 + role 24 + home 24 + persona 100 + 18) ..  1,900
+   *    the newlines joining the twenty-one rows ........................     20
    *                                                                       ------
-   *                                                                        2,490
+   *                                                                        2,580
    *
-   *  …which is the plan's ~2.5K, and it leaves better than 5,300 chars of the cap
-   *  for the player's own words.
+   *  …which is the plan's ~2.5K, and it leaves better than 5,200 chars of the cap
+   *  for the player's own words. 2,580 is MEASURED and not estimated: the harness
+   *  searches for the biggest digest a legal brief can produce — every field at
+   *  its cap, in tokens with no space near the cut so `capText` clips at the cap
+   *  exactly rather than at a word boundary short of it — and pins the number, so
+   *  this table cannot drift away from the code beneath it.
+   *
+   *  AND THOSE CAPS ARE APPLIED HERE, WHICH IS WHAT MAKES THE TABLE A BOUND
+   *  RATHER THAN AN EXPECTATION. Every field above is read back through the
+   *  brief's OWN `capText` at the brief's OWN number — 24 for a name, a role, a
+   *  home or a place, 100 for a persona, 240 for the situation — because this is
+   *  a read door over a stored artifact and `foldStoredTemplate`'s header already
+   *  says what that means: the brief this composes from is round-tripped chat
+   *  metadata, and 18-brief's byte budget bounds what IT wrote, not what a
+   *  hand-edited save or a forward build with a wider cap hands back. Read time
+   *  may only FOLD (#566's seam posture), so oversize CLIPS here rather than
+   *  costing the row the way the seal would drop it.
+   *
+   *  It is not only a length guard. `capText` sanitizes on the way through, so a
+   *  round-tripped persona carrying a tag fragment, a control byte or an EMBEDDED
+   *  NEWLINE cannot ride into `userContent` — and the newline is the one that
+   *  matters structurally rather than cosmetically, because the section below
+   *  promises the model one row per person and a raw newline in a persona is a
+   *  second row with nobody's name on it.
    *
    *  IT NAMES THE PLACE KINDS OUT LOUD, and that is not decoration: a place's
    *  `kind` IS the location handle the index is keyed by (LOCATIONS above), so
@@ -302,23 +325,23 @@ PF.pack = (() => {
   function digest(brief) {
     const cast = Array.isArray(brief?.cast) ? brief.cast : [];
     const places = Array.isArray(brief?.places) ? brief.places : [];
-    const name = str(brief?.name) || "the settlement";
+    const name = capText(brief?.name, 24) || "the settlement";
     const out = [`The settlement is ${name}.`];
-    const situation = str(brief?.situation);
+    const situation = capText(brief?.situation, 240);
     if (situation) out.push(`What is unresolved right now: ${situation}`);
     out.push("", "PLACES — the second word is the location handle a line is keyed by:", `- ${name} — settlement`);
     for (const place of places) {
-      const placeName = str(place?.name);
+      const placeName = capText(place?.name, 24);
       if (!placeName) continue;
       out.push(`- ${placeName} — ${foldEnum(place?.kind, LOCATIONS, "dwelling")}`);
     }
     out.push("", "PEOPLE — use these names EXACTLY; givers and speakers come from this list and nowhere else:");
     for (const member of cast) {
-      const who = str(member?.name);
+      const who = capText(member?.name, 24);
       if (!who) continue;
-      const role = str(member?.role);
-      const home = str(member?.home);
-      const persona = str(member?.persona);
+      const role = capText(member?.role, 24);
+      const home = capText(member?.home, 24);
+      const persona = capText(member?.persona, 100);
       out.push(
         `- ${who}${role ? `, ${role}` : ""}${home ? `, lives at ${home}` : ""}${persona ? ` — ${persona}` : ""}`,
       );
