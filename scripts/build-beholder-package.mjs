@@ -25,7 +25,7 @@ const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const packageRoot = join(repoRoot, "packages/beholder");
 const artifactsDir = join(repoRoot, "artifacts");
 
-const VERSION = "1.3.3";
+const VERSION = "1.3.6";
 const ENGINE_MIN = "2.4.4";
 const MAX_ENGINE_EXCLUSIVE = "4.0.0";
 const BASE_DESCRIPTION =
@@ -35,15 +35,14 @@ const sha256 = (value) => createHash("sha256").update(value).digest("hex");
 
 // ── Client bundle ────────────────────────────────────────────────────────────
 // src/*.js in filename order, wrapped in one strict IIFE, preceded by the
-// stylesheets, interface strings and brand mark inlined as constants. Inlining
-// keeps the client a single file with no second request and no third-party host.
+// stylesheets and interface strings inlined as constants. Inlining keeps the
+// client a single file with no second request and no third-party host.
 const srcDir = join(packageRoot, "src");
 const parts = (await readdir(srcDir)).filter((name) => name.endsWith(".js")).sort();
 if (parts.length === 0) throw new Error("Beholder has no client source modules");
 
 const styleCss = await readFile(join(srcDir, "style.css"), "utf8");
 const faCss = await readFile(join(srcDir, "fa-embed.css"), "utf8");
-const logo = await readFile(join(packageRoot, "bh-logo.png"));
 const localeDir = join(srcDir, "locales");
 const locales = {};
 for (const name of (await readdir(localeDir)).filter((file) => file.endsWith(".json")).sort()) {
@@ -56,8 +55,7 @@ for (const name of (await readdir(localeDir)).filter((file) => file.endsWith(".j
 const constants =
   `const BH_STYLE_CSS = ${JSON.stringify(styleCss)};\n` +
   `const BH_FA_CSS = ${JSON.stringify(faCss)};\n` +
-  `const BH_LOCALES = ${JSON.stringify(locales)};\n` +
-  `const BH_LOGO = ${JSON.stringify(`data:image/png;base64,${logo.toString("base64")}`)};\n`;
+  `const BH_LOCALES = ${JSON.stringify(locales)};\n`;
 
 const banner =
   `// Beholder ${VERSION} — Marinara Engine roleplay-toolbar capability (single-file client bundle)\n` +

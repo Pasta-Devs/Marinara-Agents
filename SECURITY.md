@@ -17,3 +17,5 @@ Catalog SHA-256 values detect accidental corruption and mismatched downloads. Th
 - pins third-party GitHub Actions by full commit SHA.
 
 Repository administrators should keep `staging` protected with pull requests, catalog validation, CodeQL, CodeRabbit, review-thread resolution, and the required owner-approval status check. That check must exempt only active Pasta-Devs organization members and owners; every outside contributor needs a current-head approval from `SpicyMarinara`, and membership or API failures must fail closed. Do not add a repository-role or team bypass that could admit outside collaborators or exclude private organization members. Keep force pushes and branch deletion disabled. Protect `main` separately so only `SpicyMarinara` may promote tested work from `staging`.
+
+CodeQL analyzes pull requests targeting both `staging` and `main`, so the tested catalog retains the same source and workflow scan when it is promoted to the stable channel.

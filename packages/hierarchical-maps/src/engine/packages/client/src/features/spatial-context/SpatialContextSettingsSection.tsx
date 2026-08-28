@@ -62,13 +62,15 @@ export function SpatialContextSettingsSection({
           </span>
           <span
             aria-hidden="true"
-            className={`h-5 w-9 shrink-0 rounded-full p-0.5 transition-colors ${
-              enabledForChat ? "bg-[var(--primary)]" : "bg-[var(--muted-foreground)]/50"
+            data-settings-switch-track
+            className={`inline-flex h-5 w-9 shrink-0 items-center rounded-full p-0.5 transition-colors ${
+              enabledForChat ? "bg-[var(--primary)]/70 mari-accent-animated" : "bg-[var(--border)]"
             }`}
           >
             <span
-              className={`block h-4 w-4 rounded-full bg-white shadow-sm transition-transform ${
-                enabledForChat ? "translate-x-3.5" : ""
+              data-settings-switch-thumb
+              className={`pointer-events-none block h-4 w-4 shrink-0 rounded-full bg-[var(--background)] shadow-sm ring-1 ring-[var(--border)] transition-transform ${
+                enabledForChat ? "translate-x-4" : ""
               }`}
             />
           </span>

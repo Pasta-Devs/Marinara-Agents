@@ -1,0 +1,17 @@
+{
+  "$schema": "../../../schemas/package-localization.schema.json",
+  "_meta": {
+    "locale": "en",
+    "direction": "ltr"
+  },
+  "package": {
+    "name": "Gacha Forge",
+    "description": "A configurable gacha game mode. Forge a world from your lorebooks, pull on banners, collect the cast the model writes for you, then take them into battle: play story chapters told by a visual-novel narrator, build a formation, farm materials, level and gear your units, and claim the login event and battle pass. Install it, restart Marinara Engine when prompted, then open Home → Gacha Forge."
+  },
+  "agents": {
+    "gacha-forge": {
+      "name": "Gacha Forge",
+      "description": "A configurable gacha game mode. Forge a world from your lorebooks, pull on banners, collect the cast the model writes for you, then take them into battle: play story chapters told by a visual-novel narrator, build a formation, farm materials, level and gear your units, and claim the login event and battle pass. Install it, restart Marinara Engine when prompted, then open Home → Gacha Forge."
+    }
+  }
+}

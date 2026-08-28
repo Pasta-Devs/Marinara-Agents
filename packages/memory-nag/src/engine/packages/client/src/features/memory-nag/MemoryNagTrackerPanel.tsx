@@ -10,6 +10,7 @@ export function MemoryNagTrackerPanel({ props }: { props: CapabilityProps }) {
   const { t } = useMemoryNagTranslation();
   const chatId = props.chatId ?? "";
   const enabled = props.chatMode === "roleplay" && Boolean(chatId);
+  const mobileCompact = props.mobileCompact === true;
   const [index, setIndex] = useState(0);
   const [collapsed, setCollapsed] = useState(false);
   const vault = useQuery({
@@ -28,28 +29,39 @@ export function MemoryNagTrackerPanel({ props }: { props: CapabilityProps }) {
   }, [nags.length]);
 
   if (!enabled) return null;
+  const heading = (
+    <>
+      {!mobileCompact ? (
+        <span className="mn-tracker-chevron-frame" aria-hidden="true">
+          <ChevronDown className={`mn-tracker-chevron${collapsed ? " mn-tracker-chevron--collapsed" : ""}`} />
+        </span>
+      ) : null}
+      <span className="mn-tracker-icon" aria-hidden="true">
+        <MessageSquareQuote className="mn-tracker-panel-icon" />
+      </span>
+      <strong className="mn-tracker-title">{t("memoryNag.tracker.title")}</strong>
+    </>
+  );
   return (
-    <section className="mn-shell mn-tracker">
-      <div className="mn-tracker-veil" aria-hidden="true" />
+    <section className={`mn-shell mn-tracker${mobileCompact ? " mn-tracker--mobile-compact" : ""}`}>
+      {!mobileCompact ? <div className="mn-tracker-veil" aria-hidden="true" /> : null}
       <div className="mn-tracker-content">
         <div className="mn-tracker-header">
-          <button
-            type="button"
-            className="mn-tracker-toggle"
-            aria-expanded={!collapsed}
-            aria-label={t("memoryNag.tracker.title")}
-            onClick={() => setCollapsed((value) => !value)}
-          >
-            <span className="mn-tracker-chevron-frame" aria-hidden="true">
-              <ChevronDown className={`mn-tracker-chevron${collapsed ? " mn-tracker-chevron--collapsed" : ""}`} />
-            </span>
-            <span className="mn-tracker-icon" aria-hidden="true">
-              <MessageSquareQuote className="mn-tracker-panel-icon" />
-            </span>
-            <strong className="mn-tracker-title">{t("memoryNag.tracker.title")}</strong>
-          </button>
+          {mobileCompact ? (
+            <div className="mn-tracker-toggle mn-tracker-toggle--static">{heading}</div>
+          ) : (
+            <button
+              type="button"
+              className="mn-tracker-toggle"
+              aria-expanded={!collapsed}
+              aria-label={t("memoryNag.tracker.title")}
+              onClick={() => setCollapsed((value) => !value)}
+            >
+              {heading}
+            </button>
+          )}
         </div>
-        {!collapsed ? (
+        {mobileCompact || !collapsed ? (
           <div className={`mn-tracker-value${nags.length === 0 ? " mn-tracker-value--empty" : ""}`}>
             {nags[index] ?? t("memoryNag.tracker.none")}
           </div>

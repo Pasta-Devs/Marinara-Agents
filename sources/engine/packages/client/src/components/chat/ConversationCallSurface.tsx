@@ -171,6 +171,7 @@ const CALL_VIDEO_LOOP_GUARD_SECONDS = 0.12;
 const CALL_OPTIMISTIC_MESSAGE_RECONCILE_MS = 5 * 60 * 1000;
 const CALL_MUTED_REMINDER_TIMEOUT_MS = 10_000;
 const CALL_SPEECH_BACKPRESSURE_NOTICE_MS = 8_000;
+const CALL_AUDIO_CONVERSION_YIELD_SAMPLES = 32_768;
 const DEFAULT_TEXT_TO_VOICE_PAUSE_MS = 1_800;
 const ONLINE_CHARACTER_JOIN_DELAY_MS = 1_600;
 const AWAY_CHARACTER_JOIN_DELAY_MS = 10_000;
@@ -717,18 +718,25 @@ function getAudioContextCtor() {
   );
 }
 
-function mixAudioBufferToMono(buffer: AudioBuffer): Float32Array {
+function yieldDuringAudioConversion() {
+  return new Promise<void>((resolve) => window.setTimeout(resolve, 0));
+}
+
+async function mixAudioBufferToMono(buffer: AudioBuffer): Promise<Float32Array> {
   const output = new Float32Array(buffer.length);
   for (let channel = 0; channel < buffer.numberOfChannels; channel += 1) {
     const data = buffer.getChannelData(channel);
     for (let index = 0; index < buffer.length; index += 1) {
       output[index] += data[index]! / buffer.numberOfChannels;
+      if (index > 0 && index % CALL_AUDIO_CONVERSION_YIELD_SAMPLES === 0) {
+        await yieldDuringAudioConversion();
+      }
     }
   }
   return output;
 }
 
-function resampleAudio(samples: Float32Array, fromRate: number, toRate: number): Float32Array {
+async function resampleAudio(samples: Float32Array, fromRate: number, toRate: number): Promise<Float32Array> {
   if (fromRate === toRate) return samples;
   const outputLength = Math.max(1, Math.round((samples.length * toRate) / fromRate));
   const output = new Float32Array(outputLength);
@@ -739,11 +747,14 @@ function resampleAudio(samples: Float32Array, fromRate: number, toRate: number):
     const right = Math.min(samples.length - 1, left + 1);
     const fraction = sourceIndex - left;
     output[index] = samples[left]! * (1 - fraction) + samples[right]! * fraction;
+    if (index > 0 && index % CALL_AUDIO_CONVERSION_YIELD_SAMPLES === 0) {
+      await yieldDuringAudioConversion();
+    }
   }
   return output;
 }
 
-function encodePcmWav(samples: Float32Array, sampleRate: number): Blob {
+async function encodePcmWav(samples: Float32Array, sampleRate: number): Promise<Blob> {
   const bytesPerSample = 2;
   const dataSize = samples.length * bytesPerSample;
   const buffer = new ArrayBuffer(44 + dataSize);
@@ -769,10 +780,14 @@ function encodePcmWav(samples: Float32Array, sampleRate: number): Blob {
   view.setUint32(40, dataSize, true);
 
   let offset = 44;
-  for (const sample of samples) {
+  for (let index = 0; index < samples.length; index += 1) {
+    const sample = samples[index]!;
     const clamped = Math.max(-1, Math.min(1, sample));
     view.setInt16(offset, clamped < 0 ? clamped * 0x8000 : clamped * 0x7fff, true);
     offset += bytesPerSample;
+    if (index > 0 && index % CALL_AUDIO_CONVERSION_YIELD_SAMPLES === 0) {
+      await yieldDuringAudioConversion();
+    }
   }
 
   return new Blob([buffer], { type: "audio/wav" });
@@ -786,9 +801,9 @@ async function convertRecordedAudioToWavFile(blob: Blob): Promise<File> {
   const audioContext = new AudioContextCtor();
   try {
     const decoded = await audioContext.decodeAudioData(await blob.arrayBuffer());
-    const mono = mixAudioBufferToMono(decoded);
-    const resampled = resampleAudio(mono, decoded.sampleRate, 16_000);
-    const wav = encodePcmWav(resampled, 16_000);
+    const mono = await mixAudioBufferToMono(decoded);
+    const resampled = await resampleAudio(mono, decoded.sampleRate, 16_000);
+    const wav = await encodePcmWav(resampled, 16_000);
     return new File([wav], "call-audio.wav", { type: "audio/wav" });
   } finally {
     void audioContext.close();
@@ -2377,6 +2392,7 @@ export function ConversationCallSurface({
           nativePreferred: false,
           transcriptionMode: "local_whisper",
         });
+        callSpeechSubmissionPendingRef.current = false;
         await playTurns(result.turns);
         return;
       }
@@ -2392,6 +2408,7 @@ export function ConversationCallSurface({
         kind: includeVideo ? "video" : "audio",
         nativePreferred: nativeInputMode,
       });
+      callSpeechSubmissionPendingRef.current = false;
       await playTurns(result.turns);
     },
     [localWhisperInputMode, nativeInputMode, playTurns, recordingWillUseLocalWhisperFallback, sendMedia],

@@ -16,6 +16,7 @@ let activePopover: { id: string; close: () => void } | null = null;
 
 export const inputClass = "mari-editor-field min-h-11 w-full px-3 text-sm";
 export const compactInputClass = "mari-chrome-field min-h-9 w-full !rounded-md px-3 py-2 text-xs";
+export const compactInputStyle = { color: "var(--foreground)" } as const;
 
 export const Button = forwardRef<
   HTMLButtonElement,
@@ -280,6 +281,7 @@ export function NumberField({
         aria-labelledby={`${id}-label`}
         data-ltm-control="number"
         className={compact ? compactInputClass : inputClass}
+        style={compact ? compactInputStyle : undefined}
         type="number"
         value={text}
         min={min}

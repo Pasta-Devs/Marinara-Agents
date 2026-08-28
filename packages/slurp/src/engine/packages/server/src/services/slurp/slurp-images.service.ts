@@ -183,7 +183,15 @@ export async function generateNoodlerPostImage(input: {
   });
   const styleGuidance = resolveImageStyleGuidanceText(imageSettings.styleProfiles, compiledPrompt.profile.id);
   const rawFinalPrompt = redactIdentity(input.promptOverride?.prompt.trim() || compiledPrompt.prompt);
-  const imagePromptInstructions = input.imageConnection.imagePromptInstructions?.trim();
+  // Custom prompt templates may omit `userInstructions`, so restore configured instructions only
+  // when the rendered prompt does not already contain them.
+  const configuredImageInstructions = input.settings.imageGenerationPrompt.trim();
+  const imagePromptInstructions = [
+    configuredImageInstructions && !postPrompt.includes(configuredImageInstructions) ? configuredImageInstructions : "",
+    input.imageConnection.imagePromptInstructions?.trim() ?? "",
+  ]
+    .filter(Boolean)
+    .join("\n");
   const instructionLine = imagePromptInstructions
     ? `User image instructions: ${imagePromptInstructions.replace(/\s+/g, " ").slice(0, 5000)}`
     : "";

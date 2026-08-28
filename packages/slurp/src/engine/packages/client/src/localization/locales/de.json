@@ -12,6 +12,7 @@
   "settings.notifications.customSound.status.custom": "Benutzerdefiniert",
   "settings.sections.imageGeneration.title": "Bild-Generierung",
   "settings.sections.notifications.title": "Benachrichtigungen",
+  "ui.slurp.actions.cancel": "Abbrechen",
   "ui.slurp.settings.generationMode": "Automatische Generierung",
   "ui.slurp.settings.generationModeDetail": "Beiträge vorab vorbereiten oder erst zum geplanten Zeitpunkt generieren.",
   "ui.slurp.settings.generationModePreGenerate": "Vorab vorbereiten",

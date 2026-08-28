@@ -1,12 +1,12 @@
 # The World Brief — schema v1 (sealed spec)
 
-**Architecture:** the LLM decides *what exists*, the algorithm decides *where every tile goes.*
+**Architecture:** the LLM decides _what exists_, the algorithm decides _where every tile goes._
 One structured call at game creation (engine #5135, route
 `POST /api/game/:chatId/experience-generation`) turns the wizard's preferences into a compact
 **brief**; a deterministic compiler builds the tile world from `compile(brief, seed)` forever
 after. This document is the contract between them.
 
-Synthesized from a three-draft adversarial panel (minimal-enum ×  repair-first base, judged by a
+Synthesized from a three-draft adversarial panel (minimal-enum × repair-first base, judged by a
 cost skeptic and the compiler author). Design rule inherited from the product discussion: **the form
 does the teaching** — the model fills vocabularies and bounded lists; free text exists only where a
 named consumer in shipped code reads it, and no field the model writes can become geometry except
@@ -176,7 +176,11 @@ response is **never stored** (checkpoints capture by value — see #5110).
    `situation` degrades to empty instead (a cut hook is worse than none).
 3. **Zones.** Cap/dedupe places (folded-name collision → seed-derived suffix on the LABEL only);
    drop feature items with unknown tags whole; a `host` in the cast with no gathering place
-   synthesizes AT MOST ONE interior named from the host (the player can walk into the inn).
+   synthesizes AT MOST ONE interior named from the host, in the theme's own word for a common
+   room — `Mira's Cantina`, `Perrin's Inn` — so the player can see which door is the inn. The
+   synthesis is a **post-condition on the SEALED cast**, so it is asserted twice: here, against
+   the model's draft, early enough that a `home` can resolve at the interior it just created; and
+   again after the pass-6 floors, against the cast that actually sealed (below).
 4. **Cast.** Bounds 4-10 (over → keep `leader` + first-N by array order, hoisting a `leader`
    found past the cap into the kept set); `home` resolution per §1. There is NO cap on how many
    people share a household number — unrelated lodgers, sisters at a convent and recruits in a
@@ -260,28 +264,75 @@ response is **never stored** (checkpoints capture by value — see #5110).
    enforce ≥2 distinct households (split by seed), ≥2 zones (synthesize one wilds), ≥3 distinct
    tints (rotate by seed), and no feature tag on more than TWO kept slots (the surplus re-rolls
    by seed from the theme's placer list). Every top-up derives from `hash(seed, floorName)`.
+   **Then §4.3 again, last of all** (see pass 3): the cast floor tops up from a STOCK roster and
+   every roster leads with a `host`, so a brief whose cast failed validation outright sealed a
+   keeper with nowhere to keep — and the compiler builds the common room from the gathering PLACE,
+   never from a `host` in the cast, so that settlement compiled as houses with no inn in it. Same
+   room caps as pass 3 (`places` room for the rank, gathering cap 1) and the same ledger entry. It
+   runs _after_ the wilds floor deliberately: "no named place at all" and "a keeper with nothing to
+   keep" are different lacks, and a settlement whose cast was topped up gets both floors. (The
+   pass-3 synthesis is the one path that still stands the wilds floor down: a model host with zero
+   surviving places seals `[gathering]` and no wilds — deliberate, since that model _did_ name a
+   place through its host, and the wilds floor answers namelessness, not a missing outdoors.)
 
 **Global budget:** the sealed brief must serialize ≤8 KB; over-budget briefs truncate prose fields
 in reverse-leverage order (`persona`s → zone `flavor`s → `flavor`) before anything structural.
 
-## 5. Latency & failure budget (generation never blocks — amended)
+**Read-side fold (#566).** The seal is a guarantee about the moment of sealing and nothing
+re-asserted it after the brief round-tripped through chat metadata: `PF.save._configBrief` returns
+`meta.pixelforgeBrief` as stored and `PF.world.build`'s gate asks only about its SHAPE, so a dozen
+reads inside the compiler indexed tables with values nothing had vetted. `PF.brief.foldStored` folds
+those values on a PRIVATE COPY at build()'s door, before the compiler sees them.
 
-*Amended from the sealed draft (which put generation in the wizard with a Skip button): the
+It is **not** a second `validate()`, and the difference is a contract: **seal time may DROP; read
+time may only FOLD.** Re-running the repair passes on read would re-apply the per-rank caps and
+floors to a brief sealed under a table that may not be this build's — an older build would silently
+strip places a newer one seated, which is the same silent zone loss the fold exists to close. Every
+array length, name and id crosses the fold untouched; only a value the compiler was about to use as
+a table key can move, and it moves to the default (`_ids` and prose are not folded at all).
+
+The fold is also why the copy is private. `PF.player.briefHashOf` hashes `JSON.stringify(brief)` over
+the object `_configBrief` hands back, so a load path that returned different bytes than it was given
+would sever an honest save from its own unchanged world. `validate()` is not byte-idempotent (a brief
+that took repairs re-validates with an empty `_repairs`, and a stock top-up member's key order is not
+the main path's) and it reorders the cast it is handed on the leader-hoist path — either alone rules
+it out of the read path. Fold results ride the copy as `_folds`, surface on the compiled world as
+`briefFolds` when there are any, and are **never written back** to the stored brief.
+
+## 5. Latency & failure budget (generation BLOCKS behind a loading gate — amended twice)
+
+_Amended from the sealed draft (which put generation in the wizard with a Skip button): the
 pre-launch chat is not experience-stamped, so the #5135 route 409s before launch, and after
-launch the host tears the setup UI down — there is no wizard window to block.* Generation runs
-**surface-side, after launch**: the wizard stamps `generate: true` into the experience config and
-seeds the themed default world, so the player is walking immediately; the one call runs behind a
-toast. Package-side call budget: 90 s abort; `userContent` clamps to 7,800 chars (the route 400s
+launch the host tears the setup UI down — there is no wizard window to block._ Generation runs
+**surface-side, after launch**: the wizard stamps the player's `generate` answer into the
+experience config. _The Skip button came back in 0.11 as a checkbox on the setup rather than a
+button in a window that no longer exists — unchecked writes `generate: false`, no gate arms, and
+the chat plays the themed default world immediately, which is also what every pre-0.4.0 save
+does._
+_Amended again in 0.11 (maintainer ruling #7, plan §Q3b): it no longer runs behind a toast on a
+throwaway world the player is already walking in. A generate-configured chat whose brief is not
+sealed holds at a **loading gate** — the sim does not step, no mutator resolves, no save is
+written — because a world that is going to be discarded must never be one anybody invested in._
+Package-side call budget: 90 s abort; `userContent` clamps to 7,800 chars (the route 400s
 past 8,000 — a hard contract). On a 409 `chat_busy` (server-documented transient, Retry-After 15)
 → wait it out **once** inside the budget. On the route's `truncated: true` 422 → **one** plain
-re-roll retry — *amended: the draft said "retry at maxTokens: 4096", but the route treats
+re-roll retry — _amended: the draft said "retry at maxTokens: 4096", but the route treats
 `maxTokens` as min()-only ("never a raise"), so a numeric override could only shrink the budget;
-the retry's value is length variance* — then **salvage** from the LONGEST `raw` seen across both
+the retry's value is length variance_ — then **salvage** from the LONGEST `raw` seen across both
 attempts (transport pass rules: balanced span, complete array elements) and let the floors top up
-the rest. Only outcomes worth sealing seal: success, salvage, or a deterministic/paid failure
-(400 contract, `provider_error`/parse-failure 422) → themed defaults. Transient outcomes — 404
-route-absent, 409, 429, 5xx, network error, budget timeout — leave the chat **unsealed**: the
-key stays absent and the next visit simply tries again (the default world plays fine meanwhile).
+the rest. **NO FAILURE SEALS A WORLD** — only the two outcomes that produce a real brief do:
+success and salvage. Every other outcome, transient (404 route-absent, 409, 429, 5xx, network
+error, budget timeout) _and deterministic_ (400 contract, `provider_error`/parse-failure 422),
+leaves the chat **unsealed**: the key stays absent, the gate shows a retry screen, and the next
+visit arms it again.
+_Revised in 0.11 (maintainer ruling #7, plan §Q3b). The 0.4.0 ladder sealed themed defaults on a
+deterministic/paid failure, on the reasoning that a paid call per visit is worse than the default
+world. That decision predates the loading gate, which now holds play precisely so that nobody
+invests in a world that is going to be discarded — so sealing a default is no longer "the world
+they were already walking in", it is a permanent decision made on their behalf in the one case they
+cannot undo. The `userContent` clamp above also makes a reachable 400 a contract bug rather than a
+long setting. The ladder reports the failure KIND instead (`unavailable` | `refused` | `network` |
+`timeout`), and the retry screen says which._
 The sealed result stores **atomically** under the top-level `pixelforgeBrief` metadata key
 (shallow-merge PATCH, 3 retries — never a read-modify-write of the whole setup config), and the
 world rebuilds in place when it lands; the stored key doubles as the one-shot guard, so a chat
@@ -296,18 +347,33 @@ tag ships placers with zero schema/prompt change), but **every tag in the shippe
 have a placer for EVERY shipped theme, enforced by a startup assertion over the registry** — the
 fallback chain is for third-party extension, not for shipping silent per-theme feature loss.
 
-| tag             | cozy-village            | sci-fi-colony              |
-| --------------- | ----------------------- | -------------------------- |
-| water-feature   | pond + well             | coolant pool + recycler    |
-| crop-plots      | fenced crops            | hydroponics trays          |
-| market-stalls   | table/awning row        | vendor kiosk row           |
-| workyard        | fenced stone yard       | cargo pad + crates         |
-| landmark-stone  | standing stone + light  | monument mast + beacon     |
-| shrine          | stone pad + fence       | memorial alcove            |
-| water-crossing  | stream + ford           | coolant channel + bridge   |
-| dense-growth    | heavy trees             | mast/antenna field         |
-| ruin            | roofless broken walls   | breached hull section      |
-| lookout         | raised stone pad        | observation platform       |
+| tag            | cozy-village           | sci-fi-colony            |
+| -------------- | ---------------------- | ------------------------ |
+| water-feature  | pond + well            | coolant pool + recycler  |
+| crop-plots     | fenced crops           | hydroponics trays        |
+| market-stalls  | table/awning row       | vendor kiosk row         |
+| workyard       | fenced stone yard      | cargo pad + crates       |
+| landmark-stone | standing stone + light | monument mast + beacon   |
+| shrine         | stone pad + fence      | memorial alcove          |
+| water-crossing | stream + ford          | coolant channel + bridge |
+| dense-growth   | heavy trees            | mast/antenna field       |
+| ruin           | roofless broken walls  | breached hull section    |
+| lookout        | raised stone pad       | observation platform     |
+
+**Water and roads (0.12).** Exactly one placement relaxed: a **wilds `water-feature`**, which runs
+a second pass of eight anchor attempts with the approach road off the reservation once the strict
+eight are spent. A settlement anchor overlapping an artery is still refused outright for every tag
+including this one, and `water-crossing` scans no anchors at all — the builder paints it at a fixed
+spot. Where a road runs through a water rect the road tiles are laid as **bridge** — a walkable
+treatment drawn over the water — and the water takes the rest (`20-world.js` `waterFill`). The
+crossing's hand-painted ford is the same idea and migrated onto the same tile, so the "ford" and
+"bridge" in the table above are now one visual system rather than two. It is a placement
+treatment and **not a taggable feature**: no new row in this vocabulary, no new `_ids` ordinal,
+and a settlement pond that decks a plaza with planks is a blessed outcome rather than a case to
+guard against — the plaza's `path` decks, while a `thriving` settlement's paved central 4×4 is
+`stone`, deliberately outside `ROAD_GROUND`, and waters over instead. What it bought is a
+`water-feature` in the wilds at all — the 8×5 anchor could never clear the reserved road band, so
+before this the wilds pond a brief asked for simply never existed.
 
 ## 7. Injection discipline (metering the prose)
 
@@ -315,18 +381,18 @@ Written here because it is what keeps the brief from taxing every turn forever: 
 `role` ride the per-turn header **always**; `situation` injects **once, on the first outbound
 turn**; a zone's `flavor` injects **once on first entry**; an NPC's `persona` injects **once per
 NPC** (first interaction). The one-shot flags **persist in saves** and burn only when the host
-*accepts* the turn (a refused send never loses the prose), so a reload never re-taxes the
+_accepts_ the turn (a refused send never loses the prose), so a reload never re-taxes the
 context. Nothing else from the brief ever enters GM context — the durable channel is **chat
 history**: each injection lands once inside a committed turn and stays in the transcript the GM
 re-reads every generation.
 
 ## 8. World Maps export (shipped in 0.5.0)
 
-*History: the sealed draft made World Maps the durable channel via an export "at first compile";
+_History: the sealed draft made World Maps the durable channel via an export "at first compile";
 that was deferred because no runtime location write API existed, and the durable channel became
 chat history (§7 — unchanged). World Maps 1.4.0 shipped the write path
 (`POST /api/chats/:chatId/spatial-context/locations`, Marinara-Engine#5144), so the export now
-runs.*
+runs._
 
 Once the exterior binds to its starting location (the §50-spatial seed binding), every other
 compiled zone registers as a **child of that bound location**: interiors as `kind: "building"`,
@@ -357,22 +423,45 @@ they are rooms inside a building the settlement already contains, not destinatio
 The gate exists because this route is additive with **no delete**: a row written to a player's real
 map is permanent, so it ships with the zone type that needs it rather than a release later.
 
-Not yet exported (still §9 territory): the root's population phrase and per-feature locations —
+Not yet exported: the root's population phrase (still §9 territory) and per-feature locations —
 features have no zones of their own, and decorating the root would edit a location the user may
 have authored (the route deliberately cannot).
+
+**0.12's feature register is deliberately NOT exported here, and that is a decision rather than an
+oversight.** The register (§9) now holds a rect per feature, which is the first per-feature
+geometry the package has ever had, so extending this export is the obvious next thought. It is
+declined: rows written by this route are permanent on a player's real map with no delete, no field
+on a location is shaped to hold a rect, and the register is recomputed from the sealed brief on
+every compile — so an export would stamp derived, re-derivable data irreversibly onto somebody's
+map. The determinism lane in `test-brief.mjs` (same seed + brief → the same register) is the sole
+guard the register needs, and it is enough because nothing outside the package ever sees it.
 
 ## 9. Reserved consumers
 
 The schema seals fields before their consumers exist, so shipped briefs never need regeneration
 when a consumer lands — the schema is the contract, not the renderer. The pattern has paid out
-twice already: `prosperity` now drives dress (path material, fence quality, night-light density,
-ground-fill bias) and `backgroundPopulation` now leans the minted population within its rank's
-band (0.10, §1). Still waiting for a consumer: feature `name` labels (planned: on-map
-signage/inspect text — roadmap S2) and the root's population phrase (§8).
+three times now: `prosperity` drives dress (path material, fence quality, night-light density,
+ground-fill bias), `backgroundPopulation` leans the minted population within its rank's band
+(0.10, §1), and **feature `name` labels went live in 0.12** — a brief that named a pond eight
+releases ago says that name on a player's screen today, with no regeneration and no schema change.
+
+How the name arrives, since it is the pattern working exactly as designed. The compiler's
+placement loop records every feature it places into a per-zone register (`zone.features[]` —
+`{id, tag, name, rect}`, `20-world.js` `recordFeature`), and the `id` is the feature's **`_ids`
+ordinal** from §2, mirrored by POSITION rather than looked up by name so two features sharing a
+name cannot swap identities. The register is DERIVED and never serialized: it is recomputed from
+the sealed brief on every compile, so it costs no save bytes and cannot drift. What consumes the
+name is the fishing verb — the Fish button reads `🎣 Fish <name>` off the register row under the
+player's hand (`70-hud.js`), and each session's ledger line names the spot it was fished at
+(`59-economy.js` `_logDay`), which is what the journal panel shows and what the GM is told at the
+wrap-up. The planned on-map signage / inspect-text consumer (roadmap S2) is still ahead; this is a
+second consumer of the same field, not a replacement for it.
+
+Still waiting for a consumer: the root's population phrase (§8).
 
 ## 10. Guidance note on theme mismatch
 
-The shipped guidance states verbatim: *the theme is authoritative; dress the player's setting text
-to fit it.* A player typing "cyberpunk megacity" under `cozy-village` gets a cozy village wearing
+The shipped guidance states verbatim: _the theme is authoritative; dress the player's setting text
+to fit it._ A player typing "cyberpunk megacity" under `cozy-village` gets a cozy village wearing
 cyberpunk names — coherent tiles, themed prose — never a schema error. (A wizard-side nudge when
 the free text is far from the chosen theme is a 0.4.x follow-up.)

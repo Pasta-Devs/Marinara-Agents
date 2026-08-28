@@ -234,7 +234,7 @@ async function main() {
       );
       assert.match(
         artifactClient,
-        /extract:(?:\w+\.)?\w+!=="refresh"/u,
+        /extract:[^,}]+!=="refresh"/u,
         "Normal imports must continue extracting source notes",
       );
       assert.match(
@@ -571,6 +571,9 @@ async function main() {
       let failReviewContext = false;
       let omitReviewContextId: string | null = null;
       let reviewPreflightBlocked = false;
+      let confirmReviewDiscard = false;
+      let lastReviewDiscardMessage = "";
+      let reviewQueueEmpty = false;
       let reviewFingerprintRevision = 0;
       let lastInjectionRequests = 0;
       browserServer = createServer(async (request, response) => {
@@ -666,29 +669,38 @@ async function main() {
             });
           return send(200, {
             generatedAt: "2026-07-30T00:00:00.000Z",
-            sources: reviewSources.map((source) => ({
-              ...source,
-              drafts: source.drafts.map((item: any) => ({
-                ...item,
-                draft: {
-                  ...item.draft,
-                  updatedAt: reviewFingerprintRevision ? "2026-07-30T00:00:01.000Z" : item.draft.updatedAt,
-                },
-              })),
-            })),
+            sources: reviewQueueEmpty
+              ? []
+              : reviewSources.map((source) => ({
+                  ...source,
+                  drafts: source.drafts.map((item: any) => ({
+                    ...item,
+                    draft: {
+                      ...item.draft,
+                      updatedAt: reviewFingerprintRevision ? "2026-07-30T00:00:01.000Z" : item.draft.updatedAt,
+                    },
+                  })),
+                })),
             counts: {
-              sources: reviewSources.length,
-              drafts: reviewSources.reduce((count, source) => count + source.drafts.length, 0),
-              mutations: reviewSources.reduce(
-                (count, source) =>
-                  count +
-                  source.drafts.reduce((draftCount: number, item: any) => draftCount + item.draft.mutations.length, 0),
-                0,
-              ),
-              blockedDrafts: reviewSources.reduce(
-                (count, source) => count + source.drafts.filter((item: any) => item.blockReasons.length).length,
-                0,
-              ),
+              sources: reviewQueueEmpty ? 0 : reviewSources.length,
+              drafts: reviewQueueEmpty ? 0 : reviewSources.reduce((count, source) => count + source.drafts.length, 0),
+              mutations: reviewQueueEmpty
+                ? 0
+                : reviewSources.reduce(
+                    (count, source) =>
+                      count +
+                      source.drafts.reduce(
+                        (draftCount: number, item: any) => draftCount + item.draft.mutations.length,
+                        0,
+                      ),
+                    0,
+                  ),
+              blockedDrafts: reviewQueueEmpty
+                ? 0
+                : reviewSources.reduce(
+                    (count, source) => count + source.drafts.filter((item: any) => item.blockReasons.length).length,
+                    0,
+                  ),
               candidateRejections: 0,
               deduplications: 0,
             },
@@ -990,29 +1002,31 @@ async function main() {
           rejectedSuggestionQueries.push(url.search);
           if (url.searchParams.has("chatId")) return send(200, { suggestions: [], total: 0 });
           return send(200, {
-            suggestions: [
-              {
-                id: rejectedSuggestionId,
-                fingerprint: "a".repeat(64),
-                source: { sourceNoteId: "source_mobile_recovery" },
-                scope: {},
-                modes: ["roleplay"],
-                candidate: {
-                  index: 0,
-                  reason: "invalid_format",
-                  message: "A recoverable mobile memory.",
-                  snippet: "A recoverable mobile memory.",
-                  recovery: {
-                    noteType: "world",
-                    noteId: "world_mobile_recovery",
-                    sectionKey: "facts",
+            suggestions: reviewQueueEmpty
+              ? []
+              : [
+                  {
+                    id: rejectedSuggestionId,
+                    fingerprint: "a".repeat(64),
+                    source: { sourceNoteId: "source_mobile_recovery" },
+                    scope: {},
+                    modes: ["roleplay"],
+                    candidate: {
+                      index: 0,
+                      reason: "invalid_format",
+                      message: "A recoverable mobile memory.",
+                      snippet: "A recoverable mobile memory.",
+                      recovery: {
+                        noteType: "world",
+                        noteId: "world_mobile_recovery",
+                        sectionKey: "facts",
+                      },
+                    },
+                    createdAt: "2026-07-30T00:00:00.000Z",
+                    lastSeenAt: "2026-07-30T00:00:00.000Z",
                   },
-                },
-                createdAt: "2026-07-30T00:00:00.000Z",
-                lastSeenAt: "2026-07-30T00:00:00.000Z",
-              },
-            ],
-            total: 1,
+                ],
+            total: reviewQueueEmpty ? 0 : 1,
           });
         }
         if (request.method === "POST" && url.pathname.endsWith("/notes")) {
@@ -1150,6 +1164,34 @@ async function main() {
                 })),
               }))
               .filter((source) => source.drafts.some((item: any) => item.draft.mutations.length > 0));
+          } else if (action === "skip" && draftId === reviewDraftIds.merge) {
+            reviewSources = reviewSources
+              .map((source) => ({
+                ...source,
+                drafts: source.drafts
+                  .filter((item: any) => item.draft.id !== draftId)
+                  .map((item: any) =>
+                    item.draft.id === reviewDraftIds.second
+                      ? {
+                          ...item,
+                          draft: {
+                            ...item.draft,
+                            mutations: item.draft.mutations.filter(
+                              (mutation: any) => mutation.id !== reviewMutationIds.partial,
+                            ),
+                          },
+                        }
+                      : item,
+                  ),
+                targets: source.targets.map((target: any) => ({
+                  ...target,
+                  rows: target.rows.filter(
+                    (row: any) =>
+                      row.draftId !== reviewDraftIds.second || row.mutation.id !== reviewMutationIds.partial,
+                  ),
+                })),
+              }))
+              .filter((source) => source.drafts.some((item: any) => item.draft.mutations.length > 0));
           } else {
             reviewSources = reviewSources
               .map((source) => ({
@@ -1165,7 +1207,12 @@ async function main() {
                 autoIncludedMutationIds: [],
                 indexRebuild: { status: "not_requested" },
               })
-            : send(200, { mutationIds });
+            : send(200, {
+                mutationIds:
+                  draftId === reviewDraftIds.merge
+                    ? [...new Set([...mutationIds, reviewMutationIds.partial])]
+                    : mutationIds,
+              });
         }
         if (request.method === "DELETE" && url.pathname.includes("/rejected-suggestions/")) {
           deletedSuggestionId = decodeURIComponent(url.pathname.split("/").at(-1)!);
@@ -1192,6 +1239,10 @@ async function main() {
         promptPresetEditorOpens.push(Date.now());
       });
       await page.exposeFunction("declineDestinationChange", () => false);
+      await page.exposeFunction("confirmReviewDiscard", (options: { message?: string }) => {
+        lastReviewDiscardMessage = options.message ?? "";
+        return confirmReviewDiscard;
+      });
       await page.addInitScript(() => {
         Object.defineProperty(Crypto.prototype, "randomUUID", {
           configurable: true,
@@ -1917,48 +1968,64 @@ async function main() {
         .locator('[data-ltm-status="danger"]')
         .filter({ hasText: "Memory context could not load." });
       await reviewContextError.waitFor();
-      await page.locator('[data-ltm-review-source-select="source_mobile_review"]').click();
-      await page.locator('[data-ltm-workspace-pane-tab="navigator"]').click();
+      assert.equal(await page.locator("[data-ltm-workspace]").isVisible(), false);
+      assert.equal(await page.locator('[data-ltm-review-action="apply"]').count(), 0);
       const reviewUtilitySizes = await page
         .locator('[data-ltm-status="danger"] button, [data-ltm-review-rejected-count]')
-        .evaluateAll((elements) => elements.map((element) => element.getBoundingClientRect().toJSON()));
+        .evaluateAll((elements) =>
+          elements
+            .map((element) => element.getBoundingClientRect().toJSON())
+            .filter((rect) => rect.width > 0 && rect.height > 0),
+        );
       assert.ok(
-        reviewUtilitySizes.length >= 2 && reviewUtilitySizes.every((rect) => rect.width >= 44 && rect.height >= 44),
+        reviewUtilitySizes.length >= 1 && reviewUtilitySizes.every((rect) => rect.width >= 44 && rect.height >= 44),
         JSON.stringify(reviewUtilitySizes),
       );
-      await page.locator('[data-ltm-review-draft-select="10000000-0000-4000-8000-000000000011"]').click();
-      await page.locator('[data-ltm-workspace-pane-tab="workbench"]').click();
-      const unavailableAccept = page.locator(
-        `[data-ltm-review-mutation="${reviewMutationIds.first}"] [aria-label^="Accept "]`,
-      );
-      const unavailableSkip = page.locator(
-        `[data-ltm-review-mutation="${reviewMutationIds.first}"] [aria-label^="Skip "]`,
-      );
-      assert.equal(await unavailableAccept.isDisabled(), true);
-      assert.equal(await unavailableSkip.isDisabled(), false);
-      await page
-        .locator(`[data-ltm-review-mutation="${reviewMutationIds.first}"] [data-ltm-control="review-select"]`)
-        .check();
-      assert.equal(await page.getByRole("button", { name: "Accept eligible (1)" }).isDisabled(), true);
-      assert.equal(await page.getByRole("button", { name: "Skip selected (1)" }).isDisabled(), false);
-      await page
-        .locator(`[data-ltm-review-mutation="${reviewMutationIds.first}"] [data-ltm-control="review-select"]`)
-        .uncheck();
       failReviewContext = false;
       omitReviewContextId = "world_second_mobile";
       await reviewContextError.getByRole("button", { name: "Retry" }).click();
       await reviewContextError.waitFor();
-      assert.equal(await unavailableAccept.isDisabled(), true);
+      assert.equal(await page.locator("[data-ltm-workspace]").isVisible(), false);
       omitReviewContextId = null;
       await reviewContextError.getByRole("button", { name: "Retry" }).click();
       await page.locator('[data-ltm-workspace-pane-tab="navigator"]').click();
       await page.locator('[data-ltm-review-source-select="source_mobile_review"]').waitFor();
-      assert.equal(await unavailableAccept.isDisabled(), false);
+      const restoredContextSource = page.locator('[data-ltm-review-source-select="source_mobile_review"]');
+      if ((await restoredContextSource.getAttribute("aria-expanded")) === "false") {
+        await restoredContextSource.click();
+      }
+      await page.locator('[data-ltm-workspace-pane-tab="navigator"]').click();
+      await page.locator(`[data-ltm-review-draft-select="${reviewDraftIds.first}"]`).click();
+      await page.locator('[data-ltm-workspace-pane-tab="workbench"]').click();
+      const restoredAccept = page.locator(
+        `[data-ltm-review-mutation="${reviewMutationIds.first}"] [aria-label^="Review change "]`,
+      );
+      assert.equal(await restoredAccept.isDisabled(), false);
+      await restoredAccept.click();
+      await page
+        .locator(`[data-ltm-review-mutation="${reviewMutationIds.first}"] [data-ltm-review-action="apply"]`)
+        .waitFor();
+      assert.equal(
+        await page
+          .locator(`[data-ltm-review-mutation="${reviewMutationIds.first}"] [aria-label^="Apply change "]`)
+          .count(),
+        1,
+      );
+      const firstMutation = page.locator(`[data-ltm-review-mutation="${reviewMutationIds.first}"]`);
+      assert.equal(await firstMutation.locator("[data-ltm-review-summary]").count(), 1);
+      assert.equal(await firstMutation.locator("[data-ltm-review-evidence-summary]").count(), 1);
+      await page
+        .locator(`[data-ltm-review-mutation="${reviewMutationIds.first}"] [data-ltm-review-action="apply"]`)
+        .click();
+      await page.waitForFunction(
+        (mutationId) => !document.querySelector(`[data-ltm-review-mutation="${mutationId}"]`),
+        reviewMutationIds.first,
+      );
       const mergeSource = page.locator('[data-ltm-review-source-select="source_mobile_review"]');
       if ((await mergeSource.getAttribute("aria-expanded")) === "false") {
         await mergeSource.click();
-        await page.locator('[data-ltm-workspace-pane-tab="navigator"]').click();
       }
+      await page.locator('[data-ltm-workspace-pane-tab="navigator"]').click();
       await page.locator(`[data-ltm-review-draft-select="${reviewDraftIds.merge}"]`).click();
       await page.locator('[data-ltm-workspace-pane-tab="workbench"]').click();
       const mergeMutation = page.locator(`[data-ltm-review-mutation="${reviewMutationIds.merge}"]`);
@@ -1973,8 +2040,8 @@ async function main() {
       const restoredReviewSource = page.locator('[data-ltm-review-source-select="source_mobile_review"]');
       if ((await restoredReviewSource.getAttribute("aria-expanded")) === "false") {
         await restoredReviewSource.click();
-        await page.locator('[data-ltm-workspace-pane-tab="navigator"]').click();
       }
+      await page.locator('[data-ltm-workspace-pane-tab="navigator"]').click();
       await page.locator('[data-ltm-review-draft-select="10000000-0000-4000-8000-000000000012"]').click();
       await page.locator('[data-ltm-workspace-pane-tab="workbench"]').click();
       await page.locator("[data-ltm-review-draft-title]").waitFor();
@@ -2009,7 +2076,7 @@ async function main() {
       await page.locator('[data-ltm-workspace-pane-tab="workbench"]').click();
       await page.setViewportSize({ width: 1280, height: 900 });
       const acceptButtonSize = await page
-        .locator('[data-ltm-review-mutation] [aria-label^="Accept "]')
+        .locator("[data-ltm-review-mutation] [data-ltm-review-action]")
         .first()
         .evaluate((button) => {
           const rect = button.getBoundingClientRect();
@@ -2067,12 +2134,18 @@ async function main() {
       assert.equal(await page.locator("[data-ltm-review-conflicts]").count(), 1);
       assert.equal(
         await page
-          .locator(`[data-ltm-review-mutation="${reviewMutationIds.second}"] [aria-label^="Accept "]`)
+          .locator(`[data-ltm-review-mutation="${reviewMutationIds.second}"] [data-ltm-review-action="blocked"]`)
           .isDisabled(),
         true,
       );
       assert.equal(await page.getByRole("button", { name: /^Apply preflighted \(1\)/ }).count(), 1);
-      assert.deepEqual(reviewActionCalls, []);
+      assert.deepEqual(reviewActionCalls, [
+        {
+          action: "accept",
+          draftId: reviewDraftIds.first,
+          mutationIds: [reviewMutationIds.first],
+        },
+      ]);
       reviewPreflightBlocked = false;
       await page.getByRole("button", { name: "Clear" }).click();
       await page
@@ -2088,50 +2161,92 @@ async function main() {
       failSecondReviewAccept = false;
       await page.getByRole("button", { name: "Retry failed review actions" }).click();
       await page.getByText("Retry preflight complete. Review the results before applying again.").waitFor();
+      const editedPartial = page.locator(`[data-ltm-review-mutation="${reviewMutationIds.partial}"]`);
+      assert.match(await editedPartial.locator("[data-ltm-review-summary]").innerText(), /Edited proposal/u);
       await page.getByRole("button", { name: /^Apply preflighted \(/ }).click();
       await page.waitForFunction(
         (mutationId) => !document.querySelector(`[data-ltm-review-mutation="${mutationId}"]`),
         reviewMutationIds.second,
       );
       assert.deepEqual(reviewEditedMutationIds.at(-1), [reviewMutationIds.partial]);
-      await page.locator('[data-ltm-workspace-pane-tab="navigator"]').click();
-      await page.locator(`[data-ltm-review-draft-select="${reviewDraftIds.first}"]`).click();
-      await page.locator('[data-ltm-workspace-pane-tab="workbench"]').click();
-      const firstMutation = page.locator(`[data-ltm-review-mutation="${reviewMutationIds.first}"]`);
-      await firstMutation.waitFor({ state: "visible" });
-      await page.waitForFunction(
-        (mutationId) =>
-          document
-            .querySelector(`[data-ltm-review-mutation="${mutationId}"]`)
-            ?.textContent?.includes("First mobile review memory"),
-        reviewMutationIds.first,
-      );
-      await page
-        .locator(`[data-ltm-review-mutation="${reviewMutationIds.first}"] [data-ltm-control="review-select"]`)
-        .check();
-      await page.getByRole("button", { name: "Accept eligible (1)" }).click();
-      await page.getByRole("button", { name: /^Apply preflighted \(/ }).click();
-      await page.waitForFunction(
-        (mutationId) => !document.querySelector(`[data-ltm-review-mutation="${mutationId}"]`),
-        reviewMutationIds.first,
-      );
       assert.deepEqual(reviewActionCalls, [
-        {
-          action: "accept",
-          draftId: reviewDraftIds.second,
-          mutationIds: [reviewMutationIds.second, reviewMutationIds.partial],
-        },
-        {
-          action: "accept",
-          draftId: reviewDraftIds.second,
-          mutationIds: [reviewMutationIds.second, reviewMutationIds.partial],
-        },
         {
           action: "accept",
           draftId: reviewDraftIds.first,
           mutationIds: [reviewMutationIds.first],
         },
+        {
+          action: "accept",
+          draftId: reviewDraftIds.second,
+          mutationIds: [reviewMutationIds.second, reviewMutationIds.partial],
+        },
+        {
+          action: "accept",
+          draftId: reviewDraftIds.second,
+          mutationIds: [reviewMutationIds.second, reviewMutationIds.partial],
+        },
       ]);
+
+      await page.locator('[data-ltm-workspace-pane-tab="navigator"]').click();
+      const discardSource = page.locator('[data-ltm-review-source-select="source_mobile_review"]');
+      if ((await discardSource.getAttribute("aria-expanded")) === "false") await discardSource.click();
+      await page.locator(`[data-ltm-review-draft-select="${reviewDraftIds.merge}"]`).click();
+      await page.locator('[data-ltm-workspace-pane-tab="workbench"]').click();
+      const mergeDiscardMutation = page.locator(`[data-ltm-review-mutation="${reviewMutationIds.merge}"]`);
+      const skipCallCountBeforeDecline = reviewActionCalls.length;
+      confirmReviewDiscard = false;
+      await page.evaluate(() => {
+        const element = document.querySelector("marinara-capability-long-term-memory") as HTMLElement & {
+          capabilityProps?: Record<string, unknown>;
+        };
+        element.capabilityProps = {
+          ...element.capabilityProps,
+          confirmAction: (
+            window as Window & {
+              confirmReviewDiscard: (options: { message?: string }) => boolean;
+            }
+          ).confirmReviewDiscard,
+        };
+        element.dispatchEvent(new CustomEvent("marinara-capability-props"));
+      });
+      await mergeDiscardMutation.getByRole("button", { name: /^Discard proposal /u }).click();
+      assert.equal(reviewActionCalls.length, skipCallCountBeforeDecline);
+      assert.match(lastReviewDiscardMessage, /Dependent proposals may also be discarded\./u);
+      confirmReviewDiscard = true;
+      await page.evaluate(() => {
+        const element = document.querySelector("marinara-capability-long-term-memory") as HTMLElement & {
+          capabilityProps?: Record<string, unknown>;
+        };
+        element.capabilityProps = {
+          ...element.capabilityProps,
+          confirmAction: (
+            window as Window & {
+              confirmReviewDiscard: (options: { message?: string }) => boolean;
+            }
+          ).confirmReviewDiscard,
+        };
+        element.dispatchEvent(new CustomEvent("marinara-capability-props"));
+      });
+      await mergeDiscardMutation.getByRole("button", { name: /^Discard proposal /u }).click();
+      assert.equal(reviewActionCalls.at(-1)?.action, "skip");
+
+      reviewQueueEmpty = true;
+      await page.reload();
+      await page.evaluate((version) => {
+        const element = document.createElement("marinara-capability-long-term-memory") as HTMLElement & {
+          capabilityProps?: unknown;
+        };
+        element.setAttribute("view", "detail");
+        element.capabilityProps = { agent: { name: "Long-Term Memory" }, package: { version } };
+        document.body.append(element);
+      }, packageManifest.version);
+      await page.locator('[data-ltm-surface="detail"]').waitFor();
+      await page.locator('[data-ltm-navigation="mobile"] [data-ltm-destination="review"]').click();
+      await page
+        .getByText("No proposed memories need review yet. Import a source, then choose Extract to review.")
+        .waitFor();
+      assert.equal(await page.locator("[data-ltm-workspace]").isVisible(), false);
+      reviewQueueEmpty = false;
 
       healthState = "healthy";
       await page.setViewportSize({ width: 1280, height: 900 });

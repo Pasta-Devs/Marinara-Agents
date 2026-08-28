@@ -120,7 +120,7 @@
         "schemaVersion": 1,
         "id": "beholder",
         "name": "Beholder",
-        "version": "1.3.3",
+        "version": "1.3.6",
         "description": "Tracks each roleplay character's clothing by body slot, held items, wounds, missing parts, bare slots, and species, then keeps that physical state available to the next response, and shows it on a paper doll you can open from the roleplay toolbar. Pick the prompt template for your model: one prompt for a SOTA model (GPT-5.5+, Opus 4.8+, Kimi K3+), or five passes for the local Beholder model (GetBeholder/Beholder-GGUF) — free, offline, and private. Add the Agent in Chat Settings → Agents → Tracker Agents for Roleplay mode.",
         "engine": {
           "min": "2.4.4",
@@ -147,8 +147,8 @@
           },
           {
             "path": "client.js",
-            "sha256": "71cf64f3aa52391b271aa35ea258cf5c975decdabd5277c12de56e71f6f53a9c",
-            "bytes": 272900
+            "sha256": "710ce38158e9621fcd3a234606c26111a1133afa9a1e7f1b907c4c921677d8ad",
+            "bytes": 263789
           }
         ],
         "permissions": [
@@ -163,9 +163,9 @@
       "category": "tracker",
       "iconUrl": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artwork/agent-covers/beholder.png",
       "artifact": {
-        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/beholder-1.3.3.zip",
-        "sha256": "5bf337dd2a0886c429bee24b1b7d5edb0397ab804e8207acbbf2c500150c7063",
-        "bytes": 284846
+        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/beholder-1.3.6.zip",
+        "sha256": "1f434c890bb8c35097bc4c1587f06a0a22daae45cbcf2d5922999f633f5202d5",
+        "bytes": 275735
       },
       "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Engine/blob/staging/docs/agents/built-in-agents.md#beholder"
     },
@@ -174,7 +174,7 @@
         "schemaVersion": 1,
         "id": "conversation-calls",
         "name": "Calls",
-        "version": "1.0.12",
+        "version": "1.0.13",
         "description": "Adds live audio and video calls with Conversation characters. Add as both a Command and an Agent in Chat Settings → Agents → Commands/Calls for Conversation mode.",
         "engine": {
           "min": "2.4.1",
@@ -199,8 +199,8 @@
         "files": [
           {
             "path": "agents.json",
-            "sha256": "1004e5c983744487f81ea5c0c5232aad637786476cf40bf31a7e4438aa47515e",
-            "bytes": 559
+            "sha256": "f531db07b1fe20d085f876b968e88cec1be70dbf844c3ffc8aab204ac3ceb86f",
+            "bytes": 454
           },
           {
             "path": "server.mjs",
@@ -209,8 +209,8 @@
           },
           {
             "path": "client.js",
-            "sha256": "5f4d3cb22982dab18eaf97f047918ba5613c561cb4c17d3c1ee2304547ec2a6c",
-            "bytes": 850071
+            "sha256": "34f8369debed4f6fcd8a9fb323c2062a44feda44980d6f624777c54aef6f3a27",
+            "bytes": 850335
           }
         ],
         "permissions": [
@@ -227,9 +227,9 @@
       "category": "misc",
       "iconUrl": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artwork/agent-covers/conversation-calls.png",
       "artifact": {
-        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/conversation-calls-1.0.12.zip",
-        "sha256": "140c511221c8670dd6910f88bb8e434a86a180fcb8fbac55a8bf0db1d8461e29",
-        "bytes": 3234736
+        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/conversation-calls-1.0.13.zip",
+        "sha256": "ac1abcbf18b1c12a2eb831af4c102d08e07d5c2fc2f621c4b3c368bffb7703cf",
+        "bytes": 3234895
       },
       "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Agents#conversation-calls"
     },
@@ -901,7 +901,7 @@
         },
         "id": "long-term-memory",
         "name": "Long-Term Memory",
-        "version": "1.2.11",
+        "version": "1.2.14",
         "description": "Extracts durable memories from chat summaries, character records, and lorebooks, then recalls relevant context from a package-owned vault. Enable it per chat from Chat Settings → Agents → Long-Term Memory. In Roleplay and Game, you can also add it from Chat Settings → Agents → Misc Agents.",
         "engine": {
           "min": "2.4.1",
@@ -938,8 +938,8 @@
           },
           {
             "path": "client.js",
-            "sha256": "9ced7bd69aabb1ab001a3b45a2038c620206189785e44bf72a065680aae3c2d4",
-            "bytes": 828859
+            "sha256": "0660ee8f855d7924d710e8cf2a515bfcd042edb389f7103b5aec9041de66a106",
+            "bytes": 833827
           }
         ],
         "permissions": [
@@ -955,9 +955,9 @@
       "category": "misc",
       "iconUrl": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artwork/agent-covers/long-term-memory.png",
       "artifact": {
-        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/long-term-memory-1.2.11.zip",
-        "sha256": "e97f4234048324feeb312ffc8aeaf207d520834085658c3e98781a6440b3fc0d",
-        "bytes": 1212024
+        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/long-term-memory-1.2.14.zip",
+        "sha256": "4671797947741ba5625cada56e2c667ee51a9ac42b7a5980791d9fe5fb047b2b",
+        "bytes": 1216992
       },
       "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Agents#long-term-memory"
     },
@@ -1016,7 +1016,7 @@
         },
         "id": "memory-nag",
         "name": "Memory Nag",
-        "version": "1.0.8",
+        "version": "1.0.17",
         "description": "Keeps a short per-chat vault of roleplay memories and recalls only the unresolved details that matter to the current turn. Add the Agent in Chat Settings → Agents → Tracker Agents for Roleplay mode. Once active, configure it in its standalone Memory Nag section.",
         "engine": {
           "min": "2.4.4",
@@ -1040,18 +1040,18 @@
         "files": [
           {
             "path": "agents.json",
-            "sha256": "97c946fa16d8790c003bbf3ba915a4e04d1f68503bc7503486dc210a16f502d4",
-            "bytes": 1170
+            "sha256": "c1f34eb86c321bc95356c12b15377331eabe11675d1d4c13f286df52073b9fc1",
+            "bytes": 1674
           },
           {
             "path": "server.mjs",
-            "sha256": "17e4988d470aec0d143499bac84b8ef68ad887482077d2d2cb114d08c720af4f",
-            "bytes": 21239
+            "sha256": "ddce4eb713d42206a6cff06ea097087131b8ee769c5e272e4d38eb9e47d2a6d6",
+            "bytes": 21611
           },
           {
             "path": "client.js",
-            "sha256": "ce8a6045d1417777d0f5f64180ac05910531c6e771022dbc5e065e0e88a7656f",
-            "bytes": 361251
+            "sha256": "91b07a52f827db8ab74c7a6ed196232193b1e1a4d92fd2637dd8e69150dedf1d",
+            "bytes": 371264
           }
         ],
         "permissions": [
@@ -1067,9 +1067,9 @@
       "category": "tracker",
       "iconUrl": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artwork/agent-covers/memory-nag.png",
       "artifact": {
-        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/memory-nag-1.0.8.zip",
-        "sha256": "e7474ce2ebaabade18d62e196d3f086bfc9967d90495af3d412b5d1062488b73",
-        "bytes": 385553
+        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/memory-nag-1.0.17.zip",
+        "sha256": "4da625bc08cdb24b0ede684fc17845aac6858bd900be88a7b248fd0c20fcc3be",
+        "bytes": 396443
       },
       "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Agents#memory-nag"
     },
@@ -1162,7 +1162,7 @@
         "schemaVersion": 1,
         "id": "noodle",
         "name": "Noodle",
-        "version": "1.2.13",
+        "version": "1.2.14",
         "description": "Explore the Noodle public timeline as an optional local social world. Install it, restart Marinara Engine when prompted, then open Home → Noodle.",
         "localizations": {
           "de": {
@@ -1217,18 +1217,18 @@
         "files": [
           {
             "path": "agents.json",
-            "sha256": "905d74012562eb8531a26cb9b3e3e01ac7485900c282c6021f000d2bd4b8cfac",
-            "bytes": 588
+            "sha256": "dbd9eccf6fca9b299ecdb9d0aab599e5d01fdd0260266490ca1c02a199bed923",
+            "bytes": 510
           },
           {
             "path": "server.mjs",
-            "sha256": "d77d85407042bb320dcfec695eccc2c23edd674abf56be4b94ec4595af5c5c2e",
-            "bytes": 2292030
+            "sha256": "44c936cf55b1033f7fdcd4730c14c00a8e2a36b5e3032c88a1e82a8477e162c6",
+            "bytes": 2739546
           },
           {
             "path": "client.js",
-            "sha256": "0c4f2e633a72b10fd0cc5e655275ea25b02cf06aa34609ece14a7a6f2a02a9e0",
-            "bytes": 2263762
+            "sha256": "532c1b37b38d49135ffe65b1452019b74108fe2bc56d4792ea9f88d9b3cb39e7",
+            "bytes": 2331969
           },
           {
             "path": "noodle-klusek.png",
@@ -1249,9 +1249,9 @@
       "category": "misc",
       "iconUrl": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artwork/agent-covers/noodle.png",
       "artifact": {
-        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/noodle-1.2.13.zip",
-        "sha256": "1037cec58544303fb3d4aa28c429f8d133fa24200215313e88bb2fea364074ed",
-        "bytes": 4587782
+        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/noodle-1.2.14.zip",
+        "sha256": "68e25150f3534a92e0ee07cc54d16c81fa99bc5603f7affdc2a27b878323ddf7",
+        "bytes": 5103427
       },
       "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Agents/blob/main/packages/noodle/README.md"
     },
@@ -1524,7 +1524,7 @@
         "schemaVersion": 1,
         "id": "slurp",
         "name": "Slurp",
-        "version": "1.0.15",
+        "version": "1.0.19",
         "description": "The standalone successor to NoodleR: create a local Creator profile from an Engine character or persona, publish public or locked posts, and simulate subscriptions and audience activity. Install it, restart Marinara Engine when prompted, then open Home → Slurp.",
         "localizations": {
           "de": {
@@ -1579,18 +1579,18 @@
         "files": [
           {
             "path": "agents.json",
-            "sha256": "e6bc01992d2c0010a0fa3dc5d53365ad554942cff886997462b46203c61f105d",
-            "bytes": 702
+            "sha256": "05408a5f537cef354c9f4ef9340825c9427e1774d3cdd1f29435c3b1cf39a6c4",
+            "bytes": 625
           },
           {
             "path": "server.mjs",
-            "sha256": "8642d6fbfde0421a094ff503aa36243cc6b124da047e8799fd25b6ee389a19a6",
-            "bytes": 2278021
+            "sha256": "b267955494c5e68301397ad7e59ea5e2a0c654f31368c1950be68edccdbec7d9",
+            "bytes": 2730606
           },
           {
             "path": "client.js",
-            "sha256": "7a200eb37a7e94408d3ca7fb8c83193c5649d4efcd45cea7f6ae2d2d80080de6",
-            "bytes": 2413401
+            "sha256": "d0ef89906c504b4baf1c959cb4a13464af451f99fe81cc6699149113c4b943d3",
+            "bytes": 2427720
           },
           {
             "path": "slurp-logo.png",
@@ -1615,9 +1615,9 @@
       "category": "misc",
       "iconUrl": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artwork/agent-covers/slurp.png",
       "artifact": {
-        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/slurp-1.0.15.zip",
-        "sha256": "019cd3ec14eecde118b2d8fde0252762092ac5a710f48af5be90c37419b4f40a",
-        "bytes": 4847949
+        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/slurp-1.0.19.zip",
+        "sha256": "5ad5963ab256398768361beeceb74f61d9b67fbb972b4fd259d21a86a58a744c",
+        "bytes": 5314776
       },
       "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Agents/blob/main/packages/slurp/README.md"
     },
@@ -1813,7 +1813,7 @@
         },
         "id": "hierarchical-maps",
         "name": "World Maps",
-        "version": "1.4.1",
+        "version": "1.4.2",
         "description": "Adds persistent hierarchical locations, durable shared worlds, reusable artwork, customizable Direct Link lines, and movement to Roleplay and Game. Add the Agent in Chat Settings → Agents → Tracker Agents for Roleplay and Game modes.",
         "engine": {
           "min": "2.4.2",
@@ -1844,8 +1844,8 @@
         "files": [
           {
             "path": "agents.json",
-            "sha256": "d30af31c7e3b76d137366c3b0963a318d2a20b8287d9f6c9dad038ed9beafd03",
-            "bytes": 647
+            "sha256": "42d95c7fea1ac79de89fbc8805e1dc8e2886ad3ba2a8d8396718bdc643f4f165",
+            "bytes": 557
           },
           {
             "path": "server.mjs",
@@ -1854,8 +1854,8 @@
           },
           {
             "path": "client.js",
-            "sha256": "d680a32a7d2a3adca459f48ade430dfb1dc6165c7dcf2ea56b7a8ce5f4f61b19",
-            "bytes": 926252
+            "sha256": "5f32e0e5248e1acd51dbb47d3d20f1a1a4c32372532634b7fd08f2b799be91fb",
+            "bytes": 926421
           }
         ],
         "permissions": [
@@ -1873,9 +1873,9 @@
       "category": "tracker",
       "iconUrl": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artwork/agent-covers/hierarchical-maps.png",
       "artifact": {
-        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/hierarchical-maps-1.4.1.zip",
-        "sha256": "3e400e01bdadbd14a5244fe82bd59c8e634977cf785dc6089919502d919eefd5",
-        "bytes": 1240726
+        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/hierarchical-maps-1.4.2.zip",
+        "sha256": "7c1faedf5282325d1fe9b6002617cd9282bab7268cc8c6a88b37b5f7df132cdf",
+        "bytes": 1240805
       },
       "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Engine/blob/main/docs/agents/hierarchical-maps.md"
     },

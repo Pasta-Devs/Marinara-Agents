@@ -124,8 +124,7 @@ export function shortlistMemoryNags(input: {
     let count = 0;
     for (const entry of scored) {
       if (!entry.memory.characterIds.includes(characterId)) continue;
-      if (selected.has(entry.memory.id)) continue;
-      selected.set(entry.memory.id, entry.memory);
+      if (!selected.has(entry.memory.id)) selected.set(entry.memory.id, entry.memory);
       count++;
       if (count >= input.perCharacter) break;
     }

@@ -5,6 +5,28 @@
 PF.world = (() => {
   const T = PF.TILE;
 
+  /** The spatialLocationId → zoneId table, NULL-PROTOTYPE (#567).
+   *
+   *  Every key in it belongs to the HOST — a World Maps location id, authored by
+   *  hand or by the wizard's map instructions, never written by this package —
+   *  and on a plain `{}` the word "__proto__" is not a key at all. Writing a
+   *  string there is a silent no-op (the prototype setter takes an object or
+   *  null and drops the rest) and reading it back hands out Object.prototype.
+   *  Both halves were reachable and neither failed loudly: 50-spatial's seeding
+   *  write vanished, so its emptiness test re-fired and re-dirtied on every
+   *  refresh forever while the world never gained a root to export under; and
+   *  55-maps-export's adoption read came back Object.prototype, which is neither
+   *  undefined nor the zone, so the export refused its own adoption and posted a
+   *  TWIN of the location — through a route with no delete, onto a real map.
+   *
+   *  Fixed HERE rather than at the two sites because this is the one place the
+   *  table is made: 60-save restores a save's bindings by copying entries INTO
+   *  this object, so no plain map can arrive from stored state, and every read
+   *  and write of it downstream (both files above, plus 70-hud's chip test) is
+   *  covered by the one change. `Object.keys`, `delete` and `JSON.stringify` all
+   *  behave identically, so an honest id is byte-identical either side of it. */
+  const newBindings = () => Object.create(null);
+
   function makeZone(id, name, w, h, groundFill) {
     return {
       id,
@@ -40,6 +62,22 @@ PF.world = (() => {
       // gate has to ship with the zone type, never a release later.
       mapExport: true,
       lights: [], // {x, y} warm glow points at night
+      // NAMED FEATURES STANDING IN THIS ZONE: {id, tag, name, rect}. The tiles
+      // were the only record a feature had, and a tile cannot say which feature
+      // it belongs to or what the brief called it — so a consumer asking "what
+      // is the player standing beside" had nothing to read. Written by the three
+      // sites that paint one: the compiler's placement loops, the wilds
+      // builder's `water-crossing` branch (which paints its own stream, so the
+      // feature loop skips that tag), and buildLegacy's fixed literals.
+      //
+      // DERIVED, and that is the whole contract: a world is rebuilt from
+      // (seed, theme, brief) on every load, so this list is recomputed and never
+      // stored. It appears in no snapshot() key and in no ENVELOPE_KEYS entry,
+      // and putting it in either would turn a recomputable list into a save
+      // format to migrate. Every zone carries the array, empty or not — an
+      // absent one and an empty one read alike right up to the call site that
+      // does not guard, and the consumer reads it every walking frame.
+      features: [],
     };
   }
   const idx = (z, x, y) => y * z.w + x;
@@ -50,6 +88,39 @@ PF.world = (() => {
   };
   const fillRect = (z, x0, y0, w, h, layer, tileId, solid) => {
     for (let y = y0; y < y0 + h; y++) for (let x = x0; x < x0 + w; x++) put(z, x, y, layer, tileId, solid);
+  };
+
+  // THE GROUND A ROAD IS LAID WITH. Two ids and not one, because a `struggling`
+  // settlement scuffs 18% of its road to `dirt` before a single building goes up
+  // and a scuffed road is no less a road for it. Deliberately NOT `stone`:
+  // paving is also a building's footprint, a workyard, a clearing and a ward
+  // square, and a plank decked across one of those is a bridge in the middle of
+  // a yard.
+  const ROAD_GROUND = new Set(["path", "dirt"]);
+
+  /** Lay water, decking a BRIDGE over whatever road is already standing in it.
+   *
+   *  The 0.12 ruling, and the whole of it: where a road meets water the road
+   *  wins the tiles it is on and the water takes the rest. A bridge is walkable
+   *  and drawn over the water, so the crossing survives and the pool is still a
+   *  pool — which is what let the water-feature placer stop refusing every
+   *  anchor in the wilds that touched the road band (see the wilds loop).
+   *
+   *  Reads the ground a previous pass painted, so it is order-dependent by
+   *  design: roads are laid before features everywhere this is called, and a
+   *  caller that watered first and paved after would get plain water. Throw-free
+   *  — the read is bounds-guarded, and it has to be for a reason beyond caution:
+   *  `idx` wraps an x past the east edge into the NEXT ROW, so an unguarded read
+   *  would test a tile on the wrong side of the map. This runs inside build()'s
+   *  silent-degrade try/catch, where a throw ships as a legacy world. */
+  const waterFill = (z, x0, y0, w, h) => {
+    for (let y = y0; y < y0 + h; y++) {
+      for (let x = x0; x < x0 + w; x++) {
+        const inside = x >= 0 && y >= 0 && x < z.w && y < z.h;
+        const road = inside && ROAD_GROUND.has(z.ground[idx(z, x, y)]);
+        put(z, x, y, "ground", road ? "bridge" : "water", !road);
+      }
+    }
   };
 
   /** A simple gabled building: stone footprint, plaster walls, roof overhead, one door.
@@ -288,7 +359,7 @@ PF.world = (() => {
 
   const PLACERS = {
     "water-feature"(z, x, y) {
-      fillRect(z, x, y, 6, 4, "ground", "water", true);
+      waterFill(z, x, y, 6, 4);
       put(z, x + 6, y + 1, "object", "well", true);
     },
     "crop-plots"(z, x, y) {
@@ -366,7 +437,12 @@ PF.world = (() => {
     },
     "water-crossing"(z, x, y) {
       // Placed by the wilds builder across its stream; here x,y is the ford column.
-      fillRect(z, x, y, 2, 2, "ground", "path", false);
+      // MIGRATED ONTO THE BRIDGE TILE (0.12). A hand-laid ford and a decked pool
+      // are the same idea — a road carried over water — and the only thing that
+      // made them different was shipping two pictures of it. Still non-solid,
+      // still four tiles, still inside the stream's rect: the crossing's geometry
+      // is untouched and only the word for what it is laid with has moved.
+      fillRect(z, x, y, 2, 2, "ground", "bridge", false);
     },
     "dense-growth"(z, x, y) {
       for (let dy = 0; dy < 4; dy++)
@@ -405,10 +481,97 @@ PF.world = (() => {
   }
 
   // Per-theme display names for the LEGACY fixed layout (pre-brief saves).
+  // `pond` and `stream` name the two water features the fixed layout reserves
+  // rows for. Both are the name that theme's OWN default brief gives the tag
+  // (18-brief DEFAULT_BRIEFS), so a legacy world and a compiled one call the
+  // same thing by the same word rather than inventing a second vocabulary.
   const ZONE_NAMES = {
-    "cozy-village": { village: "Hearthvale", inn: "The Amber Hearth Inn", forest: "The Whisperwood" },
-    "sci-fi-colony": { village: "Meridian Base", inn: "The Meridian Cantina", forest: "The Mast Field" },
+    "cozy-village": {
+      village: "Hearthvale",
+      inn: "The Amber Hearth Inn",
+      forest: "The Whisperwood",
+      pond: "The Village Pond",
+      stream: "The Stepping Stones",
+    },
+    "sci-fi-colony": {
+      village: "Meridian Base",
+      inn: "The Meridian Cantina",
+      forest: "The Mast Field",
+      pond: "The Coolant Pool",
+      stream: "The Conduit Bridge",
+    },
   };
+  // …AND WHAT THE FOUR OF THEM DO. The same duplication one table along, and it
+  // was the one nobody themed: the four legacy residents' roles were hardcoded
+  // in buildLegacy — "innkeeper", "farmer", "village guard", "forager" — right
+  // beside the themed name book above, so a sci-fi colony stood a farmer and a
+  // village guard in it.
+  //
+  // Invisible while a role was only a token's label, and player-facing the
+  // moment the no-rod refusal started interpolating `npc.role` (59-economy's
+  // rodHint): a legacy colony told the player "You need an angling rig — the
+  // innkeeper stocks one", pointing at an inn that does not exist in that world.
+  //
+  // Keyed by NAME because the name is the join: buildLegacy stands up Mira, Tam,
+  // Rook and Fen, and every theme's DEFAULT_BRIEFS cast names the same four. The
+  // assertion below holds this book to the brief exactly as it holds the name
+  // book, from the same source of truth and for the same reason.
+  const LEGACY_ROLES = {
+    "cozy-village": { Mira: "innkeeper", Tam: "farmer", Rook: "guard", Fen: "forager" },
+    "sci-fi-colony": {
+      Mira: "cantina keeper",
+      Tam: "hydroponics lead",
+      Rook: "pad marshal",
+      Fen: "salvage scout",
+    },
+  };
+  // BOTH BOOKS ABOVE ARE DUPLICATES, AND THIS IS WHAT KEEPS THEM ONE. Every
+  // string in them is also written in that theme's own DEFAULT_BRIEFS entry
+  // (18-brief) — the comment says the two agree and nothing made it true. They
+  // are tables in two files that get edited months apart, which is how a player
+  // ends up standing at The Village Pond in a legacy save and somewhere else in
+  // the compiled world beside it.
+  //
+  // The whole book, not only the water: the settlement, the inn, the wood and
+  // the four residents' trades are the same duplication and fail the same way.
+  // Read through `defaults()` rather than off the literal, because a repair pass
+  // that quietly renamed something on its way through validate() is exactly the
+  // drift worth catching.
+  //
+  // ASSERTED AT LOAD, deliberately not inside build(): that function degrades any
+  // compile throw to the legacy world (see its try/catch), so an invariant raised
+  // in there would be swallowed and would ship as a silently misnamed world
+  // instead of a failed build.
+  {
+    const named = (features, tag) => (features ?? []).find((feature) => feature.tag === tag)?.name;
+    for (const [theme, names] of Object.entries(ZONE_NAMES)) {
+      const fallback = PF.brief?.defaults?.(theme, 1);
+      if (!fallback) continue;
+      const wilds = fallback.places.find((place) => place.kind === "wilds");
+      const owed = {
+        village: fallback.name,
+        inn: fallback.places.find((place) => place.kind === "gathering")?.name,
+        forest: wilds?.name,
+        pond: named(fallback.features, "water-feature"),
+        stream: named(wilds?.features, "water-crossing"),
+      };
+      for (const [key, name] of Object.entries(owed)) {
+        if (names[key] !== name)
+          throw new Error(
+            `pixelforge: the legacy layout calls ${theme}'s ${key} "${names[key]}", its default brief calls it "${name}"`,
+          );
+      }
+      // The role book, held to the same standard from the same source. Read off
+      // the cast BY NAME, which is the join the two tables share.
+      for (const [who, role] of Object.entries(LEGACY_ROLES[theme] ?? {})) {
+        const owedRole = fallback.cast.find((member) => member.name === who)?.role;
+        if (role !== owedRole)
+          throw new Error(
+            `pixelforge: the legacy layout makes ${theme}'s ${who} a "${role}", its default brief makes them a "${owedRole}"`,
+          );
+      }
+    }
+  }
 
   function build(seed, theme, sealedBrief) {
     // Tight gate + containment: only a fully-sealed brief compiles, and a
@@ -423,10 +586,43 @@ PF.world = (() => {
       sealedBrief._ids &&
       typeof sealedBrief._ids.zones === "object"
     ) {
+      // Hoisted so the CATCH below can name the folds too. If a FOLDED brief fails
+      // to compile anyway, the folded values are the only ones that moved between
+      // what was stored and what the compiler read, which makes them the first
+      // thing to look at — and null until the fold has actually run, because a
+      // throw out of foldStored itself folded nothing.
+      let folded = null;
       try {
-        return compile(sealedBrief, seed);
+        // #566: THE STORED BRIEF IS UNTRUSTED AT THIS DOOR. The gate above answers
+        // for its SHAPE and nothing has ever answered for its VALUES, which are
+        // table keys a dozen reads down inside compile(). The fold is here, on a
+        // private copy, and deliberately NOT in PF.save._configBrief: the object
+        // that reader hands back is the one PF.player.briefHashOf() stamps a save
+        // against, and a load path that returned different bytes than it was given
+        // would sever an honest save from its own unchanged world. Folded for the
+        // compiler, stored for the identity — PF.brief.foldStored says why the two
+        // cannot be the same object.
+        folded = PF.brief.foldStored(sealedBrief, seed);
+        const world = compile(folded, seed);
+        if (folded._folds.length) {
+          // SAID OUT LOUD, which is the half of #566 that made the zone loss a bug
+          // rather than a degrade: a value this build has never heard of is either
+          // a hostile save or a brief from a newer build, and both are worth a line.
+          console.warn(
+            `[pixelforge] the stored brief carried ${folded._folds.length} value(s) this build does not know`,
+            folded._folds,
+          );
+          // Carried only when there ARE any, so a world compiled from an honest
+          // brief is byte-identical to the one this build compiled before the fold.
+          world.briefFolds = folded._folds;
+        }
+        return world;
       } catch (err) {
-        console.warn("[pixelforge] stored brief failed to compile; using the themed legacy world", err);
+        console.warn(
+          `[pixelforge] stored brief failed to compile after ${folded?._folds.length ?? 0} fold(s); using the themed legacy world`,
+          err,
+          folded?._folds ?? [],
+        );
       }
     }
     return buildLegacy(seed, theme);
@@ -435,6 +631,7 @@ PF.world = (() => {
   function buildLegacy(seed, theme) {
     const activeTheme = PF.art.setTheme ? PF.art.setTheme(theme) : "cozy-village";
     const names = ZONE_NAMES[activeTheme] || ZONE_NAMES["cozy-village"];
+    const roles = LEGACY_ROLES[activeTheme] || LEGACY_ROLES["cozy-village"];
     const rnd = PF.rng(seed);
 
     // ── The settlement exterior ──
@@ -448,6 +645,13 @@ PF.world = (() => {
     put(v, 21, 14, "object", "well", true);
     // pond
     fillRect(v, 33, 21, 7, 5, "ground", "water", true);
+    // The legacy layout has no brief behind it and so no ordinals to mint from,
+    // which is why its two water features carry FIXED reserved ids instead. They
+    // are TAGGED from the same closed vocabulary a brief uses (18-brief
+    // FEATURE_TAGS) because the consumer resolves per (theme, tag): an untagged
+    // legacy spot would be water that no table can answer for. Rect = the
+    // literal directly above, so the two move together or not at all.
+    v.features.push({ id: "legacy:pond", tag: "water-feature", name: names.pond, rect: { x: 33, y: 21, w: 7, h: 5 } });
     // crops with fence
     fillRect(v, 4, 20, 8, 5, "ground", "crop", false);
     for (let x = 3; x <= 12; x++) {
@@ -494,7 +698,21 @@ PF.world = (() => {
     borderTrees(f);
     fillRect(f, 1, 12, 19, 2, "ground", "path"); // west approach
     fillRect(f, 20, 1, 2, 22, "ground", "water", true); // the stream
-    fillRect(f, 20, 12, 2, 2, "ground", "path", false); // the ford
+    // The ford, MIGRATED onto the bridge tile alongside the compiled crossing's
+    // (0.12): the legacy wood and a brief-built one now cross their water by the
+    // same picture, which is the whole of the sub-decision. Non-solid as it
+    // always was — the geometry has not moved, only the tile it is laid with.
+    fillRect(f, 20, 12, 2, 2, "ground", "bridge", false); // the ford
+    // The stream's rect is the stream's own literal, and the ford's four tiles
+    // sit INSIDE it as bridge. That is deliberate and not a defect in the shape:
+    // a rect says where a feature stands, and the consumer's test — the neighbour
+    // tile IS water and lies in a rect — is what keeps the road out of the water.
+    f.features.push({
+      id: "legacy:stream",
+      tag: "water-crossing",
+      name: names.stream,
+      rect: { x: 20, y: 1, w: 2, h: 22 },
+    });
     fillRect(f, 22, 12, 4, 2, "ground", "path"); // east approach
     fillRect(f, 26, 9, 6, 5, "ground", "stone"); // the clearing
     put(f, 28, 11, "object", "wallStone", true); // the standing stone
@@ -536,11 +754,11 @@ PF.world = (() => {
 
     // NPCs — LLM characters in the story; sprites here are just their world tokens.
     v.npcs.push(
-      { id: "tam", name: "Tam", role: "farmer", hue: 96, x: 8, y: 22, wander: { x0: 4, y0: 20, x1: 11, y1: 24 } },
+      { id: "tam", name: "Tam", role: roles.Tam, hue: 96, x: 8, y: 22, wander: { x0: 4, y0: 20, x1: 11, y1: 24 } },
       {
         id: "rook",
         name: "Rook",
-        role: "village guard",
+        role: roles.Rook,
         hue: 210,
         x: 21,
         y: 10,
@@ -550,16 +768,22 @@ PF.world = (() => {
     n.npcs.push({
       id: "mira",
       name: "Mira",
-      role: "innkeeper",
+      role: roles.Mira,
       hue: 8,
       x: 5,
       y: 4,
       wander: { x0: 2, y0: 4, x1: 8, y1: 9 },
+      // The legacy world's lodging, marked the same way the compiler marks the
+      // gathering (see compile()). The legacy layout has no schedules, so the
+      // keeper is named here rather than derived: it is the same three-zone
+      // village it has always been and Mira has always kept the inn.
+      lodging: "inn",
     });
+    n.lodging = true;
     f.npcs.push({
       id: "fen",
       name: "Fen",
-      role: "forager",
+      role: roles.Fen,
       hue: 140,
       x: 29,
       y: 12,
@@ -575,7 +799,13 @@ PF.world = (() => {
       zones: { village: v, inn: n, forest: f },
       startZone: "village",
       // The exterior binds to the campaign's starting World Maps location once known.
-      bindings: {}, // spatialLocationId → zoneId
+      bindings: newBindings(), // spatialLocationId → zoneId
+      // The legacy world mints nobody — its three neighbours are written out by
+      // hand above. The stamp is still emitted (never absent, so the S5 read
+      // never has to distinguish "no stamp" from "stamp zero") and moves only
+      // when MINT_V does.
+      minted: [],
+      mintStamp: mintStampOf([]),
     };
   }
 
@@ -704,6 +934,22 @@ PF.world = (() => {
     healer: ["herbalist"],
     scholar: ["copyist"],
   };
+  // The mint's own version, folded into every mintStamp. Bump it when a change
+  // here would hand the SAME seed and the SAME brief a different roster — a new
+  // name book, a changed household size distribution, a reordered kind table.
+  // The player block's world stamp (S5 §Q3a) is what turns that into a visible
+  // severance instead of a silent one: relationship rows keyed by "Maud Thatch"
+  // mean nothing once "Maud Thatch" is a different person or nobody at all.
+  const MINT_V = 1;
+  /** Stamp the residents the COMPILER minted, in mint order. Names + kinds +
+   *  households only: tints and wander flags are cosmetic and a change to them
+   *  must not sever a save. Zero save bytes — the stamp is derived on every
+   *  build and only its comparison is persisted. */
+  function mintStampOf(minted) {
+    let text = `mint/v${MINT_V}`;
+    for (const member of minted) text += `|${member.name}\u0000${member.kind}\u0000${member.household}`;
+    return PF.hashStr(text);
+  }
 
   const SPECIAL_BUILDING_KINDS = {
     leader: "hall",
@@ -1145,6 +1391,20 @@ PF.world = (() => {
       // Nothing solid on `floor` itself: it is the row the rooms above open onto.
       fillRect(z, 5, floor + 2, 4, 3, "ground", "rug", false);
       fillRect(z, 3, floor + 1, 5, 1, "object", "counter", true);
+      // THE SERVING ROW — recorded, not merely left clear, exactly like the
+      // dwelling's hearth: whoever KEEPS this room has to be sent to a spot
+      // inside it, and the only thing that knows where the counter ended up is
+      // the furnisher that painted it. The keeper's side is the row ABOVE the
+      // counter run: the door is in the south wall and the rug and the tables
+      // are south of the counter, so north of it is the side a patron does not
+      // walk onto. Same arithmetic as a shop's work post (WORK_POSTS) — the
+      // counter's own span, one row back from it — because it is the same fact.
+      //
+      // Walkable by contract: `floor` is the row the guest rooms open onto (see
+      // above), and nothing in this furnisher or the sleeping layout may lay a
+      // solid tile on it. Runtime-only like `hearth`: re-baked on every compile,
+      // never serialized, zero save fields.
+      z.post = { x0: 3, y0: floor, x1: 7, y1: floor };
       put(z, w - 6, floor + 2, "object", "table", true);
       put(z, w - 4, floor + 4, "object", "table", true);
       z.lights.push({ x: 4, y: floor + 1 }, { x: w - 6, y: floor + 2 });
@@ -1175,6 +1435,20 @@ PF.world = (() => {
         put(z, candleX, floor + 1, "object", "wallStone", true);
         z.lights.push({ x: candleX, y: floor + 1 });
       }
+      // THE CHANCEL, recorded for the same reason the inn records its serving
+      // row: a keeper the brief homed at the settlement root needs somewhere
+      // inside their own building to stand, and only the furnisher knows where
+      // the altar went. The row BEHIND the altar, spanning it — the head of the
+      // aisle the player walks up, facing back down it.
+      //
+      // Not the altar row itself, and not the aisle: `altar` and both candle
+      // plinths are solid, so a station laid across them would hold no standable
+      // tile at all and the placer's ring scan would walk the keeper off it. The
+      // row above is clear — nothing here paints on `floor`, the benches start at
+      // `floor + 4` — and it is reached around either end of the altar run, which
+      // is why standing there does not strand anybody. Runtime-only, like the
+      // hearth and the inn's counter.
+      z.post = { x0: aisleX - 2, y0: floor, x1: aisleX + 2, y1: floor };
       for (let row = floor + 4; row < h - 2; row += 2) {
         fillRect(z, 3, row, aisleX - 3, 1, "object", "counter", true);
         fillRect(z, aisleX + 1, row, aisleX - 3, 1, "object", "counter", true);
@@ -1699,10 +1973,19 @@ PF.world = (() => {
     });
   }
 
-  /** Where a live-work owner WORKS inside their own building, keyed by special.
-   *  Only a shop has a station to be manned — the row between the stock and the
-   *  counter — so it is the only entry: a farmer works the land and comes back
-   *  in, and everyone else keeps the door apron they have always used. */
+  /** Where a live-work owner WORKS inside a building the COMPILER minted, keyed
+   *  by special. Only a shop has a station to be manned — the row between the
+   *  stock and the counter — so it is the only entry: a farmer works the land and
+   *  comes back in.
+   *
+   *  ONE OF TWO WAYS a station reaches an owner, and the split is by who built
+   *  the room. A minted building has no brief place behind it, so its station is
+   *  looked up here by `special`. A building the brief NAMED is furnished by
+   *  FURNISH, and its furnisher records its own station on the zone (`z.post` —
+   *  the inn's serving row, the sanctuary's chancel) for the places pass to hand
+   *  to the same `interior` handle. Both ends feed the one gate in the cast loop,
+   *  and a kind with a station on neither path keeps the door apron it has always
+   *  used. */
   const WORK_POSTS = {
     shop: (w, h) => ({ x0: 3, y0: h - 4, x1: w - 5, y1: h - 4 }),
   };
@@ -1717,6 +2000,38 @@ PF.world = (() => {
     // collision can never collapse two ids into one zone.
     const zoneIdForPlace = (place) => `z${brief.places.indexOf(place) + 2}`;
     const zoneIdByName = new Map(Object.entries(brief._ids.zones).map(([id, name]) => [name, id]));
+
+    // ── Feature ids: the BRIEF's ordinals, tracked apart from placement ────────
+    // `_ids.features` is minted once at seal (18-brief), walking the settlement's
+    // own features first and then each place's IN BRIEF ORDER. Mirrored here by
+    // POSITION rather than looked up by name, because two features may
+    // legitimately share one and a name lookup would collapse them.
+    //
+    // The discipline that matters: an ordinal belongs to the feature the BRIEF
+    // wrote, not to the one the map found room for. A feature the placer skips
+    // ("a plainer settlement, never a sealed one") still SPENDS its ordinal, so
+    // every feature after it keeps the id the sealed brief already promised.
+    // Ids that shuffled whenever a village happened to be full would make the
+    // registry unquotable across two builds of the same world.
+    const featureIds = new Map();
+    {
+      let ordinal = 1;
+      for (const feature of brief.features) featureIds.set(feature, `f${ordinal++}`);
+      for (const place of brief.places)
+        for (const feature of place.features ?? []) featureIds.set(feature, `f${ordinal++}`);
+    }
+    /** Put a PLACED feature on the register of the zone that holds it.
+     *
+     *  `rect` is the extent the placement pass reserved — the placer's true
+     *  footprint plus the one-tile margin FEATURE_RECTS carries — and is
+     *  deliberately NOT carved down to the tiles the placer watered. A rect may
+     *  hold tiles the feature never painted water on (a `water-feature`'s well
+     *  stands at x+6; the wilds ford lays path straight across its stream), and
+     *  the consumer's own two-sided test is what excludes them. The exclusion
+     *  lives in the test, not in the shape. */
+    const recordFeature = (zone, feature, rect) => {
+      zone.features.push({ id: featureIds.get(feature), tag: feature.tag, name: feature.name, rect });
+    };
 
     // ── The settlement exterior (z1) ──
     const v = makeZone("z1", brief.name, scale.w, scale.h, "grass");
@@ -1972,7 +2287,12 @@ PF.world = (() => {
     // A side stream, so minting residents does not shift the tile RNG under the
     // ground cover and every world that had no minting still lays the same grass.
     const mintRnd = PF.rng(PF.hashStr(`${seed >>> 0}|residents|${brief.name}`));
-    const nameBook = RESIDENT_NAMES[activeTheme] ?? RESIDENT_NAMES["cozy-village"];
+    // Through PF.own so the fallback on the right is REACHABLE. Bare, a theme
+    // named "constructor" answered with a function, `??` saw something
+    // non-nullish and kept it, and the first `nameBook.family[…]` below threw —
+    // into build()'s catch, which degrades to the legacy three-zone world. A
+    // brief that compiles fine is not a thing to lose over a word.
+    const nameBook = PF.own(RESIDENT_NAMES, activeTheme) ?? RESIDENT_NAMES["cozy-village"];
     const takenNames = new Set(brief.cast.map((m) => m.name));
     const minted = [];
     // Off EVERY sealed household, resident or not: the target ignores the
@@ -2330,6 +2650,10 @@ PF.world = (() => {
       if (!anchor) continue; // genuinely nowhere left: a plainer settlement, never a sealed one
       PLACERS[feature.tag]?.(v, anchor.x, anchor.y);
       claimed.push({ x: anchor.x, y: anchor.y, ...size });
+      // The register gets its own rect object rather than the one `claimed`
+      // holds: the two lists have different lifetimes and aliasing them would
+      // make a future edit to either quietly reach into the other.
+      recordFeature(v, feature, { x: anchor.x, y: anchor.y, ...size });
     }
     const doorRects = buildings.map((b) => ({ x: b.door.doorX, y: b.door.doorY }));
     const stallReserved = stalls.flatMap((s) => [
@@ -2537,6 +2861,24 @@ PF.world = (() => {
       });
       zone.flavor = place.flavor;
       zones[id] = zone;
+      // WHERE THE OWNER OF THIS ROOM WORKS. A place-bound facade never goes
+      // through the minted-building loop below (it has no `special` and no
+      // `households`), so its `interior` handle was never set at all — and the
+      // cast loop's promotion gates on `owned.interior?.post`. An innkeeper the
+      // brief homed at the SETTLEMENT rather than at the inn therefore stood on
+      // the door apron of the building they run for the whole of daylight, with
+      // the lit common room and the counter behind them; a sanctuary's keeper did
+      // the same on the church step, and the keeper schedule tier holds them
+      // there dawn to dusk. Both default briefs home their host at the root, so
+      // this was every default world.
+      //
+      // The station comes off the ZONE because the furnisher is what knows it.
+      // Same handle shape the minted loop builds, so the promotion needs no
+      // second branch — and kinds whose furnisher laid no station leave `post`
+      // undefined, which the promotion's optional chain reads as "keep the door
+      // apron": a hall or a workshop has no counter to be manned and gains
+      // nothing by pretending to.
+      facade.interior = { zoneId: id, post: zone.post };
       // A floor is a zone like any other from here on — it is only ever reached
       // through its stairs, and it carries its own mapExport = false.
       for (const floor of zone.floors) zones[floor.id] = floor;
@@ -2568,6 +2910,14 @@ PF.world = (() => {
         fillRect(zone, 20, 1, 2, 22, "ground", "water", true);
         PLACERS["water-crossing"](zone, 20, wMidY);
         fillRect(zone, 22, wMidY, 4, 2, "ground", "path");
+        // THE SITE THAT OWES THE CROSSING ITS ROW. The stream is painted HERE,
+        // by the builder, and the feature loop below skips `water-crossing`
+        // outright — the placer's whole job on that tag is the 2x2 ford. So no
+        // placement loop ever sees this feature, and without this line a
+        // brief-built stream would be water nothing knows the name of while a
+        // legacy one fishes. Rect = the stream literal three lines up.
+        const crossing = place.features.find((feature) => feature.tag === "water-crossing");
+        recordFeature(zone, crossing, { x: 20, y: 1, w: 2, h: 22 });
       }
       // GROUND THE WILDS CANNOT GIVE AWAY. A feature here used to be dropped at a
       // hard-coded anchor with no test of anything — not the road it had just
@@ -2584,11 +2934,13 @@ PF.world = (() => {
       // zero pixels. Reloading does not help: the save falls back to `zone.spawn`,
       // which is the other fence tile. 24 of 48 wilds zones on staging, so this
       // ships today and is not something this branch introduced.
-      const wildsReserved = [
-        east ? { x: 1, y: wMidY, w: 19, h: 2 } : { x: zone.w - 20, y: wMidY, w: 19, h: 2 },
-        { x: 1, y: wMidY, w: 4, h: 2 },
-        { x: zone.w - 5, y: wMidY, w: 4, h: 2 },
-      ];
+      // The APPROACH ROAD is held separately from the rest of the reservation
+      // because it is the one rect the bridge ruling can negotiate away (below).
+      // The other two are the tiles the portal delivers the player onto and the
+      // spawn beside them, and no ruling makes those negotiable: a pool that
+      // swallowed an arrival tile would be a decked-over doorstep at best.
+      const wildsRoad = east ? { x: 1, y: wMidY, w: 19, h: 2 } : { x: zone.w - 20, y: wMidY, w: 19, h: 2 };
+      const wildsReserved = [wildsRoad, { x: 1, y: wMidY, w: 4, h: 2 }, { x: zone.w - 5, y: wMidY, w: 4, h: 2 }];
       if (tags.has("water-crossing")) {
         wildsReserved.push({ x: 20, y: 1, w: 2, h: 22 }, { x: 20, y: wMidY, w: 6, h: 2 });
       }
@@ -2601,13 +2953,30 @@ PF.world = (() => {
         // is stepped over, and a feature with nowhere safe is dropped — the same
         // policy the settlement states as "a plainer settlement, never a sealed
         // one", which reads here as a plainer wood.
-        for (let attempt = 0; attempt < 8; attempt++) {
+        //
+        // …EXCEPT THAT WATER COULD NEVER FIT, which is what the bridge ruling
+        // answers. The scan offers rows 8..11 and nothing else, an 8x5 rect
+        // starting on any of them reaches the road band at y12..13, and the road
+        // was reserved outright — so a wilds `water-feature` was refused on every
+        // seed and the brief's pool simply never existed. Under the ruling the
+        // road is decked rather than blocked, so it stops being a reason to
+        // refuse the anchor.
+        //
+        // A SECOND PASS, not a widened first one, and that distinction is the
+        // whole of the byte-stability story: the strict eight run first and
+        // unchanged, so a pool that already found dry ground still finds the same
+        // ground. Only after they are spent does the road come off the table, and
+        // only for water — every other tag keeps its eight attempts exactly.
+        const attempts = feature.tag === "water-feature" ? 16 : 8;
+        for (let attempt = 0; attempt < attempts; attempt++) {
           const ax = anchorX;
           const ay = 8 + (((ax / 3) | 0) % 4);
           anchorX = Math.max(6, (anchorX + 9) % (zone.w - 10));
           if (ax < 1 || ay < 1 || ax + size.w > zone.w - 1 || ay + size.h > zone.h - 1) continue;
-          if (wildsReserved.some((r) => intersects({ x: ax, y: ay, ...size }, r))) continue;
+          const busy = attempt < 8 ? wildsReserved : wildsReserved.filter((rect) => rect !== wildsRoad);
+          if (busy.some((r) => intersects({ x: ax, y: ay, ...size }, r))) continue;
           PLACERS[feature.tag]?.(zone, ax, ay);
+          recordFeature(zone, feature, { x: ax, y: ay, ...size });
           break;
         }
       }
@@ -2934,11 +3303,18 @@ PF.world = (() => {
         const ownBed = bedFor.get(member);
         if (zone === v && owned) {
           if (owned.owner === member && owned.interior?.post && zones[owned.interior.zoneId]) {
-            // A shopkeeper works INSIDE the shop now that there is a shop to be
-            // inside. An owner loitering on the apron with a stocked room behind
-            // them is the same "nobody is where they are scheduled to be" gap the
-            // dwellings had. Scoped to the OWNER: the shop is their household's
-            // home too now, and a smith's child does not man the counter.
+            // AN OWNER WORKS INSIDE THE BUILDING THEY RUN, now that there is a
+            // room to be inside it: the shopkeeper between their stock and their
+            // counter, the innkeeper on the serving row, the keeper at the
+            // chancel. An owner loitering on the apron with a stocked or a lit
+            // room behind them is the same "nobody is where they are scheduled to
+            // be" gap the dwellings had. Scoped to the OWNER: a live-work
+            // building is their household's home too, and a smith's child does
+            // not man the counter.
+            //
+            // The station itself comes from whoever built the room — WORK_POSTS
+            // for a minted building, the furnisher's own `z.post` for one the
+            // brief named — and this gate cares only that there is one.
             zone = zones[owned.interior.zoneId];
             wander = owned.interior.post;
           } else {
@@ -3055,13 +3431,23 @@ PF.world = (() => {
         // already gets, so a named worker stands where the owner would rather
         // than in some third place invented for them.
         //
-        // There is deliberately no "behind the counter" branch. A workplace can
-        // only ever name a zone the BRIEF declared (`workplace` resolves against
-        // brief._ids.zones, so always `z*`), and a work post belongs to a
-        // COMPILER-MINTED building (`s*`/`h*`, keyed by `special` in WORK_POSTS).
-        // The two id spaces are disjoint by construction — see the harness case
-        // that pins it — so a counter lookup here could never match, and one was
-        // removed rather than left reading as though it might.
+        // There is deliberately no "behind the counter" branch, and the reason is
+        // no longer that a lookup could not match. WORK_POSTS is still out of
+        // reach from here: a workplace can only ever name a zone the BRIEF
+        // declared (`workplace` resolves against brief._ids.zones, so always
+        // `z*`), and that table is keyed by `special` on a COMPILER-MINTED
+        // building (`s*`/`h*`). Those two id spaces are disjoint by construction
+        // — see the harness case that pins it.
+        //
+        // What is new is that a brief-declared room CAN now carry a station: the
+        // places pass hands an inn's serving row and a sanctuary's chancel to
+        // that building's OWNER (see `facade.interior`). It stays the owner's.
+        // `workplace` is the one binding that puts SEVERAL people in one building
+        // — an acolyte, a market's fourth seller, a shop assistant — and a
+        // station is a single row five tiles long, so sending them all to it
+        // would stack them or have the occupancy scan push them straight back
+        // off. The room's walkable middle is the honest box for anybody the brief
+        // merely rostered here, and the same box the owner would get.
         wander = workZone === v ? plazaBox() : fullZoneBox(workZone);
         // Always dispersed: a workplace is a SHARED box by definition — it exists
         // precisely for the cases with more than one person in it — and two sprites
@@ -3102,6 +3488,54 @@ PF.world = (() => {
       });
     });
 
+    // ── LODGING (S3/P1): who rents a bed, and where ──────────────────────────
+    // The settlement's gathering is the one building that OFFERS beds rather than
+    // keeping them for its own people (interiorRoom carves `beds` and `homeBeds`
+    // from different bands), so it is the one place a player with no home of their
+    // own can rent a berth. Marked here rather than resolved at the call site
+    // because "which zone is the inn" is a fact about the compile, and the keeper
+    // is stamped on the NPC so the offer follows the PERSON: an innkeeper standing
+    // in the square at noon can still let you a room.
+    //
+    // Runtime-only, exactly like the schedule handles beside it — re-derived on
+    // every compile, costing zero save fields. What the RENTAL persists is the
+    // zone id, and only through PF.player.setHome, which refuses a minted `h{n}`.
+    if (gatheringZoneId && zones[gatheringZoneId]) {
+      // WHO LETS THE ROOMS: the cast member the specials pass bound to the
+      // gathering's building — the `host` kind, the innkeeper — and only if the
+      // brief named nobody, whoever the brief homed there. Deliberately NOT the
+      // `_sched.keeper` tier: that tier is PLACE_BOUND_SPECIALS, which is the
+      // sanctuary alone, so a gathering's owner never carries it and reading it
+      // here would leave every inn in the game with nobody behind the counter.
+      const facade = buildings.find((b) => b.boundPlace === gatheringPlace);
+      const host = facade?.owner ?? headOfBuilding.get(gatheringZoneId) ?? null;
+      // BOTH MARKS OR NEITHER. A brief can name a gathering and home nobody in it
+      // (no `host` kind, nobody in that building), and the zone mark used to go up
+      // unconditionally — a room the world calls lodging with nobody behind the
+      // counter, which is a promise the offer can never keep. The lodging fact is
+      // the KEEPER's, so the room is only lodging when somebody is letting it.
+      //
+      // The zone mark waits for the keeper's rather than being paired with it by
+      // inspection. Resolving a host is not the same fact as STAMPING one: the
+      // resolution hands back a roster entry and the stamp goes on by NAME, and
+      // "every roster entry is placed as an NPC under its own name" is true of
+      // this compiler and is not something this block can see. Now the offer's
+      // room path reads the zone mark to find a keeper (59-economy
+      // `_keeperInRoom`), the gap between the two would be exactly the counter
+      // with nobody behind it, so the mark is a CONSEQUENCE of the stamp landing.
+      if (host) {
+        let stamped = false;
+        for (const zone of Object.values(zones)) {
+          for (const npc of zone.npcs) {
+            if (npc.name !== host.name) continue;
+            npc.lodging = gatheringZoneId;
+            stamped = true;
+          }
+        }
+        if (stamped) zones[gatheringZoneId].lodging = true;
+      }
+    }
+
     return {
       seed,
       theme: activeTheme,
@@ -3109,7 +3543,14 @@ PF.world = (() => {
       situation: brief.situation,
       zones,
       startZone: "z1",
-      bindings: {},
+      bindings: newBindings(),
+      // Derived, never saved (S5 §Q3a). `minted` names the residents the brief
+      // did NOT. The severance itself keys off the complement of the brief's
+      // cast rather than this list — a resident the OLD mint produced is in
+      // neither — but the list is what a brief-less world falls back to, and it
+      // is the honest way to say who the compiler invented.
+      minted: minted.map((member) => member.name),
+      mintStamp: mintStampOf(minted),
     };
   }
 

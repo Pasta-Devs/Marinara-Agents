@@ -11,7 +11,7 @@
   "agents": {
     "noodle": {
       "name": "Noodle",
-      "description": "Explore the Noodle public timeline as an optional local social world. Install it, restart Marinara Engine when prompted, then open Home → Noodle."
+      "description": "Explore the Noodle public timeline as an optional local social world."
     }
   }
 }

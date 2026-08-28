@@ -819,7 +819,8 @@ export function useToggleNoodlerSubscription() {
         mergeSlurpViewerShell(current, scope),
       );
       return Promise.all([
-        qc.invalidateQueries({ queryKey: noodleKeys.viewer(input.personaId) }),
+        qc.refetchQueries({ queryKey: noodleKeys.viewer(input.personaId), type: "active" }),
+        qc.invalidateQueries({ queryKey: noodleKeys.noodlerPosts(input.creatorAccountId) }),
         qc.invalidateQueries({
           queryKey: noodleKeys.noodlerSubscribers(input.creatorAccountId),
         }),
@@ -873,9 +874,47 @@ export function useUnlockNoodlerPost() {
 export function useCreateNoodlerInteraction() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: ({ postId, ...input }: { postId: string } & NoodlerCreateInteractionInput) =>
+    mutationFn: ({
+      postId,
+      actorAccountId: _actorAccountId,
+      ...input
+    }: { postId: string; actorAccountId?: string } & NoodlerCreateInteractionInput) =>
       api.post<NoodleInteraction>(`/slurp/noodler/posts/${encodeURIComponent(postId)}/interactions`, input),
-    onSuccess: (_result, input) => qc.invalidateQueries({ queryKey: noodleKeys.viewer(input.personaId) }),
+    onMutate: async (input) => {
+      if (input.type !== "like" && input.type !== "repost") return undefined;
+      await qc.cancelQueries({ queryKey: noodleKeys.viewer(input.personaId) });
+      const previous = qc.getQueryData<NoodlerViewerScope>(noodleKeys.viewer(input.personaId));
+      qc.setQueryData<NoodlerViewerScope | undefined>(noodleKeys.viewer(input.personaId), (current) => {
+        if (!current) return current;
+        return {
+          ...current,
+          creators: current.creators.map((creator) => ({
+            ...creator,
+            posts: creator.posts.map((post) => {
+              if (post.id !== input.postId) return post;
+              const interaction: NoodleInteraction = {
+                id: `pending:${input.postId}:${input.type}:${input.parentInteractionId ?? "root"}`,
+                postId: input.postId,
+                parentInteractionId: input.parentInteractionId ?? null,
+                actorAccountId: input.actorAccountId ?? input.personaId,
+                type: input.type,
+                content: null,
+                imageUrl: null,
+                actorSnapshot: null,
+                createdAt: new Date().toISOString(),
+              };
+              if (post.interactions.some((item) => item.id === interaction.id)) return post;
+              return { ...post, interactions: [...post.interactions, interaction] };
+            }),
+          })),
+        };
+      });
+      return { previous };
+    },
+    onError: (_error, input, context) => {
+      if (context?.previous) qc.setQueryData(noodleKeys.viewer(input.personaId), context.previous);
+    },
+    onSettled: (_result, _error, input) => qc.invalidateQueries({ queryKey: noodleKeys.viewer(input.personaId) }),
   });
 }
 
@@ -894,7 +933,11 @@ export function useTriggerNoodlerCreatorReply() {
 export function useRemoveNoodlerInteraction() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: ({ postId, ...input }: { postId: string } & NoodlerRemoveInteractionInput) => {
+    mutationFn: ({
+      postId,
+      actorAccountId: _actorAccountId,
+      ...input
+    }: { postId: string; actorAccountId?: string } & NoodlerRemoveInteractionInput) => {
       const params = new URLSearchParams({
         personaId: input.personaId,
         type: input.type,
@@ -902,7 +945,40 @@ export function useRemoveNoodlerInteraction() {
       if (input.parentInteractionId) params.set("parentInteractionId", input.parentInteractionId);
       return api.delete<NoodleInteraction>(`/slurp/noodler/posts/${encodeURIComponent(postId)}/interactions?${params}`);
     },
-    onSuccess: (_result, input) => qc.invalidateQueries({ queryKey: noodleKeys.viewer(input.personaId) }),
+    onMutate: async (input) => {
+      if (input.type !== "like" && input.type !== "repost") return undefined;
+      await qc.cancelQueries({ queryKey: noodleKeys.viewer(input.personaId) });
+      const previous = qc.getQueryData<NoodlerViewerScope>(noodleKeys.viewer(input.personaId));
+      qc.setQueryData<NoodlerViewerScope | undefined>(noodleKeys.viewer(input.personaId), (current) => {
+        if (!current) return current;
+        return {
+          ...current,
+          creators: current.creators.map((creator) => ({
+            ...creator,
+            posts: creator.posts.map((post) =>
+              post.id !== input.postId
+                ? post
+                : {
+                    ...post,
+                    interactions: post.interactions.filter(
+                      (interaction) =>
+                        !(
+                          interaction.actorAccountId === (input.actorAccountId ?? input.personaId) &&
+                          interaction.type === input.type &&
+                          (interaction.parentInteractionId ?? null) === (input.parentInteractionId ?? null)
+                        ),
+                    ),
+                  },
+            ),
+          })),
+        };
+      });
+      return { previous };
+    },
+    onError: (_error, input, context) => {
+      if (context?.previous) qc.setQueryData(noodleKeys.viewer(input.personaId), context.previous);
+    },
+    onSettled: (_result, _error, input) => qc.invalidateQueries({ queryKey: noodleKeys.viewer(input.personaId) }),
   });
 }
 
@@ -967,6 +1043,40 @@ export function useDeleteNoodlerPost() {
         qc.invalidateQueries({ queryKey: noodleKeys.noodlerViewers() }),
       ]);
     },
+  });
+}
+
+export function useUpdateNoodlerInteraction() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({
+      postId,
+      interactionId,
+      personaId,
+      ...input
+    }: {
+      postId: string;
+      interactionId: string;
+      personaId: string;
+      content?: string | null;
+      imageUrl?: string | null;
+    }) =>
+      api.patch<NoodleInteraction>(
+        `/slurp/noodler/posts/${encodeURIComponent(postId)}/interactions/${encodeURIComponent(interactionId)}`,
+        { personaId, ...input },
+      ),
+    onSuccess: (_interaction, input) => qc.invalidateQueries({ queryKey: noodleKeys.viewer(input.personaId) }),
+  });
+}
+
+export function useDeleteNoodlerInteraction() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ postId, interactionId, personaId }: { postId: string; interactionId: string; personaId: string }) =>
+      api.delete<NoodleInteraction[]>(
+        `/slurp/noodler/posts/${encodeURIComponent(postId)}/interactions/${encodeURIComponent(interactionId)}?personaId=${encodeURIComponent(personaId)}`,
+      ),
+    onSuccess: (_deleted, input) => qc.invalidateQueries({ queryKey: noodleKeys.viewer(input.personaId) }),
   });
 }
 

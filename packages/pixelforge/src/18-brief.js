@@ -316,20 +316,40 @@ PF.brief = (() => {
 
     // §4.3: a host with no gathering place synthesizes AT MOST ONE interior
     // named from the host — the player must be able to walk into the inn.
+    //
+    // Run TWICE, against two different casts, because §4.3 is a post-condition on
+    // the SEALED cast and this call can only see the model's draft. The raw cast
+    // is not the sealed one: pass 6's quality floor tops up from STOCK, and every
+    // stock roster leads with a `host`. So the brief that needs the synthesis most
+    // — one whose cast failed validation outright — was the one brief that never
+    // got it, and the compiler builds the common room from the gathering PLACE (a
+    // `host` in the cast alone binds to nothing). Measured on a live playtest: a
+    // colony compiled fifteen zones of "X's home" plus a farm, with a keeper who
+    // had nowhere to keep and a berth nobody could rent. This call stays where it
+    // is anyway, one pass ahead of the cast, so a model that named a host CAN
+    // still resolve a `home` at the interior it just earned.
+    const gatheringForHost = (people) => {
+      if (brief.places.some((p) => p.kind === "gathering")) return;
+      if (brief.places.length >= placeRoom) return;
+      const host = people.find((item) => foldEnum(item?.kind ?? item?.role, CAST_KINDS, null) === "host");
+      // The theme's own word for its common room. `${hostName}'s` alone reads as
+      // one more house on the row — it stood in a street of "Rook's home" and
+      // "Fen's home" and the player could not tell which door was the inn. Both
+      // default briefs already carry the idiom (the Amber Hearth INN, the Meridian
+      // CANTINA); the host's name is budgeted so `${name}'s ${noun}` still fits the
+      // 24 characters the schema asks a model for — "'s " is three of them.
+      const noun = GATHERING_NOUNS[theme] || GATHERING_NOUNS["cozy-village"];
+      const hostName = host ? capText(host.name, Math.max(6, 24 - 3 - noun.length)) : "";
+      if (!hostName) return;
+      brief.places.push({
+        kind: "gathering",
+        name: dedupeName(`${hostName}'s ${noun}`, "places-host"),
+        flavor: "",
+      });
+      repairs.push(`places: synthesized a gathering interior for host ${hostName}`);
+    };
     const rawCast = asArray(src.cast);
-    const hasGathering = brief.places.some((p) => p.kind === "gathering");
-    if (!hasGathering && brief.places.length < placeRoom) {
-      const host = rawCast.find((item) => foldEnum(item?.kind ?? item?.role, CAST_KINDS, null) === "host");
-      const hostName = host ? capText(host.name, 20) : "";
-      if (hostName) {
-        brief.places.push({
-          kind: "gathering",
-          name: dedupeName(`${hostName}'s`, "places-host"),
-          flavor: "",
-        });
-        repairs.push(`places: synthesized a gathering interior for host ${hostName}`);
-      }
-    }
+    gatheringForHost(rawCast);
 
     // Pass 4 — cast. Over the cap, the leader survives (§4.4): hoist the first
     // leader to the front before truncating by original order.
@@ -445,6 +465,16 @@ PF.brief = (() => {
       });
       repairs.push("places: floor top-up wilds zone");
     }
+    // §4.3 again, against the cast that actually SEALED — see gatheringForHost.
+    // Last of the floors on purpose: the wilds top-up answers "this settlement has
+    // no named place at all", which is a different lack, and running ahead of it
+    // would silently spend that floor and leave a colony with an inn and no
+    // outside. So a TOP-UPPED host gets both floors. (The pass-3 call is the one
+    // path that still spends the wilds floor: a model host with zero surviving
+    // places seals [gathering] and no wilds — deliberate, because that model DID
+    // name a place through its host, and the floor answers namelessness, not a
+    // missing outdoors.)
+    gatheringForHost(brief.cast);
 
     // Identity (§2): opaque ordinal ids assigned once, stored in the sealed brief.
     const ids = { zones: {}, cast: {}, features: {} };
@@ -476,9 +506,118 @@ PF.brief = (() => {
     return brief;
   }
 
-  // ── defaults(): the themed fallback brief (skip / failure — never a gate) ───
+  // ── foldStored(): the READ-side fold (#566) ─────────────────────────────────
+  // validate() above is a SEAL-TIME guarantee, and it does not survive the round
+  // trip through chat metadata. `PF.save._configBrief` hands the compiler whatever
+  // the metadata holds, and ~14 reads inside 20-world's compile() index tables with
+  // it: a stored `prosperity: "constructor"` resolved to a function on
+  // Object.prototype and cost a town 38 of its 48 zones with nothing said, and a
+  // stored `scale` or `place.kind` threw and left build()'s catch-all degrading a
+  // compiled settlement to the 3-zone legacy layout behind one console.warn.
+  //
+  // THIS IS A FOLD, NOT A SECOND validate(), and that is the whole design. Running
+  // validate() again on read would re-run the seal-time POLICY passes too — the
+  // per-scale feature and place caps, the floors, the dedupe — against a brief
+  // sealed under a table that may not be this build's. A newer build that seats
+  // four places at hamlet rank writes a brief this one would strip to two on every
+  // load, which is the same silent zone loss the seam was opened for, arriving
+  // through the front door. Seal time may DROP; read time may only FOLD. Every
+  // array length, every name and every id crosses this function untouched, and
+  // what changes is only a value the compiler was about to use as a table key.
+  //
+  // AND IT NEVER TOUCHES THE CALLER'S OBJECT. The brief the save path holds is what
+  // PF.player.briefHashOf() stamps a save against, so a byte of it moving under the
+  // load path is a SPURIOUS SEVERANCE — rel rows, quests and home quarantined for a
+  // world that did not change. Neither hazard is theoretical: validate() reorders
+  // `src.cast` in place on the leader-hoist path, and it is not byte-idempotent
+  // anyway (a brief that took repairs at seal time re-validates with an empty
+  // `_repairs`, and a stock top-up member's key order is not the main path's). So
+  // the fold works on a deep copy that lives and dies inside build(), the stored
+  // object stays the identity source it has always been, and `_folds` — the
+  // read-side counterpart of `_repairs` — rides the copy and is never written back.
+  //
+  // Where the compiler's readings all agree on a fallback, the fold changes
+  // nothing observable: an unknown `tint` was already grey's hue (`?? 210`) and an
+  // unknown `tag` was already a plain rect with no painter — measured, those two
+  // compile identically folded or not. Everything else MOVES, deliberately.
+  // `prosperity` moving is this function's headline (the silent 38-of-48-zone
+  // loss above). `place.kind` moves because FURNISH's `|| dwelling` was never the
+  // only reading — upperPlan refuses non-household kinds outright and cellarPlan
+  // gives them no cellar, so an unfolded unknown compiled to a stunted dwelling,
+  // not a dwelling. `surround` and `standing` move to validate's own defaults,
+  // which beat a flat ground mix and a person with no rest anchor. In every case
+  // the fold's answer is the one seal time would have given, and a value naming
+  // something on Object.prototype can no longer pretend to be a table's entry.
+  //
+  // An ABSENT value stays absent. `?? "resident"` and `|| SCALES.village` are the
+  // compiler's reading of a missing field, and folding one in would rewrite a brief
+  // sealed before that field existed.
+  function foldStored(stored, seed) {
+    const brief = JSON.parse(JSON.stringify(stored));
+    const folds = [];
+    const foldAt = (owner, key, list, fallback, fieldPath) => {
+      if (!owner || typeof owner !== "object") return;
+      if (!Object.prototype.hasOwnProperty.call(owner, key)) return;
+      const was = owner[key];
+      if (was === null || was === undefined) return;
+      const now = foldEnum(was, list, fallback);
+      if (now === was) return;
+      owner[key] = now;
+      folds.push(`${fieldPath}: ${JSON.stringify(was)} -> ${JSON.stringify(now)}`);
+    };
+    const foldFeatures = (list, fieldPath) => {
+      if (!Array.isArray(list)) return;
+      // No default tag exists to fold to, and inventing one would put a feature on
+      // the map the brief never asked for. null is what the placement loops already
+      // read an unknown tag as (`FEATURE_RECTS[tag] ?? FEATURE_RECT`, `PLACERS[tag]?.`),
+      // and the row keeps its name, so the registry can still say what stands there.
+      list.forEach((feature, index) => foldAt(feature, "tag", FEATURE_TAGS, null, `${fieldPath}[${index}].tag`));
+    };
+    // Theme is the one fold whose vocabulary is not this module's to state.
+    // compile() spends `brief.theme` on a single read — `PF.art.setTheme()`
+    // (20-world) — so 10-art's table IS the whitelist, and it is asked for it at
+    // fold time rather than copied at load time. A copy would drift the moment a
+    // theme ships with art but no worked example here, and folding an art-only
+    // theme to cozy-village would replace a VALID value one screen before
+    // setTheme() would have accepted it: the future-theme divergence class the
+    // roadmap's swamp-biome prerequisites already track. No art module, no
+    // authority and so no fold — which is what 20-world's own `PF.art.setTheme ?`
+    // guard does with the same absence.
+    const themeIds = PF.art?.themeIds?.();
+    if (themeIds) foldAt(brief, "theme", themeIds, "cozy-village", "theme");
+    foldAt(brief, "scale", Object.keys(SCALES), "village", "scale");
+    foldAt(brief, "surround", SURROUNDS, pick(seed, "surround", SURROUNDS), "surround");
+    foldAt(brief, "prosperity", PROSPERITY, "modest", "prosperity");
+    foldFeatures(brief.features, "features");
+    if (Array.isArray(brief.places))
+      brief.places.forEach((place, index) => {
+        foldAt(place, "kind", PLACE_KINDS, "dwelling", `places[${index}].kind`);
+        foldFeatures(place?.features, `places[${index}].features`);
+      });
+    if (Array.isArray(brief.cast))
+      brief.cast.forEach((member, index) => {
+        foldAt(member, "kind", CAST_KINDS, "folk", `cast[${index}].kind`);
+        foldAt(member, "tint", Object.keys(TINTS), "grey", `cast[${index}].tint`);
+        foldAt(member, "standing", STANDING, "resident", `cast[${index}].standing`);
+      });
+    brief._folds = folds;
+    return brief;
+  }
+
+  // ── defaults(): the themed brief a world compiles to when nobody wrote one ──
+  // NOT a failure path any more (see generate()'s design revision): no failure
+  // seals anything. What it remains is the schema's own worked example per theme —
+  // the fixture the compiler's invariants are driven through, and the answer for
+  // any future caller that needs a brief without a generation call behind it.
   function defaults(theme, seed) {
-    return validate(DEFAULT_BRIEFS[theme] || DEFAULT_BRIEFS["cozy-village"], { theme, seed });
+    // PF.own, because this read happens BEFORE validate() applies the same guard
+    // one screen up — and it is the parameter of an exported function, so the
+    // word arrives from wherever the caller got it. Bare, `defaults("__proto__")`
+    // handed Object.prototype to validate() as the worked example: an object, so
+    // it survived the transport check, and every field then floored to nothing.
+    // The theme came back cozy-village and the brief came back EMPTY, which is
+    // the fallback on this line reading as if it had fired when it had not.
+    return validate(PF.own(DEFAULT_BRIEFS, theme) || DEFAULT_BRIEFS["cozy-village"], { theme, seed });
   }
 
   /** Truncation salvage (§4.1/§5): strip fences, take the outermost balanced
@@ -557,14 +696,33 @@ PF.brief = (() => {
    *  chat_busy; one plain re-roll on truncation (the route's maxTokens is
    *  min()-only — "never a raise" — so a numeric override could only shrink
    *  the budget); salvage of the LONGEST truncated raw seen across attempts.
-   *  Returns a SEALED brief only for outcomes worth sealing: success, salvage,
-   *  or a deterministic/paid failure (400 contract, 422 provider/parse) →
-   *  themed defaults. Transient outcomes — 404 route-absent, 409, 429, 5xx,
-   *  network error, budget timeout — return NULL so the caller leaves the
-   *  chat unsealed and the next boot simply tries again. */
+   *
+   *  Returns a SEALED brief for the two outcomes that produce a REAL one —
+   *  success and salvage — and NULL for every failure, so the caller leaves the
+   *  chat unsealed and the next visit simply tries again.
+   *
+   *  DESIGN REVISION (this release, maintainer ruling #7 / plan §Q3b). The 0.4.0
+   *  ladder sealed THEMED DEFAULTS on a deterministic/paid failure — 400 contract,
+   *  422 provider/parse — on the reasoning that a paid call per visit is worse
+   *  than the default world. That decision predates the loading gate and does not
+   *  survive it: back then a default world was what the player was already walking
+   *  in, so sealing it changed nothing they could see. Now the gate holds play
+   *  precisely so that nobody invests in a world that is going to be discarded,
+   *  and the README states the contract plainly — "a generation failure is a retry
+   *  screen; nothing is stored". Sealing defaults on a 400 makes that sentence
+   *  false in the one case a player cannot undo: the key is written, the chat is
+   *  permanently a themed default, and the three paragraphs of setting they wrote
+   *  are gone with no way back. The paid-call worry is also nearly hypothetical
+   *  now — capPreferences clamps to 7,800 against the route's 8,000 cap, so the
+   *  reachable 400 is a contract bug rather than a long setting.
+   *
+   *  `onFailure(kind)` reports WHY, once, so the retry screen can say something
+   *  truer than "something went wrong" — a deterministic refusal and a busy engine
+   *  want different sentences from the player. Kinds: "unavailable" (404/409/429/
+   *  5xx), "refused" (400/422 with nothing salvageable), "network", "timeout". */
   async function generate(
     chatId,
-    { theme, seed, preferences, onProgress, budgetMs = 90_000, busyWaitMs = Math.min(15_000, budgetMs / 6) },
+    { theme, seed, preferences, onProgress, onFailure, budgetMs = 90_000, busyWaitMs = Math.min(15_000, budgetMs / 6) },
   ) {
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), budgetMs);
@@ -605,24 +763,34 @@ PF.brief = (() => {
       }
       if (response.status === 404 || response.status === 409 || response.status === 429 || response.status >= 500) {
         console.warn("[pixelforge] world generation unavailable (transient); retrying next visit", response.status);
+        onFailure?.("unavailable");
         return null;
       }
+      // 400 (contract) and 422 (provider/parse, nothing salvageable). Deterministic
+      // — trying again probably gets the same answer — but STILL a retry screen and
+      // still nothing stored, because the alternative is deciding a themed default
+      // world on the player's behalf and writing it down where they cannot undo it.
       console.warn(
-        "[pixelforge] world generation failed; sealing the themed default",
+        "[pixelforge] world generation was refused; the chat stays unsealed",
         response.status,
         response.body?.error ?? null,
       );
+      onFailure?.("refused");
+      return null;
     } catch (err) {
       // Network trouble and the budget timeout are both transient — leave the
       // chat unsealed rather than freezing the default world in forever.
-      if (!controller.signal.aborted)
+      if (!controller.signal.aborted) {
         console.warn("[pixelforge] world generation failed (network); retrying next visit", err);
-      else console.warn("[pixelforge] world generation timed out; retrying next visit");
+        onFailure?.("network");
+      } else {
+        console.warn("[pixelforge] world generation timed out; retrying next visit");
+        onFailure?.("timeout");
+      }
       return null;
     } finally {
       clearTimeout(timer);
     }
-    return defaults(theme, seed);
   }
 
   // ── guidance(): the exact text that ships in the one call ───────────────────
@@ -738,6 +906,12 @@ PF.brief = (() => {
     ruin: "The Ruin",
     lookout: "The Lookout",
   };
+  // What each theme calls its common room, for the §4.3 host synthesis. Read off
+  // the default briefs, which name theirs in full: "The Amber Hearth Inn" and
+  // "The Meridian Cantina". PLACE_LABELS is the generic fallback for a place the
+  // model named nothing at all; this is the possessive a person's own house of
+  // hospitality takes.
+  const GATHERING_NOUNS = { "cozy-village": "Inn", "sci-fi-colony": "Cantina" };
   const PLACE_LABELS = {
     gathering: "The Hearth",
     workshop: "The Works",
@@ -896,5 +1070,18 @@ PF.brief = (() => {
     },
   };
 
-  return { VERSION, SCALES, TINTS, FEATURE_TAGS, CAPS, validate, defaults, guidance, schema, generate, salvageText };
+  return {
+    VERSION,
+    SCALES,
+    TINTS,
+    FEATURE_TAGS,
+    CAPS,
+    validate,
+    foldStored,
+    defaults,
+    guidance,
+    schema,
+    generate,
+    salvageText,
+  };
 })();

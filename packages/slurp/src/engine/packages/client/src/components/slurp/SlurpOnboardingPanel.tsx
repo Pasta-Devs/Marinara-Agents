@@ -99,6 +99,7 @@ interface WizardProps {
   selectionOnly?: boolean;
   onClose: () => void;
   onComplete?: () => void;
+  onSeeFeed?: () => void;
   onSkipped?: () => void;
 }
 
@@ -106,7 +107,14 @@ function disclosureLabel(value: NoodleIdentityDisclosure, t: ReturnType<typeof u
   return t(`ui.noodle.noodlerwizard.disclosure.${value}.title`);
 }
 
-export function SlurpOnboardingWizard({ open, selectionOnly = false, onClose, onComplete, onSkipped }: WizardProps) {
+export function SlurpOnboardingWizard({
+  open,
+  selectionOnly = false,
+  onClose,
+  onComplete,
+  onSeeFeed,
+  onSkipped,
+}: WizardProps) {
   const { t } = useUiTranslation();
   const eligible = useNoodlerEligibleAccounts("", "character", open);
   const bulkCreate = useBulkCreateNoodlerStageProfiles();
@@ -1424,7 +1432,10 @@ export function SlurpOnboardingWizard({ open, selectionOnly = false, onClose, on
               ) : (
                 <button
                   type="button"
-                  onClick={onClose}
+                  onClick={() => {
+                    onSeeFeed?.();
+                    if (!onSeeFeed) onClose();
+                  }}
                   className="min-h-10 rounded-md bg-[#ff7ec1] px-4 text-sm font-bold text-zinc-950"
                 >
                   {t("ui.noodle.noodlerwizard.openAllCreators")}
@@ -1466,7 +1477,7 @@ export function SlurpOnboardingWizard({ open, selectionOnly = false, onClose, on
               onClick={() => setProviderConfirmationOpen(false)}
               className="min-h-10 rounded-md border border-[var(--border)] px-4 text-xs font-semibold"
             >
-              {t("capabilities.actions.cancel")}
+              {t("ui.slurp.actions.cancel")}
             </button>
             <button
               type="button"

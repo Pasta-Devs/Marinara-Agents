@@ -123,9 +123,8 @@
        Every panel-scoped value should reference one of these. Adding a
        new font-size or padding without a token is a design-system bug. */
 
-    /* Master scale knob. Bumps the whole panel proportionally. Slot cards
-       cancel this out (font-size: 1em / --bh-ui-scale) to keep their
-       content density stable while the surrounding chrome breathes. */
+    /* Master scale knob. The host updates it from the floating window's
+       available width and height so chrome, cards, and the doll scale together. */
     --bh-ui-scale: 1.1;
     font-size: calc(0.875em * var(--bh-ui-scale));
 
@@ -610,8 +609,8 @@
        min-content, so a wide chip (a long item name) forces the side column — and the
        whole grid — past the panel's right edge. minmax(0,…) lets the track shrink and
        the content wrap/clip instead of overflowing. */
-    grid-template-columns: minmax(0, 1fr) 140px minmax(0, 1fr);
-    gap: 6px;
+    grid-template-columns: minmax(0, 1fr) calc(140px * var(--bh-ui-scale, 1)) minmax(0, 1fr);
+    gap: calc(6px * var(--bh-ui-scale, 1));
     align-items: start;
 }
 .bh-doll-empty {
@@ -673,9 +672,7 @@
        so it needs its own min-width:0 to shrink below its content and let the text wrap
        instead of forcing the track — and the panel — wider. */
     min-width: 0;
-    /* Cancel the panel's --bh-ui-scale so cards keep their original density
-       regardless of how much the surrounding UI is scaled up. */
-    font-size: calc(1em / var(--bh-ui-scale, 1));
+    font-size: 1em;
 }
 /* Card no longer carries a tier border — damage tier reads off each chip's
    own left bar (CSS ::before below) so the colored stripes match each
@@ -2263,8 +2260,8 @@
        because `.bh-col { display: contents }` below dissolves the columns, so the SLOT
        CARDS are the direct grid items; a bare `1fr` would size to the widest card's
        min-content and push the right column over the panel edge. */
-    grid-template-columns: minmax(0, 1fr) minmax(132px, 148px) minmax(0, 1fr);
-    gap: 4px 6px;
+    grid-template-columns: minmax(0, 1fr) minmax(calc(132px * var(--bh-ui-scale, 1)), calc(148px * var(--bh-ui-scale, 1))) minmax(0, 1fr);
+    gap: calc(4px * var(--bh-ui-scale, 1)) calc(6px * var(--bh-ui-scale, 1));
     align-items: stretch;
 }
 .bh-doll-grid.bh-paired .bh-col { display: contents; }

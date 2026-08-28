@@ -67,7 +67,10 @@
   "memoryNag.vault.cancel": "Cancel",
   "memoryNag.vault.save": "Save memory",
   "memoryNag.toolbar.label": "Memory Nags",
-  "memoryNag.toolbar.emptyWord": "head empty, no thoughts",
+  "memoryNag.toolbar.regenerate": "Regenerate Memory Nags",
+  "memoryNag.toolbar.lock": "Enter tracker lock mode",
+  "memoryNag.toolbar.unlock": "Exit tracker lock mode",
+  "memoryNag.toolbar.emptyWord": "head empty no thoughts",
   "memoryNag.toolbar.none": "No nags this time.",
   "memoryNag.tracker.title": "Memory Nags",
   "memoryNag.tracker.none": "No nags recalled for this turn."

@@ -40,7 +40,7 @@ assert.match(
 );
 assert.match(
   slurpFanActivity,
-  /content: row\.content \?\? null/u,
+  /content = activity\.type === "reply" \? activity\.content\?\.trim\(\) \|\| null : null/u,
   "fan activity parsing must accept providers that omit null content fields",
 );
 assert.match(

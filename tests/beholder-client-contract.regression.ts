@@ -14,7 +14,7 @@
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import { readFileSync, readdirSync } from "node:fs";
-import { dirname, join, resolve } from "node:path";
+import { basename, dirname, join, resolve } from "node:path";
 
 const repoRoot = resolve(dirname(process.argv[1] ?? process.cwd()), "..");
 const packageRoot = join(repoRoot, "packages/beholder");
@@ -145,6 +145,23 @@ assert.ok(
 assert.ok(manifest.permissions.includes("ui"), "a client-bearing package needs the ui permission");
 assert.match(beholderInterfaceSource, /--marinara-chat-chrome-accent/u, "Beholder must consume the chat chroma token");
 assert.match(beholderInterfaceSource, /bh-hud-icon/u, "the Beholder toolbar mark must be theme-colored");
+assert.match(
+  beholderInterfaceSource,
+  /\.bh-hud-icon\{[^}]*--marinara-app-accent-solid/u,
+  "the Beholder toolbar mark must follow the animated app accent",
+);
+assert.match(
+  beholderInterfaceSource,
+  /\$\{hostClass\} mari-accent-animated bh-hud-toggle/u,
+  "the Beholder toolbar control must opt into the host accent transition",
+);
+assert.match(
+  beholderInterfaceSource,
+  /<svg class="\$\{className\}"[^>]*stroke="currentColor"/u,
+  "Beholder launchers must use the theme-colored eye icon",
+);
+assert.doesNotMatch(beholderInterfaceSource, /BH_LOGO/u, "Beholder launchers must not restore the old PNG logo");
+assert.match(beholderInterfaceSource, /"toolbarLabel", "Beholder"/u, "the toolbar tooltip must simply say Beholder");
 assert.doesNotMatch(
   beholderInterfaceSource,
   /\.(?:bh-hud-toggle|bh-tracker-launch)[^}]*var\(--primary\)/su,
@@ -154,6 +171,11 @@ assert.match(
   beholderInterfaceSource,
   /\.bh-tracker-launch\.bh-active\{[^}]*--marinara-chat-chrome-accent/u,
   "the Tracker Panel launcher must visibly reflect its active state",
+);
+assert.match(
+  beholderInterfaceSource,
+  /\.bh-tracker-launch\.bh-active \.bh-tracker-launch__arrow\{transform:rotate\(90deg\);\}/u,
+  "the Tracker Panel arrow must point down while the Beholder window is open",
 );
 assert.match(
   beholderInterfaceSource,
@@ -172,7 +194,7 @@ assert.match(
 );
 assert.match(
   beholderInterfaceSource,
-  /event\.preventDefault\(\);\s*this\._interaction\?\.\(\);[\s\S]*const startRect/u,
+  /event\.preventDefault\(\);\s*this\._interaction\?\.\(\);[\s\S]*const pointerId/u,
   "a new pointer interaction must clean up the previous one before capturing body styles",
 );
 assert.match(
@@ -187,13 +209,63 @@ assert.match(
 );
 assert.match(
   beholderInterfaceSource,
-  /_boundsObserver = new ResizeObserver\(\(\) => this\.syncGeometry\(\)\)/u,
+  /_boundsObserver = new ResizeObserver\(\(\) => \{[\s\S]*this\.syncGeometry\(\)/u,
   "the floating window must stay inside the chat when the surrounding layout changes",
 );
 assert.match(
   beholderInterfaceSource,
-  /height:calc\(100dvh - var\(--bh-mobile-top,0px\)\)/u,
-  "mobile Beholder must fill the available viewport below the app top bar",
+  /\.beholder-panel\{ inset:0 !important; width:100% !important; height:100% !important/u,
+  "mobile Beholder must fill its chat-area host",
+);
+assert.match(
+  beholderInterfaceSource,
+  /hostArea\.appendChild\(panel\)/u,
+  "floating Beholder must be mounted inside the live chat area rather than document.body",
+);
+assert.match(
+  beholderInterfaceSource,
+  /releaseHost\(element\)[\s\S]*this\.close\(\)/u,
+  "floating Beholder must close when its roleplay host leaves the chat area",
+);
+assert.match(
+  beholderInterfaceSource,
+  /window\.open\("", "_blank"\)/u,
+  "the Beholder header must offer a detached browser tab",
+);
+assert.match(
+  beholderInterfaceSource,
+  /--bh-window-accent: var\(--marinara-app-accent-static/u,
+  "the floating window frame and controls must follow the app accent",
+);
+assert.match(
+  beholderInterfaceSource,
+  /Math\.min\(width \/ BH_WINDOW_DEFAULT_WIDTH, height \/ BH_WINDOW_DEFAULT_HEIGHT\)/u,
+  "the floating window must scale its content from the available size",
+);
+assert.match(
+  beholderInterfaceSource,
+  /fitDesktopContent\(\)[\s\S]*body\.clientHeight[\s\S]*body\.scrollHeight/u,
+  "desktop Beholder must shrink overflowing content to the available body height",
+);
+assert.match(
+  beholderInterfaceSource,
+  /const layout = !this\.isDetached\(\) && this\.isMobile\(\) \? "paired" : this\.layout/u,
+  "mobile Beholder must keep the paper doll while desktop preserves the selected layout",
+);
+assert.match(
+  beholderInterfaceSource,
+  /\.beholder-panel\.bh-mobile-layout \.bh-doll-grid\{ display:grid; \}[\s\S]*\.beholder-panel\.bh-mobile-layout \.bh-digest\{ display:none; \}/u,
+  "the full-screen mobile window must not let narrow-container rules hide the paper doll",
+);
+assert.match(
+  beholderInterfaceSource,
+  /\.rpg-chat-area\.bh-beholder-open\{ z-index:70; \}[\s\S]*\.beholder-panel\{[^}]*z-index:80/u,
+  "mobile Beholder must stack above Echo Chamber and Tracker Panel",
+);
+assert.match(
+  beholderInterfaceSource,
+  /bh-tracker-launch__arrow[^<]*<\/span><span class="bh-tracker-launch__logo"/u,
+  "the Tracker Panel launcher must place its disclosure arrow before the eye",
 );
 assert.doesNotMatch(
   beholderInterfaceSource,
@@ -233,9 +305,34 @@ const remoteReference = client.match(/https?:\/\/(?!localhost)[^"'`\s)]+/g) ?? [
 const allowedRemote = remoteReference.filter((url) => !url.startsWith("https://huggingface.co/GetBeholder"));
 assert.deepEqual(allowedRemote, [], `client bundle must not reference remote hosts: ${allowedRemote.join(", ")}`);
 
+// Reconstruct the deterministic bundle so a stale generated client cannot pass
+// merely because it still contains every module marker.
+const clientModules = readdirSync(srcDir)
+  .filter((file) => file.endsWith(".js"))
+  .sort();
+const clientLocales: Record<string, Record<string, string>> = {};
+for (const name of readdirSync(join(srcDir, "locales"))
+  .filter((file) => file.endsWith(".json"))
+  .sort()) {
+  const catalog = JSON.parse(readFileSync(join(srcDir, "locales", name), "utf8"));
+  clientLocales[basename(name, ".json").toLowerCase()] = Object.fromEntries(
+    Object.entries(catalog).filter(([key, value]) => key !== "_meta" && typeof value === "string"),
+  );
+}
+const freshClient =
+  `// Beholder ${manifest.version} — Marinara Engine roleplay-toolbar capability (single-file client bundle)\n` +
+  `// Built from packages/beholder/src (${clientModules.length} modules) by scripts/build-beholder-package.mjs. Do not edit; edit src/ and rebuild.\n` +
+  `(() => {\n"use strict";\n` +
+  `const BH_STYLE_CSS = ${JSON.stringify(readFileSync(join(srcDir, "style.css"), "utf8"))};\n` +
+  `const BH_FA_CSS = ${JSON.stringify(readFileSync(join(srcDir, "fa-embed.css"), "utf8"))};\n` +
+  `const BH_LOCALES = ${JSON.stringify(clientLocales)};\n\n` +
+  `${clientModules.map((name) => `// ===== ${name} =====\n${readFileSync(join(srcDir, name), "utf8")}`).join("\n")}\n` +
+  `})();\n`;
+assert.equal(client, freshClient, "client.js is stale relative to Beholder source — rebuild the package");
+
 // Every source module must be in the bundle, so a new module cannot be silently
 // left out of a build.
-for (const name of readdirSync(srcDir).filter((file) => file.endsWith(".js"))) {
+for (const name of clientModules) {
   assert.ok(client.includes(`// ===== ${name} =====`), `client bundle is missing ${name} — rebuild the package`);
 }
 

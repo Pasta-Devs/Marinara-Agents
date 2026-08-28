@@ -1,7 +1,22 @@
 export const MEMORY_NAG_STYLES = `
 .mn-shell {
   --mn-chroma: var(--marinara-chat-chrome-accent, var(--foreground));
-  color: var(--foreground);
+  --accent: var(--marinara-chat-chrome-highlight-bg);
+  --accent-foreground: var(--marinara-chat-chrome-highlight-text);
+  --background: var(--marinara-chat-chrome-panel-bg);
+  --border: var(--marinara-chat-chrome-panel-border);
+  --card: var(--marinara-chat-chrome-panel-bg);
+  --foreground: var(--marinara-chat-chrome-panel-text);
+  --input: var(--marinara-chat-chrome-input-border);
+  --muted: var(--marinara-chat-chrome-highlight-bg);
+  --muted-foreground: var(--marinara-chat-chrome-panel-muted);
+  --popover: var(--marinara-chat-chrome-panel-bg);
+  --popover-foreground: var(--marinara-chat-chrome-panel-text);
+  --primary: var(--marinara-chat-chrome-highlight-text);
+  --primary-foreground: var(--marinara-chat-chrome-panel-bg);
+  --ring: var(--marinara-chat-chrome-focus-ring);
+  --secondary: var(--marinara-chat-chrome-highlight-bg);
+  color: var(--marinara-chat-chrome-panel-text);
   font: inherit;
 }
 
@@ -102,6 +117,10 @@ export const MEMORY_NAG_STYLES = `
   line-height: 1.45;
 }
 
+.mn-vault-textarea {
+  padding-right: 2rem;
+}
+
 .mn-prompt-textarea {
   min-height: 3.25rem;
   border-radius: 0.375rem;
@@ -157,6 +176,20 @@ export const MEMORY_NAG_STYLES = `
 .mn-prompt-tool .mn-icon {
   width: 0.75rem;
   height: 0.75rem;
+}
+
+.mn-vault-macro-menu {
+  position: absolute;
+  z-index: 1;
+  top: 1.75rem;
+  right: 0.375rem;
+  display: flex;
+  gap: 0.25rem;
+  border: 1px solid var(--border);
+  border-radius: 0.375rem;
+  background: var(--popover);
+  padding: 0.25rem;
+  box-shadow: 0 0.5rem 1.25rem rgb(0 0 0 / 0.2);
 }
 
 .mn-prompt-modal {
@@ -228,21 +261,30 @@ export const MEMORY_NAG_STYLES = `
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: 1rem;
-  background: color-mix(in srgb, var(--background) 70%, transparent);
-  backdrop-filter: blur(5px);
+  padding: max(1rem, env(safe-area-inset-top)) 1rem max(1rem, env(safe-area-inset-bottom));
+}
+
+.mn-overlay::before {
+  position: absolute;
+  inset: 0;
+  background: rgb(0 0 0 / 55%);
+  backdrop-filter: blur(2px);
+  content: "";
 }
 
 .mn-modal {
+  position: relative;
   display: flex;
-  width: min(58rem, 100%);
-  max-height: min(88vh, 52rem);
+  width: min(48rem, 100%);
+  max-height: min(85dvh, 52rem);
   flex-direction: column;
   overflow: hidden;
-  border: 1px solid var(--border);
+  border: 1px solid var(--marinara-chat-chrome-panel-border);
   border-radius: 0.75rem;
-  background: var(--background);
-  box-shadow: 0 24px 80px rgb(0 0 0 / 40%);
+  background: var(--marinara-chat-chrome-panel-bg);
+  color: var(--marinara-chat-chrome-panel-text);
+  box-shadow: 0 25px 50px -12px rgb(0 0 0 / 40%);
+  backdrop-filter: blur(12px);
 }
 
 .mn-progress-modal {
@@ -254,14 +296,50 @@ export const MEMORY_NAG_STYLES = `
   align-items: center;
   justify-content: space-between;
   gap: 0.75rem;
-  border-bottom: 1px solid var(--border);
-  padding: 0.75rem 1rem;
+  border-bottom: 1px solid var(--marinara-chat-chrome-panel-divider);
+  padding: 0.625rem 0.75rem;
+  color: var(--marinara-chat-chrome-panel-title);
+  font-size: 0.75rem;
+  font-weight: 600;
+  line-height: 1rem;
+}
+
+.mn-modal-title {
+  min-width: 0;
+  color: var(--marinara-chat-chrome-panel-title);
+  font-size: 0.75rem;
+  font-weight: 600;
+  line-height: 1rem;
 }
 
 .mn-modal-body {
   min-height: 0;
   overflow: auto;
-  padding: 1rem;
+  padding: 1rem 1.25rem;
+  scrollbar-color: var(--marinara-chat-chrome-panel-scrollbar) transparent;
+  scrollbar-width: thin;
+}
+
+.mn-modal-close {
+  width: 1.75rem;
+  min-width: 1.75rem;
+  height: 1.75rem;
+  min-height: 1.75rem;
+  border: 0;
+  border-radius: 0.5rem;
+  background: transparent;
+  padding: 0.375rem;
+  color: var(--marinara-chat-chrome-panel-muted);
+}
+
+.mn-modal-close .mn-icon {
+  width: 1rem;
+  height: 1rem;
+}
+
+.mn-modal-close:hover {
+  background: var(--marinara-chat-chrome-highlight-bg-hover);
+  color: var(--marinara-chat-chrome-highlight-text);
 }
 
 .mn-progress {
@@ -375,6 +453,13 @@ export const MEMORY_NAG_STYLES = `
   white-space: nowrap;
 }
 
+.mn-toolbar-initial-icon {
+  width: 0.75rem;
+  height: 0.75rem;
+  flex: none;
+  color: var(--marinara-chat-chrome-button-text-active, var(--mn-chroma));
+}
+
 .mn-popover {
   z-index: 9999;
   box-sizing: border-box;
@@ -394,6 +479,11 @@ export const MEMORY_NAG_STYLES = `
 }
 
 .mn-popover-header {
+  display: flex;
+  min-height: 2rem;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
   border-bottom: 1px solid var(--marinara-chat-chrome-panel-divider, var(--border));
   padding: 0.625rem 0.75rem;
 }
@@ -413,7 +503,53 @@ export const MEMORY_NAG_STYLES = `
   width: 0.625rem;
   height: 0.625rem;
   flex: none;
-  color: var(--marinara-chat-chrome-accent, var(--muted-foreground));
+  color: var(--marinara-chat-chrome-button-text-active, var(--mn-chroma));
+}
+
+.mn-popover-actions {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 0.25rem;
+}
+
+.mn-popover-action {
+  display: inline-flex;
+  width: 1.5rem;
+  min-width: 1.5rem;
+  height: 1.5rem;
+  min-height: 1.5rem;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid transparent;
+  border-radius: 0.25rem;
+  background: transparent;
+  padding: 0;
+  color: var(--marinara-chat-chrome-panel-muted, var(--muted-foreground));
+  cursor: pointer;
+  transition: background 150ms ease, border-color 150ms ease, color 150ms ease;
+}
+
+.mn-popover-action:hover,
+.mn-popover-action--active {
+  border-color: var(--marinara-chat-chrome-button-border, var(--border));
+  background: var(--marinara-chat-chrome-highlight-bg, var(--accent));
+  color: var(--marinara-chat-chrome-button-text-active, var(--foreground));
+}
+
+.mn-popover-action:focus-visible {
+  outline: 1px solid var(--marinara-chat-chrome-focus-ring, var(--ring));
+  outline-offset: 1px;
+}
+
+.mn-popover-action:disabled {
+  cursor: not-allowed;
+  opacity: 0.4;
+}
+
+.mn-popover-action-icon {
+  width: 0.6875rem;
+  height: 0.6875rem;
 }
 
 .mn-popover-body {
@@ -451,7 +587,7 @@ export const MEMORY_NAG_STYLES = `
   z-index: 10;
   overflow: hidden;
   border-bottom: 1px solid var(--border);
-  background: var(--tracker-panel-section-background, color-mix(in srgb, var(--card) 10%, transparent));
+  background: var(--tracker-panel-section-background, color-mix(in srgb, var(--card) 5%, transparent));
   box-shadow: inset 0 1px 0 color-mix(in srgb, var(--foreground) 5%, transparent);
 }
 
@@ -572,7 +708,38 @@ export const MEMORY_NAG_STYLES = `
   padding: 0.25rem;
   color: color-mix(in srgb, var(--foreground) 35%, transparent);
   font-size: 0.6875rem;
-  line-height: 1rem;
+  line-height: 0.875rem;
+}
+
+.mn-tracker--mobile-compact {
+  border-bottom: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+.mn-tracker--mobile-compact .mn-tracker-header {
+  min-height: 0;
+  border-bottom: 0;
+  padding: 0.5rem 0.75rem 0.25rem;
+}
+
+.mn-tracker--mobile-compact .mn-tracker-toggle--static {
+  align-self: auto;
+  cursor: default;
+}
+
+.mn-tracker--mobile-compact .mn-tracker-toggle--static:hover {
+  background: transparent;
+}
+
+.mn-tracker--mobile-compact .mn-tracker-icon {
+  color: var(--marinara-chat-chrome-button-text-active, var(--mn-chroma));
+  opacity: 1;
+}
+
+.mn-tracker--mobile-compact .mn-tracker-value {
+  min-height: 0;
+  padding: 0.25rem 0.75rem 0.5rem;
 }
 
 .mn-icon {

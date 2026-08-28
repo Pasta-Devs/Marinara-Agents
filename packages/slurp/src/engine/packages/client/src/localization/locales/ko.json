@@ -14,6 +14,7 @@
   "settings.notifications.customSound.status.custom": "사용자 지정",
   "settings.sections.imageGeneration.title": "이미지 생성",
   "settings.sections.notifications.title": "알림",
+  "ui.slurp.actions.cancel": "취소",
   "ui.agents.agenteditor.aShortSummaryOfWhatThisAgentDoesPlus": "이 에이전트가 하는 일에 대한 짧은 요약과 이를 만든 개인 또는 팀의 작성자 표기입니다.",
   "ui.agents.agenteditor.activationKeywords": "활성화 키워드",
   "ui.agents.agenteditor.addAsPromptSection": "프롬프트 섹션으로 추가",

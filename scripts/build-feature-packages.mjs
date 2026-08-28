@@ -261,7 +261,7 @@ async function removeOwnedSourceSnapshots(excludedPaths) {
 const features = [
   {
     id: "noodle",
-    version: "1.2.13",
+    version: "1.2.14",
     minEngineVersion: "2.4.4",
     maxEngineExclusive: MAX_ENGINE_EXCLUSIVE,
     name: "Noodle",
@@ -317,7 +317,7 @@ const features = [
   },
   {
     id: "slurp",
-    version: "1.0.15",
+    version: "1.0.19",
     minEngineVersion: "2.4.3",
     maxEngineExclusive: MAX_ENGINE_EXCLUSIVE,
     name: "Slurp",
@@ -374,7 +374,7 @@ const features = [
   },
   {
     id: "long-term-memory",
-    version: "1.2.11",
+    version: "1.2.14",
     minEngineVersion: "2.4.1",
     maxEngineExclusive: MAX_ENGINE_EXCLUSIVE,
     name: "Long-Term Memory",
@@ -399,7 +399,7 @@ const features = [
   },
   {
     id: "memory-nag",
-    version: "1.0.8",
+    version: "1.0.17",
     minEngineVersion: "2.4.4",
     maxEngineExclusive: MAX_ENGINE_EXCLUSIVE,
     name: "Memory Nag",
@@ -429,11 +429,22 @@ const features = [
         contextSize: 5,
         maxTokens: 4096,
         temperature: 0,
+        contextSources: {
+          chatHistory: true,
+          characters: false,
+          persona: false,
+          activatedLorebookEntries: false,
+          chatSummary: false,
+          authorNotes: false,
+          trackerData: false,
+          recalledMemories: false,
+        },
       },
       defaultPromptTemplate: [
         "Decide whether one of the supplied vault memories should nag the roleplay characters after the latest turn.",
-        "Use only memory IDs from <agent_runtime_context>. Never create, rewrite, or combine a memory.",
+        "Choose only IDs listed in allowedMemoryIds inside <agent_runtime_context>. Participant IDs are character IDs, never memory IDs. Never create, rewrite, or combine a memory.",
         "A nag should fit what is happening now: an unresolved promise, past harm, relationship strain, warning, debt, or relevant admission. Quiet or unrelated moments usually need none.",
+        "Do not select a memory that only repeats the immediate scene or an action happening now. Recall relevant events from earlier in the story.",
         'Return JSON only. If no nag fits: {"nags_needed":false}. If nags fit: {"nags_needed":true,"memoryIds":["exact-id"]}.',
       ].join("\n"),
     },
@@ -443,7 +454,7 @@ const features = [
   },
   {
     id: "hierarchical-maps",
-    version: "1.4.1",
+    version: "1.4.2",
     minEngineVersion: "2.4.2",
     maxEngineExclusive: MAX_ENGINE_EXCLUSIVE,
     name: "World Maps",
@@ -460,7 +471,7 @@ const features = [
   {
     id: "conversation-calls",
     name: "Calls",
-    version: "1.0.12",
+    version: "1.0.13",
     minEngineVersion: "2.4.1",
     description: "Adds live audio and video calls with Conversation characters.",
     kind: ["agent", "conversation-calls"],

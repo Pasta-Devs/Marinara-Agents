@@ -1,4 +1,4 @@
-import { MessageSquareQuote } from "lucide-react";
+import { Lock, MessageSquareQuote, RefreshCw, Unlock } from "lucide-react";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { useQuery } from "@tanstack/react-query";
@@ -8,11 +8,10 @@ import { useMemoryNagTranslation } from "./localization";
 import type { CapabilityProps } from "./types";
 
 function recallWords(nags: string[], empty: string): string[] {
-  const words = nags
-    .join(" ")
-    .split(/[^\p{L}\p{N}'’-]+/u)
-    .filter((word) => word.length > 2);
-  return words.length > 0 ? words : empty.split(/\s+/);
+  const splitWords = (value: string, minimumLength: number) =>
+    value.split(/[^\p{L}\p{N}\p{M}'’-]+/u).filter((word) => word.length >= minimumLength && /[\p{L}\p{N}]/u.test(word));
+  const words = splitWords(nags.join(" "), 3);
+  return words.length > 0 ? words : splitWords(empty, 1);
 }
 
 export function MemoryNagToolbar({ props }: { props: CapabilityProps }) {
@@ -30,10 +29,12 @@ export function MemoryNagToolbar({ props }: { props: CapabilityProps }) {
     queryFn: () => memoryNagRequest<MemoryNagRecall | null>(`/recall/${encodeURIComponent(chatId)}`),
     refetchInterval: 2500,
   });
+  const hasCompletedRecall = vault.data !== undefined && vault.data !== null;
   const nags = useMemo(() => vault.data?.nags ?? [], [vault.data?.nags]);
   const words = useMemo(() => recallWords(nags, t("memoryNag.toolbar.emptyWord")), [nags, t]);
 
   useEffect(() => {
+    if (!hasCompletedRecall || words.length === 0) return;
     setWordIndex(nags.length > 0 ? Math.floor(Math.random() * words.length) : 0);
     const timer = window.setInterval(() => {
       setWordIndex((current) =>
@@ -41,7 +42,7 @@ export function MemoryNagToolbar({ props }: { props: CapabilityProps }) {
       );
     }, 3000);
     return () => window.clearInterval(timer);
-  }, [nags.length, words]);
+  }, [hasCompletedRecall, nags.length, words]);
 
   const computePosition = useCallback(() => {
     const anchor = buttonRef.current?.getBoundingClientRect();
@@ -105,9 +106,13 @@ export function MemoryNagToolbar({ props }: { props: CapabilityProps }) {
         aria-label={t("memoryNag.toolbar.label")}
         onClick={() => setOpen((value) => !value)}
       >
-        <span className="mn-toolbar-word" aria-hidden="true">
-          {words[wordIndex] ?? words[0]}
-        </span>
+        {hasCompletedRecall ? (
+          <span className="mn-toolbar-word" aria-hidden="true">
+            {words[wordIndex] ?? words[0]}
+          </span>
+        ) : (
+          <MessageSquareQuote className="mn-toolbar-initial-icon" aria-hidden="true" />
+        )}
       </button>
       {open
         ? createPortal(
@@ -126,6 +131,39 @@ export function MemoryNagToolbar({ props }: { props: CapabilityProps }) {
                   <MessageSquareQuote className="mn-popover-title-icon" aria-hidden="true" />
                   {t("memoryNag.toolbar.label")}
                 </strong>
+                <div className="mn-popover-actions">
+                  {props.onRerunTracker ? (
+                    <button
+                      type="button"
+                      className="mn-popover-action"
+                      disabled={props.trackerRetryBusy}
+                      title={t("memoryNag.toolbar.regenerate")}
+                      aria-label={t("memoryNag.toolbar.regenerate")}
+                      onClick={props.onRerunTracker}
+                    >
+                      <RefreshCw
+                        className={`mn-popover-action-icon${props.trackerRetryBusy ? " mn-spin" : ""}`}
+                        aria-hidden="true"
+                      />
+                    </button>
+                  ) : null}
+                  {props.onToggleLockMode ? (
+                    <button
+                      type="button"
+                      className={`mn-popover-action${props.lockMode ? " mn-popover-action--active" : ""}`}
+                      title={t(props.lockMode ? "memoryNag.toolbar.unlock" : "memoryNag.toolbar.lock")}
+                      aria-label={t(props.lockMode ? "memoryNag.toolbar.unlock" : "memoryNag.toolbar.lock")}
+                      aria-pressed={props.lockMode === true}
+                      onClick={props.onToggleLockMode}
+                    >
+                      {props.lockMode ? (
+                        <Lock className="mn-popover-action-icon" aria-hidden="true" />
+                      ) : (
+                        <Unlock className="mn-popover-action-icon" aria-hidden="true" />
+                      )}
+                    </button>
+                  ) : null}
+                </div>
               </div>
               <div className="mn-popover-body">
                 {nags.length > 0 ? (
