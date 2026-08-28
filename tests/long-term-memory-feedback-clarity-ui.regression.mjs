@@ -382,6 +382,7 @@ assert.match(vault, /maxHeight: "16rem"/u);
 assert.match(vault, /onInput=\{\(event\) =>/u);
 assert.match(sharedControls, /aria-live="polite"/u);
 assert.match(targetPicker, /<button[\s\S]*type="button"/u);
+assert.match(workspace, /aria-controls=\{listId\}/u);
 assert.doesNotMatch(targetPicker, /role="listbox"|role="option"|aria-activedescendant|ArrowDown|ArrowUp/u);
 assert.doesNotMatch(targetPicker, /className="mari-editor-tab-rail grid w-full grid-cols-4"/u);
 assert.match(targetPicker, /id=\{listId\}\s+role="list"/u);

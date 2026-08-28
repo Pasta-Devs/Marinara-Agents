@@ -218,16 +218,12 @@ function scopeIdentitySeed(scope: LtmScope) {
 }
 
 function legacyScopeIdentitySeed(scope: LtmScope) {
-  const groupIds = uniqueStrings(getLtmScopeGroupIds(scope)).sort();
+  const groupId = scope.groupId?.trim();
+  if (groupId) return `ltm_scope_v1:group:${groupId}`;
   const chatIds = uniqueStrings(getLtmScopeChatIds(scope)).sort();
+  if (chatIds.length) return `ltm_scope_v1:chat:${chatIds.join(",")}`;
   const characterIds = uniqueStrings(scope.characterIds ?? []).sort();
-  const personaIds = uniqueStrings(getLtmScopePersonaIds(scope)).sort();
-  if (groupIds.length)
-    return `ltm_scope_v1:group:${groupIds.join(",")}:chat:${chatIds.join(",")}:character:${characterIds.join(",")}:persona:${personaIds.join(",")}`;
-  if (chatIds.length)
-    return `ltm_scope_v1:chat:${chatIds.join(",")}:character:${characterIds.join(",")}:persona:${personaIds.join(",")}`;
-  if (characterIds.length) return `ltm_scope_v1:character:${characterIds.join(",")}:persona:${personaIds.join(",")}`;
-  if (personaIds.length) return `ltm_scope_v1:persona:${personaIds.join(",")}`;
+  if (characterIds.length) return `ltm_scope_v1:character:${characterIds.join(",")}`;
   return "ltm_scope_v1:global";
 }
 

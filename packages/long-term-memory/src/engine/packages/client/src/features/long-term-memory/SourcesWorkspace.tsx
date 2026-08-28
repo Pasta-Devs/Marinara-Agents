@@ -244,6 +244,7 @@ function ScopeTargetPicker({
               value={query}
               placeholder={localizeUi("ui.longTermMemory.sourcesworkspace.searchScopes")}
               aria-label={localizeUi("ui.longTermMemory.sourcesworkspace.searchScopes")}
+              aria-controls={listId}
               aria-activedescendant={
                 highlightedId && optionTargets.some((target) => target.id === highlightedId)
                   ? `${listId}-option-${highlightedId}`
