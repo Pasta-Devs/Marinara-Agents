@@ -143,19 +143,13 @@ export function matchesLtmScope(
 
 export function withMergedLtmScopeLinks(
   scope: LtmScope | null | undefined,
-  links: {
-    chatIds?: string[];
-    groupIds?: string[];
-    characterIds?: string[];
-    personaIds?: string[];
-    personaId?: string;
-  },
+  links: Pick<LtmScope, "chatId" | "chatIds" | "groupId" | "groupIds" | "characterIds" | "personaId" | "personaIds">,
 ): LtmScope {
   return normalizeLtmScope({
     ...normalizeLtmScope(scope),
-    chatIds: uniqueStrings([...getLtmScopeChatIds(scope), ...(links.chatIds ?? [])]),
-    groupIds: uniqueStrings([...getLtmScopeGroupIds(scope), ...(links.groupIds ?? [])]),
+    chatIds: uniqueStrings([...getLtmScopeChatIds(scope), ...getLtmScopeChatIds(links)]),
+    groupIds: uniqueStrings([...getLtmScopeGroupIds(scope), ...getLtmScopeGroupIds(links)]),
     characterIds: uniqueStrings([...(scope?.characterIds ?? []), ...(links.characterIds ?? [])]),
-    personaIds: uniqueStrings([...getLtmScopePersonaIds(scope), links.personaId, ...(links.personaIds ?? [])]),
+    personaIds: uniqueStrings([...getLtmScopePersonaIds(scope), ...getLtmScopePersonaIds(links)]),
   });
 }

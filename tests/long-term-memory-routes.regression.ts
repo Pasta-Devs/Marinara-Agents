@@ -19,7 +19,12 @@ async function main() {
   );
   const { activate } =
     await import("../packages/long-term-memory/src/engine/packages/server/src/services/long-term-memory/server-entry.ts");
-  const { ltmDraftPreflightResponseSchema, ltmExtractionSettingsPatchSchema, ltmExtractionSettingsSchema } =
+  const {
+    ltmDraftNoteInputSchema,
+    ltmDraftPreflightResponseSchema,
+    ltmExtractionSettingsPatchSchema,
+    ltmExtractionSettingsSchema,
+  } =
     await import("../packages/long-term-memory/src/engine/packages/shared/src/features/agents/long-term-memory/schema.ts");
   const { addRejectedSuggestions } =
     await import("../packages/long-term-memory/src/engine/packages/server/src/services/long-term-memory/rejected-suggestions.ts");
@@ -2406,12 +2411,39 @@ async function main() {
         sourceIds: [branchSourceId],
         chatId: "chat-a",
         scope: { groupId: "observatory-branches" },
+        destinationScope: {
+          groupId: "observatory-branches",
+          groupIds: ["observatory-branches"],
+          chatIds: ["chat-a", "game-a"],
+        },
         extract: false,
       },
     });
     assert.equal(scopedBranchImport.statusCode, 200, scopedBranchImport.body);
     assert.deepEqual(
       scopedBranchImport.json().imported.map((item: any) => item.sourceId),
+      [branchSourceId],
+    );
+    const explicitAllWithChatContext = await app.inject({
+      method: "POST",
+      url: "/api/long-term-memory/import/source-notes",
+      headers,
+      payload: {
+        source: "chats",
+        sourceIds: [branchSourceId],
+        chatId: "chat-a",
+        sourceScope: {},
+        destinationScope: {
+          groupId: "observatory-branches",
+          groupIds: ["observatory-branches"],
+          chatIds: ["chat-a", "game-a"],
+        },
+        extract: false,
+      },
+    });
+    assert.equal(explicitAllWithChatContext.statusCode, 200, explicitAllWithChatContext.body);
+    assert.deepEqual(
+      explicitAllWithChatContext.json().imported.map((item: any) => item.sourceId),
       [branchSourceId],
     );
     const gamePreview = await app.inject({
@@ -2437,6 +2469,7 @@ async function main() {
         source: "chats",
         sourceIds: ["chat-a:summary-provider-fail"],
         model: "missing-model",
+        destinationScope: { chatId: "chat-a", chatIds: ["chat-a"] },
       },
     });
     assert.equal(failedProvider.statusCode, 400, failedProvider.body);
@@ -2456,6 +2489,7 @@ async function main() {
         source: "chats",
         sourceIds: ["chat-a:summary-a", "missing:summary"],
         importConcurrency: 2,
+        destinationScope: { chatId: "chat-b", chatIds: ["chat-b"] },
       },
     });
     assert.equal(importedChat.statusCode, 200, importedChat.body);
@@ -2575,6 +2609,7 @@ async function main() {
         source: "chats",
         sourceIds: ["chat-a:summary-a"],
         extract: false,
+        destinationScope: { chatId: "chat-b", chatIds: ["chat-b"] },
       },
     });
     assert.equal(refreshedChat.statusCode, 200, refreshedChat.body);
@@ -2597,7 +2632,11 @@ async function main() {
       method: "POST",
       url: "/api/long-term-memory/import/source-notes",
       headers,
-      payload: { source: "chats", sourceIds: ["chat-a:summary-empty-response"] },
+      payload: {
+        source: "chats",
+        sourceIds: ["chat-a:summary-empty-response"],
+        destinationScope: { chatId: "chat-b", chatIds: ["chat-b"] },
+      },
     });
     emptyModelResponse = false;
     assert.equal(emptyResponseImport.statusCode, 200, emptyResponseImport.body);
@@ -2646,7 +2685,11 @@ async function main() {
       method: "POST",
       url: "/api/long-term-memory/import/source-notes",
       headers,
-      payload: { source: "chats", sourceIds: ["chat-a:summary-legacy"] },
+      payload: {
+        source: "chats",
+        sourceIds: ["chat-a:summary-legacy"],
+        destinationScope: { chatId: "chat-a", chatIds: ["chat-a"] },
+      },
     });
     assert.equal(migrated.statusCode, 200, migrated.body);
     assert.notEqual(migrated.json().imported[0].note.id, legacyId);
@@ -2662,6 +2705,11 @@ async function main() {
         source: "chats",
         sourceIds: ["game-a:game-session-1"],
         applyLowRisk: true,
+        destinationScope: {
+          groupId: "observatory-branches",
+          groupIds: ["observatory-branches"],
+          chatIds: ["chat-a", "game-a"],
+        },
       },
     });
     assert.equal(importedGame.statusCode, 200, importedGame.body);
@@ -2843,6 +2891,11 @@ async function main() {
       payload: {
         source: "lorebooks",
         sourceIds: [groupedImportSourceId],
+        destinationScope: {
+          chatId: "chat-a",
+          chatIds: ["chat-a"],
+          characterIds: ["character-mara"],
+        },
       },
     });
     assert.equal(loreImport.statusCode, 200, loreImport.body);
@@ -2901,7 +2954,7 @@ async function main() {
       .json()
       .samples.find((sample: any) => sample.sourceId === "game-a:game-session-1");
     assert.equal(contextGameSample.status, "imported");
-    assert.equal(contextGameSample.freshness, "context_updated");
+    assert.equal(contextGameSample.freshness, "current");
     const changedGameCalls = modelCalls;
     chats.find((chat) => chat.id === "game-a").metadata.gamePreviousSessionSummaries[0].summary =
       "The party discovered the changed Moon Vault beneath the observatory.";
@@ -2920,7 +2973,15 @@ async function main() {
       method: "POST",
       url: "/api/long-term-memory/import/source-notes",
       headers,
-      payload: { source: "chats", sourceIds: ["game-a:game-session-1"] },
+      payload: {
+        source: "chats",
+        sourceIds: ["game-a:game-session-1"],
+        destinationScope: {
+          groupId: "observatory-branches",
+          groupIds: ["observatory-branches"],
+          chatIds: ["chat-a", "game-a"],
+        },
+      },
     });
     assert.equal(changedGame.statusCode, 200, changedGame.body);
     assert.match(changedGame.json().imported[0].note.sections.source.text, /changed Moon Vault/);
@@ -3038,7 +3099,15 @@ async function main() {
       method: "POST",
       url: "/api/long-term-memory/import/source-notes",
       headers,
-      payload: { source: "chats", sourceIds: ["game-a:game-session-1"] },
+      payload: {
+        source: "chats",
+        sourceIds: ["game-a:game-session-1"],
+        destinationScope: {
+          groupId: "observatory-branches",
+          groupIds: ["observatory-branches"],
+          chatIds: ["chat-a", "game-a"],
+        },
+      },
     });
     assert.equal(refinedGame.statusCode, 200, refinedGame.body);
     assert.equal(refinedGame.json().imported[0]?.extractionStatus, "succeeded", refinedGame.body);
@@ -3050,7 +3119,15 @@ async function main() {
       method: "POST",
       url: "/api/long-term-memory/import/source-notes",
       headers,
-      payload: { source: "chats", sourceIds: ["game-a:game-session-1"] },
+      payload: {
+        source: "chats",
+        sourceIds: ["game-a:game-session-1"],
+        destinationScope: {
+          groupId: "observatory-branches",
+          groupIds: ["observatory-branches"],
+          chatIds: ["chat-a", "game-a"],
+        },
+      },
     });
     assert.equal(fallbackGame.statusCode, 200, fallbackGame.body);
     assert.equal(fallbackGame.json().imported[0].extractionStatus, "failed");
@@ -3082,6 +3159,7 @@ async function main() {
         source: "chats",
         sourceIds: ["chat-a:summary-order-b", "chat-a:summary-order-a"],
         importConcurrency: 2,
+        destinationScope: { chatId: "chat-a", chatIds: ["chat-a"] },
       },
     });
     assert.equal(ordered.statusCode, 200, ordered.body);
@@ -3105,6 +3183,7 @@ async function main() {
           sourceIds: ["chat-a:summary-aborted-new"],
           limit: 100,
           importConcurrency: 1,
+          destinationScope: { chatId: "chat-a", chatIds: ["chat-a"] },
         },
         storageService.root,
         cancelledController.signal,
@@ -3133,6 +3212,7 @@ async function main() {
         sourceIds: ["chat-a:summary-aborted-in-flight"],
         limit: 100,
         importConcurrency: 1,
+        destinationScope: { chatId: "chat-a", chatIds: ["chat-a"] },
       },
       storageService.root,
       inFlightController.signal,
@@ -3903,6 +3983,255 @@ async function main() {
     ]);
     assert.equal(attributedInjection.json().state, "injected");
     assert.equal(attributedInjection.json().dispatchedAt, "2026-07-17T00:00:00.000Z");
+    chats[0].metadata.summaryEntries.push(
+      {
+        id: "summary-cross-scope",
+        content: "A cross-scope source keeps its provenance while adding another destination.",
+        enabled: true,
+      },
+      {
+        id: "summary-cross-branches",
+        content: "An all-branches destination is explicit.",
+        enabled: true,
+      },
+      {
+        id: "summary-cross-conflict-batch",
+        content: "A conflicting destination must not stop other source notes.",
+        enabled: true,
+      },
+      {
+        id: "summary-cross-extract",
+        content: "A cross-scope extraction creates memories in its destination.",
+        enabled: true,
+      },
+      {
+        id: "summary-cross-legacy-scope",
+        content: "The legacy scope field remains a compatible source and destination.",
+        enabled: true,
+      },
+      {
+        id: "summary-cross-legacy-empty-scope",
+        content: "An empty legacy scope remains a source-only import.",
+        enabled: true,
+      },
+    );
+    const sourceScope = { chatId: "chat-a", chatIds: ["chat-a"] };
+    const destinationChat = { chatId: "chat-b", chatIds: ["chat-b"] };
+    const crossScope = await app.inject({
+      method: "POST",
+      url: "/api/long-term-memory/import/source-notes",
+      headers,
+      payload: {
+        source: "chats",
+        sourceIds: ["chat-a:summary-cross-scope"],
+        sourceScope,
+        destinationScope: destinationChat,
+        extract: false,
+      },
+    });
+    assert.equal(crossScope.statusCode, 200, crossScope.body);
+    assert.deepEqual(crossScope.json().imported[0].note.destinationScope, destinationChat);
+    assert.deepEqual(crossScope.json().imported[0].note.scope.chatIds, ["chat-a", "chat-b"]);
+    const crossScopeBeforeConflict = await storageService.storage.getNote(crossScope.json().imported[0].note.id);
+    const crossScopeConflict = await app.inject({
+      method: "POST",
+      url: "/api/long-term-memory/import/source-notes",
+      headers,
+      payload: {
+        source: "chats",
+        sourceIds: ["chat-a:summary-cross-scope", "chat-a:summary-cross-conflict-batch"],
+        sourceScope,
+        destinationScope: { characterIds: ["character-mara"] },
+        extract: false,
+      },
+    });
+    assert.equal(crossScopeConflict.statusCode, 200, crossScopeConflict.body);
+    assert.equal(crossScopeConflict.json().batchStatus, "partial_success");
+    assert.deepEqual(
+      crossScopeConflict.json().imported.map((item: any) => item.sourceId),
+      ["chat-a:summary-cross-conflict-batch"],
+    );
+    assert.deepEqual(crossScopeConflict.json().writeFailures, [
+      {
+        sourceId: "chat-a:summary-cross-scope",
+        title: "Observatory, msgs messages 2",
+        sourceWriteStatus: "failed",
+        extractionStatus: "not_started",
+        retryable: false,
+        error: {
+          code: "ltm_source_destination_conflict",
+          message:
+            "Source Observatory, msgs messages 2 is already imported with a different destination. Manage its availability in Memory Vault.",
+        },
+      },
+    ]);
+    assert.deepEqual(
+      await storageService.storage.getNote(crossScope.json().imported[0].note.id),
+      crossScopeBeforeConflict,
+    );
+    const legacyScopeImport = await app.inject({
+      method: "POST",
+      url: "/api/long-term-memory/import/source-notes",
+      headers,
+      payload: {
+        source: "chats",
+        sourceIds: ["chat-a:summary-cross-legacy-scope"],
+        scope: sourceScope,
+        extract: false,
+      },
+    });
+    assert.equal(legacyScopeImport.statusCode, 200, legacyScopeImport.body);
+    assert.deepEqual(legacyScopeImport.json().imported[0].note.destinationScope, sourceScope);
+    const legacyEmptyScopeImport = await app.inject({
+      method: "POST",
+      url: "/api/long-term-memory/import/source-notes",
+      headers,
+      payload: {
+        source: "chats",
+        sourceIds: ["chat-a:summary-cross-legacy-empty-scope"],
+        chatId: "chat-a",
+        scope: {},
+        extract: false,
+      },
+    });
+    assert.equal(legacyEmptyScopeImport.statusCode, 200, legacyEmptyScopeImport.body);
+    assert.equal(Object.hasOwn(legacyEmptyScopeImport.json().imported[0].note, "destinationScope"), false);
+    assert.equal(
+      Object.hasOwn(
+        await storageService.storage.getNote(legacyEmptyScopeImport.json().imported[0].note.id),
+        "destinationScope",
+      ),
+      false,
+    );
+    const emptyDestination = await app.inject({
+      method: "POST",
+      url: "/api/long-term-memory/import/source-notes",
+      headers,
+      payload: {
+        source: "chats",
+        sourceIds: ["chat-a:summary-cross-branches"],
+        destinationScope: {},
+        extract: false,
+      },
+    });
+    assert.equal(emptyDestination.statusCode, 400, emptyDestination.body);
+    assert.equal(emptyDestination.json().code, "ltm_destination_scope_required");
+    const allBranches = await app.inject({
+      method: "POST",
+      url: "/api/long-term-memory/import/source-notes",
+      headers,
+      payload: {
+        source: "chats",
+        sourceIds: ["chat-a:summary-cross-branches"],
+        sourceScope,
+        destinationScope: {
+          groupId: "observatory-branches",
+          groupIds: ["observatory-branches"],
+          chatIds: ["chat-a", "game-a"],
+        },
+        extract: false,
+      },
+    });
+    assert.equal(allBranches.statusCode, 200, allBranches.body);
+    assert.equal(allBranches.json().imported[0].note.destinationScope.groupId, "observatory-branches");
+    const reorderedAllBranches = await app.inject({
+      method: "POST",
+      url: "/api/long-term-memory/import/source-notes",
+      headers,
+      payload: {
+        source: "chats",
+        sourceIds: ["chat-a:summary-cross-branches"],
+        sourceScope,
+        destinationScope: {
+          groupId: "observatory-branches",
+          groupIds: ["observatory-branches"],
+          chatIds: ["game-a", "chat-a"],
+        },
+        extract: false,
+      },
+    });
+    assert.equal(reorderedAllBranches.statusCode, 200, reorderedAllBranches.body);
+    assert.equal(reorderedAllBranches.json().writeFailures.length, 0);
+    assert.equal(reorderedAllBranches.json().imported[0].sourceWriteStatus, "refreshed");
+    assert.equal(
+      ltmDraftNoteInputSchema.safeParse({
+        id: "source_destination_alias_conflict",
+        type: "source",
+        modes: ["roleplay"],
+        destinationScope: { chatId: "chat-a", chatIds: ["chat-b"] },
+        tags: [],
+        keywords: [],
+        links: [],
+        provenance: { kind: "chat_summary", sourceId: "chat-a", entryId: "summary-cross-scope" },
+        sections: { source: { text: "Source text", updatedAt: "2026-07-17T00:00:00.000Z" } },
+      }).success,
+      false,
+    );
+    const missingDestination = await app.inject({
+      method: "POST",
+      url: "/api/long-term-memory/import/source-notes",
+      headers,
+      payload: {
+        source: "chats",
+        sourceIds: ["chat-a:summary-cross-extract"],
+        sourceScope,
+        extract: false,
+      },
+    });
+    assert.equal(missingDestination.statusCode, 400, missingDestination.body);
+    assert.equal(missingDestination.json().code, "ltm_destination_scope_required");
+    const extractedCrossScope = await app.inject({
+      method: "POST",
+      url: "/api/long-term-memory/import/source-notes",
+      headers,
+      payload: {
+        source: "chats",
+        sourceIds: ["chat-a:summary-cross-extract"],
+        sourceScope,
+        destinationScope: destinationChat,
+      },
+    });
+    assert.equal(extractedCrossScope.statusCode, 200, extractedCrossScope.body);
+    assert.deepEqual(extractedCrossScope.json().imported[0].draft.scope, destinationChat);
+    assert.ok(
+      extractedCrossScope
+        .json()
+        .imported[0].draft.mutations.every((mutation: any) =>
+          mutation.kind === "create_note"
+            ? JSON.stringify(mutation.note.scope) === JSON.stringify(destinationChat)
+            : true,
+        ),
+    );
+    const refreshedCrossScope = await app.inject({
+      method: "POST",
+      url: "/api/long-term-memory/import/source-notes",
+      headers,
+      payload: {
+        source: "chats",
+        sourceIds: ["chat-a:summary-cross-extract"],
+        destinationScope: destinationChat,
+        extract: false,
+      },
+    });
+    assert.equal(refreshedCrossScope.statusCode, 200, refreshedCrossScope.body);
+    assert.deepEqual(refreshedCrossScope.json().imported[0].note.destinationScope, destinationChat);
+    const characterToPersona = await app.inject({
+      method: "POST",
+      url: "/api/long-term-memory/import/source-notes",
+      headers,
+      payload: {
+        source: "characters",
+        sourceIds: ["character-mara"],
+        destinationScope: { personaId: "persona-a" },
+        extract: false,
+      },
+    });
+    assert.equal(characterToPersona.statusCode, 200, characterToPersona.body);
+    assert.deepEqual(characterToPersona.json().imported[0].note.destinationScope, {
+      personaId: "persona-a",
+      personaIds: ["persona-a"],
+    });
+    assert.deepEqual(characterToPersona.json().imported[0].note.scope.personaIds, ["persona-a"]);
     await cleanup();
     cleanup = undefined;
     assert.equal(

@@ -287,7 +287,6 @@ async function main() {
       const scopeTargetQueries: string[] = [];
       const noteQueries: string[] = [];
       const sourcePreviewRequests: Record<string, unknown>[] = [];
-      const lorebookPreviewRequests: Record<string, unknown>[] = [];
       const reviewContextQueries: string[] = [];
       const reviewQueries: string[] = [];
       const rejectedSuggestionQueries: string[] = [];
@@ -1272,8 +1271,6 @@ async function main() {
         if (request.method() !== "POST") return;
         const body = request.postDataJSON() as Record<string, unknown>;
         if (request.url().endsWith("/api/long-term-memory/import/preview")) sourcePreviewRequests.push(body);
-        if (request.url().endsWith("/api/long-term-memory/import/lorebooks/preview"))
-          lorebookPreviewRequests.push(body);
       });
       const desktopActivationChanges: boolean[] = [];
       const chatSummarySettingsOpens: number[] = [];
@@ -2621,20 +2618,43 @@ async function main() {
       assert.equal(await page.locator('[role="alert"]').count(), 0);
       assert.equal(deletedSuggestionId, rejectedSuggestionId);
       assert.equal(savedNote?.type, "world");
-      await page.locator('[data-ltm-control="navigation"][data-ltm-destination="sources"]').first().click();
-      await page.locator('[data-ltm-source-tab="chats"]').click();
-      await page.locator('[data-ltm-source-preview-status="success"]').waitFor();
-      const initialChatPreviewRequest = sourcePreviewRequests.find((request) => request.source === "chats");
-      assert.ok(initialChatPreviewRequest);
-      assert.deepEqual(initialChatPreviewRequest.scope, {
+      const expectedInitialChatSourceScope = {
         chatId: "desktop-chat",
         chatIds: ["desktop-chat"],
+      };
+      await page.locator('[data-ltm-control="navigation"][data-ltm-destination="sources"]').first().click();
+      await page.locator('[data-ltm-source-tab="chats"]').click();
+      const scopedChatPreviewRequestPromise = page.waitForRequest((request) => {
+        if (request.method() !== "POST" || !request.url().includes("/api/long-term-memory/import/preview"))
+          return false;
+        const body = request.postDataJSON() as { source?: string; sourceScope?: unknown };
+        return (
+          body.source === "chats" && JSON.stringify(body.sourceScope) === JSON.stringify(expectedInitialChatSourceScope)
+        );
       });
+      const sourceScopePicker = page.locator('[data-ltm-scope-picker="source"]');
+      assert.equal(await sourceScopePicker.inputValue(), "all");
+      await sourceScopePicker.selectOption("chat:desktop-chat");
+      const scopedChatPreviewRequest = (await scopedChatPreviewRequestPromise).postDataJSON() as {
+        sourceScope?: unknown;
+      };
+      assert.deepEqual(scopedChatPreviewRequest.sourceScope, expectedInitialChatSourceScope);
+      await page.locator('[data-ltm-source-preview-status="success"]').waitFor();
+      const destinationToggle = page.locator("[data-ltm-destination-toggle]");
+      assert.equal(await page.locator('[data-ltm-scope-picker="destination"]').count(), 0);
+      await destinationToggle.focus();
+      await destinationToggle.press("Space");
+      await page.locator('[data-ltm-scope-picker="destination"]').waitFor();
+      assert.equal(await page.locator('[data-ltm-scope-picker="destination"]').inputValue(), "");
+      await page.locator('[data-ltm-scope-picker="destination"]').selectOption("chat:memory-chat");
+      assert.equal(await page.locator('[data-ltm-scope-picker="destination"]').inputValue(), "chat:memory-chat");
+      await destinationToggle.press("Space");
+      assert.equal(await page.locator('[data-ltm-scope-picker="destination"]').count(), 0);
       await page.locator('[data-ltm-source-tab="characters"]').click();
       await page.locator('[data-ltm-source-row-status][data-ltm-source-id="character-outside-current-chat"]').waitFor();
       const characterPreviewRequest = sourcePreviewRequests.filter((request) => request.source === "characters").at(-1);
       assert.ok(characterPreviewRequest);
-      assert.equal(Object.hasOwn(characterPreviewRequest, "scope"), false);
+      assert.equal(Object.hasOwn(characterPreviewRequest, "sourceScope"), false);
       assert.doesNotMatch(
         await page.locator('[data-ltm-surface="sources"]').innerText(),
         /character card|Summary Prompt|lorebook entries as source notes/iu,
@@ -2664,10 +2684,19 @@ async function main() {
       );
       assert.equal(await desktopReextract.isDisabled(), false);
       await page.locator('[data-ltm-source-tab="lorebooks"]').click();
+      const scopedLorebookPreviewRequestPromise = page.waitForRequest((request) => {
+        if (request.method() !== "POST" || !request.url().includes("/api/long-term-memory/import/lorebooks/preview"))
+          return false;
+        const body = request.postDataJSON() as { sourceScope?: unknown };
+        return JSON.stringify(body.sourceScope) === JSON.stringify(expectedInitialChatSourceScope);
+      });
+      await page.locator('[data-ltm-source-action="refresh-preview"]').click();
       await page.locator('[data-ltm-lorebook-id="lorebook_outside_current_chat"]').waitFor();
-      const lorebookPreviewRequest = lorebookPreviewRequests.at(-1);
+      const lorebookPreviewRequest = (await scopedLorebookPreviewRequestPromise).postDataJSON() as {
+        sourceScope?: unknown;
+      };
       assert.ok(lorebookPreviewRequest);
-      assert.equal(Object.hasOwn(lorebookPreviewRequest, "scope"), false);
+      assert.deepEqual(lorebookPreviewRequest.sourceScope, expectedInitialChatSourceScope);
       const sourcesWorkspace = page.locator('[data-ltm-surface="sources"] [data-ltm-workspace]');
       await sourcesWorkspace.waitFor();
       assert.equal(

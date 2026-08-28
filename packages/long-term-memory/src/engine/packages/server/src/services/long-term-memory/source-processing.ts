@@ -133,7 +133,7 @@ function directGameUnits(sourceNote: LtmNote, sourceText: string, sourceHash: st
 
 export async function prepareLongTermMemorySource(options: PrepareOptions): Promise<PreparedSource> {
   throwIfAborted(options.signal);
-  const scope = options.scope ?? options.sourceNote.scope;
+  const scope = options.scope ?? options.sourceNote.destinationScope ?? options.sourceNote.scope;
   const extractionMode = options.mode ?? options.sourceNote.modes[0] ?? "roleplay";
   if (options.directGameMode && extractionMode === "game") {
     const sourceHash = sourceHashForEvidenceUnitExtraction(options.sourceNote);
@@ -201,7 +201,7 @@ async function commitPreparedLongTermMemorySource(
     {
       sourceNote: prepared.sourceNote,
       response: prepared.response,
-      scope: prepared.sourceNote.scope,
+      scope: prepared.sourceNote.destinationScope ?? prepared.sourceNote.scope,
       modes: prepared.sourceNote.modes,
       extractionMode: prepared.extractionMode,
       operationId: prepared.operationId,

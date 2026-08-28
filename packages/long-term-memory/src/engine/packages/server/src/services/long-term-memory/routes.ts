@@ -856,7 +856,7 @@ export function createLongTermMemoryRoutes(runtime: {
             await processLongTermMemorySource({
               sourceNote,
               languageModel,
-              scope: chat ? resolveChatLtmScope(chat) : sourceNote.scope,
+              scope: sourceNote.destinationScope ?? (chat ? resolveChatLtmScope(chat) : sourceNote.scope),
               modes: chat ? [ltmModeForChatMode(chat.mode)] : body.mode ? [body.mode] : undefined,
               mode: body.mode,
               instruction: body.instruction,
