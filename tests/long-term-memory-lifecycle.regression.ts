@@ -736,6 +736,14 @@ async function main() {
                 personaId: "persona-a",
                 characterIds: ["character-a"],
               },
+              ...Array.from({ length: 100 }, (_, index) => ({
+                id: `bulk-chat-${index}`,
+                label: `Bulk chat ${index}`,
+                mode: "conversation",
+                groupId: null,
+                personaId: null,
+                characterIds: [],
+              })),
             ],
             groups: [
               {
@@ -2689,7 +2697,15 @@ async function main() {
       assert.match((await sourceScopeTrigger.innerText()).trim(), /All Available/u);
       await sourceScopeTrigger.click();
       assert.equal(
+        await sourceScopePicker.locator('[role="option"][data-ltm-scope-option="chat:memory-chat"]').count(),
+        1,
+      );
+      assert.equal(
         await sourceScopePicker.locator('[role="option"][data-ltm-scope-option="branch:memory-chat"]').count(),
+        0,
+      );
+      assert.equal(
+        await sourceScopePicker.locator('[role="option"][data-ltm-scope-option="group:conversation-a"]').count(),
         1,
       );
       assert.notEqual(
@@ -2708,7 +2724,15 @@ async function main() {
       const destinationScopeTrigger = destinationScopePicker.getByRole("combobox");
       await destinationScopeTrigger.click();
       assert.equal(
+        await destinationScopePicker.locator('[role="option"][data-ltm-scope-option="chat:memory-chat"]').count(),
+        1,
+      );
+      assert.equal(
         await destinationScopePicker.locator('[role="option"][data-ltm-scope-option="branch:memory-chat"]').count(),
+        0,
+      );
+      assert.equal(
+        await destinationScopePicker.locator('[role="option"][data-ltm-scope-option="group:conversation-a"]').count(),
         1,
       );
       assert.notEqual(
@@ -2768,6 +2792,9 @@ async function main() {
         await bulkDestination.locator('[data-ltm-availability-tab="branch"]').getAttribute("aria-selected"),
         "true",
       );
+      assert.equal(await bulkDestination.locator('[data-ltm-availability-target="chat:memory-chat"]').count(), 0);
+      assert.equal(await bulkDestination.locator('[data-ltm-availability-target="branch:memory-chat"]').count(), 0);
+      assert.equal(await bulkDestination.locator('[data-ltm-availability-target="branch:conversation-a"]').count(), 1);
       assert.equal(
         await page.evaluate(() => document.activeElement?.getAttribute("data-ltm-availability-tab")),
         "branch",
@@ -2791,6 +2818,17 @@ async function main() {
       await bulkDestinationAfterCancel.locator('[data-ltm-availability-target="persona:persona-a"] input').check();
       await bulkDestinationAfterCancel.locator("[data-ltm-bulk-done]").click();
       assert.match(await page.locator("[data-ltm-additional-destination-summary]").innerText(), /1 additional/u);
+      await addDestination.click();
+      const bulkBoundary = page.locator("[data-ltm-bulk-destination]");
+      await bulkBoundary.locator('[data-ltm-availability-tab="chat"]').click();
+      for (let index = 0; index < 99; index += 1) {
+        const bulkChat = bulkBoundary.locator(`[data-ltm-availability-target="chat:bulk-chat-${index}"] input`);
+        await bulkChat.evaluate((element) => (element as HTMLInputElement).click());
+        assert.equal(await bulkChat.isChecked(), true);
+      }
+      const blockedBulkChat = bulkBoundary.locator('[data-ltm-availability-target="chat:bulk-chat-99"] input');
+      assert.equal(await blockedBulkChat.isDisabled(), true);
+      await bulkBoundary.locator("[data-ltm-bulk-cancel]").click();
       await addDestination.click();
       const selectedLocations = page
         .locator("[data-ltm-bulk-destination]")

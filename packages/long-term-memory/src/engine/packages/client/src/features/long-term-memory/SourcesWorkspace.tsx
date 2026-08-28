@@ -37,7 +37,7 @@ import type { LongTermMemoryDestinationProps, SourceTab } from "./types";
 import { useLtmTranslation, type LtmTranslationFunction } from "./localization";
 import { LtmWorkspace } from "./LtmWorkspace";
 import type { LtmWorkspacePane } from "./LtmWorkspace";
-import { buildScopeIndexes, deriveScopeBranchChats, type ScopeTargetChat, type ScopeTargets } from "./scope-targets";
+import { buildScopeIndexes, type ScopeTargetChat, type ScopeTargets } from "./scope-targets";
 import {
   normalizeLtmScope,
   withMergedLtmScopeLinks,
@@ -309,6 +309,14 @@ function mergedDestinationScope(targets: ScopeTarget[]) {
   }, normalizeLtmScope(primary));
 }
 
+const MAX_DESTINATION_SCOPE_IDS = 100;
+
+function hasDestinationScopeCapacity(scope: LtmScope | undefined) {
+  return [scope?.chatIds, scope?.groupIds, scope?.characterIds, scope?.personaIds].every(
+    (ids) => !ids || ids.length <= MAX_DESTINATION_SCOPE_IDS,
+  );
+}
+
 function BulkDestinationPicker({
   primaryTarget,
   targets,
@@ -357,8 +365,20 @@ function BulkDestinationPicker({
       .includes(needle),
   );
   const selectedTargets = availableTargets.filter((target) => draftIds.includes(target.id));
+  const scopeForIds = (ids: string[]) =>
+    mergedDestinationScope([
+      ...(primaryTarget ? [primaryTarget] : []),
+      ...availableTargets.filter((target) => ids.includes(target.id)),
+    ]);
+  const targetExceedsLimit = (target: ScopeTarget, ids = draftIds) =>
+    !ids.includes(target.id) && !hasDestinationScopeCapacity(scopeForIds([...ids, target.id]));
+  const blockedTargetCount = filteredTargets.filter((target) => targetExceedsLimit(target)).length;
   const toggle = (id: string) =>
-    setDraftIds((current) => (current.includes(id) ? current.filter((value) => value !== id) : [...current, id]));
+    setDraftIds((current) => {
+      if (current.includes(id)) return current.filter((value) => value !== id);
+      const next = [...current, id];
+      return hasDestinationScopeCapacity(scopeForIds(next)) ? next : current;
+    });
   const handleCategoryKey = (event: KeyboardEvent<HTMLButtonElement>, index: number) => {
     if (!["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)) return;
     event.preventDefault();
@@ -495,6 +515,11 @@ function BulkDestinationPicker({
                     onChange={(event) => setQuery(event.target.value)}
                   />
                 </label>
+                {blockedTargetCount ? (
+                  <p role="note" className="text-xs text-[var(--muted-foreground)]">
+                    {localizeUi("ui.longTermMemory.sourcesworkspace.destinationScopeLimitReached")}
+                  </p>
+                ) : null}
                 <div
                   role="tablist"
                   aria-label={localizeUi("ui.longTermMemory.sourcesworkspace.additionalLocations")}
@@ -546,6 +571,12 @@ function BulkDestinationPicker({
                           type="checkbox"
                           className={sourceCheckboxClass}
                           checked={draftIds.includes(target.id)}
+                          disabled={targetExceedsLimit(target)}
+                          title={
+                            targetExceedsLimit(target)
+                              ? localizeUi("ui.longTermMemory.sourcesworkspace.destinationScopeLimitReached")
+                              : undefined
+                          }
                           onChange={() => toggle(target.id)}
                           aria-label={targetDisplayLabel(target, true)}
                         />
@@ -1281,11 +1312,6 @@ export default function SourcesWorkspace({
           ]
         : []),
       ...(scopeTargets.data?.chats ?? []).filter((chat) => chat.id !== props.chatId).map((chat) => chatTarget(chat)),
-      ...deriveScopeBranchChats(scopeTargets.data?.chats ?? []).map((chat) => ({
-        ...chatTarget(chat),
-        id: `branch:${chat.id}`,
-        kind: "branch" as const,
-      })),
       ...(scopeTargets.data?.groups ?? []).map((group) => ({
         id: `group:${group.id}`,
         label: `${localizeUi("ui.longTermMemory.sourcesworkspace.allBranches")}: ${group.label}`,
@@ -1619,6 +1645,10 @@ export default function SourcesWorkspace({
       return;
     }
     const destinationScope = effectiveDestination.destinationScope;
+    if (!hasDestinationScopeCapacity(destinationScope)) {
+      setImportError(localizeUi("ui.longTermMemory.sourcesworkspace.destinationScopeLimitReached"));
+      return;
+    }
     const destinationTargetLabel = effectiveDestination.destinationLabel;
     const effectiveAction = retryContract?.action ?? action;
     const contract: ImportContract = retryContract

@@ -4196,6 +4196,21 @@ async function main() {
     });
     assert.equal(missingDestination.statusCode, 400, missingDestination.body);
     assert.equal(missingDestination.json().code, "ltm_destination_scope_required");
+    const overflowDestinationScope = await app.inject({
+      method: "POST",
+      url: "/api/long-term-memory/import/source-notes",
+      headers,
+      payload: {
+        source: "chats",
+        sourceIds: ["chat-a:summary-cross-extract"],
+        sourceScope,
+        destinationScope: {
+          chatIds: Array.from({ length: 101 }, (_, index) => `overflow-destination-${index}`),
+        },
+        extract: false,
+      },
+    });
+    assert.equal(overflowDestinationScope.statusCode, 400, overflowDestinationScope.body);
     const extractedCrossScope = await app.inject({
       method: "POST",
       url: "/api/long-term-memory/import/source-notes",

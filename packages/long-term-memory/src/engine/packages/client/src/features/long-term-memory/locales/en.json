@@ -605,6 +605,7 @@
   "ui.longTermMemory.sourcesworkspace.characterAvailability": "{{value1}} (current and future chats)",
   "ui.longTermMemory.sourcesworkspace.chooseDestination": "Choose a destination",
   "ui.longTermMemory.sourcesworkspace.chooseDestinationBeforeImport": "Choose a destination before importing scoped memories.",
+  "ui.longTermMemory.sourcesworkspace.destinationScopeLimitReached": "Some locations cannot be added because each destination type is limited to 100 IDs.",
   "ui.longTermMemory.sourcesworkspace.addMoreLocations": "Add more locations",
   "ui.longTermMemory.sourcesworkspace.bulkDestinationHelp": "Choose where these memories should also be available.",
   "ui.longTermMemory.sourcesworkspace.cancel": "Cancel",
