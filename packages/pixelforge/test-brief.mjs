@@ -18512,6 +18512,22 @@ const fire = (node, type) => Promise.all((node.listeners[type] ?? []).map((fn) =
       hud.boardRefusal("something-else-entirely"),
       "…as its own sentence rather than the generic one",
     );
+    // `not-offered` IS A PRODUCED REASON, and it is the accept path's own: the
+    // mutator returns it when the pressed template is no longer in the day's
+    // selection (61-pack `accept`), which the day rolling over between the draw
+    // and the press is enough to cause. It reached the same generic fall-through
+    // `unknown-id` was filed for — a sentence about the BOARD answering for a ROW
+    // that went away — so it is read off the map beside its neighbours.
+    assert.equal(
+      hud.boardRefusal("not-offered"),
+      "The board isn't posting that one now.",
+      "not-offered reads as its own sentence",
+    );
+    assert.notEqual(
+      hud.boardRefusal("not-offered"),
+      hud.boardRefusal("something-else-entirely"),
+      "…rather than the fall-through about the board",
+    );
   } finally {
     globalThis.setTimeout = realSetTimeout;
     globalThis.clearTimeout = realClearTimeout;
@@ -19854,6 +19870,19 @@ const fire = (node, type) => Promise.all((node.listeners[type] ?? []).map((fn) =
         hud._tabBtns.map((node) => node.style.opacity),
         ["0.5", "0.5", "1"],
         "…and the mark is on the third tab, from a paint that counts to the list",
+      );
+      // AND IT IS SAID IN A CHANNEL OPACITY CANNOT REACH. A screen reader gets
+      // nothing from `style.opacity`, so the strip's active state has to be an
+      // attribute as well as a shade — the caption's own reasoning at the top of
+      // this file. `aria-pressed` and NOT `role="tab"`/`aria-modal`: the
+      // prohibition `_paintTabs` documents is about DIALOG furniture, which
+      // `_hostOwnsKeyboard` (90-element) reads via
+      // `[role="dialog"][aria-modal="true"]`, and a pressed-state attribute
+      // never matches that selector.
+      assert.deepEqual(
+        hud._tabBtns.map((node) => node.getAttribute("aria-pressed")),
+        ["false", "false", "true"],
+        "…and the active tab is announced, with the others explicitly inactive",
       );
       // THE SLOT IS THE ACTIVE TAB'S ALONE. The incoming tab is handed `null` and
       // never the tab it displaced — which is the whole reason one slot is safe

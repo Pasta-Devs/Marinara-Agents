@@ -16715,6 +16715,10 @@ PF.Hud = class {
     if (reason === "filled") return "That work is done for today — the board posts it again another day.";
     if (reason === "dup") return "You are already on that one.";
     if (reason === "not-done") return "That one isn't finished yet.";
+    // The row left today's selection between the draw and the press — the day
+    // rolled over under an open menu, or a rebuild landed beneath it. A sentence
+    // about the ROW, on `unknown-id`'s own reasoning one line down.
+    if (reason === "not-offered") return "The board isn't posting that one now.";
     if (reason === "unknown-id") return "That job is no longer on your list.";
     if (reason === "abandon-unknown") return "That job is no longer on your list.";
     return "There is nothing to do at the board just now.";
@@ -16888,16 +16892,33 @@ PF.Hud = class {
     this._paintTabs();
   }
 
-  /** Which tab is active, said in the one language every other state in this file
-   *  is said in: a STYLE PROPERTY. Not a class, not an attribute, and above all
-   *  not `role`/`aria-modal` — `_hostOwnsKeyboard` (90-element) believes any
-   *  visible `[role="dialog"][aria-modal="true"]`, and a strip that dressed its
-   *  buttons as dialog furniture would make the keys that close the panel inert
-   *  the moment it opened. The panel beside them carries the same prohibition and
-   *  the harness pins both. */
+  /** Which tab is active, said TWICE: the style property every other state in
+   *  this file is said in, and the pressed state a screen reader can actually
+   *  read. Opacity alone is a mark only a sighted user gets — the cutscene
+   *  caption at the top of this file carries the same argument — so the shade and
+   *  the attribute move together in one loop.
+   *
+   *  WHAT IS STILL FORBIDDEN IS `role`/`aria-modal`, and the distinction is the
+   *  whole reason the pressed state is safe: `_hostOwnsKeyboard` (90-element)
+   *  believes any visible `[role="dialog"][aria-modal="true"]`, so a strip that
+   *  dressed its buttons as DIALOG furniture would make the keys that close the
+   *  panel inert the moment it opened. `aria-pressed` matches neither half of
+   *  that selector. The panel beside them carries the same prohibition and the
+   *  harness pins both. */
   _paintTabs() {
-    for (let i = 0; i < this._tabBtns.length; i++)
-      this._tabBtns[i].style.opacity = i === this._journalTab ? "1" : "0.5";
+    for (let i = 0; i < this._tabBtns.length; i++) {
+      const active = i === this._journalTab;
+      this._tabBtns[i].style.opacity = active ? "1" : "0.5";
+      // The same state, said again in the channel opacity cannot reach — the
+      // caption's reasoning at the top of this file, applied to the strip. This
+      // is NOT the furniture the paragraph above forbids: `_hostOwnsKeyboard`
+      // believes `[role="dialog"][aria-modal="true"]`, and a pressed state
+      // matches neither half of that selector, so the keys that close the panel
+      // stay live. `aria-pressed` and not `role="tab"` because a tablist owes a
+      // reader `aria-controls` and arrow-key navigation, and the strip has
+      // neither to give.
+      this._tabBtns[i].setAttribute("aria-pressed", active ? "true" : "false");
+    }
   }
 
   /** Switch tabs. Three things go with the switch and each is its own rule:
