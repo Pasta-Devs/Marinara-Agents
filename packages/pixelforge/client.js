@@ -1,5 +1,5 @@
-// Pixelforge 0.12.0 — Marinara Engine game-surface Experience (single-file client bundle)
-// Built from packages/pixelforge/src (16 modules) by scripts/build-pixelforge-package.mjs. Do not edit; edit src/ and rebuild.
+// Pixelforge 0.13.0 — Marinara Engine game-surface Experience (single-file client bundle)
+// Built from packages/pixelforge/src (17 modules) by scripts/build-pixelforge-package.mjs. Do not edit; edit src/ and rebuild.
 (() => {
 "use strict";
 // ===== 00-prelude.js =====
@@ -576,6 +576,29 @@ PF.art = (() => {
       for (let plank = 4; plank < T - 3; plank += 4) px(g, 2, plank, T - 4, 1, PAL.path2);
       px(g, 2, 2, T - 4, 1, PAL.pathFleck);
     },
+    /** THE QUEST BOARD (0.13 §2.1), and the one object in a settlement the
+     *  COMPILER stands up rather than a brief. Posted boards on two legs, with
+     *  three ruled notices on the face — a silhouette that reads at 16px as
+     *  "something with writing on it" and not as another table.
+     *
+     *  TIER-0 ONLY, on `hearth`'s precedent and not by oversight. `atlas.json`'s
+     *  key order IS the shipped sheet's index map, so adding a key there without
+     *  re-baking the PNG would slide every tile under it and repaint the whole
+     *  world; 15-assets resolves Tier1 ?? Tier0 PER TILE and returns null for an
+     *  id the atlas has no index for, so the board simply draws procedurally in
+     *  both tiers until a sheet is next baked.
+     *
+     *  Unfilled, like `table` and `well` above and for the same reason: it stands
+     *  on grass, path and paving alike, and the ground under it should show. */
+    board(g) {
+      px(g, 3, 11, 2, 5, PAL.beam);
+      px(g, 11, 11, 2, 5, PAL.beam);
+      px(g, 2, 2, 12, 10, PAL.beam);
+      px(g, 3, 3, 10, 8, PAL.plaster);
+      px(g, 4, 4, 5, 1, PAL.ink);
+      px(g, 4, 6, 8, 1, PAL.ink);
+      px(g, 4, 8, 4, 1, PAL.ink);
+    },
   };
 
   // ── Themes ──────────────────────────────────────────────────────────────────
@@ -707,6 +730,21 @@ PF.art = (() => {
           px(g, 12, 4, 2, 10, PAL.fence);
           px(g, 0, 6, T, 1, PAL.trunk);
           px(g, 0, 9, T, 1, PAL.trunk);
+        },
+        // A JOB TERMINAL where the notice board stands: the same silhouette on
+        // the same legs, but the face is a lit screen and the notices are rows of
+        // glowing text. The palette swap alone could not carry this one — a
+        // colony posting paper on a plank is the sort of detail that makes a
+        // reskin read as a reskin (20-world's BOARD_NAMES names it in words; this
+        // is the picture half of the same skin).
+        board(g) {
+          px(g, 3, 11, 2, 5, PAL.beam);
+          px(g, 11, 11, 2, 5, PAL.beam);
+          px(g, 2, 2, 12, 10, PAL.trunk);
+          px(g, 3, 3, 10, 8, PAL.night);
+          px(g, 4, 4, 5, 1, PAL.doorKnob);
+          px(g, 4, 6, 8, 1, PAL.doorKnob);
+          px(g, 4, 8, 4, 1, PAL.leafHi);
         },
       },
     },
@@ -2074,6 +2112,18 @@ PF.brief = (() => {
     schema,
     generate,
     salvageText,
+    // TEXT HYGIENE, EXPORTED — not because this module wants callers inside its
+    // repair passes, but because the CONTENT PACK (61-pack) comes off the same
+    // untrusted generation channel and has the same two needs: cut a model's
+    // string on a grapheme boundary with the tags and markdown already stripped,
+    // and fold a model's word onto a closed vocabulary. `salvageText` is exported
+    // for exactly this reason already (it is schema-agnostic and the pack's
+    // truncation ladder reuses it); these two are the same argument. A second
+    // copy of either is how one artifact comes to sanitize differently from the
+    // other, and the difference would be invisible until something hostile
+    // arrived down whichever channel got the weaker one.
+    capText,
+    foldEnum,
   };
 })();
 
@@ -2581,6 +2631,35 @@ PF.world = (() => {
       stream: "The Conduit Bridge",
     },
   };
+  // ── The quest board (0.13 §2.1) ────────────────────────────────────────────
+  // THE ONE REGISTER ROW NO BRIEF WROTE. Every settlement gets a board, in both
+  // the compiled path and the legacy layout, and it gets one UNCONDITIONALLY —
+  // on a world with no content pack behind it as much as on a world full of
+  // work. Two reasons, and neither is decoration. The board is the surface that
+  // says "no work posted here" out loud, which is a truthful answer a missing
+  // fixture cannot give; and it is the surface a later release's opt-in ("write
+  // work for this world?") would live on, so a board that appeared only where
+  // there was already work would be a door that opens once you are through it.
+  //
+  // ITS ID IS FIXED AND RESERVED, on the legacy:pond precedent, and it is pushed
+  // onto zone.features OUTSIDE the `_ids` ordinal walk: the ordinals belong to
+  // the features the BRIEF wrote, and spending one here would renumber promises
+  // a sealed brief has already made. Its TAG is deliberately not one of
+  // 18-brief's FEATURE_TAGS either — no brief may author a board, and the
+  // consumer (30-sim `nearBoard`) resolves it by this id rather than by tag.
+  //
+  // The name is word-book data, ZONE_NAMES' own pattern one table up: the
+  // fixture has no brief to name it, so the theme does.
+  const BOARD_FEATURE_ID = "board:settlement";
+  const BOARD_FEATURE_TAG = "notice-board";
+  const BOARD_NAMES = {
+    "cozy-village": "The Notice Board",
+    "sci-fi-colony": "The Job Terminal",
+  };
+  /** Through PF.own so a theme named after a prototype key cannot answer with a
+   *  function — the same door every other book in this file reads through. */
+  const boardName = (theme) => PF.own(BOARD_NAMES, theme) ?? BOARD_NAMES["cozy-village"];
+
   // …AND WHAT THE FOUR OF THEM DO. The same duplication one table along, and it
   // was the one nobody themed: the four legacy residents' roles were hardcoded
   // in buildLegacy — "innkeeper", "farmer", "village guard", "forager" — right
@@ -2750,6 +2829,21 @@ PF.world = (() => {
     const doors = [inn, farm, cottage].map((b) => ({ x: b.doorX, y: b.doorY }));
     scatterTrees(v, rnd, 26, doors.concat(doors.map((d) => ({ x: d.x, y: d.y + 1 }))));
     v.spawn = { x: 21, y: 17 };
+    // THE QUEST BOARD, hand-laid: this layout has no brief and no anchor ladder
+    // to run, so the ladder's FIRST rung is written out as a literal — the apron
+    // one step west of the inn's door, which is this world's gathering place.
+    // West and not east because `doorX` itself is where the interior portal puts
+    // the player down (linkInterior), and the tile beside a door is reserved from
+    // the tree scatter above, so this ground is free by construction rather than
+    // by luck. Rect = the literal directly below, so the two move together or not
+    // at all — the pond's own discipline eighty lines up.
+    put(v, inn.doorX - 1, inn.doorY + 1, "object", "board", true);
+    v.features.push({
+      id: BOARD_FEATURE_ID,
+      tag: BOARD_FEATURE_TAG,
+      name: boardName(activeTheme),
+      rect: { x: inn.doorX - 1, y: inn.doorY + 1, w: 1, h: 1 },
+    });
 
     // ── Inn interior ──
     const n = makeZone("inn", names.inn, 16, 12, "floor");
@@ -2873,6 +2967,13 @@ PF.world = (() => {
     v.mapKind = "settlement";
     n.mapKind = "building";
     f.mapKind = "place";
+    // The location handles, marked the same way compile() marks them and for the
+    // same consumer (0.13 §2.2c): this layout has no brief and so no place
+    // ordinals to read, and the three zones it stands up have always been the
+    // settlement, its gathering place and the wood outside it.
+    v.place = "settlement";
+    n.place = "gathering";
+    f.place = "wilds";
     return {
       seed,
       theme: activeTheme,
@@ -4842,11 +4943,15 @@ PF.world = (() => {
       for (let i = leftoverLots.length - 1; i >= 0; i--) if (taken.has(i)) leftoverLots.splice(i, 1);
     }
 
-    let greens = 0;
-    for (let i = 0; i < leftoverLots.length && greens < 6; i += 3) {
+    // The lots the greens took, kept rather than merely counted: the board's
+    // anchor ladder reads them one block down (a park is public ground and a
+    // fenced kitchen garden is not, so only the dense rank's greens are offered
+    // as an anchor), and a counter cannot say WHERE anything was laid.
+    const greenLots = [];
+    for (let i = 0; i < leftoverLots.length && greenLots.length < 6; i += 3) {
       const lot = leftoverLots[i];
       PLACERS[denseRank ? "park" : "crop-plots"](v, lot.x, lot.y);
-      greens++;
+      greenLots.push(lot);
     }
     // ── THE SQUARE ─────────────────────────────────────────────────────────────
     // A plaza was eight by eight tiles of paving and nothing else — the one place
@@ -4887,6 +4992,97 @@ PF.world = (() => {
         if (well && x === well[0] && y === well[1]) continue;
         if (squareTile(x, y, "table")) boards++;
       }
+    }
+    // ── THE QUEST BOARD (0.13 §2.1) ────────────────────────────────────────────
+    // The fixture every settlement gets, laid AFTER everything else it could
+    // stand on top of and BEFORE the pocket seal, so a board that walls something
+    // off is a board whose pocket gets closed like any other.
+    //
+    // NO RNG IS DRAWN HERE, and that is load-bearing rather than tidy: the anchor
+    // is read off geometry the passes above already laid, so the fixture is
+    // deterministic per (seed, theme, brief) and the tile stream feeding the
+    // ground cover, the trees and the mint does not move under it.
+    /** Can a board stand on this tile? */
+    const boardFree = (x, y) => {
+      if (x < 2 || y < 2 || x >= v.w - 2 || y >= v.h - 2) return false;
+      // The spawn tile, never: sealPockets throws on a solid spawn, and a world
+      // that refuses to build is a legacy world in the player's hands.
+      if (x === v.spawn.x && y === v.spawn.y) return false;
+      const at = idx(v, x, y);
+      // Water is laid solid, so the test below already excludes it. This says the
+      // rule out loud because it IS the rule a lane pins: A BOARD RECT HOLDS NO
+      // WATER TILE, so nearFeature's two-sided test — and the fishing verb behind
+      // it — can never claim the board as a spot.
+      if (v.ground[at] === "water") return false;
+      if (v.solid[at] || v.object[at] || v.overhead[at]) return false;
+      // …and it is not a plug in a one-tile gap. The board is solid, so a tile
+      // with a single walkable neighbour is a doorway, and standing a board in it
+      // would hand sealPockets a room to close.
+      let open = 0;
+      for (const [nx, ny] of [
+        [x, y - 1],
+        [x, y + 1],
+        [x - 1, y],
+        [x + 1, y],
+      ]) {
+        if (nx < 0 || ny < 0 || nx >= v.w || ny >= v.h) continue;
+        if (!v.solid[idx(v, nx, ny)]) open++;
+      }
+      return open >= 2;
+    };
+    // THE ANCHOR LADDER (§2.1), in order, and every rung is a place people are
+    // already standing rather than a corner with room in it.
+    const boardAnchors = [];
+    //  (1) THE GATHERING PLACE — work is posted where people gather. The apron
+    //      row beside its door, never the door's own step: `doorX` is where the
+    //      interior portal puts the player down (linkInterior).
+    const gatheringFacade = buildings.find((b) => b.boundPlace?.kind === "gathering");
+    if (gatheringFacade)
+      for (const dx of [-1, 1, -2, 2])
+        boardAnchors.push({ x: gatheringFacade.door.doorX + dx, y: gatheringFacade.door.doorY + 1 });
+    //  (2) THE GREEN OR THE MARKET — a sealed brief may name no gathering place
+    //      at all (§2.1's own caveat), and the next most public ground is the
+    //      ground people cross. A park's path rows, then the gap between two
+    //      market tables. A loose rank's green is a FENCED kitchen garden and is
+    //      deliberately not offered: it is private ground wearing a lot.
+    if (denseRank)
+      for (const lot of greenLots) boardAnchors.push({ x: lot.x + 2, y: lot.y + 2 }, { x: lot.x + 4, y: lot.y + 2 });
+    for (const stall of stalls) boardAnchors.push({ x: stall.x + 1, y: stall.y }, { x: stall.x + 3, y: stall.y });
+    //  (3) THE SPINE ROAD NEAR SPAWN — the floor under the ladder, and the one
+    //      rung every settlement has. Flanking the vertical artery rather than in
+    //      it (a solid board in a two-tile road is half a road), walking outward
+    //      from the row the player spawns on.
+    for (const dy of [0, 1, -1, 2, -2, 3, -3, 4, -4])
+      boardAnchors.push({ x: midX + 1, y: v.spawn.y + dy }, { x: midX - 2, y: v.spawn.y + dy });
+    let boardAt = boardAnchors.find((candidate) => boardFree(candidate.x, candidate.y)) ?? null;
+    if (!boardAt) {
+      // A SCAN, not a shrug. An unanchorable FEATURE is dropped ("a plainer
+      // settlement, never a sealed one") because the brief that named it can
+      // survive it; the board cannot be dropped, because a missing board is a
+      // world that cannot say it has no work. A settlement with no tile at all to
+      // hang one on is a settlement with nowhere to walk, and the harness sweeps
+      // every rank, theme and surround to keep that a statement rather than a
+      // hope.
+      for (let y = 2; y < v.h - 2 && !boardAt; y++) {
+        for (let x = 2; x < v.w - 2; x++) {
+          if (!boardFree(x, y)) continue;
+          boardAt = { x, y };
+          break;
+        }
+      }
+    }
+    if (boardAt) {
+      put(v, boardAt.x, boardAt.y, "object", "board", true);
+      v.features.push({
+        id: BOARD_FEATURE_ID,
+        tag: BOARD_FEATURE_TAG,
+        name: boardName(activeTheme),
+        // One tile, and the rect is exactly it. Every other rect on this register
+        // is the placer's extent plus a margin, and the consumer's own two-sided
+        // test is what excludes the tiles the feature never painted; nearBoard has
+        // no second test to lean on, so the board's rect is the board.
+        rect: { x: boardAt.x, y: boardAt.y, w: 1, h: 1 },
+      });
     }
     // Last thing done to the settlement's tiles, so it sees the trees, the
     // buildings, the stalls, the features and the greens together — a pocket is
@@ -5616,6 +5812,33 @@ PF.world = (() => {
       }
     }
 
+    // ── THE LOCATION HANDLE EACH ZONE ANSWERS TO (0.13 §2.2c) ────────────────
+    // A pack indexes its content by PLACE-KIND — "the gathering place", "the
+    // wilds" — because zone ids mean nothing outside the brief that minted them
+    // and zone NAMES mean nothing after a demotion, while every compiled world
+    // and the legacy layout both have a gathering place. Resolving one to a zone
+    // is a LOOKUP and never a guess, and this is the lookup: the only site that
+    // knows which ordinal id a place got is the compiler that assigned it.
+    //
+    // Runtime-only, exactly like `lodging` above and the schedule handles below
+    // it — worlds are derived per load, so this costs zero save fields and the
+    // stamp cannot go stale against the brief it was read from.
+    //
+    // THE GROUND FLOOR ONLY. A place that grew a storey or a cellar has those as
+    // zones of their own and they carry no handle: the handle names the PLACE,
+    // and the room the door opens onto is the place you have arrived at. A
+    // visitor bound for the bell tower walks through it either way.
+    //
+    // TWO PLACES OF THE SAME KIND BOTH CARRY IT, deliberately — a brief may name
+    // two wilds — because a handle is a kind and not an address. Work that says
+    // "go to the wilds" is answered by either of them, which is what the word
+    // means.
+    zones.z1.place = "settlement";
+    for (const place of brief.places) {
+      const zone = zones[zoneIdForPlace(place)];
+      if (zone) zone.place = place.kind;
+    }
+
     return {
       seed,
       theme: activeTheme,
@@ -5642,7 +5865,11 @@ PF.world = (() => {
     return null;
   }
 
-  return { build, idx };
+  // The board's reserved key and tag ride out with the builder because they are
+  // the JOIN between the compiler and its consumers: 30-sim finds the register
+  // row by this id, and the harness holds the tag to the promise that no brief
+  // vocabulary contains it.
+  return { build, idx, BOARD_FEATURE_ID, BOARD_FEATURE_TAG };
 })();
 
 // ===== 25-schedule.js =====
@@ -5903,6 +6130,17 @@ PF.Sim = class {
     // per frame from the zone's own register (20-world makeZone.features), which
     // is itself derived — nothing here is ever saved.
     this.nearFeature = null;
+    // The quest board within reach, or null (see step()) — the FOURTH proximity
+    // read, off the same register and on the same terms as the third.
+    this.nearBoard = null;
+    // THE DAY'S QUEST RECEIPTS: {day, templates:Set} once anything has been
+    // filled today, and rebuilt by its owner on the first read of a new day
+    // (61-pack `filledToday`, which is the only writer and says why the set is
+    // keyed by template). Declared here rather than sprung into existence,
+    // exactly as `_envelopeExtra` is: a field the sim carries is a field the sim
+    // names. NEVER SERIALIZED and never restored — a reload starts the day's
+    // receipts empty, which is the recorded cost of the rule.
+    this._filled = null;
     this._npcTimers = new Map();
     this._rnd = PF.rng((world.seed ^ 0x9e3779b9) >>> 0);
     this.dirty = false; // save-worthy change happened
@@ -6049,6 +6287,40 @@ PF.Sim = class {
           );
           if (row) {
             this.nearFeature = row;
+            break;
+          }
+        }
+      }
+      // THE BOARD WITHIN REACH, the fourth read beside the three above and
+      // recomputed on the same terms: every walking frame, off the feet tile,
+      // null the moment they step away.
+      //
+      // Four neighbours again, and NO WATER TERM. The two-sided test one block up
+      // cannot serve here: it is water that says which pond a bank belongs to, and
+      // a board rect holds no water tile by construction (20-world refuses one).
+      // What is left is the rect alone — which is safe here for the reason it is
+      // not safe up there: this rect is a single tile and IS the fixture, rather
+      // than a placer's extent with margin around it.
+      //
+      // Found by the RESERVED ID rather than by tag or by position: there is
+      // exactly one board per settlement and its key is the one fixed key on the
+      // register, so a brief that named a feature after it still cannot be one.
+      this.nearBoard = null;
+      const board = z.features.length ? z.features.find((f) => f.id === PF.world.BOARD_FEATURE_ID) : null;
+      if (board) {
+        for (const [nx, ny] of [
+          [tx, ty - 1],
+          [tx, ty + 1],
+          [tx - 1, ty],
+          [tx + 1, ty],
+        ]) {
+          if (
+            nx >= board.rect.x &&
+            nx < board.rect.x + board.rect.w &&
+            ny >= board.rect.y &&
+            ny < board.rect.y + board.rect.h
+          ) {
+            this.nearBoard = board;
             break;
           }
         }
@@ -6424,9 +6696,22 @@ PF.Sim = class {
     }
     // THE WRAP-UP TELL, LAST IN THE JOIN — which puts it after the persona part
     // and before the sender's own action text, where the plan asks for it (§2.6).
-    // It is also the ONLY part of any turn a fishing word can reach the GM
-    // through (M10 as amended): the verb narrates nothing, files ledger lines,
-    // and those lines are told here or not at all.
+    // It is also the ONLY part of any turn a fishing OR A QUEST word can reach
+    // the GM through (M10 as amended, extended by 0.13 §2.5): neither verb family
+    // narrates anything, both file ledger lines, and those lines are told here or
+    // not at all.
+    //
+    // THE QUEST FAMILY WIDENS THE GM-INVISIBLE VERB GAP, and that is worth
+    // stating rather than leaving to be noticed (P7's roadmap enumeration is
+    // where it is tracked). The GM can neither MINT a quest nor PAY one out: the
+    // board is a package fixture reading a sealed pack, the completion pays from
+    // a table this package owns, and nothing in a turn asks the narrator's
+    // permission for either. What the narrator gets is the same day-grain
+    // history the fishing verb gives it — past tense, after the fact, at the
+    // wrap-up boundary Ruling 1 set — and that is deliberately the whole
+    // channel. The one exception is the exception that proves it: a `deliver`
+    // errand finishes on a turn the player was sending anyway, and even then
+    // what the GM sees is a greeting, not a handover.
     const ledger = this._composeLedger();
     if (ledger) parts.push(ledger.text);
     // The ephemeral half of the flush, handed to the sender rather than stored:
@@ -6760,6 +7045,13 @@ PF.spatial = {
     if (!core.chatId) return;
     const gen = this._gen;
     const chatId = core.chatId;
+    // A THIRD CAPTURE, and a DIFFERENT counter from the two above — travel()
+    // below spells out the same distinction for the same reason. Those two fence
+    // this refresh's post-await branches; the PLAYER mutators fence on
+    // PF.save._gen, which moves on a chat switch, and the drift arm below is now
+    // a mutator caller (the visit verb completes at an arrival). Read pre-await,
+    // like everything else here, and it is the ONE capture this site adds.
+    const saveGen = PF.save._gen ?? 0;
     // Latest-started wins: 1.12 event refreshes overlap the per-turn ones, and
     // a slow pre-commit response landing AFTER a post-commit refresh would
     // otherwise roll the world back to the departed zone (review finding).
@@ -6814,6 +7106,13 @@ PF.spatial = {
         const target = zoneId ? world?.zones[zoneId] : null;
         if (target && core.sim && core.sim.zoneId !== zoneId) {
           core.sim.teleport(zoneId, target.spawn.x, target.spawn.y);
+          // THE VISIT VERB'S OTHER SITE (0.13 §2.3), and the async one. An
+          // arrival the GM narrated is an arrival: the player is standing in the
+          // zone the work named, and refusing to answer for it because they got
+          // there by being told rather than by walking would leave a row nothing
+          // can ever complete. Inside the zone-CHANGED test on purpose, so a
+          // refresh that finds the party where it already was settles nothing.
+          core.hud?.questFilled(PF.pack.visited(core, zoneId, saveGen));
         }
         // Same class as a walked zone entry, so the same top surface: a narrated
         // arrival is the one notice most likely to print while the player is
@@ -7879,14 +8178,9 @@ PF.player = {
         if (Object.keys(keep).length) player.rel[zoneId] = keep;
         else delete player.rel[zoneId];
       }
-      const giverName = (g) => {
-        const text = str(g);
-        const bar = text.indexOf("|");
-        return bar >= 0 ? text.slice(bar + 1) : text;
-      };
-      const severedQuests = player.quests.active.filter((q) => minted.has(giverName(q.g)));
+      const severedQuests = player.quests.active.filter((q) => minted.has(this.giverOf(q.g)));
       if (severedQuests.length) {
-        player.quests.active = player.quests.active.filter((q) => !minted.has(giverName(q.g)));
+        player.quests.active = player.quests.active.filter((q) => !minted.has(this.giverOf(q.g)));
         touched = true;
       }
       if (!touched) {
@@ -7987,18 +8281,13 @@ PF.player = {
       for (const npc of world.zones[zoneId].npcs ?? []) if (npc && npc.name) known.add(npc.name);
     }
     if (!known.size) return { dropped: [], notices };
-    const giverName = (g) => {
-      const text = str(g);
-      const bar = text.indexOf("|");
-      return bar >= 0 ? text.slice(bar + 1) : text;
-    };
-    const dangling = active.filter((q) => !known.has(giverName(q.g)));
+    const dangling = active.filter((q) => !known.has(this.giverOf(q.g)));
     if (!dangling.length) return { dropped: [], notices };
     if (dangling.length === active.length) {
       // ALL of them. That is a statement about the world, not the quests.
       return { dropped: [], notices };
     }
-    player.quests.active = active.filter((q) => known.has(giverName(q.g)));
+    player.quests.active = active.filter((q) => known.has(this.giverOf(q.g)));
     // A LOSS, and the sentence has to say so. The rows above are PARKED — set
     // aside, recoverable, and their copy says as much — while this quest is
     // dropped and nothing brings it back. "No one left to hand it back to" is
@@ -8086,20 +8375,42 @@ PF.player = {
 
   /** Dedupe active quests by id. `liveCount` is how many of the leading rows
    *  came from the LIVE block: the row the player is playing wins outright, and
-   *  two parked copies of one quest fall back to whichever got further. */
+   *  two parked copies of one quest fall back to whichever got further.
+   *
+   *  BOARD INSTANCES DEDUPE AT TEMPLATE GRAIN, which is wider than the id and has
+   *  to be (0.13). A board instance id carries the day it was offered on
+   *  (`b1.d37.<template>` — 61-pack `instanceId`), so two instances of ONE template
+   *  taken on different days never collide by id, and the "at most one live
+   *  instance per template" invariant the offer layer enforces has NO owner below
+   *  it. The restore paths are exactly where that bites: a mint severance parks a
+   *  row, the player takes the same work again tomorrow, and the mint restore
+   *  CONCATs the parked copy back onto the live list — two live rows for one job,
+   *  both of which the progress site would advance.
+   *
+   *  The preference order does not move: live first, then furthest along. Only what
+   *  counts as "the same quest" widens.
+   *
+   *  Read through `PF.pack` rather than re-deriving the id shape here, in 20-world's
+   *  `PF.art?.setTheme` idiom: this file owns the ROW and the pack layer owns the
+   *  convention for the ids it mints, and a second copy of that shape is how the
+   *  dedupe comes to disagree with the counter about which template a row belongs
+   *  to. Absent pack layer, absent convention — the key falls back to the id, which
+   *  is the behaviour this function had before the board existed and the right one
+   *  for any world with no board in it. */
   _dedupeActive(active, liveCount) {
     const held = new Map();
     active.forEach((q, index) => {
       const id = str(q?.id);
       if (!id) return;
+      const key = PF.pack?.templateOf?.(id) ?? id;
       const live = index < liveCount;
-      const prior = held.get(id);
+      const prior = held.get(key);
       if (!prior) {
-        held.set(id, { q, live });
+        held.set(key, { q, live });
         return;
       }
       if (prior.live) return;
-      if (live || posInt(q?.have, 0) > posInt(prior.q?.have, 0)) held.set(id, { q, live });
+      if (live || posInt(q?.have, 0) > posInt(prior.q?.have, 0)) held.set(key, { q, live });
     });
     return [...held.values()].map((row) => row.q);
   },
@@ -8602,6 +8913,21 @@ PF.player = {
     }
   },
 
+  /** WHO IS OWED THIS QUEST: the half of a row's `g` after the bar.
+   *
+   *  `g` is `"zoneId|Name"` and every reader of it wants the name — severance
+   *  asks whether a mint took the giver away, the repair pass asks whether the
+   *  world still stands them up, and 61-pack's completion asks whether there is
+   *  anybody left to thank. This was written out three times in two files before
+   *  the third caller existed to make the point; one door means a `g` that ever
+   *  changes shape changes it in one place. A bar-less value is the whole name,
+   *  which is what a row written before the zone half existed carries. */
+  giverOf(g) {
+    const text = str(g);
+    const bar = text.indexOf("|");
+    return bar >= 0 ? text.slice(bar + 1) : text;
+  },
+
   /** Quest state. `action` is accept | progress | complete | abandon. Board
    *  completions ("b:") are world-FREE (the board is a generated template); pack
    *  completions ("p:") are world-bound and live under quests. */
@@ -8641,8 +8967,10 @@ PF.player = {
     if (action !== "complete") return false;
     active.splice(index, 1);
     // The completion counter is keyed by the quest's TEMPLATE, not its instance:
-    // "b1.d37.2" is the third delivery this world generated, and what the board
-    // needs to know is how many deliveries the player has run.
+    // `b1.d<day>.<templateId>` says which board posted the work, which DAY it was
+    // posted on and which template it came from, and what the board needs to know
+    // is how many times the player has run THAT piece of work — so two carp
+    // orders a week apart are one counter at two, never two counters at one.
     const template = str(payload?.template ?? row.id);
     const board = template.startsWith("p:") ? p.quests.done_pack : p.quests_done_board;
     const cap = board === p.quests.done_pack ? CAPS.packDone : CAPS.boardDone;
@@ -8657,7 +8985,23 @@ PF.player = {
       this._trimCounters(board, cap - 1);
     }
     if (template && template !== "__proto__") board[template] = posInt(standing, 0) + 1;
-    this.award(core, { money: row.r?.money, xp: row.r?.xp, verb: row.verb }, gen);
+    // NO VERB, AND NO FALLBACK TO THE ROW'S (the maintainer's reward ruling,
+    // plan §2.6). Quests never grant SKILL experience. A quest's task may raise a
+    // skill — catching fish for a catch order levels fishing, because the
+    // CATCHING does, through fish()'s own award — but the reward itself is money
+    // and the giver's rapport and nothing else.
+    //
+    // `r.xp` still rides the payload rather than being dropped here, and that is
+    // the point of the line: 61-pack's derivation writes xp = 0 by construction,
+    // so an honest row has nothing to pay, and this is what answers a row that
+    // never came from the derivation — a hand-edited chatMeta, a save from
+    // another build, a forward client's row. `accept` above copies `r` as given
+    // (the row is a closed literal and this mutator trusts its caller), so a
+    // planted xp reaches here intact; award() applies the money and drops the
+    // experience on the floor precisely because there is no verb to key a ladder
+    // off. Passing `row.verb` instead — which is what this line used to do —
+    // minted {"catch":{"l":1,"x":5}} into a block that had never fished.
+    this.award(core, { money: row.r?.money, xp: row.r?.xp, verb: null }, gen);
     this._touch(core);
     return true;
   },
@@ -10463,9 +10807,11 @@ PF.economy = {
    *
    *  MID-LOOP GRANT REFUSAL. grant() refuses only a NEW `(t,k)` row at the pouch
    *  cap — merges never refuse — so a session can meet the cap on a variant it
-   *  has not caught before. That window's grant AND its award are skipped and it
-   *  logs nothing; the loop continues, because the cap bounds species DIVERSITY
-   *  and not the session.
+   *  has not caught before. That window's grant, its award AND ITS QUEST PROGRESS
+   *  are skipped and it logs nothing; the loop continues, because the cap bounds
+   *  species DIVERSITY and not the session. All three are one decision: a fish
+   *  that never entered the bag is not a fish you caught, so it pays no
+   *  experience and it fills nobody's order either.
    *
    *  Returns { ok, reason, hint, windows, caught, leveled, days }. */
   fish(core, target, gen) {
@@ -10556,6 +10902,28 @@ PF.economy = {
       if (!PF.player.grant(core, { t: type, k: entry.variant }, 1, gen)) continue;
       const paid = PF.player.award(core, { xp: TUNING.catchXp[type] ?? 0, verb: "fishing" }, gen);
       if (paid?.level > before) leveled = paid.level;
+      // THE CATCH VERB'S QUEST PROGRESS (0.13 §2.3), and it is here rather than
+      // inside grant() on purpose: the pouch is world-free and knows nothing
+      // about quests, and a hook on the item verb would count a fish somebody
+      // handed you. This is the moment a catch HAPPENED, and it is inside the
+      // granted region so a cap-refused one takes the `continue` above with its
+      // award — see the mid-loop paragraph in this function's header.
+      //
+      // A FILTER AND NEVER A FIND: two live orders for the same fish both count
+      // the one that landed. The predicate is 61-pack's SHARED matcher, which the
+      // seal and the default-pack lane call too — role grain matches any yield of
+      // that role, variant grain the exact pair — because three readings of that
+      // is how a role order comes to count a variant catch in one place and not
+      // another. The verb test is this SITE's scope and not a second matcher: an
+      // errand or a walk is not advanced by pulling a fish out of the water, and
+      // a row carrying a verb no site advances (a hostile save's, a forward
+      // build's) is left exactly where 61-pack's renderer says it is.
+      //
+      // Off the per-window live re-read, and `gen` is the one this function was
+      // threaded with — the same fence every other mutator call in the loop uses.
+      for (const quest of live.quests?.active ?? [])
+        if (quest.verb === "catch" && PF.pack.matches(quest.target, { t: type, k: entry.variant }))
+          PF.player.quest(core, "progress", { id: quest.id, by: 1 }, gen);
       tally.caught.push(entry);
       caught.push({ t: type, k: entry.variant });
     }
@@ -10781,6 +11149,16 @@ PF.economy = {
 //     timeline seams do not rewind it.
 // Both: debounced, event-driven, flushed with keepalive on teardown — never
 // per-frame (Android whole-blob-rewrite shape, exploration R11/R28).
+//
+// This module also owns the CREATION SEQUENCE, and as of 0.13 that is two paid
+// calls rather than one: the world brief (18-brief) and then the offline content
+// pack (61-pack), behind a single loading gate and a single in-flight hold. The
+// window between them is a state 0.12 could not be in — a real, compiled world
+// whose people have nothing to say yet — so the four consumers of "is this chat
+// still waiting" are answered separately rather than by one widened predicate:
+// the interim mark and stamp evaluability stay BRIEF-only (identity), the gate is
+// the DISJUNCTION (content may hold play), and the lift is neither-owed. See
+// briefExpected/packExpected, which sit beside each other for that reason.
 
 // The envelope keys THIS build understands. Anything else on a restored save
 // was written by a NEWER build: simFromSaved parks it on sim._envelopeExtra and
@@ -10843,6 +11221,27 @@ const schemaVersionOf = (value) =>
 // cache on read and write sides"). Bounded: a brief is a few KB and a long session
 // can visit many chats, so the oldest entry goes rather than the map growing.
 const BRIEF_CACHE_MAX = 8;
+
+// THE CONTENT PACK'S TWO TOP-LEVEL KEYS (0.13, plan §2.2a/§2.2g). The pack is a
+// SECOND sealed blob at its own key beside the brief's, per-key shallow-merge
+// PATCH like every other: an older client carries it untouched across a round
+// trip because it never reads or writes that key at all. It has no legacy nested
+// home — the brief's `_configBrief` still reads one because chats were sealed
+// before the key moved, and the pack has never lived anywhere else.
+//
+// `pixelforgePackWanted` is the SEAL-SIDE MARKER and the whole of it is WHERE it
+// is written. The wizard's answer lives in `experienceConfig`, and that object is
+// REWRITABLE: /game/create's reuse-an-existing-chat arm replaces gameSetupConfig
+// wholesale while the spread preserves top-level keys, so a formula that read the
+// wizard's copy could be flipped ON for a veteran chat sealed years of play ago
+// (retro-generation nobody asked for, a paid call per chat) or OFF for a chat
+// mid-creation with a pack call still owed (silently packless forever). The seal
+// PATCH takes a COPY of the answer and stores it beside the brief it sealed, and
+// packExpected() reads only that copy — which no setupConfig rewrite can mint and
+// none can erase. A chat sealed before this release carries no copy and is
+// therefore never expected to have a pack, which is exactly the ruling (Q9).
+const PACK_META_KEY = "pixelforgePack";
+const PACK_WANTED_META_KEY = "pixelforgePackWanted";
 
 // The ladder's rows and what each one MEANS at each site (plan §Q2). A table
 // rather than a switch in three places: the whole finding behind slice 4 is that
@@ -11020,6 +11419,20 @@ PF.save = {
    *  evict: past that point the metadata knows, and the cache is a convenience.
    *  An entry that is NOT in here is the only witness there is (see _cacheBrief). */
   _briefSeenInMeta: new Set(),
+  /** The pack's twin of the two maps above, and it is a twin on purpose: the
+   *  escape-safety argument is identical (a pack that seals while the player is in
+   *  another chat cannot patch the metadata blob they are holding), so the reading
+   *  rule, the eviction rule and the witness set are the same. Two caches rather
+   *  than one entry holding both because the two artifacts seal at different
+   *  moments — the brief lands one call before the pack does, and for the whole of
+   *  that window the chat is half-sealed. */
+  _packCache: new Map(),
+  _packSeenInMeta: new Set(),
+  /** Chats whose seal PATCH carried the marker's copy THIS session. The witness
+   *  half of `_packWanted` — see it for why the metadata alone is not enough — and
+   *  it is evicted with the `_packCache` entry it belongs to rather than growing
+   *  for the life of the session (`_cachePack` says why the two share a rule). */
+  _packWantedSealed: new Set(),
 
   /** Reads core.sim and core.chatId and NOTHING else: 80-setup calls this with
    *  a synthetic two-key core, and reaching for core.host/hud/render there
@@ -11195,9 +11608,153 @@ PF.save = {
    *  expression: the interim world mark, the stamp-evaluability gate, the
    *  loading gate, and maybeGenerateBrief's nothing-to-generate branch. Separate
    *  copies of a predicate this load-bearing is how the gate and the interim mark
-   *  come to disagree about which chats are which. */
+   *  come to disagree about which chats are which.
+   *
+   *  0.13 SPLIT THOSE FOUR CONSUMERS RATHER THAN WIDENING THIS ONE, and the split
+   *  is the design (plan §2.2a): the brief is world IDENTITY and the pack is world
+   *  CONTENT, so the interim mark and stamp evaluability stay BRIEF-ONLY (a world
+   *  compiled from a sealed brief is a real world whether or not anybody has
+   *  written what its people say), while the loading GATE is the DISJUNCTION —
+   *  either artifact still owed holds play — and the LIFT is neither-owed. Content
+   *  holds the gate; it never defines identity. */
   briefExpected(meta, chatId) {
     return !this._configBrief(meta, chatId) && meta?.pixelforgeBrief === undefined && this._configGenerate(meta);
+  },
+
+  /** The sealed content pack, from the same two places the brief comes from: the
+   *  top-level key first, then this session's own cache (see `_cachePack`). */
+  _configPack(meta, chatId) {
+    const top =
+      meta && typeof meta[PACK_META_KEY] === "object" && meta[PACK_META_KEY] !== null ? meta[PACK_META_KEY] : null;
+    // A pack is a template list. Anything else at that key — a marker shape a
+    // later release invents, a truncated write — is NOT a pack, and answering
+    // "absent" is what lets the creation path overwrite it rather than reading
+    // work off an object that has none.
+    if (top && Array.isArray(top.templates)) {
+      if (chatId && this._packCache.has(chatId)) this._packSeenInMeta.add(chatId);
+      return top;
+    }
+    if (top) return null;
+    const cached = chatId ? this._packCache.get(chatId) : null;
+    return cached && Array.isArray(cached.templates) ? cached : null;
+  },
+
+  /** `_cacheBrief`'s twin, verbatim including the eviction rule: only entries the
+   *  metadata has been observed to carry may be dropped, because until then this
+   *  map is the only witness that the chat is sealed and dropping it would spend a
+   *  second paid call on a world that already exists.
+   *
+   *  The marker witness rides the same eviction, because it is answering a question
+   *  that entry has already closed: a chat whose pack this map holds is not owed
+   *  one, and once the METADATA is carrying that pack too — which is the only
+   *  condition under which the loop below may drop it — nothing is left for
+   *  "this chat was told to expect a pack" to decide. Left un-evicted it was the
+   *  one per-session set with no rule at all. */
+  _cachePack(chatId, sealed) {
+    if (!chatId || !sealed || !Array.isArray(sealed.templates)) return;
+    this._packCache.delete(chatId);
+    this._packSeenInMeta.delete(chatId);
+    this._packCache.set(chatId, sealed);
+    while (this._packCache.size > BRIEF_CACHE_MAX) {
+      let dropped = null;
+      for (const key of this._packCache.keys()) {
+        if (this._packSeenInMeta.has(key)) {
+          dropped = key;
+          break;
+        }
+      }
+      if (dropped === null) break;
+      this._packCache.delete(dropped);
+      this._packSeenInMeta.delete(dropped);
+      this._packWantedSealed.delete(dropped);
+    }
+  },
+
+  /** THE WORLD'S PACK, FOLDED ONCE (plan §2.2d) — what this world can actually
+   *  offer, which is a different question from what the artifact says.
+   *
+   *  RESIDENT ON THE SIM, and the two halves of that are both deliberate. It is
+   *  DERIVED, so it is never saved: `snapshot()` emits a closed literal and this
+   *  key is not in it, exactly as the feature register and the schedule handles are
+   *  recomputed rather than stored. And living on the sim buys most of the
+   *  invalidation for free — every path that replaces the world (restore,
+   *  `_rebuild`, `_installSealedWorld`) assigns a new sim and the fold goes with the
+   *  old one.
+   *
+   *  THE ONE RULE THAT IS NOT FREE IS THE GATE'S LIFT, and 0.13 is what opened it:
+   *  two of the three ways out of the gate seal a pack under a world that is
+   *  deliberately NOT replaced (`_resumeHeldWorld` and the bare lift both leave the
+   *  standing world alone — a transplant there would be destructive). A memo taken
+   *  while the gate held answers for the pack that was ABSENT then, which on a
+   *  generated cast is the default pack folding to zero offers — an honestly empty
+   *  board pinned forever on a world that has work in it. So the rule is: REBUILT
+   *  WHEN `core.sim` IS REPLACED OR WHEN THE GATE LIFTS, and `_liftGate` clears the
+   *  slot because it is the one line every path out of the gate passes through.
+   *
+   *  Read through here rather than from 61-pack directly because the two inputs are
+   *  this module's: the stored pack and the stored brief both come out of chat
+   *  metadata, cache arms included. */
+  packFold(core) {
+    const sim = core?.sim;
+    if (!sim?.world) return null;
+    if (sim._packFold) return sim._packFold;
+    const meta =
+      core.host && typeof core.host.chatMeta === "object" && core.host.chatMeta !== null ? core.host.chatMeta : {};
+    sim._packFold = PF.pack.fold(this._configPack(meta, core.chatId), {
+      brief: this._configBrief(meta, core.chatId),
+      world: sim.world,
+    });
+    return sim._packFold;
+  },
+
+  /** The SEAL-SIDE marker, and the only reader of it (see PACK_WANTED_META_KEY for
+   *  why the wizard's own copy is not trusted). Strict `=== true`: a truthy value
+   *  a later release writes for some other reason must not arm a paid call.
+   *
+   *  …AND THIS SESSION'S OWN WITNESS, for the same reason `_briefCache` exists: the
+   *  copy is written by a PATCH to the host, and the metadata blob in our hand does
+   *  not have it yet. Without the witness, the retry button after a pack-stage
+   *  failure reads a marker-less meta, decides nothing is owed, and LIFTS — the
+   *  player is handed a packless world by the button whose own copy says trying
+   *  again is free. The set is added to at exactly one place, the seal PATCH that
+   *  writes the copy, so it carries the same authority and opens no second door. */
+  _packWanted(meta, chatId) {
+    if (meta?.[PACK_WANTED_META_KEY] === true) return true;
+    return !!chatId && this._packWantedSealed.has(chatId);
+  },
+
+  /** The wizard's answer, read at exactly ONE site — the seal PATCH, which copies
+   *  it to the seal-side key above. Nothing else may read it, and that is the
+   *  whole of the fix. */
+  _configPackWanted(meta) {
+    const setup =
+      meta && typeof meta.gameSetupConfig === "object" && meta.gameSetupConfig !== null ? meta.gameSetupConfig : null;
+    const outer =
+      setup && typeof setup.experienceConfig === "object" && setup.experienceConfig !== null
+        ? setup.experienceConfig
+        : null;
+    const inner =
+      outer && typeof outer.experienceConfig === "object" && outer.experienceConfig !== null
+        ? outer.experienceConfig
+        : null;
+    return inner?.packWanted === true || outer?.packWanted === true;
+  },
+
+  /** "This chat is owed a content pack." The brief's predicate, one release later
+   *  and one term wider: the seal-side marker is present, the brief is sealed or
+   *  still coming, and no pack exists yet.
+   *
+   *  Every excluded case is excluded by the middle term. A `{skipped:true}` chat
+   *  declined the call, so `_configBrief` is null and `briefExpected` is false and
+   *  no pack is ever owed. A legacy chat has no generate flag and reads the same
+   *  way. A chat sealed before this release carries no seal-side marker and fails
+   *  the first term forever, which is Q9's ruling made structural rather than
+   *  documented: there is no side door through which a wizard re-run can start
+   *  retro-generating work for a world somebody has been playing for months. */
+  packExpected(meta, chatId) {
+    if (!this._packWanted(meta, chatId)) return false;
+    if (this._configPack(meta, chatId)) return false;
+    return !!this._configBrief(meta, chatId) || this.briefExpected(meta, chatId);
   },
 
   /** The wizard's opt-in for surface-side world generation (0.4.0 chats). */
@@ -11224,7 +11781,9 @@ PF.save = {
    *  play immediately; so does a chat whose generation was declined, whose
    *  `{skipped:true}` marker briefExpected() reads as "sealed enough". */
   armGate(core, meta) {
-    if (!core?.chatId || !this.briefExpected(meta, core.chatId)) {
+    const briefWanted = !!core?.chatId && this.briefExpected(meta, core.chatId);
+    const packWanted = !!core?.chatId && this.packExpected(meta, core.chatId);
+    if (!briefWanted && !packWanted) {
       this.gate = null;
       // THE STARTING PURSE IS A PROPERTY OF STATE, NOT OF AN INSTANT (slice 6).
       // It used to be paid at exactly ONE moment — the tail of the generation
@@ -11241,8 +11800,21 @@ PF.save = {
         PF.economy.grantStartingPurse(core);
       return false;
     }
-    this.gate = { chatId: core.chatId, state: "generating", attempts: 0 };
+    // WHICH ARTIFACT IS OWED, carried on the gate because the screen the player is
+    // looking at is not the same screen in the two cases: at the brief stage there
+    // is no world yet, and at the pack stage the world is written and safe and what
+    // is being waited on is the work posted in it. A chat owed both starts at the
+    // brief and is re-stamped when the second call begins.
+    this.gate = { chatId: core.chatId, state: "generating", attempts: 0, stage: briefWanted ? "brief" : "pack" };
     return true;
+  },
+
+  /** Which artifact the gate is waiting on now. Called when the second call starts
+   *  so the screen (and any failure it turns into) says the true thing. */
+  _stageGate(core, stage) {
+    if (!this.gateHolds(core)) return;
+    this.gate = { ...this.gate, stage };
+    core.hud?.update?.();
   },
 
   /** Does the gate hold for THIS core's chat? Every refusal below asks this and
@@ -11268,9 +11840,40 @@ PF.save = {
       console.warn("[pixelforge] refusing to start play in the placeholder world; the gate stays up");
       return;
     }
+    // THE PACK FOLD'S ONE INVALIDATION RULE (see `packFold`). The two lifts that do
+    // not replace the sim — `_resumeHeldWorld` and the bare lift — would otherwise
+    // leave the memo taken under the gate standing over a pack that has SINCE
+    // sealed. Cleared here rather than at those two sites because this is the line
+    // they both pass through, and the install path is untouched by it: it assigns a
+    // new sim one moment earlier, so the slot it clears is already empty.
+    if (core.sim) core.sim._packFold = null;
     this.gate = null;
     core.hud?.update?.();
     void this.adopt(core);
+    // S3'S STARTING PURSE, AT THE LIFT — every lift, which is the 0.13 correction.
+    // It used to be paid at the two sites that arrive at a playable world (armGate
+    // for the chats that never gate, `_installSealedWorld` for the ones that do),
+    // and the two-call gate opened a third way out that touched neither: a gate
+    // armed for a PACK on an already-compiled world, lifting because the pack key
+    // turned up (another device sealed it) rather than because anything was
+    // installed. armGate had already declined to pay — the gate was arming — and
+    // no install ran, so the world began with an empty purse and the untouched
+    // predicate refuses forever after the first coin is earned. Paid here instead,
+    // where every path out of the gate passes, after the mutators reopen a line
+    // above. Idempotent by its own predicate, and SEALED WORLDS ONLY: `brieved`
+    // marks a world compiled from a brief, and a themed default world is not a
+    // world beginning — it is the world that has always been there.
+    //
+    // …AND IT ASKS THE WORLD, WHERE armGate ASKS THE METADATA (`_configBrief`).
+    // Written down because the two predicates diverge on exactly one shape and it
+    // is worth knowing which way: a stored brief that FAILS TO COMPILE. build()'s
+    // catch-all degrades it to the legacy layout, which carries no `brieved` mark,
+    // so this line declines and armGate's — reading the key, which is still there
+    // — pays on the NEXT boot instead. A one-boot deferral, not a loss, and the
+    // conservative direction of the two: this site pays for a world that was
+    // actually compiled from a brief, rather than for one whose brief only exists
+    // in the metadata.
+    if (core.sim?.world?.brieved) PF.economy.grantStartingPurse(core);
   },
 
   /** Everything that happens once a sealed brief is IN HAND: compile the world it
@@ -11311,26 +11914,51 @@ PF.save = {
     this._lastSerialized = null;
     core.render?.clearZones?.();
     void PF.assets.load(core);
+    // THE ARMS THE GATED BOOT DEFERRED, run against the world that just compiled
+    // and BEFORE the gate lifts — see `_quarantineArms` for why they were deferred
+    // and why here is the moment they come due.
+    this._runDeferredArms(core, chatId, sealed);
     // The gate lifts BEFORE the first dirty flag, and the order is load-bearing:
     // markDirty refuses while the gate holds, so arming the save first would
     // arm nothing and the freshly compiled world would wait for some unrelated
-    // later event to be written at all.
+    // later event to be written at all. The lift also pays S3's starting purse —
+    // at the one moment that is unambiguously "this world begins now", through the
+    // mutators the gate was refusing a line ago, and for sealed worlds only.
     this._liftGate(core);
-    // S3's starting purse, at the one moment that is unambiguously "this world
-    // begins now" and after the lift, because it goes through the mutators the
-    // gate was refusing a line ago (PF.economy.grantStartingPurse says why this
-    // moment and not a default on the block). armGate pays the same debt on every
-    // boot path that never reaches here — and applies the same test: SEALED
-    // worlds only. A skipped marker reaches this tail with `sealed` null and a
-    // themed default under it, and a default world is not a world beginning — it
-    // is the world that has always been there, which is what keeps the purse off
-    // every declined and legacy chat alike (armGate's own guard already pays
-    // those nothing; two chats on the identical default world must hold the
-    // same money).
-    if (sealed) PF.economy.grantStartingPurse(core);
     core.hud?.refreshChips();
     core.hud?.toast("The world takes shape.");
     this.markDirty(core);
+  },
+
+  /** The pack sealed onto a world that was ALREADY compiled — the half-sealed
+   *  cell, where the brief was in hand before this session began and only the pack
+   *  was owed.
+   *
+   *  Deliberately NOT `_installSealedWorld`: nothing here needs rebuilding, and a
+   *  transplant would be actively destructive. The world standing under the gate
+   *  IS the real one, and the block standing in it is the player's own — so a
+   *  transplant would strip every world-bound field they already own into the
+   *  quarantine bag and route it home through a restore, for a world that never
+   *  changed. What is actually owed is the two deferred arms and the lift. */
+  _resumeHeldWorld(core, chatId, sealed) {
+    this._runDeferredArms(core, chatId, sealed);
+    this._liftGate(core);
+    core.hud?.refreshChips();
+    this.markDirty(core);
+  },
+
+  /** Re-run the rehydration arms a gated boot skipped, at the lift, against the
+   *  world about to be played. Notices land at the current day, exactly as they do
+   *  at boot. Idempotent: a consumed slot is gone, a re-stamped block agrees with
+   *  its world, and a repair that already ran finds nothing dangling. */
+  _runDeferredArms(core, chatId, sealed) {
+    const player = core.sim?.player;
+    if (!player || !core.sim.world) return;
+    const notices = this._quarantineArms(player, core.sim.world, sealed, chatId, {
+      briefExpected: false,
+      deferConsuming: false,
+    });
+    for (const text of notices) PF.player.notice(player, text, core.sim.day);
   },
 
   /** Generation did not seal. The chat stays UNSEALED — which is the whole
@@ -11344,13 +11972,31 @@ PF.save = {
    *  refused request are the same screen but not the same sentence, and a
    *  deterministic 400 that reads as a mystery is a player pressing a button that
    *  will never work. Absent for the throw path, which has no verdict to report. */
-  _failGate(core, kind) {
+  _failGate(core, kind, stage) {
     if (!this.gateHolds(core)) return;
     this.gate = {
       ...this.gate,
       state: "failed",
       attempts: this.gate.attempts + 1,
       failure: typeof kind === "string" && kind ? kind : null,
+      // WHICH CALL FAILED, carried onto the failure because the two are not the
+      // same news. A brief-stage failure means the setting is still open; a
+      // pack-stage one means it is spent and kept, and only the work posted in the
+      // world it made is missing.
+      //
+      // THE STAMPED STAGE IS THE HONEST AXIS FOR A CALLER THAT DOES NOT SAY, and
+      // 0.13 tried deriving one here before settling that. The stamp says which
+      // artifact this chat is still owed, which is the same thing as which artifact
+      // a retry can still re-roll — and THAT is the only question the two screens
+      // answer differently. The placeholder is NOT that question: it is standing
+      // for the whole of the install, on both sides of the pack seal, and deriving
+      // "brief" from it fronted the untouched-chat screen for chats whose brief was
+      // already PATCHed and one-shot. Where the placeholder DID once make the pack
+      // screen read false — "it does not rewrite the world", said while the world
+      // had yet to compile — the copy was the false part, and `gateStageNote` is
+      // where that was fixed: the world comes out the same however many times it
+      // compiles, because it compiles from a brief that is already sealed.
+      stage: stage === "pack" || stage === "brief" ? stage : (this.gate.stage ?? "brief"),
     };
     core.hud?.update?.();
   },
@@ -11361,17 +12007,39 @@ PF.save = {
    *  reads would be the one part of the screen nothing could pin.
    *
    *  The kinds are the ladder's own (18-brief `generate`'s `onFailure`) plus
-   *  "storage", which is this module's — the brief generated fine and the PATCH
-   *  that would have stored it did not. "refused" is the one that earns its own
-   *  sentence: a deterministic 400/422 gives the same answer every time, and a
-   *  player pressing a button that will never work deserves to be told so.
+   *  "storage", which is this module's — the artifact generated fine and the
+   *  PATCH that would have stored it did not. "refused" is the one that earns
+   *  its own sentence: a deterministic 400/422 gives the same answer every time,
+   *  and a player pressing a button that will never work deserves to be told so.
    *  Unknown or absent kinds fall back to the honest generic — a throw has no
    *  verdict to report, and a kind a newer ladder invents must not blank the
-   *  panel. */
-  gateReason(kind) {
+   *  panel.
+   *
+   *  TWO KINDS READ BY STAGE, and "storage" is the second of them for the same
+   *  reason "refused" was the first: 0.13 gave it a pack-stage arm and the
+   *  brief-stage sentence stopped being true there. A stage-blind "the world was
+   *  written, but saving it…" prints directly above a pack-stage note that says
+   *  the setting is written and settled, and a screen that says the save failed
+   *  beside a screen that says the world is safe is one a player has to guess
+   *  at. What did not store at the pack stage is the WORK, not the world. */
+  gateReason(kind, stage) {
     switch (kind) {
+      case "thin":
+        // THE PACK LADDER'S OWN ROW (61-pack `generate`), and it never reaches a
+        // brief-stage screen: the brief's floors top a thin brief up from stock,
+        // and the pack's floor refuses to seal one. The request WORKED, which is
+        // what separates this from "refused" — so the sentence says what came
+        // back rather than what was done to it, and leaves the retry sounding
+        // like the worthwhile thing it is (another draw, not the same verdict).
+        return "The reply came back with too little in it to keep, so none of it was written down.";
       case "refused":
-        return "The request was turned down rather than delayed, so another attempt may well get the same answer; a shorter, plainer setting description is the likeliest thing to change it.";
+        // THE ADVICE HALF IS BRIEF-STAGE ONLY. At the pack stage the setting has
+        // already been spent — it produced the world the player is about to walk
+        // into — and telling them to rewrite it would be asking them to change the
+        // one thing that worked.
+        return stage === "pack"
+          ? "The request was turned down rather than delayed, so another attempt may well get the same answer."
+          : "The request was turned down rather than delayed, so another attempt may well get the same answer; a shorter, plainer setting description is the likeliest thing to change it.";
       case "unavailable":
         return "The engine could not take the request just now — it may be busy with something else.";
       case "network":
@@ -11379,10 +12047,57 @@ PF.save = {
       case "timeout":
         return "It was taking longer than the time set aside for it.";
       case "storage":
-        return "The world was written, but saving it to this chat did not go through.";
+        // WHICH ARTIFACT DID NOT STORE IS THE STAGE'S ANSWER. At the brief stage
+        // it is the world; at the pack stage the world stored one call earlier
+        // and is settled, and what did not go through is the work posted in it.
+        return stage === "pack"
+          ? "The work was written, but saving it to this chat did not go through."
+          : "The world was written, but saving it to this chat did not go through.";
       default:
         return "Something went wrong partway through.";
     }
+  },
+
+  /** The sentence AFTER the reason, which is the half that differs by STAGE — and
+   *  every clause of it has to be true in EVERY state its stage can be in, which is
+   *  what 0.13 got wrong twice.
+   *
+   *  THE PACK STAGE HAS FOUR, not the two the first correction counted and not the
+   *  three the second did. The pack call runs while the placeholder is still
+   *  standing (a chat sealing both artifacts in one visit), it runs over a world
+   *  that is already up (the half-sealed chat, matrix cell 3), the pack SEALS and
+   *  the PATCH that would have stored it does not land (`_failGate(core, "storage",
+   *  "pack")`, three attempts down), and — the one that was missed longest — the
+   *  stage stays stamped AFTER the pack has sealed and stored, because the install
+   *  or the resume under it can still throw and the catch-all inherits the stamp.
+   *
+   *  So the sentence may not name which call failed. The first version promised the
+   *  retry "does not rewrite the world", which is false in state one: the install
+   *  had not run and the retry is what runs it. The second said "what failed is the
+   *  work posted in it" and "it re-attempts that work", which is false in state
+   *  four: the work is written, stored and safe, the compile is what threw, and
+   *  the retry makes NO second pack call at all — `packExpected` is already false
+   *  by then, so the button lands on the recompile path.
+   *
+   *  What is true in all four is the shape of the thing rather than the name of
+   *  it: the setting is spent and kept, the world compiles deterministically from
+   *  it so it comes out the same however many times it compiles, what did not
+   *  finish is something downstream of that, and the retry picks up whatever is
+   *  still owed without touching what is already written. The storage state is the
+   *  one that proves the note cannot carry the whole screen on its own: it is TRUE
+   *  there, and the REASON above it was not until `gateReason` learned the stage.
+   *
+   *  THE BRIEF STAGE HAS TWO, and that is why it no longer claims the chat is
+   *  untouched. The stage is stamped when the brief is owed, but the gate is not
+   *  re-stamped once the brief SEALS on a chat that wants no pack — so a throw out
+   *  of the install lands here with `pixelforgeBrief` already PATCHed, one-shot, and
+   *  a retry that recompiles from it rather than re-rolling it. "Exactly as you left
+   *  it" was false for that chat. What survives both is what ruling #7 actually
+   *  guarantees: NO failure seals a world on the player's behalf, ever. */
+  gateStageNote(stage) {
+    return stage === "pack"
+      ? "Your setting is written and settled — the world comes out exactly as written, however many times you try. What did not finish is downstream of it: the work posted in this world, or the last of opening the world itself. Trying again is free: it picks up whatever is still owed and leaves everything already written alone."
+      : "Nothing was lost, and no stand-in world was settled on this chat instead of yours. Try again whenever you like.";
   },
 
   /** The retry the gate's failure state offers, and the only caller is that
@@ -11412,10 +12127,16 @@ PF.save = {
    *  pre-0.4.0 chats never re-generate. */
   async maybeGenerateBrief(core) {
     const chatId = core.chatId;
+    // ONE HOLD FOR THE WHOLE SEQUENCE (plan §2.2a): brief call, store, cache, pack
+    // call, store, cache, fence, install. Every dispatcher entry checks it — this
+    // one, the retry button's, and the boot's — because the two calls are one
+    // paid transaction and re-entering it halfway would run the second call twice.
     if (!chatId || this._generating.has(chatId)) return;
     const meta =
       core.host && typeof core.host.chatMeta === "object" && core.host.chatMeta !== null ? core.host.chatMeta : {};
-    if (!this.briefExpected(meta, chatId)) {
+    const briefWanted = this.briefExpected(meta, chatId);
+    const packWanted = this.packExpected(meta, chatId);
+    if (!briefWanted && !packWanted) {
       // Nothing to generate. A gate armed against a metadata blob that has since
       // caught up (or against this session's own cache) lifts here rather than
       // waiting for a generation call that would find nothing to do.
@@ -11437,6 +12158,12 @@ PF.save = {
         this._installSealedWorld(core, chatId, this._configBrief(meta, chatId), seed, theme);
         return;
       }
+      // THE BARE LIFT, onto a world that is already compiled — reachable now
+      // without a brief in flight at all: a gate armed for a PACK comes down here
+      // when the pack key turns up from somewhere else (another device sealed it).
+      // The arms the gated boot deferred come due at THIS lift too, for the same
+      // reason they come due at an install: the next frame is play.
+      if (this.gateHolds(core)) this._runDeferredArms(core, chatId, this._configBrief(meta, chatId));
       this._liftGate(core);
       return;
     }
@@ -11454,50 +12181,124 @@ PF.save = {
       ]
         .filter(Boolean)
         .join("\n");
-      let failure = null;
-      const sealed = await PF.brief.generate(chatId, {
-        theme,
-        seed,
-        preferences,
-        onFailure: (kind) => {
-          failure = kind;
-        },
-      });
-      if (!sealed) {
-        // EVERY failure — a busy engine, the network, the budget timeout, a route
-        // that is not there, and now a deterministic 400 or 422 as well: do NOT
-        // seal. The key stays absent, this visit offers retry, and the next visit
-        // arms the gate again. There is deliberately no "play the default world"
-        // escape on any branch: sealing a default world for a player who wrote
-        // three paragraphs of setting is the outcome ruling #7 exists to forbid,
-        // and a deterministic failure is the one case they could never undo.
-        if (chatId === core.chatId) this._failGate(core, failure);
-        return;
-      }
-      let stored = false;
-      for (let attempt = 0; attempt < 3 && !stored; attempt++) {
-        try {
-          await PF.api.patchMetadata(chatId, { pixelforgeBrief: sealed });
-          stored = true;
-        } catch (err) {
-          if (attempt === 2) console.warn("[pixelforge] brief storage failed; the chat stays unsealed", err);
-          else await new Promise((resolve) => setTimeout(resolve, 500 * (attempt + 1)));
+      // ── CALL ONE: THE BRIEF ─────────────────────────────────────────────────
+      let sealed = this._configBrief(meta, chatId);
+      if (briefWanted) {
+        let failure = null;
+        sealed = await PF.brief.generate(chatId, {
+          theme,
+          seed,
+          preferences,
+          onFailure: (kind) => {
+            failure = kind;
+          },
+        });
+        if (!sealed) {
+          // EVERY failure — a busy engine, the network, the budget timeout, a route
+          // that is not there, and now a deterministic 400 or 422 as well: do NOT
+          // seal. The key stays absent, this visit offers retry, and the next visit
+          // arms the gate again. There is deliberately no "play the default world"
+          // escape on any branch: sealing a default world for a player who wrote
+          // three paragraphs of setting is the outcome ruling #7 exists to forbid,
+          // and a deterministic failure is the one case they could never undo.
+          if (chatId === core.chatId) this._failGate(core, failure, "brief");
+          return;
         }
+        // THE SEAL PATCH CARRIES THE MARKER'S COPY (plan §2.2a). One PATCH, two
+        // keys: the artifact and the era fact that this chat was created wanting a
+        // pack. Copied HERE and nowhere else, which is what makes the copy
+        // unmintable by any later rewrite of the wizard config it was read from.
+        const patch = { pixelforgeBrief: sealed };
+        const wantsPack = this._configPackWanted(meta);
+        if (wantsPack) patch[PACK_WANTED_META_KEY] = true;
+        let stored = false;
+        for (let attempt = 0; attempt < 3 && !stored; attempt++) {
+          try {
+            await PF.api.patchMetadata(chatId, patch);
+            stored = true;
+          } catch (err) {
+            if (attempt === 2) console.warn("[pixelforge] brief storage failed; the chat stays unsealed", err);
+            else await new Promise((resolve) => setTimeout(resolve, 500 * (attempt + 1)));
+          }
+        }
+        if (!stored) {
+          if (chatId === core.chatId) this._failGate(core, "storage", "brief");
+          return;
+        }
+        // Cached BEFORE the chat fence below, and that ordering is the gate's
+        // escape-safety: a generation that lands while the player is in another chat
+        // returns here, and the cache is the only thing that will tell the next visit
+        // this world is already sealed rather than generating it a second time.
+        this._cacheBrief(chatId, sealed);
+        // The witness lands beside the cache and for the same reason: until the
+        // host's metadata comes back carrying the copy, this is the only thing
+        // that knows this chat is owed a pack.
+        if (wantsPack) this._packWantedSealed.add(chatId);
       }
-      if (!stored) {
-        if (chatId === core.chatId) this._failGate(core, "storage");
-        return;
+
+      // ── CALL TWO: THE CONTENT PACK ──────────────────────────────────────────
+      // Wanted when the formula already says so (the half-sealed chat this visit
+      // arrived at), or when THIS visit just sealed the brief for a chat whose
+      // wizard asked for one. The second arm cannot ask the formula: the formula
+      // reads the seal-side marker, and the PATCH that wrote it landed on the host
+      // and not on the metadata blob in our hand.
+      //
+      // AT CREATION, A MISMATCHED PACK IS ABSENT. A pack sealed against a
+      // different brief is somebody else's world's content — the reuse-an-existing-
+      // chat arm can leave one behind — and overwriting it is right where demoting
+      // it would leave the chat permanently reading a fallback.
+      const existingPack = this._configPack(meta, chatId);
+      const packStale = !!existingPack && existingPack.briefHash !== PF.player.briefHashOf(sealed);
+      const wantPack =
+        !!sealed && (packWanted || (briefWanted && this._configPackWanted(meta) && (!existingPack || packStale)));
+      if (wantPack) {
+        this._stageGate(core, "pack");
+        let failure = null;
+        const pack = await PF.pack.generate(chatId, {
+          theme,
+          seed,
+          brief: sealed,
+          preferences,
+          onFailure: (kind) => {
+            failure = kind;
+          },
+        });
+        if (!pack) {
+          // THE WORLD IS ALREADY SAFE HERE, which is the whole difference between
+          // this failure and the one above: the brief is sealed and stored, so the
+          // retry screen says so and the retry costs one call, not a world.
+          if (chatId === core.chatId) this._failGate(core, failure, "pack");
+          return;
+        }
+        let packStored = false;
+        for (let attempt = 0; attempt < 3 && !packStored; attempt++) {
+          try {
+            await PF.api.patchMetadata(chatId, { [PACK_META_KEY]: pack });
+            packStored = true;
+          } catch (err) {
+            if (attempt === 2) console.warn("[pixelforge] pack storage failed; the world stays packless", err);
+            else await new Promise((resolve) => setTimeout(resolve, 500 * (attempt + 1)));
+          }
+        }
+        if (!packStored) {
+          if (chatId === core.chatId) this._failGate(core, "storage", "pack");
+          return;
+        }
+        this._cachePack(chatId, pack);
       }
-      // Cached BEFORE the chat fence below, and that ordering is the gate's
-      // escape-safety: a generation that lands while the player is in another chat
-      // returns here, and the cache is the only thing that will tell the next visit
-      // this world is already sealed rather than generating it a second time.
-      this._cacheBrief(chatId, sealed);
+
+      // THE CHAT FENCE, after BOTH stores and BOTH caches and before any install:
+      // everything above belongs to the chat the call was made for and lands
+      // wherever the player is; everything below touches the world in front of them.
       if (chatId !== core.chatId) return;
       // Build the world the brief describes, lift onto it, pay the purse. Shared
       // with the retry path above, which is how a throw out of any of it stays
-      // recoverable instead of stranding the player in the placeholder.
-      this._installSealedWorld(core, chatId, sealed, seed, theme);
+      // recoverable instead of stranding the player in the placeholder. A chat that
+      // only owed a PACK is already standing in its real world, so it resumes
+      // rather than recompiling (`_resumeHeldWorld` says why that distinction is
+      // not cosmetic).
+      if (briefWanted || core.sim?.world?.interim) this._installSealedWorld(core, chatId, sealed, seed, theme);
+      else this._resumeHeldWorld(core, chatId, sealed);
     } catch (err) {
       // NEVER A SPINNER WITH NOTHING BEHIND IT. Every failure the generation
       // ladder KNOWS about is already a `null` seal handled above; this is the
@@ -11682,17 +12483,62 @@ PF.save = {
    *  defaults boot behind it. */
   _rehydratePlayer(saved, world, brief, meta, chatId, sim) {
     const briefExpected = this.briefExpected(meta, chatId);
+    // WILL THE GATE HOLD? Asked of the METADATA rather than of `this.gate`, because
+    // rehydration runs BEFORE armGate on every boot path (90-element restores and
+    // then arms), so the flag is not up yet — and the two facts armGate is about to
+    // ask are exactly these two.
+    const gateWillHold = briefExpected || this.packExpected(meta, chatId);
     // 1. PARSE / MIGRATE.
     const parsed = PF.player.parse(saved && typeof saved === "object" ? saved.player : null);
     const player = parsed.player;
     if (parsed.quarantine) this._park(chatId, parsed.quarantine.slot, parsed.quarantine.entry);
 
+    const notices = this._quarantineArms(player, world, brief, chatId, {
+      briefExpected,
+      deferConsuming: gateWillHold,
+    });
+
+    // 4. NOTICES, appended to the band's own array — after the severance that
+    // emptied the ledger, so the one thing that survives the window is the
+    // explanation for it.
+    //
+    // AT THE DAY IT HAPPENED, which took a format change to be able to say
+    // (plan §2.5). These used to be ledger LINES, and a line at or below the
+    // flush gate is one the wrap-up skips — so the day was shifted up to
+    // `max(sim.day, flushedDay + 1)` to keep the notice tellable, which printed
+    // a day header from the FUTURE into the tell whenever the gate had run
+    // ahead of the clock. The band is told-flagged instead of day-gated, so the
+    // shift is deleted along with the back-door it existed for.
+    for (const text of notices) PF.player.notice(player, text, sim.day);
+    return player;
+  },
+
+  /** Steps 1b-3 of the §Q5 rehydration: the arm that CONSUMES the version slot,
+   *  the severance that fills the stamp one, the arm that consumes THAT, and the
+   *  gated dangling repair. Returns the notices they wrote.
+   *
+   *  FACTORED OUT BECAUSE IT NOW HAS TWO CALLERS, and the second one is the whole
+   *  point (plan §2.2a, round-3 fresh B1). Under a held gate, rehydration is
+   *  CONSUME-FREE: the two arms that take a quarantine slot are skipped, because a
+   *  boot that consumes a slot and then fails its generation has spent the bag on a
+   *  session that never played — the save flush refuses under the gate, so nothing
+   *  records what the consume restored, and the slot is gone next time. What is NOT
+   *  skipped is the severance PARK: applyStamps strips the live block before it
+   *  hands the entry over, so declining to park would be a real loss, and parking
+   *  the same loss twice is lossless because the stamp slot MERGES.
+   *
+   *  The deferred arms then RE-RUN AT THE LIFT (`_runDeferredArms`), before the
+   *  first ungated frame — not on some later boot. The next-ungated-boot path
+   *  serves FAILURE sessions only, which is exactly the case where nothing was
+   *  played and nothing was lost by waiting. */
+  _quarantineArms(player, world, brief, chatId, { briefExpected, deferConsuming }) {
+    const notices = [];
     // 1b. VERSION RE-ADOPTION. A block this build could not read last time is
     // readable now. It CONSUMES the slot — that is what makes a third boot a
     // no-op — and the block it displaces is parked in setAside, which no machine
     // ever restores: two live blocks cannot both be the player's state, and only
     // the player can say which one they meant.
-    const held = PF.quarantine.peek("version");
+    const held = deferConsuming ? null : PF.quarantine.peek("version");
     const heldV = held && typeof held.fromV === "number" && Number.isFinite(held.fromV) ? held.fromV : null;
     if (held && held.adoptable === true && heldV !== null && heldV <= PF.player.currentV()) {
       const readopted = PF.player.parse(held.block);
@@ -11717,7 +12563,7 @@ PF.save = {
     // 2. STAMPS / SEVERANCE, then the other direction: a stamp slot whose world
     // is the world we just built is a save coming home.
     const applied = PF.player.applyStamps(player, world, brief, briefExpected);
-    const notices = [...applied.notices];
+    notices.push(...applied.notices);
     if (applied.severed && !this._park(chatId, applied.severed.slot, applied.severed.entry)) {
       // applyStamps has ALREADY stripped the live block by the time it hands the
       // entry over, so a refusal here is a real loss — and the notice it wrote
@@ -11733,7 +12579,10 @@ PF.save = {
       // writer-site kind copy).
       notices.push("What you had done in the world that changed could not be kept, and is gone.");
     }
-    if (applied.evaluated && !applied.severed) {
+    // 2b. …AND THE OTHER DIRECTION, which is the second arm a held gate defers:
+    // it CONSUMES the stamp slot, and a consume whose result no flush can record
+    // is a slot spent for nothing.
+    if (!deferConsuming && applied.evaluated && !applied.severed) {
       const stamp = PF.quarantine.peek("stamp");
       if (stamp) {
         const restored = PF.player.restoreStamped(player, stamp, world, brief);
@@ -11749,20 +12598,7 @@ PF.save = {
     // the sim and does not arm a write of its own. The next real save carries it.
     const repaired = PF.player.repairQuests(player, world, applied.evaluated);
     notices.push(...repaired.notices);
-
-    // 4. NOTICES, appended to the band's own array — after the severance that
-    // emptied the ledger, so the one thing that survives the window is the
-    // explanation for it.
-    //
-    // AT THE DAY IT HAPPENED, which took a format change to be able to say
-    // (plan §2.5). These used to be ledger LINES, and a line at or below the
-    // flush gate is one the wrap-up skips — so the day was shifted up to
-    // `max(sim.day, flushedDay + 1)` to keep the notice tellable, which printed
-    // a day header from the FUTURE into the tell whenever the gate had run
-    // ahead of the clock. The band is told-flagged instead of day-gated, so the
-    // shift is deleted along with the back-door it existed for.
-    for (const text of notices) PF.player.notice(player, text, sim.day);
-    return player;
+    return notices;
   },
 
   /** Self-heal (review finding): ~40 engine call sites still use the unqueued
@@ -11826,7 +12662,9 @@ PF.save = {
     // _generating and _briefCache are deliberately NOT cleared — a generation
     // in flight for the chat we are leaving must still seal, and the brief it
     // seals is what stops the next visit generating that world all over again.
-    // (_briefSeenInMeta rides with the cache it describes, for the same reason.)
+    // (_briefSeenInMeta rides with the cache it describes, for the same reason,
+    // and so do the pack's two: a pack that seals after the player has left is
+    // exactly the case its cache exists for.)
     this.gate = null;
     // The in-memory quarantine bag is per-chat, exactly like the caches above:
     // restore() hydrates the arriving chat's key into it a few lines later.
@@ -13120,6 +13958,1955 @@ PF.save = {
   }
 }
 
+// ===== 61-pack.js =====
+// ── The offline content pack (schema v1) ──────────────────────────────────────
+// The SECOND sealed artifact a generated world owns, and the sibling of the brief
+// (18-brief): the brief says who lives here and where, the pack says what they SAY
+// and what they will ask the player to DO. One generation call at creation writes
+// it, seal-time validation is the only contract it has, and after that it never
+// changes — regenerating it on load would quietly rewrite dialogue and quest text
+// the player has already read, which is a worse loss than not having it at all
+// (docs/ROADMAP.md E1, P4, and open question 10's "authored once and persisted as
+// a sealed input, exactly as the brief already is").
+//
+// WHY THIS FILE LOADS HERE, after the save layer that stores it and the economy
+// whose words it borrows. The boot assertion at the foot validates the DEFAULT
+// pack against vocabularies this module does not own — the stock cast (18-brief,
+// read through `defaults()` exactly as 20-world's name book is), the catch roles
+// and each theme's variant slugs (59-economy), the theme ids (10-art). An
+// assertion that has to write `PF.economy?.` to run at all is not an assertion,
+// it is a skip with a question mark on it. Everything that reads this module
+// reaches it at RUNTIME through `PF.pack`, so nothing needs it any earlier.
+//
+// AND THE BOARD READS FROM HERE (0.13 §2.1). The fixture 20-world stands up in
+// every settlement is this artifact's surface: `boardOffers` says what today's
+// board is showing, `accept` takes a row and `turnIn` hands one in, and
+// `rowText` is the one function that turns a quest row into words anywhere in
+// the package (the quest tab reuses it verbatim). They live beside the schema
+// rather than beside the economy's verbs because every number and identity they
+// spend — K, the reward derivation, the instance id, the daily selection, the
+// board constant — is written in this file, and a surface one module along would
+// have to reach across for all of it. The MUTATION SHAPE is 59-economy's, though:
+// describe first, re-read at the press, and put every effect through a shipped
+// mutator in an order that cannot half-pay anybody.
+//
+// THE CONTENT FENCE (plan §2.2c). The pack references cast by SEALED NAME only.
+// Its fields are dialogue strings, template rows and index keys — there are no
+// per-NPC machine fields in it, ever. The brief is the sole authority on people;
+// a pack that could say who somebody IS would be a second brief, disagreeing with
+// the first the moment either was repaired.
+//
+// THE SCHEMA IS SEALED FOREVER, so every axis ships or is recorded absent. What
+// comes back from the call may be shaped like anything: the route's schema is
+// 8,000 serialized chars and ADVISORY on Anthropic and the sidecar (#5135), and
+// `strictSchema` STAYS FALSE here — it is unavailable to additionalProperties
+// schemas, which this one is. The tolerant parser is the contract. So seal time
+// REPAIRS and DROPS (validate below, the brief's own idiom), and read time only
+// FOLDS (fold below): a template this build cannot resolve leaves the selectable
+// set for this world instead of being deleted from the artifact.
+PF.pack = (() => {
+  const VERSION = 1;
+
+  // ── The index axes (plan §2.2c) ─────────────────────────────────────────────
+  // A dialogue line is keyed (location × daypart × weather × register) and the
+  // pool it lands in is SHARED BY PLACE, not owned by a person: who is speaking
+  // resolves at read from who is standing there (25-schedule answers that), which
+  // is what keeps a matrix affordable for a cast of ten and a mint of a hundred
+  // and twenty (ROADMAP open question 11).
+  //
+  // LOCATION HANDLES are the brief's own place-kind vocabulary plus the root, and
+  // that choice is the one that makes this artifact portable. Zone ids (`z3`) mean
+  // nothing outside the brief that minted them, and zone NAMES mean nothing after
+  // a demotion — but "the gathering place" is a thing every compiled world and the
+  // legacy layout both have. Resolving a handle to a zone is the READING surface's
+  // job (E1/E7's press site, not 0.13's), and it is a lookup, never a guess.
+  const LOCATIONS = ["settlement", "gathering", "workshop", "hall", "sanctuary", "dwelling", "wilds"];
+  // The four daypart words are the sim's, and 59-economy already writes them down
+  // for the same reason (the sim exports no list). Read from there rather than
+  // copied: a fifth daypart must not be able to mean one thing to a catch table
+  // and another to a line index.
+  const DAYPARTS = PF.economy.DAYPARTS;
+  // TWO REGISTERS, stranger and friend — the ROADMAP's own words for E1 (iii),
+  // and what P2's disposition ladder will switch between.
+  const REGISTERS = ["stranger", "friend"];
+  // THE WEATHER AXIS, built and empty. L2 owns the rest of this list; until then
+  // "fair" is the only value there is, and it is OPTIONAL on a line precisely so
+  // the seam costs nothing: a generation that had to spell one constant word on
+  // every line would spend a tenth of its budget saying "fair" (plan §2.2b's byte
+  // diet). Absent reads as fair, here and forever.
+  const WEATHERS = ["fair"];
+  const WEATHER_DEFAULT = "fair";
+  // THE E7 TOPIC SEAM (plan §2.2c). Optional per line, defaulting to NONE, and it
+  // exists so the Ask tree has branches to hang lines off when it arrives: rumor
+  // and work are the two E7 is load-bearing for, place and smalltalk are the ones
+  // a tree opens with. `guidance` below confines the tags it ASKS for to rumor
+  // and work — the seam is wider than the diet on purpose, because the schema
+  // seals and the guidance does not.
+  const TOPICS = ["rumor", "work", "place", "smalltalk"];
+
+  // ── The quest template vocabulary (plan §2.2c) ──────────────────────────────
+  // FOUR WORDS, THREE MECHANICS. `gather` is accepted and FOLDS to `catch` at seal
+  // with a repair logged: a model asked for chores writes "gather" for the thing
+  // this package does by fishing, and refusing the word would drop a good row over
+  // a synonym. Combat-shaped verbs are refused BY THIS ENUM and not by a policy
+  // sentence somewhere (plan §Q5) — the enum and the hook list agree by
+  // construction, and a verb with no site to progress at can never be sealed.
+  const VERBS = ["gather", "catch", "deliver", "visit"];
+  const VERB_FOLD = { gather: "catch" };
+  const MECHANICS = ["catch", "deliver", "visit"];
+  // THE TARGET IS GRAIN-TAGGED, one key naming which kind of thing it is:
+  //   { role }    — a catch ROLE: any variant of it counts (catch-common …)
+  //   { variant } — one catch VARIANT slug exactly ("carp")
+  //   { npc }     — a sealed cast NAME, for deliver (an errand, no item moves)
+  //   { place }   — a location handle, for visit
+  // The plan states the grain rule for the CATCH family ({role} XOR {variant});
+  // deliver and visit need a slot of their own or the enum ships two verbs no row
+  // can express, so the tag names the grain for all four and validate() binds each
+  // grain to the verb that can use it.
+  const TARGET_GRAINS = ["role", "variant", "npc", "place"];
+  const GRAINS_FOR_VERB = { catch: ["role", "variant"], deliver: ["npc"], visit: ["place"] };
+
+  // ONE SETTLEMENT, ONE BOARD (multi-board is W1's). The constant is the board's
+  // identity in every hash and every instance id, so it is written once.
+  const BOARD = "b1";
+
+  // ── Seal-time caps (plan §2.2g) ─────────────────────────────────────────────
+  // THERE IS NO STORAGE BUDGET — the maintainer abolished it, and the only real
+  // budget is the generation FIT (`TUNING.floorBasis` and the digest split, both
+  // below). These are hygiene caps applied at seal: a sealed blob never grows, so
+  // what they bound is what one call is allowed to hand us, not what a save is
+  // allowed to hold. `templates` is load-bearing in the floor arithmetic too — it
+  // is the cap a templates-first truncation may have filled before the cut.
+  const CAPS = {
+    templates: 24,
+    lines: 320,
+    escalation: 12, // one per NPC, and the sealed cast maxes at 10 (18-brief CAPS)
+    overheard: 24,
+    title: 48, // clip-safe: a board row is one line of plain text
+    text: 200,
+    slug: 32,
+    n: 20, // the biggest count a template may ask for
+  };
+
+  // ── The quest layer's tuning table ──────────────────────────────────────────
+  // The economy's TUNING idiom (59-economy): every number the layer spends is
+  // written HERE with its own reason, so a retune is one file. Slice 3 spends K;
+  // the reward rows below are what slice 3 copies into a row at accept.
+  const TUNING = {
+    // How many of the day's surviving templates the board offers. Four against the
+    // ten-quest cap means a player who takes everything and finishes nothing is at
+    // the cap on day three — their own equilibrium, not a forced one: offers cost
+    // nothing to ignore and never expire, and the at-cap refusal names the two
+    // reliefs (finish one, set one aside).
+    K: 4,
+    // THE SUBSTANCE FLOOR, and it is a SEAL/FAIL boundary rather than a warning:
+    // a salvaged pack that clears it seals thin, and one that does not is a
+    // FAILURE — the gate holds, the retry screen says so, and nothing is stored.
+    // Backfill covers small gaps in an otherwise-substantive pack; it may never
+    // cover the load-bearing half.
+    //
+    // WHERE THE TWO NUMBERS COME FROM (plan §2.2b). The binding case is the
+    // #5135 output floor: a connection that gives us the minimum cuts the
+    // emission's TAIL at 2,048 tokens, `salvageText` closes what is open, and
+    // whatever templates-first order the model actually honoured is what
+    // survives. Every line is costed TAGGED — the topic tag is bytes the byte
+    // diet does not have to spend, so costing it in is the safe direction:
+    //
+    //   the truncation wall (#5135, connections may undercut) ....  2,048 tokens
+    //   dense punctuation-heavy JSON, at three chars to the token .  6,144 chars
+    //   the envelope (`{"templates":[`, `],"lines":[`, the close) .    -40 chars
+    //   templates emit FIRST and may fill their own cap: 24 × 150 . -3,600 chars
+    //   …so the index is left with ...............................   2,504 chars
+    //   a TAGGED line row costs about 130, which buys ............      19 lines
+    //   less the trailing partial row the salvage trims ..........      18 lines
+    //
+    // THE TWO ROW COSTS ARE MEASURED DENSITY, NOT THE SCHEMA'S MAXIMUM, and
+    // that distinction is the whole standing of the sum. Serialized, the default
+    // pack's own rows run 112-137 chars a template (mean 121) and 97-140 chars a
+    // line with every one costed tagged (mean 119), across both themes — so 150
+    // and 130 sit above what a typical emission spends, the template cost above
+    // even the widest row measured. What the schema ALLOWS is far bigger: a
+    // 32-char slug, a 24-char giver, a 32-char variant and a 48-char title make
+    // a 217-char template, and a 200-char line with a tag is 279. So what the
+    // sum shows is that the floors CLEAR A TYPICAL TEMPLATES-FIRST CUT, and it
+    // is not a worst-case guarantee. It cannot be one and keep these floors:
+    // 24 × 217 leaves 896 chars of index, which is two rows, and a floor sized
+    // from that would have to be M ≤ 2.
+    //
+    // SO THE RESIDUAL IS WRITTEN DOWN RATHER THAN ROUNDED OFF. A floor
+    // connection (2,048 effective tokens) whose model writes near the schema's
+    // cap on every row — a full template block and 200-character dialogue —
+    // comes back with an index this floor refuses, on every attempt, and the
+    // retry screen is that player's honest state rather than a bug in the
+    // arithmetic. That is the degrade ladder's own posture (plan §2.2b): floor
+    // connections get a thin pack BY DESIGN, an accepted limitation with the
+    // ladder as their normal path, and the sizing TARGET is the typical ~4K
+    // ceiling, where the same emission clears with room to spare. The max-shape
+    // lane in the harness pins it, so it stays a known cost rather than
+    // something the next reader rediscovers against a comment that denied it.
+    //
+    // Eighteen lines and twenty-four templates against floors of twelve and
+    // three: a typical cut at this wall still seals, and a pack that came back
+    // with a quarter of an index still fails. `floorBasis` carries the inputs so
+    // the lane that re-runs the sum cannot drift from the table.
+    floorTemplates: 3,
+    floorLines: 12,
+    floorBasis: { truncTokens: 2_048, charsPerToken: 3, envelopeChars: 40, templateChars: 150, lineChars: 130 },
+    // ── The reward derivation (plan §2.6, RULED) ──────────────────────────────
+    // MONEY IS DERIVED FROM (verb, n) AND THE PACK NEVER AUTHORS IT — the schema
+    // excludes money and xp, the seal drops both, and `rewardFor` below is the
+    // one place a number is minted. Single authority, the economy's own rule:
+    // a retune moves future accepts and leaves accepted deals honored, because
+    // slice 3 copies `r` into the row at accept.
+    //
+    // Priced against the two things 0.11 sells, since quest income is the only
+    // income there is (59-economy PRICES: a 12-coin berth, a 6-coin fantasy entry
+    // rod, a 40-coin decent rod, a 40-coin starting purse):
+    //   visit   6 flat — one walk, no call, and exactly the entry rod: the first
+    //                    errand a player runs pays for the thing that starts
+    //                    fishing.
+    //   deliver 10 flat — a walk plus the handover, and the handover is the one
+    //                    quest verb that spends a GM call (plan §2.3).
+    //   catch   5 + 4n — n is the only lever the ruling leaves (a rare fish and a
+    //                    common one pay the same per fish; the RARITY already
+    //                    pays, in the skill the catching raises). n=3 is 17, which
+    //                    covers a berth with change; n=20, the cap, is 85, which
+    //                    is about a full day at the water (59-economy's pacing
+    //                    note: ~22 yields in a ten-hour day).
+    // THERE IS NO xp ROW HERE AND THERE NEVER WILL BE. Quests do not grant skill
+    // experience — the TASK raises the skill, through the site that does the work
+    // — so `rewardFor` returns xp 0 structurally rather than reading a number
+    // somebody could retune off zero.
+    reward: {
+      catch: { base: 5, per: 4 },
+      deliver: { base: 10, per: 0 },
+      visit: { base: 6, per: 0 },
+    },
+  };
+
+  // ── Text hygiene ────────────────────────────────────────────────────────────
+  // The brief's, not a second copy: `capText` sanitizes, strips markdown and tag
+  // fragments and cuts on a grapheme boundary, and `foldEnum` is the same
+  // Unicode-aware enum fold every axis below wants. Pack content comes off the
+  // same untrusted channel a brief does and has no business being cleaned twice
+  // in two ways.
+  const capText = (value, max) => PF.brief.capText(value, max);
+  const foldEnum = (value, list, fallback) => PF.brief.foldEnum(value, list, fallback);
+  const str = (value) => (typeof value === "string" ? value : "");
+  /** Arrays may arrive as objects keyed by id, which is a common shape without
+   *  provider json_schema — 18-brief's own reading, and the pack meets the same
+   *  channel. Object.values() BEFORE the array check saves the whole list. */
+  const asArray = (value) => {
+    if (Array.isArray(value)) return value;
+    if (value && typeof value === "object") return Object.values(value);
+    return [];
+  };
+  /** A slug the id space can hold: lowercase, dashed, no colon. The colon is the
+   *  counter key's own separator (`p:<pack>:<slug>`) and 59-economy closes the
+   *  same door on catch variants for the ledger's separator — a slug carrying one
+   *  is content nobody needs and an encoding that never has to survive one is a
+   *  line shorter. */
+  const slugify = (value, max) =>
+    capText(value, max)
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, "-")
+      .replace(/^-+|-+$/g, "");
+
+  /** The counter class a template id declares, and the two classes are the whole
+   *  of §2.2e. `p:<pack>:<slug>` is WORLD-BOUND — generated content belongs to the
+   *  world it was written for and is severed with it. `b:<slug>` is WORLD-FREE —
+   *  the default pack's generic work means the same thing anywhere, which is true
+   *  BY CONSTRUCTION because those rows target catch ROLES (shared by every theme)
+   *  rather than variants, and their titles are worded per theme at render.
+   *  58-player's quest() already routes on exactly this prefix. */
+  const packTemplateId = (packId, slug) => `p:${packId}:${slug}`;
+  const boardTemplateId = (slug) => `b:${slug}`;
+
+  /** The pack's own short identity, minted from the brief it sealed against — one
+   *  pack per brief, so the brief's hash names it. It rides the template ids so a
+   *  regenerated pack's counters cannot land on the old pack's rows. */
+  const idOf = (briefHash) => (briefHash >>> 0).toString(36);
+
+  // ── The #5135 walls this call is composed against (FROZEN) ──────────────────
+  // Not tuning and not ours: they are the route's, they are the same three the
+  // brief call is written to, and they are written down here because the digest
+  // split below is arithmetic ON them. `userContent` is capped at 8,000 chars and
+  // the route 400s past it; `instructions` at 16,000; the schema at 8,000
+  // SERIALIZED and it is ADVISORY on Anthropic and the sidecar — the tolerant
+  // parser is the contract, which is why seal-time validate() is the only one.
+  const USER_CONTENT_CAP = 8_000;
+  const INSTRUCTIONS_CAP = 16_000;
+  const SCHEMA_CAP = 8_000;
+  // What the split holds back from the cap for its own joiner and ellipsis, and
+  // for a route that counts a byte we do not. 18-brief clips preferences at 7,800
+  // against the same 8,000 for the same 200-char reason; this is that margin,
+  // named rather than spelled, because here it is subtracted from a running total
+  // instead of from a constant.
+  const USER_CONTENT_MARGIN = 200;
+
+  /** THE DIGEST — the world this pack is being written FOR, in the model's own
+   *  reading order (plan §2.2b). It goes FIRST in `userContent` and the player's
+   *  preferences clip against what is left, and that order is the whole design:
+   *  the pack's job is to sound like THIS settlement's people, so the facts it
+   *  must not contradict are the ones that may never be the half that gets cut.
+   *
+   *  PERSONA IS IN IT BECAUSE PERSONA IS THE VOICE SOURCE. A cast list of names
+   *  and roles produces dialogue that could be anyone's; "wants the ford rebuilt
+   *  and is hiding who let it go" is what makes a line sound like Wren Ash. It is
+   *  also the single biggest field here (100 chars × a cast of ten), which is why
+   *  the worst case is measured rather than hoped at:
+   *
+   *    the settlement's name row and the two section headers ............    201
+   *    the situation, with its lead-in (18-brief caps the field at 240) .    270
+   *    the zone list: the root plus 4 places × (name 24 + kind + dashes) .    189
+   *    the cast: 10 × (name 24 + role 24 + home 24 + persona 100 + 18) ..  1,900
+   *    the newlines joining the twenty-one rows ........................     20
+   *                                                                       ------
+   *                                                                        2,580
+   *
+   *  …which is the plan's ~2.5K, and it leaves better than 5,200 chars of the cap
+   *  for the player's own words. 2,580 is MEASURED and not estimated: the harness
+   *  searches for the biggest digest a legal brief can produce — every field at
+   *  its cap, in tokens with no space near the cut so `capText` clips at the cap
+   *  exactly rather than at a word boundary short of it — and pins the number, so
+   *  this table cannot drift away from the code beneath it.
+   *
+   *  AND THOSE CAPS ARE APPLIED HERE, WHICH IS WHAT MAKES THE TABLE A BOUND
+   *  RATHER THAN AN EXPECTATION. Every field above is read back through the
+   *  brief's OWN `capText` at the brief's OWN number — 24 for a name, a role, a
+   *  home or a place, 100 for a persona, 240 for the situation — because this is
+   *  a read door over a stored artifact and `foldStoredTemplate`'s header already
+   *  says what that means: the brief this composes from is round-tripped chat
+   *  metadata, and 18-brief's byte budget bounds what IT wrote, not what a
+   *  hand-edited save or a forward build with a wider cap hands back. Read time
+   *  may only FOLD (#566's seam posture), so oversize CLIPS here rather than
+   *  costing the row the way the seal would drop it.
+   *
+   *  It is not only a length guard. `capText` sanitizes on the way through, so a
+   *  round-tripped persona carrying a tag fragment, a control byte or an EMBEDDED
+   *  NEWLINE cannot ride into `userContent` — and the newline is the one that
+   *  matters structurally rather than cosmetically, because the section below
+   *  promises the model one row per person and a raw newline in a persona is a
+   *  second row with nobody's name on it.
+   *
+   *  IT NAMES THE PLACE KINDS OUT LOUD, and that is not decoration: a place's
+   *  `kind` IS the location handle the index is keyed by (LOCATIONS above), so
+   *  the list teaches the mapping from "The Amber Hearth Inn" to `gathering` in
+   *  the same breath that it teaches the inn exists. Without it the model has to
+   *  guess which of seven handles a name belongs under, and a guessed handle is a
+   *  line that never renders anywhere. */
+  function digest(brief) {
+    const cast = Array.isArray(brief?.cast) ? brief.cast : [];
+    const places = Array.isArray(brief?.places) ? brief.places : [];
+    const name = capText(brief?.name, 24) || "the settlement";
+    const out = [`The settlement is ${name}.`];
+    const situation = capText(brief?.situation, 240);
+    if (situation) out.push(`What is unresolved right now: ${situation}`);
+    out.push("", "PLACES — the second word is the location handle a line is keyed by:", `- ${name} — settlement`);
+    for (const place of places) {
+      const placeName = capText(place?.name, 24);
+      if (!placeName) continue;
+      out.push(`- ${placeName} — ${foldEnum(place?.kind, LOCATIONS, "dwelling")}`);
+    }
+    out.push("", "PEOPLE — use these names EXACTLY; givers and speakers come from this list and nowhere else:");
+    for (const member of cast) {
+      const who = capText(member?.name, 24);
+      if (!who) continue;
+      const role = capText(member?.role, 24);
+      const home = capText(member?.home, 24);
+      const persona = capText(member?.persona, 100);
+      out.push(
+        `- ${who}${role ? `, ${role}` : ""}${home ? `, lives at ${home}` : ""}${persona ? ` — ${persona}` : ""}`,
+      );
+    }
+    return out.join("\n");
+  }
+
+  /** The digest first, then whatever room is left for the player's own setting
+   *  text. The route 400s past 8,000 chars, so this is a hard clip and not a
+   *  preference: an unbounded wizard Setting must cost the player the tail of
+   *  their own description rather than the whole request.
+   *
+   *  The brief call clips at a CONSTANT 7,800 because it sends nothing else; this
+   *  one subtracts the digest first, so the same margin is arithmetic here. The
+   *  preferences are what lose their tail: the digest is the half the pack must
+   *  not contradict, so it is cut only when it is the thing that does not fit.
+   *
+   *  AND IT CAN BE. The brief this composes from is the STORED one on the
+   *  pack-only arm — 60-save hands `_configBrief`'s answer straight through, and
+   *  that is a round-tripped object off chat metadata, not the one the seal
+   *  produced. 18-brief's own byte budget bounds what IT writes; it bounds
+   *  nothing about a hand-edited save or a forward build whose cast cap is
+   *  wider. A digest over the cap would 400 the route on every attempt and hand
+   *  that chat a retry button that can never work, so it clips like everything
+   *  else here and the request stays legal. */
+  function composeUserContent(digestText, preferences) {
+    const headRoom = USER_CONTENT_CAP - USER_CONTENT_MARGIN;
+    const head = digestText.length > headRoom ? digestText.slice(0, headRoom) : digestText;
+    const room = USER_CONTENT_CAP - head.length - USER_CONTENT_MARGIN;
+    const prefs = typeof preferences === "string" ? preferences : "";
+    if (!prefs.trim() || room <= 0) return head;
+    const clipped = prefs.length > room ? `${prefs.slice(0, room)}…` : prefs;
+    return `${head}\n\nWHAT THE PLAYER ASKED FOR:\n${clipped}`;
+  }
+
+  // ── guidance(): the exact text that ships in the second call ────────────────
+  /** 18-brief's `guidance` one call later, and written to the same three rules:
+   *  the vocabularies are INTERPOLATED from the constants above so the enum and
+   *  the teaching can never drift, every limit is stated as hard, and the reply is
+   *  a bare JSON object.
+   *
+   *  EMISSION ORDER IS BEST-EFFORT AND SAID SO. Templates first, then the index,
+   *  then the two smaller sections — because the truncation wall eats the TAIL,
+   *  and the floor arithmetic (TUNING.floorBasis) is computed against a cut that
+   *  honoured this order. Nothing enforces it: `schema()` lists its properties in
+   *  the same order and the sentence below asks for it out loud, and both are
+   *  hints a provider is free to ignore (the schema is ADVISORY — #5135). What
+   *  makes a disordered emission survivable is not this paragraph, it is that the
+   *  floor is a seal/fail boundary: a cut that lost the templates fails, holds
+   *  the gate, and the retry is free.
+   *
+   *  TITLES NAME THE WORK AND NOT ONE ADDRESS, and that line is here rather than
+   *  in the schema because it is a WORDING rule and nothing can validate it. A
+   *  `visit` target is a location HANDLE — the KIND of place — and `visited()`
+   *  settles the row on arrival at ANY zone carrying it, which is the design and
+   *  not a slip: the mechanical fallback line ("travel to wilds") is honest about
+   *  it. A generated title that named one of them instead ("Walk out to North
+   *  Wood") would be the only surface in the package promising an address the row
+   *  never asked for, and the player would fill it somewhere else and be right.
+   *  The default pack already writes titles this way; this is the sentence that
+   *  asks a generated one to.
+   *
+   *  TOPIC TAGS ARE CONFINED TO rumor|work HERE, while the SCHEMA seals all four
+   *  (plan §2.2c). That gap is deliberate and it is the byte diet: `place` and
+   *  `smalltalk` are the tags an Ask tree opens with and the two E7 is not
+   *  load-bearing for, so paying four extra characters a line for them now buys
+   *  nothing this release can read. The schema is the thing that seals forever and
+   *  the guidance is the thing that can be rewritten next release, so the wider
+   *  vocabulary belongs in the schema and the diet belongs here. */
+  function guidance(theme) {
+    return [
+      "You are writing an OFFLINE CONTENT PACK for a settlement that already exists: what its people say,",
+      "and the work they post on the board. Reply with ONLY a JSON object.",
+      "",
+      `The visual theme is "${theme}" and it is AUTHORITATIVE: everything you write is dressed to fit it.`,
+      "The settlement, its places and its people are given below and are FIXED. Do not invent a person, a",
+      "place or an event that contradicts them; you are writing what is already there, not deciding it.",
+      "",
+      "Write the sections IN THIS ORDER — templates, then lines, then escalation, then overheard. If you",
+      "run out of room, it is the LAST section that should be short.",
+      "",
+      "- templates: the work the board posts. Each is {slug, giver, verb, target, n, title}.",
+      "    giver: the NAME of one of the people listed below, spelled exactly. Nobody else can post work.",
+      `    verb: one of ${VERBS.join(" | ")}. Nothing else exists — there is no combat and no crafting.`,
+      "    target: ONE of these four shapes, and it must match the verb:",
+      `      {"role": …}    for gather/catch — one of ${PF.economy.CATCH_ROLES.join(" | ")} (any catch of that kind counts)`,
+      '      {"variant": …} for gather/catch — one exact species this theme has',
+      '      {"npc": …}     for deliver — the NAME of another person on the list (an errand: a word carried, not an object)',
+      `      {"place": …}   for visit — one of ${LOCATIONS.join(" | ")}`,
+      "    n: how many to catch, 1-20. Always 1 for deliver and visit.",
+      "    title: what the board row reads, <=48 characters of plain text. Name the WORK, not ONE address —",
+      "      any place of the kind named finishes a visit, so a title promising a particular one can mislead.",
+      "    NEVER write money, pay, a price, a reward or experience. The game decides what work is worth.",
+      "- lines: what somebody standing in a place says, keyed so the right line reaches the right moment.",
+      "    Each is {at, when, r, text} plus an optional topic.",
+      `    at: one of ${LOCATIONS.join(" | ")} — the handle beside each place below.`,
+      `    when: one of ${DAYPARTS.join(" | ")}.`,
+      `    r: ${REGISTERS[0]} (they barely know you) or ${REGISTERS[1]} (they do).`,
+      "    topic (optional): rumor or work. Leave it off for anything else.",
+      "    text: ONE spoken line, <=200 characters. No name tags, no quotation marks, no stage directions.",
+      "    Cover the places and hours somebody would actually be there; write more friend lines than you",
+      "    think you need, because that register is where the settlement stops sounding like a signpost.",
+      "- escalation: ONE line per person, {npc, text}: the thing they say when the player asks properly",
+      "    about the unresolved situation above — the door, not what is behind it. Keep it withholding.",
+      "- overheard: {at, text} — half of somebody else's conversation, heard in passing. Nobody answers it.",
+      "",
+      "Everything is in the player's language. Write people who want things and are inconvenient about it.",
+    ].join("\n");
+  }
+
+  /** The advisory schema. Property order is the emission order the guidance asks
+   *  for out loud, for the same reason and with the same standing: a hint, not a
+   *  guarantee. `strictSchema` is NEVER SET on this call and stays false — it is
+   *  unavailable to additionalProperties schemas and this is one, so the tolerant
+   *  parser is the contract and validate() is the enforcement. */
+  function schema() {
+    const text = (maxLength) => ({ type: "string", maxLength });
+    return {
+      type: "object",
+      properties: {
+        templates: {
+          type: "array",
+          maxItems: CAPS.templates,
+          items: {
+            type: "object",
+            properties: {
+              slug: text(CAPS.slug),
+              giver: text(24),
+              verb: { type: "string", enum: VERBS },
+              target: {
+                type: "object",
+                properties: {
+                  role: { type: "string", enum: PF.economy.CATCH_ROLES },
+                  variant: text(CAPS.slug),
+                  npc: text(24),
+                  place: { type: "string", enum: LOCATIONS },
+                },
+              },
+              n: { type: "integer", minimum: 1, maximum: CAPS.n },
+              title: text(CAPS.title),
+            },
+            required: ["giver", "verb", "target", "title"],
+          },
+        },
+        lines: {
+          type: "array",
+          maxItems: CAPS.lines,
+          items: {
+            type: "object",
+            properties: {
+              at: { type: "string", enum: LOCATIONS },
+              when: { type: "string", enum: DAYPARTS },
+              r: { type: "string", enum: REGISTERS },
+              text: text(CAPS.text),
+              topic: { type: "string", enum: TOPICS },
+            },
+            required: ["at", "when", "r", "text"],
+          },
+        },
+        escalation: {
+          type: "array",
+          maxItems: CAPS.escalation,
+          items: {
+            type: "object",
+            properties: { npc: text(24), text: text(CAPS.text) },
+            required: ["npc", "text"],
+          },
+        },
+        overheard: {
+          type: "array",
+          maxItems: CAPS.overheard,
+          items: {
+            type: "object",
+            properties: { at: { type: "string", enum: LOCATIONS }, text: text(CAPS.text) },
+            required: ["at", "text"],
+          },
+        },
+      },
+      required: ["templates", "lines"],
+    };
+  }
+
+  return {
+    VERSION,
+    BOARD,
+    LOCATIONS,
+    DAYPARTS,
+    REGISTERS,
+    WEATHERS,
+    TOPICS,
+    VERBS,
+    MECHANICS,
+    TARGET_GRAINS,
+    CAPS,
+    TUNING,
+    idOf,
+
+    // ── The shared matcher predicate (plan §2.2d, round-3 dryness D4) ─────────
+    /** Does this yield answer that quest row's target? ONE implementation, three
+     *  callers: the seal validator (through the grain check), the default-pack
+     *  boot lane, and — when the lifecycle slice lands it — fish()'s granted
+     *  region. Three copies of this is how a role-grain quest comes to count a
+     *  variant-grain catch in one place and not another.
+     *
+     *  `target` is the quest ROW's own target string, because that is all the
+     *  progress site ever has: the row is a closed 8-field literal and `target`
+     *  is a plain string in it. The grain is recoverable from the string alone
+     *  because the two namespaces are ASSERTED DISJOINT at the foot of this file
+     *  — no catch role is ever also a variant slug, in any theme this build
+     *  ships. Role grain matches ANY yield of that role; variant grain matches the
+     *  exact (t, k) pair, which is what stops a bait row whose slug collided with
+     *  a fish from paying a fishing quest. */
+    matches(target, item) {
+      const want = str(target);
+      if (!want) return false;
+      const t = str(item?.t);
+      const k = str(item?.k);
+      if (!t) return false;
+      if (PF.economy.CATCH_ROLES.includes(want)) return t === want;
+      return k === want && PF.economy.CATCH_ROLES.includes(t);
+    },
+
+    /** The string a template's grain-tagged target becomes when a row is minted
+     *  from it. Role and variant flatten to the bare word the matcher reads; npc
+     *  and place flatten to the name the deliver/visit sites compare. */
+    targetString(template) {
+      const target = template?.target;
+      if (!target || typeof target !== "object") return "";
+      for (const grain of TARGET_GRAINS) {
+        const value = str(target[grain]);
+        if (value) return value;
+      }
+      return "";
+    },
+
+    // ── The reward, derived (plan §2.6, RULED) ───────────────────────────────
+    /** What a template's (verb, n) is worth, and the ONLY place in the package a
+     *  quest reward number is minted. The pack never authors one — the schema
+     *  excludes money and xp and the seal drops both — so a row's `r` is a
+     *  function of two fields this build already trusts.
+     *
+     *  xp IS ZERO BY CONSTRUCTION AND NOT BY A ZERO IN A TABLE. Quests never
+     *  grant skill experience (the maintainer's reward ruling): a catch quest
+     *  levels fishing because the CATCHING does, through fish()'s own award, and
+     *  the quest's reward is money and the giver's rapport. The wire field stays
+     *  — the row is a closed eight-field literal and dropping `xp` would be a
+     *  format change for nothing — but there is no reward row to read it from and
+     *  no path here that can write it non-zero. The completion site passes no
+     *  verb to award(), which drops a hostile row's planted xp at the gate; this
+     *  is the half that makes an honest row's xp zero in the first place.
+     *
+     *  A verb with no row — one this build cannot mint anyway — is worth nothing
+     *  rather than a default, and the lookup is an own-key one because `verb` is
+     *  a string off a stored artifact (00-prelude says why once). */
+    rewardFor(verb, n) {
+      const row = PF.own(TUNING.reward, str(verb));
+      if (!row) return { money: 0, xp: 0 };
+      const count = PF.clamp(Math.round(Number(n) || 1), 1, CAPS.n);
+      return { money: row.base + row.per * count, xp: 0 };
+    },
+
+    // ── Instance identity (plan §2.2c) ───────────────────────────────────────
+    /** `b1.d<day>.<templateId>` — deterministic per (board, day, template), so a
+     *  rewind that replays the same day mints the same id and the same-day dup
+     *  accept refuses by id inside the mutator. The template rides IN the id
+     *  because the completion counter is keyed by template and the row does not
+     *  carry one. */
+    instanceId(day, templateId) {
+      const id = str(templateId);
+      if (!id) return "";
+      return `${BOARD}.d${Math.max(0, Math.trunc(Number(day) || 0))}.${id}`;
+    },
+
+    /** The template half of a board instance id, or null when the id is not one.
+     *  Used by the template-grain dedupe (58-player `_dedupeActive`) and by any
+     *  reader that has a row and wants its title. */
+    templateOf(instanceId) {
+      const match = /^b1\.d\d+\.(.+)$/.exec(str(instanceId));
+      return match ? match[1] : null;
+    },
+
+    // ── validate(): the seal (the brief's repair-pass idiom) ─────────────────
+    /** Runs ONCE, on the way in from the generation call, and seals. Item-level
+     *  repair: a row this build cannot make sense of is DROPPED with a line in
+     *  `_repairs` rather than poisoning the artifact, exactly as an unknown
+     *  feature tag drops a whole feature at 18-brief's seal.
+     *
+     *  Returns null when the result is under the substance floor — that is a
+     *  FAILURE and not a thin success: the gate holds, the retry screen says the
+     *  world is safe, and nothing is written. A pack is the one artifact whose
+     *  absence is survivable (the default pack reads in its place), so sealing a
+     *  hollow one would trade a free retry for a permanent nothing. */
+    validate(raw, { theme: rawTheme, seed, brief }) {
+      const repairs = [];
+      const themeIds = PF.art?.themeIds?.() ?? ["cozy-village"];
+      const theme = themeIds.includes(rawTheme) ? rawTheme : "cozy-village";
+      const src = raw && typeof raw === "object" && !Array.isArray(raw) ? raw : {};
+      if (src !== raw) repairs.push("transport: non-object root replaced");
+      const briefHash = PF.player.briefHashOf(brief);
+      const packId = idOf(briefHash);
+      // The cast is the fence: a giver has to be somebody the brief SEALED, by
+      // name, or the board can offer work from a person who does not exist. This
+      // is what makes a mint-parked board row structurally impossible.
+      const cast = new Set(
+        (Array.isArray(brief?.cast) ? brief.cast : []).map((member) => str(member?.name)).filter(Boolean),
+      );
+      const pack = {
+        packVersion: VERSION,
+        theme,
+        briefHash,
+        templates: [],
+        lines: [],
+        escalation: [],
+        overheard: [],
+      };
+      const usedSlugs = new Set();
+
+      for (const item of asArray(src.templates)) {
+        if (pack.templates.length >= CAPS.templates) {
+          repairs.push(`templates: over ${CAPS.templates}, dropped the rest`);
+          break;
+        }
+        const row = this.foldTemplate(item, { cast, theme, packId, usedSlugs, repairs, index: pack.templates.length });
+        if (row) pack.templates.push(row);
+      }
+
+      for (const item of asArray(src.lines)) {
+        if (pack.lines.length >= CAPS.lines) {
+          repairs.push(`lines: over ${CAPS.lines}, dropped the rest`);
+          break;
+        }
+        const text = capText(item?.text, CAPS.text);
+        if (!text) continue;
+        const at = foldEnum(item?.at, LOCATIONS, null);
+        const when = foldEnum(item?.when, DAYPARTS, null);
+        const register = foldEnum(item?.r ?? item?.register, REGISTERS, null);
+        if (!at || !when || !register) {
+          repairs.push(`lines[${pack.lines.length}]: dropped, unusable index key`);
+          continue;
+        }
+        const line = { at, when, r: register, text };
+        // The weather word is optional and the topic tag is optional, and an
+        // ABSENT one stays absent: writing the default in would spend bytes
+        // saying what the reader already reads, and it would make a line that
+        // never chose a topic indistinguishable from one that chose "none".
+        const weather = foldEnum(item?.w ?? item?.weather, WEATHERS, null);
+        if (weather) line.w = weather;
+        const topic = foldEnum(item?.topic, TOPICS, null);
+        if (topic) line.topic = topic;
+        pack.lines.push(line);
+      }
+
+      for (const item of asArray(src.escalation)) {
+        if (pack.escalation.length >= CAPS.escalation) break;
+        const npc = capText(item?.npc ?? item?.name, 24);
+        const text = capText(item?.text, CAPS.text);
+        if (!text) continue;
+        if (!cast.has(npc)) {
+          repairs.push(`escalation: dropped a line for ${JSON.stringify(npc || null)}, who is not in the cast`);
+          continue;
+        }
+        pack.escalation.push({ npc, text });
+      }
+
+      for (const item of asArray(src.overheard)) {
+        if (pack.overheard.length >= CAPS.overheard) break;
+        const text = capText(item?.text, CAPS.text);
+        if (!text) continue;
+        const at = foldEnum(item?.at, LOCATIONS, null);
+        if (!at) continue;
+        const row = { at, text };
+        const topic = foldEnum(item?.topic, TOPICS, null);
+        if (topic) row.topic = topic;
+        pack.overheard.push(row);
+      }
+
+      // THE FLOOR, and nothing below it seals. Stated in numbers from TUNING so a
+      // retune moves the boundary in one place (and so the failure line says which
+      // half was thin, which is the difference between a bug report and a shrug).
+      if (pack.templates.length < TUNING.floorTemplates || pack.lines.length < TUNING.floorLines) {
+        console.warn(
+          `[pixelforge] the content pack came back under its floor (${pack.templates.length}/${TUNING.floorTemplates} templates, ` +
+            `${pack.lines.length}/${TUNING.floorLines} lines); nothing sealed`,
+        );
+        return null;
+      }
+      // ── BACKFILL, AFTER THE FLOOR AND NEVER BEFORE IT (plan §2.2b) ──────────
+      // The rule is that backfill may cover a small gap in a pack that is already
+      // substantive and may never be the thing that got a pack over the line. A
+      // pack that needed topping up to pass would be a hollow one sealed forever
+      // with our own words in it, which is exactly the trade the floor exists to
+      // refuse.
+      //
+      // WHAT MAKES THAT TRUE IS FIELD DISJOINTNESS, NOT THIS ORDERING. The floor
+      // above reads `templates` and `lines`; the backfill below writes `overheard`
+      // and nothing else, so moving these two blocks past each other would not
+      // change a verdict — the sections do not overlap. The order still belongs
+      // here because it states the rule where a reader meets it, and because the
+      // day somebody widens the backfill is the day the order becomes the only
+      // thing standing between a hollow pack and a permanent seal.
+      //
+      // AND IT IS SCOPED TO `overheard`, WHICH IS THE ONLY SECTION THAT CAN
+      // HONESTLY TAKE IT. Templates and the line index are the floor's own two
+      // halves — the load-bearing ones — and topping either up would be stock
+      // content pretending to be this world's. `escalation` cannot take it
+      // either, for the content fence's reason: those rows name a PERSON, and
+      // the only names the fallback has are the four stock residents this world
+      // has never heard of. Overheard is the one pool with no speaker in it —
+      // half a conversation, keyed to a place and attributed to nobody — so the
+      // fallback's rows are as true in a generated settlement as in a default
+      // one, and a world with none of them has a real hole where E1's ambience
+      // goes.
+      if (pack.overheard.length === 0) {
+        pack.overheard = this.defaults(theme).overheard;
+        repairs.push("overheard: empty, backfilled from the default pack");
+      }
+      pack._repairs = repairs;
+      // `seed` stays reserved. The backfill that came did not need entropy — it
+      // copies a fixed pool wholesale rather than choosing from one — and a seed
+      // spent to shuffle rows a later reader will hash over anyway would be
+      // determinism theatre.
+      void seed;
+      return pack;
+    },
+
+    /** One template row, repaired or dropped. Split out of validate() because the
+     *  default-pack lane drives it too — the hand-authored artifact goes through
+     *  the same door the model's does, which is the only way "written to the same
+     *  schema" can be a fact rather than an intention. */
+    foldTemplate(item, { cast, theme, packId, usedSlugs, repairs, index }) {
+      const say = (text) => repairs?.push(`templates[${index}]: ${text}`);
+      const giver = capText(item?.giver, 24);
+      // GIVER ∈ THE SEALED CAST, for `p:` rows without exception (round-3 fresh
+      // M2a). A giver the brief never named is a row that can only ever be
+      // mint-parked or repair-dropped the first time the world is rebuilt, which
+      // is a quest that exists to be lost.
+      if (!giver || !cast.has(giver)) {
+        say(`dropped, giver ${JSON.stringify(giver || null)} is not in the sealed cast`);
+        return null;
+      }
+      const asked = foldEnum(item?.verb, VERBS, null);
+      if (!asked) {
+        say(`dropped, verb ${JSON.stringify(str(item?.verb) || null)} is not one this build can verify`);
+        return null;
+      }
+      const verb = VERB_FOLD[asked] ?? asked;
+      if (verb !== asked) say(`verb ${asked} -> ${verb}`);
+      const target = this.foldTarget(item?.target, verb, { cast, theme });
+      if (!target) {
+        say(`dropped, ${verb} has no target this world can resolve`);
+        return null;
+      }
+      const slugSource = str(item?.slug) || str(item?.id) || `${verb}-${this.targetString({ target })}`;
+      let slug = slugify(slugSource, CAPS.slug) || `${verb}-${index}`;
+      // The id space is the counter's key space, so a duplicate slug is two rows
+      // sharing one completion count. Ordinal-suffixed rather than dropped: the
+      // row is otherwise good and the player never sees the slug.
+      let attempt = 2;
+      while (usedSlugs.has(slug)) slug = `${slugify(slugSource, CAPS.slug) || verb}-${attempt++}`;
+      usedSlugs.add(slug);
+      const n = verb === "catch" ? PF.clamp(Math.round(Number(item?.n) || 1), 1, CAPS.n) : 1;
+      return {
+        id: packTemplateId(packId, slug),
+        giver,
+        verb,
+        target,
+        n,
+        // A TITLE IS PLAIN TEXT AND CLIPS SAFE. It renders in a board row and in
+        // the quest tab through the same shared renderer, so anything that could
+        // reflow a row is stripped at the seal rather than at every read.
+        title: capText(item?.title, CAPS.title) || `${verb} ${this.targetString({ target })}`,
+      };
+    },
+
+    /** The grain-tagged target, bound to the verb that can use it. Returns null
+     *  when nothing resolves — the caller drops the row.
+     *
+     *  THE VERB IS A KEY OFF AN UNTRUSTED STRING, so the lookup goes through
+     *  `PF.own` (00-prelude says why once for the whole package). A bare
+     *  `GRAINS_FOR_VERB[verb]` handed back Object.prototype for "__proto__" and a
+     *  function for "constructor" or "toString" — all of them non-nullish, so the
+     *  `??` could not fire and the `for…of` under it threw "allowed is not
+     *  iterable" instead of refusing the row. An unknown verb and a hostile one
+     *  are the same answer here: no allowed grain, nothing resolves, null. */
+    foldTarget(raw, verb, { cast, theme }) {
+      const allowed = PF.own(GRAINS_FOR_VERB, verb) ?? [];
+      const source = raw && typeof raw === "object" ? raw : null;
+      const bare = str(raw);
+      for (const grain of allowed) {
+        const value = capText(source ? source[grain] : grain === allowed[0] ? bare : "", CAPS.slug);
+        if (!value) continue;
+        if (grain === "role" && !PF.economy.CATCH_ROLES.includes(value)) continue;
+        if (grain === "variant" && !this.variantsOf(theme).has(value)) continue;
+        if (grain === "npc" && !cast.has(value)) continue;
+        if (grain === "place" && !LOCATIONS.includes(value)) continue;
+        return { [grain]: value };
+      }
+      // A bare string against the catch family: the grain is recoverable because
+      // the namespaces are disjoint, so a model that wrote `target: "carp"` is
+      // answered rather than dropped over a wrapper it did not know to write.
+      if (verb === "catch" && bare) {
+        const word = capText(bare, CAPS.slug);
+        if (PF.economy.CATCH_ROLES.includes(word)) return { role: word };
+        if (this.variantsOf(theme).has(word)) return { variant: word };
+      }
+      return null;
+    },
+
+    /** Every variant slug a theme's catch tables name. Cheap enough to recompute
+     *  and deliberately not cached: the tables are a module constant, and a cache
+     *  keyed by theme is one more thing to invalidate for nothing. */
+    variantsOf(theme) {
+      const byTag = PF.own(PF.economy.CATCH_TABLES, theme) ?? PF.economy.CATCH_TABLES["cozy-village"];
+      const slugs = new Set();
+      for (const table of Object.values(byTag ?? {})) for (const entry of table) slugs.add(entry.variant);
+      return slugs;
+    },
+
+    // ── fold(): the READ side (plan §2.2d) ───────────────────────────────────
+    /** What THIS world can actually offer, derived once per install or rebuild and
+     *  never saved. Three things happen here and nothing else does:
+     *
+     *  1. DEMOTION. The pack carries the briefHash it sealed against; a mismatch
+     *     means the world under it changed, and the SELECTABLE SET falls back to
+     *     the default pack. It touches nothing else: live quest rows stay, render
+     *     through the shared fallback, complete and abandon normally, and sever
+     *     and repair exactly as before. A demotion is a content fact, not a save
+     *     event.
+     *  2. THE SELECTABLE SET, through `foldStoredTemplate` — the row-level door
+     *     where a stored template is answered for in full. Never offered is never
+     *     accepted is never repair-dropped, so the dangling row the repair pass
+     *     exists to catch is one this set can no longer mint.
+     *  3. THE SORTED IDS. The daily selection hashes over the SORTED SET of
+     *     surviving ids and never over post-fold ordinals, so what a given day
+     *     offers is a function of the surviving SET and not of the order the
+     *     artifact happens to list it in: two builds that fold the same templates
+     *     out of the same pack post the same board on day 12, whatever order the
+     *     stored array or a re-serialization put them in.
+     *
+     *     What it deliberately does NOT buy is stability across a CHANGE of that
+     *     set. The selection is a Fisher-Yates shuffle of the whole pool, so a
+     *     template folding out shortens the pool and reshuffles it — every day's
+     *     offers move, not just the ones that template was on. That is benign and
+     *     of a piece with a demotion: both are content facts, neither touches a
+     *     live row, and a board the player has not walked up to yet owes them no
+     *     particular day.
+     */
+    fold(stored, { brief, world }) {
+      const theme = str(world?.theme) || "cozy-village";
+      const briefHash = PF.player.briefHashOf(brief);
+      // A PACK IS SEALED AGAINST A BRIEF, AND HASH ZERO IS NOT A BRIEF. It is what
+      // `briefHashOf` answers for a world that has none, and it is the DEFAULT
+      // pack's own sentinel (below) — so on a brief-less world the equality would
+      // hold for any artifact carrying the sentinel, and a foreign or hand-written
+      // pack would adopt as that world's own sealed content. Never-sealed is the
+      // only honest reading of a hash that means "there was nothing to hash".
+      const sealed =
+        briefHash !== 0 &&
+        stored &&
+        typeof stored === "object" &&
+        Array.isArray(stored.templates) &&
+        stored.briefHash === briefHash
+          ? stored
+          : null;
+      const demoted = !!stored && !sealed;
+      const pack = sealed ?? this.defaults(theme);
+      const known = new Set();
+      for (const zoneId of Object.keys(world?.zones ?? {})) {
+        for (const npc of world.zones[zoneId]?.npcs ?? []) if (npc?.name) known.add(npc.name);
+      }
+      const byId = new Map();
+      for (const template of pack.templates) {
+        const row = this.foldStoredTemplate(template, { known, theme });
+        if (row) byId.set(row.id, row);
+      }
+      return {
+        pack,
+        source: sealed ? "sealed" : "default",
+        demoted,
+        // WHO STANDS IN THIS WORLD, kept rather than thrown away. It is built
+        // here anyway (the giver fence above spends it once per template), it is
+        // rebuilt exactly when the world is, and the completion path needs the
+        // same answer for one name: is there anybody left to file this under and
+        // to thank. 58-player's repair pass builds its own copy on purpose — that
+        // one runs BEFORE there is a sim to hang a fold on.
+        known,
+        byId,
+        ids: [...byId.keys()].sort(),
+        // Memo slot for the daily selection, keyed by day (see selection()).
+        _day: -1,
+        _offers: [],
+      };
+    },
+
+    /** ONE STORED TEMPLATE, ANSWERED FOR AT THE READ DOOR — the pack's twin of
+     *  18-brief `foldStored` (#566), and it exists for that seam's exact reason:
+     *  validate()'s guarantees are SEAL-TIME and do not survive the round trip
+     *  through chat metadata. THE STORED PACK IS UNTRUSTED HERE. It reaches this
+     *  door from a forward-build client (the schema widens — L2's weather word,
+     *  pack-v2 — and an older client keeps carrying the key by design), from
+     *  another device, and from a hand-edited or foreign chatMeta; and every field
+     *  below is one this build then SPENDS: `verb` picks which progress site
+     *  advances the row, `target` flattens to the bare string the matcher reads,
+     *  `n` is a number a player is asked to reach, `title` renders into a board
+     *  row and the quest tab.
+     *
+     *  THE SEAM POSTURE IS #566'S, unchanged: seal time may DROP, read time may
+     *  only FOLD. So a STRUCTURAL failure — a verb with no site, no single
+     *  resolvable grain, a giver nobody stands up — folds the row OUT of the
+     *  selectable set, which costs this world an offer and costs the artifact
+     *  nothing; and SCALAR excess CLAMPS and CLIPS rather than costing the row.
+     *
+     *  `gather` FOLDS TO `catch` HERE TOO, and that is a deliberate call rather
+     *  than an oversight: the word is a synonym for the mechanic, the seal already
+     *  answers it that way, and the fold is one own-key lookup. A row that reached
+     *  storage unfolded — sealed by a build whose table read differently, or
+     *  hand-written — is answered rather than dropped over a word.
+     *
+     *  AND IT ALWAYS RETURNS A COPY, never the stored object. The row it hands
+     *  back is the closed six-field shape validate() emits, so a stored `r` (the
+     *  reward the schema excludes and TUNING derives) or any other key a hostile
+     *  save invented is UNREACHABLE from everything downstream, rather than riding
+     *  into the offer layer on an object nobody re-read. */
+    foldStoredTemplate(stored, { known, theme }) {
+      if (!stored || typeof stored !== "object") return null;
+      const id = str(stored.id);
+      if (!id) return null;
+      // The giver fence, and it is the same one the seal applies one release
+      // earlier: work is offered by somebody standing in this world or by nobody.
+      const giver = str(stored.giver);
+      if (!known.has(giver)) return null;
+      const asked = str(stored.verb);
+      const verb = PF.own(VERB_FOLD, asked) ?? asked;
+      // THE MECHANICS ENUM, NOT THE WIDER SEAL-ACCEPT ONE. `VERBS` is what a
+      // generation call may WRITE; MECHANICS is what this build can VERIFY, and a
+      // row it cannot verify could only ever be accepted and then never completed.
+      //
+      // It is a LIST MEMBERSHIP TEST and not a table lookup, and that is the point
+      // of the pattern rather than an accident of it: `verb` here is a string off a
+      // hand-edited or foreign artifact, and this door's own header calls the stored
+      // pack untrusted. `foldTarget` below refuses the same rows a step later — an
+      // unknown verb has no grain bound to it either, hostile ones included now that
+      // its lookup is an own-key one — so this line is the statement of the rule and
+      // that one is the enforcement. Both are wanted: the day GRAINS_FOR_VERB gains
+      // an entry MECHANICS has not is the day the pair stops agreeing, and until
+      // then a verb naming an inherited property is refused twice rather than once.
+      if (!MECHANICS.includes(verb)) return null;
+      // THE GRAIN RULE IS THE SEAL'S OWN, CALLED HERE — not a second copy written
+      // to look like it. Same grain-to-verb binding, same role/variant/place
+      // vocabularies, same first-allowed-grain-that-resolves answer for a row that
+      // tagged two, and the same CAPS.slug clip on the value. A private copy of
+      // this is exactly how a row comes to resolve one way at the seal and another
+      // at the read; the only argument it takes differently is the cast, and that
+      // difference IS the read side — the seal asks who the brief named, this asks
+      // who is standing in the world about to offer the work.
+      const target = this.foldTarget(stored.target, verb, { cast: known, theme });
+      if (!target) return null;
+      return {
+        id,
+        giver,
+        verb,
+        // A fresh one-grain object out of foldTarget, so a second key beside the
+        // grain — a forward build's, a hostile save's — cannot ride into the row.
+        target,
+        // THE SEAL'S OWN ARITHMETIC, not a second one written to look like it: a
+        // counting verb clamps into [1, CAPS.n] and a non-counting one is always
+        // one. Two doors doing different sums is how a stored row comes to ask for
+        // a number this build's own seal could never have written.
+        n: verb === "catch" ? PF.clamp(Math.round(Number(stored.n) || 1), 1, CAPS.n) : 1,
+        // …and the seal's own text hygiene, through the SAME helper rather than a
+        // fork of it: a title is plain text that clips safe, because it renders in
+        // a board row and anything that could reflow one is stripped at a door
+        // rather than at every read.
+        title: capText(stored.title, CAPS.title) || `${verb} ${this.targetString({ target })}`,
+      };
+    },
+
+    // ── The daily selection (plan §2.2d) ─────────────────────────────────────
+    /** The K templates today's board offers: `hash(seed, day, "b1")` over the
+     *  SORTED surviving ids, memoised by day. Deterministic across processes and
+     *  across a rewind — the board a player saw on day 12 is the board day 12
+     *  always had, whatever they have accepted since. */
+    selection(folded, seed, day) {
+      if (!folded || !folded.ids.length) return [];
+      const at = Math.max(0, Math.trunc(Number(day) || 0));
+      if (folded._day === at) return folded._offers;
+      const rng = PF.rng(PF.hashStr(`${seed >>> 0}|${at}|${BOARD}`));
+      const pool = [...folded.ids];
+      // Fisher-Yates against the seeded stream, then take the first K: a shuffle
+      // rather than K draws, so the same template cannot be offered twice on one
+      // day however small the surviving set is.
+      for (let i = pool.length - 1; i > 0; i--) {
+        const j = (rng() * (i + 1)) | 0;
+        const swap = pool[i];
+        pool[i] = pool[j];
+        pool[j] = swap;
+      }
+      folded._day = at;
+      folded._offers = pool.slice(0, Math.min(TUNING.K, pool.length)).map((id) => folded.byId.get(id));
+      return folded._offers;
+    },
+
+    // ── THE SHARED ROW RENDERER (plan §2.4) ──────────────────────────────────
+    /** ONE quest row as one line of plain text, and the ONE function that turns a
+     *  row into words anywhere in the package. The board's jobs section renders
+     *  through it and the quest tab renders through it VERBATIM — §2.4's own
+     *  sentence, and the reason there is no board-shaped branch anywhere below.
+     *
+     *  THE TITLE IS A LOOKUP AND THE FALLBACK IS A SYNTHESIS. A board instance id
+     *  carries its template (`b1.d<day>.<id>`), so the pack that is folded right
+     *  now can be asked what it called the work; and when it cannot answer — a
+     *  demoted world, a row minted from a template that has since folded out, a
+     *  save carried in from somewhere else — the row's own eight fields say the
+     *  same thing mechanically: "Catch 5 carp — 3/5 — for Alder Vance". A missing
+     *  title is a plainer line, never a blank one, because the row is a live
+     *  object the player is carrying and it has to be legible without its pack.
+     *
+     *  THE MIDDLE CLAUSE IS VERB-AWARE, and the fraction is the COUNTING verb's
+     *  alone. `deliver` and `visit` are n = 1 by construction (the seal and the
+     *  read door both write it), so "0/1" would be a progress bar for a thing
+     *  that has no progress — it is either done or it is a walk you have not
+     *  taken yet, and the words say which.
+     *
+     *  `folded` is optional: a caller with no fold in its hand (a band notice, a
+     *  test) still gets the mechanical line rather than an exception. */
+    rowText(row, folded) {
+      const verb = str(row?.verb);
+      const target = str(row?.target);
+      const counting = verb === "catch";
+      const n = PF.clamp(Math.round(Number(row?.n) || 1), 1, CAPS.n);
+      const have = PF.clamp(Math.round(Number(row?.have) || 0), 0, n);
+      const template = this.templateOf(row?.id);
+      const titled = template ? capText(folded?.byId?.get(template)?.title, CAPS.title) : "";
+      // The mechanical shape, per verb: what the row IS, and what is outstanding
+      // on it. Read as a table rather than as a chain of ternaries in the join,
+      // because the fourth arm is the one that matters and a chain hides it.
+      const named = target || "something";
+      const shape = counting
+        ? { lead: `Catch ${n} ${named}`, middle: `${have}/${n}` }
+        : verb === "deliver"
+          ? { lead: `Take word to ${named}`, middle: `waiting on the handover to ${named}` }
+          : verb === "visit"
+            ? { lead: `Go to ${named}`, middle: `travel to ${named}` }
+            : // A VERB NO SITE IN THIS BUILD ADVANCES. Nothing here can mint one
+              // — the seal's enum and the read door both refuse it — but a
+              // hostile save or a forward build's row carries whatever it likes
+              // and `quest("accept")` stores the word as given. So the line says
+              // the two things it can stand behind, who and what, and claims
+              // neither progress nor a mechanic it cannot name. Falling through
+              // to the visit arm instead would print "travel to" over a row
+              // nothing will ever complete.
+              { lead: named, middle: "" };
+      const giver = PF.player.giverOf(row?.g);
+      return [titled || shape.lead, shape.middle, giver ? `for ${giver}` : ""].filter(Boolean).join(" — ");
+    },
+
+    // ── defaults(): the pack a world with none reads instead ─────────────────
+    /** A READ-TIME FALLBACK ONLY. It is never sealed, never stored, and never the
+     *  answer to a failed generation — a failure holds the gate and offers a
+     *  retry, exactly as 18-brief's ladder refuses to seal a themed default brief.
+     *  What it serves is the two chats that legitimately have no pack of their
+     *  own: one whose generation was declined ({skipped:true}) and one created
+     *  before this release, plus the demotion case above.
+     *
+     *  A DEEP COPY per call, because the fold hands `pack` to readers and a shared
+     *  literal would let one world's reader mutate every other world's fallback. */
+    defaults(theme) {
+      const book = PF.own(DEFAULT_PACKS, theme) ?? DEFAULT_PACKS["cozy-village"];
+      return JSON.parse(JSON.stringify(book));
+    },
+
+    // ── THE BOARD (plan §2.1) ────────────────────────────────────────────────
+    // The pack's own reading surface, and it lives HERE rather than beside the
+    // economy's verbs for one reason: every number and every identity it spends
+    // is in this file. K, the reward derivation, the instance id, the daily
+    // selection, the template caps and the board constant are all above, and a
+    // board written one module along would reach across for the lot of them.
+    //
+    // The SHAPE is 59-economy's, exactly: an OFFER that describes and never
+    // mutates, and VERBS that go through the shipped mutators in an order that
+    // cannot half-pay anybody. What is different is the cadence — a board is read
+    // at menu-open and at each press, never per frame, so `boardOffers` is free to
+    // walk the day's selection and the active list rather than having to be cheap
+    // enough for sixty calls a second.
+
+    /** THE DAY'S RECEIPT: which templates have already been FILLED today.
+     *
+     *  ONE COMPLETION PER TEMPLATE PER DAY, uniformly. The board posts a day's
+     *  work and filling it fills it — without the rule, accept → complete →
+     *  re-accept is legal on the same day, because a completed row leaves
+     *  `quests.active` and the dup check has nothing left to see while the
+     *  deterministic instance id re-mints unchanged. For a catch that is merely
+     *  odd (the work really does repeat); for `visit`, which completes on ENTRY,
+     *  it is a walk-in-circles coin loop, and a rule that held for one verb and
+     *  not the others would be a rule the player has to learn per row.
+     *
+     *  KEYED BY TEMPLATE AND NOT BY INSTANCE. An instance id carries its own day,
+     *  so a set of them would be day-scoped for free — and would miss the case
+     *  that matters most: a job taken on day 3 and handed in on day 9 is
+     *  `b1.d3.X`, while today's board is offering `b1.d9.X`. The work is the
+     *  template; the instance is one day's copy of it.
+     *
+     *  SIM-RESIDENT AND NOT SERIALIZED, deliberately, and the cost is stated
+     *  rather than hidden: a reload forgets the day's receipts, so a player who
+     *  reloads mid-day can fill the same template twice. That seam is acceptable
+     *  under the rolling-compat posture — the alternative is a new persisted
+     *  field on the save wire for a rule about one day — and it self-heals at
+     *  midnight. A rewind clears it too, which is the honest answer there: a
+     *  rewind that un-completes the quest should un-file its receipt with it, and
+     *  `_rebuild` replacing the sim wholesale does exactly that. */
+    filledToday(core) {
+      const sim = core?.sim;
+      if (!sim) return null;
+      const day = Math.max(0, Math.trunc(Number(sim.day) || 0));
+      // Rebuilt on the first read of a new day rather than cleared on a clock
+      // tick: the sim has no hook the pack could hang a midnight callback off,
+      // and a set that is rebuilt when it is asked for cannot be stale when it
+      // is read.
+      if (!sim._filled || sim._filled.day !== day) sim._filled = { day, templates: new Set() };
+      return sim._filled;
+    },
+
+    /** What this board is offering and what it is holding for you. Describes
+     *  only. Returns { available, reason, board, folded, day, offers, jobs }.
+     *
+     *  `offers` is one row per template in today's selection, each carrying the
+     *  STATE the menu renders it in: `open`, `taken` (accepted today — the day's
+     *  receipt, still on the board beside the live job), `filled` (completed
+     *  today — see filledToday), `dup` (a live row for the same template from an
+     *  earlier day), `at-cap` (nothing can be taken at all). The states are
+     *  answered here so the menu never has to work anything out, and re-answered
+     *  on every press so a two-press race cannot accept twice. */
+    boardOffers(core) {
+      const sim = core?.sim;
+      const no = (reason) => ({ available: false, reason, board: null, folded: null, day: 0, offers: [], jobs: [] });
+      if (!sim?.world) return no("no-world");
+      if (sim.mode !== "walk") return no("wrong-mode");
+      // The gate's own answer, on fishOffer's cadence: a world still being
+      // written has no work in it to read and no player block to write to.
+      if (PF.save?.gateHolds?.(core)) return no("gate-held");
+      if (!sim.nearBoard) return no("not-at-board");
+      const folded = PF.save.packFold(core);
+      if (!folded) return no("no-world");
+      const player = PF.player.get(core);
+      const jobs = Array.isArray(player?.quests?.active) ? player.quests.active : [];
+      const day = Math.max(0, Math.trunc(Number(sim.day) || 0));
+      const atCap = jobs.length >= PF.player.CAPS.activeQuests;
+      const live = new Set(jobs.map((q) => str(q.id)));
+      const liveTemplates = new Set(jobs.map((q) => this.templateOf(q.id)).filter(Boolean));
+      const filled = this.filledToday(core);
+      const offers = this.selection(folded, sim.world.seed, day).map((template) => {
+        const id = this.instanceId(day, template.id);
+        // TAKEN BEFORE FILLED BEFORE DUP BEFORE AT-CAP, and the order is the
+        // honest one: a row you took an hour ago should say so rather than
+        // blaming a full list, a row you FINISHED an hour ago should say that
+        // rather than that you are on it, and a full list is only the reason you
+        // cannot take work you have not already got.
+        const state = live.has(id)
+          ? "taken"
+          : filled.templates.has(template.id)
+            ? "filled"
+            : liveTemplates.has(template.id)
+              ? "dup"
+              : atCap
+                ? "at-cap"
+                : "open";
+        return { template, id, state, reward: this.rewardFor(template.verb, template.n) };
+      });
+      return { available: true, reason: null, board: sim.nearBoard, folded, day, offers, jobs };
+    },
+
+    /** Take one of today's offers. Every effect goes through a shipped mutator,
+     *  in an order that cannot leave a half-taken job:
+     *    1. RE-READ the board (the menu's copy is a press old — the player may
+     *       have walked away, filled their list, or taken this very row on the
+     *       button beside it);
+     *    2. `quest("accept")` — the row. Its `r` is copied in HERE, off TUNING's
+     *       derivation, so a later retune moves future accepts only and the deal
+     *       the player took is the deal they are paid (§2.6);
+     *    3. `log()` — the day-ledger line, event-side and at the event's day.
+     *  No bump: taking work is not yet a favour done.
+     *  Returns { ok, reason, id, title, reward }. */
+    accept(core, templateId, gen) {
+      const view = this.boardOffers(core);
+      if (!view.available) return { ok: false, reason: view.reason, id: "", title: "", reward: null };
+      const offer = view.offers.find((row) => row.template.id === str(templateId));
+      if (!offer) return { ok: false, reason: "not-offered", id: "", title: "", reward: null };
+      if (offer.state !== "open")
+        return { ok: false, reason: offer.state, id: offer.id, title: offer.template.title, reward: null };
+      const sim = core.sim;
+      const template = offer.template;
+      const taken = PF.player.quest(
+        core,
+        "accept",
+        {
+          id: offer.id,
+          // The row's `g` is `zoneId|Name` and the zone is the SETTLEMENT root —
+          // the key every rel row in the package already uses, so one person is
+          // one row wherever in the world you meet them.
+          g: `${sim.world.startZone}|${template.giver}`,
+          verb: template.verb,
+          target: this.targetString(template),
+          n: template.n,
+          r: offer.reward,
+          day: view.day,
+        },
+        gen,
+      );
+      // The fence, the gate, or a chat switch under us. The mutator is the first
+      // thing here that can refuse and nothing after it has run.
+      if (!taken) return { ok: false, reason: "refused", id: offer.id, title: template.title, reward: null };
+      PF.player.log(core, `Took work from ${template.giver}: ${template.title}.`, view.day, gen);
+      return { ok: true, reason: null, id: offer.id, title: template.title, reward: offer.reward };
+    },
+
+    // ── THE LINE DIET (plan §2.3), and this is where its writers live ────────
+    // ONE LINE PER ACCEPT (accept, above), ONE PER COMPLETION (settle, below),
+    // ONE PER ABANDON (`abandon`, below — the quest tab presses it) and ZERO PER
+    // PROGRESS. The last of those is the one worth stating: an increment is not an event the
+    // wrap-up should read out, and a session of fishing would otherwise file
+    // forty of them and evict the day it happened on.
+    //
+    // AND THE DAY CAN STILL OVERFLOW, which is accepted rather than solved. The
+    // honest sum on a board-heavy day is accepts (up to K) + carryover
+    // completions (up to the ten-quest cap) + abandons + the fishing verb's own
+    // lines + purchases, and that clears `CAPS.ledgerPerDay` (15) without being
+    // an unusual day at all. What the compaction then does is drop the day's
+    // EARLIEST lines, which is the right end to lose: the wrap-up is a story
+    // told at bedtime and the morning is what the player is furthest from
+    // remembering. Raising the cap would buy a longer tell out of the same
+    // #5135 budget the tell is already truncated against — so the cap stays and
+    // the loss is written down here instead of discovered in a playtest.
+    //
+    // EVERY ONE OF THEM IS FILED EVENT-SIDE, AT THE EVENT'S DAY. A job taken on
+    // day 3 and finished on day 9 is two lines under two days, and neither of
+    // them moves because the other happened.
+
+    /** THE COMPLETION ITSELF, and it is ONE function because there are now three
+     *  places a quest can finish: the board's hand-in press, the zone the `visit`
+     *  row named, and the handover a `deliver` errand ends at. Three copies of
+     *  this is how a completion comes to pay at one site and not bump at another,
+     *  or to file its line under the wrong day at the third.
+     *
+     *  The order is §2.1's press flow and cannot half-pay anybody:
+     *    1. CAPTURE the reward, the giver and the template BEFORE the splice.
+     *       The honest reason: `quest("complete")` splices the row out of
+     *       `quests.active`, and `row` here is an OBJECT REFERENCE, so reading
+     *       `r` off it afterwards still reads the reward — what is gone is the
+     *       row's place in the list, not its fields. What the order buys is that
+     *       nothing below has to go looking for it again: a re-find by id after
+     *       the splice finds nothing, and `template` is an argument to the call
+     *       itself and so could not be read later at all. The lane pins the
+     *       consequence rather than the ordering — the money and giver handed
+     *       back are the vanished row's fields, and a re-find would hand back
+     *       neither;
+     *    2. `quest("complete")` — the splice, the counter and the pay. NO VERB
+     *       reaches award() from here (§2.6, RULED): a quest pays money and
+     *       rapport and nothing else;
+     *    3. the DAY'S RECEIPT, so the same work cannot be filled twice today;
+     *    4. `log()` at the sim's day — EVENT-SIDE and at the EVENT's day, which
+     *       is what makes a job taken on day 3 and finished on day 9 read as two
+     *       lines in the right two places. The giver's name rides only when this
+     *       world still stands them up (the fold's `known` set), because a line
+     *       naming somebody the world cannot resolve is a line the wrap-up would
+     *       read out as fact;
+     *    5. `bump({t:1})` — the giver remembers, on the same settlement-scoped
+     *       key every other bump uses, and SKIPPED SILENTLY on the same miss.
+     *
+     *  `say` is the caller's own sentence, and it is a CALLBACK rather than a
+     *  string so the guard can decide the shape: it is handed the giver's name or
+     *  null and the money already worded by the theme, and hands back the line.
+     *  Returns { money, giver, template } or null when the mutator refused. */
+    settle(core, row, gen, say) {
+      const sim = core?.sim;
+      const world = sim?.world;
+      if (!world || !row) return null;
+      const money = Math.max(0, Math.round(Number(row.r?.money) || 0));
+      const giver = PF.player.giverOf(row.g);
+      const template = this.templateOf(row.id) ?? str(row.id);
+      if (!PF.player.quest(core, "complete", { id: str(row.id), template }, gen)) return null;
+      const folded = PF.save.packFold(core);
+      const stands = !!giver && !!folded?.known?.has(giver);
+      this.filledToday(core)?.templates.add(template);
+      PF.player.log(core, say(stands ? giver : null, PF.economy.money(world, money)), sim.day, gen);
+      if (stands) PF.player.bump(core, world.startZone, giver, { t: 1 }, gen);
+      return { money, giver: stands ? giver : null, template };
+    },
+
+    /** Hand one finished job in. Two things happen here that `settle` cannot do
+     *  for itself, and they are the reason the press has a function of its own:
+     *    1. RE-FIND the live row by id (buyRod's offer-re-read: the menu drew this
+     *       row a press ago and the row is what pays);
+     *    2. REFUSE unless `have >= n` at THIS read. The mutator pays with no such
+     *       check by design — it trusts its caller — so this line is the check,
+     *       and it is why the lane pins the press side rather than the mutator.
+     *  Returns { ok, reason, money, giver, have, n }. */
+    turnIn(core, id, gen) {
+      const sim = core?.sim;
+      const fail = (reason, extra) => ({ ok: false, reason, money: 0, giver: null, have: 0, n: 0, ...extra });
+      if (!sim?.world) return fail("no-world");
+      if (sim.mode !== "walk") return fail("wrong-mode");
+      if (PF.save?.gateHolds?.(core)) return fail("gate-held");
+      if (!sim.nearBoard) return fail("not-at-board");
+      const player = PF.player.get(core);
+      const rows = Array.isArray(player?.quests?.active) ? player.quests.active : [];
+      const row = rows.find((q) => str(q.id) === str(id));
+      if (!row) return fail("unknown-id");
+      const n = Math.max(1, Math.round(Number(row.n) || 1));
+      const have = Math.max(0, Math.round(Number(row.have) || 0));
+      if (have < n) return fail("not-done", { have, n });
+      const done = this.settle(core, row, gen, (giver, paid) =>
+        giver ? `Filled ${giver}'s board order — ${paid}.` : `Filled the board order — ${paid}.`,
+      );
+      if (!done) return fail("refused", { have, n });
+      return { ok: true, reason: null, money: done.money, giver: done.giver, have, n };
+    },
+
+    /** LET ONE JOB GO (plan §2.3). Free, player-initiated, and pressed from the
+     *  quest tab and nowhere else — the board can take work on and take it back
+     *  finished, but giving up is not a thing you do by standing in front of a
+     *  board, and an abandon offered there would be an abandon offered at the one
+     *  moment the player is most likely to mis-press.
+     *
+     *  NO BOARD GATE AND NO MODE GATE, and both absences are deliberate. This is
+     *  reached from a panel that is only open in walk mode (`_panelsAllowed`) and
+     *  is closed under the loading gate, and the mutator's own `_live` refuses
+     *  under the gate and under a generation mismatch — so a second copy of those
+     *  guards here would be unreachable code standing where a real one used to.
+     *
+     *  THE GIVER IS READ BEFORE THE SPLICE, on `settle`'s discipline, and the
+     *  MUTATOR IS THE AUTHORITY on whether there is anything to let go: a row that
+     *  left the list between the tab's paint and the press — a severance parking
+     *  it, the repair pass dropping it, a rebuild landing under an open panel — is
+     *  refused by id and comes back as `abandon-unknown`, which is the sentence
+     *  the refusal map has been carrying since the slice before this one. A
+     *  generation fence refusal answers with the same value on purpose: from the
+     *  player's side, a block that moved under them and a row that was never there
+     *  are the same fact.
+     *
+     *  ONE LEDGER LINE, event-side and at the event's day (§2.3's diet), and the
+     *  giver's name rides it only while this world still stands them up — the same
+     *  known-cast guard every other line in this file is written through.
+     *  Returns { ok, reason, giver }. */
+    abandon(core, id, gen) {
+      const sim = core?.sim;
+      if (!sim?.world) return { ok: false, reason: "no-world", giver: null };
+      const player = PF.player.get(core);
+      const rows = Array.isArray(player?.quests?.active) ? player.quests.active : [];
+      const row = rows.find((q) => str(q.id) === str(id)) ?? null;
+      const giver = row ? PF.player.giverOf(row.g) : "";
+      if (!PF.player.quest(core, "abandon", { id: str(id) }, gen))
+        return { ok: false, reason: "abandon-unknown", giver: null };
+      const folded = PF.save.packFold(core);
+      const stands = !!giver && !!folded?.known?.has(giver);
+      PF.player.log(core, stands ? `Set aside ${giver}'s board order.` : "Set aside a board order.", sim.day, gen);
+      return { ok: true, reason: null, giver: stands ? giver : null };
+    },
+
+    // ── THE TWO VERB SITES THAT ARE NOT A PRESS (plan §2.3) ──────────────────
+    // `catch` advances at 59-economy's fish() and hands in at the board, because
+    // counting is what it does. The other two mechanics have nothing to count:
+    // they are done the moment they happen, and the moment they happen is not a
+    // moment the player is standing at a board. So they COMPLETE where they
+    // happen, through the same `settle` the press uses.
+
+    /** THE VISIT VERB, completed on ENTRY: the walk WAS the quest. Called by the
+     *  two real zone-change callers — the frame loop's `zoneChanged` branch (a
+     *  portal under the player's feet) and 50-spatial's drift arm (the GM moved
+     *  the party) — because the sim holds no core and no generation of its own
+     *  and cannot call anything itself.
+     *
+     *  IT MATCHES ON THE LOCATION HANDLE, which is what a `visit` row's target is
+     *  (the schema binds the `place` grain to this verb and nothing else). The
+     *  handle is stamped on the zone by the compiler, which is the only site that
+     *  knows which ordinal id a brief's place got — a lookup, never a guess.
+     *
+     *  A FILTER AND NOT A FIND, for the catch site's reason: two rows asking for
+     *  the same walk are both answered by taking it once.
+     *
+     *  NO MODE TEST, deliberately, and it is the one place this layer does not
+     *  copy the board's guards. A drift arrival lands while the player is reading
+     *  narration — that IS the mode a narrated arrival happens in — and refusing
+     *  it would leave a row that can never complete, because nothing walks into a
+     *  zone it is already standing in. The gate is still honoured: a world still
+     *  being written has no arrivals in it to answer.
+     *
+     *  ACCEPTING WHILE STANDING IN Y DOES NOT COMPLETE, and that falls out rather
+     *  than being tested for: this runs on a zone CHANGE and the board is not in
+     *  the wilds. Re-entry is idempotent the same way — the row is spliced by the
+     *  first arrival, so the second finds nothing to settle.
+     *
+     *  Returns the settled rows (possibly none), for the surface to say so. */
+    visited(core, zoneId, gen) {
+      const sim = core?.sim;
+      const world = sim?.world;
+      if (!world) return [];
+      if (PF.save?.gateHolds?.(core)) return [];
+      const id = str(zoneId);
+      const zone = PF.own(world.zones, id) ? world.zones[id] : null;
+      const handle = str(zone?.place);
+      if (!handle) return [];
+      const player = PF.player.get(core);
+      const rows = Array.isArray(player?.quests?.active) ? player.quests.active : [];
+      const due = rows.filter((row) => str(row.verb) === "visit" && str(row.target) === handle);
+      const filled = [];
+      for (const row of due) {
+        // THE ZONE'S NAME AND NOT THE HANDLE. "wilds" is an index key; the line
+        // is history a wrap-up reads out, and "walked out to the wilds" is a
+        // sentence about a vocabulary rather than about a place the player went.
+        const done = this.settle(core, row, gen, (giver, paid) =>
+          giver ? `Walked out to ${zone.name} for ${giver} — ${paid}.` : `Walked out to ${zone.name} — ${paid}.`,
+        );
+        if (done) filled.push(done);
+      }
+      return filled;
+    },
+
+    /** THE DELIVER VERB, and it is an ERRAND rather than a courier job: no item
+     *  moves, because no quest-item type exists and inventing one for a word
+     *  would be a format change nothing else asks for. What is delivered is word,
+     *  and word is delivered by TALKING — so this completes in the one place the
+     *  package can be sure a conversation actually started: 90-element's accepted
+     *  `.then`, after the host has taken the turn.
+     *
+     *  THE ONE NON-GM-FREE QUEST VERB, stated rather than discovered (Ruling 1 is
+     *  "lean", not "zero"): the handover costs exactly one GM call, which is the
+     *  greeting the player was sending anyway.
+     *
+     *  BOTH FENCES ARE THE CALLER'S and both are needed. `gen` is the generation
+     *  the turn was composed under — a chat switch under the await would otherwise
+     *  credit the arriving chat's block with the departing chat's errand — and the
+     *  SIM IDENTITY is the second, because `_rebuild` replaces core.sim wholesale
+     *  (a rewind, a checkpoint load) WITHOUT moving `_gen`, so the fence alone
+     *  cannot see it. The caller refuses on a mismatch by simply not calling: the
+     *  quest stays active, the player talks to them again, and the honest cost is
+     *  one extra GM call in a race nobody will ever notice.
+     *
+     *  `name` is captured AT SEND for the same reason: the person the player
+     *  walked up to is the person the errand was run to, whoever is standing
+     *  there by the time the host answers. */
+    delivered(core, name, gen) {
+      const sim = core?.sim;
+      const world = sim?.world;
+      if (!world) return [];
+      if (PF.save?.gateHolds?.(core)) return [];
+      const to = str(name);
+      if (!to) return [];
+      const player = PF.player.get(core);
+      const rows = Array.isArray(player?.quests?.active) ? player.quests.active : [];
+      const due = rows.filter((row) => str(row.verb) === "deliver" && str(row.target) === to);
+      const filled = [];
+      for (const row of due) {
+        // THE GIVER == TARGET CASE IS RECORDED HARMLESS, not defended against: a
+        // template whose giver is also its target bumps the same person twice in
+        // one turn (once for the conversation in 90-element, once for the errand
+        // here), which reads as two encounters on a turn that was two things.
+        const done = this.settle(core, row, gen, (giver, paid) =>
+          giver && giver !== to ? `Took ${giver}'s word to ${to} — ${paid}.` : `Took word to ${to} — ${paid}.`,
+        );
+        if (done) filled.push(done);
+      }
+      return filled;
+    },
+
+    // ── generate(): the second generation call ───────────────────────────────
+    /** THE SECOND #5135 CALL, and it is 18-brief `generate`'s TWIN rather than its
+     *  cousin: same bounded wait, same one wait-out on the documented-transient
+     *  409, same single same-base re-roll on truncation, same salvage of the
+     *  LONGEST truncated raw seen across attempts, same `onFailure(kind)` reported
+     *  once. The ladder is FROZEN at one re-roll and a salvage (#5135) — there is
+     *  no degrade-the-ask rung, because the only thing left to degrade would be
+     *  the digest, and a pack written against a world we described less accurately
+     *  is worse than no pack at all.
+     *
+     *  It returns a SEALED pack for the two outcomes that produce a real one and
+     *  NULL for every failure, so the caller holds the gate and the retry is free.
+     *  NOTHING HERE STORES OR CACHES: 60-save owns both, in that order, and owns
+     *  the gate stamping around them.
+     *
+     *  THE ONE ROW THE BRIEF'S LADDER DOES NOT HAVE is `"thin"`, and it is the
+     *  substance floor arriving as a failure kind. A brief's validate() always
+     *  produces a brief — the floors top it up from stock — but a pack under the
+     *  floor is a FAILURE by design (see validate): sealing a hollow pack trades a
+     *  free retry for a permanent nothing. So a 200 that seals to null is reported
+     *  as its own kind rather than folded into "refused", which would tell the
+     *  player their request was turned down when it was answered thinly.
+     *
+     *  `strictSchema` is NOT SENT and stays false — see schema(). */
+    async generate(
+      chatId,
+      {
+        theme,
+        seed,
+        brief,
+        preferences,
+        onProgress,
+        onFailure,
+        budgetMs = 90_000,
+        busyWaitMs = Math.min(15_000, budgetMs / 6),
+      } = {},
+    ) {
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), budgetMs);
+      try {
+        const base = {
+          instructions: guidance(theme),
+          // THE DIGEST FIRST, the player's own words after (plan §2.2b).
+          userContent: composeUserContent(digest(brief), preferences),
+          schema: schema(),
+        };
+        // ONE DOOR. Everything the route hands back that is an object at all goes
+        // through validate(), array roots included — that is the case validate's
+        // own "transport: non-object root replaced" repair is written for, and a
+        // pre-check here that answered it first would be a second reading of the
+        // same shape, one screen from the first.
+        const seal = (data) => (data && typeof data === "object" ? this.validate(data, { theme, seed, brief }) : null);
+        let response = await PF.api.postExperienceGeneration(chatId, base, controller.signal);
+        if (response.status === 409) {
+          // chat_busy ships Retry-After: 15 — wait it out once inside the budget
+          // (busyWaitMs is a timer seam so the harness never sleeps for real).
+          await new Promise((resolve) => setTimeout(resolve, busyWaitMs));
+          if (!controller.signal.aborted)
+            response = await PF.api.postExperienceGeneration(chatId, base, controller.signal);
+        }
+        const rawOf = (r) =>
+          r.status === 422 && r.body?.truncated && typeof r.body.raw === "string" ? r.body.raw : null;
+        let bestRaw = rawOf(response);
+        if (response.status === 422 && response.body?.truncated) {
+          onProgress?.("Writing what your world has to say… (one more try)");
+          response = await PF.api.postExperienceGeneration(chatId, base, controller.signal);
+          const retryRaw = rawOf(response);
+          if (retryRaw && (!bestRaw || retryRaw.length > bestRaw.length)) bestRaw = retryRaw;
+        }
+        // `thin` is remembered rather than returned from, because a whole
+        // response can still come back after a truncated one: a 200 that seals to
+        // null must not stop the salvage of a longer raw from an earlier attempt.
+        let thin = false;
+        if (response.status === 200 && response.body?.ok) {
+          const sealed = seal(response.body.data);
+          if (sealed) return sealed;
+          thin = true;
+        }
+        if (bestRaw) {
+          const salvaged = PF.brief.salvageText(bestRaw);
+          if (salvaged) {
+            // THE SALVAGE SEALS THIN, AND THAT IS THE POINT OF THE FLOOR. What
+            // came back is a templates-first emission with its tail cut off, so
+            // the pack is smaller than the one that was asked for — and a smaller
+            // pack is a real one. validate() is what decides whether it is small
+            // or hollow, and it is the same validate() a whole response goes
+            // through: one door, one set of guarantees.
+            const sealed = seal(salvaged);
+            if (sealed) {
+              sealed._repairs.push("transport: salvaged from a truncated response");
+              return sealed;
+            }
+            thin = true;
+          }
+        }
+        if (thin) {
+          console.warn("[pixelforge] the content pack came back under its floor; nothing sealed, the retry is free");
+          onFailure?.("thin");
+          return null;
+        }
+        if (response.status === 404 || response.status === 409 || response.status === 429 || response.status >= 500) {
+          console.warn("[pixelforge] content pack unavailable (transient); the world stays packless", response.status);
+          onFailure?.("unavailable");
+          return null;
+        }
+        console.warn(
+          "[pixelforge] the content pack was refused; the world stays packless",
+          response.status,
+          response.body?.error ?? null,
+        );
+        onFailure?.("refused");
+        return null;
+      } catch (err) {
+        // The brief's two verdicts, and the same reading of them: neither seals
+        // anything, and the world under this call is already written and safe.
+        if (!controller.signal.aborted) {
+          console.warn("[pixelforge] the content pack call failed (network); the world stays packless", err);
+          onFailure?.("network");
+        } else {
+          console.warn("[pixelforge] the content pack call timed out; the world stays packless");
+          onFailure?.("timeout");
+        }
+        return null;
+      } finally {
+        clearTimeout(timer);
+      }
+    },
+
+    // The three composition halves, exported for the same reason 18-brief exports
+    // its own: the walls they are written against (#5135) are the kind of contract
+    // that is only ever checked by measuring, and a lane that re-implemented the
+    // split would be measuring itself.
+    digest,
+    composeUserContent,
+    guidance,
+    schema,
+    USER_CONTENT_CAP,
+    INSTRUCTIONS_CAP,
+    SCHEMA_CAP,
+  };
+})();
+
+// ── The default pack, both themes (plan §2.2f) ────────────────────────────────
+// A FIRST-CLASS DELIVERABLE and the largest hand-authored content artifact this
+// package ships. It is written to the same schema the generated one is, folds
+// through the same fold(), and is held to it by the boot assertion at the foot of
+// this file — the skins' idiom (59-economy), for the skins' reason: a fallback
+// nobody validates is a fallback that is broken on the day it is first needed,
+// which is by definition a day nothing else is working either.
+//
+// THE TEMPLATES ARE WORLD-FREE BY CONSTRUCTION (§2.2e): their ids are `b:` class,
+// their catch targets are ROLES rather than variants (a role means the same thing
+// in every theme; a variant does not), their givers are the four stock residents
+// every default and legacy world stands up (Mira, Tam, Rook, Fen — 18-brief
+// STOCK_CAST, 20-world buildLegacy), and only their TITLES are theme-worded. So a
+// board completion counted here means the same thing in the next world, which is
+// exactly what `quests_done_board` claims about itself.
+const DEFAULT_PACKS = (() => {
+  // Compact writers: the sealed shape is the object below, and the tuple form is
+  // what keeps sixty-odd lines of dialogue readable in a source file. `w` is
+  // omitted deliberately — absent reads as fair, and the axis costs nothing until
+  // L2 fills it.
+  const line = (at, when, r, text, topic) => (topic ? { at, when, r, text, topic } : { at, when, r, text });
+  const cast = (name, text) => ({ npc: name, text });
+  const heard = (at, text, topic) => (topic ? { at, text, topic } : { at, text });
+
+  // The generic work, shared across themes: same ids, same givers, same role-grain
+  // targets, per-theme titles supplied below.
+  const WORK = [
+    { slug: "catch-common-3", giver: "Tam", verb: "catch", target: { role: "catch-common" }, n: 3 },
+    { slug: "catch-common-6", giver: "Mira", verb: "catch", target: { role: "catch-common" }, n: 6 },
+    { slug: "catch-uncommon-2", giver: "Mira", verb: "catch", target: { role: "catch-uncommon" }, n: 2 },
+    { slug: "catch-rare-1", giver: "Rook", verb: "catch", target: { role: "catch-rare" }, n: 1 },
+    { slug: "deliver-fen", giver: "Mira", verb: "deliver", target: { npc: "Fen" }, n: 1 },
+    { slug: "deliver-rook", giver: "Tam", verb: "deliver", target: { npc: "Rook" }, n: 1 },
+    { slug: "visit-wilds", giver: "Fen", verb: "visit", target: { place: "wilds" }, n: 1 },
+    { slug: "visit-gathering", giver: "Rook", verb: "visit", target: { place: "gathering" }, n: 1 },
+  ];
+  const templates = (titles) =>
+    WORK.map((row) => ({
+      id: `b:${row.slug}`,
+      giver: row.giver,
+      verb: row.verb,
+      target: row.target,
+      n: row.n,
+      title: titles[row.slug],
+    }));
+
+  return {
+    "cozy-village": {
+      packVersion: 1,
+      theme: "cozy-village",
+      // ZERO IS THE DEFAULT PACK'S HASH and it is never anybody's brief hash in
+      // practice; what matters is that it can never MATCH a sealed brief's, so
+      // this artifact can never be mistaken for a sealed one on the read path.
+      briefHash: 0,
+      templates: templates({
+        "catch-common-3": "Three for the pot",
+        "catch-common-6": "A basket for the kitchen",
+        "catch-uncommon-2": "Something better than usual",
+        "catch-rare-1": "One good fish",
+        "deliver-fen": "Word out to the wood",
+        "deliver-rook": "A message for the guard",
+        "visit-wilds": "Walk the old path",
+        "visit-gathering": "Come by the inn",
+      }),
+      lines: [
+        line("settlement", "dawn", "stranger", "Early, aren't you. Mind the wet stones by the gate."),
+        line("settlement", "dawn", "friend", "You're up before the bread is. Come back at noon and I'll have some."),
+        line("settlement", "day", "stranger", "Morning. If you're looking for work, there's a board up.", "work"),
+        line("settlement", "day", "friend", "They're saying the north field is sinking again.", "rumor"),
+        line("settlement", "dusk", "stranger", "Getting on. Most doors shut when the light goes."),
+        line("settlement", "dusk", "friend", "Walk with me as far as the well? It's on your way."),
+        line("settlement", "night", "stranger", "Late to be out. Nothing's open but the inn.", "place"),
+        line("settlement", "night", "friend", "Couldn't sleep either, then. It's a good night for not sleeping."),
+        line("gathering", "dawn", "stranger", "Kitchen's not lit yet. Sit if you like."),
+        line("gathering", "dawn", "friend", "First cup's yours. Don't tell the others."),
+        line("gathering", "day", "stranger", "Room's a fair price and the beds are dry.", "place"),
+        line("gathering", "day", "friend", "There's a job on the board somebody ought to take.", "work"),
+        line("gathering", "dusk", "stranger", "Busiest hour. Mind your elbows."),
+        line("gathering", "dusk", "friend", "Sit down, you look like a day happened to you."),
+        line("gathering", "night", "stranger", "Last of the fire. I'm not stoking it again."),
+        line("gathering", "night", "friend", "Stay for one more. The walk home will still be there.", "smalltalk"),
+        line("wilds", "dawn", "stranger", "Fog sits low out here till the sun finds it."),
+        line("wilds", "dawn", "friend", "The fish bite better before anyone else is awake.", "work"),
+        line("wilds", "day", "stranger", "Keep to the path. It knows where it's going."),
+        line("wilds", "day", "friend", "Found a good stone last week. I'll show you sometime.", "place"),
+        line("wilds", "dusk", "stranger", "I'd turn back if I were you. The light goes fast under trees."),
+        line("wilds", "dusk", "friend", "One more cast and then we go. That's what you said last time."),
+        line("wilds", "night", "stranger", "Something moved. Probably a deer. Probably."),
+        line("wilds", "night", "friend", "Quiet out here, isn't it. Good quiet."),
+        line("workshop", "day", "stranger", "Watch the sparks and don't touch the bench."),
+        line("workshop", "day", "friend", "Hold this a moment — no, that end. Thank you."),
+        line("hall", "day", "stranger", "You can wait, but the answer will be the same tomorrow."),
+        line("hall", "day", "friend", "They'll hear you out. Whether they listen is another thing.", "rumor"),
+        line("sanctuary", "day", "stranger", "Sit where you like. Nobody minds."),
+        line("sanctuary", "day", "friend", "I come here to think and end up not thinking. It works."),
+        line("dwelling", "day", "stranger", "This is somebody's house, you know."),
+        line("dwelling", "day", "friend", "Door's open. Wipe your feet."),
+      ],
+      escalation: [
+        cast("Mira", "You heard about the field, then? Ask me again when the room's empty."),
+        cast("Tam", "It isn't the rain. I've farmed rain. Ask me properly and I'll tell you."),
+        cast("Rook", "I'm not paid to have opinions about it. Off duty, I have several."),
+        cast("Fen", "I've seen what the water's doing out past the trees. Nobody wants to hear it."),
+      ],
+      overheard: [
+        heard("settlement", "…and he says the survey came back fine. Fine!", "rumor"),
+        heard("settlement", "…if the plots go, we all go, is what I'm saying.", "rumor"),
+        heard("gathering", "…third night running she's been up at that window.", "rumor"),
+        heard("gathering", "…tell him yourself, then. I'm not doing it.", "smalltalk"),
+        heard("wilds", "…swear the water's higher than it was.", "place"),
+        heard("wilds", "…don't go past the marker after dark, that's all I'll say.", "place"),
+      ],
+      _repairs: [],
+    },
+    "sci-fi-colony": {
+      packVersion: 1,
+      theme: "sci-fi-colony",
+      briefHash: 0,
+      templates: templates({
+        "catch-common-3": "Three for the galley",
+        "catch-common-6": "A crate for the galley",
+        "catch-uncommon-2": "Something off the usual list",
+        "catch-rare-1": "One good specimen",
+        "deliver-fen": "Word out to the flats",
+        "deliver-rook": "A message for the marshal",
+        "visit-wilds": "Walk the mast line",
+        "visit-gathering": "Come by the cantina",
+      }),
+      lines: [
+        line("settlement", "dawn", "stranger", "Shift change. Mind the deck plates, they sweat at this hour."),
+        line("settlement", "dawn", "friend", "You beat the lights up. Come by later, I'll owe you a coffee."),
+        line("settlement", "day", "stranger", "If you're after work, the terminal's posting.", "work"),
+        line("settlement", "day", "friend", "They're saying the seal readings came back wrong again.", "rumor"),
+        line("settlement", "dusk", "stranger", "Cycle's dimming. Most bays lock at amber."),
+        line("settlement", "dusk", "friend", "Walk as far as the ring with me? It's on your route."),
+        line("settlement", "night", "stranger", "Late cycle. Nothing's open but the cantina.", "place"),
+        line("settlement", "night", "friend", "Couldn't sleep through the hum either. Nobody does at first."),
+        line("gathering", "dawn", "stranger", "Galley's cold. Sit if you like."),
+        line("gathering", "dawn", "friend", "First cup's yours. It's the real stuff, so don't advertise it."),
+        line("gathering", "day", "stranger", "Bunk's a fair rate and the air's filtered twice.", "place"),
+        line("gathering", "day", "friend", "There's a posting nobody's taken. Somebody ought to.", "work"),
+        line("gathering", "dusk", "stranger", "Busiest hour on the ring. Mind your elbows."),
+        line("gathering", "dusk", "friend", "Sit down, you look like a shift happened to you."),
+        line("gathering", "night", "stranger", "Last of the pot. I'm not brewing again."),
+        line("gathering", "night", "friend", "Stay for one more. The corridor will still be there.", "smalltalk"),
+        line("wilds", "dawn", "stranger", "Dust hangs out here until the light burns it off."),
+        line("wilds", "dawn", "friend", "The pools run better before the day crew is up.", "work"),
+        line("wilds", "day", "stranger", "Keep to the marked line. It's marked for a reason."),
+        line("wilds", "day", "friend", "Found a good spot past mast nine. I'll show you sometime.", "place"),
+        line("wilds", "dusk", "stranger", "I'd turn back. Out here the light goes all at once."),
+        line("wilds", "dusk", "friend", "One more run and we go. That's what you said last cycle."),
+        line("wilds", "night", "stranger", "Something tripped a sensor. Probably grit. Probably."),
+        line("wilds", "night", "friend", "Quiet out past the masts, isn't it. Good quiet."),
+        line("workshop", "day", "stranger", "Watch the arc and keep off the bench."),
+        line("workshop", "day", "friend", "Hold this — no, the other end. Thank you."),
+        line("hall", "day", "stranger", "You can wait, but the answer will be the same next cycle."),
+        line("hall", "day", "friend", "They'll log what you say. Whether they read it is another thing.", "rumor"),
+        line("sanctuary", "day", "stranger", "Sit anywhere. Nobody's keeping the seats."),
+        line("sanctuary", "day", "friend", "I come here to think and end up not thinking. It works."),
+        line("dwelling", "day", "stranger", "These are somebody's quarters, you know."),
+        line("dwelling", "day", "friend", "Hatch is open. Knock the dust off first."),
+      ],
+      escalation: [
+        cast("Mira", "You heard about the readings, then? Ask me again when the galley's empty."),
+        cast("Tam", "It isn't the filters. I've run filters. Ask me properly and I'll tell you."),
+        cast("Rook", "I'm not paid to have opinions about it. Off shift, I have several."),
+        cast("Fen", "I've seen what the dust is doing past the masts. Nobody logs that."),
+      ],
+      overheard: [
+        heard("settlement", "…and command says the numbers came back nominal. Nominal!", "rumor"),
+        heard("settlement", "…if the bay goes, we all go, is what I'm saying.", "rumor"),
+        heard("gathering", "…third cycle running she's been up at that port.", "rumor"),
+        heard("gathering", "…tell him yourself, then. I'm not filing it.", "smalltalk"),
+        heard("wilds", "…swear the drift's deeper than it was.", "place"),
+        heard("wilds", "…don't go past the beacon after dark, that's all I'll say.", "place"),
+      ],
+      _repairs: [],
+    },
+  };
+})();
+
+// ── The default pack's validation lane (plan §2.2f) ──────────────────────────
+// Boot-asserted, in the skins' idiom (59-economy) and for the skins' reason: this
+// artifact is only ever read on a day something else already went wrong — a
+// declined generation, a chat older than the feature, a pack whose world moved
+// under it — so a hole in it is a hole nobody meets until the worst moment. It is
+// held to the same three facts the fold reads: both themes fold clean, every giver
+// resolves, every target resolves.
+{
+  // THE DISJOINT NAMESPACES, first, because the shared matcher predicate rests on
+  // them: a quest row carries its target as a bare STRING, and the grain is
+  // recovered by asking whether the word is a catch role. A variant slug that was
+  // also a role name would make that question unanswerable — every catch of that
+  // role would pay a quest for one specific fish, silently and forever.
+  const roles = new Set(PF.economy.CATCH_ROLES);
+  for (const [theme, byTag] of Object.entries(PF.economy.CATCH_TABLES)) {
+    for (const table of Object.values(byTag)) {
+      for (const entry of table) {
+        if (roles.has(entry.variant))
+          throw new Error(
+            `pixelforge: ${theme}'s "${entry.variant}" is both a catch variant and a catch role; the two namespaces must stay disjoint`,
+          );
+      }
+    }
+  }
+
+  for (const theme of PF.art?.themeIds?.() ?? []) {
+    const pack = PF.pack.defaults(theme);
+    if (pack.theme !== theme)
+      throw new Error(`pixelforge: the default pack for "${theme}" is written for "${pack.theme}"`);
+    if (pack.briefHash !== 0)
+      throw new Error(
+        `pixelforge: the default pack for "${theme}" carries a brief hash, so a sealed world could adopt it`,
+      );
+    // The stock cast, read through defaults() rather than off a literal — the same
+    // source of truth 20-world's legacy name book is held to, and for the same
+    // reason: two tables in two files edited months apart is how a giver stops
+    // existing in the world that is supposed to stand them up.
+    const stock = new Set(PF.brief.defaults(theme, 1).cast.map((member) => member.name));
+    if (pack.templates.length < PF.pack.TUNING.floorTemplates)
+      throw new Error(`pixelforge: the default pack for "${theme}" is under its own template floor`);
+    if (pack.lines.length < PF.pack.TUNING.floorLines)
+      throw new Error(`pixelforge: the default pack for "${theme}" is under its own line floor`);
+    for (const template of pack.templates) {
+      if (!String(template.id).startsWith("b:"))
+        throw new Error(`pixelforge: the default pack's "${template.id}" is not a world-free (b:) template`);
+      if (!stock.has(template.giver))
+        throw new Error(
+          `pixelforge: the default pack's "${template.id}" is given by ${template.giver}, who is not in ${theme}'s stock cast`,
+        );
+      if (!PF.pack.MECHANICS.includes(template.verb))
+        throw new Error(`pixelforge: the default pack's "${template.id}" asks for "${template.verb}"`);
+      const grains = Object.keys(template.target ?? {});
+      if (grains.length !== 1 || !PF.pack.TARGET_GRAINS.includes(grains[0]))
+        throw new Error(`pixelforge: the default pack's "${template.id}" has no single grain-tagged target`);
+      const [grain] = grains;
+      const value = template.target[grain];
+      // ROLE GRAIN, DELIBERATELY, for every catch row: a variant is a theme's own
+      // word and a `b:` counter that means one thing in a valley and another in a
+      // colony is not world-free at all.
+      if (grain === "variant")
+        throw new Error(`pixelforge: the default pack's "${template.id}" targets a variant, which is not theme-shared`);
+      if (grain === "role" && !PF.economy.CATCH_ROLES.includes(value))
+        throw new Error(`pixelforge: the default pack's "${template.id}" targets the role "${value}"`);
+      if (grain === "npc" && !stock.has(value))
+        throw new Error(`pixelforge: the default pack's "${template.id}" delivers to ${value}, who is not stock cast`);
+      if (grain === "place" && !PF.pack.LOCATIONS.includes(value))
+        throw new Error(`pixelforge: the default pack's "${template.id}" sends the player to "${value}"`);
+      if (!template.title) throw new Error(`pixelforge: the default pack's "${template.id}" has no title`);
+    }
+    for (const row of pack.lines) {
+      if (!PF.pack.LOCATIONS.includes(row.at) || !PF.pack.DAYPARTS.includes(row.when))
+        throw new Error(
+          `pixelforge: a default ${theme} line is keyed (${row.at}, ${row.when}), which is not an index cell`,
+        );
+      if (!PF.pack.REGISTERS.includes(row.r))
+        throw new Error(`pixelforge: a default ${theme} line is written in the "${row.r}" register`);
+      if (row.w !== undefined && !PF.pack.WEATHERS.includes(row.w))
+        throw new Error(`pixelforge: a default ${theme} line is keyed for "${row.w}" weather`);
+      if (row.topic !== undefined && !PF.pack.TOPICS.includes(row.topic))
+        throw new Error(`pixelforge: a default ${theme} line is tagged "${row.topic}"`);
+      if (!row.text) throw new Error(`pixelforge: a default ${theme} line has no text`);
+    }
+    for (const row of pack.escalation) {
+      if (!stock.has(row.npc))
+        throw new Error(
+          `pixelforge: the default pack's escalation line for ${row.npc} names nobody ${theme} stands up`,
+        );
+    }
+    for (const row of pack.overheard) {
+      if (!PF.pack.LOCATIONS.includes(row.at))
+        throw new Error(`pixelforge: a default ${theme} overheard line stands at "${row.at}"`);
+    }
+    // …AND IT FOLDS CLEAN AGAINST THE WORLD THAT WILL READ IT. The two chats this
+    // artifact serves compile the LEGACY layout (a declined generation and a chat
+    // older than the feature both reach `build(seed, theme, null)`), so that is
+    // the world it is asserted against — every template surviving, because a
+    // fallback that folds to nothing is the same empty board as no fallback.
+    const folded = PF.pack.fold(null, { brief: null, world: PF.world.build(1, theme, null) });
+    if (folded.ids.length !== pack.templates.length)
+      throw new Error(
+        `pixelforge: only ${folded.ids.length} of ${theme}'s ${pack.templates.length} default templates survive the fold into a default world`,
+      );
+  }
+}
+
 // ===== 70-hud.js =====
 // ── HUD (main mount) ──────────────────────────────────────────────────────────
 // Everything interactive lives here, in the z-30 main mount: location/clock
@@ -13225,6 +16012,25 @@ PF.Hud = class {
       style:
         "display:none;flex-direction:column;gap:6px;align-items:flex-end;max-height:40vh;overflow:auto;pointer-events:auto;",
     });
+    // 0.13's reading surface, on the fishing verb's gating shape and its menu
+    // idiom. Proximity-gated on `nearBoard` ALONE — no offer test, no purse test,
+    // no pack test: reading a board costs nothing, sends nothing, and a board
+    // that hid itself on a world with no work would be the one board a player
+    // most needs to be able to walk up to and be told so.
+    //
+    // THE EXPOSURE IS TRIGGER-ONLY, and that containment is deliberate (plan
+    // §2.1, M5 provisional pending the 0.12 browser playtest): everything about
+    // WHERE this lives is these two lines plus the census entry and the gating in
+    // update(). Nothing about the menu below or the pack behind it knows it was
+    // reached from a button in this column, so a post-playtest reshape — a
+    // different trigger, a different surface — moves the entry and the gate and
+    // leaves the work untouched.
+    this.boardBtn = this._btn("📋 Board", () => this.toggleBoard());
+    this.boardBtn.style.display = "none";
+    this.boardMenu = PF.el("div", {
+      style:
+        "display:none;flex-direction:column;gap:6px;align-items:flex-end;max-height:40vh;overflow:auto;pointer-events:auto;",
+    });
     this.waitBtn = this._btn("⏩ Wait…", () => this.toggleWait());
     this.keyboardBtn = this._btn("Keyboard", () => core.setMode("dialogue"));
     this.resumeBtn = this._btn("▶ Resume walking", () => core.resume());
@@ -13247,6 +16053,8 @@ PF.Hud = class {
         this.fishBtn,
         this.sleepMenu,
         this.sleepBtn,
+        this.boardMenu,
+        this.boardBtn,
         this.waitMenu,
         this.waitBtn,
         this.keyboardBtn,
@@ -13363,11 +16171,18 @@ PF.Hud = class {
     this.journalBody = PF.el("div", {
       style: "flex:1 1 auto;overflow:auto;display:flex;flex-direction:column;gap:10px;",
     });
+    // THE TAB STRIP (0.13 §2.4), and the panel's interior is now three rows:
+    // header, strip, body — with the BODY the only thing that scrolls. The strip
+    // and the header both sit on `flex:0 0 auto` so a long list cannot push the
+    // tabs off the top of the surface, which is the one layout mistake a scroller
+    // wrapped around the whole interior makes.
+    this.journalTabs = PF.el("div", { style: "display:flex;gap:6px;flex:0 0 auto;" });
     this.journalEl = PF.el("div", { style: panelStyle, "aria-label": "journal" }, [
       PF.el("div", { style: panelHead }, [
         PF.el("div", { style: panelTitle, text: "Journal" }),
         this._btn("✕ Close", () => this.closeJournal()),
       ]),
+      this.journalTabs,
       this.journalBody,
     ]);
     // The sheet's two columns: the sprite on the left with the themed generic
@@ -13418,6 +16233,66 @@ PF.Hud = class {
     this._journalMemo = null;
     this._sheet = false;
     this._sheetKey = null;
+    // ── THE TABS THEMSELVES (0.13 §2.4) ──────────────────────────────────────
+    // A LIST of {label, render, memoSync}, and it is a list rather than two
+    // branches because the third occupant is already committed (P8's extended
+    // view). Nothing below this line counts them: the strip is built by walking
+    // the list, the active tab is an INDEX into it, and `_journalSync` asks
+    // whichever one is active. Landing a third tab is one more entry here.
+    //
+    // WHAT THE TWO FIELDS DO, and why the memo is one slot rather than one per
+    // tab. `memoSync(held)` is asked once a frame while the panel is up and
+    // answers the only question the frame has: has what I draw MOVED — handing
+    // back the new memo when it has and `null` when it has not. `render()` draws
+    // the body from live state. The slot belongs to whichever tab is active and
+    // is nulled when the panel opens and when the tab switches, so the two never
+    // have to agree about its shape: the ledger watches two array identities and
+    // two lengths (a wholesale rebuild and an append that kept its array), the
+    // quest tab watches a value-key string, and neither knows the other exists.
+    this._journalTabs = [
+      {
+        label: "Journal",
+        render: () => {
+          const held = this._ledgerArrays();
+          this._renderJournal(held.lines ?? [], held.notices ?? []);
+        },
+        memoSync: (held) => {
+          const { lines, notices } = this._ledgerArrays();
+          const lineCount = lines?.length ?? 0;
+          const noticeCount = notices?.length ?? 0;
+          if (
+            held &&
+            held.lines === lines &&
+            held.notices === notices &&
+            held.lineCount === lineCount &&
+            held.noticeCount === noticeCount
+          )
+            return null;
+          return { lines, notices, lineCount, noticeCount };
+        },
+      },
+      {
+        label: "Jobs",
+        render: () => this._renderQuests(),
+        memoSync: (held) => {
+          const key = this._questValueKey();
+          if (held === key) return null;
+          // ANY REPAINT THIS TAB DID NOT ASK FOR DROPS THE ARMED CONFIRM (§2.3).
+          // A confirm is armed on one row; if the list moved under it — a catch
+          // landed, a severance took rows away, the purse changed — the row the
+          // second press would land on is not the row the first press meant.
+          // The arming press repaints through `_repaintQuests`, which seeds this
+          // slot itself, so it is never the repaint that disarms it.
+          this._dropQuestPress();
+          return key;
+        },
+      },
+    ];
+    this._journalTab = 0;
+    // The instance id of the row whose "set aside" has been pressed once, and the
+    // sentence the last press left behind (see `_dropQuestPress`).
+    this._dropQuestPress();
+    this._buildTabs();
     this.refreshChips();
   }
 
@@ -13649,6 +16524,225 @@ PF.Hud = class {
     );
   }
 
+  // ── THE BOARD (plan §2.1) ──────────────────────────────────────────────────
+  // Two sections in one list, and the surface owns NONE of the rules: what is
+  // offered, what state each offer is in and whether a job can be handed in are
+  // all answered by 61-pack's `boardOffers`, re-read at every press. This is the
+  // drawing.
+
+  /** Open the board, or close it. The fishing menu's shape one method up: a
+   *  refusal is answered WHERE IT WAS PRESSED rather than behind a list whose
+   *  every row then refuses. */
+  toggleBoard() {
+    const open = this.boardMenu.style.display !== "flex";
+    if (!open) {
+      this.boardMenu.style.display = "none";
+      return;
+    }
+    const view = PF.pack.boardOffers(this.core);
+    if (!view.available) {
+      this.boardMenu.style.display = "none";
+      this.toast(this.boardRefusal(view.reason));
+      return;
+    }
+    this._renderBoard(view);
+    this.boardMenu.style.display = "flex";
+  }
+
+  closeBoard() {
+    this.boardMenu.style.display = "none";
+  }
+
+  /** BOTH SECTIONS, every time. A press changes both — accepting puts a row in
+   *  the jobs list AND dims the offer it came from, handing one in empties a job
+   *  AND can free the cap that was dimming every offer on the board — so the
+   *  handlers below re-render the whole list rather than patching a row.
+   *  Event-driven and never per frame: update() only decides whether the BUTTON
+   *  is on screen.
+   *
+   *  THE JOBS SECTION LEADS WHEN IT HOLDS SOMETHING FINISHED. A player walking
+   *  back with five carp wants the hand-in above the fold, not under four fresh
+   *  offers; with nothing finished, the day's work is the reason they walked up.
+   *
+   *  A row accepted today renders in BOTH sections on purpose (plan §2.1): the
+   *  dimmed offer is the day's receipt — it is what the board posted — and the
+   *  jobs row is the live object with the count on it. */
+  _renderBoard(view) {
+    const chip = (text, dim) => PF.el("span", { style: dim ? `${this.S.chip}opacity:0.55;` : this.S.chip, text });
+    const offers = [];
+    if (!view.folded.ids.length) {
+      // THE PACKLESS WORLD'S OWN STATE (Q9), and it is deliberately none of the
+      // others. Not "not yet", not "check back", not "everything is taken" — a
+      // world sealed before this release, or one whose owner declined the second
+      // call, has no work in it and will not grow any on its own. The board is
+      // still standing there to say so, which is the whole reason the fixture is
+      // unconditional.
+      offers.push(chip("No work posted here.", true));
+    } else {
+      offers.push(chip("Today's work"));
+      for (const offer of view.offers) {
+        const money = PF.economy.money(this.core.sim.world, offer.reward.money);
+        const label = `${offer.template.title} — ${money}`;
+        if (offer.state === "open") {
+          offers.push(this._btn(label, () => this.acceptWork(offer.template.id)));
+          continue;
+        }
+        // DIMMED AND STILL PRESSABLE, on the berth button's rule: a control that
+        // vanishes teaches the player nothing about why. The press says which of
+        // the three reasons it is.
+        //
+        // AND THE COPY NAMES NO DIRECTION. It used to say "below", which was true
+        // on the day it was written and false the moment the row it points at
+        // finished: a finished job lifts the jobs section ABOVE the offers (see
+        // the ordering rule at the foot of this method), so the receipt was
+        // telling the player to look the wrong way at exactly the moment they had
+        // something to hand in. The list is named instead of placed.
+        //
+        // TWO OF THE STATES CARRY THEIR OWN WORDS and the other two keep the
+        // price. `taken` and `filled` are things the player DID today, and a row
+        // still quoting its fee after it has been paid out reads as work still on
+        // offer; `dup` and `at-cap` are about the list rather than the row, and
+        // the fee is still the honest label for work that is genuinely open to
+        // somebody with room for it.
+        const state = offer.state;
+        const row = this._btn(
+          state === "taken"
+            ? `${offer.template.title} — taken — see your jobs list`
+            : state === "filled"
+              ? `${offer.template.title} — filled today`
+              : label,
+          () => this.acceptWork(offer.template.id),
+        );
+        row.style.opacity = "0.45";
+        offers.push(row);
+      }
+    }
+    const jobs = [];
+    if (view.jobs.length) {
+      jobs.push(chip("Your jobs here"));
+      for (const row of view.jobs) {
+        const text = PF.pack.rowText(row, view.folded);
+        const done = Math.round(Number(row.have) || 0) >= Math.max(1, Math.round(Number(row.n) || 1));
+        if (!done) {
+          jobs.push(chip(text, true));
+          continue;
+        }
+        jobs.push(this._btn(`${text} — hand it in`, () => this.turnInJob(row.id)));
+      }
+    }
+    const finished = view.jobs.some(
+      (row) => Math.round(Number(row.have) || 0) >= Math.max(1, Math.round(Number(row.n) || 1)),
+    );
+    this.boardMenu.replaceChildren(...(finished ? [...jobs, ...offers] : [...offers, ...jobs]));
+  }
+
+  /** Take an offer. The offer is re-read inside `accept`, so a menu drawn a press
+   *  ago cannot take a row twice or take one past the cap; this turns the answer
+   *  into a sentence and redraws both sections. */
+  acceptWork(templateId) {
+    const result = PF.pack.accept(this.core, templateId);
+    if (!result.ok) {
+      this.toast(this.boardRefusal(result.reason));
+      // A refusal that came from the BOARD's own state — taken, duplicated, at
+      // the cap — is still a change the list may not be showing (another press
+      // filled the cap), so the redraw happens on both arms. A refusal about the
+      // place or the mode leaves nothing to draw and the menu is already closing.
+      const view = PF.pack.boardOffers(this.core);
+      if (view.available) this._renderBoard(view);
+      else this.closeBoard();
+      return;
+    }
+    this.toast(`Taken on: ${result.title}`);
+    const view = PF.pack.boardOffers(this.core);
+    if (view.available) this._renderBoard(view);
+  }
+
+  /** Hand a finished job in. `turnIn` re-finds the row and re-checks `have >= n`
+   *  at the press, so a row that moved under the menu cannot be paid twice. */
+  turnInJob(id) {
+    const result = PF.pack.turnIn(this.core, id);
+    if (!result.ok) {
+      this.toast(this.boardRefusal(result.reason));
+      const refused = PF.pack.boardOffers(this.core);
+      if (refused.available) this._renderBoard(refused);
+      else this.closeBoard();
+      return;
+    }
+    // The purse moved, so the chips have.
+    this.refreshChips();
+    const paid = PF.economy.money(this.core.sim.world, result.money);
+    this.toast(result.giver ? `Handed in to ${result.giver} — ${paid}` : `Handed in — ${paid}`);
+    const view = PF.pack.boardOffers(this.core);
+    if (view.available) this._renderBoard(view);
+  }
+
+  /** The board's refusals, turned into sentences — the fishing verb's
+   *  reason-to-sentence map, not a fork of it.
+   *
+   *  `not-at-board` and `no-world` are absent for fishRefusal's own reason: the
+   *  button is not on screen where there is no board, so a line for them would be
+   *  copy nobody can reach — which is exactly why the fall-through has to be a
+   *  real sentence.
+   *
+   *  THE AT-CAP COPY NAMES BOTH RELIEFS and both are now built: finishing is the
+   *  board's own hand-in, and setting aside is the quest tab's per-row confirm
+   *  (§2.3, `setAsideJob`). The wording is §2.1's verbatim, and it was written
+   *  one slice before the affordance it points at because the arc ships as ONE
+   *  submission — no player is ever handed a build where "set aside" points at
+   *  nothing.
+   *
+   *  AND IT IS THE ONE MAP, read from both surfaces. The name is the board's
+   *  because the board is where it was written, not because the sentences are:
+   *  every reason in it is a reason about a JOB, and the two places a job can be
+   *  pressed answer them identically. A second map for the tab is how one of them
+   *  comes to say something the other does not.
+   *
+   *  `unknown-id` IS THE BOARD'S OWN, corrected: slice 3 filed it with the
+   *  surfaces the board cannot reach, and the board reaches it every time a row
+   *  leaves `quests.active` under an open menu — a mint severance parking it, the
+   *  repair pass dropping it, a rebuild landing between the draw and the press.
+   *  The press then re-finds nothing and the generic fall-through said "there is
+   *  nothing to do at the board", which is a sentence about the BOARD written for
+   *  a row that went away. `abandon-unknown` is that same fact one surface along
+   *  — the quest tab pressing a row the block no longer holds — and it shipped
+   *  with this enumeration a slice before its producer existed, which is why the
+   *  two read alike (plan §2.3's refusal list is complete here). */
+  boardRefusal(reason) {
+    if (reason === "wrong-mode") return "Not while you're talking — resume walking first";
+    if (reason === "gate-held") return "Not yet — your world is still being written.";
+    if (reason === "at-cap") return "Your job list is full — finish or set aside a job first.";
+    if (reason === "taken") return "You took that one today — it is on your jobs list.";
+    if (reason === "filled") return "That work is done for today — the board posts it again another day.";
+    if (reason === "dup") return "You are already on that one.";
+    if (reason === "not-done") return "That one isn't finished yet.";
+    if (reason === "unknown-id") return "That job is no longer on your list.";
+    if (reason === "abandon-unknown") return "That job is no longer on your list.";
+    return "There is nothing to do at the board just now.";
+  }
+
+  /** A JOB THAT FINISHED WHERE THE PLAYER WAS STANDING, rather than at the board.
+   *  The visit and deliver verbs complete at their own sites (61-pack), and a
+   *  completion the player is never told about is a purse that moved for no
+   *  reason they can see — the board's hand-in toasts, and a session of fishing
+   *  toasts, so an errand run and a walk taken have to as well.
+   *
+   *  ONE PLACE FOR THE COPY, called from three sites (the frame loop's arrival,
+   *  50-spatial's drift arm, and Talk's accepted turn). It takes the LIST rather
+   *  than one row because both verbs are answered with a filter: two rows asking
+   *  for the same walk are both filled by taking it, and each is its own sentence.
+   *  An empty list says nothing and touches nothing, which is the ordinary case
+   *  for every arrival and every greeting in the game. */
+  questFilled(done) {
+    if (!Array.isArray(done) || !done.length) return;
+    const world = this.core.sim?.world;
+    for (const row of done) {
+      const paid = PF.economy.money(world, row.money);
+      this.toast(row.giver ? `Done for ${row.giver} — ${paid}` : `Job done — ${paid}`);
+    }
+    // The purse moved, so the chips have.
+    this.refreshChips();
+  }
+
   /** Take the rod the button is offering. The offer is re-read inside buyRod, so
    *  a frame-old button cannot overcharge anybody; this turns the refusals into
    *  sentences, exactly as rentBerth's caller does. */
@@ -13731,11 +16825,19 @@ PF.Hud = class {
    *  `preventDefault` either way, because the host's own Escape handling is not
    *  ours to cancel, so "the key meant something here" is not a question it has
    *  to ask. The return is the honest answer for a caller that does — today that
-   *  is the harness, which pins it. */
+   *  is the harness, which pins it.
+   *
+   *  THE BOARD'S LIST CLOSES HERE TOO (0.13 §2.1). It is not a panel — it is a
+   *  floating list in the action column, like the fishing and sleeping menus —
+   *  but Escape is the only key that can reach any of them, and a list of work
+   *  left standing over a closed surface is the one of the four that holds a
+   *  press with consequences behind it. It rides the return for the same reason
+   *  the panels do: "something was open" is the honest answer either way. */
   closePanels() {
-    const open = this._journal || this._sheet;
+    const open = this._journal || this._sheet || this.boardMenu.style.display === "flex";
     this.closeJournal();
     this.closeSheet();
+    this.closeBoard();
     return open;
   }
 
@@ -13749,7 +16851,18 @@ PF.Hud = class {
     // the first would be a panel nobody can see under a panel nobody closed.
     this.closeSheet();
     this._journal = true;
+    // THESE TWO ARE DEFENSIVE SYMMETRY, and saying so is the point: the CLOSE
+    // side is the load-bearing one, and every close routes through
+    // `closeJournal` — the chip, and Escape via `closePanels` — so nothing can
+    // reach this line with a press still armed or a slot still held. (Leaving
+    // the world is NOT one of them: `update` HIDES the journal and leaves
+    // `_journal` true, so the panel comes back as it was on the next in-world
+    // frame. It never reaches this line at all.)
+    // They are unkillable by construction and a mutation test will never red on
+    // them; they stay because an open that assumed a clean slot would be resting
+    // on a guarantee written in another method.
     this._journalMemo = null;
+    this._dropQuestPress();
     this._journalSync();
     this.journalEl.style.display = "flex";
   }
@@ -13757,32 +16870,83 @@ PF.Hud = class {
   closeJournal() {
     this._journal = false;
     this._journalMemo = null;
+    // A CLOSED PANEL HOLDS NO ARMED CONFIRM (§2.3). The tab it was armed on is
+    // repainted from scratch on the next open, and a press half-made an hour ago
+    // is not permission for the press that reopens the panel.
+    this._dropQuestPress();
     this.journalEl.style.display = "none";
   }
 
-  /** The journal's memo: the two ARRAYS and their two lengths (plan §2.5). The
-   *  identities catch a wholesale replacement — `_compactLedger` rebuilds
-   *  `ledger.lines` on every append, and a restore assigns a fresh band — and
-   *  the lengths catch an append that kept the array it pushed onto, which is
-   *  exactly what `notice()` does while the band is under its cap.
+  /** THE STRIP, built by WALKING THE LIST (§2.4). Nothing here knows there are
+   *  two of them: a third descriptor lands a third button with no other change,
+   *  which is the whole reason the tabs are a list. Rebuildable rather than
+   *  inlined into the constructor for the same reason — a list that can only be
+   *  read once at mount is a list with a two-tab assumption in it. */
+  _buildTabs() {
+    this._tabBtns = this._journalTabs.map((tab, index) => this._btn(tab.label, () => this._selectTab(index)));
+    this.journalTabs.replaceChildren(...this._tabBtns);
+    this._paintTabs();
+  }
+
+  /** Which tab is active, said in the one language every other state in this file
+   *  is said in: a STYLE PROPERTY. Not a class, not an attribute, and above all
+   *  not `role`/`aria-modal` — `_hostOwnsKeyboard` (90-element) believes any
+   *  visible `[role="dialog"][aria-modal="true"]`, and a strip that dressed its
+   *  buttons as dialog furniture would make the keys that close the panel inert
+   *  the moment it opened. The panel beside them carries the same prohibition and
+   *  the harness pins both. */
+  _paintTabs() {
+    for (let i = 0; i < this._tabBtns.length; i++)
+      this._tabBtns[i].style.opacity = i === this._journalTab ? "1" : "0.5";
+  }
+
+  /** Switch tabs. Three things go with the switch and each is its own rule:
+   *  the MEMO (the slot belongs to the tab that is active, and the incoming tab
+   *  has never seen it), the ARMED CONFIRM (§2.3 — a half-made press does not
+   *  survive leaving the surface it was made on), and the SCROLL POSITION, which
+   *  is reset because the body is one scroller shared by every tab and arriving
+   *  at a short list two hundred pixels down is arriving at a blank panel.
+   *
+   *  Re-pressing the ACTIVE tab is a no-op on purpose: it is not a switch, so it
+   *  neither repaints nor disarms anything. */
+  _selectTab(index) {
+    if (index === this._journalTab || !this._journalTabs[index]) return;
+    this._journalTab = index;
+    this._journalMemo = null;
+    this._dropQuestPress();
+    this.journalBody.scrollTop = 0;
+    this._paintTabs();
+    this._journalSync();
+  }
+
+  /** THE PANEL'S ONE PER-FRAME QUESTION, asked of whichever tab is up. The tab
+   *  answers with its new memo or with `null` for "nothing I draw has moved",
+   *  and this seeds the slot and paints. Two lines of driver and no branch per
+   *  tab: everything that differs between them lives in the descriptors. */
+  _journalSync() {
+    const tab = this._journalTabs[this._journalTab];
+    if (!tab) return;
+    const memo = tab.memoSync(this._journalMemo);
+    if (memo === null) return;
+    this._journalMemo = memo;
+    tab.render();
+  }
+
+  /** The ledger tab's two arrays, through ONE reader — which is what makes "the
+   *  memo is the projection of what the tab draws" true rather than nearly true
+   *  (the sheet's `_num` discipline). The memo watches their IDENTITIES because
+   *  `_compactLedger` rebuilds `ledger.lines` on every append and a restore
+   *  assigns a fresh band, and their LENGTHS because `notice()` pushes onto the
+   *  array it already had while the band is under its cap.
    *
    *  What it deliberately does NOT track is the told flag: the band shows told
    *  and untold rows alike, so a burn changes nothing the panel draws. */
-  _journalSync() {
+  _ledgerArrays() {
     const player = PF.player.get(this.core);
-    const lines = Array.isArray(player?.ledger?.lines) ? player.ledger.lines : null;
-    const notices = Array.isArray(player?.ledger?.notices) ? player.ledger.notices : null;
-    const memo = this._journalMemo;
-    if (
-      memo &&
-      memo.lines === lines &&
-      memo.notices === notices &&
-      memo.lineCount === (lines?.length ?? 0) &&
-      memo.noticeCount === (notices?.length ?? 0)
-    )
-      return;
-    this._journalMemo = { lines, notices, lineCount: lines?.length ?? 0, noticeCount: notices?.length ?? 0 };
-    this._renderJournal(lines ?? [], notices ?? []);
+    return {
+      lines: Array.isArray(player?.ledger?.lines) ? player.ledger.lines : null,
+      notices: Array.isArray(player?.ledger?.notices) ? player.ledger.notices : null,
+    };
   }
 
   /** ONE LIST, day-grouped from each line's own day, newest day first — and the
@@ -13841,6 +17005,262 @@ PF.Hud = class {
     }
     if (!days.length && !notices.length)
       body.appendChild(PF.el("div", { style: dim, text: "Nothing written down yet." }));
+  }
+
+  // ── THE QUEST TAB (0.13 §2.4) ─────────────────────────────────────────────
+  // What the player is carrying, what they have finished, and what a world they
+  // no longer stand in is holding for them. It renders through the SHARED row
+  // renderer (61-pack `rowText`) and adds no branch of its own to it: the board's
+  // jobs section and this list are the same sentences, because they are the same
+  // rows and there is one function that turns a row into words.
+
+  /** The two press-driven pieces of state this tab draws, dropped together. They
+   *  are HUD-side and nowhere else — an abandon is free and player-initiated, so
+   *  there is nothing to persist and nothing a reload should remember — and
+   *  neither is in the value key, deliberately: a press paints its own answer
+   *  immediately (`_repaintQuests`), while the key is what catches the BLOCK
+   *  moving underneath. Anything that moves the block drops both, which is the
+   *  point: the row a second press would land on must be the row the first press
+   *  meant. */
+  _dropQuestPress() {
+    this._armedAbandon = null;
+    this._questSaid = "";
+  }
+
+  /** A press has changed what this tab draws, so paint it AND seed the memo with
+   *  the key the paint was made from. Seeding is what keeps the armed confirm
+   *  alive: the next frame compares equal, `memoSync` answers "nothing moved",
+   *  and nothing disarms the press the player has half-made. Only ever called
+   *  from this tab's own buttons, which exist only while this tab is painted. */
+  _repaintQuests() {
+    this._journalMemo = this._questValueKey();
+    this._renderQuests();
+  }
+
+  /** Where this world's board is, read ONCE for both the value key and the empty
+   *  state (the sheet's one-reader discipline). The fixture is unconditional and
+   *  lives on the settlement root, so this answers on every world that has one —
+   *  and `null` rather than a guess on one that somehow has not, which is the
+   *  only case the empty state has nothing to point at. */
+  _boardWhere() {
+    const world = this.core.sim?.world;
+    const zone = PF.own(world?.zones, world?.startZone) ?? null;
+    const board = (Array.isArray(zone?.features) ? zone.features : []).find(
+      (row) => row?.id === PF.world.BOARD_FEATURE_ID,
+    );
+    return board ? { board: String(board.name), zone: String(zone.name) } : null;
+  }
+
+  /** How many quest rows the stamp bag is holding for another world. A severance
+   *  parks the world-bound half of the block (58-player `applyStamps`) and the
+   *  notice band narrates it in story order; this is the same fact told where the
+   *  rows themselves are missing from. */
+  _parkedQuests() {
+    const parked = PF.quarantine?.peek?.("stamp")?.fields?.questsActive;
+    return Array.isArray(parked) ? parked.length : 0;
+  }
+
+  /** THE EMPTY STATE (§2.4): present-tense fact, a pointer and not a promise, no
+   *  nag — and it must not contradict the board it points at. The two arms are
+   *  the board's own test (`folded.ids.length`), so a packless or demoted world
+   *  says the same thing here that the board says there ("No work posted here")
+   *  rather than sending the player across the settlement to read it. */
+  _questEmpty(folded) {
+    const where = this._boardWhere();
+    if (!where) return "Nothing taken on.";
+    return folded?.ids?.length
+      ? `Nothing taken on. ${where.board} in ${where.zone} has work.`
+      : `Nothing taken on. ${where.board} in ${where.zone} has none posted.`;
+  }
+
+  /** The counter's own word when the pack cannot name it: the last segment of the
+   *  template id (`p:<pack>:<slug>` and `b:<slug>` both end in it). A finished
+   *  job's counter outlives the pack that minted it — a demotion, a world sealed
+   *  against another brief, a `b:` counter that travelled here from somewhere
+   *  else — so the tally has to be legible without a title, exactly as a live row
+   *  is (`rowText`'s own fallback). */
+  _slugOf(id) {
+    const text = String(id ?? "");
+    return text.slice(text.lastIndexOf(":") + 1) || text;
+  }
+
+  /** THE LIVE VALUE KEY (§2.4, the sheet's projection invariant adopted verbatim
+   *  — see `_sheetValueKey`). Every field of every live row, both completion maps
+   *  as sorted `template:count` joins (NEVER sums: trimming a counter and
+   *  incrementing another is a sum that does not move), the world's theme, and
+   *  THE PACK'S OWN IDENTITY.
+   *
+   *  THE PACK HASH IS THE TERM WITH TEETH. A demotion moves no quest state at all
+   *  — the rows stay, complete and abandon exactly as before — and changes every
+   *  TITLE on this tab, because the titles come out of the fold. Without the hash
+   *  in the key the tab would sit there showing a demoted world the sealed pack's
+   *  words until something unrelated moved.
+   *
+   *  TWO TERMS BEYOND §2.4'S LIST, and both are the invariant asking for them
+   *  rather than the list being widened for comfort: the tab also draws the
+   *  PARKED-ROW notice and the empty state's BOARD AND ZONE NAMES, and a key that
+   *  did not carry them would leave those two halves unable to re-render. (A
+   *  severance under an open panel moves the rows as well, and a rebuild usually
+   *  moves the theme — "usually" is exactly what a projection may not rest on.)
+   *
+   *  Rows join their nine fields with `|` (§2.4's own separator), rows join with
+   *  `,`, and the sections with `~`. THREE SEPARATORS ARE NOT THREE FENCES, and
+   *  the earlier claim here that a value carrying one could not forge a boundary
+   *  above it was simply wrong: `g` is `"zoneId|Name"` and carries the field
+   *  separator in every row this build mints (58-player's `giverOf` still
+   *  tolerates a bar-less legacy value, which is the only kind that does not),
+   *  and a board or zone name with a `~` in it lands at the top level. What
+   *  makes that harmless is not the separators but what happens to the key
+   *  afterwards — NOTHING PARSES IT. It is built, compared whole against the
+   *  last one, and thrown away; no reader ever splits it back into fields, so
+   *  there is no structure for a forged boundary to mislead. The only failure a
+   *  separator in a value could ever buy is a COLLISION — two different blocks
+   *  rendering the same string — which takes a row hand-built to collide (the
+   *  numeric fields go through `_num` and cannot carry one), and which costs
+   *  exactly one missed repaint: a line left stale until the next thing moves.
+   *  Not a wrong render, not a lost mutation. */
+  _questValueKey() {
+    const player = PF.player.get(this.core);
+    const world = this.core.sim?.world;
+    const text = (value) => (typeof value === "string" ? value : "");
+    const byKey = (a, b) => (a[0] < b[0] ? -1 : a[0] > b[0] ? 1 : 0);
+    const tally = (map) =>
+      Object.entries(map ?? {})
+        .sort(byKey)
+        .map(([id, n]) => `${id}:${this._num(n)}`)
+        .join(",");
+    const rows = (Array.isArray(player?.quests?.active) ? player.quests.active : [])
+      .map((row) =>
+        [
+          text(row?.id),
+          text(row?.verb),
+          text(row?.target),
+          this._num(row?.have),
+          this._num(row?.n),
+          text(row?.g),
+          this._num(row?.day),
+          this._num(row?.r?.money),
+          this._num(row?.r?.xp),
+        ].join("|"),
+      )
+      .join(",");
+    const where = this._boardWhere();
+    return [
+      rows,
+      tally(player?.quests?.done_pack),
+      tally(player?.quests_done_board),
+      world?.theme ?? "",
+      PF.save.packFold(this.core)?.pack?.briefHash ?? "",
+      this._parkedQuests(),
+      where ? `${where.board}@${where.zone}` : "",
+    ].join("~");
+  }
+
+  /** The tab, top to bottom: what a lost world is holding, what the last press
+   *  said, the live list (or the empty state), then the two done groups. */
+  _renderQuests() {
+    const body = this.journalBody;
+    body.replaceChildren();
+    const dim = "opacity:0.7;";
+    const head = (label) => PF.el("div", { style: `font:700 12px/1.6 inherit;${dim}`, text: label });
+    const player = PF.player.get(this.core);
+    const folded = PF.save.packFold(this.core);
+    const rows = Array.isArray(player?.quests?.active) ? player.quests.active : [];
+
+    // THE LOSS, SAID WHERE THE HOLE IS (§2.4). The notice band on the tab beside
+    // this one narrates the severance in story order and is the record of it;
+    // this line is why the list under it is shorter than the player remembers.
+    if (this._parkedQuests())
+      body.appendChild(PF.el("div", { style: dim, text: "Some tasks belong to another world and are set aside." }));
+    if (this._questSaid) body.appendChild(PF.el("div", { style: dim, text: this._questSaid }));
+
+    if (!rows.length) {
+      body.appendChild(PF.el("div", { style: dim, text: this._questEmpty(folded) }));
+    } else {
+      const live = PF.el("div", { style: "display:flex;flex-direction:column;gap:6px;" }, [head("Your job list")]);
+      for (const row of rows) {
+        const id = String(row?.id ?? "");
+        // THE ABANDON AFFORDANCE, and it is on THIS tab and only this one (§2.3).
+        // One press arms it and the second lets the job go; the armed state is a
+        // style property and a word, held hud-side, dropped by anything that
+        // moves the list. Free, and never anything but the player's own doing —
+        // nothing in the package abandons a quest for them.
+        const armed = this._armedAbandon === id;
+        const drop = this._btn(armed ? "Set it aside?" : "Set aside", () => this.setAsideJob(id));
+        drop.style.opacity = armed ? "1" : "0.55";
+        live.appendChild(
+          PF.el("div", { style: "display:flex;align-items:center;justify-content:space-between;gap:8px;" }, [
+            PF.el("div", { text: PF.pack.rowText(row, folded) }),
+            drop,
+          ]),
+        );
+      }
+      body.appendChild(live);
+    }
+
+    // THE TWO DONE GROUPS, and the split is the counter classes' own (§2.2e). A
+    // `p:` counter was minted by work this world's pack posted and means nothing
+    // anywhere else; a `b:` counter came off the generic templates, whose targets
+    // are ROLE-grain and whose givers are the stock cast, so it means the same
+    // thing in the next world — which is what `quests_done_board` claims about
+    // itself, said out loud where the player can read it.
+    for (const [label, map, cap] of [
+      ["Done — this world's", player?.quests?.done_pack, PF.player.CAPS.packDone],
+      ["Done — travels with you", player?.quests_done_board, PF.player.CAPS.boardDone],
+    ]) {
+      const byKey = (a, b) => (a[0] < b[0] ? -1 : a[0] > b[0] ? 1 : 0);
+      const tallies = Object.entries(map ?? {}).sort(byKey);
+      if (!tallies.length) continue;
+      const group = PF.el("div", { style: "display:flex;flex-direction:column;gap:2px;" }, [head(label)]);
+      for (const [id, count] of tallies)
+        group.appendChild(
+          PF.el("div", {
+            style: dim,
+            text: `${folded?.byId?.get(id)?.title || this._slugOf(id)} ×${this._num(count)}`,
+          }),
+        );
+      // A BOUNDED TALLY SAYS SO WHEN IT IS AT THE BOUND. These maps EVICT — the
+      // least-earned counter goes to make room for a new kind of work — so a full
+      // one is a list that has already lost something, and a tally that let the
+      // player read it as a complete history would be lying quietly.
+      if (tallies.length >= cap)
+        group.appendChild(PF.el("div", { style: dim, text: `Only the last ${cap} kinds of work are kept.` }));
+      body.appendChild(group);
+    }
+  }
+
+  /** Let one job go. THE FIRST PRESS ARMS AND CHANGES NOTHING — no mutator runs,
+   *  no line is written — and the second one does it. A confirm rather than an
+   *  undo because there is nothing to undo to: the row carries the count the
+   *  player earned toward it, and re-accepting tomorrow's copy of the same
+   *  template starts at zero.
+   *
+   *  THE VANISHED ROW SELF-HEALS through the mutator rather than through a guard
+   *  here: `quest("abandon")` refuses an id it cannot find, so a row that left the
+   *  list between the paint and the press (a severance, the repair pass, a
+   *  rebuild) comes back as a refusal and a repaint that no longer shows it. The
+   *  generation fence answers with the same value on purpose — from where the
+   *  player is standing, a block that moved under them and a row that was never
+   *  there are the same sentence. */
+  setAsideJob(id) {
+    if (this._armedAbandon !== id) {
+      this._dropQuestPress();
+      this._armedAbandon = id;
+      this._repaintQuests();
+      return;
+    }
+    const result = PF.pack.abandon(this.core, id);
+    this._dropQuestPress();
+    // SAID IN THE PANEL AND NOT IN A TOAST, because a toast cannot be read from
+    // here: the panels are full-surface and opaque and sit above the toast
+    // surface in the root's own order, so a sentence sent there while one is open
+    // is a sentence nobody sees.
+    this._questSaid = result.ok
+      ? result.giver
+        ? `Set aside ${result.giver}'s job.`
+        : "Set aside."
+      : this.boardRefusal(result.reason);
+    this._repaintQuests();
   }
 
   toggleSheet() {
@@ -14121,24 +17541,52 @@ PF.Hud = class {
     // player can be looking at a retry button that will keep giving the same
     // answer. It has to be in the memo key or the sentence never changes.
     const gateWhy = gate === "failed" ? (PF.save.gate.failure ?? null) : null;
+    // WHICH ARTIFACT the gate is waiting on — the world itself or the content
+    // written for it (0.13's second generation call). Two different screens: at the
+    // brief stage nothing has been settled on this chat at all, and at the pack
+    // stage the SETTING is sealed and kept whatever happens next. What is not
+    // settled at the pack stage is the world in front of the player: the stamp
+    // outlives the pack call itself, so this stage also covers a pack that sealed
+    // and an install that then threw — see `PF.save.gateStageNote`, whose whole
+    // job is a sentence true on every one of those arms. In the memo key for the
+    // same reason `gateWhy` is: a stage that changed without the state changing
+    // would leave the wrong sentence up.
+    const gateStage = gate ? (PF.save.gate.stage ?? "brief") : null;
     if (
       mode !== this._mode ||
       spatialAvail !== this._spatialAvail ||
       gate !== this._gate ||
-      gateWhy !== this._gateWhy
+      gateWhy !== this._gateWhy ||
+      gateStage !== this._gateStage
     ) {
       this._mode = mode;
       this._spatialAvail = spatialAvail;
       this._gate = gate;
       this._gateWhy = gateWhy;
+      this._gateStage = gateStage;
       const inWorld = mode === "walk" && !gate;
       this.gateEl.style.display = gate ? "flex" : "none";
       this.gateRetry.style.display = gate === "failed" ? "" : "none";
-      this.gateTitle.textContent = gate === "failed" ? "The world didn't finish being written." : "Writing your world…";
+      this.gateTitle.textContent =
+        gate === "failed"
+          ? gateStage === "pack"
+            ? // NOT "the work for this world didn't finish being written": the pack
+              // stage is stamped on both sides of the pack's own seal, so on the
+              // arm where the work IS written and the install threw, that title
+              // named the wrong thing as missing. What is true on every arm is
+              // that the world did not finish coming up, which is also the thing
+              // the player is looking at a spinner instead of.
+              "This world didn't finish opening."
+            : "The world didn't finish being written."
+          : gateStage === "pack"
+            ? "Writing what your world has to say…"
+            : "Writing your world…";
       this.gateBody.textContent =
         gate === "failed"
-          ? `${PF.save.gateReason(gateWhy)} Nothing was lost and nothing was decided for you — this chat is exactly as you left it. Try again whenever you like.`
-          : "One generation call is shaping the settlement, its people and the places in it. This can take a minute.";
+          ? `${PF.save.gateReason(gateWhy, gateStage)} ${PF.save.gateStageNote(gateStage)}`
+          : gateStage === "pack"
+            ? "The settlement is written. One more call is filling in what its people say and the work they have to offer."
+            : "One generation call is shaping the settlement, its people and the places in it. This can take a minute.";
       this.topbar.style.display = gate ? "none" : "";
       // Replay: the host owns the whole screen. Combat: keep a minimal HUD —
       // the mode is inferred from the narrative gameActiveState, which can flip
@@ -14158,6 +17606,8 @@ PF.Hud = class {
         this._fish = null;
         this.sleepBtn.style.display = "none";
         this._sleep = null;
+        this.boardBtn.style.display = "none";
+        this._board = null;
       }
       // THE PANEL OPENERS, on the berth button's cadence and for a reason of
       // their own: the gate hides the whole topbar, but the topbar STAYS UP in
@@ -14189,6 +17639,7 @@ PF.Hud = class {
       this.waitMenu.style.display = "none";
       this.fishMenu.style.display = "none";
       this.sleepMenu.style.display = "none";
+      this.boardMenu.style.display = "none";
       if (mode === "dialogue" && !gate) this.toast("Type in the message box below — Resume to keep walking");
     }
     // Nothing below the gate means anything: there is no beat to caption, nobody
@@ -14290,6 +17741,22 @@ PF.Hud = class {
         this.sleepBtn.style.display = bed.bed ? "" : "none";
         if (bed.bed) this.sleepBtn.style.opacity = bed.available ? "1" : "0.45";
         else this.sleepMenu.style.display = "none";
+      }
+      // THE BOARD, and it is the simplest gate in this block: the fixture within
+      // reach or nothing. No offer is read here and no state is answered — a
+      // board is a thing you walk up to, and everything it might refuse is
+      // answered at menu-open and at each press instead (§2.2d). It never dims
+      // either, because there is no refusal that belongs to standing in front of
+      // it: an empty board says so in words, in the menu, where the words fit.
+      const board = sim.nearBoard;
+      const boardKey = board ? `${board.id}:${board.name}` : "";
+      if (boardKey !== this._board) {
+        this._board = boardKey;
+        this.boardBtn.style.display = board ? "" : "none";
+        // Walking away closes the list with the button, exactly as the bank
+        // does: a board's offers are the offers of a board you are standing at.
+        if (board) this.boardBtn.textContent = `📋 ${board.name}`;
+        else this.closeBoard();
       }
       const clock = sim.clockLabel();
       if (clock !== this._clock) {
@@ -14568,7 +18035,20 @@ PF.mountSetup = (el, props) => {
       enableAgents: true,
       spatialMapInstructions: preset.spatial,
       combatStyle: "classic",
-      experienceConfig: { seed, theme: themeSel.value, generate: generateIn.checked },
+      // `packWanted` rides the SAME answer rather than asking a second question
+      // (0.13): the offline content pack is written by a second call in the same
+      // creation, and a player who wants a generated world wants its people to
+      // have something to say and something to ask for. Splitting it would put a
+      // cost decision in front of somebody who has already made it. It is read at
+      // exactly one place — the seal PATCH, which copies it beside the sealed
+      // brief — because THIS object is rewritable and that copy is not
+      // (60-save PACK_WANTED_META_KEY).
+      experienceConfig: {
+        seed,
+        theme: themeSel.value,
+        generate: generateIn.checked,
+        packWanted: generateIn.checked,
+      },
     };
     launchBtn.disabled = true;
     cancelBtn.disabled = true; // mirror the host's mid-launch freeze
@@ -14977,6 +18457,15 @@ PF.core = {
     // reference survives the wholesale null, so the turn that was sent is the
     // turn that gets burned.
     const pend = sim._pendingIntro;
+    // THE SIM THIS TURN WAS COMPOSED AGAINST, captured beside the pending and
+    // read after the await. The generation fence one screen up cannot see this
+    // one: `_gen` moves on a CHAT switch, while `_rebuild` replaces core.sim
+    // wholesale on the same chat (a rewind, a checkpoint load, a swipe) without
+    // touching it — and an errand settled against the replaced sim would pay out
+    // of a story that no longer contains the walk up to this person. The refusal
+    // is silent and costs one extra GM call in a race nobody will see: the quest
+    // stays active and the player talks to them again.
+    const sentSim = sim;
     void Promise.resolve(this.host.sendMessage(text))
       .then((ok) => {
         if (ok === false) {
@@ -15002,6 +18491,28 @@ PF.core = {
           // the world you happen to meet them. Surfacing the disposition in the
           // turn header is P2's own item and deliberately not here.
           PF.player.bump(this, sim.world.startZone, npc.name, { t: 1 }, gen);
+          // THE DELIVER VERB'S ONE SITE (0.13 §2.3). An errand is finished by
+          // TALKING — no item moves, because there is no quest-item type and
+          // inventing one for a word would be a format change nothing else asks
+          // for — so the handover is exactly this accepted turn, and it is the
+          // one quest verb that costs a GM call at all (Ruling 1 is lean, not
+          // zero). Gated on the captured generation AND on the sim still being
+          // the one the greeting was composed against; on a mismatch nothing is
+          // settled and the quest is still there to be finished by talking again.
+          //
+          // WHO THE ERRAND WAS RUN TO IS `npc`, the binding this whole method was
+          // composed against, and NOT a live proximity read. This used to copy
+          // `npc.name` into a `sentTo` of its own under a comment about the
+          // schedules walking somebody out of the room — which was two claims and
+          // both were wrong: `npc` is a const binding on the object the player
+          // walked up to, so a copy of its name guards nothing the binding does
+          // not, and the schedules cannot rename anybody. The hazard the closure
+          // really does answer is the OTHER shape this line could have taken —
+          // asking `this.sim.nearNpc` HERE, after the await, which is asking who
+          // is standing there now, after the host has had its whole thinking time
+          // for somebody else to wander in. The delivery was to the person the
+          // player greeted.
+          if (sentSim === this.sim) this.hud?.questFilled(PF.pack.delivered(this, npc.name, gen));
         }
       })
       .catch((err) => {
@@ -15010,6 +18521,31 @@ PF.core = {
         this.hud?.toast("That didn't go through — try again.");
         console.warn("[pixelforge] interact send failed", err);
       });
+    PF.save.markDirty(this);
+  },
+
+  /** A ZONE THE PLAYER WALKED INTO — the frame loop's own arrival, and one of the
+   *  two real zone-change callers in the package (50-spatial's drift arm is the
+   *  other, and it is the async one). Lifted out of the tick rather than left
+   *  inline: this is arrival BEHAVIOUR and not frame plumbing, the drift arm has
+   *  to do the same things, and inline in a `requestAnimationFrame` closure it
+   *  was the one branch here nothing could drive.
+   *
+   *  SYNCHRONOUS, so the generation is read FRESH (plan §2.3's gen sourcing): the
+   *  player is standing in the new zone by the time this runs and there is no
+   *  await for a chat switch to slip through. The captures belong to the two
+   *  senders, which really do wait. */
+  _zoneChanged() {
+    const sim = this.sim;
+    if (!sim) return;
+    this.hud?.refreshChips();
+    // "location": the top strip, clear of the narration panel the bottom
+    // toast surface sits over (70-hud `toast`).
+    this.hud?.toast(sim.zone().name, "location");
+    // THE VISIT VERB COMPLETES ON ENTRY (0.13 §2.3): the walk was the quest. The
+    // pack answers whether this arrival finished anything and the HUD says so —
+    // the toast above is where the player is, this is what it was worth.
+    this.hud?.questFilled(PF.pack.visited(this, sim.zoneId, PF.save._gen ?? 0));
     PF.save.markDirty(this);
   },
 
@@ -15162,13 +18698,7 @@ PF.core = {
           this._cutsceneDeclared = !!sim.cutscene;
           this._declareChrome();
         }
-        if (res.zoneChanged) {
-          this.hud?.refreshChips();
-          // "location": the top strip, clear of the narration panel the bottom
-          // toast surface sits over (70-hud `toast`).
-          this.hud?.toast(sim.zone().name, "location");
-          PF.save.markDirty(this);
-        }
+        if (res.zoneChanged) this._zoneChanged();
       }
       if (this._underlayEl) this.render?.draw(sim);
       // Positional autosave: at most one save per 30s of movement — the real
