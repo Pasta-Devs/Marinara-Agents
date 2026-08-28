@@ -13746,7 +13746,11 @@ await withSavePath(async ({ calls, behavior, makeCore }) => {
     // THE FIXTURE, held to its own rule: exactly one, in the settlement and
     // nowhere else, spending no ordinal and wearing no brief tag.
     assert.equal(fixed.length, 1, "the settlement gets exactly one board and no other zone gets any");
-    assert.deepEqual(first.z1.filter((row) => row.id === loadedPF.world.BOARD_FEATURE_ID), fixed, "…and it is z1's");
+    assert.deepEqual(
+      first.z1.filter((row) => row.id === loadedPF.world.BOARD_FEATURE_ID),
+      fixed,
+      "…and it is z1's",
+    );
     assert.equal(fixed[0].tag, loadedPF.world.BOARD_FEATURE_TAG, "…tagged as the fixture it is");
     assert.ok(
       !loadedPF.brief.FEATURE_TAGS.includes(fixed[0].tag),
@@ -14078,8 +14082,7 @@ await withSavePath(async ({ calls, behavior, makeCore }) => {
     // terminal, not to a notice board. Read off the legacy layout because that is
     // the one world both themes build from the same input, so the NAME is the
     // only thing that can have moved.
-    const named = (theme) =>
-      world.build(88, theme, null).zones.village.features.find((row) => row.id === BOARD).name;
+    const named = (theme) => world.build(88, theme, null).zones.village.features.find((row) => row.id === BOARD).name;
     assert.ok(named("cozy-village"), "the board is named in the fantasy theme");
     assert.notEqual(named("cozy-village"), named("sci-fi-colony"), "…and the colony does not call it the same thing");
     assert.notEqual(named("sci-fi-colony"), "notice-board", "…a name, not the tag");
@@ -16292,7 +16295,10 @@ await withSavePath(async ({ calls, behavior, makeCore }) => {
       }
       // …AND THE HEADER IS STILL JUST THE WORLD. Nothing about a job list leaks
       // into the part of the prefix every single turn carries.
-      assert.ok(!/quest|job|board|order/i.test(quiet.sim.header()), `the header says none of it (${quiet.sim.header()})`);
+      assert.ok(
+        !/quest|job|board|order/i.test(quiet.sim.header()),
+        `the header says none of it (${quiet.sim.header()})`,
+      );
     }
 
     // ── TRUNCATION DROPS THE NEWEST DAYS, AND THE BURN FOLLOWS IT ─────────────
@@ -17792,10 +17798,7 @@ const fire = (node, type) => Promise.all((node.listeners[type] ?? []).map((fn) =
       `…and it does not point DOWN at a list that is now above it (${receiptNow.textContent})`,
     );
     await fire(receiptNow, "click");
-    assert.ok(
-      !/below/i.test(hud.toastEl.textContent),
-      `…nor does the refusal it toasts (${hud.toastEl.textContent})`,
-    );
+    assert.ok(!/below/i.test(hud.toastEl.textContent), `…nor does the refusal it toasts (${hud.toastEl.textContent})`);
     assert.ok(
       /jobs/i.test(hud.toastEl.textContent),
       "…which still says where the job went, just not which way to look",
@@ -18162,7 +18165,14 @@ const fire = (node, type) => Promise.all((node.listeners[type] ?? []).map((fn) =
       theme: "cozy-village",
       briefHash: hash,
       templates: [
-        { id: "p:s:a", giver: "Marla", verb: "catch", target: { role: "catch-common" }, n: 3, title: "Three for Marla" },
+        {
+          id: "p:s:a",
+          giver: "Marla",
+          verb: "catch",
+          target: { role: "catch-common" },
+          n: 3,
+          title: "Three for Marla",
+        },
         { id: "p:s:b", giver: "Marla", verb: "catch", target: { variant: "carp" }, n: 2, title: "Two carp" },
         { id: "p:s:c", giver: "Wren Ash", verb: "visit", target: { place: "gathering" }, n: 1, title: "Look in" },
         { id: "p:s:d", giver: "Alder Vance", verb: "deliver", target: { npc: "Marla" }, n: 1, title: "Word to Marla" },
@@ -18213,7 +18223,11 @@ const fire = (node, type) => Promise.all((node.listeners[type] ?? []).map((fn) =
     const dayFive = idsNow();
     assert.equal(dayFive.length, pack.TUNING.K, `K offers on day ${chosen}`);
     assert.ok(pack.accept(core, "p:s:a").ok, "one of them is taken");
-    assert.deepEqual(idsNow(), dayFive, "…and the board still posts the same four: what changed is a state, not a list");
+    assert.deepEqual(
+      idsNow(),
+      dayFive,
+      "…and the board still posts the same four: what changed is a state, not a list",
+    );
     // Walk away, come back, look again — the memo is per DAY and the answer is
     // the seed's, so a re-derivation cannot hand back a different board.
     sim.teleport("z1", w.zones.z1.spawn.x, w.zones.z1.spawn.y);
@@ -18313,7 +18327,9 @@ const fire = (node, type) => Promise.all((node.listeners[type] ?? []).map((fn) =
     const result = pack.turnIn(core, "b1.d1.b:ghost");
     assert.equal(result.ok, true, "the job still hands in: the work was done");
     assert.equal(result.giver, null, "…but nobody is named as having taken it");
-    const line = P.get(core).ledger.lines.map(([, text]) => text).at(-1);
+    const line = P.get(core)
+      .ledger.lines.map(([, text]) => text)
+      .at(-1);
     assert.equal(
       line,
       "Filled the board order — 6 coins.",
@@ -18334,7 +18350,9 @@ const fire = (node, type) => Promise.all((node.listeners[type] ?? []).map((fn) =
     P.quest(core, "progress", { id: "b1.d1.b:real", by: 1 });
     assert.equal(pack.turnIn(core, "b1.d1.b:real").giver, "Tam", "a giver who is standing there IS named");
     assert.equal(
-      P.get(core).ledger.lines.map(([, text]) => text).at(-1),
+      P.get(core)
+        .ledger.lines.map(([, text]) => text)
+        .at(-1),
       "Filled Tam's board order — 6 coins.",
       "…in the line",
     );
@@ -18678,7 +18696,10 @@ const fire = (node, type) => Promise.all((node.listeners[type] ?? []).map((fn) =
       E.fish(at.core, "dusk");
       const after = P.serialize(P.get(at.core));
       assert.ok(after.quests.active[0].have > 0, "the session moved the count");
-      assert.ok(after.pouch.items.some((row) => row.k === "carp"), "…and put fish in the bag");
+      assert.ok(
+        after.pouch.items.some((row) => row.k === "carp"),
+        "…and put fish in the bag",
+      );
       // ONE BLOB BACK, and both halves come with it.
       at.sim.player = P.parse(JSON.parse(before)).player;
       assert.equal(P.get(at.core).quests.active[0].have, 0, "the count rewound");
@@ -18860,7 +18881,13 @@ const fire = (node, type) => Promise.all((node.listeners[type] ?? []).map((fn) =
     // event's day — a walk taken on the board's day 4 and finished on day 4.
     const lines = () => P.get(core).ledger.lines;
     const arrival = lines().filter(([, text]) => text.includes("Walked out to"));
-    assert.equal(arrival.length, 2, `one line per completion, no more (${lines().map(([, t]) => t).join(" | ")})`);
+    assert.equal(
+      arrival.length,
+      2,
+      `one line per completion, no more (${lines()
+        .map(([, t]) => t)
+        .join(" | ")})`,
+    );
     assert.ok(arrival[0][1].includes("The Wood"), "…naming the zone the player actually reached");
     assert.ok(!arrival[0][1].includes("wilds"), "…rather than the index key the schema uses");
     assert.ok(arrival[0][1].includes("Ivy"), "…and the giver it was for");
@@ -24121,8 +24148,7 @@ const fire = (node, type) => Promise.all((node.listeners[type] ?? []).map((fn) =
     pixelforgeBrief: purseBrief,
     pixelforgePackWanted: true,
   };
-  const purseLines = (core) =>
-    P.get(core).ledger.lines.filter(([, text]) => text.includes("Arrived with")).length;
+  const purseLines = (core) => P.get(core).ledger.lines.filter(([, text]) => text.includes("Arrived with")).length;
 
   await withSavePath(async ({ behavior, tick, makeCore }) => {
     await withGeneration(async ({ responses, postCount }) => {
