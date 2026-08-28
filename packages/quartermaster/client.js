@@ -1,4 +1,4 @@
-// Quartermaster 0.7.1 — Marinara Engine roleplay-tracker capability (single-file client bundle)
+// Quartermaster 0.7.2 — Marinara Engine roleplay-tracker capability (single-file client bundle)
 // Built from packages/quartermaster/src (6 modules) by scripts/build-quartermaster-package.mjs. Do not edit; edit src/ and rebuild.
 (() => {
 "use strict";
@@ -708,6 +708,32 @@ QM.dock = {
   _boundsObserver: null,
   _bodyObserver: null,
 
+  // Every DOM node _paint/_ensureRoot cache on `this` so a repaint can find
+  // and update them without rebuilding — cleared together whenever the root
+  // is rebuilt or there's no chat to show, since a stale reference into a
+  // detached tree is worse than none.
+  _resetCachedNodes() {
+    this.columns = null;
+    this.zoomWrapper = null;
+    this.uiSizeButtons = null;
+    this.errorNode = null;
+    this.feedSelect = null;
+    this.settingsSection = null;
+    this.settingsContent = null;
+    this.settingsChevron = null;
+    this.underwearToggle = null;
+    this.armorToggle = null;
+    this.weaponsToggle = null;
+    this.equippedContainer = null;
+    this.outfitsContainer = null;
+    this.outfitForm = null;
+    this.form = null;
+    this.listContainer = null;
+    this.portraitWrapper = null;
+    this.portraitImage = null;
+    this.portraitPlaceholder = null;
+  },
+
   isOpen() {
     return this.isOpenFlag;
   },
@@ -1015,27 +1041,9 @@ QM.dock = {
     this.root = root;
     this.header = header;
     this.body = body;
-    // Reset the cached body children — a fresh body element means everything
-    // built for a previous root no longer exists.
-    this.columns = null;
-    this.zoomWrapper = null;
-    this.uiSizeButtons = null;
-    this.errorNode = null;
-    this.feedSelect = null;
-    this.settingsSection = null;
-    this.settingsContent = null;
-    this.settingsChevron = null;
-    this.underwearToggle = null;
-    this.armorToggle = null;
-    this.weaponsToggle = null;
-    this.equippedContainer = null;
-    this.outfitsContainer = null;
-    this.outfitForm = null;
-    this.form = null;
-    this.listContainer = null;
-    this.portraitWrapper = null;
-    this.portraitImage = null;
-    this.portraitPlaceholder = null;
+    // A fresh body element means everything built for a previous root no
+    // longer exists.
+    this._resetCachedNodes();
 
     this.observeChatBounds();
     this.observeBodyWidth();
@@ -1061,25 +1069,7 @@ QM.dock = {
 
     if (!QM.state.chatId) {
       this.body.replaceChildren(QM.textNode("No active chat."));
-      this.columns = null;
-      this.zoomWrapper = null;
-      this.uiSizeButtons = null;
-      this.errorNode = null;
-      this.feedSelect = null;
-      this.settingsSection = null;
-      this.settingsContent = null;
-      this.settingsChevron = null;
-      this.underwearToggle = null;
-      this.armorToggle = null;
-      this.weaponsToggle = null;
-      this.equippedContainer = null;
-      this.outfitsContainer = null;
-      this.outfitForm = null;
-      this.form = null;
-      this.listContainer = null;
-      this.portraitWrapper = null;
-      this.portraitImage = null;
-      this.portraitPlaceholder = null;
+      this._resetCachedNodes();
       return;
     }
 

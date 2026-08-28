@@ -460,26 +460,30 @@ async function loadInventoryState(documents, chatId, ownerId) {
 // Neither slot instance's capabilityProps carries personaInfo/avatarUrl --
 // confirmed against the Engine's actual render sites this session
 // (RoleplayHUD.tsx's roleplay-tracker props and TrackerDataSidebar.tsx's
-// tracker-panel props are both far narrower than assumed). So the portrait
-// is resolved server-side instead: the chat's personaId, then that
-// persona's avatarPath via the resources facade — the same field name the
-// Engine's own client reads (persona.avatarPath) for the identical purpose.
-async function resolvePersonaAvatarUrl(persistence, resources, chatId) {
+// tracker-panel props are both far narrower than assumed). So the persona's
+// avatar/name are resolved server-side instead: the chat's personaId, then
+// that persona's record via the resources facade — the same field names the
+// Engine's own client reads (persona.avatarPath, persona.name) for the
+// identical purpose. One lookup shared by both resolvers below, rather than
+// two copies of the same chat→persona round trip.
+async function resolveChatPersonaData(persistence, resources, chatId) {
   const chat = await persistence.getChat(chatId);
   if (!chat || !chat.personaId) return null;
   const [persona] = await resources.listPersonas([chat.personaId]);
-  const avatarPath = persona && persona.data && typeof persona.data.avatarPath === "string" ? persona.data.avatarPath : null;
+  return persona?.data ?? null;
+}
+
+async function resolvePersonaAvatarUrl(persistence, resources, chatId) {
+  const data = await resolveChatPersonaData(persistence, resources, chatId);
+  const avatarPath = data && typeof data.avatarPath === "string" ? data.avatarPath : null;
   return avatarPath || null;
 }
 
-// Same resolution path as resolvePersonaAvatarUrl, for the prompt-context
-// summary's opening line — falls back to a generic label rather than failing
-// the whole contribution when there's no active persona to name.
+// Falls back to a generic label rather than failing the whole prompt-context
+// contribution when there's no active persona to name.
 async function resolvePersonaName(persistence, resources, chatId) {
-  const chat = await persistence.getChat(chatId);
-  if (!chat || !chat.personaId) return "The persona";
-  const [persona] = await resources.listPersonas([chat.personaId]);
-  const name = persona && persona.data && typeof persona.data.name === "string" ? persona.data.name.trim() : "";
+  const data = await resolveChatPersonaData(persistence, resources, chatId);
+  const name = data && typeof data.name === "string" ? data.name.trim() : "";
   return name || "The persona";
 }
 
