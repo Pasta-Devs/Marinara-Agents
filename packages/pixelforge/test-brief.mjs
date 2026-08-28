@@ -14043,6 +14043,17 @@ await withSavePath(async ({ calls, behavior, makeCore }) => {
                   for (let x = rect.x; x < rect.x + rect.w; x++)
                     assert.notEqual(z.ground[y * z.w + x], "water", `${where}: no water tile in a board rect`);
                 assert.ok(canReach(z, rect.x, rect.y), `${where}: and the player can walk up to it`);
+                // NO BOARD STANDS ON A DOORSTEP, swept everywhere rather than
+                // pinned on the one seed the rung-1 case uses. A door sits in a
+                // wall, so `(doorX, doorY + 1)` is both the only ground the
+                // doorway can be approached from AND the tile `linkInterior`
+                // delivers an outgoing player onto — and the board is solid.
+                // Cheap here (a set per world, membership once) and it covers
+                // the SCAN rung, which the ladder cases never reach.
+                const steps = new Set(
+                  (z.portals ?? []).filter((p) => p.toZone && p.toZone !== z.id).map((p) => `${p.x},${p.y + 1}`),
+                );
+                assert.ok(!steps.has(`${rect.x},${rect.y}`), `${where}: and it is on nobody's doorstep`);
                 swept++;
               }
             }
@@ -14077,6 +14088,33 @@ await withSavePath(async ({ calls, behavior, makeCore }) => {
       assert.equal(row.rect.y, door.y + 1, "the board is on the door's apron row");
       assert.equal(Math.abs(row.rect.x - door.x), 1, "…one step to the side of it");
       assert.notEqual(row.rect.x, door.x, "…and never on the step the portal delivers to");
+      // AND NOT ON ANY OTHER BUILDING'S STEP EITHER, which the rung-1 offsets
+      // alone do not promise: `dx` is never 0, so the gathering's OWN step is
+      // unreachable by construction, but a NEIGHBOUR's step at the same row is a
+      // question about lot geometry rather than about the ladder. `boardFree`
+      // now answers it directly and this is that answer read back.
+      const allSteps = new Set(
+        w.zones.z1.portals.filter((p) => p.toZone && p.toZone !== "z1").map((p) => `${p.x},${p.y + 1}`),
+      );
+      assert.ok(allSteps.size > 0, "the settlement has doorsteps to avoid");
+      assert.ok(!allSteps.has(`${row.rect.x},${row.rect.y}`), "…and the board is on none of them");
+    }
+    // THE LEGACY TWIN, asserted rather than assumed. `buildLegacy` hand-lays its
+    // board one step WEST of the inn door instead of running the ladder, and the
+    // guard cannot reach a literal — so the only thing that keeps that board off
+    // the inn's doorstep is the `- 1` in the literal itself. It is checked here
+    // against the same rule the compiled worlds are held to, because a world with
+    // no brief is still a world a player loads.
+    {
+      const w = world.build(1234, "cozy-village", null);
+      const z = w.zones.village;
+      const row = z.features.find((r) => r.id === BOARD);
+      assert.ok(row, "the legacy layout has its board");
+      const steps = new Set(
+        (z.portals ?? []).filter((p) => p.toZone && p.toZone !== z.id).map((p) => `${p.x},${p.y + 1}`),
+      );
+      assert.ok(steps.size > 0, "…and the legacy village has doors");
+      assert.ok(!steps.has(`${row.rect.x},${row.rect.y}`), "…and its hand-laid board is on no doorstep");
     }
     // Themed by the word book, exactly as the legacy pond is: a colony posts to a
     // terminal, not to a notice board. Read off the legacy layout because that is

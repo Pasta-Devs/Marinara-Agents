@@ -2872,9 +2872,37 @@ PF.world = (() => {
     // is read off geometry the passes above already laid, so the fixture is
     // deterministic per (seed, theme, brief) and the tile stream feeding the
     // ground cover, the trees and the mint does not move under it.
+    // THE DOORSTEPS ARE SPOKEN FOR, and this is the invariant said out loud
+    // rather than a bug being closed. `linkInterior` puts a player coming out of
+    // a building down on `(doorX, doorY + 1)` — the rung-1 comment below names
+    // the same tile from the other side — and a door sits in a wall, so that
+    // apron is the ONLY ground the doorway can be approached from.
+    //
+    // A board is solid and is laid BEFORE the pocket seal, so a board on a
+    // doorstep is an exit softlock either way round: the interior portal
+    // delivers the player onto a solid tile, or `sealPockets` closes the
+    // now-unreachable doorway behind it and the building is gone for good.
+    //
+    // THE TREE SCATTER ALREADY RESERVES THESE TILES (`doorRects` and the
+    // `wildsArrivals` note above it) and the board was the one solid-placing
+    // pass that did not — the same omission that comment records for a trunk
+    // landing on a wilds arrival.
+    //
+    // HONESTLY: no ladder rung offers a doorstep today (measured — 0 collisions
+    // across 4,000 worlds, and 0 across 3,000 more with five places and a
+    // fourteen-strong cast, because lot geometry never puts two doors within two
+    // columns of one row). So this changes no placement in any world that can be
+    // generated now. It is here for the SCAN rung, which walks every tile in the
+    // zone with no ladder to keep it honest, and for whoever edits the ladder or
+    // reuses `boardFree` next — W8's tight platform geometry is the scheduled
+    // trigger. Like the two defensive lines in 70-hud's `toggleJournal`, a
+    // mutation test will never red on it; it stays because a placer that assumed
+    // clear doorsteps would be resting on a guarantee written in another pass.
+    const doorSteps = new Set(buildings.map((b) => `${b.door.doorX},${b.door.doorY + 1}`));
     /** Can a board stand on this tile? */
     const boardFree = (x, y) => {
       if (x < 2 || y < 2 || x >= v.w - 2 || y >= v.h - 2) return false;
+      if (doorSteps.has(`${x},${y}`)) return false;
       // The spawn tile, never: sealPockets throws on a solid spawn, and a world
       // that refuses to build is a legacy world in the player's hands.
       if (x === v.spawn.x && y === v.spawn.y) return false;
@@ -2940,6 +2968,25 @@ PF.world = (() => {
           break;
         }
       }
+    }
+    if (!boardAt) {
+      // AND IF THE SCAN COMES BACK EMPTY, IT SAYS SO. The arm above is a
+      // statement — "a settlement with no tile at all to hang one on is a
+      // settlement with nowhere to walk" — and it stayed true only because
+      // nothing had ever narrowed the scan. The doorstep guard narrows it, by a
+      // handful of tiles and provably not enough to matter today, but the honest
+      // shape of a new refusal is a new way to come back with nothing.
+      //
+      // So the miss is RECORDED rather than skipped in silence: a world that
+      // arrives without a board is a world whose board button never appears, and
+      // the difference between "this brief sealed no work" and "the compiler
+      // could not place the fixture" is exactly the difference between a design
+      // and a bug. The brief's own repair log is the channel — where the seal
+      // already writes what it had to drop — and the push is guarded because a
+      // brief object can be compiled more than once in a session and a log that
+      // doubles its entries is a log nobody trusts.
+      const note = "world: no free tile for the quest board; settlement built without one";
+      if (Array.isArray(brief._repairs) && !brief._repairs.includes(note)) brief._repairs.push(note);
     }
     if (boardAt) {
       put(v, boardAt.x, boardAt.y, "object", "board", true);
