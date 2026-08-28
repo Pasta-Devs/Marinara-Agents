@@ -19795,6 +19795,41 @@ const fire = (node, type) => Promise.all((node.listeners[type] ?? []).map((fn) =
         });
       });
     });
+
+    // (c) AND THE CLEAR SITS UNDER BOTH GUARDS, which is half the rule and the
+    // half the two arms above cannot see: they both lift for real, so a clear
+    // hoisted to the head of `_liftGate` reads identical to them. What it breaks is
+    // the two calls that REFUSE — and each refuses precisely because the memo it
+    // would drop is still the right one for the world in front of somebody.
+    await withSavePath(async ({ makeCore }) => {
+      await withPack(async () => {
+        // (i) THE PLACEHOLDER REFUSAL. The gate holds, the interim world is
+        // standing, and the lift declines because nobody plays a world that is
+        // going to be discarded. Nothing was invalidated by a lift that did not
+        // happen: the fold under the gate is still the fold for what is on screen.
+        const core = makeCore("chat-fold-refused", 4242);
+        const meta = wizardConfig();
+        core.host.chatMeta = meta;
+        core.sim = loadedPF.save.restore(meta, "chat-fold-refused");
+        assert.equal(core.sim.world.interim, true, "the placeholder is what is standing");
+        assert.equal(loadedPF.save.armGate(core, meta), true, "…and the gate is up over it");
+        const memo = loadedPF.save.packFold(core);
+        loadedPF.save._liftGate(core);
+        assert.equal(loadedPF.save.gateHolds(core), true, "the lift refused, as it must over a placeholder");
+        assert.equal(core.sim._packFold, memo, "…and left the memo alone: a refusal invalidates nothing");
+        assert.equal(loadedPF.save.packFold(core), memo, "so the next read is that same fold, not a rebuilt one");
+
+        // (ii) THE WRONG-CHAT DOOR. An async completion for the chat we LEFT can
+        // land after the player has arrived somewhere else, and the memo it would
+        // drop on the way past belongs to the world they are looking at now.
+        const other = makeCore("chat-fold-elsewhere", 909);
+        const otherMemo = loadedPF.save.packFold(other);
+        assert.equal(loadedPF.save.gateHolds(other), false, "this core's chat is not the one the gate is armed for");
+        loadedPF.save._liftGate(other);
+        assert.equal(other.sim._packFold, otherMemo, "so the lift touched nothing of its, the memo included");
+        assert.equal(loadedPF.save.gateHolds(core), true, "…and the gate it does not own is still up");
+      });
+    });
   }
 }
 
