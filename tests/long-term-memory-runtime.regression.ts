@@ -460,6 +460,11 @@ async function main() {
         }),
       );
       await storage.createNote(
+        note("world_resolved", "chat-a", "The resolved cobalt archive world memory is closed.", {
+          status: "resolved",
+        }),
+      );
+      await storage.createNote(
         note("world_game_only", "chat-a", "The game-only cobalt archive is elsewhere.", { modes: ["game"] }),
       );
       await storage.createNote(
@@ -832,17 +837,24 @@ async function main() {
         resolvedExcluded.chunks.some((chunk: any) => chunk.chunk.noteId === "thread_resolved"),
         false,
       );
+      assert.equal(
+        resolvedExcluded.chunks.some((chunk: any) => chunk.chunk.noteId === "world_resolved"),
+        false,
+        "resolved non-thread memories must be excluded by default",
+      );
       const archivedExcluded = await retrieveLongTermMemory({
         root: storage.root,
         queryText: "archived cobalt archive",
         scope: { chatId: "chat-a", chatIds: ["chat-a"] },
         mode: "roleplay",
+        includeResolved: true,
         maxChunks: 10,
         maxTokens: 4096,
       });
       assert.equal(
         archivedExcluded.chunks.some((chunk: any) => chunk.chunk.noteId === "world_archived"),
         false,
+        "archived memories must stay excluded when resolved memories are included",
       );
       const modeMismatchExcluded = await retrieveLongTermMemory({
         root: storage.root,
@@ -868,6 +880,11 @@ async function main() {
       assert.equal(
         resolvedIncluded.chunks.some((chunk: any) => chunk.chunk.noteId === "thread_resolved"),
         true,
+      );
+      assert.equal(
+        resolvedIncluded.chunks.some((chunk: any) => chunk.chunk.noteId === "world_resolved"),
+        true,
+        "includeResolved must allow resolved non-thread memories",
       );
       const tagRecall = await retrieveLongTermMemory({
         root: storage.root,
