@@ -29,6 +29,8 @@ Since 1.2.0 the package is **staging only**: Engine `staging` testers are offere
 - **Story polish.** The prologue is the first beat of chapter 1, free by construction; a beat segment can be a thought and is painted as one; backgrounds follow the scene; the loading screen names the place it is painting; and forging a chapter no longer pre-paints its locations — art is painted when the player reaches it.
 - **Connections per job.** Prose (45% of measured spend) and chapter compression can run on a cheaper model than the structured calls, per world; world lorebooks can opt into feeding story scenes.
 
+**1.5.1** is a hotfix: the world-creation escape now reaches all four creation screens. Creation ends by reading the prologue, so its chapter forge and prologue beat are as barless as the founding cast and its art — a player from an old world could sit on "Forging the first chapter" with no way out. The cancel is gated on the prologue debt, so a later chapter's forge never grows a world-killing button beside its Retry.
+
 ### It also reworks screens that already shipped
 
 This release is not only additive; the reworks it carries to interfaces already in staging are listed in the pull request body and summarised here:

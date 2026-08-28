@@ -15,7 +15,7 @@
         },
         "id": "gacha-forge",
         "name": "Gacha Forge",
-        "version": "1.5.0",
+        "version": "1.5.1",
         "description": "A complete gacha game mode. Describe a world and Gacha Forge builds the rest: banners to pull on, a cast the model writes and paints for you, story chapters told by a visual-novel narrator, and the battles, gear and events that grow around them. Install it, restart Marinara Engine when prompted, then open Home → Gacha Forge.",
         "engine": {
           "min": "2.4.4",
@@ -56,8 +56,8 @@
           },
           {
             "path": "client.js",
-            "sha256": "86baf186a6e1b64ed3894a43c6450f8bad3a7a6f6c6fe55b2624b8d74c9bf0b2",
-            "bytes": 832614
+            "sha256": "a45a9c709673512cbbfdf68ea60cddbeb4def636d015bf6f7b24641b538c28e5",
+            "bytes": 832977
           },
           {
             "path": "gacha-forge-icon.png",
@@ -74,9 +74,9 @@
       "category": "misc",
       "iconUrl": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artwork/agent-covers/gacha-forge.png",
       "artifact": {
-        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/gacha-forge-1.5.0.zip",
-        "sha256": "9ae5bde2fa1f5c0d7ec994d083cc7d226a27c4509410066c5d9067ac4a9e287b",
-        "bytes": 1128100
+        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/gacha-forge-1.5.1.zip",
+        "sha256": "7fa5bb94ea96055babcee52780b05b1a1105b54bc41a61a295812706ec569a29",
+        "bytes": 1128463
       },
       "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Agents/blob/main/packages/gacha-forge/README.md"
     }
