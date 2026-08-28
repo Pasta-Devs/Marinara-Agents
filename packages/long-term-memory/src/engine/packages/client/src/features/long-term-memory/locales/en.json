@@ -600,6 +600,7 @@
   "ui.longTermMemory.sourcesworkspace.additionalLocations": "Additional locations",
   "ui.longTermMemory.sourcesworkspace.additionalLocationsCount": "{{count}} additional",
   "ui.longTermMemory.sourcesworkspace.alreadyImported": "Already imported",
+  "ui.longTermMemory.sourcesworkspace.branches": "Branches",
   "ui.longTermMemory.sourcesworkspace.chats": "Chats",
   "ui.longTermMemory.sourcesworkspace.characterAvailability": "{{value1}} (current and future chats)",
   "ui.longTermMemory.sourcesworkspace.chooseDestination": "Choose a destination",

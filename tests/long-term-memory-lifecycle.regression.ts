@@ -728,12 +728,20 @@ async function main() {
                 personaId: "persona-a",
                 characterIds: ["character-a"],
               },
+              {
+                id: "memory-conversation-branch",
+                label: "Memory conversation branch",
+                mode: "conversation",
+                groupId: "conversation-a",
+                personaId: "persona-a",
+                characterIds: ["character-a"],
+              },
             ],
             groups: [
               {
                 id: "conversation-a",
                 label: "Conversation A",
-                chatIds: ["memory-chat"],
+                chatIds: ["memory-chat", "memory-conversation-branch"],
               },
             ],
             characters: [{ id: "character-a", label: "Character A" }],
@@ -1383,10 +1391,26 @@ async function main() {
       assert.equal(
         await memoryScope
           .locator('[data-ltm-memory-scope-picker="branch"]')
-          .getByText("All branches", { exact: true })
+          .locator('[data-ltm-memory-scope-target="branch:all"]')
           .count(),
         1,
       );
+      const memoryChatPicker = memoryScope.locator('[data-ltm-memory-scope-picker="chat"]');
+      await memoryChatPicker.locator(":scope > summary").click();
+      assert.equal(await memoryChatPicker.locator('[data-ltm-memory-scope-target="group:conversation-a"]').count(), 1);
+      await memoryChatPicker.locator('[data-ltm-memory-scope-target="group:conversation-a"]').click();
+      const memoryBranchPicker = memoryScope.locator('[data-ltm-memory-scope-picker="branch"]');
+      assert.equal(
+        await memoryBranchPicker.locator('[data-ltm-memory-scope-target="chat:memory-conversation-branch"]').count(),
+        1,
+      );
+      assert.equal(await memoryBranchPicker.locator('[data-ltm-memory-scope-target="chat:memory-chat"]').count(), 0);
+      const roleplayMode = memoryScope.getByRole("checkbox", { name: "Roleplay" });
+      await roleplayMode.check();
+      assert.equal(await memoryBranchPicker.locator('[data-ltm-memory-scope-target="chat:memory-chat"]').count(), 1);
+      await roleplayMode.uncheck();
+      await memoryChatPicker.locator(":scope > summary").click();
+      await memoryChatPicker.locator('[data-ltm-memory-scope-target="chat:desktop-chat"]').click();
       await memoryScope.locator('[data-ltm-memory-scope-picker="character"] > summary').press("Enter");
       assert.equal(
         await memoryScope
@@ -2664,6 +2688,16 @@ async function main() {
       const sourceScopeTrigger = sourceScopePicker.getByRole("combobox");
       assert.match((await sourceScopeTrigger.innerText()).trim(), /All Available/u);
       await sourceScopeTrigger.click();
+      assert.equal(
+        await sourceScopePicker.locator('[role="option"][data-ltm-scope-option="branch:memory-chat"]').count(),
+        1,
+      );
+      assert.notEqual(
+        await sourceScopePicker
+          .locator('[role="listbox"]')
+          .evaluate((listbox) => getComputedStyle(listbox).backgroundColor),
+        "rgba(0, 0, 0, 0)",
+      );
       await sourceScopePicker.locator('[role="option"][data-ltm-scope-option="chat:desktop-chat"]').click();
       const scopedChatPreviewRequest = (await scopedChatPreviewRequestPromise).postDataJSON() as {
         sourceScope?: unknown;
@@ -2673,6 +2707,16 @@ async function main() {
       const destinationScopePicker = page.locator('[data-ltm-scope-picker="destination"]');
       const destinationScopeTrigger = destinationScopePicker.getByRole("combobox");
       await destinationScopeTrigger.click();
+      assert.equal(
+        await destinationScopePicker.locator('[role="option"][data-ltm-scope-option="branch:memory-chat"]').count(),
+        1,
+      );
+      assert.notEqual(
+        await destinationScopePicker
+          .locator('[role="listbox"]')
+          .evaluate((listbox) => getComputedStyle(listbox).backgroundColor),
+        "rgba(0, 0, 0, 0)",
+      );
       const destinationScopeSearch = destinationScopePicker.locator("input");
       await destinationScopeSearch.fill("chat");
       await destinationScopeSearch.press("ArrowDown");

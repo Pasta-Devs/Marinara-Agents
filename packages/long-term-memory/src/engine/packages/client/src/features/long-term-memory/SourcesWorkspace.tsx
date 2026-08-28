@@ -37,7 +37,7 @@ import type { LongTermMemoryDestinationProps, SourceTab } from "./types";
 import { useLtmTranslation, type LtmTranslationFunction } from "./localization";
 import { LtmWorkspace } from "./LtmWorkspace";
 import type { LtmWorkspacePane } from "./LtmWorkspace";
-import { buildScopeIndexes, type ScopeTargetChat, type ScopeTargets } from "./scope-targets";
+import { buildScopeIndexes, deriveScopeBranchChats, type ScopeTargetChat, type ScopeTargets } from "./scope-targets";
 import {
   normalizeLtmScope,
   withMergedLtmScopeLinks,
@@ -60,7 +60,7 @@ type ImportContract = {
   chatId?: string;
   selectionKey: string;
 };
-type ScopeTargetKind = "all" | "chat" | "group" | "character" | "persona";
+type ScopeTargetKind = "all" | "chat" | "branch" | "character" | "persona";
 type ScopeTarget = {
   id: string;
   label: string;
@@ -104,7 +104,7 @@ function ScopeTargetPicker({
   const listId = useId();
   const groups: Array<[Exclude<ScopeTargetKind, "all">, string]> = [
     ["chat", localizeUi("ui.longTermMemory.sourcesworkspace.chats")],
-    ["group", localizeUi("ui.longTermMemory.sourcesworkspace.allBranches")],
+    ["branch", localizeUi("ui.longTermMemory.sourcesworkspace.branches")],
     ["character", localizeUi("ui.longTermMemory.sourcesworkspace.characters")],
     ["persona", localizeUi("ui.longTermMemory.sourcesworkspace.personas")],
   ];
@@ -232,7 +232,7 @@ function ScopeTargetPicker({
           id={listId}
           role="listbox"
           aria-label={ariaLabel}
-          className="absolute left-0 top-full z-30 mt-2 w-full min-w-[min(20rem,calc(100vw-2rem))] overflow-hidden rounded-md border border-[var(--marinara-editor-divider)] bg-[var(--marinara-editor-control-bg)] shadow-xl"
+          className="absolute left-0 top-full z-30 mt-2 w-full min-w-[min(20rem,calc(100vw-2rem))] overflow-hidden rounded-md border border-[var(--marinara-editor-divider)] bg-[var(--card)] shadow-xl"
         >
           <label className="relative block border-b border-[var(--marinara-editor-divider)] p-2">
             <Search
@@ -337,14 +337,14 @@ function BulkDestinationPicker({
   const categoryLabels: Record<"all" | Exclude<ScopeTargetKind, "all">, string> = {
     all: localizeUi("ui.longTermMemory.sourcesworkspace.all"),
     chat: localizeUi("ui.longTermMemory.sourcesworkspace.chats"),
-    group: localizeUi("ui.longTermMemory.sourcesworkspace.allBranches"),
+    branch: localizeUi("ui.longTermMemory.sourcesworkspace.branches"),
     character: localizeUi("ui.longTermMemory.sourcesworkspace.characters"),
     persona: localizeUi("ui.longTermMemory.sourcesworkspace.personas"),
   };
   const categories: Array<["all" | Exclude<ScopeTargetKind, "all">, string]> = [
     ["all", categoryLabels.all],
     ["chat", categoryLabels.chat],
-    ["group", categoryLabels.group],
+    ["branch", categoryLabels.branch],
     ["character", categoryLabels.character],
     ["persona", categoryLabels.persona],
   ];
@@ -370,9 +370,8 @@ function BulkDestinationPicker({
           : (index + (event.key === "ArrowRight" ? 1 : -1) + categories.length) % categories.length;
     const nextKind = categories[nextIndex]![0];
     setActiveKind(nextKind);
-    const nextTab = nextKind === "group" ? "branch" : nextKind;
     requestAnimationFrame(() =>
-      document.querySelector<HTMLElement>(`[data-ltm-availability-tab="${nextTab}"]`)?.focus(),
+      document.querySelector<HTMLElement>(`[data-ltm-availability-tab="${nextKind}"]`)?.focus(),
     );
   };
 
@@ -492,7 +491,7 @@ function BulkDestinationPicker({
                     value={query}
                     placeholder={localizeUi("ui.longTermMemory.sourcesworkspace.searchScopes")}
                     aria-label={localizeUi("ui.longTermMemory.sourcesworkspace.searchScopes")}
-                    data-ltm-availability-search={activeKind === "group" ? "branch" : activeKind}
+                    data-ltm-availability-search={activeKind}
                     onChange={(event) => setQuery(event.target.value)}
                   />
                 </label>
@@ -516,7 +515,7 @@ function BulkDestinationPicker({
                         aria-selected={activeKind === kind}
                         aria-controls="ltm-bulk-destination-list"
                         tabIndex={activeKind === kind ? 0 : -1}
-                        data-ltm-availability-tab={kind === "group" ? "branch" : kind}
+                        data-ltm-availability-tab={kind}
                         data-active={activeKind === kind}
                         className="mari-editor-tab min-h-11 min-w-0 rounded-md border px-2 text-xs font-semibold"
                         onClick={() => setActiveKind(kind)}
@@ -540,7 +539,7 @@ function BulkDestinationPicker({
                     {filteredTargets.map((target) => (
                       <label
                         key={target.id}
-                        data-ltm-availability-target={`${target.kind === "group" ? "branch" : target.kind}:${target.id.split(":").slice(1).join(":")}`}
+                        data-ltm-availability-target={`${target.kind}:${target.id.split(":").slice(1).join(":")}`}
                         className="flex min-h-11 cursor-pointer items-center gap-3 px-3 py-2 text-sm hover:bg-[var(--secondary)]/35"
                       >
                         <input
@@ -1282,10 +1281,15 @@ export default function SourcesWorkspace({
           ]
         : []),
       ...(scopeTargets.data?.chats ?? []).filter((chat) => chat.id !== props.chatId).map((chat) => chatTarget(chat)),
+      ...deriveScopeBranchChats(scopeTargets.data?.chats ?? []).map((chat) => ({
+        ...chatTarget(chat),
+        id: `branch:${chat.id}`,
+        kind: "branch" as const,
+      })),
       ...(scopeTargets.data?.groups ?? []).map((group) => ({
         id: `group:${group.id}`,
         label: `${localizeUi("ui.longTermMemory.sourcesworkspace.allBranches")}: ${group.label}`,
-        kind: "group" as const,
+        kind: "branch" as const,
         sourceScope: { groupId: group.id, groupIds: [group.id], chatIds: group.chatIds },
         destinationScope: { groupId: group.id, groupIds: [group.id], chatIds: group.chatIds },
         searchText: group.chatIds.join(" "),
