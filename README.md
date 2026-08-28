@@ -68,6 +68,7 @@ These packages are being built in this repository but are not ready for the stab
 | Package | ID | Availability | Status |
 | --- | --- | --- | --- |
 | Pixelforge | [`pixelforge`](packages/pixelforge/manifest.json) | In development | A walkable pixel-art RPG Experience for Game Mode: generated settlements, NPCs, and story-driven exploration. Under active development; not yet listed for users. |
+| Quartermaster | [`quartermaster`](packages/quartermaster/manifest.json) | In development | A per-chat RPG character sheet and inventory manager: equip slots, item locations, saved outfits, and a narration-driven tracker agent. Under active development; not yet listed for users. |
 
 ### Localization sources
 

@@ -22,6 +22,7 @@ import { withPackageActivationGuidance } from "./catalog-package-guidance.mjs";
 import { writeEnglishPackageLocale } from "./package-locales.mjs";
 import { createDeterministicZip } from "./deterministic-zip.mjs";
 import { INCOMPLETE_PACKAGE_IDS } from "./catalog-incomplete.mjs";
+import { catalogArtworkUrl } from "./catalog-artwork.mjs";
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const packageRoot = join(repoRoot, "packages/quartermaster");
@@ -37,7 +38,7 @@ const PACKAGE_ID = "quartermaster";
 // live this session. Reset this to a clean starting version (0.1.0) in one
 // commit right before this is actually proposed; the intervening bumps are
 // disposable dev-iteration numbers, not real releases.
-const VERSION = "0.5.1";
+const VERSION = "0.5.2";
 // Declared against the exact staging Engine this scaffold was built and tested
 // against. Do not lower this to reach stable users — see CONTRIBUTING.md.
 const ENGINE_MIN = "2.4.4";
@@ -199,8 +200,16 @@ catalog.packages = catalog.packages.filter((entry) => entry.manifest.id !== PACK
 catalog.packages.push({
   manifest,
   category: "tracker",
-  // No cover art yet (iconUrl is optional) — add via catalog-artwork.mjs's
-  // convention (artwork/agent-covers/quartermaster.png) once it exists.
+  // validate-catalog.mjs hard-rejects a missing documentationUrl and any
+  // iconUrl that doesn't exactly equal catalogArtworkUrl(id) for every entry
+  // it can see — confirmed by reading the validator this session. Both are
+  // no-ops for now (INCOMPLETE_PACKAGE_IDS keeps this entry out of every
+  // catalog the validator actually reads), but wiring them now means there's
+  // nothing left to remember at the moment this graduates out of that set.
+  // iconUrl points at real cover art that doesn't exist on disk yet — see
+  // artwork/agent-covers/ — that 404 is fine until this is actually listed.
+  iconUrl: catalogArtworkUrl(PACKAGE_ID),
+  documentationUrl: "https://github.com/Pasta-Devs/Marinara-Agents/blob/main/packages/quartermaster/README.md",
   artifact: {
     url: `${ARTIFACT_BASE_URL}/${basename(artifactPath)}`,
     sha256: sha256(archive),
