@@ -1000,9 +1000,14 @@ PF.Hud = class {
     const gateWhy = gate === "failed" ? (PF.save.gate.failure ?? null) : null;
     // WHICH ARTIFACT the gate is waiting on — the world itself or the content
     // written for it (0.13's second generation call). Two different screens: at the
-    // brief stage there is no world yet, and at the pack stage the world is already
-    // sealed and safe. In the memo key for the same reason `gateWhy` is: a stage
-    // that changed without the state changing would leave the wrong sentence up.
+    // brief stage nothing has been settled on this chat at all, and at the pack
+    // stage the SETTING is sealed and kept whatever happens next. What is not
+    // settled at the pack stage is the world in front of the player: the stamp
+    // outlives the pack call itself, so this stage also covers a pack that sealed
+    // and an install that then threw — see `PF.save.gateStageNote`, whose whole
+    // job is a sentence true on every one of those arms. In the memo key for the
+    // same reason `gateWhy` is: a stage that changed without the state changing
+    // would leave the wrong sentence up.
     const gateStage = gate ? (PF.save.gate.stage ?? "brief") : null;
     if (
       mode !== this._mode ||
@@ -1022,7 +1027,13 @@ PF.Hud = class {
       this.gateTitle.textContent =
         gate === "failed"
           ? gateStage === "pack"
-            ? "The work for this world didn't finish being written."
+            ? // NOT "the work for this world didn't finish being written": the pack
+              // stage is stamped on both sides of the pack's own seal, so on the
+              // arm where the work IS written and the install threw, that title
+              // named the wrong thing as missing. What is true on every arm is
+              // that the world did not finish coming up, which is also the thing
+              // the player is looking at a spinner instead of.
+              "This world didn't finish opening."
             : "The world didn't finish being written."
           : gateStage === "pack"
             ? "Writing what your world has to say…"

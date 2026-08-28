@@ -20675,4 +20675,231 @@ const fire = (node, type) => Promise.all((node.listeners[type] ?? []).map((fn) =
   });
 }
 
+// ── THE THIN PACK, THROUGH THE WHOLE MACHINE (0.13 slice 2) ─────────────────
+// The mocks above pin the ladder in isolation; this is the same thin answer
+// arriving at the state machine, because "nothing sealed" is only half a
+// contract — the other half is that the gate HOLDS, the screen says something
+// true, and the button under it does the thing the screen promised.
+{
+  const packBrief = loadedPF.brief.validate(gateBriefData, { theme: "cozy-village", seed: 4242 });
+  const cast = packBrief.cast.map((member) => member.name);
+  const body = (templates, lines) => ({
+    status: 200,
+    body: {
+      ok: true,
+      data: {
+        templates: Array.from({ length: templates }, (_, i) => ({
+          slug: `w${i}`,
+          giver: cast[i % cast.length],
+          verb: "visit",
+          target: { place: "wilds" },
+          n: 1,
+          title: `Walk out, number ${i}`,
+        })),
+        lines: Array.from({ length: lines }, (_, i) => ({
+          at: "settlement",
+          when: "day",
+          r: "stranger",
+          text: `A line somebody says, number ${i}.`,
+        })),
+      },
+    },
+  });
+  const halfSealed = {
+    gameSetupConfig: {
+      experienceConfig: { generate: true, seed: 4242, theme: "cozy-village", packWanted: true },
+    },
+    pixelforgeBrief: packBrief,
+    pixelforgePackWanted: true,
+  };
+  const clearPackCaches = () => {
+    loadedPF.save._packCache.clear();
+    loadedPF.save._packSeenInMeta.clear();
+    loadedPF.save._packWantedSealed.clear();
+  };
+
+  await withSavePath(async ({ calls, behavior, tick, makeCore }) => {
+    await withGeneration(async ({ responses, postCount }) => {
+      clearPackCaches();
+      try {
+        behavior.get = async () => ({ available: true, status: 200, body: { exists: false } });
+        responses.post = async () => body(4, loadedPF.pack.TUNING.floorLines - 1);
+        const core = makeCore("chat-thin", 4242);
+        core.host.chatMeta = halfSealed;
+        core.sim = loadedPF.save.restore(halfSealed, "chat-thin");
+        assert.equal(core.sim.world.brieved, true, "the chat arrives in its real world with only the pack owed");
+        assert.equal(loadedPF.save.armGate(core, halfSealed), true, "…and the gate holds for that pack");
+        calls.length = 0;
+        await loadedPF.save.maybeGenerateBrief(core);
+        await tick();
+        assert.equal(postCount(), 1, "the pack call ran");
+        assert.equal(
+          calls.filter((c) => c.kind === "patch" && c.patch.pixelforgePack).length,
+          0,
+          "…and NOTHING was stored: a pack under its floor is a failure, not a thin success",
+        );
+        assert.equal(loadedPF.save.gateHolds(core), true, "the gate still holds");
+        assert.equal(loadedPF.save.gate.state, "failed", "on a retry screen");
+        assert.equal(loadedPF.save.gate.stage, "pack", "stamped for the call that failed");
+        assert.equal(loadedPF.save.gate.failure, "thin", "…carrying the ladder's own verdict for it");
+        assert.equal(
+          loadedPF.save.packExpected(core.host.chatMeta, "chat-thin"),
+          true,
+          "so the next visit asks again rather than settling for a world with no work in it",
+        );
+        // THE SCREEN THE PLAYER IS LOOKING AT, both halves of it.
+        const reason = loadedPF.save.gateReason("thin", "pack");
+        const note = loadedPF.save.gateStageNote("pack");
+        assert.ok(reason.includes("too little"), "the reason says the answer was thin");
+        assert.ok(!reason.includes("turned down"), "…and does not call a working call a refusal");
+        assert.notEqual(
+          reason,
+          loadedPF.save.gateReason("refused", "pack"),
+          "…so a thin answer and a refused request are not the same sentence",
+        );
+        assert.ok(note.includes("written and settled"), "and the note says the setting is spent and kept");
+
+        // …AND THE BUTTON DOES WHAT THE SCREEN SAID. A whole answer this time.
+        responses.post = async () => body(6, 40);
+        assert.equal(loadedPF.save.retryGeneration(core), true, "the retry fires");
+        for (let i = 0; i < 50 && loadedPF.save.gate; i++) await tick();
+        assert.equal(postCount(), 2, "one more pack call, and only one");
+        assert.equal(loadedPF.save.gateHolds(core), false, "the gate lifts");
+        const stored = calls.find((c) => c.kind === "patch" && c.patch.pixelforgePack);
+        assert.ok(stored, "…and THIS time the pack is stored");
+        assert.equal(
+          stored.patch.pixelforgePack.briefHash,
+          loadedPF.player.briefHashOf(packBrief),
+          "sealed against the brief that was already in hand",
+        );
+      } finally {
+        clearPackCaches();
+      }
+    });
+  });
+
+  // ── THE SEALED-PACK-INSTALL-THROW ARM, AND THE COPY IT FRONTS ─────────────
+  // The arm slice 1's copy misattributed. The pack call SUCCEEDED here — sealed,
+  // stored, cached — and the install under it threw, so the pack stage is stamped
+  // on a chat whose work is written and safe. The retired sentences ("what failed
+  // is the work posted in it", "it re-attempts that work") were false on exactly
+  // this arm, and so was the screen title above them: the retry makes NO second
+  // pack call at all, because `packExpected` is already false by the time the
+  // button is pressed. The copy has to be true whichever call it was.
+  await withSavePath(async ({ calls, behavior, tick, makeCore }) => {
+    await withGeneration(async ({ responses, postCount }) => {
+      clearPackCaches();
+      try {
+        behavior.get = async () => ({ available: true, status: 200, body: { exists: false } });
+        responses.post = async (chatId, requestBody) =>
+          requestBody.instructions.startsWith("You are writing an OFFLINE CONTENT PACK")
+            ? body(6, 40)
+            : { status: 200, body: { ok: true, data: gateBriefData } };
+        const meta = {
+          gameSetupConfig: {
+            experienceConfig: { generate: true, seed: 4242, theme: "cozy-village", packWanted: true },
+          },
+        };
+        const core = makeCore("chat-install-throw", 4242);
+        core.host.chatMeta = meta;
+        core.sim = loadedPF.save.restore(meta, "chat-install-throw");
+        assert.equal(loadedPF.save.armGate(core, meta), true, "a chat owed both artifacts gates");
+        calls.length = 0;
+        const realSim = loadedPF.Sim;
+        loadedPF.Sim = function Exploding() {
+          throw new TypeError("the compiled world would not build");
+        };
+        try {
+          await loadedPF.save.maybeGenerateBrief(core);
+          await tick();
+        } finally {
+          loadedPF.Sim = realSim;
+        }
+        assert.equal(postCount(), 2, "both calls were made");
+        const packPatch = calls.find((c) => c.kind === "patch" && c.patch.pixelforgePack);
+        assert.ok(packPatch, "THE PACK SEALED AND STORED — that is what makes this arm the one under test");
+        assert.equal(loadedPF.save.gate.state, "failed", "and the throw after it is a retry screen");
+        assert.equal(loadedPF.save.gate.stage, "pack", "…stamped for the pack, because the stamp outlives the call");
+
+        // THE SENTENCES, held to this arm one clause at a time.
+        const note = loadedPF.save.gateStageNote("pack");
+        assert.ok(note.includes("written and settled"), "the setting is spent and kept, and the note says so");
+        assert.ok(note.includes("comes out exactly as written"), "…and the world compiles the same every time");
+        assert.ok(note.includes("Trying again is free"), "…and the retry costs nothing");
+        assert.ok(!note.includes("does not rewrite"), "it does NOT promise a world that is already up");
+        assert.ok(
+          !note.includes("What failed is the work posted in it"),
+          "…and it does NOT name the pack as the thing that failed: on this arm the pack is written and stored",
+        );
+        assert.ok(
+          !note.includes("re-attempts that work"),
+          "…nor promise a second attempt at it: on this arm the retry makes no pack call at all",
+        );
+        assert.ok(
+          note.includes("picks up whatever is still owed") && note.includes("leaves everything already written alone"),
+          "what it promises instead is call-agnostic, and true whichever half did not finish",
+        );
+        assert.ok(
+          note.includes("the last of opening the world itself"),
+          "…and it names the OTHER thing that can be outstanding at this stage",
+        );
+
+        // THE TITLE ABOVE THEM, through the real Hud on the shim.
+        core.host.chatMeta = { ...meta };
+        for (const call of calls) if (call.kind === "patch") Object.assign(core.host.chatMeta, call.patch);
+        const hud = new loadedPF.Hud(new FakeNode("div"), core);
+        core.hud = hud;
+        hud.update();
+        assert.equal(
+          hud.gateTitle.textContent,
+          "This world didn't finish opening.",
+          "the failed pack-stage screen names what did not finish, not which call it blames",
+        );
+        assert.notEqual(
+          hud.gateTitle.textContent,
+          "The work for this world didn't finish being written.",
+          "…and not the old title, which was false the moment the work WAS written",
+        );
+        assert.ok(hud.gateBody.textContent.includes("picks up whatever is still owed"), "with the new note under it");
+        assert.equal(hud.gateRetry.style.display, "", "and a button to press");
+
+        // THE SUBSTANCE UNDER THE SENTENCES. Both artifacts are byte-identical
+        // across the press, and the press spends no call at all.
+        const briefBytes = JSON.stringify(core.host.chatMeta.pixelforgeBrief);
+        const packBytes = JSON.stringify(core.host.chatMeta.pixelforgePack);
+        assert.equal(
+          loadedPF.save.packExpected(core.host.chatMeta, "chat-install-throw"),
+          false,
+          "nothing is owed any more: the retry is the INSTALL, which is why the copy may not promise a second pack call",
+        );
+        assert.equal(loadedPF.save.retryGeneration(core), true, "the button fires");
+        for (let i = 0; i < 50 && loadedPF.save.gate; i++) await tick();
+        assert.equal(loadedPF.save.gateHolds(core), false, "the gate lifts");
+        assert.equal(core.sim.world.brieved, true, "onto the world the retry finished installing");
+        assert.equal(postCount(), 2, "and no third call: neither artifact was re-rolled");
+        assert.equal(JSON.stringify(core.host.chatMeta.pixelforgeBrief), briefBytes, "the sealed brief did not move");
+        assert.equal(JSON.stringify(core.host.chatMeta.pixelforgePack), packBytes, "…and neither did the sealed pack");
+      } finally {
+        clearPackCaches();
+      }
+    });
+  });
+
+  // ── AND THE BRIEF-STAGE NOTE KEEPS ITS OWN TWO CLAUSES ────────────────────
+  // Pinned because they were not: a rewrite of the pack half can lose the brief
+  // half's promise silently, and "no stand-in world was settled" is the sentence
+  // ruling #7 actually guarantees.
+  {
+    const note = loadedPF.save.gateStageNote("brief");
+    assert.ok(note.includes("Nothing was lost"), "the brief-stage note says nothing was lost");
+    assert.ok(
+      note.includes("no stand-in world was settled"),
+      "…and that no default was decided on the player's behalf",
+    );
+    assert.ok(note.includes("Try again whenever you like"), "…and invites the retry without urgency");
+    assert.ok(!note.includes("exactly as you left it"), "…while never claiming the chat is untouched");
+    assert.notEqual(note, loadedPF.save.gateStageNote("pack"), "the two stages are two sentences");
+  }
+}
+
 console.log("brief validator + compiler: all cases passed");
