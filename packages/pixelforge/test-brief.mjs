@@ -19818,6 +19818,16 @@ const fire = (node, type) => Promise.all((node.listeners[type] ?? []).map((fn) =
       assert.equal(hud._journalTab, 2, "pressing the third tab selects it");
       assert.equal(painted, 1, "…and it drew itself");
       assert.deepEqual(textOf(hud.journalBody), ["the third tab"], "…into the shared body");
+      // AND THE MARK GOES ON IT. `_paintTabs` walks the buttons it built, so a
+      // third tab is marked by the same loop that marks the first two — but a
+      // paint that counted to two instead of to the list would still SELECT and
+      // RENDER the third tab correctly and simply never light it, which is a
+      // strip whose active mark silently stops at tab two.
+      assert.deepEqual(
+        hud._tabBtns.map((node) => node.style.opacity),
+        ["0.5", "0.5", "1"],
+        "…and the mark is on the third tab, from a paint that counts to the list",
+      );
       // THE SLOT IS THE ACTIVE TAB'S ALONE. The incoming tab is handed `null` and
       // never the tab it displaced — which is the whole reason one slot is safe
       // for N tabs: two tabs whose memos happened to be the same SHAPE would
@@ -20332,7 +20342,12 @@ const fire = (node, type) => Promise.all((node.listeners[type] ?? []).map((fn) =
       hud.toggleJournal();
       assert.equal(hud._journalTab, 1, "the panel reopens on the tab it was left on");
       assert.equal(hud._armedAbandon, null, "…with nothing armed");
-      assert.notEqual(hud.journalBody.children[0], stale, "…and painted fresh, the slot having gone with the close");
+      // THE SLOT IS NULLED TWICE — once on the close and again on the open — so
+      // this reds only if BOTH go. Naming one of them would read as a pin on the
+      // close alone, which it is not: the close is the load-bearing half and the
+      // open is deliberate symmetry (`toggleJournal`), and only the pair being
+      // gone leaves a stale slot for the reopened panel to answer from.
+      assert.notEqual(hud.journalBody.children[0], stale, "…and painted fresh: neither close nor open kept a slot");
       assert.equal(at.player.quests.active.length, 2, "and after all of that, both jobs are still there");
     }
 
@@ -20373,9 +20388,18 @@ const fire = (node, type) => Promise.all((node.listeners[type] ?? []).map((fn) =
     // §2.3: per-row on the quest tab AND ONLY THERE. The board takes work on and
     // takes it back finished; giving up is not something you do by standing in
     // front of a board, which is the one place a mis-press is likeliest.
+    //
+    // THE ROW IS STAGED FINISHED, because the completable row IS the surface the
+    // rationale is about: it is the only board row that carries a button at all,
+    // it is the row the returning player walks up to press, and "set aside"
+    // sitting a few pixels from "hand it in" is the mis-press §2.3 refuses to
+    // build. A case that staged only a dimmed in-progress row would pass with the
+    // affordance bolted onto the hand-it-in rows, which is the version that
+    // matters.
     {
       const at = mount();
       assert.equal(takeOn(at, "b1.d1.p:t:a"), true, "a job on the list");
+      assert.equal(P.quest(at.core, "progress", { id: "b1.d1.p:t:a", by: 3 }), true, "…and it is finished");
       at.hud.toggleJournal();
       assert.ok(
         !buttonsIn(at.hud.journalBody).some((node) => /Set aside/.test(node.textContent)),
@@ -20388,8 +20412,8 @@ const fire = (node, type) => Promise.all((node.listeners[type] ?? []).map((fn) =
       at.hud.update();
       at.hud.toggleBoard();
       assert.ok(
-        textOf(at.hud.boardMenu).some((text) => /Three for Marla/.test(text)),
-        `the board is listing the job (${textOf(at.hud.boardMenu)})`,
+        buttonsIn(at.hud.boardMenu).some((node) => /Three for Marla.*hand it in/.test(node.textContent)),
+        `the board is offering to take the finished job back (${textOf(at.hud.boardMenu)})`,
       );
       assert.ok(
         !textOf(at.hud.boardMenu).some((text) => /[Ss]et aside/.test(text) && !/full/.test(text)),

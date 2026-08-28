@@ -941,6 +941,13 @@ PF.Hud = class {
     // the first would be a panel nobody can see under a panel nobody closed.
     this.closeSheet();
     this._journal = true;
+    // THESE TWO ARE DEFENSIVE SYMMETRY, and saying so is the point: the CLOSE
+    // side is the load-bearing one, and every close routes through
+    // `closeJournal` — the chip, Escape via `closePanels`, the mode change — so
+    // nothing can reach this line with a press still armed or a slot still held.
+    // They are unkillable by construction and a mutation test will never red on
+    // them; they stay because an open that assumed a clean slot would be resting
+    // on a guarantee written in another method.
     this._journalMemo = null;
     this._dropQuestPress();
     this._journalSync();
@@ -1184,8 +1191,19 @@ PF.Hud = class {
    *  moves the theme — "usually" is exactly what a projection may not rest on.)
    *
    *  Rows join their nine fields with `|` (§2.4's own separator), rows join with
-   *  `,`, and the sections with `~` — three levels, three separators, so a value
-   *  carrying one of them cannot forge a boundary above it. */
+   *  `,`, and the sections with `~`. THREE SEPARATORS ARE NOT THREE FENCES, and
+   *  the earlier claim here that a value carrying one could not forge a boundary
+   *  above it was simply wrong: `g` is `"zoneId|Name"` and carries the field
+   *  separator in every row that exists, and a board or zone name with a `~` in
+   *  it lands at the top level. What makes that harmless is not the separators
+   *  but what happens to the key afterwards — NOTHING PARSES IT. It is built,
+   *  compared whole against the last one, and thrown away; no reader ever splits
+   *  it back into fields, so there is no structure for a forged boundary to
+   *  mislead. The only failure a separator in a value could ever buy is a
+   *  COLLISION — two different blocks rendering the same string — which takes a
+   *  row hand-built to collide (the numeric fields go through `_num` and cannot
+   *  carry one), and which costs exactly one missed repaint: a line left stale
+   *  until the next thing moves. Not a wrong render, not a lost mutation. */
   _questValueKey() {
     const player = PF.player.get(this.core);
     const world = this.core.sim?.world;
