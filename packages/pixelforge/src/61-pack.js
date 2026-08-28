@@ -1337,6 +1337,112 @@ PF.pack = (() => {
       return { ok: true, reason: null, money: done.money, giver: done.giver, have, n };
     },
 
+    // ── THE TWO VERB SITES THAT ARE NOT A PRESS (plan §2.3) ──────────────────
+    // `catch` advances at 59-economy's fish() and hands in at the board, because
+    // counting is what it does. The other two mechanics have nothing to count:
+    // they are done the moment they happen, and the moment they happen is not a
+    // moment the player is standing at a board. So they COMPLETE where they
+    // happen, through the same `settle` the press uses.
+
+    /** THE VISIT VERB, completed on ENTRY: the walk WAS the quest. Called by the
+     *  two real zone-change callers — the frame loop's `zoneChanged` branch (a
+     *  portal under the player's feet) and 50-spatial's drift arm (the GM moved
+     *  the party) — because the sim holds no core and no generation of its own
+     *  and cannot call anything itself.
+     *
+     *  IT MATCHES ON THE LOCATION HANDLE, which is what a `visit` row's target is
+     *  (the schema binds the `place` grain to this verb and nothing else). The
+     *  handle is stamped on the zone by the compiler, which is the only site that
+     *  knows which ordinal id a brief's place got — a lookup, never a guess.
+     *
+     *  A FILTER AND NOT A FIND, for the catch site's reason: two rows asking for
+     *  the same walk are both answered by taking it once.
+     *
+     *  NO MODE TEST, deliberately, and it is the one place this layer does not
+     *  copy the board's guards. A drift arrival lands while the player is reading
+     *  narration — that IS the mode a narrated arrival happens in — and refusing
+     *  it would leave a row that can never complete, because nothing walks into a
+     *  zone it is already standing in. The gate is still honoured: a world still
+     *  being written has no arrivals in it to answer.
+     *
+     *  ACCEPTING WHILE STANDING IN Y DOES NOT COMPLETE, and that falls out rather
+     *  than being tested for: this runs on a zone CHANGE and the board is not in
+     *  the wilds. Re-entry is idempotent the same way — the row is spliced by the
+     *  first arrival, so the second finds nothing to settle.
+     *
+     *  Returns the settled rows (possibly none), for the surface to say so. */
+    visited(core, zoneId, gen) {
+      const sim = core?.sim;
+      const world = sim?.world;
+      if (!world) return [];
+      if (PF.save?.gateHolds?.(core)) return [];
+      const id = str(zoneId);
+      const zone = PF.own(world.zones, id) ? world.zones[id] : null;
+      const handle = str(zone?.place);
+      if (!handle) return [];
+      const player = PF.player.get(core);
+      const rows = Array.isArray(player?.quests?.active) ? player.quests.active : [];
+      const due = rows.filter((row) => str(row.verb) === "visit" && str(row.target) === handle);
+      const filled = [];
+      for (const row of due) {
+        // THE ZONE'S NAME AND NOT THE HANDLE. "wilds" is an index key; the line
+        // is history a wrap-up reads out, and "walked out to the wilds" is a
+        // sentence about a vocabulary rather than about a place the player went.
+        const done = this.settle(core, row, gen, (giver, paid) =>
+          giver ? `Walked out to ${zone.name} for ${giver} — ${paid}.` : `Walked out to ${zone.name} — ${paid}.`,
+        );
+        if (done) filled.push(done);
+      }
+      return filled;
+    },
+
+    /** THE DELIVER VERB, and it is an ERRAND rather than a courier job: no item
+     *  moves, because no quest-item type exists and inventing one for a word
+     *  would be a format change nothing else asks for. What is delivered is word,
+     *  and word is delivered by TALKING — so this completes in the one place the
+     *  package can be sure a conversation actually started: 90-element's accepted
+     *  `.then`, after the host has taken the turn.
+     *
+     *  THE ONE NON-GM-FREE QUEST VERB, stated rather than discovered (Ruling 1 is
+     *  "lean", not "zero"): the handover costs exactly one GM call, which is the
+     *  greeting the player was sending anyway.
+     *
+     *  BOTH FENCES ARE THE CALLER'S and both are needed. `gen` is the generation
+     *  the turn was composed under — a chat switch under the await would otherwise
+     *  credit the arriving chat's block with the departing chat's errand — and the
+     *  SIM IDENTITY is the second, because `_rebuild` replaces core.sim wholesale
+     *  (a rewind, a checkpoint load) WITHOUT moving `_gen`, so the fence alone
+     *  cannot see it. The caller refuses on a mismatch by simply not calling: the
+     *  quest stays active, the player talks to them again, and the honest cost is
+     *  one extra GM call in a race nobody will ever notice.
+     *
+     *  `name` is captured AT SEND for the same reason: the person the player
+     *  walked up to is the person the errand was run to, whoever is standing
+     *  there by the time the host answers. */
+    delivered(core, name, gen) {
+      const sim = core?.sim;
+      const world = sim?.world;
+      if (!world) return [];
+      if (PF.save?.gateHolds?.(core)) return [];
+      const to = str(name);
+      if (!to) return [];
+      const player = PF.player.get(core);
+      const rows = Array.isArray(player?.quests?.active) ? player.quests.active : [];
+      const due = rows.filter((row) => str(row.verb) === "deliver" && str(row.target) === to);
+      const filled = [];
+      for (const row of due) {
+        // THE GIVER == TARGET CASE IS RECORDED HARMLESS, not defended against: a
+        // template whose giver is also its target bumps the same person twice in
+        // one turn (once for the conversation in 90-element, once for the errand
+        // here), which reads as two encounters on a turn that was two things.
+        const done = this.settle(core, row, gen, (giver, paid) =>
+          giver && giver !== to ? `Took ${giver}'s word to ${to} — ${paid}.` : `Took word to ${to} — ${paid}.`,
+        );
+        if (done) filled.push(done);
+      }
+      return filled;
+    },
+
     // ── generate(): the second generation call ───────────────────────────────
     /** THE SECOND #5135 CALL, and it is 18-brief `generate`'s TWIN rather than its
      *  cousin: same bounded wait, same one wait-out on the documented-transient

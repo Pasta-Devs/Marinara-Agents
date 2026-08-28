@@ -374,6 +374,19 @@ PF.core = {
     // reference survives the wholesale null, so the turn that was sent is the
     // turn that gets burned.
     const pend = sim._pendingIntro;
+    // THE SIM THIS TURN WAS COMPOSED AGAINST, captured beside the pending and
+    // read after the await. The generation fence one screen up cannot see this
+    // one: `_gen` moves on a CHAT switch, while `_rebuild` replaces core.sim
+    // wholesale on the same chat (a rewind, a checkpoint load, a swipe) without
+    // touching it — and an errand settled against the replaced sim would pay out
+    // of a story that no longer contains the walk up to this person. The refusal
+    // is silent and costs one extra GM call in a race nobody will see: the quest
+    // stays active and the player talks to them again.
+    const sentSim = sim;
+    // WHO THE ERRAND WAS RUN TO, captured at SEND. By the time the host answers,
+    // the schedules may have walked this person out of the room — the delivery
+    // was to the person the player greeted, not to whoever is standing there now.
+    const sentTo = npc.name;
     void Promise.resolve(this.host.sendMessage(text))
       .then((ok) => {
         if (ok === false) {
@@ -399,6 +412,15 @@ PF.core = {
           // the world you happen to meet them. Surfacing the disposition in the
           // turn header is P2's own item and deliberately not here.
           PF.player.bump(this, sim.world.startZone, npc.name, { t: 1 }, gen);
+          // THE DELIVER VERB'S ONE SITE (0.13 §2.3). An errand is finished by
+          // TALKING — no item moves, because there is no quest-item type and
+          // inventing one for a word would be a format change nothing else asks
+          // for — so the handover is exactly this accepted turn, and it is the
+          // one quest verb that costs a GM call at all (Ruling 1 is lean, not
+          // zero). Gated on the captured generation AND on the sim still being
+          // the one the greeting was composed against; on a mismatch nothing is
+          // settled and the quest is still there to be finished by talking again.
+          if (sentSim === this.sim) this.hud?.questFilled(PF.pack.delivered(this, sentTo, gen));
         }
       })
       .catch((err) => {
@@ -407,6 +429,31 @@ PF.core = {
         this.hud?.toast("That didn't go through — try again.");
         console.warn("[pixelforge] interact send failed", err);
       });
+    PF.save.markDirty(this);
+  },
+
+  /** A ZONE THE PLAYER WALKED INTO — the frame loop's own arrival, and one of the
+   *  two real zone-change callers in the package (50-spatial's drift arm is the
+   *  other, and it is the async one). Lifted out of the tick rather than left
+   *  inline: this is arrival BEHAVIOUR and not frame plumbing, the drift arm has
+   *  to do the same things, and inline in a `requestAnimationFrame` closure it
+   *  was the one branch here nothing could drive.
+   *
+   *  SYNCHRONOUS, so the generation is read FRESH (plan §2.3's gen sourcing): the
+   *  player is standing in the new zone by the time this runs and there is no
+   *  await for a chat switch to slip through. The captures belong to the two
+   *  senders, which really do wait. */
+  _zoneChanged() {
+    const sim = this.sim;
+    if (!sim) return;
+    this.hud?.refreshChips();
+    // "location": the top strip, clear of the narration panel the bottom
+    // toast surface sits over (70-hud `toast`).
+    this.hud?.toast(sim.zone().name, "location");
+    // THE VISIT VERB COMPLETES ON ENTRY (0.13 §2.3): the walk was the quest. The
+    // pack answers whether this arrival finished anything and the HUD says so —
+    // the toast above is where the player is, this is what it was worth.
+    this.hud?.questFilled(PF.pack.visited(this, sim.zoneId, PF.save._gen ?? 0));
     PF.save.markDirty(this);
   },
 
@@ -559,13 +606,7 @@ PF.core = {
           this._cutsceneDeclared = !!sim.cutscene;
           this._declareChrome();
         }
-        if (res.zoneChanged) {
-          this.hud?.refreshChips();
-          // "location": the top strip, clear of the narration panel the bottom
-          // toast surface sits over (70-hud `toast`).
-          this.hud?.toast(sim.zone().name, "location");
-          PF.save.markDirty(this);
-        }
+        if (res.zoneChanged) this._zoneChanged();
       }
       if (this._underlayEl) this.render?.draw(sim);
       // Positional autosave: at most one save per 30s of movement — the real

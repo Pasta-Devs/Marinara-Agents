@@ -837,6 +837,13 @@ PF.world = (() => {
     v.mapKind = "settlement";
     n.mapKind = "building";
     f.mapKind = "place";
+    // The location handles, marked the same way compile() marks them and for the
+    // same consumer (0.13 §2.2c): this layout has no brief and so no place
+    // ordinals to read, and the three zones it stands up have always been the
+    // settlement, its gathering place and the wood outside it.
+    v.place = "settlement";
+    n.place = "gathering";
+    f.place = "wilds";
     return {
       seed,
       theme: activeTheme,
@@ -3673,6 +3680,33 @@ PF.world = (() => {
         }
         if (stamped) zones[gatheringZoneId].lodging = true;
       }
+    }
+
+    // ── THE LOCATION HANDLE EACH ZONE ANSWERS TO (0.13 §2.2c) ────────────────
+    // A pack indexes its content by PLACE-KIND — "the gathering place", "the
+    // wilds" — because zone ids mean nothing outside the brief that minted them
+    // and zone NAMES mean nothing after a demotion, while every compiled world
+    // and the legacy layout both have a gathering place. Resolving one to a zone
+    // is a LOOKUP and never a guess, and this is the lookup: the only site that
+    // knows which ordinal id a place got is the compiler that assigned it.
+    //
+    // Runtime-only, exactly like `lodging` above and the schedule handles below
+    // it — worlds are derived per load, so this costs zero save fields and the
+    // stamp cannot go stale against the brief it was read from.
+    //
+    // THE GROUND FLOOR ONLY. A place that grew a storey or a cellar has those as
+    // zones of their own and they carry no handle: the handle names the PLACE,
+    // and the room the door opens onto is the place you have arrived at. A
+    // visitor bound for the bell tower walks through it either way.
+    //
+    // TWO PLACES OF THE SAME KIND BOTH CARRY IT, deliberately — a brief may name
+    // two wilds — because a handle is a kind and not an address. Work that says
+    // "go to the wilds" is answered by either of them, which is what the word
+    // means.
+    zones.z1.place = "settlement";
+    for (const place of brief.places) {
+      const zone = zones[zoneIdForPlace(place)];
+      if (zone) zone.place = place.kind;
     }
 
     return {

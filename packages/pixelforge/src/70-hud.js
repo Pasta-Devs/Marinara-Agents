@@ -738,6 +738,29 @@ PF.Hud = class {
     return "There is nothing to do at the board just now.";
   }
 
+  /** A JOB THAT FINISHED WHERE THE PLAYER WAS STANDING, rather than at the board.
+   *  The visit and deliver verbs complete at their own sites (61-pack), and a
+   *  completion the player is never told about is a purse that moved for no
+   *  reason they can see — the board's hand-in toasts, and a session of fishing
+   *  toasts, so an errand run and a walk taken have to as well.
+   *
+   *  ONE PLACE FOR THE COPY, called from three sites (the frame loop's arrival,
+   *  50-spatial's drift arm, and Talk's accepted turn). It takes the LIST rather
+   *  than one row because both verbs are answered with a filter: two rows asking
+   *  for the same walk are both filled by taking it, and each is its own sentence.
+   *  An empty list says nothing and touches nothing, which is the ordinary case
+   *  for every arrival and every greeting in the game. */
+  questFilled(done) {
+    if (!Array.isArray(done) || !done.length) return;
+    const world = this.core.sim?.world;
+    for (const row of done) {
+      const paid = PF.economy.money(world, row.money);
+      this.toast(row.giver ? `Done for ${row.giver} — ${paid}` : `Job done — ${paid}`);
+    }
+    // The purse moved, so the chips have.
+    this.refreshChips();
+  }
+
   /** Take the rod the button is offering. The offer is re-read inside buyRod, so
    *  a frame-old button cannot overcharge anybody; this turns the refusals into
    *  sentences, exactly as rentBerth's caller does. */

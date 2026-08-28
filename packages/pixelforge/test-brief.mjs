@@ -18347,6 +18347,586 @@ const fire = (node, type) => Promise.all((node.listeners[type] ?? []).map((fn) =
   }
 }
 
+// ═══ THE VERB SITES (0.13 slice 4) ══════════════════════════════════════════
+// Progress is EVENT-DRIVEN at the verbs (plan §2.3) and never a sweep, never a
+// pouch read, never a grant() hook: the pouch is world-free and compose is pure,
+// so the only honest moment to move a quest is the moment the thing the quest
+// asked for actually happened. Three verbs, three sites, three different gen
+// sources — and each site is pinned for what only IT can get wrong.
+
+// ── CATCH: EVERY MATCHING ROW, AND ONLY A CATCH THAT LANDED ─────────────────
+{
+  const E = loadedPF.economy;
+  const P = loadedPF.player;
+  const pack = loadedPF.pack;
+  let chats = 0;
+  /** A player at the legacy pond with a rod, on a fixed day. The legacy world for
+   *  the fishing cases' own reason: smallest world with a registry row on it. */
+  const angler = ({ level = 1, day = 3, seed = 7 } = {}) => {
+    const w = world.build(seed, "cozy-village", null);
+    const sim = new loadedPF.Sim(w);
+    sim.clockMin = 9 * 60;
+    sim.day = day;
+    sim.resolveSchedules();
+    const core = { chatId: `chat-catchhook-${++chats}`, sim, hud: { toast() {}, refreshChips() {} }, markDirty() {} };
+    const pond = w.zones.village.features.find((row) => row.id === "legacy:pond");
+    for (let y = pond.rect.y - 1; y <= pond.rect.y + pond.rect.h; y++)
+      for (let x = pond.rect.x - 1; x <= pond.rect.x + pond.rect.w; x++) {
+        const z = w.zones.village;
+        if (x < 0 || y < 0 || x >= z.w || y >= z.h) continue;
+        if (z.ground[y * z.w + x] === "water" || z.solid[y * z.w + x]) continue;
+        sim.teleport("village", x, y);
+        sim.step(0, {});
+        if (sim.nearFeature?.id === pond.id) break;
+      }
+    assert.equal(sim.nearFeature?.id, pond.id, "the fixture stands at the pond");
+    P.grant(core, { t: "rod", k: "crude" }, 1);
+    P.equip(core, "fishing", "tool", { t: "rod", k: "crude" });
+    if (level > 1) P.award(core, { xp: 5 * level * (level - 1), verb: "fishing" });
+    return { w, sim, core };
+  };
+  const take = (core, sim, w, id, verb, target, n) =>
+    P.quest(core, "accept", {
+      id,
+      g: `${w.startZone}|Mira`,
+      verb,
+      target,
+      n,
+      r: { money: 3, xp: 0 },
+      day: sim.day,
+    });
+  const haveOf = (core, id) => P.get(core).quests.active.find((q) => q.id === id)?.have ?? -1;
+
+  try {
+    // ── ALL MATCHING ROWS ADVANCE, WHICH IS A FILTER AND NOT A FIND ──────────
+    // The named regression: two active carp orders and one carp out of the water
+    // must move BOTH. A `find` here would advance whichever row happened to be
+    // first in the list and quietly starve the other for the rest of the save.
+    {
+      const at = angler({ level: 1 });
+      const cap = pack.CAPS.n;
+      take(at.core, at.sim, at.w, "b1.d3.carp-a", "catch", "carp", cap);
+      take(at.core, at.sim, at.w, "b1.d3.carp-b", "catch", "carp", cap);
+      // ROLE GRAIN, which the same predicate answers differently: any yield whose
+      // TYPE is that role counts, whatever variant it happened to be.
+      take(at.core, at.sim, at.w, "b1.d3.common", "catch", "catch-common", cap);
+      // AND THREE ROWS THIS WATER CANNOT MOVE: a variant the pond does not open
+      // at level 1, an honest row for another verb, and — the one only the site's
+      // own verb test can stop — a row whose verb no site in this build advances
+      // while its TARGET is a fish this session is about to land. Nothing here
+      // can mint that row (both doors fold `gather` to `catch`), which is exactly
+      // why it is written by hand: a hostile save carries whatever it likes and
+      // `quest("accept")` stores the word as given.
+      take(at.core, at.sim, at.w, "b1.d3.bream", "catch", "bream", cap);
+      take(at.core, at.sim, at.w, "b1.d3.walk", "visit", "wilds", 1);
+      take(at.core, at.sim, at.w, "b1.d3.gather", "gather", "carp", cap);
+      const out = E.fish(at.core, "dusk");
+      const carp = out.caught.filter((row) => row.k === "carp").length;
+      const common = out.caught.filter((row) => row.t === "catch-common").length;
+      assert.ok(carp > 1, `the session landed carp to count (${carp})`);
+      assert.equal(haveOf(at.core, "b1.d3.carp-a"), carp, "the first carp order counted every carp");
+      assert.equal(haveOf(at.core, "b1.d3.carp-b"), carp, "…and so did the second: a filter, never a find");
+      assert.equal(haveOf(at.core, "b1.d3.common"), common, "the role-grain row counted every common yield");
+      assert.equal(haveOf(at.core, "b1.d3.bream"), 0, "a variant this water did not give up moved nothing");
+      assert.equal(haveOf(at.core, "b1.d3.walk"), 0, "…and neither did a row for another verb entirely");
+      assert.equal(
+        haveOf(at.core, "b1.d3.gather"),
+        0,
+        "…nor the unfoldable row asking for the very fish that landed: no site advances that verb",
+      );
+      // ONE PREDICATE, and this is the assertion that says the site did not fork
+      // it: the same call the seal and the default-pack lane make answers every
+      // yield the session produced exactly as the rows above were moved.
+      for (const row of out.caught) {
+        assert.equal(pack.matches("carp", row), row.k === "carp", `matches() answers carp for ${row.t}:${row.k}`);
+        assert.equal(
+          pack.matches("catch-common", row),
+          row.t === "catch-common",
+          `…and the role for ${row.t}:${row.k}`,
+        );
+      }
+      // ZERO PROGRESS LINES (the line diet, §2.3). A day of fishing files the
+      // fishing verb's OWN line and nothing else — an increment is not an event
+      // the wrap-up should read out, and forty of them would evict the day.
+      const lines = P.get(at.core).ledger.lines.map(([, text]) => text);
+      assert.ok(
+        lines.every((text) => text.includes("Fished")),
+        `every line filed is the fishing verb's own (${lines.join(" | ")})`,
+      );
+      // …AND NOTHING WAS COMPLETED EITHER. The catch site only ever advances: the
+      // hand-in is the board's press, which is what makes a finished job a thing
+      // the player walks back with rather than a thing that resolves in the water.
+      assert.equal(P.get(at.core).quests.active.length, 6, "every row is still on the list");
+      assert.deepEqual(P.get(at.core).quests_done_board, {}, "…and nothing was counted as done");
+    }
+
+    // ── A CAP-REFUSED CATCH DOES NOT COUNT ───────────────────────────────────
+    // grant() refuses a NEW (t,k) row at the pouch cap, and the window's award is
+    // skipped with it. The quest progress goes the same way and for the same
+    // reason: a fish that never entered the bag is not a fish you caught. Staged
+    // one row short of the cap at level 1, where the pond opens exactly two
+    // variants — the first to land takes the last row and the other can never be
+    // recorded at all.
+    {
+      const at = angler({ level: 1 });
+      take(at.core, at.sim, at.w, "b1.d3.carp", "catch", "carp", pack.CAPS.n);
+      take(at.core, at.sim, at.w, "b1.d3.worms", "catch", "worms", pack.CAPS.n);
+      const held = P.get(at.core).pouch.items.length;
+      for (let i = 0; i < P.CAPS.items - held - 1; i++) P.grant(at.core, { t: "catch-common", k: `filler-${i}` }, 1);
+      assert.equal(P.get(at.core).pouch.items.length, P.CAPS.items - 1, "one row of headroom");
+      const out = E.fish(at.core, "dawn");
+      const landed = new Set(out.caught.map((row) => row.k));
+      assert.equal(landed.size, 1, `exactly one variant could be recorded (${[...landed]})`);
+      assert.equal(P.get(at.core).pouch.items.length, P.CAPS.items, "the pouch is at the cap and stayed there");
+      // The one that landed counted; the one the cap refused counted nothing —
+      // and `out.caught` is the record of which was which.
+      assert.equal(
+        haveOf(at.core, "b1.d3.carp"),
+        out.caught.filter((row) => row.k === "carp").length,
+        "the variant that entered the bag advanced its order",
+      );
+      assert.equal(haveOf(at.core, "b1.d3.worms"), 0, "…and the one the cap turned away advanced nothing");
+      assert.ok(!landed.has("worms"), "…which is the variant the cap actually refused here");
+    }
+
+    // ── HAVE AND THE POUCH RIDE THE SAME BLOCK ───────────────────────────────
+    // Rewind exactness comes free at this site and it is worth saying why: the
+    // count and the fish are two fields of ONE serialized player block, so there
+    // is no ordering between them a rewind could land inside. A quest that
+    // remembered its progress somewhere else would be the version of this that
+    // can rewind to five carp caught and a count of nine.
+    {
+      const at = angler({ level: 1 });
+      take(at.core, at.sim, at.w, "b1.d3.carp", "catch", "carp", pack.CAPS.n);
+      const wire = P.serialize(P.get(at.core));
+      assert.equal(wire.quests.active[0].have, 0, "the blob carries the count");
+      const before = JSON.stringify(wire);
+      E.fish(at.core, "dusk");
+      const after = P.serialize(P.get(at.core));
+      assert.ok(after.quests.active[0].have > 0, "the session moved the count");
+      assert.ok(after.pouch.items.some((row) => row.k === "carp"), "…and put fish in the bag");
+      // ONE BLOB BACK, and both halves come with it.
+      at.sim.player = P.parse(JSON.parse(before)).player;
+      assert.equal(P.get(at.core).quests.active[0].have, 0, "the count rewound");
+      assert.ok(!P.get(at.core).pouch.items.some((row) => row.k === "carp"), "…and the fish rewound with it");
+    }
+  } finally {
+    loadedPF.save.reset(); // the mutators self-dirty, and a dirty block arms a timer
+  }
+}
+
+// ── THE LOCATION HANDLE EACH ZONE ANSWERS TO ────────────────────────────────
+// The `visit` verb's target is a location HANDLE — the brief's own place-kind
+// vocabulary plus the root — because zone ids mean nothing outside the brief
+// that minted them and zone names mean nothing after a demotion. Resolving one
+// is a LOOKUP, and the compiler is the only site that knows which ordinal id a
+// place got, so the compiler is where the stamp goes.
+{
+  const sealed = brief.validate(
+    {
+      scale: "village",
+      name: "Handleton",
+      places: [
+        { kind: "gathering", name: "The Inn" },
+        { kind: "wilds", name: "The Wood" },
+        { kind: "sanctuary", name: "The Chapel" },
+      ],
+      cast: [
+        { name: "Ivy", role: "warden", kind: "leader", tint: "blue", home: "Handleton", household: 1 },
+        { name: "Bett", role: "innkeep", kind: "host", tint: "amber", home: "The Inn", household: 2 },
+      ],
+    },
+    { theme: "cozy-village", seed: 77 },
+  );
+  const w = world.build(77, "cozy-village", sealed);
+  assert.equal(w.zones.z1.place, "settlement", "the root answers to the root handle");
+  // z{i+2} is the compiler's own ordinal for the brief's i-th place, which is
+  // exactly the fact this stamp exists to spare every reader from re-deriving.
+  assert.equal(w.zones.z2.place, "gathering", "and each place answers to its own kind");
+  assert.equal(w.zones.z3.place, "wilds", "…in brief order");
+  assert.equal(w.zones.z4.place, "sanctuary", "…all of them");
+  // EVERY HANDLE THE PACK SCHEMA KNOWS is one a world can actually answer to,
+  // and every handle a world stamps is one the schema knows. A vocabulary that
+  // drifted would be quest rows nothing can complete, sealed forever.
+  for (const zone of Object.values(w.zones))
+    if (zone.place)
+      assert.ok(loadedPF.pack.LOCATIONS.includes(zone.place), `${zone.id}'s handle "${zone.place}" is in the schema`);
+  // AND THE FLOORS ABOVE A PLACE CARRY NONE. The handle names the place, and the
+  // room the door opens onto is where you have arrived; a storey is a room
+  // inside it that the player walked through the ground floor to reach.
+  for (const zone of Object.values(w.zones))
+    if (zone.mapExport === false) assert.equal(zone.place, undefined, `${zone.id} is a room, not a place`);
+  // THE LEGACY LAYOUT ANSWERS TOO, which is what keeps the default pack's
+  // visit templates from folding out of every brief-less world.
+  const legacy = world.build(7, "cozy-village", null);
+  assert.equal(legacy.zones.village.place, "settlement", "the legacy village is the settlement");
+  assert.equal(legacy.zones.inn.place, "gathering", "…its inn is the gathering place");
+  assert.equal(legacy.zones.forest.place, "wilds", "…and the wood outside it is the wilds");
+}
+
+// ── VISIT: THE WALK WAS THE QUEST ───────────────────────────────────────────
+// It completes on ENTRY, at both of the two real zone-change callers: the frame
+// loop's own arrival (a portal under the player's feet) and 50-spatial's drift
+// arm (the GM moved the party). The sim holds no core and no generation, so it
+// cannot call anything itself — which is why there are two callers and not one
+// place inside step().
+{
+  const P = loadedPF.player;
+  const pack = loadedPF.pack;
+  const realSetTimeout = globalThis.setTimeout;
+  const realClearTimeout = globalThis.clearTimeout;
+  globalThis.setTimeout = () => 0;
+  globalThis.clearTimeout = () => {};
+  const prevGetSpatial = loadedPF.api.getSpatial;
+  loadedPF.save.reset();
+  loadedPF.spatial.reset();
+  const core = loadedPF.core;
+  try {
+    const sealed = brief.validate(
+      {
+        scale: "village",
+        name: "Walkerton",
+        places: [
+          { kind: "gathering", name: "The Inn" },
+          { kind: "wilds", name: "The Wood" },
+        ],
+        cast: [
+          { name: "Ivy", role: "warden", kind: "leader", tint: "blue", home: "Walkerton", household: 1 },
+          { name: "Bett", role: "innkeep", kind: "host", tint: "amber", home: "The Inn", household: 2 },
+        ],
+      },
+      { theme: "cozy-village", seed: 55 },
+    );
+    const w = world.build(55, "cozy-village", sealed);
+    const sim = new loadedPF.Sim(w);
+    sim.day = 4;
+    const toasts = [];
+    const filled = [];
+    core.chatId = "chat-visit";
+    core.sim = sim;
+    core.host = { chatMeta: {} };
+    core.hud = {
+      toast: (text) => toasts.push(text),
+      refreshChips() {},
+      update() {},
+      questFilled: (done) => filled.push(...done),
+    };
+    const active = () => P.get(core).quests.active;
+    const take = (id, target, day) =>
+      P.quest(core, "accept", {
+        id,
+        g: `${w.startZone}|Ivy`,
+        verb: "visit",
+        target,
+        n: 1,
+        r: { money: 6, xp: 0 },
+        day: day ?? sim.day,
+      });
+    /** A portal crossing, driven through the SHIPPED path: step() finds the
+     *  portal under the feet, teleports and reports the change, and the frame
+     *  loop's arrival method is what answers for it. */
+    const walkThrough = (fromZone, portal) => {
+      sim.teleport(fromZone, portal.x, portal.y);
+      const res = sim.step(0, {});
+      assert.equal(res.zoneChanged, true, `the portal at ${portal.x},${portal.y} moved the player`);
+      core._zoneChanged();
+    };
+    const toWood = w.zones.z1.portals.find((p) => p.toZone === "z3");
+    const backHome = w.zones.z3.portals.find((p) => p.toZone === "z1");
+    assert.ok(toWood && backHome, "the wilds is reachable and leaves a way home");
+
+    // ── ACCEPTING WHILE YOU ARE ALREADY STANDING THERE FINISHES NOTHING ──────
+    // The hook is an ARRIVAL and not a location test, so work taken at the board
+    // — which is in the settlement — cannot be a settlement walk already done.
+    assert.equal(take("b1.d4.here", "settlement"), true, "a settlement walk is taken on, in the settlement");
+    assert.equal(active().length, 1, "…and it is still a job");
+    assert.equal(P.get(core).pouch.money, 0, "…paid for nothing");
+
+    // ── THE ARRIVAL PAYS ─────────────────────────────────────────────────────
+    // TWO rows for the same walk, because the site filters rather than finds:
+    // one walk answers both, exactly as one catch answers two carp orders.
+    assert.equal(take("b1.d4.wood-a", "wilds"), true, "one walk to the wood is taken on");
+    assert.equal(take("b1.d4.wood-b", "wilds"), true, "…and a second, from another day's board");
+    const met = P.get(core).rel[w.startZone]?.Ivy?.t ?? 0;
+    walkThrough("z1", toWood);
+    assert.equal(sim.zoneId, "z3", "the player is in the wood");
+    assert.equal(
+      active().filter((q) => q.target === "wilds").length,
+      0,
+      "both walks completed on entry: the walk WAS the quest",
+    );
+    assert.equal(P.get(core).pouch.money, 12, "…and both were paid");
+    assert.equal(P.get(core).quests_done_board["b1.d4.wood-a"] ?? 0, 0, "the counter is keyed by TEMPLATE");
+    assert.equal(P.get(core).quests_done_board["wood-a"], 1, "…which is what rides in the instance id");
+    assert.equal(P.get(core).rel[w.startZone]?.Ivy?.t, met + 2, "the giver remembers both");
+    assert.equal(P.get(core).rel[w.startZone]?.Ivy?.d ?? 0, 0, "…as encounters, never as a promotion");
+    assert.equal(filled.length, 2, "the surface was told about both");
+    // THE LINE NAMES THE PLACE AND NOT THE HANDLE, and is filed EVENT-SIDE at the
+    // event's day — a walk taken on the board's day 4 and finished on day 4.
+    const lines = () => P.get(core).ledger.lines;
+    const arrival = lines().filter(([, text]) => text.includes("Walked out to"));
+    assert.equal(arrival.length, 2, `one line per completion, no more (${lines().map(([, t]) => t).join(" | ")})`);
+    assert.ok(arrival[0][1].includes("The Wood"), "…naming the zone the player actually reached");
+    assert.ok(!arrival[0][1].includes("wilds"), "…rather than the index key the schema uses");
+    assert.ok(arrival[0][1].includes("Ivy"), "…and the giver it was for");
+    assert.equal(arrival[0][0], 4, "…filed at the day it happened on");
+
+    // ── RE-ENTRY IS IDEMPOTENT, AND IT COSTS NOTHING TO CHECK ────────────────
+    // Two guards hold this up and both are worth having: a zone change is only
+    // reported when the zone CHANGED, and the row is spliced by the first
+    // arrival, so a second finds nothing to settle.
+    // WALKING HOME FINISHES THE SETTLEMENT ROW, which is the other half of the
+    // accept-in-place pin: the walk it asked for is one the player really does
+    // take, they just had not taken it yet when they took the work on.
+    const paid = P.get(core).pouch.money;
+    assert.equal(active().length, 1, "the settlement walk was still outstanding");
+    walkThrough("z3", backHome);
+    assert.equal(active().length, 0, "…and coming home is what fills it");
+    assert.equal(P.get(core).pouch.money, paid + 6, "…paid on arrival, like every other walk");
+    // …AND NOW THE SECOND ARRIVAL IN THE WOOD, with nothing left to answer it.
+    const settled = P.get(core).pouch.money;
+    const filedSoFar = lines().filter(([, text]) => text.includes("Walked out to")).length;
+    walkThrough("z1", toWood);
+    walkThrough("z3", backHome);
+    walkThrough("z1", toWood);
+    assert.equal(P.get(core).pouch.money, settled, "walking the same ground again pays nothing");
+    assert.equal(
+      lines().filter(([, text]) => text.includes("Walked out to")).length,
+      filedSoFar,
+      "…and files nothing either: the rows it would have answered are gone",
+    );
+
+    // ── AND THE DRIFT ARM, WHICH IS THE OTHER CALLER ─────────────────────────
+    // The GM moved the party. An arrival narrated is an arrival: the player is
+    // standing in the zone the work named, and refusing to answer for it because
+    // they got there by being told would leave a row nothing can complete.
+    {
+      const spatial = loadedPF.spatial;
+      spatial.reset();
+      const at = { loc: "loc-root" };
+      loadedPF.api.getSpatial = async () => ({
+        definition: { revision: 1 },
+        currentLocationId: at.loc,
+        breadcrumb: [{ name: at.loc }],
+        destinations: [],
+      });
+      w.bindings["loc-root"] = "z1";
+      w.bindings["loc-wood"] = "z3";
+      sim.teleport("z1", w.zones.z1.spawn.x, w.zones.z1.spawn.y);
+      await spatial.refresh(core); // seeds _lastLocationId
+      assert.equal(take("b1.d4.drift", "wilds"), true, "a walk to the wood is taken on");
+      // MID-CONVERSATION, deliberately: a narrated arrival lands while the player
+      // is reading, and this site has no mode test for exactly that reason.
+      sim.mode = "dialogue";
+      const before = P.get(core).pouch.money;
+      at.loc = "loc-wood";
+      await spatial.refresh(core);
+      assert.equal(sim.zoneId, "z3", "the drift followed the GM into the wood");
+      assert.equal(active().length, 0, "…and the walk completed there");
+      assert.equal(P.get(core).pouch.money, before + 6, "…and paid");
+      sim.mode = "walk";
+
+      // A REFRESH THAT FINDS THE PARTY WHERE IT ALREADY WAS SETTLES NOTHING.
+      assert.equal(take("b1.d4.again", "wilds"), true, "another walk to the wood is taken on");
+      const held = P.get(core).pouch.money;
+      await spatial.refresh(core);
+      assert.equal(active().length, 1, "a refresh with no movement in it is not an arrival");
+      assert.equal(P.get(core).pouch.money, held, "…and pays nothing");
+    }
+  } finally {
+    loadedPF.api.getSpatial = prevGetSpatial;
+    globalThis.setTimeout = realSetTimeout;
+    globalThis.clearTimeout = realClearTimeout;
+    core.sim = null;
+    core.hud = null;
+    loadedPF.save.reset();
+    loadedPF.spatial.reset();
+  }
+}
+
+// ── DELIVER: AN ERRAND, FINISHED BY TALKING ─────────────────────────────────
+// No item moves — there is no quest-item type and inventing one for a word would
+// be a format change nothing else asks for — so what is delivered is word, and
+// word is delivered in the one place the package can be sure a conversation
+// started: Talk's accepted `.then`. It is the ONE quest verb that costs a GM
+// call, which is the greeting the player was sending anyway (Ruling 1 is lean,
+// not zero), and the count is pinned here because "lean" is a claim.
+{
+  const P = loadedPF.player;
+  const pack = loadedPF.pack;
+  const core = loadedPF.core;
+  const realSetTimeout = globalThis.setTimeout;
+  const realClearTimeout = globalThis.clearTimeout;
+  globalThis.setTimeout = () => 0;
+  globalThis.clearTimeout = () => {};
+  loadedPF.save.reset();
+  loadedPF.spatial.reset();
+  try {
+    const w = world.build(7, "cozy-village", null);
+    const sim = new loadedPF.Sim(w);
+    sim.day = 5;
+    const sent = [];
+    const filled = [];
+    core.chatId = "chat-deliver";
+    core.sim = sim;
+    core.hud = {
+      toast() {},
+      refreshChips() {},
+      update() {},
+      questFilled: (done) => filled.push(...done),
+    };
+    let accept = true;
+    core.host = {
+      chatMeta: {},
+      isStreaming: false,
+      narrationDone: true,
+      latestAssistant: { id: "m1" },
+      sendMessage: (text) => {
+        sent.push(text);
+        return accept;
+      },
+    };
+    const settle = async () => {
+      for (let i = 0; i < 8; i++) await Promise.resolve();
+    };
+    const active = () => P.get(core).quests.active;
+    const take = (id, giver, target) =>
+      P.quest(core, "accept", {
+        id,
+        g: `${w.startZone}|${giver}`,
+        verb: "deliver",
+        target,
+        n: 1,
+        r: { money: 8, xp: 0 },
+        day: sim.day,
+      });
+    const rook = w.zones.village.npcs.find((npc) => npc.name === "Rook");
+    const tam = w.zones.village.npcs.find((npc) => npc.name === "Tam");
+    assert.ok(rook && tam, "the legacy village stands two people up in the open");
+    const talkTo = (npc) => {
+      sim.mode = "walk";
+      sim.nearNpc = npc;
+      core.interact();
+    };
+
+    // ── THE HANDOVER: ONE TURN, ONE COMPLETION ───────────────────────────────
+    assert.equal(take("b1.d5.word", "Mira", "Rook"), true, "an errand to Rook is taken on");
+    const met = P.get(core).rel[w.startZone]?.Rook?.t ?? 0;
+    talkTo(rook);
+    await settle();
+    assert.equal(sent.length, 1, "the handover costs EXACTLY one GM call — the greeting itself");
+    assert.equal(active().length, 0, "…and the errand is finished");
+    assert.equal(P.get(core).pouch.money, 8, "…and paid");
+    assert.equal(P.get(core).quests_done_board.word, 1, "…and counted under its template");
+    // THE LINE NAMES BOTH ENDS: who sent the word and who it reached.
+    const lines = () => P.get(core).ledger.lines.map(([, text]) => text);
+    const errand = lines().find((text) => text.includes("Took"));
+    assert.ok(errand, `an errand line was filed (${lines().join(" | ")})`);
+    assert.ok(errand.includes("Mira") && errand.includes("Rook"), `…naming both ends (${errand})`);
+    assert.equal(P.get(core).ledger.lines.find(([, text]) => text.includes("Took"))[0], 5, "…at the event's day");
+    // ROOK IS BUMPED ONCE FOR THE CONVERSATION AND NOT AGAIN FOR THE ERRAND: the
+    // deliver bump goes to the GIVER, and Mira is not the person standing here.
+    assert.equal(P.get(core).rel[w.startZone]?.Rook?.t, met + 1, "the person talked to gained one encounter");
+    assert.equal(P.get(core).rel[w.startZone]?.Mira?.t ?? 0, 1, "…and the sender gained one for the errand run");
+
+    // ── TWO ERRANDS TO ONE PERSON ARE BOTH RUN BY ONE GREETING ───────────────
+    // A filter and not a find, for the catch site's reason: two boards can owe
+    // the same person word, and walking up to them once is the handover for
+    // both. Still ONE call — which is the whole shape of "lean".
+    {
+      assert.equal(take("b1.d5.pair-a", "Mira", "Rook"), true, "one errand to Rook");
+      assert.equal(take("b1.d5.pair-b", "Fen", "Rook"), true, "…and another from somebody else");
+      const held = P.get(core).pouch.money;
+      const spent = sent.length;
+      talkTo(rook);
+      await settle();
+      assert.equal(active().length, 0, "one greeting hands over both");
+      assert.equal(P.get(core).pouch.money, held + 16, "…and pays for both");
+      assert.equal(sent.length, spent + 1, "…on exactly one GM call between them");
+    }
+
+    // ── GIVER == TARGET IS A DOUBLE BUMP, AND IT IS RECORDED HARMLESS ────────
+    // A template can name the same person as giver and target ("come and tell me
+    // yourself"). The conversation bumps them and so does the errand, so `t`
+    // moves twice in one turn — which is two things having happened, not a bug.
+    assert.equal(take("b1.d5.self", "Tam", "Tam"), true, "an errand to its own giver is taken on");
+    const twice = P.get(core).rel[w.startZone]?.Tam?.t ?? 0;
+    talkTo(tam);
+    await settle();
+    assert.equal(active().length, 0, "…and finishes on the same greeting");
+    assert.equal(P.get(core).rel[w.startZone]?.Tam?.t, twice + 2, "…bumping the one person twice, deliberately");
+    const selfLine = lines().at(-1);
+    assert.ok(!/Tam's word to Tam/.test(selfLine), `…and the line does not say it twice (${selfLine})`);
+
+    // ── A REFUSED TURN IS NOT A HANDOVER ─────────────────────────────────────
+    assert.equal(take("b1.d5.refused", "Mira", "Rook"), true, "another errand to Rook is taken on");
+    accept = false;
+    const purse = P.get(core).pouch.money;
+    talkTo(rook);
+    await settle();
+    assert.equal(active().length, 1, "a turn the host refused delivered nothing");
+    assert.equal(P.get(core).pouch.money, purse, "…and paid nothing");
+    accept = true;
+
+    // ── AND A SIM REPLACED UNDER THE AWAIT REFUSES ───────────────────────────
+    // `_gen` moves on a CHAT switch and stays put through a rewind, a checkpoint
+    // load or a swipe — all of which replace core.sim wholesale. So the fence
+    // alone cannot see this, and the second capture is what does: the quest stays
+    // active, the player talks to them again, and the honest cost is one extra GM
+    // call in a race nobody will ever notice.
+    {
+      let replaced = null;
+      core.host.sendMessage = (text) => {
+        sent.push(text);
+        replaced = new loadedPF.Sim(w);
+        replaced.day = sim.day;
+        replaced.player = P.get(core);
+        core.sim = replaced;
+        return true;
+      };
+      const held = P.get(core).pouch.money;
+      talkTo(rook);
+      await settle();
+      assert.ok(replaced && core.sim === replaced, "the sim really was replaced under the await");
+      assert.equal(P.get(core).quests.active.length, 1, "the errand is still there to be run");
+      assert.equal(P.get(core).pouch.money, held, "…and nothing was paid out of the replaced story");
+      core.sim = sim;
+      core.host.sendMessage = (text) => {
+        sent.push(text);
+        return true;
+      };
+      // …AND TALKING AGAIN FINISHES IT, which is what makes the refusal a cost
+      // rather than a loss.
+      talkTo(rook);
+      await settle();
+      assert.equal(P.get(core).quests.active.length, 0, "the second greeting hands it over");
+      assert.equal(P.get(core).pouch.money, held + 8, "…and pays");
+    }
+
+    // ── THE NAME IS CAPTURED AT SEND ─────────────────────────────────────────
+    // The schedules can walk this person out of the room while the host is
+    // thinking. The errand was run to the person the player greeted.
+    {
+      assert.equal(take("b1.d5.moved", "Mira", "Rook"), true, "one more errand to Rook");
+      const held = P.get(core).pouch.money;
+      talkTo(rook);
+      sim.nearNpc = tam; // somebody else is standing there by the time it lands
+      await settle();
+      assert.equal(P.get(core).quests.active.length, 0, "the errand still reached the person it was greeted at");
+      assert.equal(P.get(core).pouch.money, held + 8, "…and paid");
+    }
+  } finally {
+    globalThis.setTimeout = realSetTimeout;
+    globalThis.clearTimeout = realClearTimeout;
+    core.sim = null;
+    core.hud = null;
+    core.host = null;
+    core._talkConfirm = null;
+    loadedPF.save.reset();
+    loadedPF.spatial.reset();
+  }
+}
+
 // ── THE GHOST-LADDER FENCE: NOTHING ON THE QUEST PATH MINTS A SKILL ─────────
 // THE REWARD RULING (plan §2.6). Quests never grant skill experience. A quest's
 // TASK may raise a skill — catching fish for a catch quest levels fishing,
@@ -18983,7 +19563,10 @@ const fire = (node, type) => Promise.all((node.listeners[type] ?? []).map((fn) =
     const toasts = [];
     core.chatId = "chat-talk-skip";
     core.sim = sim;
-    core.hud = { toast: (text) => toasts.push(text), refreshChips() {}, update() {} };
+    // questFilled stands in for the real Hud's own (70-hud): Talk's accepted turn
+    // is the deliver verb's completion site, and a stub that did not model the
+    // surface would turn a settled errand into a thrown "not a function".
+    core.hud = { toast: (text) => toasts.push(text), refreshChips() {}, update() {}, questFilled() {} };
     const host = {
       chatId: "chat-talk-skip",
       isStreaming: false,
