@@ -1471,8 +1471,10 @@ PF.player = {
     if (action !== "complete") return false;
     active.splice(index, 1);
     // The completion counter is keyed by the quest's TEMPLATE, not its instance:
-    // "b1.d37.2" is the third delivery this world generated, and what the board
-    // needs to know is how many deliveries the player has run.
+    // `b1.d<day>.<templateId>` says which board posted the work, which DAY it was
+    // posted on and which template it came from, and what the board needs to know
+    // is how many times the player has run THAT piece of work — so two carp
+    // orders a week apart are one counter at two, never two counters at one.
     const template = str(payload?.template ?? row.id);
     const board = template.startsWith("p:") ? p.quests.done_pack : p.quests_done_board;
     const cap = board === p.quests.done_pack ? CAPS.packDone : CAPS.boardDone;
@@ -1487,7 +1489,23 @@ PF.player = {
       this._trimCounters(board, cap - 1);
     }
     if (template && template !== "__proto__") board[template] = posInt(standing, 0) + 1;
-    this.award(core, { money: row.r?.money, xp: row.r?.xp, verb: row.verb }, gen);
+    // NO VERB, AND NO FALLBACK TO THE ROW'S (the maintainer's reward ruling,
+    // plan §2.6). Quests never grant SKILL experience. A quest's task may raise a
+    // skill — catching fish for a catch order levels fishing, because the
+    // CATCHING does, through fish()'s own award — but the reward itself is money
+    // and the giver's rapport and nothing else.
+    //
+    // `r.xp` still rides the payload rather than being dropped here, and that is
+    // the point of the line: 61-pack's derivation writes xp = 0 by construction,
+    // so an honest row has nothing to pay, and this is what answers a row that
+    // never came from the derivation — a hand-edited chatMeta, a save from
+    // another build, a forward client's row. `accept` above copies `r` as given
+    // (the row is a closed literal and this mutator trusts its caller), so a
+    // planted xp reaches here intact; award() applies the money and drops the
+    // experience on the floor precisely because there is no verb to key a ladder
+    // off. Passing `row.verb` instead — which is what this line used to do —
+    // minted {"catch":{"l":1,"x":5}} into a block that had never fished.
+    this.award(core, { money: row.r?.money, xp: row.r?.xp, verb: null }, gen);
     this._touch(core);
     return true;
   },

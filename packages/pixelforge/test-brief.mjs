@@ -18347,6 +18347,126 @@ const fire = (node, type) => Promise.all((node.listeners[type] ?? []).map((fn) =
   }
 }
 
+// ── THE GHOST-LADDER FENCE: NOTHING ON THE QUEST PATH MINTS A SKILL ─────────
+// THE REWARD RULING (plan §2.6). Quests never grant skill experience. A quest's
+// TASK may raise a skill — catching fish for a catch quest levels fishing,
+// through fish()'s own award and nothing else — but the REWARD is money and the
+// giver's rapport, full stop.
+//
+// TWO HALVES HOLD THAT UP AND THEY FAIL DIFFERENTLY, so both are pinned here.
+// The GUARANTEE is structural: `rewardFor` derives xp = 0 by construction, so an
+// honest row has nothing to pay. The BACKSTOP is the completion path passing NO
+// verb to award(), which is what answers a row that did not come from
+// `rewardFor` at all — a hand-edited chatMeta, a forward build, a save carried
+// in from somewhere else. quest("accept") stores `r.xp` as given (the row is a
+// closed eight-field literal and the mutator trusts its caller), so a planted
+// xp reaches the completion; award() applies the money and drops the xp on the
+// floor exactly when there is no verb to key a ladder off.
+//
+// The failure this fences is the one slice 2's verify measured: with the verb
+// still riding the payload, a row carrying r.xp = 5 landed
+// {"verbs":{"catch":{"l":1,"x":5}}} in a block that had never fished. That is a
+// ladder MINTED by a quest, which is the thing the ruling forbids.
+{
+  const P = loadedPF.player;
+  const pack = loadedPF.pack;
+  const realSetTimeout = globalThis.setTimeout;
+  const realClearTimeout = globalThis.clearTimeout;
+  globalThis.setTimeout = () => 0;
+  globalThis.clearTimeout = () => {};
+  loadedPF.save.reset();
+  loadedPF.spatial.reset();
+  try {
+    const w = world.build(7, "cozy-village", null);
+    const sim = new loadedPF.Sim(w);
+    const core = {
+      chatId: "chat-ghost-ladder",
+      sim,
+      host: { chatMeta: {} },
+      interact() {},
+      setMode() {},
+      resume() {},
+      markDirty() {},
+    };
+    core.hud = new loadedPF.Hud(new FakeNode("div"), core);
+    const board = w.zones.village.features.find((row) => row.id === loadedPF.world.BOARD_FEATURE_ID);
+    sim.teleport("village", board.rect.x, board.rect.y + 1);
+    sim.step(0, {});
+
+    // FIRST, THE GUARANTEE. Every verb this build can seal, at every count it can
+    // ask for, is worth money and no experience — because the derivation has no
+    // xp row to read rather than because somebody typed a zero into one.
+    for (const verb of pack.MECHANICS)
+      for (const n of [1, 3, pack.CAPS.n])
+        assert.equal(pack.rewardFor(verb, n).xp, 0, `${verb} x${n} pays no skill experience`);
+
+    // THEN THE BACKSTOP, driven with a row this build could not have written. The
+    // reward is planted straight through the mutator, which is exactly how a
+    // hostile save reaches the completion: `quest("accept")` copies `r` as given.
+    const hostile = {
+      id: pack.instanceId(sim.day, "b:hostile-catch"),
+      g: `${w.startZone}|Mira`,
+      verb: "catch",
+      target: "carp",
+      n: 2,
+      r: { money: 9, xp: 5 },
+      day: sim.day,
+    };
+    assert.equal(P.quest(core, "accept", hostile), true, "the planted row is taken on");
+    assert.equal(P.get(core).quests.active[0].r.xp, 5, "…and it really is carrying experience: the mutator trusts it");
+    P.quest(core, "progress", { id: hostile.id, by: hostile.n });
+    const purse = P.get(core).pouch.money;
+    const handed = pack.turnIn(core, hostile.id);
+    assert.equal(handed.ok, true, "the hostile row hands in like any other");
+    assert.equal(P.get(core).pouch.money, purse + 9, "…and is PAID: the money half of the reward is honoured");
+    // THE RED SHAPE, named: this is what the block held before the amendment.
+    assert.notEqual(
+      JSON.stringify(P.get(core).skills.verbs),
+      '{"catch":{"l":1,"x":5}}',
+      "…and the ladder slice 2's verify measured is not there",
+    );
+    assert.deepEqual(P.get(core).skills.verbs, {}, "…because the quest path minted no ladder at all");
+
+    // AND NOT FOR A HOSTILE VERB EITHER. The row's `verb` is a string off stored
+    // data and award() keys a bucket off whatever it is handed, so a row naming a
+    // verb no site in this build advances must mint no bucket for it either.
+    for (const verb of ["fishing", "questing", "toString"]) {
+      const row = {
+        id: pack.instanceId(sim.day, `b:hostile-${verb}`),
+        g: `${w.startZone}|Mira`,
+        verb,
+        target: "carp",
+        n: 1,
+        r: { money: 1, xp: 40 },
+        day: sim.day,
+      };
+      assert.equal(P.quest(core, "accept", row), true, `a row verbed "${verb}" is taken on`);
+      P.quest(core, "progress", { id: row.id, by: 1 });
+      assert.equal(pack.turnIn(core, row.id).ok, true, `…and handed in`);
+      assert.deepEqual(P.get(core).skills.verbs, {}, `…leaving no ladder for "${verb}"`);
+    }
+
+    // A PRE-EXISTING GHOST LADDER STILL RENDERS, and that is deliberate. The
+    // fence is about what the quest path MINTS; a block that arrived carrying a
+    // ladder for a verb this build cannot level is a pre-existing seam (a foreign
+    // save, a forward build), and quietly deleting somebody's numbers to tidy up
+    // an invariant we only started enforcing today is the worse answer.
+    P.get(core).skills.verbs.questing = { l: 3, x: 7 };
+    const ghosted = pack.boardOffers(core);
+    assert.equal(ghosted.available, true, "the board reads fine over a ghost ladder");
+    assert.deepEqual(
+      P.get(core).skills.verbs.questing,
+      { l: 3, x: 7 },
+      "…and the ghost is still standing where it was found",
+    );
+  } finally {
+    globalThis.setTimeout = realSetTimeout;
+    globalThis.clearTimeout = realClearTimeout;
+    loadedPF.save.reset();
+    loadedPF.spatial.reset();
+  }
+}
+
 // ═══ THE TWO PANELS (0.12 slice 5) ══════════════════════════════════════════
 // The journal and the character sheet, over the real Hud on the DOM shim. Two
 // surfaces with two different memos, and the memo is the whole engineering: a
