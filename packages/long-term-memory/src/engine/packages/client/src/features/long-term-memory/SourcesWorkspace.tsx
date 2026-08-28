@@ -1356,7 +1356,10 @@ export default function SourcesWorkspace({
     scopeTargetOptions.find((target) => target.id === "all") ??
     scopeTargetOptions[0];
   const destinationTargets = useMemo(
-    () => scopeTargetOptions.filter((target) => target.kind !== "all"),
+    () =>
+      scopeTargetOptions.filter(
+        (target) => target.kind !== "all" && hasDestinationScopeCapacity(target.destinationScope),
+      ),
     [scopeTargetOptions],
   );
   const destinationTarget = destinationTargets.find((target) => target.id === destinationTargetId);
@@ -1514,8 +1517,8 @@ export default function SourcesWorkspace({
   useEffect(() => {
     if (!scopeTargetOptions.some((target) => target.id === sourceTargetId))
       setSourceTargetId(props.chatId ? `chat:${props.chatId}` : "all");
-    if (props.chatId && !destinationTargets.some((target) => target.id === destinationTargetId))
-      setDestinationTargetId(`chat:${props.chatId}`);
+    if (!destinationTargets.some((target) => target.id === destinationTargetId))
+      setDestinationTargetId(props.chatId ? `chat:${props.chatId}` : "");
     setAdditionalDestinationTargetIds((current) =>
       current.filter((id) => destinationTargets.some((target) => target.id === id)),
     );

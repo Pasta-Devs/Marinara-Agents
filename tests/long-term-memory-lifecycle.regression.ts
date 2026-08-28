@@ -751,6 +751,16 @@ async function main() {
                 label: "Conversation A",
                 chatIds: ["memory-chat", "memory-conversation-branch"],
               },
+              {
+                id: "valid-group",
+                label: "Valid group",
+                chatIds: Array.from({ length: 100 }, (_, index) => `valid-group-chat-${index}`),
+              },
+              {
+                id: "overflow-group",
+                label: "Overflow group",
+                chatIds: Array.from({ length: 101 }, (_, index) => `overflow-group-chat-${index}`),
+              },
             ],
             characters: [{ id: "character-a", label: "Character A" }],
             personas: [
@@ -2723,6 +2733,12 @@ async function main() {
       const destinationScopePicker = page.locator('[data-ltm-scope-picker="destination"]');
       const destinationScopeTrigger = destinationScopePicker.getByRole("combobox");
       await destinationScopeTrigger.click();
+      const destinationScopeSearch = destinationScopePicker.locator("input");
+      await destinationScopeSearch.fill("Overflow group");
+      assert.equal(await destinationScopePicker.locator('[data-ltm-scope-option="group:overflow-group"]').count(), 0);
+      await destinationScopeSearch.fill("Valid group");
+      assert.equal(await destinationScopePicker.locator('[data-ltm-scope-option="group:valid-group"]').count(), 1);
+      await destinationScopeSearch.fill("");
       assert.equal(
         await destinationScopePicker.locator('[role="option"][data-ltm-scope-option="chat:memory-chat"]').count(),
         1,
@@ -2741,7 +2757,6 @@ async function main() {
           .evaluate((listbox) => getComputedStyle(listbox).backgroundColor),
         "rgba(0, 0, 0, 0)",
       );
-      const destinationScopeSearch = destinationScopePicker.locator("input");
       await destinationScopeSearch.fill("chat");
       await destinationScopeSearch.press("ArrowDown");
       assert.equal(

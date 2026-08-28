@@ -224,6 +224,7 @@ assert.match(vault, /searchBranches/u);
 assert.match(vault, /scope-targets\?includeAllChats=true/u);
 assert.doesNotMatch(workspace, /id: `branch:\$\{chat\.id\}`/u);
 assert.match(workspace, /destinationScopeLimitReached/u);
+assert.match(workspace, /hasDestinationScopeCapacity\(target\.destinationScope\)/u);
 assert.match(workspace, /data-ltm-availability-target=\{`\$\{target\.kind\}:/u);
 assert.match(workspace, /bg-\[var\(--card\)\] shadow-xl/u);
 assert.doesNotMatch(vault, /matchesFilters/u);
