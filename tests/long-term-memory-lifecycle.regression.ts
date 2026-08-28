@@ -728,16 +728,45 @@ async function main() {
                 personaId: "persona-a",
                 characterIds: ["character-a"],
               },
+              {
+                id: "memory-conversation-branch",
+                label: "Memory conversation branch",
+                mode: "conversation",
+                groupId: "conversation-a",
+                personaId: "persona-a",
+                characterIds: ["character-a"],
+              },
+              ...Array.from({ length: 100 }, (_, index) => ({
+                id: `bulk-chat-${index}`,
+                label: `Bulk chat ${index}`,
+                mode: "conversation",
+                groupId: null,
+                personaId: null,
+                characterIds: [],
+              })),
             ],
             groups: [
               {
                 id: "conversation-a",
                 label: "Conversation A",
-                chatIds: ["memory-chat"],
+                chatIds: ["memory-chat", "memory-conversation-branch"],
+              },
+              {
+                id: "valid-group",
+                label: "Valid group",
+                chatIds: Array.from({ length: 100 }, (_, index) => `valid-group-chat-${index}`),
+              },
+              {
+                id: "overflow-group",
+                label: "Overflow group",
+                chatIds: Array.from({ length: 101 }, (_, index) => `overflow-group-chat-${index}`),
               },
             ],
             characters: [{ id: "character-a", label: "Character A" }],
-            personas: [{ id: "persona-a", label: "Persona A" }],
+            personas: [
+              { id: "persona-a", label: "Persona A", comment: "Space explorer" },
+              { id: "persona-b", label: "Persona A", comment: "Private detective" },
+            ],
           });
         }
         if (request.method === "GET" && url.pathname.endsWith("/notes")) {
@@ -1083,6 +1112,31 @@ async function main() {
             },
           });
         }
+        if (request.method === "POST" && url.pathname.endsWith("/import/source-notes")) {
+          const chunks: Buffer[] = [];
+          for await (const chunk of request) chunks.push(Buffer.from(chunk));
+          const body = JSON.parse(Buffer.concat(chunks).toString("utf8")) as {
+            source: string;
+            sourceIds: string[];
+          };
+          return send(200, {
+            operationId: "00000000-0000-4000-8000-000000000001",
+            batchStatus: "failed",
+            source: body.source,
+            imported: [],
+            writeFailures: [],
+            missingSourceIds: body.sourceIds,
+            counts: {
+              requested: body.sourceIds.length,
+              sourceNotesWritten: 0,
+              succeeded: 0,
+              failed: 0,
+              cancelled: 0,
+              missing: body.sourceIds.length,
+              sourceWriteFailed: 0,
+            },
+          });
+        }
         if (request.method === "POST" && url.pathname.endsWith("/notes/source_desktop_reextract/extract"))
           return await new Promise<void>((resolve) => {
             releaseReextraction = () => {
@@ -1355,10 +1409,26 @@ async function main() {
       assert.equal(
         await memoryScope
           .locator('[data-ltm-memory-scope-picker="branch"]')
-          .getByText("All branches", { exact: true })
+          .locator('[data-ltm-memory-scope-target="branch:all"]')
           .count(),
         1,
       );
+      const memoryChatPicker = memoryScope.locator('[data-ltm-memory-scope-picker="chat"]');
+      await memoryChatPicker.locator(":scope > summary").click();
+      assert.equal(await memoryChatPicker.locator('[data-ltm-memory-scope-target="group:conversation-a"]').count(), 1);
+      await memoryChatPicker.locator('[data-ltm-memory-scope-target="group:conversation-a"]').click();
+      const memoryBranchPicker = memoryScope.locator('[data-ltm-memory-scope-picker="branch"]');
+      assert.equal(
+        await memoryBranchPicker.locator('[data-ltm-memory-scope-target="chat:memory-conversation-branch"]').count(),
+        1,
+      );
+      assert.equal(await memoryBranchPicker.locator('[data-ltm-memory-scope-target="chat:memory-chat"]').count(), 0);
+      const roleplayMode = memoryScope.getByRole("checkbox", { name: "Roleplay" });
+      await roleplayMode.check();
+      assert.equal(await memoryBranchPicker.locator('[data-ltm-memory-scope-target="chat:memory-chat"]').count(), 1);
+      await roleplayMode.uncheck();
+      await memoryChatPicker.locator(":scope > summary").click();
+      await memoryChatPicker.locator('[data-ltm-memory-scope-target="chat:desktop-chat"]').click();
       await memoryScope.locator('[data-ltm-memory-scope-picker="character"] > summary').press("Enter");
       assert.equal(
         await memoryScope
@@ -2633,23 +2703,221 @@ async function main() {
         );
       });
       const sourceScopePicker = page.locator('[data-ltm-scope-picker="source"]');
-      assert.equal(await sourceScopePicker.inputValue(), "all");
-      await sourceScopePicker.selectOption("chat:desktop-chat");
+      const sourceScopeTrigger = sourceScopePicker.getByRole("combobox");
+      assert.match((await sourceScopeTrigger.innerText()).trim(), /All Available/u);
+      await sourceScopeTrigger.click();
+      assert.equal(await sourceScopePicker.locator('[role="listbox"] input').count(), 0);
+      assert.equal(
+        await sourceScopePicker.locator('[role="option"][data-ltm-scope-option="chat:memory-chat"]').count(),
+        1,
+      );
+      assert.equal(
+        await sourceScopePicker.locator('[role="option"][data-ltm-scope-option="branch:memory-chat"]').count(),
+        0,
+      );
+      assert.equal(
+        await sourceScopePicker.locator('[role="option"][data-ltm-scope-option="group:conversation-a"]').count(),
+        1,
+      );
+      assert.notEqual(
+        await sourceScopePicker
+          .locator("[data-ltm-scope-picker-popup]")
+          .evaluate((listbox) => getComputedStyle(listbox).backgroundColor),
+        "rgba(0, 0, 0, 0)",
+      );
+      await sourceScopePicker.locator('[role="option"][data-ltm-scope-option="chat:desktop-chat"]').click();
       const scopedChatPreviewRequest = (await scopedChatPreviewRequestPromise).postDataJSON() as {
         sourceScope?: unknown;
       };
       assert.deepEqual(scopedChatPreviewRequest.sourceScope, expectedInitialChatSourceScope);
       await page.locator('[data-ltm-source-preview-status="success"]').waitFor();
-      const destinationToggle = page.locator("[data-ltm-destination-toggle]");
-      assert.equal(await page.locator('[data-ltm-scope-picker="destination"]').count(), 0);
-      await destinationToggle.focus();
-      await destinationToggle.press("Space");
-      await page.locator('[data-ltm-scope-picker="destination"]').waitFor();
-      assert.equal(await page.locator('[data-ltm-scope-picker="destination"]').inputValue(), "");
-      await page.locator('[data-ltm-scope-picker="destination"]').selectOption("chat:memory-chat");
-      assert.equal(await page.locator('[data-ltm-scope-picker="destination"]').inputValue(), "chat:memory-chat");
-      await destinationToggle.press("Space");
-      assert.equal(await page.locator('[data-ltm-scope-picker="destination"]').count(), 0);
+      const destinationScopePicker = page.locator('[data-ltm-scope-picker="destination"]');
+      const destinationScopeTrigger = destinationScopePicker.getByRole("combobox");
+      assert.equal(await destinationScopeTrigger.getAttribute("aria-required"), "true");
+      await destinationScopeTrigger.click();
+      const destinationScopeSearch = destinationScopePicker.locator("input");
+      await destinationScopeSearch.fill("Overflow group");
+      assert.equal(await destinationScopePicker.locator('[data-ltm-scope-option="group:overflow-group"]').count(), 0);
+      await destinationScopeSearch.fill("Valid group");
+      assert.equal(await destinationScopePicker.locator('[data-ltm-scope-option="group:valid-group"]').count(), 1);
+      await destinationScopeSearch.fill("");
+      assert.equal(
+        await destinationScopePicker.locator('[role="option"][data-ltm-scope-option="chat:memory-chat"]').count(),
+        1,
+      );
+      assert.equal(
+        await destinationScopePicker.locator('[role="option"][data-ltm-scope-option="branch:memory-chat"]').count(),
+        0,
+      );
+      assert.equal(
+        await destinationScopePicker.locator('[role="option"][data-ltm-scope-option="group:conversation-a"]').count(),
+        1,
+      );
+      assert.notEqual(
+        await destinationScopePicker
+          .locator("[data-ltm-scope-picker-popup]")
+          .evaluate((listbox) => getComputedStyle(listbox).backgroundColor),
+        "rgba(0, 0, 0, 0)",
+      );
+      await destinationScopeSearch.fill("chat");
+      await destinationScopeSearch.press("ArrowDown");
+      assert.equal(
+        await destinationScopePicker
+          .locator('[role="option"][data-ltm-scope-option="chat:desktop-chat"][data-highlighted="true"]')
+          .count(),
+        1,
+      );
+      await destinationScopeSearch.fill("Space explorer");
+      const personaScopeOption = destinationScopePicker.locator('[data-ltm-scope-option="persona:persona-a"]');
+      assert.equal(await personaScopeOption.count(), 1);
+      assert.match(await personaScopeOption.innerText(), /Space explorer/u);
+      await personaScopeOption.click();
+      assert.match(await destinationScopeTrigger.innerText(), /Space explorer/u);
+      await destinationScopeTrigger.click();
+      await destinationScopeSearch.fill("Private detective");
+      const alternatePersonaScopeOption = destinationScopePicker.locator('[data-ltm-scope-option="persona:persona-b"]');
+      assert.equal(await alternatePersonaScopeOption.count(), 1);
+      await alternatePersonaScopeOption.click();
+      assert.match(await destinationScopeTrigger.innerText(), /Private detective/u);
+      await destinationScopeTrigger.click();
+      await destinationScopeSearch.fill("Memory chat");
+      await destinationScopePicker.locator('[role="option"][data-ltm-scope-option="chat:memory-chat"]').click();
+      assert.match((await destinationScopeTrigger.innerText()).trim(), /Memory chat/u);
+      const addDestination = page.locator("[data-ltm-add-destination]");
+      await addDestination.click();
+      const bulkDestination = page.locator("[data-ltm-bulk-destination]");
+      await bulkDestination.waitFor();
+      assert.equal(await bulkDestination.locator('[data-ltm-availability-tab="all"]').count(), 1);
+      await bulkDestination.locator('[data-ltm-availability-search="all"]').fill("conversation");
+      assert.equal(await bulkDestination.locator('[data-ltm-availability-target="chat:desktop-chat"]').count(), 1);
+      await bulkDestination.locator('[data-ltm-availability-search="all"]').fill("");
+      const bulkAllTab = bulkDestination.locator('[data-ltm-availability-tab="all"]');
+      await bulkAllTab.focus();
+      await bulkAllTab.press("ArrowRight");
+      await page.waitForFunction(() => document.activeElement?.getAttribute("data-ltm-availability-tab") === "chat");
+      assert.equal(
+        await bulkDestination.locator('[data-ltm-availability-tab="chat"]').getAttribute("aria-selected"),
+        "true",
+      );
+      assert.equal(
+        await page.evaluate(() => document.activeElement?.getAttribute("data-ltm-availability-tab")),
+        "chat",
+      );
+      await bulkDestination.locator('[data-ltm-availability-tab="chat"]').press("ArrowRight");
+      await page.waitForFunction(() => document.activeElement?.getAttribute("data-ltm-availability-tab") === "branch");
+      assert.equal(
+        await bulkDestination.locator('[data-ltm-availability-tab="branch"]').getAttribute("aria-selected"),
+        "true",
+      );
+      assert.equal(await bulkDestination.locator('[data-ltm-availability-target="chat:memory-chat"]').count(), 0);
+      assert.equal(await bulkDestination.locator('[data-ltm-availability-target="branch:memory-chat"]').count(), 0);
+      assert.equal(await bulkDestination.locator('[data-ltm-availability-target="branch:conversation-a"]').count(), 1);
+      assert.equal(
+        await page.evaluate(() => document.activeElement?.getAttribute("data-ltm-availability-tab")),
+        "branch",
+      );
+      await bulkDestination.locator('[data-ltm-availability-tab="persona"]').click();
+      const personaSearch = bulkDestination.locator('[data-ltm-availability-search="persona"]');
+      await personaSearch.fill("Private detective");
+      assert.equal(await bulkDestination.locator('[data-ltm-availability-target="persona:persona-a"]').count(), 0);
+      const personaBTarget = bulkDestination.locator('[data-ltm-availability-target="persona:persona-b"]');
+      assert.equal(await personaBTarget.count(), 1);
+      assert.match(await personaBTarget.innerText(), /Private detective/u);
+      await personaSearch.fill("");
+      const personaDestination = bulkDestination.locator('[data-ltm-availability-target="persona:persona-a"]');
+      await personaDestination.click();
+      assert.equal(await personaDestination.locator('input[type="checkbox"]').isChecked(), true);
+      await bulkDestination.locator("[data-ltm-bulk-cancel]").click();
+      assert.equal(await page.locator("[data-ltm-additional-destination-summary]").count(), 0);
+      await addDestination.click();
+      const bulkDestinationAfterCancel = page.locator("[data-ltm-bulk-destination]");
+      await bulkDestinationAfterCancel.locator('[data-ltm-availability-tab="persona"]').click();
+      await bulkDestinationAfterCancel.locator('[data-ltm-availability-target="persona:persona-a"] input').check();
+      await bulkDestinationAfterCancel.locator("[data-ltm-bulk-done]").click();
+      assert.match(await page.locator("[data-ltm-additional-destination-summary]").innerText(), /1 additional/u);
+      await addDestination.click();
+      const bulkBoundary = page.locator("[data-ltm-bulk-destination]");
+      await bulkBoundary.locator('[data-ltm-availability-tab="chat"]').click();
+      for (let index = 0; index < 99; index += 1) {
+        const bulkChat = bulkBoundary.locator(`[data-ltm-availability-target="chat:bulk-chat-${index}"] input`);
+        await bulkChat.evaluate((element) => (element as HTMLInputElement).click());
+        assert.equal(await bulkChat.isChecked(), true);
+      }
+      const blockedBulkChat = bulkBoundary.locator('[data-ltm-availability-target="chat:bulk-chat-99"] input');
+      assert.equal(await blockedBulkChat.isDisabled(), true);
+      await bulkBoundary.locator("[data-ltm-bulk-done]").click();
+      assert.match(await page.locator("[data-ltm-additional-destination-summary]").innerText(), /100 additional/u);
+      await destinationScopeTrigger.click();
+      await destinationScopeSearch.fill("Valid group");
+      await destinationScopePicker.locator('[data-ltm-scope-option="group:valid-group"]').click();
+      assert.match(await destinationScopeTrigger.innerText(), /Memory chat/u);
+      assert.equal(await page.getByText(/Some locations cannot be added/u).count(), 1);
+      await addDestination.click();
+      const bulkCleanup = page.locator("[data-ltm-bulk-destination]");
+      const bulkChatChips = bulkCleanup.locator('button[aria-label^="Remove Bulk chat"]');
+      while (await bulkChatChips.count()) await bulkChatChips.first().click({ force: true });
+      await bulkCleanup.locator("[data-ltm-bulk-done]").click();
+      assert.match(await page.locator("[data-ltm-additional-destination-summary]").innerText(), /1 additional/u);
+      await addDestination.click();
+      const selectedLocations = page
+        .locator("[data-ltm-bulk-destination]")
+        .getByText("Selected locations", { exact: true })
+        .locator("..");
+      assert.equal(await selectedLocations.getByText("Space explorer", { exact: true }).count(), 1);
+      await page.locator("[data-ltm-bulk-destination]").locator("[data-ltm-bulk-cancel]").click();
+      await page.setViewportSize({ width: 390, height: 844 });
+      await addDestination.click();
+      const mobileBulkDestination = page.locator("[data-ltm-bulk-destination]");
+      const mobileBulkGeometry = await mobileBulkDestination.locator("section").evaluate((section) => {
+        const rect = section.getBoundingClientRect();
+        return {
+          width: rect.width,
+          height: rect.height,
+          pageFits: document.documentElement.scrollWidth <= document.documentElement.clientWidth,
+        };
+      });
+      assert.deepEqual(mobileBulkGeometry, { width: 390, height: 844, pageFits: true });
+      const removeLocationBox = await mobileBulkDestination.locator('button[aria-label^="Remove "]').boundingBox();
+      assert.ok(removeLocationBox);
+      assert.ok(removeLocationBox.width >= 44 && removeLocationBox.height >= 44);
+      await mobileBulkDestination.locator("[data-ltm-bulk-cancel]").click();
+      await page.setViewportSize({ width: 1280, height: 900 });
+      await page.locator('[data-ltm-source-select="character-outside-current-chat"]').check();
+      const mergedDestinationRequestPromise = page.waitForRequest(
+        (request) => request.method() === "POST" && request.url().includes("/api/long-term-memory/import/source-notes"),
+      );
+      await page.locator('[data-ltm-source-action="import-selected"]').click();
+      const mergedDestinationRequest = (await mergedDestinationRequestPromise).postDataJSON() as {
+        destinationScope?: unknown;
+      };
+      assert.deepEqual(mergedDestinationRequest.destinationScope, {
+        chatId: "memory-chat",
+        chatIds: ["memory-chat"],
+        personaId: "persona-a",
+        personaIds: ["persona-a"],
+      });
+      await page.locator("[data-ltm-import-scope-result]").waitFor();
+      await destinationScopeTrigger.click();
+      await destinationScopeSearch.fill("Valid group");
+      await destinationScopePicker.locator('[data-ltm-scope-option="group:valid-group"]').click();
+      assert.match(await destinationScopeTrigger.innerText(), /Valid group/u);
+      await page.locator('[data-ltm-source-select="character-outside-current-chat"]').check();
+      const validGroupRequestPromise = page.waitForRequest(
+        (request) => request.method() === "POST" && request.url().includes("/api/long-term-memory/import/source-notes"),
+      );
+      await page.locator('[data-ltm-source-action="import-selected"]').click();
+      const validGroupRequest = (await validGroupRequestPromise).postDataJSON() as {
+        destinationScope?: unknown;
+      };
+      assert.deepEqual(validGroupRequest.destinationScope, {
+        chatId: "valid-group-chat-0",
+        chatIds: Array.from({ length: 100 }, (_, index) => `valid-group-chat-${index}`),
+        groupId: "valid-group",
+        groupIds: ["valid-group"],
+        personaId: "persona-a",
+        personaIds: ["persona-a"],
+      });
+      await page.locator("[data-ltm-import-scope-result]").waitFor();
       await page.locator('[data-ltm-source-tab="characters"]').click();
       await page.locator('[data-ltm-source-row-status][data-ltm-source-id="character-outside-current-chat"]').waitFor();
       const characterPreviewRequest = sourcePreviewRequests.filter((request) => request.source === "characters").at(-1);

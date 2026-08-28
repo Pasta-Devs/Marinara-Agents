@@ -1450,9 +1450,8 @@ async function main() {
     assert.deepEqual((await storageService.storage.getNote("world_persona_transfer")).scope, {
       chatId: "chat-persona-a",
       chatIds: ["chat-persona-a", "chat-persona-b"],
-      characterIds: ["character-mara"],
       personaId: "persona-a",
-      personaIds: ["persona-a", "persona-b"],
+      personaIds: ["persona-a"],
     });
     const extractSource = await app.inject({
       method: "POST",
@@ -1483,7 +1482,11 @@ async function main() {
       type: "source",
       status: "active",
       modes: ["roleplay"],
-      scope: { chatId: "chat-a", chatIds: ["chat-a"] },
+      scope: {
+        chatId: "chat-persona-a",
+        chatIds: ["chat-persona-a"],
+        personaId: "persona-a",
+      },
       tags: ["source_summary", "imported_chat"],
       keywords: [],
       links: [],
@@ -3983,6 +3986,14 @@ async function main() {
     ]);
     assert.equal(attributedInjection.json().state, "injected");
     assert.equal(attributedInjection.json().dispatchedAt, "2026-07-17T00:00:00.000Z");
+    chats.push({
+      ...chats[1],
+      id: "chat-persona-a-alt",
+      name: "Persona A alternate",
+      characterIds: ["character-nyra"],
+      personaId: "persona-a",
+      metadata: {},
+    });
     chats[0].metadata.summaryEntries.push(
       {
         id: "summary-cross-scope",
@@ -4012,6 +4023,11 @@ async function main() {
       {
         id: "summary-cross-legacy-empty-scope",
         content: "An empty legacy scope remains a source-only import.",
+        enabled: true,
+      },
+      {
+        id: "summary-persona-write-scope",
+        content: "A current-chat import must not inherit the chat persona.",
         enabled: true,
       },
     );
@@ -4180,6 +4196,21 @@ async function main() {
     });
     assert.equal(missingDestination.statusCode, 400, missingDestination.body);
     assert.equal(missingDestination.json().code, "ltm_destination_scope_required");
+    const overflowDestinationScope = await app.inject({
+      method: "POST",
+      url: "/api/long-term-memory/import/source-notes",
+      headers,
+      payload: {
+        source: "chats",
+        sourceIds: ["chat-a:summary-cross-extract"],
+        sourceScope,
+        destinationScope: {
+          chatIds: Array.from({ length: 101 }, (_, index) => `overflow-destination-${index}`),
+        },
+        extract: false,
+      },
+    });
+    assert.equal(overflowDestinationScope.statusCode, 400, overflowDestinationScope.body);
     const extractedCrossScope = await app.inject({
       method: "POST",
       url: "/api/long-term-memory/import/source-notes",
@@ -4232,6 +4263,79 @@ async function main() {
       personaIds: ["persona-a"],
     });
     assert.deepEqual(characterToPersona.json().imported[0].note.scope.personaIds, ["persona-a"]);
+    await storageService.storage.createNote({
+      id: "source_persona_reextract",
+      title: "Persona re-extraction fixture",
+      type: "source",
+      status: "active",
+      modes: ["roleplay"],
+      scope: {
+        chatId: "chat-persona-a",
+        chatIds: ["chat-persona-a"],
+        personaId: "persona-a",
+      },
+      tags: ["source_summary"],
+      keywords: [],
+      links: [],
+      provenance: {
+        kind: "chat_summary",
+        sourceId: "chat-persona-a",
+        entryId: "persona-reextract",
+      },
+      sections: {
+        source: {
+          text: "This re-extraction must stay in the current chat.",
+          updatedAt: "2026-07-17T00:00:00.000Z",
+        },
+      },
+    });
+    const implicitPersonaReextract = await app.inject({
+      method: "POST",
+      url: "/api/long-term-memory/notes/source_persona_reextract/extract",
+      headers,
+      payload: {},
+    });
+    assert.equal(implicitPersonaReextract.statusCode, 200, implicitPersonaReextract.body);
+    assert.deepEqual(implicitPersonaReextract.json().draft.scope, {
+      chatId: "chat-persona-a",
+      chatIds: ["chat-persona-a"],
+    });
+    const implicitPersonaImport = await app.inject({
+      method: "POST",
+      url: "/api/long-term-memory/import/source-notes",
+      headers,
+      payload: {
+        source: "chats",
+        sourceIds: ["chat-persona-a:summary-persona-write-scope"],
+        chatId: "chat-persona-a",
+      },
+    });
+    assert.equal(implicitPersonaImport.statusCode, 200, implicitPersonaImport.body);
+    const implicitPersonaResult = implicitPersonaImport.json().imported[0];
+    assert.deepEqual(implicitPersonaResult.note.destinationScope, {
+      chatId: "chat-persona-a",
+      chatIds: ["chat-persona-a"],
+    });
+    assert.deepEqual(implicitPersonaResult.note.scope, {
+      chatId: "chat-persona-a",
+      chatIds: ["chat-persona-a"],
+    });
+    assert.deepEqual((await storageService.storage.getNote(implicitPersonaResult.note.id))?.scope, {
+      chatId: "chat-persona-a",
+      chatIds: ["chat-persona-a"],
+    });
+    assert.deepEqual(implicitPersonaResult.draft.scope, {
+      chatId: "chat-persona-a",
+      chatIds: ["chat-persona-a"],
+    });
+    assert.ok(
+      implicitPersonaResult.draft.mutations.every((mutation: any) =>
+        mutation.kind === "create_note"
+          ? JSON.stringify(mutation.note.scope) ===
+            JSON.stringify({ chatId: "chat-persona-a", chatIds: ["chat-persona-a"] })
+          : true,
+      ),
+    );
     await cleanup();
     cleanup = undefined;
     assert.equal(
