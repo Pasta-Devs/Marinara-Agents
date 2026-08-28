@@ -18479,7 +18479,14 @@ const fire = (node, type) => Promise.all((node.listeners[type] ?? []).map((fn) =
       { id: "p:h:combat", giver: marla, verb: "defeat", target: { npc: "Wren Ash" }, n: 1, title: "Deal with him" },
       { id: "p:h:no-grain", giver: marla, verb: "catch", target: {}, n: 2, title: "Nothing named" },
       { id: "p:h:no-target-key", giver: marla, verb: "catch", n: 2, title: "No target at all" },
-      { id: "p:h:future-grain", giver: marla, verb: "catch", target: { item: "lantern" }, n: 1, title: "A later grain" },
+      {
+        id: "p:h:future-grain",
+        giver: marla,
+        verb: "catch",
+        target: { item: "lantern" },
+        n: 1,
+        title: "A later grain",
+      },
       // A grain that resolves but is not this verb's — a place to catch, a role to
       // walk to. The old read loop had no clause that fired on it at all.
       { id: "p:h:wrong-grain", giver: marla, verb: "visit", target: { role: "catch-common" }, n: 1, title: "Go role" },
@@ -18624,7 +18631,11 @@ const fire = (node, type) => Promise.all((node.listeners[type] ?? []).map((fn) =
     }
     const money = stored.find((row) => row.id === "p:h:money");
     assert.notEqual(hostile.byId.get("p:h:money"), money, "the row on the board is a COPY, not the stored object");
-    assert.equal(money.r.money, 9999, "…and the artifact is untouched: read time folds what it reads, it never repairs");
+    assert.equal(
+      money.r.money,
+      9999,
+      "…and the artifact is untouched: read time folds what it reads, it never repairs",
+    );
     assert.equal({}.polluted, undefined, "and an own __proto__ key in the artifact polluted nothing");
   }
 
