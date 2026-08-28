@@ -293,12 +293,15 @@ function requestedSourceScope(request: { sourceScope?: LtmScope; scope?: LtmScop
 
 function scopeKey(scope: LtmScope | undefined) {
   const normalized = normalizeLtmScope(scope);
+  const chatIds = normalized.chatIds ? [...normalized.chatIds].sort() : undefined;
+  const groupIds = normalized.groupIds ? [...normalized.groupIds].sort() : undefined;
+  const personaIds = normalized.personaIds ? [...normalized.personaIds].sort() : undefined;
   return JSON.stringify({
     ...normalized,
-    ...(normalized.chatIds ? { chatIds: [...normalized.chatIds].sort() } : {}),
-    ...(normalized.groupIds ? { groupIds: [...normalized.groupIds].sort() } : {}),
+    ...(chatIds ? { chatId: chatIds[0], chatIds } : {}),
+    ...(groupIds ? { groupId: groupIds[0], groupIds } : {}),
     ...(normalized.characterIds ? { characterIds: [...normalized.characterIds].sort() } : {}),
-    ...(normalized.personaIds ? { personaIds: [...normalized.personaIds].sort() } : {}),
+    ...(personaIds ? { personaId: personaIds[0], personaIds } : {}),
   });
 }
 

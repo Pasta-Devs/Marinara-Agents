@@ -1199,7 +1199,7 @@ export default function SourcesWorkspace({
       setImportResultContract(contract);
       const failedIds = [
         ...result.imported.filter((item) => item.retryable).map((item) => item.sourceId),
-        ...result.writeFailures.map((item) => item.sourceId),
+        ...result.writeFailures.filter((item) => item.retryable).map((item) => item.sourceId),
       ];
       setSelections((current) => ({
         ...current,

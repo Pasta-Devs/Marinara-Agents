@@ -4130,6 +4130,7 @@ async function main() {
     });
     assert.equal(reorderedAllBranches.statusCode, 200, reorderedAllBranches.body);
     assert.equal(reorderedAllBranches.json().writeFailures.length, 0);
+    assert.equal(reorderedAllBranches.json().imported[0].sourceWriteStatus, "refreshed");
     assert.equal(
       ltmDraftNoteInputSchema.safeParse({
         id: "source_destination_alias_conflict",
