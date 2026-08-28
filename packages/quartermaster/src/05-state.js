@@ -137,6 +137,33 @@ QM.state = {
     this._reload();
   },
 
+  // Neither view has any way to know the server-side tracker agent changed
+  // something — that happens entirely inside the post_processing pipeline,
+  // with no push/event back to the client. Confirmed live: an agent turn
+  // reconciled correctly (verified server-side), but the dock kept showing
+  // stale data until an unrelated manual action forced a reload. Polling
+  // while a view is actually open/mounted is the fix — ref-counted so the
+  // dock and tracker panel can both be open without either one stopping the
+  // other's polling when it closes first.
+  _activeViewers: 0,
+  _pollTimer: null,
+
+  startPolling() {
+    this._activeViewers += 1;
+    if (this._pollTimer) return;
+    this._pollTimer = setInterval(() => {
+      if (this.chatId && typeof document !== "undefined" && !document.hidden) this._reload();
+    }, 5000);
+  },
+
+  stopPolling() {
+    this._activeViewers = Math.max(0, this._activeViewers - 1);
+    if (this._activeViewers === 0 && this._pollTimer) {
+      clearInterval(this._pollTimer);
+      this._pollTimer = null;
+    }
+  },
+
   async _reload() {
     const chatId = this.chatId;
     if (!chatId) return;

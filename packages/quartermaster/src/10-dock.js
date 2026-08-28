@@ -195,7 +195,12 @@ QM.dock = {
     this.root.classList.remove("qm-dock-collapsed");
     this._syncToggles();
     this.syncGeometry();
-    if (!this.unsubscribe) this.unsubscribe = QM.state.subscribe(() => this._paint());
+    if (!this.unsubscribe) {
+      this.unsubscribe = QM.state.subscribe(() => this._paint());
+      // Picks up server-side changes from the tracker agent, which has no
+      // way to push an update to us — see QM.state.startPolling's comment.
+      QM.state.startPolling();
+    }
     QM.state.ensureLoaded();
     this._paint();
   },
@@ -206,6 +211,7 @@ QM.dock = {
     if (this.unsubscribe) {
       this.unsubscribe();
       this.unsubscribe = null;
+      QM.state.stopPolling();
     }
     this._syncToggles();
   },

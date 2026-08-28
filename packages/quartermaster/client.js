@@ -1,4 +1,4 @@
-// Quartermaster 0.7.0 — Marinara Engine roleplay-tracker capability (single-file client bundle)
+// Quartermaster 0.7.1 — Marinara Engine roleplay-tracker capability (single-file client bundle)
 // Built from packages/quartermaster/src (6 modules) by scripts/build-quartermaster-package.mjs. Do not edit; edit src/ and rebuild.
 (() => {
 "use strict";
@@ -218,6 +218,33 @@ QM.state = {
   ensureLoaded() {
     if (!this.chatId || this.items !== null) return;
     this._reload();
+  },
+
+  // Neither view has any way to know the server-side tracker agent changed
+  // something — that happens entirely inside the post_processing pipeline,
+  // with no push/event back to the client. Confirmed live: an agent turn
+  // reconciled correctly (verified server-side), but the dock kept showing
+  // stale data until an unrelated manual action forced a reload. Polling
+  // while a view is actually open/mounted is the fix — ref-counted so the
+  // dock and tracker panel can both be open without either one stopping the
+  // other's polling when it closes first.
+  _activeViewers: 0,
+  _pollTimer: null,
+
+  startPolling() {
+    this._activeViewers += 1;
+    if (this._pollTimer) return;
+    this._pollTimer = setInterval(() => {
+      if (this.chatId && typeof document !== "undefined" && !document.hidden) this._reload();
+    }, 5000);
+  },
+
+  stopPolling() {
+    this._activeViewers = Math.max(0, this._activeViewers - 1);
+    if (this._activeViewers === 0 && this._pollTimer) {
+      clearInterval(this._pollTimer);
+      this._pollTimer = null;
+    }
   },
 
   async _reload() {
@@ -696,7 +723,12 @@ QM.dock = {
     this.root.classList.remove("qm-dock-collapsed");
     this._syncToggles();
     this.syncGeometry();
-    if (!this.unsubscribe) this.unsubscribe = QM.state.subscribe(() => this._paint());
+    if (!this.unsubscribe) {
+      this.unsubscribe = QM.state.subscribe(() => this._paint());
+      // Picks up server-side changes from the tracker agent, which has no
+      // way to push an update to us — see QM.state.startPolling's comment.
+      QM.state.startPolling();
+    }
     QM.state.ensureLoaded();
     this._paint();
   },
@@ -707,6 +739,7 @@ QM.dock = {
     if (this.unsubscribe) {
       this.unsubscribe();
       this.unsubscribe = null;
+      QM.state.stopPolling();
     }
     this._syncToggles();
   },
@@ -1921,6 +1954,9 @@ QM.panel = {
     this.container = container;
     this.root = null; // force the persistent structure to be rebuilt for the new container
     this.unsubscribe = QM.state.subscribe(() => this.paint());
+    // Picks up server-side changes from the tracker agent, which has no way
+    // to push an update to us — see QM.state.startPolling's comment.
+    QM.state.startPolling();
     QM.state.ensureLoaded();
     this.paint();
   },
@@ -1929,6 +1965,7 @@ QM.panel = {
     if (this.unsubscribe) {
       this.unsubscribe();
       this.unsubscribe = null;
+      QM.state.stopPolling();
     }
     this.container = null;
     this.root = null;
