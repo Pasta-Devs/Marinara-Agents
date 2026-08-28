@@ -21,7 +21,12 @@ import {
   normalizeLtmScope,
   withMergedLtmScopeLinks,
 } from "../../../../shared/src/features/agents/long-term-memory/scope.js";
-import { ltmModeForChatMode, normalizeLtmChatCharacterIds, resolveChatLtmScope } from "./chat-scope.js";
+import {
+  ltmModeForChatMode,
+  normalizeLtmChatCharacterIds,
+  resolveChatLtmScope,
+  resolveChatLtmWriteScope,
+} from "./chat-scope.js";
 import { DEFAULT_LTM_IMPORTED_SOURCE_MODE } from "../../../../shared/src/features/agents/long-term-memory/constants.js";
 import { nowIso } from "./ltm-utils.js";
 import { getPackageLanguageModels, getPackagePersistence, getPackageResources } from "./package-runtime.js";
@@ -680,7 +685,7 @@ export async function importPackageInterop(
       legacyScopeRequest && request.scope && !isGlobalLtmScope(request.scope) ? request.scope : undefined,
     destinationScope =
       request.destinationScope ??
-      (legacyScopeRequest ? legacyDestinationScope : chat ? resolveChatLtmScope(chat) : undefined),
+      (legacyScopeRequest ? legacyDestinationScope : chat ? resolveChatLtmWriteScope(chat) : undefined),
     operationId = randomUUID(),
     selected = new Set(request.sourceIds),
     rows = await candidates({ ...request, sourceScope }, selected),

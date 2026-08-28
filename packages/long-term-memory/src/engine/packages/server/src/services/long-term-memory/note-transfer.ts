@@ -17,7 +17,7 @@ import {
   matchesLtmScope,
   withMergedLtmScopeLinks,
 } from "../../../../shared/src/features/agents/long-term-memory/scope.js";
-import { resolveChatLtmScope } from "./chat-scope.js";
+import { resolveChatLtmWriteScope } from "./chat-scope.js";
 import { uniqueStrings } from "./ltm-utils.js";
 import { logger } from "./package-runtime.js";
 import { LongTermMemoryStorage } from "./storage.js";
@@ -313,7 +313,7 @@ async function buildTransferPlan(
     throw new LtmNoteTransferError("Transfer includes an invalid derived note.", 400);
   const transferNoteIds = uniqueStrings([...requestedNoteIds, ...derivedNoteIds]);
   const selectedSet = new Set(transferNoteIds);
-  const destinationScope = resolveChatLtmScope(destinationChat);
+  const destinationScope = resolveChatLtmWriteScope(destinationChat);
   const destinationCandidates = notes.filter(
     (note) => !selectedSet.has(note.id) && matchesLtmScope(note, { scope: destinationScope }),
   );
