@@ -717,11 +717,19 @@ PF.pack = (() => {
         return null;
       }
       // ── BACKFILL, AFTER THE FLOOR AND NEVER BEFORE IT (plan §2.2b) ──────────
-      // The ordering IS the rule: backfill may cover a small gap in a pack that
-      // is already substantive, and it may never be the thing that got a pack
-      // over the line. A pack that needed topping up to pass would be a hollow
-      // one sealed forever with our own words in it, which is exactly the trade
-      // the floor exists to refuse.
+      // The rule is that backfill may cover a small gap in a pack that is already
+      // substantive and may never be the thing that got a pack over the line. A
+      // pack that needed topping up to pass would be a hollow one sealed forever
+      // with our own words in it, which is exactly the trade the floor exists to
+      // refuse.
+      //
+      // WHAT MAKES THAT TRUE IS FIELD DISJOINTNESS, NOT THIS ORDERING. The floor
+      // above reads `templates` and `lines`; the backfill below writes `overheard`
+      // and nothing else, so moving these two blocks past each other would not
+      // change a verdict — the sections do not overlap. The order still belongs
+      // here because it states the rule where a reader meets it, and because the
+      // day somebody widens the backfill is the day the order becomes the only
+      // thing standing between a hollow pack and a permanent seal.
       //
       // AND IT IS SCOPED TO `overheard`, WHICH IS THE ONLY SECTION THAT CAN
       // HONESTLY TAKE IT. Templates and the line index are the floor's own two

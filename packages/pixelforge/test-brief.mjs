@@ -20391,7 +20391,10 @@ const fire = (node, type) => Promise.all((node.listeners[type] ?? []).map((fn) =
     // the seam is deliberately wider than the diet, because the schema is the half
     // that seals forever and the guidance is the half a later release can rewrite.
     assert.ok(text.includes("topic (optional): rumor or work"), "the guidance confines topic tags to the two E7 needs");
-    assert.ok(!text.includes("smalltalk"), "…and does not spend bytes teaching the two it cannot read yet");
+    // Only `smalltalk` is checked, and the message says only that: "place" is a
+    // legitimate word in these instructions — it is a grain handle and a target
+    // shape — so its absence is not something the guidance can be asked for.
+    assert.ok(!text.includes("smalltalk"), "…and does not spend bytes teaching smalltalk, which it cannot read yet");
     assert.deepEqual(
       pack.TOPICS,
       ["rumor", "work", "place", "smalltalk"],
@@ -20674,15 +20677,28 @@ const fire = (node, type) => Promise.all((node.listeners[type] ?? []).map((fn) =
     assert.ok(sealed.lines.length < 200, `…on a fraction of the index that was written (${sealed.lines.length}/200)`);
     // …and the SECOND rung is what the ladder is for: the longest raw across
     // attempts is the one salvaged, not merely the last.
+    //
+    // THE SHORTER RE-ROLL SEALS TOO, and that is what makes this a test of
+    // "longest" rather than of "not empty". A 600-char re-roll is under the floor,
+    // so a last-wins ladder would fail the seal outright and any assert at all
+    // would catch it. At 5,600 the re-roll clears both floors on its own — it just
+    // clears them with fewer lines than the 6,144-char cut — so only comparing the
+    // two seals can tell the two ladders apart.
     sent.length = 0;
     let attempt = 0;
     state.reply = async () => {
       attempt += 1;
-      return { status: 422, body: { truncated: true, raw: attempt === 1 ? cut : whole.slice(0, 600) } };
+      return { status: 422, body: { truncated: true, raw: attempt === 1 ? cut : whole.slice(0, 5_600) } };
     };
     const second = await run();
     assert.ok(second.sealed, "the shorter re-roll does not cost us the longer first answer");
-    assert.ok(second.sealed.lines.length >= pack.TUNING.floorLines, "…the longest raw seen is the one salvaged");
+    // AN EQUALITY AND NOT A FLOOR CHECK. `>= floorLines` is true of BOTH raws
+    // here, so it leaves the whole span between them unwatched — which is the
+    // entire thing "the longest raw across attempts" claims. What the second run
+    // seals is what the FIRST run sealed, to the row, because both salvaged the
+    // same raw.
+    assert.deepEqual(second.sealed, sealed, "the longest raw seen is the one salvaged, to the row");
+    assert.equal(second.sealed.lines.length, sealed.lines.length, "…which is the whole index the long cut left");
   });
 
   // ── THE SAME CUT AT SCHEMA-MAX DENSITY DOES NOT SEAL, AND THAT IS PINNED ──
