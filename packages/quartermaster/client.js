@@ -1,4 +1,4 @@
-// Quartermaster 0.6.0 — Marinara Engine roleplay-tracker capability (single-file client bundle)
+// Quartermaster 0.7.0 — Marinara Engine roleplay-tracker capability (single-file client bundle)
 // Built from packages/quartermaster/src (6 modules) by scripts/build-quartermaster-package.mjs. Do not edit; edit src/ and rebuild.
 (() => {
 "use strict";
@@ -361,12 +361,16 @@ QM.state = {
     return qmSortByName(this.outfits ?? []);
   },
 
+  // Each slot carries its own name/description snapshot now (not just an
+  // item id — plan-locked this session so a saved outfit is a durable
+  // record, not a live reference: server.mjs's applyOutfitEquip recreates a
+  // missing item from this same snapshot). Reads the name straight off the
+  // outfit, so this shows correctly even for an item that's since been
+  // deleted or dropped by a tracker-agent turn.
   outfitItemNames(outfit) {
-    const items = this.items ?? [];
     return Object.values(outfit.slots ?? {})
-      .map((itemId) => items.find((item) => item.id === itemId))
+      .map((snapshot) => (snapshot && typeof snapshot === "object" ? snapshot.name : null))
       .filter(Boolean)
-      .map((item) => item.name)
       .sort((a, b) => a.localeCompare(b));
   },
 
@@ -378,7 +382,10 @@ QM.state = {
     const outfitEntries = Object.entries(outfit.slots ?? {});
     const currentEntries = Object.entries(current);
     if (outfitEntries.length !== currentEntries.length) return false;
-    return outfitEntries.every(([slot, itemId]) => current[slot] === itemId);
+    return outfitEntries.every(([slot, snapshot]) => {
+      const itemId = snapshot && typeof snapshot === "object" ? snapshot.itemId : snapshot;
+      return current[slot] === itemId;
+    });
   },
 };
 

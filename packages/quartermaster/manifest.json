@@ -10,7 +10,7 @@
   },
   "id": "quartermaster",
   "name": "Quartermaster",
-  "version": "0.6.0",
+  "version": "0.7.0",
   "description": "A per-chat RPG character sheet and inventory manager: equip slots, item locations, saved outfits, portrait and item images, and a read-only stat display, with an optional tracker agent that syncs equipped items and inventory from the story. Early scaffold — most features are not yet implemented. Add the Agent in Chat Settings → Agents → Tracker Agents for Roleplay mode.",
   "engine": {
     "min": "2.4.4",
@@ -33,18 +33,18 @@
   "files": [
     {
       "path": "agents.json",
-      "sha256": "1295f02ea29ef5eb66a191b8be5752e706c20e697ebc806b8eef466e81978097",
-      "bytes": 3574
+      "sha256": "ea428de5d35c6875d314c8c5adb2175a80b757eaf92270d282adc1dfa1f1e93f",
+      "bytes": 3314
     },
     {
       "path": "client.js",
-      "sha256": "3e8c214221d499bfd623372348a8dff81bdc017ea7a48fe2003ae7e5fc712be6",
-      "bytes": 88969
+      "sha256": "5263bfd1e241fb3f14f9deb4e6742b131ad5bbd76f9bf966f1a528c09547cad5",
+      "bytes": 89465
     },
     {
       "path": "server.mjs",
-      "sha256": "de5ad6756bdb1466538a7c2dcb509f0286650b032d26ba30a1c9ee1b572a42e1",
-      "bytes": 34249
+      "sha256": "19e13699121102e6e744f66b0809f28da1a503e881ab2137def97fc175302cd3",
+      "bytes": 37102
     }
   ],
   "permissions": [

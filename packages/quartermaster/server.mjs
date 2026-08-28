@@ -149,13 +149,31 @@ function applyLocation(items, item, location) {
   item.location = location;
 }
 
-// slot -> itemId for every currently-equipped item.
+// slot -> a snapshot of the currently-equipped item, not just its id. Saved
+// outfits carry name/description alongside the id so a saved outfit is a
+// durable, self-contained record — see applyOutfitEquip's own comment for
+// why this matters (an item can go missing from the live inventory for
+// reasons that have nothing to do with the outfit itself).
 function currentEquippedSlots(items) {
   const slots = {};
   for (const item of items) {
-    if (item.location.startsWith("equipped:")) slots[item.location.slice("equipped:".length)] = item.id;
+    if (item.location.startsWith("equipped:")) {
+      slots[item.location.slice("equipped:".length)] = { itemId: item.id, name: item.name, description: item.description };
+    }
   }
   return slots;
+}
+
+// Outfits saved before this shape existed stored a bare itemId string per
+// slot. Normalize on read so old data keeps working (comparisons just never
+// match once the id is stale, same as before) rather than throwing — new
+// saves/updates always write the full object shape via currentEquippedSlots.
+function normalizeOutfitSlotSnapshot(value) {
+  if (typeof value === "string") return { itemId: value, name: null, description: null };
+  if (value && typeof value === "object") {
+    return { itemId: value.itemId ?? null, name: value.name ?? null, description: value.description ?? null };
+  }
+  return { itemId: null, name: null, description: null };
 }
 
 function outfitMatchesCurrent(outfit, items) {
@@ -163,7 +181,43 @@ function outfitMatchesCurrent(outfit, items) {
   const outfitEntries = Object.entries(outfit.slots ?? {});
   const currentEntries = Object.entries(current);
   if (outfitEntries.length !== currentEntries.length) return false;
-  return outfitEntries.every(([slot, itemId]) => current[slot] === itemId);
+  return outfitEntries.every(
+    ([slot, snapshot]) => current[slot]?.itemId === normalizeOutfitSlotSnapshot(snapshot).itemId,
+  );
+}
+
+// Equips a saved outfit: unequips everything currently worn, then applies
+// each saved slot. If a slot's referenced item no longer exists — deleted,
+// or dropped by a tracker-agent turn that (mistakenly or not) omitted it
+// from a full-snapshot response — the outfit's OWN saved name/description
+// recreates it fresh instead of the slot silently staying empty. This is
+// what makes an outfit a durable backup rather than a set of live item-id
+// references: re-equipping it is what restores anything that went missing,
+// which is also why item deletion no longer prunes outfit slot data (see the
+// two call sites this replaced). Mutates `state` in place; no return value.
+function applyOutfitEquip(state, outfit) {
+  for (const item of state.items) {
+    if (item.location.startsWith("equipped:")) item.location = "bag";
+  }
+  for (const [slot, rawSnapshot] of Object.entries(outfit.slots ?? {})) {
+    if (!slotGroupVisible(slot, state)) continue;
+    const snapshot = normalizeOutfitSlotSnapshot(rawSnapshot);
+    let item = snapshot.itemId ? state.items.find((candidate) => candidate.id === snapshot.itemId) : undefined;
+    if (!item && snapshot.name) {
+      item = {
+        id: randomUUID(),
+        name: snapshot.name,
+        description: snapshot.description || "",
+        quantity: 1,
+        location: "bag",
+        defaultSlot: null,
+      };
+      state.items.push(item);
+    }
+    if (!item) continue; // legacy slot with neither a live id nor a recreatable name
+    item.location = `equipped:${slot}`;
+    outfit.slots[slot] = { itemId: item.id, name: item.name, description: item.description };
+  }
 }
 
 function equippedItemNamesText(items) {
@@ -215,6 +269,27 @@ function qmNormalizeMatchKey(name) {
   return typeof name === "string" ? name.trim().toLowerCase().replace(/[-_\s]+/g, "") : "";
 }
 
+// The tracker agent's own <agent_runtime_context> — plain dash-list text
+// instead of a JSON object. A returned object gets JSON.stringify'd and
+// HTML-entity-escaped by the engine when it's embedded into the prompt
+// (confirmed by reading it back from a live debug log — a wall of `&quot;`),
+// which burns tokens and is harder for the model to scan than a flat list.
+// Matches the plain-list style the built-in Background agent's own
+// <available_backgrounds> block uses for the same reason.
+function formatAgentRuntimeContext(items, outfitNames) {
+  const lines = ["Items:"];
+  if (items.length === 0) {
+    lines.push("(none)");
+  } else {
+    for (const item of items) {
+      const description = item.description ? `: ${item.description}` : "";
+      lines.push(`- ${item.name}${description} (qty ${item.quantity}, ${item.location})`);
+    }
+  }
+  lines.push(outfitNames.length > 0 ? `Outfits: ${outfitNames.join(", ")}` : "Outfits: (none)");
+  return lines.join("\n");
+}
+
 // Reconciles one tracker-agent turn's raw JSON output into the owner's
 // canonical inventory. `persistState` is passed in rather than imported,
 // since it's a closure defined in activate() (it also syncs the appearance
@@ -236,20 +311,15 @@ async function reconcileTrackerOutput(documents, persistState, chatId, ownerId, 
     const key = qmNormalizeMatchKey(data.equipOutfit);
     outfit = state.outfits.find((candidate) => qmNormalizeMatchKey(candidate.name) === key) || null;
   }
-  const outfitItemIds = outfit ? new Set(Object.values(outfit.slots)) : null;
   const seenIds = new Set();
+  // applyOutfitEquip mutates outfit.slots to the resolved (possibly freshly
+  // recreated) item ids, so outfitItemIds has to be read back AFTER it runs,
+  // not computed from the pre-equip slots.
+  let outfitItemIds = null;
   if (outfit) {
-    for (const item of state.items) {
-      if (item.location.startsWith("equipped:")) item.location = "bag";
-    }
-    for (const [slot, itemId] of Object.entries(outfit.slots)) {
-      if (!slotGroupVisible(slot, state)) continue;
-      const item = state.items.find((candidate) => candidate.id === itemId);
-      if (item) {
-        item.location = `equipped:${slot}`;
-        seenIds.add(item.id);
-      }
-    }
+    applyOutfitEquip(state, outfit);
+    outfitItemIds = new Set(Object.values(outfit.slots).map((snapshot) => snapshot.itemId));
+    for (const id of outfitItemIds) seenIds.add(id);
   }
 
   const entries = Array.isArray(data.items) ? data.items : [];
@@ -279,13 +349,12 @@ async function reconcileTrackerOutput(documents, persistState, chatId, ownerId, 
   }
 
   // Full snapshot: anything not re-stated (or covered by the active outfit)
-  // this turn is gone.
+  // this turn is gone. Saved outfits are NOT pruned when an item they
+  // reference disappears here — see applyOutfitEquip's own comment: the
+  // outfit keeps its own name/description snapshot precisely so it can
+  // recreate the item next time it's equipped, rather than silently losing
+  // that slot to a full-snapshot turn that (correctly or not) omitted it.
   state.items = state.items.filter((item) => seenIds.has(item.id));
-  for (const savedOutfit of state.outfits) {
-    for (const [slot, itemId] of Object.entries(savedOutfit.slots)) {
-      if (!state.items.some((item) => item.id === itemId)) delete savedOutfit.slots[slot];
-    }
-  }
 
   await persistState(chatId, ownerId, state);
 }
@@ -470,15 +539,10 @@ export async function activate(context) {
     async prepareContext({ context }) {
       if (context.chatMode !== "roleplay") return null;
       const state = await loadInventoryState(documents, context.chatId, QM_TRACKER_OWNER_ID);
-      return {
-        items: state.items.map((item) => ({
-          name: item.name,
-          description: item.description || undefined,
-          quantity: item.quantity,
-          location: item.location,
-        })),
-        outfits: state.outfits.map((outfit) => outfit.name),
-      };
+      return formatAgentRuntimeContext(
+        state.items,
+        state.outfits.map((outfit) => outfit.name),
+      );
     },
     async finalizeResult({ context, result }) {
       if (context.chatMode === "roleplay" && result?.success && result.data && typeof result.data === "object") {
@@ -601,14 +665,10 @@ export async function activate(context) {
         if (nextItems.length === state.items.length) return reply.status(404).send({ error: "Item not found" });
         state.items = nextItems;
 
-        // An item leaving the inventory drops out of any saved outfit that
-        // referenced it, matching the extension's behavior — the outfit
-        // itself survives, just with one fewer slot filled.
-        for (const outfit of state.outfits) {
-          for (const [slot, referencedItemId] of Object.entries(outfit.slots)) {
-            if (referencedItemId === itemId) delete outfit.slots[slot];
-          }
-        }
+        // Saved outfits keep their own name/description snapshot per slot
+        // now (not just the id), so a deleted item's slot is NOT pruned —
+        // re-equipping that outfit later recreates it fresh. See
+        // applyOutfitEquip's own comment for why this is deliberate.
 
         await persistState(chatId, ownerId, state);
         return { items: state.items, outfits: state.outfits };
@@ -663,19 +723,9 @@ export async function activate(context) {
 
         // Equipping an outfit replaces the whole equipped set in one step —
         // everything currently worn comes off first, then the outfit's items
-        // go on. Matches the extension: "unequip whatever you're wearing and
-        // equip that outfit's items into their saved slots, in one step."
-        // An outfit saved while a group was visible can still reference that
-        // group's slots after it's turned off again — skip just those
-        // assignments rather than failing the whole outfit.
-        for (const item of state.items) {
-          if (item.location.startsWith("equipped:")) item.location = "bag";
-        }
-        for (const [slot, itemId] of Object.entries(outfit.slots)) {
-          if (!slotGroupVisible(slot, state)) continue;
-          const item = state.items.find((candidate) => candidate.id === itemId);
-          if (item) item.location = `equipped:${slot}`;
-        }
+        // go on, recreating anything that's gone missing since it was saved.
+        // See applyOutfitEquip's own comment.
+        applyOutfitEquip(state, outfit);
 
         await persistState(chatId, ownerId, state);
         return { items: state.items, outfits: state.outfits };
