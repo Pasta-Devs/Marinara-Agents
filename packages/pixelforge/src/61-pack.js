@@ -1271,8 +1271,8 @@ PF.pack = (() => {
 
     // ── THE LINE DIET (plan §2.3), and this is where its writers live ────────
     // ONE LINE PER ACCEPT (accept, above), ONE PER COMPLETION (settle, below),
-    // ONE PER ABANDON (the quest tab's, next slice) and ZERO PER PROGRESS. The
-    // last of those is the one worth stating: an increment is not an event the
+    // ONE PER ABANDON (`abandon`, below — the quest tab presses it) and ZERO PER
+    // PROGRESS. The last of those is the one worth stating: an increment is not an event the
     // wrap-up should read out, and a session of fishing would otherwise file
     // forty of them and evict the day it happened on.
     //
@@ -1369,6 +1369,47 @@ PF.pack = (() => {
       );
       if (!done) return fail("refused", { have, n });
       return { ok: true, reason: null, money: done.money, giver: done.giver, have, n };
+    },
+
+    /** LET ONE JOB GO (plan §2.3). Free, player-initiated, and pressed from the
+     *  quest tab and nowhere else — the board can take work on and take it back
+     *  finished, but giving up is not a thing you do by standing in front of a
+     *  board, and an abandon offered there would be an abandon offered at the one
+     *  moment the player is most likely to mis-press.
+     *
+     *  NO BOARD GATE AND NO MODE GATE, and both absences are deliberate. This is
+     *  reached from a panel that is only open in walk mode (`_panelsAllowed`) and
+     *  is closed under the loading gate, and the mutator's own `_live` refuses
+     *  under the gate and under a generation mismatch — so a second copy of those
+     *  guards here would be unreachable code standing where a real one used to.
+     *
+     *  THE GIVER IS READ BEFORE THE SPLICE, on `settle`'s discipline, and the
+     *  MUTATOR IS THE AUTHORITY on whether there is anything to let go: a row that
+     *  left the list between the tab's paint and the press — a severance parking
+     *  it, the repair pass dropping it, a rebuild landing under an open panel — is
+     *  refused by id and comes back as `abandon-unknown`, which is the sentence
+     *  the refusal map has been carrying since the slice before this one. A
+     *  generation fence refusal answers with the same value on purpose: from the
+     *  player's side, a block that moved under them and a row that was never there
+     *  are the same fact.
+     *
+     *  ONE LEDGER LINE, event-side and at the event's day (§2.3's diet), and the
+     *  giver's name rides it only while this world still stands them up — the same
+     *  known-cast guard every other line in this file is written through.
+     *  Returns { ok, reason, giver }. */
+    abandon(core, id, gen) {
+      const sim = core?.sim;
+      if (!sim?.world) return { ok: false, reason: "no-world", giver: null };
+      const player = PF.player.get(core);
+      const rows = Array.isArray(player?.quests?.active) ? player.quests.active : [];
+      const row = rows.find((q) => str(q.id) === str(id)) ?? null;
+      const giver = row ? PF.player.giverOf(row.g) : "";
+      if (!PF.player.quest(core, "abandon", { id: str(id) }, gen))
+        return { ok: false, reason: "abandon-unknown", giver: null };
+      const folded = PF.save.packFold(core);
+      const stands = !!giver && !!folded?.known?.has(giver);
+      PF.player.log(core, stands ? `Set aside ${giver}'s board order.` : "Set aside a board order.", sim.day, gen);
+      return { ok: true, reason: null, giver: stands ? giver : null };
     },
 
     // ── THE TWO VERB SITES THAT ARE NOT A PRESS (plan §2.3) ──────────────────

@@ -17236,7 +17236,13 @@ const fire = (node, type) => Promise.all((node.listeners[type] ?? []).map((fn) =
     const hud = new loadedPF.Hud(new FakeNode("div"), { sim: null });
     hud.toast("Tam's farm", "location");
     hud.toast("There is no room to be had here.");
-    const shown = walkNodes(hud.root).filter((node) => node.style.opacity === "1");
+    // The whole surface, minus the journal's tab strip BY NODE IDENTITY. The
+    // active tab marks itself with the same style property every dimmable control
+    // in this file uses (0.13 §2.4), and it does so from the constructor — inside
+    // a panel that is not open. Subtracting those two named nodes rather than
+    // narrowing the walk keeps the rest of the canary: any OTHER node that lights
+    // up here still fails this line.
+    const shown = walkNodes(hud.root).filter((node) => node.style.opacity === "1" && !hud._tabBtns.includes(node));
     assert.equal(shown.length, 2, "an arrival and a refusal are on two different surfaces at once");
     const located = shown.find((node) => node.textContent === "Tam's farm");
     const plain = shown.find((node) => node.textContent !== "Tam's farm");
@@ -19652,6 +19658,751 @@ const fire = (node, type) => Promise.all((node.listeners[type] ?? []).map((fn) =
     loadedPF.assets._requestedTheme = assetsWas.requestedTheme;
     loadedPF.save.reset();
     loadedPF.spatial.reset();
+  }
+}
+
+// ═══ THE TAB STRIP AND THE QUEST TAB (0.13 slice 5) ═════════════════════════
+// The journal panel's interior is [header, strip, body] with the BODY the only
+// scroller, and the strip is a LIST of {label, render, memoSync} rather than two
+// tabs with a switch between them — P8's extended view is a committed third
+// occupant, so "no two-tab assumptions" is a property worth pinning rather than
+// hoping for. The quest tab draws the live rows through the SHARED renderer
+// (61-pack `rowText`, verbatim — the board's jobs section and this list are the
+// same sentences because they are the same function), the two done groups, and
+// the one line a world the player no longer stands in is holding for them.
+{
+  const P = loadedPF.player;
+  const pack = loadedPF.pack;
+  const realSetTimeout = globalThis.setTimeout;
+  const realClearTimeout = globalThis.clearTimeout;
+  globalThis.setTimeout = () => 0;
+  globalThis.clearTimeout = () => {};
+  loadedPF.save.reset();
+  loadedPF.spatial.reset();
+  loadedPF.quarantine.reset();
+  const sealedBrief = brief.validate(
+    {
+      scale: "village",
+      name: "Tabbington",
+      places: [{ kind: "gathering", name: "The Long Table" }],
+      cast: [
+        { name: "Alder Vance", role: "reeve", kind: "leader", tint: "blue", home: "Tabbington", household: 1 },
+        { name: "Perrin Quill", role: "innkeep", kind: "host", tint: "amber", home: "The Long Table", household: 2 },
+        { name: "Marla", role: "farmhand", kind: "grower", tint: "green", home: "Tabbington", household: 3 },
+        { name: "Wren Ash", role: "smith", kind: "maker", tint: "teal", home: "Tabbington", household: 4 },
+      ],
+    },
+    { theme: "cozy-village", seed: 606 },
+  );
+  const briefHash = P.briefHashOf(sealedBrief);
+  const sealedPack = () => ({
+    packVersion: 1,
+    theme: "cozy-village",
+    briefHash,
+    templates: [
+      { id: "p:t:a", giver: "Marla", verb: "catch", target: { role: "catch-common" }, n: 3, title: "Three for Marla" },
+      { id: "p:t:b", giver: "Alder Vance", verb: "visit", target: { place: "gathering" }, n: 1, title: "Look in" },
+      { id: "p:t:c", giver: "Perrin Quill", verb: "deliver", target: { npc: "Marla" }, n: 1, title: "Word to Marla" },
+    ],
+    lines: [],
+    escalation: [],
+    overheard: [],
+  });
+  let mounts = 0;
+  /** A world with a pack of its own, so the titles on the tab are the pack's and
+   *  a demotion has something to take away. `packed: false` mounts the same world
+   *  with no pack at all, which is the packless world Q9 is about. */
+  const mount = ({ packed = true } = {}) => {
+    const w = world.build(606, "cozy-village", sealedBrief);
+    const sim = new loadedPF.Sim(w);
+    const meta = packed ? { pixelforgeBrief: sealedBrief, pixelforgePack: sealedPack() } : {};
+    const core = {
+      chatId: `chat-tabs-${++mounts}`,
+      sim,
+      host: { chatMeta: meta },
+      interact() {},
+      setMode() {},
+      resume() {},
+      markDirty() {},
+    };
+    core.hud = new loadedPF.Hud(new FakeNode("div"), core);
+    core.hud.update();
+    return { w, sim, meta, core, hud: core.hud, player: P.get(core) };
+  };
+  const textOf = (node) =>
+    walkNodes(node)
+      .map((child) => String(child.textContent))
+      .filter(Boolean);
+  const buttonsIn = (node) => walkNodes(node).filter((child) => child.tagName === "BUTTON");
+  const takeOn = (at, id, over) =>
+    P.quest(at.core, "accept", {
+      id,
+      g: `${at.w.startZone}|Marla`,
+      verb: "catch",
+      target: "catch-common",
+      n: 3,
+      r: { money: 12, xp: 0 },
+      day: 1,
+      ...over,
+    });
+  /** The quest tab, opened. Tab one is the ledger and tab two is the jobs — by
+   *  INDEX, because that is what the strip is. */
+  const openJobs = (at) => {
+    at.hud.toggleJournal();
+    at.hud._selectTab(1);
+  };
+  try {
+    // ── THE STRIP IS A MECHANISM, NOT TWO TABS ────────────────────────────────
+    {
+      const at = mount();
+      const hud = at.hud;
+      // THE INTERIOR IS THREE ROWS AND THE BODY IS THE SOLE SCROLLER. A panel
+      // that scrolled as a whole would take the tabs off the top of the surface
+      // the moment a list got long, which is the one layout mistake here that
+      // cannot be recovered from by scrolling back.
+      assert.deepEqual(
+        hud.journalEl.children.slice(1),
+        [hud.journalTabs, hud.journalBody],
+        "the panel is header, strip, body — in that order",
+      );
+      assert.ok(/overflow:auto/.test(hud.journalBody.style.cssText), "the body scrolls");
+      assert.ok(!/overflow:auto/.test(hud.journalEl.style.cssText), "…and the panel around it does not");
+      assert.ok(/flex:0 0 auto/.test(hud.journalTabs.style.cssText), "…and the strip cannot be pushed off it");
+
+      // THE CENSUS IS UNTOUCHED, and it is the ENUMERATED STACK SWEEP further up
+      // this file that says so — it names every button in the action column and
+      // fails on one it does not know, which is exactly what a tab leaking out of
+      // the panel would be. What is asserted HERE is the locality that makes that
+      // true: the strip's buttons live in the strip, inside the panel the journal
+      // chip already opens, and nowhere else in the tree.
+      assert.deepEqual(hud.journalTabs.children, hud._tabBtns, "the strip holds the tabs, and holds only them");
+      const stack = hud.actions.children.filter((node) => node.tagName === "BUTTON");
+      for (const tab of hud._tabBtns)
+        assert.ok(!stack.includes(tab), `the ${tab.textContent} tab is not in the action stack`);
+      assert.ok(!buttonsIn(hud.topbar).includes(hud._tabBtns[0]), "…nor in the topbar beside the chip that opens it");
+
+      // AND NO TAB IS A MODAL DIALOG, which is the panel's own trap one level
+      // down: `_hostOwnsKeyboard` believes any visible
+      // `[role="dialog"][aria-modal="true"]`, so a strip dressed as dialog
+      // furniture would make the keys that close the panel inert.
+      for (const tab of hud._tabBtns) {
+        assert.equal(tab.getAttribute("role"), null, "a tab of ours claims no dialog role");
+        assert.equal(tab.getAttribute("aria-modal"), null, "…and is not an aria-modal dialog");
+      }
+
+      // A THIRD TAB LANDS WITHOUT SURGERY (P8). Nothing in the strip counts to
+      // two: one more descriptor is one more button, selectable, driving its own
+      // render off its own memo.
+      let painted = 0;
+      const handed = [];
+      hud._journalTabs.push({
+        label: "Later",
+        render: () => {
+          painted += 1;
+          hud.journalBody.replaceChildren(loadedPF.el("div", { text: "the third tab" }));
+        },
+        memoSync: (held) => {
+          handed.push(held);
+          return held === "third" ? null : "third";
+        },
+      });
+      hud._buildTabs();
+      assert.equal(hud._tabBtns.length, 3, "the strip is as long as the list");
+      assert.deepEqual(
+        hud._tabBtns.map((node) => node.textContent),
+        ["Journal", "Jobs", "Later"],
+        "…and labelled from it",
+      );
+      hud.toggleJournal();
+      await fire(hud._tabBtns[2], "click");
+      assert.equal(hud._journalTab, 2, "pressing the third tab selects it");
+      assert.equal(painted, 1, "…and it drew itself");
+      assert.deepEqual(textOf(hud.journalBody), ["the third tab"], "…into the shared body");
+      // THE SLOT IS THE ACTIVE TAB'S ALONE. The incoming tab is handed `null` and
+      // never the tab it displaced — which is the whole reason one slot is safe
+      // for N tabs: two tabs whose memos happened to be the same SHAPE would
+      // otherwise read each other's and answer "nothing moved".
+      assert.deepEqual(handed, [null], "the arriving tab is handed a slot of its own");
+      const asks = handed.length;
+      hud.update();
+      assert.equal(handed.length, asks + 1, "the frame asks the ACTIVE tab and no other");
+      assert.equal(handed.at(-1), "third", "…handing it back what it last said");
+      assert.equal(painted, 1, "…and an unmoved memo paints nothing");
+      hud._journalTabs.pop();
+      hud._buildTabs();
+      hud.closeJournal();
+    }
+
+    // ── SWITCHING: THE MEMO, THE SCROLL AND THE ACTIVE MARK ───────────────────
+    {
+      const at = mount();
+      const hud = at.hud;
+      at.player.ledger.lines.push([2, "Walked to the mill."]);
+      hud.toggleJournal();
+      assert.equal(hud._journalTab, 0, "the panel opens on the ledger, which is where it always opened");
+      assert.ok(textOf(hud.journalBody).includes("Walked to the mill."), "…showing what is written down");
+      // THE ACTIVE MARK IS A STYLE PROPERTY and nothing else — no class, no
+      // attribute, and above all no dialog furniture.
+      assert.deepEqual(
+        hud._tabBtns.map((node) => node.style.opacity),
+        ["1", "0.5"],
+        "the tab you are on is the one at full strength",
+      );
+      // A SCROLL POSITION FROM THE LIST YOU WERE READING DOES NOT FOLLOW YOU. The
+      // body is one scroller shared by every tab, so arriving at a short list two
+      // hundred pixels down is arriving at a blank panel. (What the harness can
+      // reach is the WRITE; that it moves a real surface is on the browser pass.)
+      hud.journalBody.scrollTop = 240;
+      const ledger = hud.journalBody.children[0];
+      hud._selectTab(1);
+      assert.equal(hud.journalBody.scrollTop, 0, "switching tabs goes back to the top");
+      assert.deepEqual(
+        hud._tabBtns.map((node) => node.style.opacity),
+        ["0.5", "1"],
+        "…and the mark moves with it",
+      );
+      assert.notEqual(hud.journalBody.children[0], ledger, "the body is the other tab's now");
+      assert.ok(
+        textOf(hud.journalBody).some((line) => line.startsWith("Nothing taken on.")),
+        `…drawn from scratch: the memo belongs to the tab that is active (${textOf(hud.journalBody)})`,
+      );
+      // RE-PRESSING THE ACTIVE TAB IS NOT A SWITCH: it repaints nothing, because
+      // nothing has moved, and it disarms nothing.
+      const held = hud.journalBody.children[0];
+      hud.journalBody.scrollTop = 90;
+      await fire(hud._tabBtns[1], "click");
+      assert.equal(hud.journalBody.children[0], held, "pressing the tab you are on writes no DOM");
+      assert.equal(hud.journalBody.scrollTop, 90, "…and does not throw your place away");
+      // AND BACK AGAIN REBUILDS THE LEDGER rather than resurfacing the list it
+      // drew before, because the slot it memoised into belonged to the other tab.
+      hud._selectTab(0);
+      assert.notEqual(hud.journalBody.children[0], ledger, "coming back to the ledger rebuilds it");
+      assert.ok(textOf(hud.journalBody).includes("Walked to the mill."), "…from the block that is live now");
+      hud.closeJournal();
+    }
+
+    // ── ESCAPE CLOSES THE PANEL WHOLE, FROM EITHER TAB ────────────────────────
+    // No new hotkey in 0.13 (recorded): the tabs are pressed, and the one key the
+    // panel answers to closes all of it. A tab that trapped Escape for itself
+    // would be a surface the player has to leave twice.
+    {
+      const at = mount();
+      openJobs(at);
+      assert.equal(at.hud._journalTab, 1, "standing on the quest tab");
+      assert.equal(at.hud.closePanels(), true, "Escape had something to close");
+      assert.equal(at.hud._journal, false, "…and it closed the PANEL, not the tab");
+      assert.equal(at.hud.journalEl.style.display, "none", "…off the screen with it");
+    }
+
+    // ── THE QUEST TAB IS THE SHARED RENDERER, ROW FOR ROW ─────────────────────
+    // Every line on this tab is `rowText`'s, character for character. The board's
+    // jobs section renders the same rows through the same function, and the pin
+    // is what stops a second, drifting copy of that sentence growing here.
+    {
+      const at = mount();
+      const hud = at.hud;
+      assert.equal(takeOn(at, "b1.d1.p:t:a"), true, "a job off this world's own pack is taken on");
+      assert.equal(
+        takeOn(at, "b1.d1.p:gone:x", { verb: "visit", target: "wilds", n: 1 }),
+        true,
+        "…and one whose template this world's pack cannot name",
+      );
+      P.quest(at.core, "progress", { id: "b1.d1.p:t:a", by: 2 });
+      openJobs(at);
+      const folded = loadedPF.save.packFold(at.core);
+      const drawn = textOf(hud.journalBody);
+      for (const row of at.player.quests.active)
+        assert.ok(
+          drawn.includes(pack.rowText(row, folded)),
+          `the tab draws exactly what the shared renderer says (${drawn.join(" | ")})`,
+        );
+      assert.ok(drawn.includes("Three for Marla — 2/3 — for Marla"), "the pack's title, with the count on it");
+      assert.ok(
+        drawn.includes("Go to wilds — travel to wilds — for Marla"),
+        `…and the mechanical line where the pack has nothing to say (${drawn.join(" | ")})`,
+      );
+    }
+
+    // ── THE EMPTY STATE POINTS, AND DOES NOT PROMISE ──────────────────────────
+    // Present-tense fact, the board named where it stands, and no nag. On a
+    // packless world it must not send the player across the settlement to read
+    // "No work posted here" off the board — the two surfaces say the same thing.
+    {
+      const at = mount();
+      const board = at.w.zones[at.w.startZone].features.find((row) => row.id === loadedPF.world.BOARD_FEATURE_ID);
+      const zoneName = at.w.zones[at.w.startZone].name;
+      openJobs(at);
+      assert.ok(
+        textOf(at.hud.journalBody).includes(`Nothing taken on. ${board.name} in ${zoneName} has work.`),
+        `a world with work in it says where the work is (${textOf(at.hud.journalBody)})`,
+      );
+
+      const bare = mount({ packed: false });
+      assert.deepEqual(loadedPF.save.packFold(bare.core).ids, [], "the packless world folds to nothing selectable");
+      openJobs(bare);
+      const said = textOf(bare.hud.journalBody);
+      assert.ok(
+        said.includes(`Nothing taken on. ${board.name} in ${zoneName} has none posted.`),
+        `…and a packless one says so instead (${said})`,
+      );
+      assert.ok(!said.some((line) => /has work/.test(line)), "…never promising work that is not posted");
+      // …AND THE BOARD ITSELF, on the same world, in its own words. The two
+      // surfaces are read minutes apart by the same player and neither may
+      // contradict the other.
+      const sim = bare.sim;
+      sim.teleport(bare.w.startZone, board.rect.x, board.rect.y + 1);
+      sim.step(0, {});
+      bare.hud.update();
+      bare.hud.toggleBoard();
+      assert.ok(
+        textOf(bare.hud.boardMenu).includes("No work posted here."),
+        `the board says it plainly (${textOf(bare.hud.boardMenu)})`,
+      );
+      bare.hud.closeBoard();
+    }
+
+    // ── THE VALUE KEY IS A LIVE PROJECTION, ONE TERM AT A TIME ────────────────
+    // The sheet's invariant adopted verbatim (§2.4): this key is the projection of
+    // PRECISELY what the tab draws. Each case below moves ONE value, because a
+    // single "it re-rendered" case passes with most of the key deleted.
+    {
+      const at = mount();
+      const hud = at.hud;
+      assert.equal(takeOn(at, "b1.d1.p:t:a"), true, "one job is on the list");
+      openJobs(at);
+      const idle = hud.journalBody.children[0];
+      hud.update();
+      assert.equal(hud.journalBody.children[0], idle, "an idle frame writes no DOM at all");
+
+      // (1) PROGRESS. A catch lands while the tab is open and the fraction moves.
+      P.quest(at.core, "progress", { id: "b1.d1.p:t:a", by: 1 });
+      hud.update();
+      assert.notEqual(hud.journalBody.children[0], idle, "a row moving under the tab re-renders it");
+      assert.ok(textOf(hud.journalBody).includes("Three for Marla — 1/3 — for Marla"), "…with the new count");
+
+      // (2) A COMPLETION COUNTER. The done groups are drawn from the two maps, so
+      // a counter moving is the tab moving — and the maps are joined as sorted
+      // `template:count` pairs rather than summed, because trimming one counter
+      // while another increments is a SUM that does not move.
+      const counted = hud.journalBody.children[0];
+      at.player.quests.done_pack["p:t:b"] = 1;
+      hud.update();
+      assert.notEqual(hud.journalBody.children[0], counted, "a completion counter re-renders the tab");
+      assert.ok(textOf(hud.journalBody).includes("Look in ×1"), "…naming the work the pack called it");
+      const trimmed = hud.journalBody.children[0];
+      delete at.player.quests.done_pack["p:t:b"];
+      at.player.quests.done_pack["p:t:c"] = 1;
+      hud.update();
+      assert.notEqual(hud.journalBody.children[0], trimmed, "a trim-and-increment moves the key: it is not a sum");
+      assert.ok(textOf(hud.journalBody).includes("Word to Marla ×1"), "…and the tally is the counter that is there");
+      // …AND THE OTHER MAP IS ITS OWN TERM. The two are different groups on the
+      // tab and different things in the world — one is this world's, one travels
+      // — so a key that watched only the first would draw a stale second.
+      const bound = hud.journalBody.children[0];
+      at.player.quests_done_board["b:visit-wilds"] = 3;
+      hud.update();
+      assert.notEqual(hud.journalBody.children[0], bound, "the world-free map re-renders the tab too");
+      assert.ok(textOf(hud.journalBody).includes("visit-wilds ×3"), "…with its own tally on it");
+
+      // (3) THE PACK'S IDENTITY. A demotion moves NO quest state — the rows stay,
+      // complete and abandon exactly as before — and changes every title on this
+      // tab, because the titles come out of the fold. Without the pack's hash in
+      // the key the tab would sit there showing the sealed pack's words.
+      const beforeDemotion = JSON.parse(JSON.stringify(at.player.quests));
+      const titled = hud.journalBody.children[0];
+      at.meta.pixelforgePack = { ...sealedPack(), briefHash: (briefHash ^ 0x5f5f5f5f) >>> 0 };
+      at.sim._packFold = null; // the world was not replaced; only what is stored under it moved
+      assert.equal(loadedPF.save.packFold(at.core).demoted, true, "the stored pack no longer answers for this brief");
+      hud.update();
+      assert.notEqual(hud.journalBody.children[0], titled, "the demotion re-rendered the tab");
+      const plain = textOf(hud.journalBody);
+      assert.ok(!plain.some((line) => line.startsWith("Three for Marla")), `the pack's title is gone (${plain})`);
+      assert.ok(
+        plain.includes("Catch 3 catch-common — 1/3 — for Marla"),
+        `…replaced by the shared renderer's mechanical line (${plain})`,
+      );
+      assert.deepEqual(at.player.quests, beforeDemotion, "…and not one field of quest state moved with it");
+    }
+
+    // ── AND THE THEME, WHICH IS EVERY TITLE ON A WORLD WITH NO PACK ───────────
+    // The fold reads the world's theme (61-pack `fold`), and the default pack's
+    // titles are theme-worded — so a `_rebuild` landing another theme under an
+    // open tab has moved every word on it without touching one player field. The
+    // pack hash does not see it (zero either side) and the board's own name does
+    // not (it is baked into the fixture the world was built with).
+    // A LEGACY world, because that is a world the default pack actually folds
+    // against: its givers are the four stock residents the generic templates name
+    // (Mira, Tam, Rook, Fen), which a generated cast has no reason to contain.
+    {
+      const w = world.build(7, "cozy-village", null);
+      const sim = new loadedPF.Sim(w);
+      const core = {
+        chatId: `chat-tabs-${++mounts}`,
+        sim,
+        host: { chatMeta: {} },
+        interact() {},
+        setMode() {},
+        resume() {},
+        markDirty() {},
+      };
+      core.hud = new loadedPF.Hud(new FakeNode("div"), core);
+      const hud = core.hud;
+      hud.update();
+      P.get(core).quests_done_board["b:visit-wilds"] = 2;
+      hud.toggleJournal();
+      hud._selectTab(1);
+      const cozy = pack.defaults("cozy-village").templates.find((row) => row.id === "b:visit-wilds").title;
+      const colony = pack.defaults("sci-fi-colony").templates.find((row) => row.id === "b:visit-wilds").title;
+      assert.notEqual(cozy, colony, "the two default packs word that work differently");
+      assert.ok(textOf(hud.journalBody).includes(`${cozy} ×2`), `the valley's word for it is on the tab (${cozy})`);
+      const valley = hud.journalBody.children[0];
+      sim.world.theme = "sci-fi-colony";
+      sim._packFold = null;
+      assert.equal(loadedPF.save.packFold(core).pack.briefHash, 0, "both default packs carry the same sentinel hash");
+      hud.update();
+      assert.notEqual(hud.journalBody.children[0], valley, "the theme moving re-rendered the tab on its own");
+      assert.ok(textOf(hud.journalBody).includes(`${colony} ×2`), "…in this world's word for the same work");
+      hud.closeJournal();
+    }
+
+    // ── AND WHERE THE BOARD IS, WHICH IS THE EMPTY STATE'S TWO NAMES ──────────
+    // A checkpoint load or a rewind replaces the world under an open panel. Land
+    // one whose settlement is called something else — same theme, no pack either
+    // side, no rows to sever — and the only thing that has moved is the sentence
+    // this tab is currently drawing.
+    {
+      const at = mount({ packed: false });
+      openJobs(at);
+      const named = at.hud.journalBody.children[0];
+      at.w.zones[at.w.startZone].name = "Somewhere Else";
+      at.hud.update();
+      assert.notEqual(at.hud.journalBody.children[0], named, "the settlement's name moving re-renders the tab");
+      assert.ok(
+        textOf(at.hud.journalBody).some((line) => line.includes("in Somewhere Else has none posted")),
+        `…and the empty state points at the world that is standing (${textOf(at.hud.journalBody)})`,
+      );
+    }
+
+    // ── THE LOSS, TOLD ON BOTH SURFACES FROM ONE SEVERANCE ────────────────────
+    // A brief severance parks the world-bound half of the block. The notice BAND
+    // (the ledger tab) narrates it in story order and is the record; the quest tab
+    // says the same thing where the hole is — the list under it is shorter than
+    // the player remembers and this is why.
+    {
+      const at = mount();
+      assert.equal(takeOn(at, "b1.d1.p:t:a"), true, "a job taken in the world that is about to change");
+      const otherBrief = brief.defaults("sci-fi-colony", 900);
+      const otherWorld = world.build(900, "sci-fi-colony", otherBrief);
+      at.player.world = P.stampsFor(at.w, sealedBrief);
+      const severed = P.applyStamps(at.player, otherWorld, otherBrief, false);
+      assert.ok(severed.severed, "the changed brief severs");
+      assert.equal(severed.severed.entry.fields.questsActive.length, 1, "…parking the job with the rest of it");
+      // The two writes 60-save makes after the strip, in its order: park the
+      // entry, then file the notices it handed back.
+      assert.equal(
+        loadedPF.quarantine.put(at.core.chatId, "stamp", severed.severed.entry),
+        true,
+        "the bag takes the entry",
+      );
+      for (const text of severed.notices) P.notice(at.player, text, at.sim.day);
+
+      openJobs(at);
+      const onTab = textOf(at.hud.journalBody);
+      assert.ok(
+        onTab.includes("Some tasks belong to another world and are set aside."),
+        `the quest tab says the rows are elsewhere (${onTab})`,
+      );
+      assert.deepEqual(at.player.quests.active, [], "…which is true: the list really is empty");
+      at.hud._selectTab(0);
+      const band = textOf(at.hud.journalBody);
+      assert.ok(
+        band.some((line) => /belonged to another world/.test(line)),
+        `…and the band on the tab beside it narrates the same severance (${band})`,
+      );
+      loadedPF.quarantine.reset();
+    }
+
+    // ── AND THE PARKED COUNT IS A TERM IN THE KEY, NOT A FIRST-PAINT ACCIDENT ─
+    // The severance above moves the live rows as well, so it would repaint on the
+    // row join alone. This is the case that does not: a checkpoint load hydrates
+    // the bag from the save it lands, and a player with nothing on their list has
+    // an unchanged row join either side of it — while the tab has gained a line.
+    {
+      const at = mount();
+      openJobs(at);
+      const empty = at.hud.journalBody.children[0];
+      assert.deepEqual(at.player.quests.active, [], "nothing on the list, before or after");
+      assert.equal(
+        loadedPF.quarantine.put(at.core.chatId, "stamp", {
+          reason: "brief",
+          fromV: P.currentV(),
+          stamps: { seed: 1, briefHash: 2, mintStamp: 3 },
+          fields: { rel: {}, questsActive: [{ id: "b1.d2.p:t:a", have: 1 }] },
+        }),
+        true,
+        "the bag comes back holding somebody else's world",
+      );
+      at.hud.update();
+      assert.notEqual(at.hud.journalBody.children[0], empty, "the tab re-renders on the bag alone");
+      assert.ok(
+        textOf(at.hud.journalBody).includes("Some tasks belong to another world and are set aside."),
+        `…having gained the line (${textOf(at.hud.journalBody)})`,
+      );
+      loadedPF.quarantine.reset();
+    }
+
+    // ── THE DONE GROUPS: WHAT STAYS HERE, AND WHAT TRAVELS ────────────────────
+    // The split is the counter classes' own (§2.2e). A `p:` counter was minted by
+    // work this world's pack posted; a `b:` counter came off the generic
+    // templates, whose targets are role-grain and whose givers are the stock cast,
+    // so it means the same thing in the next world.
+    {
+      const at = mount();
+      at.player.quests.done_pack["p:t:a"] = 2;
+      at.player.quests.done_pack["p:vanished:z"] = 1;
+      at.player.quests_done_board["b:visit-wilds"] = 4;
+      openJobs(at);
+      const drawn = textOf(at.hud.journalBody);
+      const where = (text) => drawn.indexOf(text);
+      assert.ok(where("Done — this world's") >= 0, `the world-bound group is labelled (${drawn})`);
+      assert.ok(where("Done — travels with you") > where("Done — this world's"), "…and the world-free one after it");
+      assert.ok(where("Three for Marla ×2") > where("Done — this world's"), "the pack names the work it posted");
+      assert.ok(
+        where("Three for Marla ×2") < where("Done — travels with you"),
+        "…under the group it belongs to and not the other",
+      );
+      // A TITLE MISS IS A BARE SLUG, NEVER A BLANK LINE. A counter outlives the
+      // pack that minted it — a demotion, a world sealed against another brief, a
+      // `b:` counter that travelled here — so a tally has to be legible without
+      // one, exactly as a live row is.
+      assert.ok(where("z ×1") > where("Done — this world's"), `a template the fold cannot name is a slug (${drawn})`);
+      assert.ok(where("visit-wilds ×4") > where("Done — travels with you"), "…and so is the travelling counter");
+
+      // A BOUNDED TALLY SAYS SO AT THE BOUND, and only there: these maps EVICT the
+      // least-earned counter to make room, so a full one has already lost
+      // something and a list that read as complete history would be lying.
+      assert.ok(!drawn.some((line) => /Only the last/.test(line)), "a short list claims nothing about its bound");
+      let filler = 0;
+      while (Object.keys(at.player.quests.done_pack).length < P.CAPS.packDone)
+        at.player.quests.done_pack[`p:t:fill${filler++}`] = 1;
+      assert.equal(
+        Object.keys(at.player.quests.done_pack).length,
+        P.CAPS.packDone,
+        "the map is filled to EXACTLY its bound, which is where the line has to appear",
+      );
+      at.hud.update();
+      assert.ok(
+        textOf(at.hud.journalBody).includes(`Only the last ${P.CAPS.packDone} kinds of work are kept.`),
+        "…and a full one says what it drops",
+      );
+    }
+
+    // ── ONE ROW PER TEMPLATE REACHES THE TAB ──────────────────────────────────
+    // The restore paths run underneath the offer layer's "at most one live job per
+    // template" rule: a mint severance parks a row, the player takes the same work
+    // again on a later day, and the mint restore CONCATS the parked copy back.
+    // `_dedupeActive` collapses them at template grain, and this is that invariant
+    // seen from the surface a player actually reads.
+    {
+      const at = mount();
+      assert.equal(takeOn(at, "b1.d9.p:t:a"), true, "the job is on the list, taken again today");
+      P.quest(at.core, "progress", { id: "b1.d9.p:t:a", by: 1 });
+      const parked = { ...at.player.quests.active[0], id: "b1.d3.p:t:a", have: 3 };
+      assert.ok(
+        P.restoreStamped(
+          at.player,
+          {
+            reason: "mint",
+            fromV: P.currentV(),
+            stamps: P.stampsFor(at.w, sealedBrief),
+            fields: { rel: {}, questsActive: [parked] },
+          },
+          at.w,
+          sealedBrief,
+        ),
+        "…and yesterday's copy of it comes home",
+      );
+      openJobs(at);
+      const drawn = textOf(at.hud.journalBody).filter((line) => line.startsWith("Three for Marla"));
+      assert.deepEqual(drawn, ["Three for Marla — 1/3 — for Marla"], "one template is one row, and it is the LIVE one");
+    }
+
+    // ── SETTING A JOB ASIDE: TWO PRESSES, AND ONE OF THEM CHANGES NOTHING ─────
+    {
+      const at = mount();
+      const hud = at.hud;
+      assert.equal(takeOn(at, "b1.d1.p:t:a"), true, "a job to give up on");
+      assert.equal(takeOn(at, "b1.d1.p:t:c", { verb: "deliver", target: "Marla", n: 1 }), true, "…and one to keep");
+      P.quest(at.core, "progress", { id: "b1.d1.p:t:a", by: 2 });
+      at.sim.day = 6;
+      openJobs(at);
+      const dropButtons = () => buttonsIn(hud.journalBody).filter((node) => /Set/.test(node.textContent));
+      assert.equal(dropButtons().length, 2, "every row carries the affordance");
+      assert.deepEqual(
+        dropButtons().map((node) => node.style.opacity),
+        ["0.55", "0.55"],
+        "…quietly, until one is pressed",
+      );
+
+      // THE FIRST PRESS ARMS AND DOES NOTHING ELSE. No mutator runs, no line is
+      // written, and the row is exactly where it was.
+      const purse = at.player.pouch.money;
+      const linesBefore = at.player.ledger.lines.length;
+      await fire(dropButtons()[0], "click");
+      assert.equal(at.player.quests.active.length, 2, "the first press let nothing go");
+      assert.equal(at.player.ledger.lines.length, linesBefore, "…and wrote nothing down");
+      const armed = dropButtons();
+      assert.equal(armed[0].textContent, "Set it aside?", "the row that is armed asks");
+      assert.equal(armed[0].style.opacity, "1", "…and says so in the one language this file speaks");
+      assert.equal(armed[1].textContent, "Set aside", "…while the row beside it is untouched");
+
+      // AN IDLE FRAME DOES NOT DISARM IT. The arming press seeded the memo with
+      // the key it painted from, so the frame after it finds nothing moved.
+      hud.update();
+      assert.equal(hud._armedAbandon, "b1.d1.p:t:a", "a frame in which nothing moved leaves the press standing");
+      assert.equal(dropButtons()[0].textContent, "Set it aside?", "…and the question with it");
+
+      // THE SECOND PRESS DOES IT: free, one line, at the day it happened on, and
+      // no completion counter anywhere near it.
+      await fire(dropButtons()[0], "click");
+      assert.deepEqual(
+        at.player.quests.active.map((row) => row.id),
+        ["b1.d1.p:t:c"],
+        "the job is off the list and the other one is not",
+      );
+      assert.equal(at.player.pouch.money, purse, "setting work aside is free");
+      assert.deepEqual(at.player.quests.done_pack, {}, "…and is not a completion: nothing was counted");
+      assert.deepEqual(at.player.quests_done_board, {}, "…in either map");
+      const line = at.player.ledger.lines.at(-1);
+      assert.equal(at.player.ledger.lines.length, linesBefore + 1, "exactly one line per abandon (§2.3's diet)");
+      assert.equal(line[0], 6, "…filed at the day it happened on");
+      assert.equal(line[1], "Set aside Marla's board order.", `…naming who is no longer owed it (${line[1]})`);
+      assert.ok(
+        textOf(hud.journalBody).includes("Set aside Marla's job."),
+        `…and the panel says so where a toast could not be read (${textOf(hud.journalBody)})`,
+      );
+      // …AND THE RECEIPT SURVIVES THE NEXT FRAME. The press repaints and seeds
+      // the memo with the key it painted from; without that seeding the very next
+      // frame would find the key moved, drop the press state and redraw the list
+      // with the sentence gone before anybody read it.
+      hud.update();
+      assert.ok(
+        textOf(hud.journalBody).includes("Set aside Marla's job."),
+        "…and is still there on the frame after the press",
+      );
+      assert.equal(hud._armedAbandon, null, "nothing is left armed");
+    }
+
+    // ── THE ARMED CONFIRM IS FRAGILE ON PURPOSE ───────────────────────────────
+    // It is armed on ONE instance id, and anything that moves the list under it
+    // drops it: the row the second press lands on has to be the row the first
+    // press meant.
+    {
+      const at = mount();
+      const hud = at.hud;
+      assert.equal(takeOn(at, "b1.d1.p:t:a"), true, "two jobs");
+      assert.equal(takeOn(at, "b1.d1.p:t:c", { verb: "deliver", target: "Marla", n: 1 }), true, "…on the list");
+      openJobs(at);
+      const arm = async () => {
+        const node = buttonsIn(hud.journalBody).find((child) => /Set/.test(child.textContent));
+        await fire(node, "click");
+        assert.equal(hud._armedAbandon, "b1.d1.p:t:a", "the first row is armed");
+      };
+
+      // (1) THE LIST MOVING. A catch landing on the OTHER row is enough.
+      await arm();
+      P.quest(at.core, "progress", { id: "b1.d1.p:t:c", by: 1 });
+      hud.update();
+      assert.equal(hud._armedAbandon, null, "a repaint the press did not ask for disarms it");
+      assert.equal(at.player.quests.active.length, 2, "…and nothing was let go on the way");
+
+      // (2) LEAVING THE TAB.
+      await arm();
+      hud._selectTab(0);
+      assert.equal(hud._armedAbandon, null, "walking to the other tab drops the half-made press");
+      hud._selectTab(1);
+      assert.equal(hud._armedAbandon, null, "…and coming back does not find it waiting");
+
+      // (3) CLOSING THE PANEL. A press half-made an hour ago is not permission
+      // for the press that reopens the journal.
+      await arm();
+      hud.closeJournal();
+      assert.equal(hud._armedAbandon, null, "a closed panel holds no armed confirm");
+      const stale = hud.journalBody.children[0];
+      hud.toggleJournal();
+      assert.equal(hud._journalTab, 1, "the panel reopens on the tab it was left on");
+      assert.equal(hud._armedAbandon, null, "…with nothing armed");
+      assert.notEqual(hud.journalBody.children[0], stale, "…and painted fresh, the slot having gone with the close");
+      assert.equal(at.player.quests.active.length, 2, "and after all of that, both jobs are still there");
+    }
+
+    // ── A ROW THAT WENT AWAY UNDER THE PRESS ──────────────────────────────────
+    // The mutator refuses an id it cannot find, and that refusal IS the self-heal:
+    // the tab says so in the words the board's own refusal map has been carrying
+    // since the slice before this one, and repaints without the row.
+    {
+      const at = mount();
+      const hud = at.hud;
+      assert.equal(takeOn(at, "b1.d1.p:t:a"), true, "a job on the list");
+      openJobs(at);
+      const drop = buttonsIn(hud.journalBody).find((node) => /Set/.test(node.textContent));
+      await fire(drop, "click");
+      // The row leaves between the paint and the second press — a severance
+      // parking it, the repair pass dropping it, a rebuild landing underneath.
+      assert.equal(P.quest(at.core, "abandon", { id: "b1.d1.p:t:a" }), true, "the row goes out from under the button");
+      const lines = at.player.ledger.lines.length;
+      await fire(drop, "click");
+      // THE COPY ITSELF, not `boardRefusal("abandon-unknown")` re-read: an
+      // expectation computed from the function under test moves whenever it does.
+      // The sentence is pinned to the map further up this file (slice 4 wrote it
+      // there a slice before this surface existed); what is pinned HERE is that
+      // the tab is reading it rather than inventing a second one.
+      assert.ok(
+        textOf(hud.journalBody).includes("That job is no longer on your list."),
+        `the tab says what happened (${textOf(hud.journalBody)})`,
+      );
+      assert.equal(at.player.ledger.lines.length, lines, "…and files no line for work it did not set aside");
+      assert.ok(
+        textOf(hud.journalBody).some((text) => text.startsWith("Nothing taken on.")),
+        "…and the list it repaints no longer shows the row",
+      );
+      assert.equal(hud._armedAbandon, null, "nothing is left armed");
+    }
+
+    // ── AND THE AFFORDANCE IS THE QUEST TAB'S ALONE ───────────────────────────
+    // §2.3: per-row on the quest tab AND ONLY THERE. The board takes work on and
+    // takes it back finished; giving up is not something you do by standing in
+    // front of a board, which is the one place a mis-press is likeliest.
+    {
+      const at = mount();
+      assert.equal(takeOn(at, "b1.d1.p:t:a"), true, "a job on the list");
+      at.hud.toggleJournal();
+      assert.ok(
+        !buttonsIn(at.hud.journalBody).some((node) => /Set aside/.test(node.textContent)),
+        "the ledger tab offers nothing to press",
+      );
+      const board = at.w.zones[at.w.startZone].features.find((row) => row.id === loadedPF.world.BOARD_FEATURE_ID);
+      at.hud.closeJournal();
+      at.sim.teleport(at.w.startZone, board.rect.x, board.rect.y + 1);
+      at.sim.step(0, {});
+      at.hud.update();
+      at.hud.toggleBoard();
+      assert.ok(
+        textOf(at.hud.boardMenu).some((text) => /Three for Marla/.test(text)),
+        `the board is listing the job (${textOf(at.hud.boardMenu)})`,
+      );
+      assert.ok(
+        !textOf(at.hud.boardMenu).some((text) => /[Ss]et aside/.test(text) && !/full/.test(text)),
+        "…and offers no way to give it up from here",
+      );
+      at.hud.closeBoard();
+    }
+  } finally {
+    globalThis.setTimeout = realSetTimeout;
+    globalThis.clearTimeout = realClearTimeout;
+    loadedPF.save.reset();
+    loadedPF.spatial.reset();
+    loadedPF.quarantine.reset();
   }
 }
 
