@@ -20286,10 +20286,17 @@ const fire = (node, type) => Promise.all((node.listeners[type] ?? []).map((fn) =
   }
 
   // ── THE FLOOR ARITHMETIC, RE-RUN ──────────────────────────────────────────
-  // N and M are not preferences: they are what survives the worst cut the #5135
-  // output floor can produce on a templates-first emission with every line
-  // TAGGED. Recomputed here from the table's own inputs so the comment beside the
-  // rows and the numbers in them cannot drift apart.
+  // N and M are what a templates-first emission at the default pack's own
+  // density leaves after the #5135 output floor cuts the tail, with every line
+  // costed TAGGED. Recomputed here from the table's own inputs so the comment
+  // beside the rows and the numbers in them cannot drift apart.
+  //
+  // WHAT THIS BLOCK CHECKS IS BASIS → FLOOR, NOT BASIS → REALITY. It re-runs the
+  // sum the comment writes out and confirms the floors clear ITS answer; it says
+  // nothing about whether the two row costs describe what a generation can
+  // legally emit, because they do not — the schema allows rows two thirds bigger
+  // again. The lane that answers for reality is the max-shape one further down,
+  // which drives a real cut through the real salvage and PINS the residual.
   {
     const b = pack.TUNING.floorBasis;
     const chars = b.truncTokens * b.charsPerToken;
@@ -20303,7 +20310,7 @@ const fire = (node, type) => Promise.all((node.listeners[type] ?? []).map((fn) =
     );
     assert.ok(
       pack.TUNING.floorLines <= lines,
-      `the line floor (${pack.TUNING.floorLines}) is clearable by the worst templates-first cut (${lines} lines)`,
+      `the line floor (${pack.TUNING.floorLines}) is clearable by a typical-density templates-first cut (${lines} lines)`,
     );
     // …AND IT IS A FLOOR, NOT A FORMALITY. Set at what the wall guarantees and
     // nothing more would make every thin pack seal; these two are meaningfully
@@ -20400,6 +20407,34 @@ const fire = (node, type) => Promise.all((node.listeners[type] ?? []).map((fn) =
     })),
     escalation: cast.map((npc) => ({ npc, text: "Ask me again when the room is empty and I will tell you." })),
     overheard: [{ at: "settlement", text: "…and they said the survey came back fine. Fine!", topic: "rumor" }],
+  });
+
+  /** The same shape written at the SCHEMA'S OWN CAPS rather than at the default
+   *  pack's density: a 32-char slug, a 48-char title, a 200-char spoken line and
+   *  a topic tag on every row. The two fields that must name something real —
+   *  the giver and the delivery target — are cast names, so those are as long as
+   *  this world's names are and no longer; everything a model is free to fill is
+   *  filled. This is the density `TUNING.floorBasis` is NOT sized for, and the
+   *  max-shape lane below is what pins that. */
+  const fill = (n, seed) => `${seed}${"-lengthened".repeat(20)}`.slice(0, n);
+  const maxEmission = (templates, lines) => ({
+    templates: Array.from({ length: templates }, (_, i) => ({
+      slug: fill(pack.CAPS.slug, `posted-work-${i}`),
+      giver: cast[i % cast.length],
+      verb: "deliver",
+      target: { npc: cast[(i + 1) % cast.length] },
+      n: 1,
+      title: fill(pack.CAPS.title, `A board row at the schema's own title cap ${i}`),
+    })),
+    lines: Array.from({ length: lines }, (_, i) => ({
+      at: pack.LOCATIONS[i % pack.LOCATIONS.length],
+      when: pack.DAYPARTS[i % pack.DAYPARTS.length],
+      r: pack.REGISTERS[i % 2],
+      text: fill(pack.CAPS.text, `A spoken line written out to the schema's two-hundred-character cap, number ${i}, `),
+      topic: pack.TOPICS[i % pack.TOPICS.length],
+    })),
+    escalation: [],
+    overheard: [],
   });
 
   /** Stub the ONE host call this ladder makes and put it back. `script` is a
@@ -20514,6 +20549,49 @@ const fire = (node, type) => Promise.all((node.listeners[type] ?? []).map((fn) =
     const second = await run();
     assert.ok(second.sealed, "the shorter re-roll does not cost us the longer first answer");
     assert.ok(second.sealed.lines.length >= pack.TUNING.floorLines, "…the longest raw seen is the one salvaged");
+  });
+
+  // ── THE SAME CUT AT SCHEMA-MAX DENSITY DOES NOT SEAL, AND THAT IS PINNED ──
+  // `TUNING.floorBasis` is sized on the default pack's MEASURED density, and the
+  // schema allows rows far bigger than that. So there is one shape the floors do
+  // not clear, and it is asserted here rather than left for a future reader to
+  // rediscover against a comment: a connection at the 2,048-token floor whose
+  // model writes to the caps on every row. The templates alone eat the cut and
+  // the index that survives is a handful of tagged lines, which the floor
+  // refuses — on every attempt, so the retry button never gets that player
+  // anywhere. It is an ACCEPTED LIMITATION and not a bug (plan §2.2b: floor
+  // connections get a thin pack by design, with the degrade ladder as their
+  // normal path, and the sizing target is the typical ~4K ceiling).
+  //
+  // Asserted as a FAILURE on purpose. If this lane ever seals, a floor moved, a
+  // cap moved, or the wall did — and whoever moved it is owed the news, because
+  // the residual this pins is the reason the arithmetic beside the floors says
+  // "typical" and not "worst case".
+  await withPackCall(async ({ state }) => {
+    // The fixture really is at the schema's caps, so the lane's name is a fact
+    // rather than a label: shorter rows would let more index through the cut and
+    // the lane would seal — going green for the opposite of its own reason.
+    const probe = maxEmission(1, 1);
+    assert.equal(probe.templates[0].slug.length, pack.CAPS.slug, "the fixture's slugs are at the schema's cap");
+    assert.equal(probe.templates[0].title.length, pack.CAPS.title, "…and its titles");
+    assert.equal(probe.lines[0].text.length, pack.CAPS.text, "…and its spoken lines");
+    assert.ok(probe.lines[0].topic, "…and every line is tagged, the way the basis costs them");
+
+    const wall = pack.TUNING.floorBasis.truncTokens * pack.TUNING.floorBasis.charsPerToken;
+    const cut = JSON.stringify(maxEmission(pack.CAPS.templates, 200)).slice(0, wall);
+    state.reply = async () => ({ status: 422, body: { truncated: true, raw: cut } });
+    const { sealed, failure } = await run();
+    assert.equal(sealed, null, "a max-shape templates-first cut at the wall does NOT clear the floor");
+    assert.equal(failure, "thin", "…and it fails as thin: the call worked, the cut just left too little index");
+    // WHICH HALF WENT, so the pin records the mechanism and not only the verdict:
+    // the full template list survived — it is what ate the cut — and the index is
+    // the half the floor refuses.
+    const salvaged = loadedPF.brief.salvageText(cut);
+    assert.equal(salvaged.templates.length, pack.CAPS.templates, "the whole template list survived the cut");
+    assert.ok(
+      salvaged.lines.length < pack.TUNING.floorLines,
+      `…and the index left under it is short of the floor (${salvaged.lines.length}/${pack.TUNING.floorLines})`,
+    );
   });
 
   // ── UNDER THE FLOOR IS A FAILURE, AND IT HAS ITS OWN VERDICT ──────────────

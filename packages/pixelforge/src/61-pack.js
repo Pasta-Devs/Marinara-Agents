@@ -147,10 +147,35 @@ PF.pack = (() => {
     //   a TAGGED line row costs about 130, which buys ............      19 lines
     //   less the trailing partial row the salvage trims ..........      18 lines
     //
+    // THE TWO ROW COSTS ARE MEASURED DENSITY, NOT THE SCHEMA'S MAXIMUM, and
+    // that distinction is the whole standing of the sum. Serialized, the default
+    // pack's own rows run 112-137 chars a template (mean 121) and 97-140 chars a
+    // line with every one costed tagged (mean 119), across both themes — so 150
+    // and 130 sit above what a typical emission spends, the template cost above
+    // even the widest row measured. What the schema ALLOWS is far bigger: a
+    // 32-char slug, a 24-char giver, a 32-char variant and a 48-char title make
+    // a 217-char template, and a 200-char line with a tag is 279. So what the
+    // sum shows is that the floors CLEAR A TYPICAL TEMPLATES-FIRST CUT, and it
+    // is not a worst-case guarantee. It cannot be one and keep these floors:
+    // 24 × 217 leaves 896 chars of index, which is two rows, and a floor sized
+    // from that would have to be M ≤ 2.
+    //
+    // SO THE RESIDUAL IS WRITTEN DOWN RATHER THAN ROUNDED OFF. A floor
+    // connection (2,048 effective tokens) whose model writes near the schema's
+    // cap on every row — a full template block and 200-character dialogue —
+    // comes back with an index this floor refuses, on every attempt, and the
+    // retry screen is that player's honest state rather than a bug in the
+    // arithmetic. That is the degrade ladder's own posture (plan §2.2b): floor
+    // connections get a thin pack BY DESIGN, an accepted limitation with the
+    // ladder as their normal path, and the sizing TARGET is the typical ~4K
+    // ceiling, where the same emission clears with room to spare. The max-shape
+    // lane in the harness pins it, so it stays a known cost rather than
+    // something the next reader rediscovers against a comment that denied it.
+    //
     // Eighteen lines and twenty-four templates against floors of twelve and
-    // three: the worst cut this wall can produce still seals, and a pack that
-    // came back with a quarter of an index still fails. `floorBasis` carries the
-    // inputs so the lane that re-runs the sum cannot drift from the table.
+    // three: a typical cut at this wall still seals, and a pack that came back
+    // with a quarter of an index still fails. `floorBasis` carries the inputs so
+    // the lane that re-runs the sum cannot drift from the table.
     floorTemplates: 3,
     floorLines: 12,
     floorBasis: { truncTokens: 2_048, charsPerToken: 3, envelopeChars: 40, templateChars: 150, lineChars: 130 },
