@@ -682,14 +682,9 @@ PF.player = {
         if (Object.keys(keep).length) player.rel[zoneId] = keep;
         else delete player.rel[zoneId];
       }
-      const giverName = (g) => {
-        const text = str(g);
-        const bar = text.indexOf("|");
-        return bar >= 0 ? text.slice(bar + 1) : text;
-      };
-      const severedQuests = player.quests.active.filter((q) => minted.has(giverName(q.g)));
+      const severedQuests = player.quests.active.filter((q) => minted.has(this.giverOf(q.g)));
       if (severedQuests.length) {
-        player.quests.active = player.quests.active.filter((q) => !minted.has(giverName(q.g)));
+        player.quests.active = player.quests.active.filter((q) => !minted.has(this.giverOf(q.g)));
         touched = true;
       }
       if (!touched) {
@@ -790,18 +785,13 @@ PF.player = {
       for (const npc of world.zones[zoneId].npcs ?? []) if (npc && npc.name) known.add(npc.name);
     }
     if (!known.size) return { dropped: [], notices };
-    const giverName = (g) => {
-      const text = str(g);
-      const bar = text.indexOf("|");
-      return bar >= 0 ? text.slice(bar + 1) : text;
-    };
-    const dangling = active.filter((q) => !known.has(giverName(q.g)));
+    const dangling = active.filter((q) => !known.has(this.giverOf(q.g)));
     if (!dangling.length) return { dropped: [], notices };
     if (dangling.length === active.length) {
       // ALL of them. That is a statement about the world, not the quests.
       return { dropped: [], notices };
     }
-    player.quests.active = active.filter((q) => known.has(giverName(q.g)));
+    player.quests.active = active.filter((q) => known.has(this.giverOf(q.g)));
     // A LOSS, and the sentence has to say so. The rows above are PARKED — set
     // aside, recoverable, and their copy says as much — while this quest is
     // dropped and nothing brings it back. "No one left to hand it back to" is
@@ -1425,6 +1415,21 @@ PF.player = {
       delete victim.row.s;
       delete victim.row.a;
     }
+  },
+
+  /** WHO IS OWED THIS QUEST: the half of a row's `g` after the bar.
+   *
+   *  `g` is `"zoneId|Name"` and every reader of it wants the name — severance
+   *  asks whether a mint took the giver away, the repair pass asks whether the
+   *  world still stands them up, and 61-pack's completion asks whether there is
+   *  anybody left to thank. This was written out three times in two files before
+   *  the third caller existed to make the point; one door means a `g` that ever
+   *  changes shape changes it in one place. A bar-less value is the whole name,
+   *  which is what a row written before the zone half existed carries. */
+  giverOf(g) {
+    const text = str(g);
+    const bar = text.indexOf("|");
+    return bar >= 0 ? text.slice(bar + 1) : text;
   },
 
   /** Quest state. `action` is accept | progress | complete | abandon. Board
