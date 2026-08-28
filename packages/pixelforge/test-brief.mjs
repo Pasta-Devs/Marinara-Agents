@@ -17941,6 +17941,49 @@ const fire = (node, type) => Promise.all((node.listeners[type] ?? []).map((fn) =
       sim.day = wasDay;
     }
 
+    // ── AND THE RECEIPT IS THE TEMPLATE, WHICH IS THE CASE THAT MATTERS ──────
+    // An instance id carries its own day, so a set of THOSE would be day-scoped
+    // for free — and would miss this exactly: a job taken on one day and handed
+    // in on another is `b1.d<taken>.X` while the board in front of the player is
+    // offering `b1.d<today>.X`. Two ids, one piece of work.
+    {
+      // A template the board posts on two different days, found rather than
+      // assumed: the selection is a shuffle and which template repeats is its
+      // business, not the fixture's.
+      const folded = pack.boardOffers(core).folded;
+      const dayOf = (id, from) => {
+        for (let day = from; day < from + 60; day++)
+          if (pack.selection(folded, w.seed, day).some((t) => t.id === id)) return day;
+        return 0;
+      };
+      let took = 0;
+      let hands = 0;
+      let template = "";
+      for (const id of folded.ids) {
+        const a = dayOf(id, sim.day + 1);
+        const b = a ? dayOf(id, a + 1) : 0;
+        // …and one the player is not already carrying, or the accept refuses.
+        if (a && b && !active().some((q) => pack.templateOf(q.id) === id)) {
+          took = a;
+          hands = b;
+          template = id;
+          break;
+        }
+      }
+      assert.ok(template, "the board posts some template on two different days");
+      sim.day = took;
+      assert.equal(pack.accept(core, template).ok, true, "taken on the first of them");
+      const carried = active().find((q) => pack.templateOf(q.id) === template);
+      assert.equal(carried.day, took, "…carrying the day it was taken on, in its id and its row");
+      P.quest(core, "progress", { id: carried.id, by: carried.n });
+      sim.day = hands;
+      assert.equal(pack.turnIn(core, carried.id).ok, true, "and handed in on the second");
+      const posted = pack.boardOffers(core).offers.find((offer) => offer.template.id === template);
+      assert.ok(posted, "today's board is posting that same work");
+      assert.notEqual(posted.id, carried.id, "…as a different instance, because it is a different day");
+      assert.equal(posted.state, "filled", "…and it reads filled: the receipt is the WORK, not the copy of it");
+    }
+
     // ── THE DUPLICATE, WHICH IS A DIFFERENT REFUSAL FROM THE RECEIPT ─────────
     // A row taken on an earlier day is still live; the board offering that
     // template again is not a second job, it is the same one.
@@ -18569,30 +18612,49 @@ const fire = (node, type) => Promise.all((node.listeners[type] ?? []).map((fn) =
     // ── A CAP-REFUSED CATCH DOES NOT COUNT ───────────────────────────────────
     // grant() refuses a NEW (t,k) row at the pouch cap, and the window's award is
     // skipped with it. The quest progress goes the same way and for the same
-    // reason: a fish that never entered the bag is not a fish you caught. Staged
-    // one row short of the cap at level 1, where the pond opens exactly two
-    // variants — the first to land takes the last row and the other can never be
-    // recorded at all.
+    // reason: a fish that never entered the bag is not a fish you caught.
+    //
+    // MEASURED AS A DIFFERENCE, because "the quest did not advance" is worth
+    // nothing beside a run where it did — the first draft of this case staged the
+    // refusal on a BAIT row, which the matcher never answers for anyway, so it
+    // was green with the hook above the grant guard too.
+    //
+    // Two fixtures, one stream. The roll is a function of (seed, day, window,
+    // spot, level, tool, mod) and the pouch is in none of it, so the run at the
+    // cap rolls exactly the fish the run with room lands. AT THE LEVEL CAP on
+    // purpose: `level` is in the key, and a control that climbed a rung mid
+    // session would be a second stream rather than a comparison.
     {
-      const at = angler({ level: 1 });
-      take(at.core, at.sim, at.w, "b1.d3.carp", "catch", "carp", pack.CAPS.n);
-      take(at.core, at.sim, at.w, "b1.d3.worms", "catch", "worms", pack.CAPS.n);
-      const held = P.get(at.core).pouch.items.length;
-      for (let i = 0; i < P.CAPS.items - held - 1; i++) P.grant(at.core, { t: "catch-common", k: `filler-${i}` }, 1);
-      assert.equal(P.get(at.core).pouch.items.length, P.CAPS.items - 1, "one row of headroom");
-      const out = E.fish(at.core, "dawn");
-      const landed = new Set(out.caught.map((row) => row.k));
-      assert.equal(landed.size, 1, `exactly one variant could be recorded (${[...landed]})`);
-      assert.equal(P.get(at.core).pouch.items.length, P.CAPS.items, "the pouch is at the cap and stayed there");
-      // The one that landed counted; the one the cap refused counted nothing —
-      // and `out.caught` is the record of which was which.
+      const seat = () => {
+        const at = angler({ level: P.CAPS.skillLevel });
+        assert.equal(
+          P.resolvedLevel(P.get(at.core).skills.verbs.fishing),
+          P.CAPS.skillLevel,
+          "the fixture is at the level cap, where the roll's own key stops moving",
+        );
+        take(at.core, at.sim, at.w, "b1.d3.carp", "catch", "carp", pack.CAPS.n);
+        return at;
+      };
+      const open = seat();
+      const landed = E.fish(open.core, "dusk");
+      const openCarp = landed.caught.filter((row) => row.k === "carp").length;
+      assert.ok(openCarp > 1, `with room in the bag the session lands carp (${openCarp})`);
+      assert.equal(haveOf(open.core, "b1.d3.carp"), openCarp, "…every one of them counted");
+
+      const full = seat();
+      const held = P.get(full.core).pouch.items.length;
+      for (let i = 0; i < P.CAPS.items - held - 1; i++) P.grant(full.core, { t: "catch-common", k: `filler-${i}` }, 1);
+      assert.equal(P.get(full.core).pouch.items.length, P.CAPS.items - 1, "the second bag has one row of headroom");
+      const refused = E.fish(full.core, "dusk");
+      assert.equal(refused.windows, landed.windows, "the same session, window for window");
+      assert.equal(P.get(full.core).pouch.items.length, P.CAPS.items, "…which met the cap and stopped there");
+      const fullCarp = refused.caught.filter((row) => row.k === "carp").length;
+      assert.ok(fullCarp < openCarp, `the cap turned carp away that the other run landed (${fullCarp} of ${openCarp})`);
       assert.equal(
-        haveOf(at.core, "b1.d3.carp"),
-        out.caught.filter((row) => row.k === "carp").length,
-        "the variant that entered the bag advanced its order",
+        haveOf(full.core, "b1.d3.carp"),
+        fullCarp,
+        "and the order counted the carp that entered the bag and NOT the ones the cap refused",
       );
-      assert.equal(haveOf(at.core, "b1.d3.worms"), 0, "…and the one the cap turned away advanced nothing");
-      assert.ok(!landed.has("worms"), "…which is the variant the cap actually refused here");
     }
 
     // ── HAVE AND THE POUCH RIDE THE SAME BLOCK ───────────────────────────────
@@ -18741,6 +18803,21 @@ const fire = (node, type) => Promise.all((node.listeners[type] ?? []).map((fn) =
     const backHome = w.zones.z3.portals.find((p) => p.toZone === "z1");
     assert.ok(toWood && backHome, "the wilds is reachable and leaves a way home");
 
+    // ── THE ONE JOIN THIS HARNESS CANNOT DRIVE, PINNED AS TEXT ───────────────
+    // Everything below runs the arrival method directly, because the frame loop
+    // it hangs off is a `requestAnimationFrame` closure that wants a page. So the
+    // one thing left unasserted is the LINE that joins them — and deleting it
+    // would leave every case in this block green while no walked arrival in the
+    // real game answered for anything. A text pin is a poor assertion and it is
+    // the honest one available: it catches the deletion, it cannot catch a
+    // rewrite that keeps the words, and prettier is what keeps the shape stable.
+    assert.match(
+      readFileSync(join(here, "src", "90-element.js"), "utf8"),
+      /if \(res\.zoneChanged\) this\._zoneChanged\(\);/,
+      "the frame loop's zone-change branch calls the arrival method the cases below drive",
+    );
+    assert.equal(typeof core._zoneChanged, "function", "…which is on the core, where it can be driven at all");
+
     // ── ACCEPTING WHILE YOU ARE ALREADY STANDING THERE FINISHES NOTHING ──────
     // The hook is an ARRIVAL and not a location test, so work taken at the board
     // — which is in the settlement — cannot be a settlement walk already done.
@@ -18767,6 +18844,12 @@ const fire = (node, type) => Promise.all((node.listeners[type] ?? []).map((fn) =
     assert.equal(P.get(core).rel[w.startZone]?.Ivy?.t, met + 2, "the giver remembers both");
     assert.equal(P.get(core).rel[w.startZone]?.Ivy?.d ?? 0, 0, "…as encounters, never as a promotion");
     assert.equal(filled.length, 2, "the surface was told about both");
+    // AND THE DAY'S RECEIPT WAS FILED, which is the whole reason the one-per-day
+    // rule had to land before this hook did: without it, walking out and back is
+    // accept → complete → accept → complete, six coins a lap, for as long as the
+    // player can be bothered.
+    assert.ok(pack.filledToday(core).templates.has("wood-a"), "the walk filed its receipt for the day");
+    assert.ok(pack.filledToday(core).templates.has("wood-b"), "…both of them");
     // THE LINE NAMES THE PLACE AND NOT THE HANDLE, and is filed EVENT-SIDE at the
     // event's day — a walk taken on the board's day 4 and finished on day 4.
     const lines = () => P.get(core).ledger.lines;
@@ -18868,6 +18951,37 @@ const fire = (node, type) => Promise.all((node.listeners[type] ?? []).map((fn) =
       await spatial.refresh(core);
       assert.equal(active().length, 1, "a refresh with no movement in it is not an arrival");
       assert.equal(P.get(core).pouch.money, held, "…and pays nothing");
+
+      // ── THE ONE NEW CAPTURE, AND WHAT IT IS FOR ────────────────────────────
+      // This arm is the async one, and the player mutators fence on PF.save._gen
+      // — which moves on a CHAT SWITCH. Read PRE-await, a switch under the GET
+      // leaves the arrival holding a stale generation and every mutator refuses:
+      // the walk is not settled, and the arriving chat's block is not paid for
+      // the departing chat's errand. Read AFTER the await it would match the new
+      // generation and pay into the wrong save.
+      sim.teleport("z3", w.zones.z3.spawn.x, w.zones.z3.spawn.y);
+      at.loc = "loc-wood";
+      await spatial.refresh(core); // resync _lastLocationId to the wood
+      const carried = P.get(core).pouch.money;
+      loadedPF.api.getSpatial = async () => {
+        loadedPF.save._gen = (loadedPF.save._gen ?? 0) + 1; // a chat switch, mid-flight
+        return {
+          definition: { revision: 1 },
+          currentLocationId: "loc-root",
+          breadcrumb: [{ name: "loc-root" }],
+          destinations: [],
+        };
+      };
+      sim.teleport("z3", w.zones.z3.spawn.x, w.zones.z3.spawn.y);
+      assert.equal(take("b1.d4.raced", "settlement"), true, "a walk home is taken on");
+      await spatial.refresh(core);
+      assert.equal(sim.zoneId, "z1", "the drift still followed the world back");
+      assert.equal(
+        P.get(core).quests.active.some((q) => q.id === "b1.d4.raced"),
+        true,
+        "…but the arrival settled nothing under a generation that moved",
+      );
+      assert.equal(P.get(core).pouch.money, carried, "…and paid nothing into the chat that arrived");
     }
   } finally {
     loadedPF.api.getSpatial = prevGetSpatial;
@@ -18878,6 +18992,34 @@ const fire = (node, type) => Promise.all((node.listeners[type] ?? []).map((fn) =
     loadedPF.save.reset();
     loadedPF.spatial.reset();
   }
+}
+
+// ── AND THE SURFACE SAYS SO, IN ONE PLACE FOR THREE SITES ───────────────────
+// A completion the player is never told about is a purse that moved for no
+// reason they can see. The board's hand-in toasts and a session of fishing
+// toasts, so a walk taken and an errand run have to as well — and the copy lives
+// once, because the arrival, the drift arm and Talk's accepted turn all reach it.
+{
+  const w = world.build(7, "cozy-village", null);
+  const sim = new loadedPF.Sim(w);
+  const core = { chatId: "chat-questfilled", sim, host: { chatMeta: {} }, markDirty() {} };
+  const hud = new loadedPF.Hud(new FakeNode("div"), core);
+  hud.questFilled([]);
+  assert.equal(hud.toastEl.textContent, "", "nothing filled says nothing: the ordinary arrival and the ordinary hello");
+  hud.questFilled(undefined);
+  assert.equal(hud.toastEl.textContent, "", "…and neither does a caller with nothing to hand it");
+  hud.questFilled([{ money: 6, giver: "Mira" }]);
+  assert.equal(
+    hud.toastEl.textContent,
+    `Done for Mira — ${loadedPF.economy.money(w, 6)}`,
+    "a filled job names who it was for and what it paid, in the world's own money",
+  );
+  hud.questFilled([{ money: 6, giver: null }]);
+  assert.equal(
+    hud.toastEl.textContent,
+    `Job done — ${loadedPF.economy.money(w, 6)}`,
+    "…and drops the name rather than inventing one when the world cannot stand them up",
+  );
 }
 
 // ── DELIVER: AN ERRAND, FINISHED BY TALKING ─────────────────────────────────
