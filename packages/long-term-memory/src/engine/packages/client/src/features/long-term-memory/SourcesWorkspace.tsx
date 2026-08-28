@@ -1578,6 +1578,18 @@ export default function SourcesWorkspace({
   };
 
   const changeDestinationScope = (next: string) => {
+    const nextTarget = destinationTargets.find((target) => target.id === next);
+    const retainedAdditionalTargets = additionalDestinationTargetIds.flatMap((id) => {
+      const target = destinationTargets.find((item) => item.id === id);
+      return target && target.id !== next ? [target] : [];
+    });
+    if (
+      nextTarget &&
+      !hasDestinationScopeCapacity(mergedDestinationScope([nextTarget, ...retainedAdditionalTargets]))
+    ) {
+      setImportError(localizeUi("ui.longTermMemory.sourcesworkspace.destinationScopeLimitReached"));
+      return;
+    }
     setDestinationTargetId(next);
     setAdditionalDestinationTargetIds((current) => current.filter((id) => id !== next));
     clearImportResult();
