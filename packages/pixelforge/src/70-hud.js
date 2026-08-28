@@ -102,6 +102,25 @@ PF.Hud = class {
       style:
         "display:none;flex-direction:column;gap:6px;align-items:flex-end;max-height:40vh;overflow:auto;pointer-events:auto;",
     });
+    // 0.13's reading surface, on the fishing verb's gating shape and its menu
+    // idiom. Proximity-gated on `nearBoard` ALONE — no offer test, no purse test,
+    // no pack test: reading a board costs nothing, sends nothing, and a board
+    // that hid itself on a world with no work would be the one board a player
+    // most needs to be able to walk up to and be told so.
+    //
+    // THE EXPOSURE IS TRIGGER-ONLY, and that containment is deliberate (plan
+    // §2.1, M5 provisional pending the 0.12 browser playtest): everything about
+    // WHERE this lives is these two lines plus the census entry and the gating in
+    // update(). Nothing about the menu below or the pack behind it knows it was
+    // reached from a button in this column, so a post-playtest reshape — a
+    // different trigger, a different surface — moves the entry and the gate and
+    // leaves the work untouched.
+    this.boardBtn = this._btn("📋 Board", () => this.toggleBoard());
+    this.boardBtn.style.display = "none";
+    this.boardMenu = PF.el("div", {
+      style:
+        "display:none;flex-direction:column;gap:6px;align-items:flex-end;max-height:40vh;overflow:auto;pointer-events:auto;",
+    });
     this.waitBtn = this._btn("⏩ Wait…", () => this.toggleWait());
     this.keyboardBtn = this._btn("Keyboard", () => core.setMode("dialogue"));
     this.resumeBtn = this._btn("▶ Resume walking", () => core.resume());
@@ -124,6 +143,8 @@ PF.Hud = class {
         this.fishBtn,
         this.sleepMenu,
         this.sleepBtn,
+        this.boardMenu,
+        this.boardBtn,
         this.waitMenu,
         this.waitBtn,
         this.keyboardBtn,
@@ -526,6 +547,165 @@ PF.Hud = class {
     );
   }
 
+  // ── THE BOARD (plan §2.1) ──────────────────────────────────────────────────
+  // Two sections in one list, and the surface owns NONE of the rules: what is
+  // offered, what state each offer is in and whether a job can be handed in are
+  // all answered by 61-pack's `boardOffers`, re-read at every press. This is the
+  // drawing.
+
+  /** Open the board, or close it. The fishing menu's shape one method up: a
+   *  refusal is answered WHERE IT WAS PRESSED rather than behind a list whose
+   *  every row then refuses. */
+  toggleBoard() {
+    const open = this.boardMenu.style.display !== "flex";
+    if (!open) {
+      this.boardMenu.style.display = "none";
+      return;
+    }
+    const view = PF.pack.boardOffers(this.core);
+    if (!view.available) {
+      this.boardMenu.style.display = "none";
+      this.toast(this.boardRefusal(view.reason));
+      return;
+    }
+    this._renderBoard(view);
+    this.boardMenu.style.display = "flex";
+  }
+
+  closeBoard() {
+    this.boardMenu.style.display = "none";
+  }
+
+  /** BOTH SECTIONS, every time. A press changes both — accepting puts a row in
+   *  the jobs list AND dims the offer it came from, handing one in empties a job
+   *  AND can free the cap that was dimming every offer on the board — so the
+   *  handlers below re-render the whole list rather than patching a row.
+   *  Event-driven and never per frame: update() only decides whether the BUTTON
+   *  is on screen.
+   *
+   *  THE JOBS SECTION LEADS WHEN IT HOLDS SOMETHING FINISHED. A player walking
+   *  back with five carp wants the hand-in above the fold, not under four fresh
+   *  offers; with nothing finished, the day's work is the reason they walked up.
+   *
+   *  A row accepted today renders in BOTH sections on purpose (plan §2.1): the
+   *  dimmed offer is the day's receipt — it is what the board posted — and the
+   *  jobs row is the live object with the count on it. */
+  _renderBoard(view) {
+    const chip = (text, dim) => PF.el("span", { style: dim ? `${this.S.chip}opacity:0.55;` : this.S.chip, text });
+    const offers = [];
+    if (!view.folded.ids.length) {
+      // THE PACKLESS WORLD'S OWN STATE (Q9), and it is deliberately none of the
+      // others. Not "not yet", not "check back", not "everything is taken" — a
+      // world sealed before this release, or one whose owner declined the second
+      // call, has no work in it and will not grow any on its own. The board is
+      // still standing there to say so, which is the whole reason the fixture is
+      // unconditional.
+      offers.push(chip("No work posted here.", true));
+    } else {
+      offers.push(chip("Today's work"));
+      for (const offer of view.offers) {
+        const money = PF.economy.money(this.core.sim.world, offer.reward.money);
+        const label = `${offer.template.title} — ${money}`;
+        if (offer.state === "open") {
+          offers.push(this._btn(label, () => this.acceptWork(offer.template.id)));
+          continue;
+        }
+        // DIMMED AND STILL PRESSABLE, on the berth button's rule: a control that
+        // vanishes teaches the player nothing about why. The press says which of
+        // the three reasons it is.
+        const row = this._btn(
+          offer.state === "taken" ? `${offer.template.title} — taken — see your jobs below` : label,
+          () => this.acceptWork(offer.template.id),
+        );
+        row.style.opacity = "0.45";
+        offers.push(row);
+      }
+    }
+    const jobs = [];
+    if (view.jobs.length) {
+      jobs.push(chip("Your jobs here"));
+      for (const row of view.jobs) {
+        const text = PF.pack.rowText(row, view.folded);
+        const done = Math.round(Number(row.have) || 0) >= Math.max(1, Math.round(Number(row.n) || 1));
+        if (!done) {
+          jobs.push(chip(text, true));
+          continue;
+        }
+        jobs.push(this._btn(`${text} — hand it in`, () => this.turnInJob(row.id)));
+      }
+    }
+    const finished = view.jobs.some(
+      (row) => Math.round(Number(row.have) || 0) >= Math.max(1, Math.round(Number(row.n) || 1)),
+    );
+    this.boardMenu.replaceChildren(...(finished ? [...jobs, ...offers] : [...offers, ...jobs]));
+  }
+
+  /** Take an offer. The offer is re-read inside `accept`, so a menu drawn a press
+   *  ago cannot take a row twice or take one past the cap; this turns the answer
+   *  into a sentence and redraws both sections. */
+  acceptWork(templateId) {
+    const result = PF.pack.accept(this.core, templateId);
+    if (!result.ok) {
+      this.toast(this.boardRefusal(result.reason));
+      // A refusal that came from the BOARD's own state — taken, duplicated, at
+      // the cap — is still a change the list may not be showing (another press
+      // filled the cap), so the redraw happens on both arms. A refusal about the
+      // place or the mode leaves nothing to draw and the menu is already closing.
+      const view = PF.pack.boardOffers(this.core);
+      if (view.available) this._renderBoard(view);
+      else this.closeBoard();
+      return;
+    }
+    this.toast(`Taken on: ${result.title}`);
+    const view = PF.pack.boardOffers(this.core);
+    if (view.available) this._renderBoard(view);
+  }
+
+  /** Hand a finished job in. `turnIn` re-finds the row and re-checks `have >= n`
+   *  at the press, so a row that moved under the menu cannot be paid twice. */
+  turnInJob(id) {
+    const result = PF.pack.turnIn(this.core, id);
+    if (!result.ok) {
+      this.toast(this.boardRefusal(result.reason));
+      const refused = PF.pack.boardOffers(this.core);
+      if (refused.available) this._renderBoard(refused);
+      else this.closeBoard();
+      return;
+    }
+    // The purse moved, so the chips have.
+    this.refreshChips();
+    const paid = PF.economy.money(this.core.sim.world, result.money);
+    this.toast(result.giver ? `Handed in to ${result.giver} — ${paid}` : `Handed in — ${paid}`);
+    const view = PF.pack.boardOffers(this.core);
+    if (view.available) this._renderBoard(view);
+  }
+
+  /** The board's refusals, turned into sentences — the fishing verb's
+   *  reason-to-sentence map, not a fork of it. The three the BOARD can reach are
+   *  here; the rest of the enumeration (unknown-id, abandon-unknown) lands with
+   *  the surfaces that can reach those.
+   *
+   *  `not-at-board` and `no-world` are absent for fishRefusal's own reason: the
+   *  button is not on screen where there is no board, so a line for them would be
+   *  copy nobody can reach — which is exactly why the fall-through has to be a
+   *  real sentence.
+   *
+   *  THE AT-CAP COPY NAMES BOTH RELIEFS, and one of them is not built yet: the
+   *  abandon affordance is the quest tab's (§2.3) and lands in the slice after
+   *  this one. The wording is §2.1's verbatim because the arc ships as ONE
+   *  submission — no player is ever handed a build where "set aside" points at
+   *  nothing — and it is recorded here so the pairing is deliberate rather than
+   *  discovered. */
+  boardRefusal(reason) {
+    if (reason === "wrong-mode") return "Not while you're talking — resume walking first";
+    if (reason === "gate-held") return "Not yet — your world is still being written.";
+    if (reason === "at-cap") return "Your job list is full — finish or set aside a job first.";
+    if (reason === "taken") return "You took that one today — it is in your jobs below.";
+    if (reason === "dup") return "You are already on that one.";
+    if (reason === "not-done") return "That one isn't finished yet.";
+    return "There is nothing to do at the board just now.";
+  }
+
   /** Take the rod the button is offering. The offer is re-read inside buyRod, so
    *  a frame-old button cannot overcharge anybody; this turns the refusals into
    *  sentences, exactly as rentBerth's caller does. */
@@ -608,11 +788,19 @@ PF.Hud = class {
    *  `preventDefault` either way, because the host's own Escape handling is not
    *  ours to cancel, so "the key meant something here" is not a question it has
    *  to ask. The return is the honest answer for a caller that does — today that
-   *  is the harness, which pins it. */
+   *  is the harness, which pins it.
+   *
+   *  THE BOARD'S LIST CLOSES HERE TOO (0.13 §2.1). It is not a panel — it is a
+   *  floating list in the action column, like the fishing and sleeping menus —
+   *  but Escape is the only key that can reach any of them, and a list of work
+   *  left standing over a closed surface is the one of the four that holds a
+   *  press with consequences behind it. It rides the return for the same reason
+   *  the panels do: "something was open" is the honest answer either way. */
   closePanels() {
-    const open = this._journal || this._sheet;
+    const open = this._journal || this._sheet || this.boardMenu.style.display === "flex";
     this.closeJournal();
     this.closeSheet();
+    this.closeBoard();
     return open;
   }
 
@@ -1063,6 +1251,8 @@ PF.Hud = class {
         this._fish = null;
         this.sleepBtn.style.display = "none";
         this._sleep = null;
+        this.boardBtn.style.display = "none";
+        this._board = null;
       }
       // THE PANEL OPENERS, on the berth button's cadence and for a reason of
       // their own: the gate hides the whole topbar, but the topbar STAYS UP in
@@ -1094,6 +1284,7 @@ PF.Hud = class {
       this.waitMenu.style.display = "none";
       this.fishMenu.style.display = "none";
       this.sleepMenu.style.display = "none";
+      this.boardMenu.style.display = "none";
       if (mode === "dialogue" && !gate) this.toast("Type in the message box below — Resume to keep walking");
     }
     // Nothing below the gate means anything: there is no beat to caption, nobody
@@ -1195,6 +1386,22 @@ PF.Hud = class {
         this.sleepBtn.style.display = bed.bed ? "" : "none";
         if (bed.bed) this.sleepBtn.style.opacity = bed.available ? "1" : "0.45";
         else this.sleepMenu.style.display = "none";
+      }
+      // THE BOARD, and it is the simplest gate in this block: the fixture within
+      // reach or nothing. No offer is read here and no state is answered — a
+      // board is a thing you walk up to, and everything it might refuse is
+      // answered at menu-open and at each press instead (§2.2d). It never dims
+      // either, because there is no refusal that belongs to standing in front of
+      // it: an empty board says so in words, in the menu, where the words fit.
+      const board = sim.nearBoard;
+      const boardKey = board ? `${board.id}:${board.name}` : "";
+      if (boardKey !== this._board) {
+        this._board = boardKey;
+        this.boardBtn.style.display = board ? "" : "none";
+        // Walking away closes the list with the button, exactly as the bank
+        // does: a board's offers are the offers of a board you are standing at.
+        if (board) this.boardBtn.textContent = `📋 ${board.name}`;
+        else this.closeBoard();
       }
       const clock = sim.clockLabel();
       if (clock !== this._clock) {

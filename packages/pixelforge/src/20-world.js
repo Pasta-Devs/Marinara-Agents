@@ -501,6 +501,35 @@ PF.world = (() => {
       stream: "The Conduit Bridge",
     },
   };
+  // ── The quest board (0.13 §2.1) ────────────────────────────────────────────
+  // THE ONE REGISTER ROW NO BRIEF WROTE. Every settlement gets a board, in both
+  // the compiled path and the legacy layout, and it gets one UNCONDITIONALLY —
+  // on a world with no content pack behind it as much as on a world full of
+  // work. Two reasons, and neither is decoration. The board is the surface that
+  // says "no work posted here" out loud, which is a truthful answer a missing
+  // fixture cannot give; and it is the surface a later release's opt-in ("write
+  // work for this world?") would live on, so a board that appeared only where
+  // there was already work would be a door that opens once you are through it.
+  //
+  // ITS ID IS FIXED AND RESERVED, on the legacy:pond precedent, and it is pushed
+  // onto zone.features OUTSIDE the `_ids` ordinal walk: the ordinals belong to
+  // the features the BRIEF wrote, and spending one here would renumber promises
+  // a sealed brief has already made. Its TAG is deliberately not one of
+  // 18-brief's FEATURE_TAGS either — no brief may author a board, and the
+  // consumer (30-sim `nearBoard`) resolves it by this id rather than by tag.
+  //
+  // The name is word-book data, ZONE_NAMES' own pattern one table up: the
+  // fixture has no brief to name it, so the theme does.
+  const BOARD_FEATURE_ID = "board:settlement";
+  const BOARD_FEATURE_TAG = "notice-board";
+  const BOARD_NAMES = {
+    "cozy-village": "The Notice Board",
+    "sci-fi-colony": "The Job Terminal",
+  };
+  /** Through PF.own so a theme named after a prototype key cannot answer with a
+   *  function — the same door every other book in this file reads through. */
+  const boardName = (theme) => PF.own(BOARD_NAMES, theme) ?? BOARD_NAMES["cozy-village"];
+
   // …AND WHAT THE FOUR OF THEM DO. The same duplication one table along, and it
   // was the one nobody themed: the four legacy residents' roles were hardcoded
   // in buildLegacy — "innkeeper", "farmer", "village guard", "forager" — right
@@ -670,6 +699,21 @@ PF.world = (() => {
     const doors = [inn, farm, cottage].map((b) => ({ x: b.doorX, y: b.doorY }));
     scatterTrees(v, rnd, 26, doors.concat(doors.map((d) => ({ x: d.x, y: d.y + 1 }))));
     v.spawn = { x: 21, y: 17 };
+    // THE QUEST BOARD, hand-laid: this layout has no brief and no anchor ladder
+    // to run, so the ladder's FIRST rung is written out as a literal — the apron
+    // one step west of the inn's door, which is this world's gathering place.
+    // West and not east because `doorX` itself is where the interior portal puts
+    // the player down (linkInterior), and the tile beside a door is reserved from
+    // the tree scatter above, so this ground is free by construction rather than
+    // by luck. Rect = the literal directly below, so the two move together or not
+    // at all — the pond's own discipline eighty lines up.
+    put(v, inn.doorX - 1, inn.doorY + 1, "object", "board", true);
+    v.features.push({
+      id: BOARD_FEATURE_ID,
+      tag: BOARD_FEATURE_TAG,
+      name: boardName(activeTheme),
+      rect: { x: inn.doorX - 1, y: inn.doorY + 1, w: 1, h: 1 },
+    });
 
     // ── Inn interior ──
     const n = makeZone("inn", names.inn, 16, 12, "floor");
@@ -2762,11 +2806,15 @@ PF.world = (() => {
       for (let i = leftoverLots.length - 1; i >= 0; i--) if (taken.has(i)) leftoverLots.splice(i, 1);
     }
 
-    let greens = 0;
-    for (let i = 0; i < leftoverLots.length && greens < 6; i += 3) {
+    // The lots the greens took, kept rather than merely counted: the board's
+    // anchor ladder reads them one block down (a park is public ground and a
+    // fenced kitchen garden is not, so only the dense rank's greens are offered
+    // as an anchor), and a counter cannot say WHERE anything was laid.
+    const greenLots = [];
+    for (let i = 0; i < leftoverLots.length && greenLots.length < 6; i += 3) {
       const lot = leftoverLots[i];
       PLACERS[denseRank ? "park" : "crop-plots"](v, lot.x, lot.y);
-      greens++;
+      greenLots.push(lot);
     }
     // ── THE SQUARE ─────────────────────────────────────────────────────────────
     // A plaza was eight by eight tiles of paving and nothing else — the one place
@@ -2807,6 +2855,97 @@ PF.world = (() => {
         if (well && x === well[0] && y === well[1]) continue;
         if (squareTile(x, y, "table")) boards++;
       }
+    }
+    // ── THE QUEST BOARD (0.13 §2.1) ────────────────────────────────────────────
+    // The fixture every settlement gets, laid AFTER everything else it could
+    // stand on top of and BEFORE the pocket seal, so a board that walls something
+    // off is a board whose pocket gets closed like any other.
+    //
+    // NO RNG IS DRAWN HERE, and that is load-bearing rather than tidy: the anchor
+    // is read off geometry the passes above already laid, so the fixture is
+    // deterministic per (seed, theme, brief) and the tile stream feeding the
+    // ground cover, the trees and the mint does not move under it.
+    /** Can a board stand on this tile? */
+    const boardFree = (x, y) => {
+      if (x < 2 || y < 2 || x >= v.w - 2 || y >= v.h - 2) return false;
+      // The spawn tile, never: sealPockets throws on a solid spawn, and a world
+      // that refuses to build is a legacy world in the player's hands.
+      if (x === v.spawn.x && y === v.spawn.y) return false;
+      const at = idx(v, x, y);
+      // Water is laid solid, so the test below already excludes it. This says the
+      // rule out loud because it IS the rule a lane pins: A BOARD RECT HOLDS NO
+      // WATER TILE, so nearFeature's two-sided test — and the fishing verb behind
+      // it — can never claim the board as a spot.
+      if (v.ground[at] === "water") return false;
+      if (v.solid[at] || v.object[at] || v.overhead[at]) return false;
+      // …and it is not a plug in a one-tile gap. The board is solid, so a tile
+      // with a single walkable neighbour is a doorway, and standing a board in it
+      // would hand sealPockets a room to close.
+      let open = 0;
+      for (const [nx, ny] of [
+        [x, y - 1],
+        [x, y + 1],
+        [x - 1, y],
+        [x + 1, y],
+      ]) {
+        if (nx < 0 || ny < 0 || nx >= v.w || ny >= v.h) continue;
+        if (!v.solid[idx(v, nx, ny)]) open++;
+      }
+      return open >= 2;
+    };
+    // THE ANCHOR LADDER (§2.1), in order, and every rung is a place people are
+    // already standing rather than a corner with room in it.
+    const boardAnchors = [];
+    //  (1) THE GATHERING PLACE — work is posted where people gather. The apron
+    //      row beside its door, never the door's own step: `doorX` is where the
+    //      interior portal puts the player down (linkInterior).
+    const gatheringFacade = buildings.find((b) => b.boundPlace?.kind === "gathering");
+    if (gatheringFacade)
+      for (const dx of [-1, 1, -2, 2])
+        boardAnchors.push({ x: gatheringFacade.door.doorX + dx, y: gatheringFacade.door.doorY + 1 });
+    //  (2) THE GREEN OR THE MARKET — a sealed brief may name no gathering place
+    //      at all (§2.1's own caveat), and the next most public ground is the
+    //      ground people cross. A park's path rows, then the gap between two
+    //      market tables. A loose rank's green is a FENCED kitchen garden and is
+    //      deliberately not offered: it is private ground wearing a lot.
+    if (denseRank)
+      for (const lot of greenLots) boardAnchors.push({ x: lot.x + 2, y: lot.y + 2 }, { x: lot.x + 4, y: lot.y + 2 });
+    for (const stall of stalls) boardAnchors.push({ x: stall.x + 1, y: stall.y }, { x: stall.x + 3, y: stall.y });
+    //  (3) THE SPINE ROAD NEAR SPAWN — the floor under the ladder, and the one
+    //      rung every settlement has. Flanking the vertical artery rather than in
+    //      it (a solid board in a two-tile road is half a road), walking outward
+    //      from the row the player spawns on.
+    for (const dy of [0, 1, -1, 2, -2, 3, -3, 4, -4])
+      boardAnchors.push({ x: midX + 1, y: v.spawn.y + dy }, { x: midX - 2, y: v.spawn.y + dy });
+    let boardAt = boardAnchors.find((candidate) => boardFree(candidate.x, candidate.y)) ?? null;
+    if (!boardAt) {
+      // A SCAN, not a shrug. An unanchorable FEATURE is dropped ("a plainer
+      // settlement, never a sealed one") because the brief that named it can
+      // survive it; the board cannot be dropped, because a missing board is a
+      // world that cannot say it has no work. A settlement with no tile at all to
+      // hang one on is a settlement with nowhere to walk, and the harness sweeps
+      // every rank, theme and surround to keep that a statement rather than a
+      // hope.
+      for (let y = 2; y < v.h - 2 && !boardAt; y++) {
+        for (let x = 2; x < v.w - 2; x++) {
+          if (!boardFree(x, y)) continue;
+          boardAt = { x, y };
+          break;
+        }
+      }
+    }
+    if (boardAt) {
+      put(v, boardAt.x, boardAt.y, "object", "board", true);
+      v.features.push({
+        id: BOARD_FEATURE_ID,
+        tag: BOARD_FEATURE_TAG,
+        name: boardName(activeTheme),
+        // One tile, and the rect is exactly it. Every other rect on this register
+        // is the placer's extent plus a margin, and the consumer's own two-sided
+        // test is what excludes the tiles the feature never painted; nearBoard has
+        // no second test to lean on, so the board's rect is the board.
+        rect: { x: boardAt.x, y: boardAt.y, w: 1, h: 1 },
+      });
     }
     // Last thing done to the settlement's tiles, so it sees the trees, the
     // buildings, the stalls, the features and the greens together — a pocket is
@@ -3562,5 +3701,9 @@ PF.world = (() => {
     return null;
   }
 
-  return { build, idx };
+  // The board's reserved key and tag ride out with the builder because they are
+  // the JOIN between the compiler and its consumers: 30-sim finds the register
+  // row by this id, and the harness holds the tag to the promise that no brief
+  // vocabulary contains it.
+  return { build, idx, BOARD_FEATURE_ID, BOARD_FEATURE_TAG };
 })();

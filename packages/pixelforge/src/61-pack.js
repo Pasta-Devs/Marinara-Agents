@@ -17,6 +17,18 @@
 // it is a skip with a question mark on it. Everything that reads this module
 // reaches it at RUNTIME through `PF.pack`, so nothing needs it any earlier.
 //
+// AND THE BOARD READS FROM HERE (0.13 §2.1). The fixture 20-world stands up in
+// every settlement is this artifact's surface: `boardOffers` says what today's
+// board is showing, `accept` takes a row and `turnIn` hands one in, and
+// `rowText` is the one function that turns a quest row into words anywhere in
+// the package (the quest tab reuses it verbatim). They live beside the schema
+// rather than beside the economy's verbs because every number and identity they
+// spend — K, the reward derivation, the instance id, the daily selection, the
+// board constant — is written in this file, and a surface one module along would
+// have to reach across for all of it. The MUTATION SHAPE is 59-economy's, though:
+// describe first, re-read at the press, and put every effect through a shipped
+// mutator in an order that cannot half-pay anybody.
+//
 // THE CONTENT FENCE (plan §2.2c). The pack references cast by SEALED NAME only.
 // Its fields are dialogue strings, template rows and index keys — there are no
 // per-NPC machine fields in it, ever. The brief is the sole authority on people;
@@ -898,6 +910,13 @@ PF.pack = (() => {
         pack,
         source: sealed ? "sealed" : "default",
         demoted,
+        // WHO STANDS IN THIS WORLD, kept rather than thrown away. It is built
+        // here anyway (the giver fence above spends it once per template), it is
+        // rebuilt exactly when the world is, and the completion path needs the
+        // same answer for one name: is there anybody left to file this under and
+        // to thank. 58-player's repair pass builds its own copy on purpose — that
+        // one runs BEFORE there is a sim to hang a fold on.
+        known,
         byId,
         ids: [...byId.keys()].sort(),
         // Memo slot for the daily selection, keyed by day (see selection()).
@@ -1014,6 +1033,60 @@ PF.pack = (() => {
       return folded._offers;
     },
 
+    // ── THE SHARED ROW RENDERER (plan §2.4) ──────────────────────────────────
+    /** ONE quest row as one line of plain text, and the ONE function that turns a
+     *  row into words anywhere in the package. The board's jobs section renders
+     *  through it and the quest tab renders through it VERBATIM — §2.4's own
+     *  sentence, and the reason there is no board-shaped branch anywhere below.
+     *
+     *  THE TITLE IS A LOOKUP AND THE FALLBACK IS A SYNTHESIS. A board instance id
+     *  carries its template (`b1.d<day>.<id>`), so the pack that is folded right
+     *  now can be asked what it called the work; and when it cannot answer — a
+     *  demoted world, a row minted from a template that has since folded out, a
+     *  save carried in from somewhere else — the row's own eight fields say the
+     *  same thing mechanically: "Catch 5 carp — 3/5 — for Alder Vance". A missing
+     *  title is a plainer line, never a blank one, because the row is a live
+     *  object the player is carrying and it has to be legible without its pack.
+     *
+     *  THE MIDDLE CLAUSE IS VERB-AWARE, and the fraction is the COUNTING verb's
+     *  alone. `deliver` and `visit` are n = 1 by construction (the seal and the
+     *  read door both write it), so "0/1" would be a progress bar for a thing
+     *  that has no progress — it is either done or it is a walk you have not
+     *  taken yet, and the words say which.
+     *
+     *  `folded` is optional: a caller with no fold in its hand (a band notice, a
+     *  test) still gets the mechanical line rather than an exception. */
+    rowText(row, folded) {
+      const verb = str(row?.verb);
+      const target = str(row?.target);
+      const counting = verb === "catch";
+      const n = PF.clamp(Math.round(Number(row?.n) || 1), 1, CAPS.n);
+      const have = PF.clamp(Math.round(Number(row?.have) || 0), 0, n);
+      const template = this.templateOf(row?.id);
+      const titled = template ? capText(folded?.byId?.get(template)?.title, CAPS.title) : "";
+      // The mechanical shape, per verb: what the row IS, and what is outstanding
+      // on it. Read as a table rather than as a chain of ternaries in the join,
+      // because the fourth arm is the one that matters and a chain hides it.
+      const named = target || "something";
+      const shape = counting
+        ? { lead: `Catch ${n} ${named}`, middle: `${have}/${n}` }
+        : verb === "deliver"
+          ? { lead: `Take word to ${named}`, middle: `waiting on the handover to ${named}` }
+          : verb === "visit"
+            ? { lead: `Go to ${named}`, middle: `travel to ${named}` }
+            : // A VERB NO SITE IN THIS BUILD ADVANCES. Nothing here can mint one
+              // — the seal's enum and the read door both refuse it — but a
+              // hostile save or a forward build's row carries whatever it likes
+              // and `quest("accept")` stores the word as given. So the line says
+              // the two things it can stand behind, who and what, and claims
+              // neither progress nor a mechanic it cannot name. Falling through
+              // to the visit arm instead would print "travel to" over a row
+              // nothing will ever complete.
+              { lead: named, middle: "" };
+      const giver = PF.player.giverOf(row?.g);
+      return [titled || shape.lead, shape.middle, giver ? `for ${giver}` : ""].filter(Boolean).join(" — ");
+    },
+
     // ── defaults(): the pack a world with none reads instead ─────────────────
     /** A READ-TIME FALLBACK ONLY. It is never sealed, never stored, and never the
      *  answer to a failed generation — a failure holds the gate and offers a
@@ -1027,6 +1100,153 @@ PF.pack = (() => {
     defaults(theme) {
       const book = PF.own(DEFAULT_PACKS, theme) ?? DEFAULT_PACKS["cozy-village"];
       return JSON.parse(JSON.stringify(book));
+    },
+
+    // ── THE BOARD (plan §2.1) ────────────────────────────────────────────────
+    // The pack's own reading surface, and it lives HERE rather than beside the
+    // economy's verbs for one reason: every number and every identity it spends
+    // is in this file. K, the reward derivation, the instance id, the daily
+    // selection, the template caps and the board constant are all above, and a
+    // board written one module along would reach across for the lot of them.
+    //
+    // The SHAPE is 59-economy's, exactly: an OFFER that describes and never
+    // mutates, and VERBS that go through the shipped mutators in an order that
+    // cannot half-pay anybody. What is different is the cadence — a board is read
+    // at menu-open and at each press, never per frame, so `boardOffers` is free to
+    // walk the day's selection and the active list rather than having to be cheap
+    // enough for sixty calls a second.
+
+    /** What this board is offering and what it is holding for you. Describes
+     *  only. Returns { available, reason, board, folded, day, offers, jobs }.
+     *
+     *  `offers` is one row per template in today's selection, each carrying the
+     *  STATE the menu renders it in: `open`, `taken` (accepted today — the day's
+     *  receipt, still on the board beside the live job), `dup` (a live row for the
+     *  same template from an earlier day), `at-cap` (nothing can be taken at all).
+     *  The states are answered here so the menu never has to work anything out,
+     *  and re-answered on every press so a two-press race cannot accept twice. */
+    boardOffers(core) {
+      const sim = core?.sim;
+      const no = (reason) => ({ available: false, reason, board: null, folded: null, day: 0, offers: [], jobs: [] });
+      if (!sim?.world) return no("no-world");
+      if (sim.mode !== "walk") return no("wrong-mode");
+      // The gate's own answer, on fishOffer's cadence: a world still being
+      // written has no work in it to read and no player block to write to.
+      if (PF.save?.gateHolds?.(core)) return no("gate-held");
+      if (!sim.nearBoard) return no("not-at-board");
+      const folded = PF.save.packFold(core);
+      if (!folded) return no("no-world");
+      const player = PF.player.get(core);
+      const jobs = Array.isArray(player?.quests?.active) ? player.quests.active : [];
+      const day = Math.max(0, Math.trunc(Number(sim.day) || 0));
+      const atCap = jobs.length >= PF.player.CAPS.activeQuests;
+      const live = new Set(jobs.map((q) => str(q.id)));
+      const liveTemplates = new Set(jobs.map((q) => this.templateOf(q.id)).filter(Boolean));
+      const offers = this.selection(folded, sim.world.seed, day).map((template) => {
+        const id = this.instanceId(day, template.id);
+        // TAKEN BEFORE DUP BEFORE AT-CAP, and the order is the honest one: a row
+        // you took an hour ago should say so rather than blaming a full list, and
+        // a full list is only the reason you cannot take work you have not
+        // already got.
+        const state = live.has(id) ? "taken" : liveTemplates.has(template.id) ? "dup" : atCap ? "at-cap" : "open";
+        return { template, id, state, reward: this.rewardFor(template.verb, template.n) };
+      });
+      return { available: true, reason: null, board: sim.nearBoard, folded, day, offers, jobs };
+    },
+
+    /** Take one of today's offers. Every effect goes through a shipped mutator,
+     *  in an order that cannot leave a half-taken job:
+     *    1. RE-READ the board (the menu's copy is a press old — the player may
+     *       have walked away, filled their list, or taken this very row on the
+     *       button beside it);
+     *    2. `quest("accept")` — the row. Its `r` is copied in HERE, off TUNING's
+     *       derivation, so a later retune moves future accepts only and the deal
+     *       the player took is the deal they are paid (§2.6);
+     *    3. `log()` — the day-ledger line, event-side and at the event's day.
+     *  No bump: taking work is not yet a favour done.
+     *  Returns { ok, reason, id, title, reward }. */
+    accept(core, templateId, gen) {
+      const view = this.boardOffers(core);
+      if (!view.available) return { ok: false, reason: view.reason, id: "", title: "", reward: null };
+      const offer = view.offers.find((row) => row.template.id === str(templateId));
+      if (!offer) return { ok: false, reason: "not-offered", id: "", title: "", reward: null };
+      if (offer.state !== "open")
+        return { ok: false, reason: offer.state, id: offer.id, title: offer.template.title, reward: null };
+      const sim = core.sim;
+      const template = offer.template;
+      const taken = PF.player.quest(
+        core,
+        "accept",
+        {
+          id: offer.id,
+          // The row's `g` is `zoneId|Name` and the zone is the SETTLEMENT root —
+          // the key every rel row in the package already uses, so one person is
+          // one row wherever in the world you meet them.
+          g: `${sim.world.startZone}|${template.giver}`,
+          verb: template.verb,
+          target: this.targetString(template),
+          n: template.n,
+          r: offer.reward,
+          day: view.day,
+        },
+        gen,
+      );
+      // The fence, the gate, or a chat switch under us. The mutator is the first
+      // thing here that can refuse and nothing after it has run.
+      if (!taken) return { ok: false, reason: "refused", id: offer.id, title: template.title, reward: null };
+      PF.player.log(core, `Took work from ${template.giver}: ${template.title}.`, view.day, gen);
+      return { ok: true, reason: null, id: offer.id, title: template.title, reward: offer.reward };
+    },
+
+    /** Hand one finished job in. The press flow, in the order §2.1 sets out:
+     *    1. RE-FIND the live row by id (buyRod's offer-re-read: the menu drew this
+     *       row a press ago and the row is what pays);
+     *    2. REFUSE unless `have >= n` at THIS read. The mutator pays with no such
+     *       check by design — it trusts its caller — so this line is the check,
+     *       and it is why the lane pins the press side rather than the mutator;
+     *    3. CAPTURE the reward, the giver and the template BEFORE the splice —
+     *       `quest("complete")` removes the row, and reading `r` off it afterwards
+     *       reads off nothing;
+     *    4. `quest("complete")` — the splice, the counter and the pay;
+     *    5. `log()` at the sim's day — with the giver's name only when this world
+     *       still stands them up (the fold's `known` set), because a line naming
+     *       somebody the world cannot resolve is a line the wrap-up would read out
+     *       as fact;
+     *    6. `bump({t:1})` — the giver remembers, on the same settlement-scoped key
+     *       every other bump uses, and SKIPPED SILENTLY on the same miss. A quest
+     *       pays money and rapport and nothing else (§2.6, RULED): no verb is
+     *       passed anywhere here, and the row's `r.xp` is zero by construction.
+     *  Returns { ok, reason, money, giver, have, n }. */
+    turnIn(core, id, gen) {
+      const sim = core?.sim;
+      const fail = (reason, extra) => ({ ok: false, reason, money: 0, giver: null, have: 0, n: 0, ...extra });
+      if (!sim?.world) return fail("no-world");
+      if (sim.mode !== "walk") return fail("wrong-mode");
+      if (PF.save?.gateHolds?.(core)) return fail("gate-held");
+      if (!sim.nearBoard) return fail("not-at-board");
+      const player = PF.player.get(core);
+      const rows = Array.isArray(player?.quests?.active) ? player.quests.active : [];
+      const row = rows.find((q) => str(q.id) === str(id));
+      if (!row) return fail("unknown-id");
+      const n = Math.max(1, Math.round(Number(row.n) || 1));
+      const have = Math.max(0, Math.round(Number(row.have) || 0));
+      if (have < n) return fail("not-done", { have, n });
+      const world = sim.world;
+      const money = Math.max(0, Math.round(Number(row.r?.money) || 0));
+      const giver = PF.player.giverOf(row.g);
+      const template = this.templateOf(row.id) ?? str(row.id);
+      if (!PF.player.quest(core, "complete", { id: str(id), template }, gen)) return fail("refused", { have, n });
+      const folded = PF.save.packFold(core);
+      const stands = !!giver && !!folded?.known?.has(giver);
+      const paid = PF.economy.money(world, money);
+      PF.player.log(
+        core,
+        stands ? `Filled ${giver}'s board order — ${paid}.` : `Filled the board order — ${paid}.`,
+        sim.day,
+        gen,
+      );
+      if (stands) PF.player.bump(core, world.startZone, giver, { t: 1 }, gen);
+      return { ok: true, reason: null, money, giver: stands ? giver : null, have, n };
     },
 
     // ── generate(): the second generation call ───────────────────────────────

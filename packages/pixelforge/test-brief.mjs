@@ -13720,19 +13720,39 @@ await withSavePath(async ({ calls, behavior, makeCore }) => {
     const first = registryOf(built);
     const second = registryOf(world.build(606, "cozy-village", sealed));
     assert.deepEqual(second, first, "same seed + same brief, same registry — rows do not drift between builds");
-    const rows = Object.values(first).flat();
+    const all = Object.values(first).flat();
+    // THE REGISTER HAS TWO CLASSES OF ROW SINCE 0.13, and they are pinned apart
+    // rather than together. Everything the ORDINAL WALK minted carries a brief
+    // ordinal and a brief tag; the quest board is a COMPILER FIXTURE with a
+    // reserved id, deliberately outside both vocabularies (20-world
+    // BOARD_FEATURE_ID says why). Folding the two into one loop is how the board
+    // would come to be checked against a rule it was written to sit outside of.
+    const rows = all.filter((row) => row.id !== loadedPF.world.BOARD_FEATURE_ID);
+    const fixed = all.filter((row) => row.id === loadedPF.world.BOARD_FEATURE_ID);
     assert.ok(rows.length >= 3, `and the sweep saw real rows (${rows.length})`);
-    for (const row of rows) {
-      assert.ok(/^f\d+$/.test(row.id), `${row.name}: a compiled row carries a brief ordinal, not "${row.id}"`);
-      assert.ok(loadedPF.brief.FEATURE_TAGS.includes(row.tag), `${row.name}: tagged from the closed vocabulary`);
+    for (const row of all) {
       assert.ok(
         Number.isInteger(row.rect.x) && Number.isInteger(row.rect.y) && row.rect.w > 0 && row.rect.h > 0,
         `${row.name}: a real rect`,
       );
     }
+    for (const row of rows) {
+      assert.ok(/^f\d+$/.test(row.id), `${row.name}: a compiled row carries a brief ordinal, not "${row.id}"`);
+      assert.ok(loadedPF.brief.FEATURE_TAGS.includes(row.tag), `${row.name}: tagged from the closed vocabulary`);
+    }
     // …and the ids the compiler wrote are the ids the SEAL minted, not a
     // parallel numbering that happens to agree today.
     for (const row of rows) assert.equal(sealed._ids.features[row.id], row.name, `${row.id} is the sealed ordinal`);
+    // THE FIXTURE, held to its own rule: exactly one, in the settlement and
+    // nowhere else, spending no ordinal and wearing no brief tag.
+    assert.equal(fixed.length, 1, "the settlement gets exactly one board and no other zone gets any");
+    assert.deepEqual(first.z1.filter((row) => row.id === loadedPF.world.BOARD_FEATURE_ID), fixed, "…and it is z1's");
+    assert.equal(fixed[0].tag, loadedPF.world.BOARD_FEATURE_TAG, "…tagged as the fixture it is");
+    assert.ok(
+      !loadedPF.brief.FEATURE_TAGS.includes(fixed[0].tag),
+      "…and that tag is NOT in the brief's vocabulary, so no brief can ever author a board",
+    );
+    assert.equal(sealed._ids.features[fixed[0].id], undefined, "…and it spent no ordinal");
   }
 
   // ── AN UNPLACEABLE FEATURE STILL SPENDS ITS ORDINAL ─────────────────────────
@@ -13762,8 +13782,13 @@ await withSavePath(async ({ calls, behavior, makeCore }) => {
     const wildsId = `z${sealed.places.findIndex((place) => place.kind === "wilds") + 2}`;
     assert.deepEqual(
       w.zones.z1.features.map((row) => `${row.id}:${row.name}`),
-      ["f1:The Stone"],
-      "the outpost placed the stone and dropped the rows",
+      // The board rides at the END of the settlement's register, after the
+      // ordinal walk that never knew about it — RE-PINNED at 0.13 rather than
+      // filtered, because the position is the statement: the fixture is pushed
+      // outside the walk, so it cannot displace an ordinal even here, where the
+      // walk itself lost a feature.
+      ["f1:The Stone", "board:settlement:The Notice Board"],
+      "the outpost placed the stone, dropped the rows, and stood its board up regardless",
     );
     assert.deepEqual(
       w.zones[wildsId].features.map((row) => `${row.id}:${row.name}`),
@@ -13810,15 +13835,25 @@ await withSavePath(async ({ calls, behavior, makeCore }) => {
     }
   }
 
-  // ── THE LEGACY WORLD'S TWO RESERVED ROWS ────────────────────────────────────
+  // ── THE LEGACY WORLD'S RESERVED ROWS ────────────────────────────────────────
   // buildLegacy has no brief to mint ids from, so its water carries fixed
   // reserved ids at the literals — and TAGS, because the consumer resolves its
   // table by (theme, tag) and a legacy spot has to resolve like any other.
+  //
+  // THREE ROWS SINCE 0.13, not two: the quest board is the third reserved id and
+  // the first that is not water. RE-PINNED with the water rows counted apart, so
+  // the sentence this case has always made — the layout reserves exactly two
+  // WATER features — survives the arrival of a dry one.
   for (const theme of ["cozy-village", "sci-fi-colony"]) {
     const w = world.build(77, theme, null);
     const rows = Object.values(w.zones).flatMap((zone) => zone.features);
-    assert.equal(rows.length, 2, `${theme}: the legacy layout reserves exactly two water features`);
-    const pond = w.zones.village.features;
+    assert.equal(rows.length, 3, `${theme}: the legacy layout reserves exactly three rows`);
+    assert.equal(
+      rows.filter((row) => row.tag === "water-feature" || row.tag === "water-crossing").length,
+      2,
+      `${theme}: exactly two of them are water`,
+    );
+    const pond = w.zones.village.features.filter((row) => row.id !== loadedPF.world.BOARD_FEATURE_ID);
     const stream = w.zones.forest.features;
     assert.equal(pond.length, 1, `${theme}: the village keeps its pond`);
     assert.equal(stream.length, 1, `${theme}: the wood keeps its stream`);
@@ -13882,6 +13917,194 @@ await withSavePath(async ({ calls, behavior, makeCore }) => {
     sim.teleport("forest", 22, 10); // beside the stream proper, north of the ford
     sim.step(0, {});
     assert.equal(sim.nearFeature?.id, "legacy:stream", "…while the bank two tiles north of it is");
+  }
+
+  // ── THE QUEST BOARD IS A FIXTURE, NOT A FEATURE (0.13 §2.1) ─────────────────
+  // Every settlement gets one, in the compiled path and the legacy layout alike,
+  // and it gets one WHETHER OR NOT there is any work to post: the board is the
+  // surface a packless world says "no work posted here" on, and the surface a
+  // later opt-in would live on, so a board that appeared only where work already
+  // existed would be a door that opens once you are through it.
+  //
+  // THE SWEEP IS THE ASSERTION. A single-world case would pin the tile this
+  // build happens to choose; what is worth pinning is that EVERY rank, theme,
+  // surround and prosperity places one, on ground the player can reach, with no
+  // water under it — the last of which is the named guarantee that keeps the
+  // fishing verb off the board (nearFeature's two-sided test needs water, and
+  // the board rect has none, so the two reads can never both fire on one tile).
+  {
+    const BOARD = loadedPF.world.BOARD_FEATURE_ID;
+    const boardCast = [
+      { name: "Ivy", role: "warden", kind: "leader", tint: "blue", home: "Boardton", household: 1 },
+      { name: "Bett", role: "innkeep", kind: "host", tint: "amber", home: "Boardton", household: 2 },
+      { name: "Cass", role: "smith", kind: "maker", tint: "teal", home: "Boardton", household: 3 },
+      { name: "Dov", role: "farmer", kind: "grower", tint: "green", home: "Boardton", household: 4 },
+    ];
+    /** Can the player actually walk up to (x, y)? Flood-fills from the spawn over
+     *  the FINISHED zone — sealPockets has already run — so a neighbour that is
+     *  still walkable here is a neighbour reachable from where the player starts.
+     *  A board nobody can stand next to is a button nobody can ever press. */
+    const canReach = (z, x, y) => {
+      const at = (cx, cy) => cy * z.w + cx;
+      const seen = new Set([at(z.spawn.x, z.spawn.y)]);
+      const queue = [[z.spawn.x, z.spawn.y]];
+      while (queue.length) {
+        const [cx, cy] = queue.pop();
+        for (const [dx, dy] of [
+          [1, 0],
+          [-1, 0],
+          [0, 1],
+          [0, -1],
+        ]) {
+          const nx = cx + dx;
+          const ny = cy + dy;
+          if (nx < 0 || ny < 0 || nx >= z.w || ny >= z.h || seen.has(at(nx, ny)) || z.solid[at(nx, ny)]) continue;
+          seen.add(at(nx, ny));
+          queue.push([nx, ny]);
+        }
+      }
+      return [
+        [x, y - 1],
+        [x, y + 1],
+        [x - 1, y],
+        [x + 1, y],
+      ].some(([nx, ny]) => nx >= 0 && ny >= 0 && nx < z.w && ny < z.h && seen.has(at(nx, ny)));
+    };
+
+    let swept = 0;
+    for (const theme of ["cozy-village", "sci-fi-colony"]) {
+      for (const scale of ["outpost", "hamlet", "village", "town", "city"]) {
+        for (const prosperity of ["struggling", "thriving"]) {
+          for (const surround of ["woods", "water", "barren"]) {
+            // Two shapes, and the difference is the ANCHOR LADDER's first rung.
+            // With a host in the cast the seal always ends up with a gathering
+            // place; with no host and the interior kinds spoken for there is none
+            // at all, which is the "a sealed brief can have zero gathering
+            // places" caveat the ladder exists for.
+            for (const hostless of [false, true]) {
+              const sealed = brief.validate(
+                {
+                  scale,
+                  prosperity,
+                  surround,
+                  name: "Boardton",
+                  features: [
+                    { tag: "water-feature", name: "The Pool" },
+                    { tag: "crop-plots", name: "The Rows" },
+                  ],
+                  places: hostless
+                    ? [
+                        { kind: "hall", name: "The Hall" },
+                        { kind: "sanctuary", name: "The Chapel" },
+                      ]
+                    : [{ kind: "gathering", name: "The Inn" }],
+                  cast: hostless ? boardCast.filter((m) => m.kind !== "host") : boardCast,
+                },
+                { theme, seed: 31 },
+              );
+              const w = world.build(31, theme, sealed);
+              const rows = Object.entries(w.zones).flatMap(([zoneId, zone]) =>
+                zone.features.filter((row) => row.id === BOARD).map((row) => ({ zoneId, row })),
+              );
+              const where = `${theme}/${scale}/${prosperity}/${surround}/${hostless ? "no-host" : "host"}`;
+              assert.equal(rows.length, 1, `${where}: exactly one board, unconditionally`);
+              assert.equal(rows[0].zoneId, "z1", `${where}: and it stands in the settlement`);
+              const z = w.zones.z1;
+              const { rect } = rows[0].row;
+              const at = rect.y * z.w + rect.x;
+              assert.equal(z.object[at], "board", `${where}: the register row and the tile are the same tile`);
+              assert.ok(z.solid[at], `${where}: …and it is solid, so the player stands in FRONT of it`);
+              // THE NAMED GUARANTEE (plan §0): no water in a board rect.
+              for (let y = rect.y; y < rect.y + rect.h; y++)
+                for (let x = rect.x; x < rect.x + rect.w; x++)
+                  assert.notEqual(z.ground[y * z.w + x], "water", `${where}: no water tile in a board rect`);
+              assert.ok(canReach(z, rect.x, rect.y), `${where}: and the player can walk up to it`);
+              swept++;
+            }
+          }
+        }
+      }
+    }
+    assert.equal(swept, 120, `the sweep actually ran (${swept} worlds)`);
+
+    // DETERMINISTIC PER (seed, theme, brief), which is what makes the fixture a
+    // fixture: worlds are rebuilt on every load, and a board that moved between
+    // two builds would be a button that was there yesterday and is not today.
+    const sealed = brief.validate(
+      { scale: "village", name: "Boardton", places: [{ kind: "gathering", name: "The Inn" }], cast: boardCast },
+      { theme: "cozy-village", seed: 88 },
+    );
+    const boardOf = (w) => w.zones.z1.features.find((row) => row.id === BOARD);
+    assert.deepEqual(
+      boardOf(world.build(88, "cozy-village", sealed)),
+      boardOf(world.build(88, "cozy-village", sealed)),
+      "same seed + same brief, same board",
+    );
+    // THE FIRST RUNG OF THE LADDER, pinned where it can be: with a gathering
+    // place that claimed a facade, the board stands on that facade's apron —
+    // beside the door and never ON the step, which is where the interior portal
+    // puts the player down.
+    {
+      const w = world.build(88, "cozy-village", sealed);
+      const row = boardOf(w);
+      const door = w.zones.z1.portals.find((p) => p.label === "Enter The Inn");
+      assert.ok(door, "the gathering place claimed a facade");
+      assert.equal(row.rect.y, door.y + 1, "the board is on the door's apron row");
+      assert.equal(Math.abs(row.rect.x - door.x), 1, "…one step to the side of it");
+      assert.notEqual(row.rect.x, door.x, "…and never on the step the portal delivers to");
+    }
+    // Themed by the word book, exactly as the legacy pond is: a colony posts to a
+    // terminal, not to a notice board. Read off the legacy layout because that is
+    // the one world both themes build from the same input, so the NAME is the
+    // only thing that can have moved.
+    const named = (theme) =>
+      world.build(88, theme, null).zones.village.features.find((row) => row.id === BOARD).name;
+    assert.ok(named("cozy-village"), "the board is named in the fantasy theme");
+    assert.notEqual(named("cozy-village"), named("sci-fi-colony"), "…and the colony does not call it the same thing");
+    assert.notEqual(named("sci-fi-colony"), "notice-board", "…a name, not the tag");
+  }
+
+  // ── nearBoard: THE FOURTH PROXIMITY READ (0.13 §2.1) ────────────────────────
+  // The rect alone, with no water term — which is safe here for the reason it is
+  // NOT safe for nearFeature: a board rect is a single tile and IS the fixture,
+  // while a feature rect is a placer's extent with margin around it.
+  {
+    const w = world.build(7, "cozy-village", null);
+    const board = w.zones.village.features.find((row) => row.id === loadedPF.world.BOARD_FEATURE_ID);
+    assert.ok(board, "the legacy layout hangs a board beside the inn door");
+    const sim = new loadedPF.Sim(w);
+    const stand = (x, y) => {
+      sim.teleport("village", x, y);
+      sim.step(0, {});
+      return sim.nearBoard;
+    };
+    assert.equal(stand(board.rect.x, board.rect.y + 1)?.id, board.id, "standing under it finds it");
+    assert.equal(stand(board.rect.x - 1, board.rect.y)?.id, board.id, "…and so does standing beside it");
+    assert.equal(stand(board.rect.x + 1, board.rect.y + 1), null, "…but not corner-on: four neighbours, not eight");
+    assert.equal(stand(21, 17), null, "and the spawn, across the square, is nowhere near it");
+
+    // THE TWO READS ARE DISJOINT AT THE BOARD, which is the whole point of the
+    // no-water rule: the board is dry, so nothing about standing at it can look
+    // like standing at a bank.
+    stand(board.rect.x, board.rect.y + 1);
+    assert.ok(sim.nearBoard, "standing at the board");
+    assert.equal(sim.nearFeature, null, "…is not standing at any water");
+
+    // …AND AT THE BANK IT IS THE OTHER WAY ROUND.
+    stand(32, 23);
+    assert.equal(sim.nearFeature?.id, "legacy:pond", "standing at the pond");
+    assert.equal(sim.nearBoard, null, "…is not standing at the board");
+
+    // WALK-ONLY, like the three reads beside it: the whole block is inside
+    // `mode === "walk"`, so a conversation cannot move it under the player.
+    stand(board.rect.x, board.rect.y + 1);
+    sim.mode = "dialogue";
+    sim.teleport("village", 21, 17);
+    sim.step(0, {});
+    assert.equal(sim.nearBoard?.id, board.id, "a conversation does not recompute it");
+    sim.mode = "walk";
+    sim.step(0, {});
+    assert.equal(sim.nearBoard, null, "…and walking again does");
   }
 
   // ── THE ROAD MAY CROSS THE WATER NOW (0.12 slice 3b, the bridge ruling) ─────
@@ -16617,7 +16840,13 @@ await withSavePath(async ({ calls, behavior, makeCore }) => {
     const hostile = built(planted((stored) => (stored.features[0].tag = "valueOf")));
     assert.equal(hostile.w.brieved, true, "an unknown feature tag still compiles the brief's world");
     assert.deepEqual(hostile.w.briefFolds, ['features[0].tag: "valueOf" -> null'], "and the fold is on the record");
-    const rows = Object.values(hostile.w.zones).flatMap((zone) => zone.features ?? []);
+    // The BRIEF's rows: the 0.13 board is a compiler fixture with a reserved id
+    // and a tag outside the brief's vocabulary by design, and no brief — hostile
+    // or otherwise — can put a row there. Excluded by ID rather than by tag, so
+    // a hostile tag that spelled the fixture's own word could not slip through.
+    const rows = Object.values(hostile.w.zones)
+      .flatMap((zone) => zone.features ?? [])
+      .filter((row) => row.id !== loadedPF.world.BOARD_FEATURE_ID);
     // Against the VOCABULARY, not against `typeof`: a prototype key is a perfectly
     // good string, so a type test here would pass just as happily on the unfolded
     // row and pin nothing at all.
@@ -17082,10 +17311,17 @@ const fire = (node, type) => Promise.all((node.listeners[type] ?? []).map((fn) =
 // §2.3's honest recount. The old "these are mutually rare" premise is STRUCK:
 // Talk is up for the whole of walk mode, keepers wander with no zone
 // restriction, and an inn beside a pond puts Talk, Wait, Keyboard, Travel, Fish,
-// Berth and Buy-Rod on screen at once by construction. Seven for slice 3; slice
-// 4 adds Sleep and the worst case is EIGHT, which is exactly why this is pinned:
-// adding a button means recounting here, deliberately, and the recount is what
-// the last change to this stack actually failed on.
+// Berth and Buy-Rod on screen at once by construction. Seven for 0.12 slice 3;
+// slice 4 added Sleep for eight, and 0.13's Board makes it NINE — which is
+// exactly why this is pinned: adding a button means recounting here,
+// deliberately, and the recount is what the last change to this stack actually
+// failed on. It failed on this line again when the Board arrived, which is the
+// case doing its job rather than the case being in the way.
+//
+// THERE IS NO BUTTON BUDGET (plan §2.1, recorded): nine is a COUNT and not a
+// ceiling, and how dense nine reads in the thumb zone is a playtest observation
+// the maintainer still owns. What this case guarantees is that the number is
+// known and deliberate.
 //
 // A DISPLAY-STATE pin over the real Hud on the shim, and not a layout one. The
 // shim has no layout engine and this case makes no claim about pixels.
@@ -17123,6 +17359,7 @@ const fire = (node, type) => Promise.all((node.listeners[type] ?? []).map((fn) =
       Travel: hud.travelBtn,
       Fish: hud.fishBtn,
       Sleep: hud.sleepBtn,
+      Board: hud.boardBtn,
       Wait: hud.waitBtn,
       Keyboard: hud.keyboardBtn,
       Resume: hud.resumeBtn,
@@ -17142,7 +17379,7 @@ const fire = (node, type) => Promise.all((node.listeners[type] ?? []).map((fn) =
     // BEFORE THE FIRST UPDATE, which is a claim only this line makes: a
     // display-gated button that ships visible is on screen for every frame
     // before update() runs, and for the whole of a mount that never reaches one.
-    for (const name of ["Berth", "Buy-Rod", "Fish", "Sleep"])
+    for (const name of ["Berth", "Buy-Rod", "Fish", "Sleep", "Board"])
       assert.equal(stack[name].style.display, "none", `${name} boots HIDDEN, before anything has decided`);
 
     const census = () => {
@@ -17198,17 +17435,40 @@ const fire = (node, type) => Promise.all((node.listeners[type] ?? []).map((fn) =
     assert.equal(hud.fishBtn.style.opacity, "0.45", "…and Fish is offered dimmed to a rodless player, not hidden");
     assert.ok(hud.fishBtn.textContent.includes(w.zones.village.features[0].name), "…naming the water it is about");
 
-    // (7) THE WORST CASE, WHICH IS EIGHT. The bed is the eighth, and it takes a
-    // berth held in the zone the player is standing in — staged here rather than
-    // walked to, because what the census is about is what the STACK does when all
-    // eight co-occur, not which brief produces a bedroom with a pond at the door.
+    // (7) EIGHT. The bed is the eighth, and it takes a berth held in the zone the
+    // player is standing in — staged here rather than walked to, because what the
+    // census is about is what the STACK does when all of them co-occur, not which
+    // brief produces a bedroom with a pond at the door.
     P.setHome(core, "village");
     assert.deepEqual(
       census(),
       ["Berth", "Buy-Rod", "Fish", "Keyboard", "Sleep", "Talk", "Travel", "Wait"],
-      "the full slice-4 stack is EIGHT — recount this when slice 5 adds anything",
+      "eight at the bank with a bed and a keeper — and no Board, because nobody is standing at one",
     );
     assert.equal(hud.sleepBtn.style.opacity, "1", "…and the bed is offered, not dimmed");
+
+    // (7b) THE WORST CASE, WHICH IS NINE. The board is the ninth, staged on the
+    // keeper's own idiom two steps up — `nearBoard` is a proximity read like
+    // `nearNpc`, and what this case asks is what the COLUMN does when every gate
+    // in it is open at once, not whether one legacy tile happens to sit within
+    // reach of the pond bank. (The walk-up path — step there, the button
+    // appears; step away, it goes — is pinned in the board's own case further
+    // down, off real geometry.)
+    const boardRow = w.zones.village.features.find((row) => row.id === loadedPF.world.BOARD_FEATURE_ID);
+    assert.ok(boardRow, "the legacy layout stands a board up");
+    sim.nearBoard = boardRow;
+    assert.deepEqual(
+      census(),
+      ["Berth", "Board", "Buy-Rod", "Fish", "Keyboard", "Sleep", "Talk", "Travel", "Wait"],
+      "the full 0.13 stack is NINE — recount this when anything else is added",
+    );
+    assert.equal(hud.boardBtn.textContent, `📋 ${boardRow.name}`, "…and the board names itself in this theme's words");
+    assert.ok(
+      !hud.boardBtn.style.opacity,
+      "…and nothing ever dims it — reading a board costs nothing, so there is no refusal that belongs to standing at one",
+    );
+    sim.nearBoard = null;
+    assert.ok(!census().includes("Board"), "and stepping away from it takes the button");
     // …AND IT IS THE BED THAT SHOWS IT, not the room: step out of the zone the
     // berth is in and the button goes with it.
     sim.teleport("inn", 3, 3);
@@ -17306,6 +17566,637 @@ const fire = (node, type) => Promise.all((node.listeners[type] ?? []).map((fn) =
     globalThis.setTimeout = realSetTimeout;
     globalThis.clearTimeout = realClearTimeout;
     loadedPF.save.gate = null;
+    loadedPF.save.reset();
+    loadedPF.spatial.reset();
+  }
+}
+
+// ═══ THE BOARD MENU (0.13 slice 3) ══════════════════════════════════════════
+// The two-section list, over the real Hud on the DOM shim. Everything about WHAT
+// is offered is 61-pack's and pinned above; what this case is about is the
+// surface: which sections render, in what order, what a press does to both of
+// them, and what a board with nothing on it says.
+{
+  const P = loadedPF.player;
+  const pack = loadedPF.pack;
+  const realSetTimeout = globalThis.setTimeout;
+  const realClearTimeout = globalThis.clearTimeout;
+  globalThis.setTimeout = () => 0;
+  globalThis.clearTimeout = () => {};
+  loadedPF.save.reset();
+  loadedPF.spatial.reset();
+  try {
+    const w = world.build(7, "cozy-village", null);
+    const sim = new loadedPF.Sim(w);
+    // A HOST THAT COUNTS WHAT IT IS ASKED TO SEND. Reading a board, taking work
+    // and handing it in are all offline by design (ROADMAP Ruling 1's whole
+    // point: a way to play without spending calls), and a surface that quietly
+    // started sending would be the one regression nobody would see in a diff.
+    let sent = 0;
+    const core = {
+      chatId: "chat-board",
+      sim,
+      host: {
+        chatMeta: {},
+        sendMessage() {
+          sent++;
+          return Promise.resolve();
+        },
+      },
+      interact() {},
+      setMode() {},
+      resume() {},
+      markDirty() {},
+    };
+    core.hud = new loadedPF.Hud(new FakeNode("div"), core);
+    const hud = core.hud;
+    const board = w.zones.village.features.find((row) => row.id === loadedPF.world.BOARD_FEATURE_ID);
+    const standAtBoard = () => {
+      sim.teleport("village", board.rect.x, board.rect.y + 1);
+      sim.step(0, {});
+      assert.equal(sim.nearBoard?.id, board.id, "the fixture is standing at the board");
+    };
+    const labels = () => hud.boardMenu.children.map((node) => String(node.textContent));
+    const rowNamed = (text) => hud.boardMenu.children.find((node) => String(node.textContent).includes(text));
+    const openBoard = () => {
+      hud.closeBoard();
+      hud.toggleBoard();
+    };
+
+    // ── THE LIST, AND WHERE IT LIVES ─────────────────────────────────────────
+    standAtBoard();
+    hud.update();
+    assert.equal(hud.boardBtn.style.display, "", "the button is up at the board");
+    assert.ok(hud.actions.children.includes(hud.boardMenu), "and the list is a child of the action stack");
+    // THE FISHING MENU'S OWN SHAPE, not a second one: a board can carry four
+    // offers and ten jobs, so the list has to be allowed to run out of room and
+    // scroll inside itself rather than push the thumb zone off the screen.
+    for (const rule of ["max-height:40vh", "overflow:auto"])
+      assert.ok(hud.boardMenu.style.cssText.includes(rule), `the list carries ${rule}, exactly as the fish menu does`);
+    assert.ok(hud.fishMenu.style.cssText.includes("max-height:40vh"), "…which is the idiom it is copying");
+    assert.ok(
+      hud.boardMenu.children.length === 0 && hud.boardMenu.style.display === "none",
+      "…closed and empty until it is opened",
+    );
+    hud.toggleBoard();
+    assert.equal(hud.boardMenu.style.display, "flex", "pressing it opens the list");
+    // A LEGACY WORLD READS THE DEFAULT PACK, whose four givers are exactly the
+    // four people this layout stands up — so the board here is full.
+    const first = pack.boardOffers(core);
+    assert.equal(first.available, true, "and the board answers");
+    assert.equal(first.offers.length, pack.TUNING.K, `K offers, and K is ${pack.TUNING.K}`);
+    assert.equal(labels()[0], "Today's work", "the offers section leads when nothing is finished");
+    assert.ok(
+      !labels().includes("Your jobs here"),
+      "…and there is no jobs section at all before anything is taken: an empty heading is furniture",
+    );
+    for (const offer of first.offers)
+      assert.ok(
+        rowNamed(offer.template.title),
+        `every offer is on the list under its pack title (${offer.template.title})`,
+      );
+    // …AND EVERY OFFER QUOTES WHAT IT PAYS, out of TUNING's derivation and not
+    // out of the pack (the schema has no money in it at all).
+    const money = (n) => loadedPF.economy.money(w, n);
+    for (const offer of first.offers)
+      assert.ok(
+        String(rowNamed(offer.template.title).textContent).includes(money(offer.reward.money)),
+        `${offer.template.title}: the price is on the row`,
+      );
+
+    // ── ACCEPT: ONE PRESS, BOTH SECTIONS ─────────────────────────────────────
+    const taken = first.offers[0].template;
+    assert.equal(first.offers[0].state, "open", "the row about to be pressed is open");
+    await fire(rowNamed(taken.title), "click");
+    const active = () => P.get(core).quests.active;
+    assert.equal(active().length, 1, "the press took the job");
+    const row = active()[0];
+    assert.equal(row.id, pack.instanceId(sim.day, taken.id), "…under the deterministic instance id");
+    assert.equal(row.g, `${w.startZone}|${taken.giver}`, "…keyed to the giver at the settlement root");
+    // THE REWARD IS COPIED IN AT ACCEPT (§2.6): an accepted deal is honored
+    // across a retune, so the row carries the number rather than pointing at it.
+    assert.deepEqual(row.r, pack.rewardFor(taken.verb, taken.n), "…carrying the reward TUNING derived");
+    assert.equal(row.r.xp, 0, "…and NO skill experience, which is structural and not a zero somebody typed");
+    // BOTH SECTIONS REDRAW, and the row it came from is deliberately still on the
+    // board: the dimmed offer is the day's receipt, the job is the live object.
+    assert.ok(labels().includes("Your jobs here"), "the jobs section appeared without reopening the menu");
+    const receipt = rowNamed(`${taken.title} — taken`);
+    assert.ok(receipt, "…and the offer it came from is still posted, saying it was taken");
+    assert.equal(receipt.style.opacity, "0.45", "…dimmed rather than removed");
+    assert.ok(
+      rowNamed(pack.rowText(row, first.folded)),
+      "…while the jobs section carries the live row through the shared renderer",
+    );
+    // OFFERS STILL LEAD: nothing is finished yet.
+    assert.equal(labels()[0], "Today's work", "with nothing finished the day's work is still what you walked up for");
+    // …and the accept wrote its own ledger line, event-side and at the event's day.
+    const lines = () => P.get(core).ledger.lines.map(([, text]) => text);
+    assert.ok(
+      lines().some((text) => text.includes(taken.giver) && text.includes(taken.title)),
+      `the accept filed a line naming the giver and the work (${lines().join(" | ")})`,
+    );
+
+    // ── A SECOND PRESS ON THE SAME ROW REFUSES, and says which refusal it is ──
+    await fire(rowNamed(`${taken.title} — taken`), "click");
+    assert.equal(active().length, 1, "pressing the receipt does not take it twice");
+    assert.equal(
+      hud.toastEl.textContent,
+      "You took that one today — it is in your jobs below.",
+      "…and the toast says so rather than falling through to a generic line",
+    );
+
+    // ── TURN-IN: THE PRESS-SIDE CHECK IS THE ONLY ONE THERE IS ───────────────
+    // quest("complete") pays with NO have >= n test — it trusts its caller by
+    // design — so the caller IS the check, and this is the assertion that says so.
+    assert.equal(pack.turnIn(core, row.id).reason, "not-done", "an unfinished job refuses at the press");
+    assert.equal(active().length, 1, "…and is still on the list");
+    assert.ok(
+      !hud.boardMenu.children.some(
+        (node) => node.tagName === "BUTTON" && String(node.textContent).includes("hand it in"),
+      ),
+      "…and an unfinished row is not even a press target: it is a line, not a control",
+    );
+    // Finished through the SHIPPED mutator rather than by writing the field: the
+    // verb-site hooks are slice 4's, and this case is about the board.
+    P.quest(core, "progress", { id: row.id, by: row.n });
+    // A WEEK LATER. A multi-day job hands in at the board on ANY later day — the
+    // no-re-offer rule governs the OFFERS section and nothing else — and the line
+    // it writes is filed at the day it happened on, not at the day it was taken.
+    const tookOn = row.day;
+    sim.day = tookOn + 6;
+    openBoard();
+    assert.equal(labels()[0], "Your jobs here", "a finished job puts the jobs section above the fold");
+    const handIn = rowNamed("hand it in");
+    assert.ok(handIn && handIn.tagName === "BUTTON", "…and the finished row is the press target");
+
+    const before = {
+      money: P.get(core).pouch.money,
+      skills: JSON.stringify(P.get(core).skills),
+      rel: P.get(core).rel[w.startZone]?.[taken.giver]?.t ?? 0,
+    };
+    await fire(handIn, "click");
+    const after = P.get(core);
+    assert.equal(active().length, 0, "the job is handed in and gone");
+    assert.equal(after.pouch.money, before.money + row.r.money, "…the purse is paid exactly what the row carried");
+    assert.equal(
+      after.quests_done_board[taken.id],
+      1,
+      "…the completion counter is keyed by TEMPLATE, in the world-free board map",
+    );
+    assert.equal(after.rel[w.startZone]?.[taken.giver]?.t ?? 0, before.rel + 1, "…and the giver remembers it");
+    assert.ok(
+      lines().some((text) => text.includes(taken.giver) && text.includes(money(row.r.money))),
+      `the completion line names the giver and the money (${lines().join(" | ")})`,
+    );
+    const filed = P.get(core).ledger.lines.at(-1);
+    assert.equal(filed[0], tookOn + 6, "…and it is filed at the day it HAPPENED, six days after the job was taken");
+    assert.equal(
+      P.get(core).ledger.lines.find(([, text]) => text.includes(taken.title))[0],
+      tookOn,
+      "…while the accept's own line stayed at the day the work was taken on",
+    );
+    // ── THE REWARD RULING, PINNED WHERE IT CAN ACTUALLY BREAK ────────────────
+    // A quest's TASK may raise a skill — catching fish levels fishing, through
+    // fish()'s own award — but the REWARD never does. So a full accept → satisfy
+    // → hand-in cycle must move the skills block by exactly nothing, and must not
+    // MINT a ladder either: award() keys a new ladder off the verb it is handed,
+    // and this path hands it none.
+    assert.equal(JSON.stringify(after.skills), before.skills, "a completed quest moved no skill experience at all");
+    assert.deepEqual(
+      Object.keys(after.skills.verbs),
+      [],
+      `…and minted no ladder at all, for the quest's verb (${taken.verb}) or for anything else`,
+    );
+
+    // ── THE DUPLICATE, WHICH IS A DIFFERENT REFUSAL FROM THE RECEIPT ─────────
+    // A row taken on an earlier day is still live; the board offering that
+    // template again is not a second job, it is the same one.
+    const openNow = pack.boardOffers(core).offers.find((offer) => offer.state === "open");
+    assert.ok(openNow, "today's board has something open on it");
+    const dupOffer = openNow.template;
+    openBoard();
+    await fire(rowNamed(dupOffer.title), "click");
+    assert.equal(active().length, 1, "a second job is taken");
+    let dupDay = 0;
+    for (let day = sim.day + 1; day <= sim.day + 40 && !dupDay; day++)
+      if (pack.selection(pack.fold(null, { brief: null, world: w }), w.seed, day).some((t) => t.id === dupOffer.id))
+        dupDay = day;
+    assert.ok(dupDay, "the board posts that template again on some later day");
+    sim.day = dupDay;
+    openBoard();
+    const reposted = rowNamed(dupOffer.title);
+    assert.ok(reposted, "…and it is on the list");
+    assert.equal(reposted.style.opacity, "0.45", "…dimmed, because the job it would mint is already yours");
+    await fire(reposted, "click");
+    assert.equal(active().length, 1, "pressing it takes nothing");
+    assert.equal(hud.toastEl.textContent, "You are already on that one.", "…and says which refusal it is");
+
+    // ── WHAT THIS BOARD CAN PUT ON THE LIST BY ITSELF ────────────────────────
+    // Eight, and no more — worth saying out loud rather than discovering as a
+    // hang: the default pack holds eight templates and only one live instance of
+    // each may stand, so a world reading the fallback can never fill a ten-job
+    // list off its own board. The bound below is read off a SEPARATE variable and
+    // not off `sim.day`, because the loop moves the clock under it.
+    const capFrom = sim.day;
+    for (let day = capFrom; P.get(core).quests.active.length < P.CAPS.activeQuests && day < capFrom + 60; day++) {
+      sim.day = day;
+      for (const offer of pack.boardOffers(core).offers)
+        if (offer.state === "open") pack.accept(core, offer.template.id);
+    }
+    assert.equal(active().length, 8, "the default pack's eight templates are eight jobs, and there are no more");
+    assert.ok(
+      pack.boardOffers(core).offers.every((offer) => offer.state === "taken" || offer.state === "dup"),
+      "…so every row on the board is one you are already carrying",
+    );
+
+    // ── WALKING AWAY, AND ESCAPE ─────────────────────────────────────────────
+    assert.equal(hud.boardMenu.style.display, "flex", "the list is open");
+    assert.equal(hud.closePanels(), true, "Escape closes it and says something was open");
+    assert.equal(hud.boardMenu.style.display, "none", "…and it is closed");
+    openBoard();
+    sim.teleport("village", 21, 17);
+    sim.step(0, {});
+    hud.update();
+    assert.equal(sim.nearBoard, null, "stepping into the square leaves the board behind");
+    assert.equal(hud.boardBtn.style.display, "none", "…the button goes with it");
+    assert.equal(hud.boardMenu.style.display, "none", "…and takes the open list with it");
+    // AND THE LIST REFUSES TO OPEN AWAY FROM THE BOARD, which is the frame-old
+    // press: the button was up when the finger came down and the player has
+    // walked off since.
+    hud.toggleBoard();
+    assert.equal(hud.boardMenu.style.display, "none", "a press away from the board opens nothing");
+
+    // …AND NOT ONE OF THOSE PRESSES ASKED THE HOST TO SEND ANYTHING. Opening the
+    // list, taking work, being refused three different ways and handing a job in
+    // are the whole of what this case did.
+    assert.equal(sent, 0, "the board never spent a turn");
+  } finally {
+    globalThis.setTimeout = realSetTimeout;
+    globalThis.clearTimeout = realClearTimeout;
+    loadedPF.save.gate = null;
+    loadedPF.save.reset();
+    loadedPF.spatial.reset();
+  }
+}
+
+// ── AT THE CAP, THE BOARD SAYS WHAT TO DO ABOUT IT ──────────────────────────
+// Ten active jobs is the mutator's refusal; the board's job is to say so BEFORE
+// the press and to name the way out. Staged on a player whose list is full of
+// work from somewhere else, deliberately: at-cap is the state of an offer you
+// have NOT got, so a list filled off this board itself would read `taken` and
+// `dup` on every row and never reach this state at all (the case above pins
+// exactly that).
+{
+  const P = loadedPF.player;
+  const pack = loadedPF.pack;
+  const realSetTimeout = globalThis.setTimeout;
+  const realClearTimeout = globalThis.clearTimeout;
+  globalThis.setTimeout = () => 0;
+  globalThis.clearTimeout = () => {};
+  loadedPF.save.reset();
+  loadedPF.spatial.reset();
+  try {
+    const w = world.build(7, "cozy-village", null);
+    const sim = new loadedPF.Sim(w);
+    const core = {
+      chatId: "chat-board-cap",
+      sim,
+      host: { chatMeta: {} },
+      interact() {},
+      setMode() {},
+      resume() {},
+      markDirty() {},
+    };
+    core.hud = new loadedPF.Hud(new FakeNode("div"), core);
+    const hud = core.hud;
+    const board = w.zones.village.features.find((row) => row.id === loadedPF.world.BOARD_FEATURE_ID);
+    for (let i = 0; i < P.CAPS.activeQuests; i++)
+      P.quest(core, "accept", { id: `q-elsewhere-${i}`, g: `${w.startZone}|Tam`, verb: "visit", target: "away", n: 1 });
+    assert.equal(P.get(core).quests.active.length, P.CAPS.activeQuests, "the list is full");
+    sim.teleport("village", board.rect.x, board.rect.y + 1);
+    sim.step(0, {});
+    hud.update();
+    hud.toggleBoard();
+    const offers = pack.boardOffers(core).offers;
+    assert.ok(offers.length > 0, "the board is still posting work");
+    assert.ok(
+      offers.every((offer) => offer.state === "at-cap"),
+      "…and every row of it reads at-cap, because none of them is one you already hold",
+    );
+    const capRow = hud.boardMenu.children.find((node) => String(node.textContent).includes(offers[0].template.title));
+    assert.equal(capRow.style.opacity, "0.45", "the row renders dimmed rather than vanishing");
+    assert.equal(capRow.tagName, "BUTTON", "…and stays pressable, because a control that disappears teaches nothing");
+    await fire(capRow, "click");
+    assert.equal(P.get(core).quests.active.length, P.CAPS.activeQuests, "pressing it takes nothing");
+    assert.equal(
+      hud.toastEl.textContent,
+      "Your job list is full — finish or set aside a job first.",
+      "…and the refusal names BOTH reliefs rather than only stating the wall",
+    );
+  } finally {
+    globalThis.setTimeout = realSetTimeout;
+    globalThis.clearTimeout = realClearTimeout;
+    loadedPF.save.reset();
+    loadedPF.spatial.reset();
+  }
+}
+
+// ── THE BOARD IS THE DAY'S SELECTION, AND A DEMOTION DOES NOT TOUCH THE JOBS ─
+// Two claims that live together because they are the same seam from both sides.
+// What the board OFFERS is `selection(fold, seed, day)` and nothing else — it
+// does not shrink as work is taken and it does not drift as the player walks
+// away and back. What the player is CARRYING is the live rows, and a demotion
+// (the pack no longer matches the brief it sealed against) takes the selectable
+// set away without touching one of them: they still render, through the shared
+// renderer's fallback, and they still hand in.
+{
+  const P = loadedPF.player;
+  const pack = loadedPF.pack;
+  const realSetTimeout = globalThis.setTimeout;
+  const realClearTimeout = globalThis.clearTimeout;
+  globalThis.setTimeout = () => 0;
+  globalThis.clearTimeout = () => {};
+  loadedPF.save.reset();
+  loadedPF.spatial.reset();
+  try {
+    const sealed = brief.validate(
+      {
+        scale: "village",
+        name: "Selectville",
+        places: [{ kind: "gathering", name: "The Inn" }],
+        cast: [
+          { name: "Alder Vance", role: "reeve", kind: "leader", tint: "blue", home: "Selectville", household: 1 },
+          { name: "Perrin Quill", role: "innkeep", kind: "host", tint: "amber", home: "The Inn", household: 2 },
+          { name: "Marla", role: "farmhand", kind: "grower", tint: "green", home: "Selectville", household: 3 },
+          { name: "Wren Ash", role: "smith", kind: "maker", tint: "teal", home: "Selectville", household: 4 },
+        ],
+      },
+      { theme: "cozy-village", seed: 606 },
+    );
+    const w = world.build(606, "cozy-village", sealed);
+    const hash = P.briefHashOf(sealed);
+    const sealedPack = {
+      packVersion: 1,
+      theme: "cozy-village",
+      briefHash: hash,
+      templates: [
+        { id: "p:s:a", giver: "Marla", verb: "catch", target: { role: "catch-common" }, n: 3, title: "Three for Marla" },
+        { id: "p:s:b", giver: "Marla", verb: "catch", target: { variant: "carp" }, n: 2, title: "Two carp" },
+        { id: "p:s:c", giver: "Wren Ash", verb: "visit", target: { place: "gathering" }, n: 1, title: "Look in" },
+        { id: "p:s:d", giver: "Alder Vance", verb: "deliver", target: { npc: "Marla" }, n: 1, title: "Word to Marla" },
+        { id: "p:s:e", giver: "Alder Vance", verb: "catch", target: { role: "catch-rare" }, n: 1, title: "One rare" },
+        { id: "p:s:f", giver: "Perrin Quill", verb: "catch", target: { role: "catch-common" }, n: 6, title: "Six" },
+      ],
+      lines: [],
+      escalation: [],
+      overheard: [],
+    };
+    const meta = { pixelforgeBrief: sealed, pixelforgePack: sealedPack };
+    const sim = new loadedPF.Sim(w);
+    const core = {
+      chatId: "chat-board-select",
+      sim,
+      host: { chatMeta: meta },
+      interact() {},
+      setMode() {},
+      resume() {},
+      markDirty() {},
+    };
+    core.hud = new loadedPF.Hud(new FakeNode("div"), core);
+    const hud = core.hud;
+    const board = w.zones.z1.features.find((row) => row.id === loadedPF.world.BOARD_FEATURE_ID);
+    const standAtBoard = () => {
+      sim.teleport("z1", board.rect.x, board.rect.y + 1);
+      sim.step(0, {});
+    };
+    standAtBoard();
+    hud.update();
+    assert.equal(loadedPF.save.packFold(core).source, "sealed", "the world reads its own sealed pack");
+
+    // (1) THE OFFERS ARE THE DAY'S, and the day's are the same every time it is
+    // asked. Membership, not state: taking a job dims a row, it does not remove
+    // it from what the board posted.
+    const idsNow = () => pack.boardOffers(core).offers.map((offer) => offer.template.id);
+    // A DAY THAT POSTS A KNOWN ROW, found rather than assumed: the selection is a
+    // seeded shuffle, so hard-coding "day five offers p:s:a" would be pinning
+    // today's hash rather than the behaviour. What the case needs is a day on
+    // which the row it wants to talk about is on the board.
+    let chosen = 0;
+    for (let day = 1; day <= 40 && !chosen; day++) {
+      sim.day = day;
+      if (idsNow().includes("p:s:a")) chosen = day;
+    }
+    assert.ok(chosen, "some day inside the first forty posts the row this case is about");
+    sim.day = chosen;
+    const dayFive = idsNow();
+    assert.equal(dayFive.length, pack.TUNING.K, `K offers on day ${chosen}`);
+    assert.ok(pack.accept(core, "p:s:a").ok, "one of them is taken");
+    assert.deepEqual(idsNow(), dayFive, "…and the board still posts the same four: what changed is a state, not a list");
+    // Walk away, come back, look again — the memo is per DAY and the answer is
+    // the seed's, so a re-derivation cannot hand back a different board.
+    sim.teleport("z1", w.zones.z1.spawn.x, w.zones.z1.spawn.y);
+    sim.step(0, {});
+    standAtBoard();
+    assert.deepEqual(idsNow(), dayFive, "walking away and back is the same board");
+    sim.day = chosen + 1;
+    const nextDay = idsNow();
+    sim.day = chosen;
+    assert.deepEqual(idsNow(), dayFive, `…and coming back from another day re-derives day ${chosen} exactly`);
+    assert.notDeepEqual(nextDay, dayFive, "…while a different day is a different board");
+
+    // (2) THE DEMOTION. The pack no longer matches the brief it sealed against —
+    // so the SELECTABLE set goes (the fallback's givers are strangers here) and
+    // the live row does not.
+    const carried = P.get(core).quests.active[0];
+    assert.ok(carried, "the job taken above is still being carried");
+    const titled = pack.rowText(carried, loadedPF.save.packFold(core));
+    assert.ok(titled.startsWith("Three for Marla"), `the pack's title is what renders today (${titled})`);
+    meta.pixelforgePack = { ...sealedPack, briefHash: (hash ^ 0x5f5f5f5f) >>> 0 };
+    sim._packFold = null; // the world was not replaced; only what is stored under it moved
+    const demoted = loadedPF.save.packFold(core);
+    assert.equal(demoted.demoted, true, "the stored pack no longer answers for this brief");
+    assert.deepEqual(demoted.ids, [], "…so there is nothing selectable at all");
+    assert.deepEqual(P.get(core).quests.active, [carried], "…and the job the player took is untouched");
+    const plain = pack.rowText(carried, demoted);
+    assert.equal(
+      plain,
+      "Catch 3 catch-common — 0/3 — for Marla",
+      "…rendering through the shared fallback: a plainer line, never a blank one",
+    );
+    // AND THE BOARD SAYS SO IN THE SAME WORDS A PACKLESS WORLD DOES, with the job
+    // still listed underneath — the offers went, the work did not.
+    hud.closeBoard();
+    hud.toggleBoard();
+    const shown = hud.boardMenu.children.map((node) => String(node.textContent));
+    assert.equal(shown[0], "No work posted here.", "the offers section is honestly empty");
+    assert.ok(shown.includes("Your jobs here"), "…and the jobs section is still there");
+    assert.ok(shown.includes(plain), `…carrying the demoted row (${shown.join(" | ")})`);
+    // …AND IT STILL HANDS IN. A demotion is about what can be OFFERED; a row that
+    // was accepted is a deal, and the deal is honored.
+    P.quest(core, "progress", { id: carried.id, by: carried.n });
+    const paid = pack.turnIn(core, carried.id);
+    assert.equal(paid.ok, true, "a demoted world still takes the finished job back");
+    assert.equal(paid.money, carried.r.money, "…and pays exactly what the row was accepted for");
+  } finally {
+    globalThis.setTimeout = realSetTimeout;
+    globalThis.clearTimeout = realClearTimeout;
+    loadedPF.save.reset();
+    loadedPF.spatial.reset();
+  }
+}
+
+// ── THE GIVER WHO IS NO LONGER THERE ────────────────────────────────────────
+// The completion line and the rapport bump are both guarded on the same
+// question — does this world still stand this person up — and both answer it the
+// same way. The line drops the NAME rather than the line (a wrap-up must never
+// read out a person the world cannot resolve), and the bump is skipped in
+// silence rather than minting a relationship row for a stranger.
+{
+  const P = loadedPF.player;
+  const pack = loadedPF.pack;
+  const realSetTimeout = globalThis.setTimeout;
+  const realClearTimeout = globalThis.clearTimeout;
+  globalThis.setTimeout = () => 0;
+  globalThis.clearTimeout = () => {};
+  loadedPF.save.reset();
+  loadedPF.spatial.reset();
+  try {
+    const w = world.build(7, "cozy-village", null);
+    const sim = new loadedPF.Sim(w);
+    const core = {
+      chatId: "chat-board-ghost",
+      sim,
+      host: { chatMeta: {} },
+      interact() {},
+      setMode() {},
+      resume() {},
+      markDirty() {},
+    };
+    const board = w.zones.village.features.find((row) => row.id === loadedPF.world.BOARD_FEATURE_ID);
+    sim.teleport("village", board.rect.x, board.rect.y + 1);
+    sim.step(0, {});
+    // A row whose giver never stood in this world at all. `quest("accept")` takes
+    // the payload as given — it is the BOARD that checks who is offering, and this
+    // row did not come from one.
+    P.quest(core, "accept", {
+      id: "b1.d1.b:ghost",
+      g: `${w.startZone}|Someone Gone`,
+      verb: "visit",
+      target: "away",
+      n: 1,
+      r: { money: 6, xp: 0 },
+      day: 1,
+    });
+    P.quest(core, "progress", { id: "b1.d1.b:ghost", by: 1 });
+    const result = pack.turnIn(core, "b1.d1.b:ghost");
+    assert.equal(result.ok, true, "the job still hands in: the work was done");
+    assert.equal(result.giver, null, "…but nobody is named as having taken it");
+    const line = P.get(core).ledger.lines.map(([, text]) => text).at(-1);
+    assert.equal(
+      line,
+      "Filled the board order — 6 coins.",
+      "the line drops the NAME rather than the line, so a wrap-up never reads out a person this world cannot resolve",
+    );
+    assert.equal(P.get(core).rel[w.startZone]?.["Someone Gone"], undefined, "…and no relationship row was minted");
+    // THE SAME PATH WITH A REAL GIVER writes both halves, which is what makes the
+    // two assertions above a guard rather than a path that never fires.
+    P.quest(core, "accept", {
+      id: "b1.d1.b:real",
+      g: `${w.startZone}|Tam`,
+      verb: "visit",
+      target: "away",
+      n: 1,
+      r: { money: 6, xp: 0 },
+      day: 1,
+    });
+    P.quest(core, "progress", { id: "b1.d1.b:real", by: 1 });
+    assert.equal(pack.turnIn(core, "b1.d1.b:real").giver, "Tam", "a giver who is standing there IS named");
+    assert.equal(
+      P.get(core).ledger.lines.map(([, text]) => text).at(-1),
+      "Filled Tam's board order — 6 coins.",
+      "…in the line",
+    );
+    assert.equal(P.get(core).rel[w.startZone].Tam.t, 1, "…and in the rapport the completion pays");
+  } finally {
+    globalThis.setTimeout = realSetTimeout;
+    globalThis.clearTimeout = realClearTimeout;
+    loadedPF.save.reset();
+    loadedPF.spatial.reset();
+  }
+}
+
+// ── THE PACKLESS WORLD'S BOARD SAYS SO (Q9) ─────────────────────────────────
+// A chat sealed before this release, or one whose owner declined the second
+// call, has a brief and no pack. The default pack's four givers are the stock
+// residents and a GENERATED cast contains none of them, so the fallback folds to
+// nothing — and the board has to say that in its OWN words. Not "not yet", not
+// "check back", not "everything is taken": nothing is posted here and nothing
+// will grow on its own.
+{
+  const realSetTimeout = globalThis.setTimeout;
+  const realClearTimeout = globalThis.clearTimeout;
+  globalThis.setTimeout = () => 0;
+  globalThis.clearTimeout = () => {};
+  loadedPF.save.reset();
+  loadedPF.spatial.reset();
+  try {
+    const sealed = brief.validate(
+      {
+        scale: "village",
+        name: "Packless",
+        places: [{ kind: "gathering", name: "The Inn" }],
+        // FOUR NAMED PEOPLE, none of them a stock resident. A thinner cast is
+        // BACKFILLED from the theme's default brief — which stands Mira and Fen
+        // up, and the default pack's work is theirs, so a two-person brief would
+        // have a full board and prove nothing.
+        cast: [
+          { name: "Alder Vance", role: "reeve", kind: "leader", tint: "blue", home: "Packless", household: 1 },
+          { name: "Perrin Quill", role: "innkeep", kind: "host", tint: "amber", home: "The Inn", household: 2 },
+          { name: "Marla", role: "farmhand", kind: "grower", tint: "green", home: "Packless", household: 3 },
+          { name: "Wren Ash", role: "smith", kind: "maker", tint: "teal", home: "Packless", household: 4 },
+        ],
+      },
+      { theme: "cozy-village", seed: 404 },
+    );
+    const w = world.build(404, "cozy-village", sealed);
+    const sim = new loadedPF.Sim(w);
+    const core = {
+      chatId: "chat-packless",
+      sim,
+      host: { chatMeta: {} },
+      interact() {},
+      setMode() {},
+      resume() {},
+      markDirty() {},
+    };
+    core.hud = new loadedPF.Hud(new FakeNode("div"), core);
+    const hud = core.hud;
+    const board = w.zones.z1.features.find((row) => row.id === loadedPF.world.BOARD_FEATURE_ID);
+    assert.ok(board, "a packless world still gets its board — that is the whole point of the fixture");
+    sim.teleport("z1", board.rect.x, board.rect.y + 1);
+    sim.step(0, {});
+    hud.update();
+    assert.equal(hud.boardBtn.style.display, "", "…and the button is up in front of it");
+    hud.toggleBoard();
+    assert.equal(hud.boardMenu.style.display, "flex", "…and it opens");
+    const text = hud.boardMenu.children.map((node) => String(node.textContent)).join(" | ");
+    // EXACT, because the copy is the deliverable: not "not yet", not "check back",
+    // not the all-taken state, and not a heading over an empty list.
+    assert.equal(text, "No work posted here.", "the board says exactly one thing, and that is it");
+    assert.ok(
+      !hud.boardMenu.children.some((node) => node.tagName === "BUTTON"),
+      "…with nothing to press: a packless board is a reading, not a menu",
+    );
+    // …AND IT IS NOT THE DEFAULT PACK WEARING A SEALED WORLD'S CLOTHES. The
+    // fallback is READ — that is the shipped path — and it folds to nothing here,
+    // which is the mechanism that makes the honest state honest.
+    const folded = loadedPF.save.packFold(core);
+    assert.equal(folded.source, "default", "the fallback is what was read");
+    assert.equal(folded.demoted, false, "…and nothing was demoted: there was never a pack to set aside");
+    assert.deepEqual(folded.ids, [], "…and not one of its rows resolves against this cast");
+  } finally {
+    globalThis.setTimeout = realSetTimeout;
+    globalThis.clearTimeout = realClearTimeout;
     loadedPF.save.reset();
     loadedPF.spatial.reset();
   }
@@ -18462,6 +19353,83 @@ const fire = (node, type) => Promise.all((node.listeners[type] ?? []).map((fn) =
     assert.equal(pack.templateOf("b1.d0.b:catch-common-3"), "b:catch-common-3", "the default pack's class too");
     assert.equal(pack.templateOf("q1"), null, "a row that is not a board instance says so");
     assert.equal(pack.templateOf("b1.dx.p:x:a"), null, "…and so does one that only looks like one");
+  }
+
+  // ── THE SHARED ROW RENDERER (plan §2.4) ─────────────────────────────────────
+  // ONE function turns a quest row into words, and both surfaces call it: the
+  // board's jobs section here in slice 3, the quest tab verbatim in slice 5. What
+  // is pinned is the CONTRACT §2.4 writes out — the title is a lookup, the
+  // fallback is a synthesis from the row's own eight fields, and the have/n
+  // fraction belongs to the counting verb alone.
+  {
+    const row = (over) => ({
+      id: "b1.d4.p:x:a",
+      g: "z1|Alder Vance",
+      verb: "catch",
+      target: "carp",
+      n: 5,
+      have: 3,
+      r: { money: 25, xp: 0 },
+      day: 4,
+      ...over,
+    });
+    // (1) THE PACK ANSWERS, so the pack's words are the words.
+    assert.equal(
+      pack.rowText(row(), folded),
+      "Three — 3/5 — for Alder Vance",
+      "a template the fold still knows renders under its own title",
+    );
+    // (2) THE PACK CANNOT ANSWER — a demoted world, a template that folded out,
+    // a save carried in from somewhere else. The row is still legible, because
+    // the row is the live object the player is carrying.
+    assert.equal(
+      pack.rowText(row(), null),
+      "Catch 5 carp — 3/5 — for Alder Vance",
+      "…and with no pack in hand the eight fields say it themselves",
+    );
+    assert.equal(
+      pack.rowText(row({ id: "b1.d4.p:x:gone" }), folded),
+      "Catch 5 carp — 3/5 — for Alder Vance",
+      "…the same for a template this world folded OUT: the fallback is the miss path, not the no-pack path",
+    );
+    assert.equal(
+      pack.rowText(row({ id: "q-legacy" }), folded),
+      "Catch 5 carp — 3/5 — for Alder Vance",
+      "…and for a row whose id is not a board instance at all",
+    );
+    // (3) THE NON-COUNTING VERBS get words instead of a fraction: "0/1" is a
+    // progress bar for something that has no progress.
+    assert.equal(
+      pack.rowText(row({ verb: "deliver", target: "Marla", n: 1, have: 0 }), null),
+      "Take word to Marla — waiting on the handover to Marla — for Alder Vance",
+      "a delivery says what it is waiting on",
+    );
+    assert.equal(
+      pack.rowText(row({ verb: "visit", target: "The Wood", n: 1, have: 0 }), null),
+      "Go to The Wood — travel to The Wood — for Alder Vance",
+      "…and a visit says where",
+    );
+    for (const verb of ["deliver", "visit"])
+      assert.ok(
+        !/\d\/\d/.test(pack.rowText(row({ verb, target: "X", n: 1, have: 0 }), null)),
+        `${verb}: no fraction, ever`,
+      );
+    // (4) THE GIVER CLAUSE IS DROPPED RATHER THAN LEFT DANGLING, and the count
+    // still clamps: a row is untrusted data like everything else off a save.
+    assert.equal(pack.rowText(row({ g: "" }), null), "Catch 5 carp — 3/5", "no giver, no `for` clause");
+    assert.equal(
+      pack.rowText(row({ have: 99 }), null),
+      "Catch 5 carp — 5/5 — for Alder Vance",
+      "…and a have past n reads as done rather than as nonsense",
+    );
+    // (5) A VERB NO SITE ADVANCES — nothing in this build can mint one, but a
+    // hostile save carries whatever it likes and the row still has to render. It
+    // must not borrow a mechanic it does not have: no fraction, and no "travel
+    // to" over a row that will never complete.
+    const alien = pack.rowText(row({ verb: "defeat", target: "the wolf", n: 1, have: 0 }), null);
+    assert.equal(alien, "the wolf — for Alder Vance", "an unreadable verb says only what it can stand behind");
+    assert.ok(!/travel to|handover|\d\/\d/.test(alien), "…and borrows no other verb's words");
+    assert.equal(pack.rowText({}, null), "something", "an empty row is a plain line, never a blank one");
   }
 
   // THE READ DOOR IS THE SEAL'S EQUAL (#566's seam posture, applied to the pack).
