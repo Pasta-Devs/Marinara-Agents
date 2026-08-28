@@ -3,15 +3,19 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   BookOpen,
   Check,
+  ChevronDown,
   ChevronRight,
   CircleAlert,
   Ellipsis,
   FileInput,
   Loader2,
   ListChecks,
+  Plus,
   RefreshCw,
+  Search,
   Send,
   Sparkles,
+  X,
 } from "lucide-react";
 import type {
   LtmImportSourceNotesResponse,
@@ -34,6 +38,10 @@ import { useLtmTranslation, type LtmTranslationFunction } from "./localization";
 import { LtmWorkspace } from "./LtmWorkspace";
 import type { LtmWorkspacePane } from "./LtmWorkspace";
 import { buildScopeIndexes, type ScopeTargetChat, type ScopeTargets } from "./scope-targets";
+import {
+  normalizeLtmScope,
+  withMergedLtmScopeLinks,
+} from "../../../../shared/src/features/agents/long-term-memory/scope.js";
 
 type Source = SourceTab;
 type FlatPanel = "available" | "imported";
@@ -60,7 +68,12 @@ type ScopeTarget = {
   kind: ScopeTargetKind;
   sourceScope?: LtmScope;
   destinationScope?: LtmScope;
+  searchText?: string;
 };
+
+function targetDisplayLabel(target: ScopeTarget, destination: boolean) {
+  return destination ? (target.destinationLabel ?? target.label) : target.label;
+}
 
 function ScopeTargetPicker({
   targets,
@@ -82,43 +95,459 @@ function ScopeTargetPicker({
   invalid?: boolean;
 }) {
   const { t: localizeUi } = useLtmTranslation();
+  const [open, setOpen] = useState(false);
+  const [query, setQuery] = useState("");
+  const rootRef = useRef<HTMLDivElement>(null);
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  const searchRef = useRef<HTMLInputElement>(null);
+  const listId = useId();
   const groups: Array<[Exclude<ScopeTargetKind, "all">, string]> = [
     ["chat", localizeUi("ui.longTermMemory.sourcesworkspace.chats")],
     ["group", localizeUi("ui.longTermMemory.sourcesworkspace.allBranches")],
     ["character", localizeUi("ui.longTermMemory.sourcesworkspace.characters")],
     ["persona", localizeUi("ui.longTermMemory.sourcesworkspace.personas")],
   ];
-  return (
-    <select
-      className={inputClass}
-      value={value}
-      onChange={(event) => onChange(event.target.value)}
-      aria-label={ariaLabel}
-      aria-invalid={invalid}
-      required={required}
-      data-ltm-scope-picker={testId}
+  const selectedTarget = targets.find((target) => target.id === value);
+  const needle = query.trim().toLocaleLowerCase();
+  const matches = (target: ScopeTarget) =>
+    `${target.label} ${target.destinationLabel ?? ""} ${target.searchText ?? ""}`.toLocaleLowerCase().includes(needle);
+  const filteredTargets = targets.filter((target) => matches(target));
+  const optionTargets = [
+    ...(selectedTarget && matches(selectedTarget) ? [selectedTarget] : []),
+    ...groups.flatMap(([kind]) => filteredTargets.filter((target) => target.kind === kind && target.id !== value)),
+  ];
+  const [highlightedId, setHighlightedId] = useState(value);
+  const close = () => {
+    setOpen(false);
+    setQuery("");
+    requestAnimationFrame(() => triggerRef.current?.focus({ preventScroll: true }));
+  };
+
+  useEffect(() => {
+    if (!open) return;
+    const onPointerDown = (event: PointerEvent) => {
+      if (!rootRef.current?.contains(event.target as Node)) close();
+    };
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") close();
+    };
+    document.addEventListener("pointerdown", onPointerDown);
+    document.addEventListener("keydown", onKeyDown);
+    requestAnimationFrame(() => searchRef.current?.focus());
+    return () => {
+      document.removeEventListener("pointerdown", onPointerDown);
+      document.removeEventListener("keydown", onKeyDown);
+    };
+  }, [open]);
+
+  const choose = (target: ScopeTarget) => {
+    onChange(target.id);
+    close();
+  };
+  const moveHighlight = (direction: 1 | -1) => {
+    if (!optionTargets.length) return;
+    const currentIndex = optionTargets.findIndex((target) => target.id === highlightedId);
+    const nextIndex = (Math.max(0, currentIndex) + direction + optionTargets.length) % optionTargets.length;
+    setHighlightedId(optionTargets[nextIndex]!.id);
+  };
+  const option = (target: ScopeTarget) => (
+    <button
+      key={target.id}
+      type="button"
+      role="option"
+      id={`${listId}-option-${target.id}`}
+      aria-selected={target.id === value}
+      data-highlighted={target.id === highlightedId}
+      data-ltm-scope-option={target.id}
+      className="mari-editor-action mari-editor-action--compact flex min-h-11 w-full items-center gap-2 rounded-none border-x-0 border-t-0 px-3 py-2 text-left text-xs last:border-b-0 data-[highlighted=true]:bg-[var(--secondary)] aria-selected:bg-[var(--primary)]/10"
+      onMouseDown={(event) => event.preventDefault()}
+      onMouseEnter={() => setHighlightedId(target.id)}
+      onClick={() => choose(target)}
     >
-      {required ? <option value="">{localizeUi("ui.longTermMemory.sourcesworkspace.chooseDestination")}</option> : null}
-      {targets
-        .filter((target) => target.kind === "all")
-        .map((target) => (
-          <option key={target.id} value={target.id}>
-            {destination ? (target.destinationLabel ?? target.label) : target.label}
-          </option>
-        ))}
-      {groups.map(([kind, label]) => {
-        const options = targets.filter((target) => target.kind === kind);
-        return options.length ? (
-          <optgroup key={kind} label={label}>
-            {options.map((target) => (
-              <option key={target.id} value={target.id}>
-                {destination ? (target.destinationLabel ?? target.label) : target.label}
-              </option>
-            ))}
-          </optgroup>
-        ) : null;
-      })}
-    </select>
+      <Check
+        aria-hidden="true"
+        size="0.875rem"
+        className={target.id === value ? "shrink-0 text-[var(--marinara-editor-accent)]" : "shrink-0 opacity-0"}
+      />
+      <span className="min-w-0 flex-1 truncate">{targetDisplayLabel(target, destination)}</span>
+    </button>
+  );
+  return (
+    <div ref={rootRef} className="relative min-w-0 flex-1 sm:max-w-[36rem]" data-ltm-scope-picker={testId}>
+      <button
+        ref={triggerRef}
+        type="button"
+        role="combobox"
+        aria-label={ariaLabel}
+        aria-expanded={open}
+        aria-controls={open ? listId : undefined}
+        aria-haspopup="listbox"
+        aria-required={required}
+        aria-invalid={invalid}
+        data-ltm-scope-picker-trigger={testId}
+        className={`${inputClass} flex items-center gap-2 text-left`}
+        onClick={() => setOpen((current) => !current)}
+        onKeyDown={(event) => {
+          if (["Enter", " ", "ArrowDown"].includes(event.key)) {
+            event.preventDefault();
+            setOpen(true);
+          }
+        }}
+      >
+        <span
+          className="min-w-0 flex-1 truncate"
+          title={selectedTarget ? targetDisplayLabel(selectedTarget, destination) : undefined}
+        >
+          {selectedTarget
+            ? targetDisplayLabel(selectedTarget, destination)
+            : localizeUi("ui.longTermMemory.sourcesworkspace.chooseDestination")}
+        </span>
+        <ChevronDown
+          aria-hidden="true"
+          size="0.875rem"
+          className={`shrink-0 transition-transform ${open ? "rotate-180" : ""}`}
+        />
+      </button>
+      {open ? (
+        <div
+          id={listId}
+          role="listbox"
+          aria-label={ariaLabel}
+          className="absolute left-0 top-full z-30 mt-2 w-full min-w-[min(20rem,calc(100vw-2rem))] overflow-hidden rounded-md border border-[var(--marinara-editor-divider)] bg-[var(--marinara-editor-control-bg)] shadow-xl"
+        >
+          <label className="relative block border-b border-[var(--marinara-editor-divider)] p-2">
+            <Search
+              aria-hidden="true"
+              size="0.875rem"
+              className="pointer-events-none absolute left-5 top-1/2 -translate-y-1/2 text-[var(--muted-foreground)]"
+            />
+            <input
+              ref={searchRef}
+              className={`${inputClass} pl-9`}
+              value={query}
+              placeholder={localizeUi("ui.longTermMemory.sourcesworkspace.searchScopes")}
+              aria-label={localizeUi("ui.longTermMemory.sourcesworkspace.searchScopes")}
+              onChange={(event) => {
+                setQuery(event.target.value);
+                setHighlightedId("");
+              }}
+              onKeyDown={(event) => {
+                if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+                  event.preventDefault();
+                  moveHighlight(event.key === "ArrowDown" ? 1 : -1);
+                } else if (event.key === "Enter") {
+                  const target = optionTargets.find((item) => item.id === highlightedId);
+                  if (target) {
+                    event.preventDefault();
+                    choose(target);
+                  }
+                }
+              }}
+            />
+          </label>
+          <div className="max-h-72 overflow-y-auto">
+            {selectedTarget && matches(selectedTarget) ? (
+              <div className="border-b border-[var(--marinara-editor-divider)]">
+                <p className="bg-[var(--secondary)] px-3 py-1 text-xs font-semibold uppercase tracking-wide text-[var(--muted-foreground)]">
+                  {localizeUi("ui.longTermMemory.sourcesworkspace.selectedLocation")}
+                </p>
+                {option(selectedTarget)}
+              </div>
+            ) : null}
+            {groups.map(([kind, label]) => {
+              const options = filteredTargets.filter((target) => target.kind === kind && target.id !== value);
+              return options.length ? (
+                <div key={kind}>
+                  <p className="border-b border-[var(--marinara-editor-divider)] bg-[var(--secondary)] px-3 py-1 text-xs font-semibold uppercase tracking-wide text-[var(--muted-foreground)]">
+                    {label}
+                  </p>
+                  {options.map(option)}
+                </div>
+              ) : null;
+            })}
+            {!filteredTargets.length ? (
+              <p className="px-3 py-4 text-xs text-[var(--muted-foreground)]">
+                {localizeUi("ui.longTermMemory.sourcesworkspace.noMatchingScopes")}
+              </p>
+            ) : null}
+          </div>
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+function mergedDestinationScope(targets: ScopeTarget[]) {
+  const primary = targets[0]?.destinationScope;
+  if (!primary) return undefined;
+  return targets.slice(1).reduce((scope, target) => {
+    return target.destinationScope ? withMergedLtmScopeLinks(scope, target.destinationScope) : scope;
+  }, normalizeLtmScope(primary));
+}
+
+function BulkDestinationPicker({
+  primaryTarget,
+  targets,
+  selectedIds,
+  onChange,
+}: {
+  primaryTarget?: ScopeTarget;
+  targets: ScopeTarget[];
+  selectedIds: string[];
+  onChange: (ids: string[]) => void;
+}) {
+  const { t: localizeUi } = useLtmTranslation();
+  const [open, setOpen] = useState(false);
+  const [draftIds, setDraftIds] = useState(selectedIds);
+  const [activeKind, setActiveKind] = useState<"all" | Exclude<ScopeTargetKind, "all">>("all");
+  const [query, setQuery] = useState("");
+  const dialogRef = useRef<HTMLDialogElement>(null);
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  const availableTargets = useMemo(
+    () =>
+      targets
+        .filter((target) => target.id !== primaryTarget?.id)
+        .sort((left, right) => left.label.localeCompare(right.label)),
+    [primaryTarget?.id, targets],
+  );
+  const categoryLabels: Record<"all" | Exclude<ScopeTargetKind, "all">, string> = {
+    all: localizeUi("ui.longTermMemory.sourcesworkspace.all"),
+    chat: localizeUi("ui.longTermMemory.sourcesworkspace.chats"),
+    group: localizeUi("ui.longTermMemory.sourcesworkspace.allBranches"),
+    character: localizeUi("ui.longTermMemory.sourcesworkspace.characters"),
+    persona: localizeUi("ui.longTermMemory.sourcesworkspace.personas"),
+  };
+  const categories: Array<["all" | Exclude<ScopeTargetKind, "all">, string]> = [
+    ["all", categoryLabels.all],
+    ["chat", categoryLabels.chat],
+    ["group", categoryLabels.group],
+    ["character", categoryLabels.character],
+    ["persona", categoryLabels.persona],
+  ];
+  const activeTargets =
+    activeKind === "all" ? availableTargets : availableTargets.filter((target) => target.kind === activeKind);
+  const needle = query.trim().toLocaleLowerCase();
+  const filteredTargets = activeTargets.filter((target) =>
+    `${target.label} ${target.destinationLabel ?? ""} ${target.searchText ?? ""}`.toLocaleLowerCase().includes(needle),
+  );
+  const selectedTargets = availableTargets.filter((target) => draftIds.includes(target.id));
+  const toggle = (id: string) =>
+    setDraftIds((current) => (current.includes(id) ? current.filter((value) => value !== id) : [...current, id]));
+  const handleCategoryKey = (event: KeyboardEvent<HTMLButtonElement>, index: number) => {
+    if (!["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)) return;
+    event.preventDefault();
+    const nextIndex =
+      event.key === "Home"
+        ? 0
+        : event.key === "End"
+          ? categories.length - 1
+          : (index + (event.key === "ArrowRight" ? 1 : -1) + categories.length) % categories.length;
+    const nextKind = categories[nextIndex]![0];
+    setActiveKind(nextKind);
+    requestAnimationFrame(() =>
+      document.querySelector<HTMLElement>(`[data-ltm-availability-tab="${nextKind}"]`)?.focus(),
+    );
+  };
+
+  useEffect(() => {
+    const dialog = dialogRef.current;
+    if (!dialog) return;
+    if (open && !dialog.open) dialog.showModal();
+    if (!open && dialog.open) dialog.close();
+    if (open) {
+      setDraftIds(selectedIds);
+      setActiveKind("all");
+      setQuery("");
+    }
+    if (open) requestAnimationFrame(() => dialog.querySelector<HTMLElement>("input")?.focus());
+  }, [open, selectedIds]);
+
+  return (
+    <>
+      <Button
+        ref={triggerRef}
+        disabled={!primaryTarget}
+        onClick={() => setOpen(true)}
+        data-ltm-add-destination
+        className="w-full justify-center sm:w-auto"
+      >
+        <Plus aria-hidden="true" size="0.875rem" />
+        {localizeUi("ui.longTermMemory.sourcesworkspace.addMoreLocations")}
+        {selectedIds.length ? ` (${selectedIds.length})` : ""}
+      </Button>
+      {open ? (
+        <dialog
+          ref={dialogRef}
+          data-ltm-bulk-destination
+          aria-modal="true"
+          aria-labelledby="ltm-bulk-destination-title"
+          onCancel={(event) => {
+            event.preventDefault();
+            setOpen(false);
+          }}
+          onClose={() => {
+            setOpen(false);
+            requestAnimationFrame(() => triggerRef.current?.focus({ preventScroll: true }));
+          }}
+          onClick={(event) => {
+            if (event.target === event.currentTarget) setOpen(false);
+          }}
+          className="fixed inset-0 z-50 m-0 h-full max-h-none w-full max-w-none bg-black/50 p-0 backdrop:bg-black/50 sm:grid sm:place-items-center sm:p-4"
+        >
+          <section className="flex h-full w-full flex-col bg-[var(--background)] text-[var(--foreground)] sm:h-auto sm:max-h-[min(42rem,calc(100vh-2rem))] sm:max-w-2xl sm:rounded-md sm:border sm:border-[var(--border)] sm:shadow-xl">
+            <header className="flex items-start justify-between gap-3 border-b border-[var(--border)] p-4">
+              <div className="min-w-0">
+                <h2 id="ltm-bulk-destination-title" className="text-base font-semibold">
+                  {localizeUi("ui.longTermMemory.sourcesworkspace.addMoreLocations")}
+                </h2>
+                <p className="mt-1 text-xs text-[var(--muted-foreground)]">
+                  {localizeUi("ui.longTermMemory.sourcesworkspace.bulkDestinationHelp")}
+                </p>
+              </div>
+              <IconButton
+                icon={X}
+                label={localizeUi("ui.longTermMemory.sourcesworkspace.closeBulkPicker")}
+                onClick={() => setOpen(false)}
+              />
+            </header>
+            <div className="min-h-0 flex-1 overflow-y-auto">
+              <div className="sticky top-0 z-10 space-y-3 bg-[var(--background)] p-4 pb-3">
+                <div className="rounded-md border border-[var(--border)] bg-[var(--secondary)]/35 p-3">
+                  <p className="text-xs font-semibold uppercase tracking-wide text-[var(--muted-foreground)]">
+                    {localizeUi("ui.longTermMemory.sourcesworkspace.primaryLocation")}
+                  </p>
+                  <p className="mt-1 truncate text-sm font-semibold">
+                    {primaryTarget ? targetDisplayLabel(primaryTarget, true) : ""}
+                  </p>
+                </div>
+                {selectedTargets.length ? (
+                  <div className="space-y-2">
+                    <p className="text-xs font-semibold">
+                      {localizeUi("ui.longTermMemory.sourcesworkspace.selectedLocations")}
+                    </p>
+                    <div className="flex flex-wrap gap-1.5">
+                      {selectedTargets.map((target) => (
+                        <span
+                          key={target.id}
+                          className="inline-flex max-w-full items-center gap-1 rounded-md border border-[var(--border)] bg-[var(--secondary)] px-2 py-1 text-xs"
+                        >
+                          <span className="truncate">{targetDisplayLabel(target, true)}</span>
+                          <button
+                            type="button"
+                            aria-label={localizeUi("ui.longTermMemory.sourcesworkspace.removeLocationValue1", {
+                              value1: targetDisplayLabel(target, true),
+                            })}
+                            className="grid h-7 w-7 shrink-0 place-items-center rounded hover:bg-[var(--accent)]"
+                            onClick={() => setDraftIds((current) => current.filter((id) => id !== target.id))}
+                          >
+                            <X aria-hidden="true" size="0.75rem" />
+                          </button>
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                ) : null}
+                <label className="relative block">
+                  <Search
+                    aria-hidden="true"
+                    size="0.875rem"
+                    className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-[var(--muted-foreground)]"
+                  />
+                  <input
+                    className={`${inputClass} pl-9`}
+                    value={query}
+                    placeholder={localizeUi("ui.longTermMemory.sourcesworkspace.searchScopes")}
+                    aria-label={localizeUi("ui.longTermMemory.sourcesworkspace.searchScopes")}
+                    data-ltm-availability-search={activeKind === "group" ? "branch" : activeKind}
+                    onChange={(event) => setQuery(event.target.value)}
+                  />
+                </label>
+                <div
+                  role="tablist"
+                  aria-label={localizeUi("ui.longTermMemory.sourcesworkspace.additionalLocations")}
+                  className="grid grid-cols-2 gap-1 sm:grid-cols-5"
+                >
+                  {categories.map(([kind, label], index) => {
+                    const count =
+                      kind === "all"
+                        ? draftIds.length
+                        : draftIds.filter((id) =>
+                            availableTargets.some((target) => target.id === id && target.kind === kind),
+                          ).length;
+                    return (
+                      <button
+                        key={kind}
+                        type="button"
+                        role="tab"
+                        aria-selected={activeKind === kind}
+                        aria-controls="ltm-bulk-destination-list"
+                        tabIndex={activeKind === kind ? 0 : -1}
+                        data-ltm-availability-tab={kind === "group" ? "branch" : kind}
+                        data-active={activeKind === kind}
+                        className="mari-editor-tab min-h-11 min-w-0 rounded-md border px-2 text-xs font-semibold"
+                        onClick={() => setActiveKind(kind)}
+                        onKeyDown={(event) => handleCategoryKey(event, index)}
+                      >
+                        <span className="block truncate">{label}</span>
+                        <span className="text-xs text-[var(--muted-foreground)]">{count}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+              <div
+                id="ltm-bulk-destination-list"
+                role="tabpanel"
+                className="px-4 pb-4"
+                aria-label={categoryLabels[activeKind]}
+              >
+                {filteredTargets.length ? (
+                  <div className="divide-y divide-[var(--border)] rounded-md border border-[var(--border)]">
+                    {filteredTargets.map((target) => (
+                      <label
+                        key={target.id}
+                        data-ltm-availability-target={`${target.kind === "group" ? "branch" : target.kind}:${target.id.split(":").slice(1).join(":")}`}
+                        className="flex min-h-11 cursor-pointer items-center gap-3 px-3 py-2 text-sm hover:bg-[var(--secondary)]/35"
+                      >
+                        <input
+                          type="checkbox"
+                          className={sourceCheckboxClass}
+                          checked={draftIds.includes(target.id)}
+                          onChange={() => toggle(target.id)}
+                          aria-label={targetDisplayLabel(target, true)}
+                        />
+                        <span className="min-w-0 flex-1">
+                          <span className="block truncate font-normal">{target.label}</span>
+                        </span>
+                      </label>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="rounded-md border border-[var(--border)] px-3 py-4 text-xs text-[var(--muted-foreground)]">
+                    {localizeUi("ui.longTermMemory.sourcesworkspace.noMatchingScopes")}
+                  </p>
+                )}
+              </div>
+            </div>
+            <footer className="flex flex-wrap justify-end gap-2 border-t border-[var(--border)] p-4">
+              <Button onClick={() => setOpen(false)} data-ltm-bulk-cancel>
+                {localizeUi("ui.longTermMemory.sourcesworkspace.cancel")}
+              </Button>
+              <Button
+                primary
+                onClick={() => {
+                  onChange(draftIds);
+                  setOpen(false);
+                }}
+                data-ltm-bulk-done
+              >
+                {localizeUi("ui.longTermMemory.sourcesworkspace.done")}
+              </Button>
+            </footer>
+          </section>
+        </dialog>
+      ) : null}
+    </>
   );
 }
 
@@ -760,7 +1189,7 @@ export default function SourcesWorkspace({
   const [lorebookMobilePane, setLorebookMobilePane] = useState<Exclude<LtmWorkspacePane, "inspector">>("navigator");
   const [sourceTargetId, setSourceTargetId] = useState(props.chatId ? `chat:${props.chatId}` : "all");
   const [destinationTargetId, setDestinationTargetId] = useState(props.chatId ? `chat:${props.chatId}` : "");
-  const [destinationEnabled, setDestinationEnabled] = useState(false);
+  const [additionalDestinationTargetIds, setAdditionalDestinationTargetIds] = useState<string[]>([]);
   const [modeFilter, setModeFilter] = useState<LtmMode | "all">("all");
   const [selections, setSelections] = useState<Record<string, string[]>>({});
   const [flatPanel, setFlatPanel] = useState<FlatPanel>("available");
@@ -795,6 +1224,7 @@ export default function SourcesWorkspace({
         chatIds: [chat.id],
       },
       destinationScope: { chatId: chat.id, chatIds: [chat.id] },
+      searchText: [chat.mode, chat.groupId, chat.personaId, ...chat.characterIds].filter(Boolean).join(" "),
     });
     return [
       ...(props.chatId
@@ -819,6 +1249,7 @@ export default function SourcesWorkspace({
         kind: "group" as const,
         sourceScope: { groupId: group.id, groupIds: [group.id], chatIds: group.chatIds },
         destinationScope: { groupId: group.id, groupIds: [group.id], chatIds: group.chatIds },
+        searchText: group.chatIds.join(" "),
       })),
       ...(scopeTargets.data?.characters ?? []).map((character) => ({
         id: `character:${character.id}`,
@@ -853,14 +1284,37 @@ export default function SourcesWorkspace({
     scopeTargetOptions.find((target) => target.id === sourceTargetId) ??
     scopeTargetOptions.find((target) => target.id === "all") ??
     scopeTargetOptions[0];
-  const destinationTargets = scopeTargetOptions.filter((target) => target.kind !== "all");
+  const destinationTargets = useMemo(
+    () => scopeTargetOptions.filter((target) => target.kind !== "all"),
+    [scopeTargetOptions],
+  );
   const destinationTarget = destinationTargets.find((target) => target.id === destinationTargetId);
+  const primaryDestinationTarget = destinationTarget;
+  const additionalDestinationTargets = additionalDestinationTargetIds.flatMap((id) => {
+    const target = destinationTargets.find((item) => item.id === id);
+    return target ? [target] : [];
+  });
+  const selectedDestinationTargets = primaryDestinationTarget
+    ? [primaryDestinationTarget, ...additionalDestinationTargets]
+    : [];
+  const currentDestinationScope = mergedDestinationScope(selectedDestinationTargets);
+  const currentDestinationLabel = primaryDestinationTarget
+    ? `${targetDisplayLabel(primaryDestinationTarget, true)}${
+        additionalDestinationTargets.length
+          ? ` + ${localizeUi("ui.longTermMemory.sourcesworkspace.additionalLocationsCount", {
+              count: additionalDestinationTargets.length,
+            })}`
+          : ""
+      }`
+    : localizeUi("ui.longTermMemory.sourcesworkspace.chooseDestination");
   const sourceScope = sourceTarget?.sourceScope;
   const previewScope =
     source === "chats" || source === "lorebooks" || (source === "characters" && sourceTarget?.kind === "character")
       ? sourceScope
       : undefined;
-  const effectiveImportScope = `${sourceTargetId}:${destinationTargetId || "none"}`;
+  const effectiveImportScope = `${sourceTargetId}:${destinationTargetId || "none"}:${[...additionalDestinationTargetIds]
+    .sort()
+    .join(",")}`;
   const preview = useQuery({
     queryKey: [...queryKeys.preview, source, previewScope, modeFilter],
     queryFn: () =>
@@ -991,12 +1445,15 @@ export default function SourcesWorkspace({
       setSourceTargetId(props.chatId ? `chat:${props.chatId}` : "all");
     if (props.chatId && !destinationTargets.some((target) => target.id === destinationTargetId))
       setDestinationTargetId(`chat:${props.chatId}`);
+    setAdditionalDestinationTargetIds((current) =>
+      current.filter((id) => destinationTargets.some((target) => target.id === id)),
+    );
   }, [destinationTargetId, destinationTargets, props.chatId, scopeTargetOptions, sourceTargetId]);
 
   useEffect(() => {
     setSourceTargetId(props.chatId ? `chat:${props.chatId}` : "all");
     setDestinationTargetId(props.chatId ? `chat:${props.chatId}` : "");
-    setDestinationEnabled(false);
+    setAdditionalDestinationTargetIds([]);
   }, [props.chatId]);
 
   useEffect(() => {
@@ -1048,6 +1505,7 @@ export default function SourcesWorkspace({
 
   const changeDestinationScope = (next: string) => {
     setDestinationTargetId(next);
+    setAdditionalDestinationTargetIds((current) => current.filter((id) => id !== next));
     clearImportResult();
   };
 
@@ -1103,23 +1561,20 @@ export default function SourcesWorkspace({
       setImportError(localizeUi("ui.longTermMemory.sourcesworkspace.selectUpTo100SourceParts"));
       return;
     }
-    const effectiveDestination = destinationEnabled
-      ? destinationTarget
-      : props.chatId
-        ? {
-            destinationScope: { chatId: props.chatId, chatIds: [props.chatId] },
-            destinationLabel: props.chatName ?? localizeUi("ui.longTermMemory.sourcesworkspace.currentChat"),
-          }
+    const effectiveDestination = retryContract
+      ? {
+          destinationScope: retryContract.destinationScope,
+          destinationLabel: retryContract.destinationTargetLabel,
+        }
+      : currentDestinationScope
+        ? { destinationScope: currentDestinationScope, destinationLabel: currentDestinationLabel }
         : undefined;
     if (!effectiveDestination) {
       setImportError(localizeUi("ui.longTermMemory.sourcesworkspace.chooseDestinationBeforeImport"));
       return;
     }
     const destinationScope = effectiveDestination.destinationScope;
-    const destinationTargetLabel =
-      effectiveDestination.destinationLabel ??
-      ("label" in effectiveDestination ? effectiveDestination.label : undefined) ??
-      localizeUi("ui.longTermMemory.sourcesworkspace.chooseDestination");
+    const destinationTargetLabel = effectiveDestination.destinationLabel;
     const effectiveAction = retryContract?.action ?? action;
     const contract: ImportContract = retryContract
       ? {
@@ -1419,27 +1874,13 @@ export default function SourcesWorkspace({
             testId="source"
           />
         </div>
-        <label className="flex min-h-11 w-full items-center gap-2 text-xs font-medium">
-          <input
-            type="checkbox"
-            className={sourceCheckboxClass}
-            checked={destinationEnabled}
-            onChange={(event) => {
-              setDestinationEnabled(event.target.checked);
-              clearImportResult();
-            }}
-            aria-controls="ltm-destination-scope-control"
-            data-ltm-destination-toggle
-          />
-          <span>{localizeUi("ui.longTermMemory.sourcesworkspace.makeMemoriesAvailableElsewhere")}</span>
-        </label>
-        {destinationEnabled ? (
-          <div
-            id="ltm-destination-scope-control"
-            role="group"
-            aria-labelledby={destinationScopeLabelId}
-            className="flex min-h-11 w-full flex-col gap-2 text-xs font-medium sm:flex-row sm:items-center"
-          >
+        <div
+          id="ltm-destination-scope-control"
+          role="group"
+          aria-labelledby={destinationScopeLabelId}
+          className="flex min-h-11 w-full flex-col gap-2 text-xs font-medium"
+        >
+          <div className="flex min-h-11 w-full flex-col gap-2 sm:flex-row sm:items-center">
             <span id={destinationScopeLabelId} className="sm:shrink-0">
               {localizeUi("ui.longTermMemory.sourcesworkspace.makeMemoriesAvailableIn")}
             </span>
@@ -1451,15 +1892,33 @@ export default function SourcesWorkspace({
               testId="destination"
               destination
               required={!props.chatId}
-              invalid={!props.chatId && !destinationTarget}
+              invalid={!primaryDestinationTarget}
             />
-            {!props.chatId && !destinationTarget ? (
-              <span role="alert" className="text-[var(--marinara-editor-warning)]">
-                {localizeUi("ui.longTermMemory.sourcesworkspace.chooseDestinationBeforeImport")}
+          </div>
+          <div className="flex flex-wrap items-center gap-2 sm:pl-[8.5rem]">
+            <BulkDestinationPicker
+              primaryTarget={primaryDestinationTarget}
+              targets={destinationTargets}
+              selectedIds={additionalDestinationTargetIds}
+              onChange={(ids) => {
+                setAdditionalDestinationTargetIds(ids);
+                clearImportResult();
+              }}
+            />
+            {additionalDestinationTargets.length ? (
+              <span className="text-xs text-[var(--muted-foreground)]" data-ltm-additional-destination-summary>
+                {localizeUi("ui.longTermMemory.sourcesworkspace.additionalLocationsCount", {
+                  count: additionalDestinationTargets.length,
+                })}
               </span>
             ) : null}
           </div>
-        ) : null}
+          {!primaryDestinationTarget ? (
+            <span role="alert" className="text-[var(--marinara-editor-warning)]">
+              {localizeUi("ui.longTermMemory.sourcesworkspace.chooseDestinationBeforeImport")}
+            </span>
+          ) : null}
+        </div>
       </div>
 
       <div className="flex flex-wrap items-center justify-between gap-3">

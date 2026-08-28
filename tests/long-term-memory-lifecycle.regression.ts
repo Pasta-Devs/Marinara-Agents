@@ -1083,6 +1083,31 @@ async function main() {
             },
           });
         }
+        if (request.method === "POST" && url.pathname.endsWith("/import/source-notes")) {
+          const chunks: Buffer[] = [];
+          for await (const chunk of request) chunks.push(Buffer.from(chunk));
+          const body = JSON.parse(Buffer.concat(chunks).toString("utf8")) as {
+            source: string;
+            sourceIds: string[];
+          };
+          return send(200, {
+            operationId: "00000000-0000-4000-8000-000000000001",
+            batchStatus: "failed",
+            source: body.source,
+            imported: [],
+            writeFailures: [],
+            missingSourceIds: body.sourceIds,
+            counts: {
+              requested: body.sourceIds.length,
+              sourceNotesWritten: 0,
+              succeeded: 0,
+              failed: 0,
+              cancelled: 0,
+              missing: body.sourceIds.length,
+              sourceWriteFailed: 0,
+            },
+          });
+        }
         if (request.method === "POST" && url.pathname.endsWith("/notes/source_desktop_reextract/extract"))
           return await new Promise<void>((resolve) => {
             releaseReextraction = () => {
@@ -2633,23 +2658,69 @@ async function main() {
         );
       });
       const sourceScopePicker = page.locator('[data-ltm-scope-picker="source"]');
-      assert.equal(await sourceScopePicker.inputValue(), "all");
-      await sourceScopePicker.selectOption("chat:desktop-chat");
+      const sourceScopeTrigger = sourceScopePicker.getByRole("combobox");
+      assert.match((await sourceScopeTrigger.innerText()).trim(), /All Available/u);
+      await sourceScopeTrigger.click();
+      await sourceScopePicker.locator('[role="option"][data-ltm-scope-option="chat:desktop-chat"]').click();
       const scopedChatPreviewRequest = (await scopedChatPreviewRequestPromise).postDataJSON() as {
         sourceScope?: unknown;
       };
       assert.deepEqual(scopedChatPreviewRequest.sourceScope, expectedInitialChatSourceScope);
       await page.locator('[data-ltm-source-preview-status="success"]').waitFor();
-      const destinationToggle = page.locator("[data-ltm-destination-toggle]");
-      assert.equal(await page.locator('[data-ltm-scope-picker="destination"]').count(), 0);
-      await destinationToggle.focus();
-      await destinationToggle.press("Space");
-      await page.locator('[data-ltm-scope-picker="destination"]').waitFor();
-      assert.equal(await page.locator('[data-ltm-scope-picker="destination"]').inputValue(), "");
-      await page.locator('[data-ltm-scope-picker="destination"]').selectOption("chat:memory-chat");
-      assert.equal(await page.locator('[data-ltm-scope-picker="destination"]').inputValue(), "chat:memory-chat");
-      await destinationToggle.press("Space");
-      assert.equal(await page.locator('[data-ltm-scope-picker="destination"]').count(), 0);
+      const destinationScopePicker = page.locator('[data-ltm-scope-picker="destination"]');
+      const destinationScopeTrigger = destinationScopePicker.getByRole("combobox");
+      await destinationScopeTrigger.click();
+      await destinationScopePicker.locator('[role="option"][data-ltm-scope-option="chat:memory-chat"]').click();
+      assert.match((await destinationScopeTrigger.innerText()).trim(), /Memory chat/u);
+      const addDestination = page.locator("[data-ltm-add-destination]");
+      await addDestination.click();
+      const bulkDestination = page.locator("[data-ltm-bulk-destination]");
+      await bulkDestination.waitFor();
+      assert.equal(await bulkDestination.locator('[data-ltm-availability-tab="all"]').count(), 1);
+      await bulkDestination.locator('[data-ltm-availability-search="all"]').fill("conversation");
+      assert.equal(await bulkDestination.locator('[data-ltm-availability-target="chat:desktop-chat"]').count(), 1);
+      await bulkDestination.locator('[data-ltm-availability-search="all"]').fill("");
+      await bulkDestination.locator('[data-ltm-availability-tab="persona"]').click();
+      const personaDestination = bulkDestination.locator('[data-ltm-availability-target="persona:persona-a"]');
+      await personaDestination.click();
+      assert.equal(await personaDestination.locator('input[type="checkbox"]').isChecked(), true);
+      await bulkDestination.locator("[data-ltm-bulk-cancel]").click();
+      assert.equal(await page.locator("[data-ltm-additional-destination-summary]").count(), 0);
+      await addDestination.click();
+      const bulkDestinationAfterCancel = page.locator("[data-ltm-bulk-destination]");
+      await bulkDestinationAfterCancel.locator('[data-ltm-availability-tab="persona"]').click();
+      await bulkDestinationAfterCancel.locator('[data-ltm-availability-target="persona:persona-a"] input').check();
+      await bulkDestinationAfterCancel.locator("[data-ltm-bulk-done]").click();
+      assert.match(await page.locator("[data-ltm-additional-destination-summary]").innerText(), /1 additional/u);
+      await page.setViewportSize({ width: 390, height: 844 });
+      await addDestination.click();
+      const mobileBulkDestination = page.locator("[data-ltm-bulk-destination]");
+      const mobileBulkGeometry = await mobileBulkDestination.locator("section").evaluate((section) => {
+        const rect = section.getBoundingClientRect();
+        return {
+          width: rect.width,
+          height: rect.height,
+          pageFits: document.documentElement.scrollWidth <= document.documentElement.clientWidth,
+        };
+      });
+      assert.deepEqual(mobileBulkGeometry, { width: 390, height: 844, pageFits: true });
+      await mobileBulkDestination.locator("[data-ltm-bulk-cancel]").click();
+      await page.setViewportSize({ width: 1280, height: 900 });
+      await page.locator('[data-ltm-source-select="character-outside-current-chat"]').check();
+      const mergedDestinationRequestPromise = page.waitForRequest(
+        (request) => request.method() === "POST" && request.url().includes("/api/long-term-memory/import/source-notes"),
+      );
+      await page.locator('[data-ltm-source-action="import-selected"]').click();
+      const mergedDestinationRequest = (await mergedDestinationRequestPromise).postDataJSON() as {
+        destinationScope?: unknown;
+      };
+      assert.deepEqual(mergedDestinationRequest.destinationScope, {
+        chatId: "memory-chat",
+        chatIds: ["memory-chat"],
+        personaId: "persona-a",
+        personaIds: ["persona-a"],
+      });
+      await page.locator("[data-ltm-import-scope-result]").waitFor();
       await page.locator('[data-ltm-source-tab="characters"]').click();
       await page.locator('[data-ltm-source-row-status][data-ltm-source-id="character-outside-current-chat"]').waitFor();
       const characterPreviewRequest = sourcePreviewRequests.filter((request) => request.source === "characters").at(-1);
