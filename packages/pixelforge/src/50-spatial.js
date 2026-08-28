@@ -48,6 +48,13 @@ PF.spatial = {
     if (!core.chatId) return;
     const gen = this._gen;
     const chatId = core.chatId;
+    // A THIRD CAPTURE, and a DIFFERENT counter from the two above — travel()
+    // below spells out the same distinction for the same reason. Those two fence
+    // this refresh's post-await branches; the PLAYER mutators fence on
+    // PF.save._gen, which moves on a chat switch, and the drift arm below is now
+    // a mutator caller (the visit verb completes at an arrival). Read pre-await,
+    // like everything else here, and it is the ONE capture this site adds.
+    const saveGen = PF.save._gen ?? 0;
     // Latest-started wins: 1.12 event refreshes overlap the per-turn ones, and
     // a slow pre-commit response landing AFTER a post-commit refresh would
     // otherwise roll the world back to the departed zone (review finding).
@@ -102,6 +109,13 @@ PF.spatial = {
         const target = zoneId ? world?.zones[zoneId] : null;
         if (target && core.sim && core.sim.zoneId !== zoneId) {
           core.sim.teleport(zoneId, target.spawn.x, target.spawn.y);
+          // THE VISIT VERB'S OTHER SITE (0.13 §2.3), and the async one. An
+          // arrival the GM narrated is an arrival: the player is standing in the
+          // zone the work named, and refusing to answer for it because they got
+          // there by being told rather than by walking would leave a row nothing
+          // can ever complete. Inside the zone-CHANGED test on purpose, so a
+          // refresh that finds the party where it already was settles nothing.
+          core.hud?.questFilled(PF.pack.visited(core, zoneId, saveGen));
         }
         // Same class as a walked zone entry, so the same top surface: a narrated
         // arrival is the one notice most likely to print while the player is

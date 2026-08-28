@@ -30,6 +30,17 @@ PF.Sim = class {
     // per frame from the zone's own register (20-world makeZone.features), which
     // is itself derived — nothing here is ever saved.
     this.nearFeature = null;
+    // The quest board within reach, or null (see step()) — the FOURTH proximity
+    // read, off the same register and on the same terms as the third.
+    this.nearBoard = null;
+    // THE DAY'S QUEST RECEIPTS: {day, templates:Set} once anything has been
+    // filled today, and rebuilt by its owner on the first read of a new day
+    // (61-pack `filledToday`, which is the only writer and says why the set is
+    // keyed by template). Declared here rather than sprung into existence,
+    // exactly as `_envelopeExtra` is: a field the sim carries is a field the sim
+    // names. NEVER SERIALIZED and never restored — a reload starts the day's
+    // receipts empty, which is the recorded cost of the rule.
+    this._filled = null;
     this._npcTimers = new Map();
     this._rnd = PF.rng((world.seed ^ 0x9e3779b9) >>> 0);
     this.dirty = false; // save-worthy change happened
@@ -176,6 +187,40 @@ PF.Sim = class {
           );
           if (row) {
             this.nearFeature = row;
+            break;
+          }
+        }
+      }
+      // THE BOARD WITHIN REACH, the fourth read beside the three above and
+      // recomputed on the same terms: every walking frame, off the feet tile,
+      // null the moment they step away.
+      //
+      // Four neighbours again, and NO WATER TERM. The two-sided test one block up
+      // cannot serve here: it is water that says which pond a bank belongs to, and
+      // a board rect holds no water tile by construction (20-world refuses one).
+      // What is left is the rect alone — which is safe here for the reason it is
+      // not safe up there: this rect is a single tile and IS the fixture, rather
+      // than a placer's extent with margin around it.
+      //
+      // Found by the RESERVED ID rather than by tag or by position: there is
+      // exactly one board per settlement and its key is the one fixed key on the
+      // register, so a brief that named a feature after it still cannot be one.
+      this.nearBoard = null;
+      const board = z.features.length ? z.features.find((f) => f.id === PF.world.BOARD_FEATURE_ID) : null;
+      if (board) {
+        for (const [nx, ny] of [
+          [tx, ty - 1],
+          [tx, ty + 1],
+          [tx - 1, ty],
+          [tx + 1, ty],
+        ]) {
+          if (
+            nx >= board.rect.x &&
+            nx < board.rect.x + board.rect.w &&
+            ny >= board.rect.y &&
+            ny < board.rect.y + board.rect.h
+          ) {
+            this.nearBoard = board;
             break;
           }
         }
@@ -551,9 +596,22 @@ PF.Sim = class {
     }
     // THE WRAP-UP TELL, LAST IN THE JOIN — which puts it after the persona part
     // and before the sender's own action text, where the plan asks for it (§2.6).
-    // It is also the ONLY part of any turn a fishing word can reach the GM
-    // through (M10 as amended): the verb narrates nothing, files ledger lines,
-    // and those lines are told here or not at all.
+    // It is also the ONLY part of any turn a fishing OR A QUEST word can reach
+    // the GM through (M10 as amended, extended by 0.13 §2.5): neither verb family
+    // narrates anything, both file ledger lines, and those lines are told here or
+    // not at all.
+    //
+    // THE QUEST FAMILY WIDENS THE GM-INVISIBLE VERB GAP, and that is worth
+    // stating rather than leaving to be noticed (P7's roadmap enumeration is
+    // where it is tracked). The GM can neither MINT a quest nor PAY one out: the
+    // board is a package fixture reading a sealed pack, the completion pays from
+    // a table this package owns, and nothing in a turn asks the narrator's
+    // permission for either. What the narrator gets is the same day-grain
+    // history the fishing verb gives it — past tense, after the fact, at the
+    // wrap-up boundary Ruling 1 set — and that is deliberately the whole
+    // channel. The one exception is the exception that proves it: a `deliver`
+    // errand finishes on a turn the player was sending anyway, and even then
+    // what the GM sees is a greeting, not a handover.
     const ledger = this._composeLedger();
     if (ledger) parts.push(ledger.text);
     // The ephemeral half of the flush, handed to the sender rather than stored:

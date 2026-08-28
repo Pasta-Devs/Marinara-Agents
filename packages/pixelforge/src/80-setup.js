@@ -253,7 +253,20 @@ PF.mountSetup = (el, props) => {
       enableAgents: true,
       spatialMapInstructions: preset.spatial,
       combatStyle: "classic",
-      experienceConfig: { seed, theme: themeSel.value, generate: generateIn.checked },
+      // `packWanted` rides the SAME answer rather than asking a second question
+      // (0.13): the offline content pack is written by a second call in the same
+      // creation, and a player who wants a generated world wants its people to
+      // have something to say and something to ask for. Splitting it would put a
+      // cost decision in front of somebody who has already made it. It is read at
+      // exactly one place — the seal PATCH, which copies it beside the sealed
+      // brief — because THIS object is rewritable and that copy is not
+      // (60-save PACK_WANTED_META_KEY).
+      experienceConfig: {
+        seed,
+        theme: themeSel.value,
+        generate: generateIn.checked,
+        packWanted: generateIn.checked,
+      },
     };
     launchBtn.disabled = true;
     cancelBtn.disabled = true; // mirror the host's mid-launch freeze
