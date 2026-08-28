@@ -64,6 +64,7 @@ type ScopeTargetKind = "all" | "chat" | "group" | "character" | "persona";
 type ScopeTarget = {
   id: string;
   label: string;
+  comment?: string;
   destinationLabel?: string;
   kind: ScopeTargetKind;
   sourceScope?: LtmScope;
@@ -110,13 +111,16 @@ function ScopeTargetPicker({
   const selectedTarget = targets.find((target) => target.id === value);
   const needle = query.trim().toLocaleLowerCase();
   const matches = (target: ScopeTarget) =>
-    `${target.label} ${target.destinationLabel ?? ""} ${target.searchText ?? ""}`.toLocaleLowerCase().includes(needle);
+    `${target.label} ${target.comment ?? ""} ${target.destinationLabel ?? ""} ${target.searchText ?? ""}`
+      .toLocaleLowerCase()
+      .includes(needle);
   const filteredTargets = targets.filter((target) => matches(target));
   const optionTargets = [
     ...(selectedTarget && matches(selectedTarget) ? [selectedTarget] : []),
     ...groups.flatMap(([kind]) => filteredTargets.filter((target) => target.kind === kind && target.id !== value)),
   ];
   const [highlightedId, setHighlightedId] = useState(value);
+  useEffect(() => setHighlightedId(value), [value]);
   const close = () => {
     setOpen(false);
     setQuery("");
@@ -147,7 +151,12 @@ function ScopeTargetPicker({
   const moveHighlight = (direction: 1 | -1) => {
     if (!optionTargets.length) return;
     const currentIndex = optionTargets.findIndex((target) => target.id === highlightedId);
-    const nextIndex = (Math.max(0, currentIndex) + direction + optionTargets.length) % optionTargets.length;
+    const nextIndex =
+      currentIndex < 0
+        ? direction === 1
+          ? 0
+          : optionTargets.length - 1
+        : (currentIndex + direction + optionTargets.length) % optionTargets.length;
     setHighlightedId(optionTargets[nextIndex]!.id);
   };
   const option = (target: ScopeTarget) => (
@@ -169,7 +178,12 @@ function ScopeTargetPicker({
         size="0.875rem"
         className={target.id === value ? "shrink-0 text-[var(--marinara-editor-accent)]" : "shrink-0 opacity-0"}
       />
-      <span className="min-w-0 flex-1 truncate">{targetDisplayLabel(target, destination)}</span>
+      <span className="min-w-0 flex-1">
+        <span className="block truncate">{targetDisplayLabel(target, destination)}</span>
+        {target.comment ? (
+          <span className="block truncate text-xs text-[var(--muted-foreground)]">{target.comment}</span>
+        ) : null}
+      </span>
     </button>
   );
   return (
@@ -227,6 +241,11 @@ function ScopeTargetPicker({
               value={query}
               placeholder={localizeUi("ui.longTermMemory.sourcesworkspace.searchScopes")}
               aria-label={localizeUi("ui.longTermMemory.sourcesworkspace.searchScopes")}
+              aria-activedescendant={
+                highlightedId && optionTargets.some((target) => target.id === highlightedId)
+                  ? `${listId}-option-${highlightedId}`
+                  : undefined
+              }
               onChange={(event) => {
                 setQuery(event.target.value);
                 setHighlightedId("");
@@ -328,7 +347,9 @@ function BulkDestinationPicker({
     activeKind === "all" ? availableTargets : availableTargets.filter((target) => target.kind === activeKind);
   const needle = query.trim().toLocaleLowerCase();
   const filteredTargets = activeTargets.filter((target) =>
-    `${target.label} ${target.destinationLabel ?? ""} ${target.searchText ?? ""}`.toLocaleLowerCase().includes(needle),
+    `${target.label} ${target.comment ?? ""} ${target.destinationLabel ?? ""} ${target.searchText ?? ""}`
+      .toLocaleLowerCase()
+      .includes(needle),
   );
   const selectedTargets = availableTargets.filter((target) => draftIds.includes(target.id));
   const toggle = (id: string) =>
@@ -344,8 +365,9 @@ function BulkDestinationPicker({
           : (index + (event.key === "ArrowRight" ? 1 : -1) + categories.length) % categories.length;
     const nextKind = categories[nextIndex]![0];
     setActiveKind(nextKind);
+    const nextTab = nextKind === "group" ? "branch" : nextKind;
     requestAnimationFrame(() =>
-      document.querySelector<HTMLElement>(`[data-ltm-availability-tab="${nextKind}"]`)?.focus(),
+      document.querySelector<HTMLElement>(`[data-ltm-availability-tab="${nextTab}"]`)?.focus(),
     );
   };
 
@@ -431,13 +453,20 @@ function BulkDestinationPicker({
                           key={target.id}
                           className="inline-flex max-w-full items-center gap-1 rounded-md border border-[var(--border)] bg-[var(--secondary)] px-2 py-1 text-xs"
                         >
-                          <span className="truncate">{targetDisplayLabel(target, true)}</span>
+                          <span className="min-w-0">
+                            <span className="block truncate">{targetDisplayLabel(target, true)}</span>
+                            {target.comment ? (
+                              <span className="block truncate text-xs text-[var(--muted-foreground)]">
+                                {target.comment}
+                              </span>
+                            ) : null}
+                          </span>
                           <button
                             type="button"
                             aria-label={localizeUi("ui.longTermMemory.sourcesworkspace.removeLocationValue1", {
                               value1: targetDisplayLabel(target, true),
                             })}
-                            className="grid h-7 w-7 shrink-0 place-items-center rounded hover:bg-[var(--accent)]"
+                            className="grid h-11 w-11 shrink-0 place-items-center rounded hover:bg-[var(--accent)]"
                             onClick={() => setDraftIds((current) => current.filter((id) => id !== target.id))}
                           >
                             <X aria-hidden="true" size="0.75rem" />
@@ -518,6 +547,11 @@ function BulkDestinationPicker({
                         />
                         <span className="min-w-0 flex-1">
                           <span className="block truncate font-normal">{target.label}</span>
+                          {target.comment ? (
+                            <span className="block truncate text-xs text-[var(--muted-foreground)]">
+                              {target.comment}
+                            </span>
+                          ) : null}
                         </span>
                       </label>
                     ))}
@@ -1254,6 +1288,7 @@ export default function SourcesWorkspace({
       ...(scopeTargets.data?.characters ?? []).map((character) => ({
         id: `character:${character.id}`,
         label: character.label,
+        comment: character.comment,
         destinationLabel: localizeUi("ui.longTermMemory.sourcesworkspace.characterAvailability", {
           value1: character.label,
         }),
@@ -1264,6 +1299,7 @@ export default function SourcesWorkspace({
       ...(scopeTargets.data?.personas ?? []).map((persona) => ({
         id: `persona:${persona.id}`,
         label: persona.label,
+        comment: persona.comment,
         destinationLabel: localizeUi("ui.longTermMemory.sourcesworkspace.personaAvailability", {
           value1: persona.label,
         }),

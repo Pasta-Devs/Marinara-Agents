@@ -4301,6 +4301,14 @@ async function main() {
       chatId: "chat-persona-a",
       chatIds: ["chat-persona-a"],
     });
+    assert.deepEqual(implicitPersonaResult.note.scope, {
+      chatId: "chat-persona-a",
+      chatIds: ["chat-persona-a"],
+    });
+    assert.deepEqual((await storageService.storage.getNote(implicitPersonaResult.note.id))?.scope, {
+      chatId: "chat-persona-a",
+      chatIds: ["chat-persona-a"],
+    });
     assert.deepEqual(implicitPersonaResult.draft.scope, {
       chatId: "chat-persona-a",
       chatIds: ["chat-persona-a"],

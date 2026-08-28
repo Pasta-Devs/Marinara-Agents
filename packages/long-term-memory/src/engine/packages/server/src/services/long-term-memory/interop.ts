@@ -759,7 +759,9 @@ export async function importPackageInterop(
   for (const row of rows) {
     if (conflictingSourceIds.has(row.sourceId)) continue;
     try {
-      const scope = withMergedLtmScopeLinks(row.scope, destinationScope ?? row.scope),
+      const sourceNoteScope =
+          row.provenance.kind === "chat_summary" ? { chatIds: [row.provenance.sourceId] } : row.scope,
+        scope = withMergedLtmScopeLinks(sourceNoteScope, destinationScope ?? row.scope),
         input = {
           id: row.sourceNoteId,
           title: row.title,

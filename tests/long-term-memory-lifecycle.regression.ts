@@ -737,7 +737,10 @@ async function main() {
               },
             ],
             characters: [{ id: "character-a", label: "Character A" }],
-            personas: [{ id: "persona-a", label: "Persona A" }],
+            personas: [
+              { id: "persona-a", label: "Persona A", comment: "Space explorer" },
+              { id: "persona-b", label: "Persona A", comment: "Private detective" },
+            ],
           });
         }
         if (request.method === "GET" && url.pathname.endsWith("/notes")) {
@@ -2670,6 +2673,22 @@ async function main() {
       const destinationScopePicker = page.locator('[data-ltm-scope-picker="destination"]');
       const destinationScopeTrigger = destinationScopePicker.getByRole("combobox");
       await destinationScopeTrigger.click();
+      const destinationScopeSearch = destinationScopePicker.locator("input");
+      await destinationScopeSearch.fill("chat");
+      await destinationScopeSearch.press("ArrowDown");
+      assert.equal(
+        await destinationScopePicker
+          .locator('[role="option"][data-ltm-scope-option="chat:desktop-chat"][data-highlighted="true"]')
+          .count(),
+        1,
+      );
+      await destinationScopeSearch.fill("Space explorer");
+      const personaScopeOption = destinationScopePicker.locator('[data-ltm-scope-option="persona:persona-a"]');
+      assert.equal(await personaScopeOption.count(), 1);
+      assert.match(await personaScopeOption.innerText(), /Space explorer/u);
+      await destinationScopeSearch.press("Escape");
+      await destinationScopePicker.locator('[role="listbox"]').waitFor({ state: "detached" });
+      await destinationScopeTrigger.click();
       await destinationScopePicker.locator('[role="option"][data-ltm-scope-option="chat:memory-chat"]').click();
       assert.match((await destinationScopeTrigger.innerText()).trim(), /Memory chat/u);
       const addDestination = page.locator("[data-ltm-add-destination]");
@@ -2680,7 +2699,36 @@ async function main() {
       await bulkDestination.locator('[data-ltm-availability-search="all"]').fill("conversation");
       assert.equal(await bulkDestination.locator('[data-ltm-availability-target="chat:desktop-chat"]').count(), 1);
       await bulkDestination.locator('[data-ltm-availability-search="all"]').fill("");
+      const bulkAllTab = bulkDestination.locator('[data-ltm-availability-tab="all"]');
+      await bulkAllTab.focus();
+      await bulkAllTab.press("ArrowRight");
+      await page.waitForFunction(() => document.activeElement?.getAttribute("data-ltm-availability-tab") === "chat");
+      assert.equal(
+        await bulkDestination.locator('[data-ltm-availability-tab="chat"]').getAttribute("aria-selected"),
+        "true",
+      );
+      assert.equal(
+        await page.evaluate(() => document.activeElement?.getAttribute("data-ltm-availability-tab")),
+        "chat",
+      );
+      await bulkDestination.locator('[data-ltm-availability-tab="chat"]').press("ArrowRight");
+      await page.waitForFunction(() => document.activeElement?.getAttribute("data-ltm-availability-tab") === "branch");
+      assert.equal(
+        await bulkDestination.locator('[data-ltm-availability-tab="branch"]').getAttribute("aria-selected"),
+        "true",
+      );
+      assert.equal(
+        await page.evaluate(() => document.activeElement?.getAttribute("data-ltm-availability-tab")),
+        "branch",
+      );
       await bulkDestination.locator('[data-ltm-availability-tab="persona"]').click();
+      const personaSearch = bulkDestination.locator('[data-ltm-availability-search="persona"]');
+      await personaSearch.fill("Private detective");
+      assert.equal(await bulkDestination.locator('[data-ltm-availability-target="persona:persona-a"]').count(), 0);
+      const personaBTarget = bulkDestination.locator('[data-ltm-availability-target="persona:persona-b"]');
+      assert.equal(await personaBTarget.count(), 1);
+      assert.match(await personaBTarget.innerText(), /Private detective/u);
+      await personaSearch.fill("");
       const personaDestination = bulkDestination.locator('[data-ltm-availability-target="persona:persona-a"]');
       await personaDestination.click();
       assert.equal(await personaDestination.locator('input[type="checkbox"]').isChecked(), true);
@@ -2692,6 +2740,13 @@ async function main() {
       await bulkDestinationAfterCancel.locator('[data-ltm-availability-target="persona:persona-a"] input').check();
       await bulkDestinationAfterCancel.locator("[data-ltm-bulk-done]").click();
       assert.match(await page.locator("[data-ltm-additional-destination-summary]").innerText(), /1 additional/u);
+      await addDestination.click();
+      const selectedLocations = page
+        .locator("[data-ltm-bulk-destination]")
+        .getByText("Selected locations", { exact: true })
+        .locator("..");
+      assert.equal(await selectedLocations.getByText("Space explorer", { exact: true }).count(), 1);
+      await page.locator("[data-ltm-bulk-destination]").locator("[data-ltm-bulk-cancel]").click();
       await page.setViewportSize({ width: 390, height: 844 });
       await addDestination.click();
       const mobileBulkDestination = page.locator("[data-ltm-bulk-destination]");
@@ -2704,6 +2759,9 @@ async function main() {
         };
       });
       assert.deepEqual(mobileBulkGeometry, { width: 390, height: 844, pageFits: true });
+      const removeLocationBox = await mobileBulkDestination.locator('button[aria-label^="Remove "]').boundingBox();
+      assert.ok(removeLocationBox);
+      assert.ok(removeLocationBox.width >= 44 && removeLocationBox.height >= 44);
       await mobileBulkDestination.locator("[data-ltm-bulk-cancel]").click();
       await page.setViewportSize({ width: 1280, height: 900 });
       await page.locator('[data-ltm-source-select="character-outside-current-chat"]').check();
