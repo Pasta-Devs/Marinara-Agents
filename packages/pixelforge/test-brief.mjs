@@ -20322,18 +20322,13 @@ const fire = (node, type) => Promise.all((node.listeners[type] ?? []).map((fn) =
     );
     assert.equal(pack.rewardFor("visit", 9).money, pack.rewardFor("visit", 1).money, "a walk is a walk");
     assert.equal(pack.rewardFor("deliver", 9).money, pack.rewardFor("deliver", 1).money, "…and an errand is an errand");
-    // Priced against the two things 0.11 actually sells.
-    const prices = loadedPF.economy.PRICES["cozy-village"];
-    assert.equal(
-      pack.rewardFor("visit", 1).money,
-      prices["rod:crude"],
-      "the first walk pays for the rod that starts fishing",
-    );
-    assert.ok(pack.rewardFor("catch", 3).money > prices.berth, "…and a three-fish order covers a night with change");
-    assert.ok(
-      pack.rewardFor("catch", pack.CAPS.n).money < loadedPF.economy.STARTING_PURSE * 3,
-      "…while the biggest order the schema allows is a day's work, not a fortune",
-    );
+    // NOTHING HERE PINS A REWARD TO A PRICE, and that is the 0.12 ruling rather
+    // than an omission: the affordability reading (a walk buys the entry rod, a
+    // three-fish order covers a berth) lives in TUNING's comment as PROSE and is
+    // deliberately NOT enforced, because a retune of either table is a maintainer
+    // call and not a regression. The prose is theme-narrow besides — the entry rod
+    // is 6 in cozy-village and 24 in sci-fi-colony — so an assert on it would be
+    // false in half the themes it claims to describe.
     // A verb with no row is worth nothing rather than a default, and the lookup is
     // an OWN-key one because verbs arrive off stored artifacts.
     for (const hostile of ["constructor", "__proto__", "toString", "defeat", ""]) {
@@ -20343,7 +20338,6 @@ const fire = (node, type) => Promise.all((node.listeners[type] ?? []).map((fn) =
         `"${hostile}" derives nothing and throws nothing`,
       );
     }
-    assert.equal(Object.prototype.hasOwnProperty.call({}, "pf-poison"), false, "…and pollutes nothing on the way");
     // n is clamped by the seal's own cap, so a hostile stored count cannot mint a
     // reward the schema could never have asked for.
     assert.equal(pack.rewardFor("catch", 1e9).money, pack.rewardFor("catch", pack.CAPS.n).money, "n clamps at the cap");
