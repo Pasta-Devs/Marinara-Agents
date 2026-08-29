@@ -51,7 +51,9 @@ async function main() {
     ),
     true,
   );
-  const { configurePackageRuntime, getPackageEmbeddingAdapter } = await import(`${source}/package-runtime.ts`);
+  const { configurePackageRuntime, getPackageEmbeddingAdapter, resolvePackageEmbeddingAdapter } = await import(
+    `${source}/package-runtime.ts`
+  );
   const { embedLongTermMemoryTexts } = await import(`${source}/embedding-adapter.ts`);
   const timestamp = "2026-07-17T00:00:00.000Z";
   const makeChunk = (
@@ -86,6 +88,13 @@ async function main() {
   const services = new Map<string, any>();
   const dataDir = await mkdtemp(join(tmpdir(), "marinara-ltm-runtime-"));
   const logger = { debug() {}, info() {}, warn() {}, error() {} };
+  let resolvedAdapter = {
+    spaceId: "resolved-space-a",
+    label: "resolved A",
+    async embed(texts: string[]) {
+      return texts.map(() => [1]);
+    },
+  };
   const chats = [
     {
       id: "chat-a",
@@ -174,6 +183,10 @@ async function main() {
   const api = {
     runtime: {
       logger,
+      embeddings: resolvedAdapter,
+      async resolveEmbeddings() {
+        return resolvedAdapter;
+      },
       async getAgentConfig() {
         agentConfigReads += 1;
         return legacyAgentConfig;
@@ -225,6 +238,31 @@ async function main() {
     "LTM runtime",
     async () => {
       cleanup = await activate({ dataDir, api });
+      assert.equal((await resolvePackageEmbeddingAdapter()).label, "resolved A");
+      resolvedAdapter = {
+        spaceId: "resolved-space-b",
+        label: "resolved B",
+        async embed(texts: string[]) {
+          return texts.map(() => [2]);
+        },
+      };
+      assert.equal(
+        (await resolvePackageEmbeddingAdapter()).spaceId,
+        "resolved-space-b",
+        "LTM must resolve the current package embedding adapter after activation",
+      );
+      const explicitAdapter = {
+        spaceId: "explicit-space",
+        label: "explicit adapter",
+        async embed(texts: string[]) {
+          return texts.map(() => [3]);
+        },
+      };
+      assert.equal(
+        (await resolvePackageEmbeddingAdapter(explicitAdapter)).label,
+        "explicit adapter",
+        "explicit test adapters must bypass the runtime resolver",
+      );
       storage = services.get("long-term-memory:storage").storage;
       runtime = services.get("long-term-memory:runtime");
       assert.deepEqual(
@@ -471,29 +509,31 @@ async function main() {
         note("world_tagged", "chat-a", "The brass warding marker is recorded here.", { tags: ["cobalt_tag"] }),
       );
       const embedCalls: string[] = [];
+      const testEmbeddingAdapter = {
+        spaceId: "test-space",
+        label: "test embeddings",
+        async embed(texts: string[]) {
+          embedCalls.push(...texts);
+          return texts.map((text) =>
+            text.includes("beneath the observatory")
+              ? [1, 0]
+              : text.includes("brass warding seal")
+                ? [0, 1]
+                : text.includes("Silent nebula resonance under glass")
+                  ? [0, 0.75]
+                  : text.includes("nebula")
+                    ? [0, 0.75]
+                    : text.includes("observatory")
+                      ? [1, 0]
+                      : [0, 0],
+          );
+        },
+      };
       releaseRestoredRuntime = configurePackageRuntime({
         ...api.runtime,
         dataDir,
-        embeddings: {
-          spaceId: "test-space",
-          label: "test embeddings",
-          async embed(texts: string[]) {
-            embedCalls.push(...texts);
-            return texts.map((text) =>
-              text.includes("beneath the observatory")
-                ? [1, 0]
-                : text.includes("brass warding seal")
-                  ? [0, 1]
-                  : text.includes("Silent nebula resonance under glass")
-                    ? [0, 0.75]
-                    : text.includes("nebula")
-                      ? [0, 0.75]
-                      : text.includes("observatory")
-                        ? [1, 0]
-                        : [0, 0],
-            );
-          },
-        },
+        resolveEmbeddings: undefined,
+        embeddings: testEmbeddingAdapter,
       });
       const embeddingBatchCalls: string[][] = [];
       const embeddingBatchAdapter = {
@@ -1136,7 +1176,12 @@ async function main() {
       assert.equal(getPackageEmbeddingAdapter()?.spaceId, "newer-space");
       releaseNewer();
       releaseRestoredRuntime?.();
-      releaseRestoredRuntime = configurePackageRuntime({ ...api.runtime, dataDir });
+      releaseRestoredRuntime = configurePackageRuntime({
+        ...api.runtime,
+        dataDir,
+        resolveEmbeddings: undefined,
+        embeddings: testEmbeddingAdapter,
+      });
 
       await storage.createNote({
         id: "source_chat_summary_runtime",
@@ -1157,6 +1202,38 @@ async function main() {
         null,
         "source notes must not participate in recall",
       );
+      releaseRestoredRuntime?.();
+      releaseRestoredRuntime = configurePackageRuntime({
+        ...api.runtime,
+        dataDir,
+        embeddings: undefined,
+        resolveEmbeddings: undefined,
+      });
+      const unavailableEmbeddingsLexicalRecall = await retrieveLongTermMemory({
+        root: storage.root,
+        queryText: "brass warding seal",
+        scope: { chatId: "chat-a", chatIds: ["chat-a"] },
+        mode: "roleplay",
+        semanticWeight: 1,
+        lexicalWeight: 1,
+        graphWeight: 0,
+        keywordWeight: 0,
+        maxChunks: 5,
+        maxTokens: 4096,
+      });
+      assert.equal(unavailableEmbeddingsLexicalRecall.embeddingsAvailable, false);
+      assert.equal(
+        unavailableEmbeddingsLexicalRecall.chunks[0]?.chunk.noteId,
+        "world_visible_second",
+        "lexical recall must remain functional without any embedding source",
+      );
+      releaseRestoredRuntime?.();
+      releaseRestoredRuntime = configurePackageRuntime({
+        ...api.runtime,
+        dataDir,
+        embeddings: testEmbeddingAdapter,
+        resolveEmbeddings: undefined,
+      });
 
       const vaultBeforeUninstall = await readFile(
         join(dataDir, "long-term-memory", "vault", "world", "world_visible.json"),
