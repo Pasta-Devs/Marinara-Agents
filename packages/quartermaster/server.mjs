@@ -779,9 +779,15 @@ export async function activate(context) {
       routes.get("/inventory/:chatId/:ownerId/export", async (request, reply) => {
         const { chatId, ownerId } = request.params;
         const state = await loadInventoryState(documents, chatId, ownerId);
+        // Informational only — the import route never reads this back. It's
+        // here so the client can put a real name on the downloaded file
+        // instead of just a date, for a user juggling exports from several
+        // personas.
+        const personaName = await resolvePersonaName(persistence, resources, chatId);
         return {
           formatVersion: QM_EXPORT_FORMAT_VERSION,
           exportedAt: new Date().toISOString(),
+          personaName,
           items: state.items,
           outfits: state.outfits,
           showUnderwear: state.showUnderwear,

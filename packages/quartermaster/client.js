@@ -689,6 +689,20 @@ function qmClampWindowValue(value, minimum, maximum) {
   return Math.min(maximum, Math.max(minimum, value));
 }
 
+// "The persona" (the export route's own fallback when there's no active
+// persona) collapses to an empty slug, which the caller treats as "leave it
+// out of the filename" rather than downloading a file literally named
+// "the-persona".
+function qmFilenameSafe(text) {
+  const slug = (typeof text === "string" ? text : "")
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 60);
+  return slug === "the-persona" ? "" : slug;
+}
+
 function qmReadUiSize() {
   try {
     const stored = window.localStorage.getItem(QM_UI_SIZE_KEY);
@@ -1390,7 +1404,9 @@ QM.dock = {
         const url = URL.createObjectURL(blob);
         const link = document.createElement("a");
         link.href = url;
-        link.download = `quartermaster-inventory-${new Date().toISOString().slice(0, 10)}.json`;
+        const personaSlug = qmFilenameSafe(payload.personaName);
+        const datePart = new Date().toISOString().slice(0, 10);
+        link.download = `quartermaster-inventory-${personaSlug ? `${personaSlug}-` : ""}${datePart}.json`;
         link.click();
         URL.revokeObjectURL(url);
       } finally {
