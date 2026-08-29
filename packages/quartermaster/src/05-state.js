@@ -262,6 +262,14 @@ QM.state = {
   unequipAll() {
     return this._mutate(QM.unequipAll(this.chatId, QM_OWNER_ID));
   },
+  // Read-only — doesn't touch `this` state, just hands the caller (the dock's
+  // export button) the payload to write out as a file.
+  exportInventory() {
+    return QM.exportInventory(this.chatId, QM_OWNER_ID);
+  },
+  importInventory(payload) {
+    return this._mutate(QM.importInventory(this.chatId, QM_OWNER_ID, payload));
+  },
   createOutfit(outfit) {
     return this._mutate(QM.createOutfit(this.chatId, QM_OWNER_ID, outfit));
   },

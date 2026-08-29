@@ -74,3 +74,12 @@ QM.unequipAll = (chatId, ownerId) =>
     method: "POST",
     body: "{}",
   });
+
+QM.exportInventory = (chatId, ownerId) =>
+  qmRequest(`/inventory/${encodeURIComponent(chatId)}/${encodeURIComponent(ownerId)}/export`, { method: "GET" });
+
+QM.importInventory = (chatId, ownerId, payload) =>
+  qmRequest(`/inventory/${encodeURIComponent(chatId)}/${encodeURIComponent(ownerId)}/import`, {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });

@@ -770,10 +770,73 @@ QM.dock = {
     const content = document.createElement("div");
     Object.assign(content.style, { padding: "8px", display: this.settingsExpanded ? "" : "none" });
     content.appendChild(this._buildSlotVisibilityRow());
+    content.appendChild(this._buildExportImportRow());
     this.settingsContent = content;
 
     section.append(header, content);
     return section;
+  },
+
+  // Portable character sheet: export the current chat's items/outfits/
+  // settings as a downloadable file, or replace them by importing one back —
+  // in a fresh chat this needs no tracker agent enabled at all, matching the
+  // original extension's own export/import.
+  _buildExportImportRow() {
+    const row = document.createElement("div");
+    Object.assign(row.style, { display: "flex", alignItems: "center", gap: "10px", marginTop: "8px" });
+
+    const exportButton = QM.button("Export…", {
+      bg: "var(--secondary, transparent)",
+      fg: "var(--secondary-foreground, inherit)",
+      border: true,
+    });
+    exportButton.addEventListener("click", async () => {
+      exportButton.disabled = true;
+      try {
+        const payload = await QM.state.exportInventory();
+        const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement("a");
+        link.href = url;
+        link.download = `quartermaster-inventory-${new Date().toISOString().slice(0, 10)}.json`;
+        link.click();
+        URL.revokeObjectURL(url);
+      } finally {
+        exportButton.disabled = false;
+      }
+    });
+
+    const importButton = QM.button("Import…", {
+      bg: "var(--secondary, transparent)",
+      fg: "var(--secondary-foreground, inherit)",
+      border: true,
+    });
+    const fileInput = document.createElement("input");
+    fileInput.type = "file";
+    fileInput.accept = "application/json";
+    fileInput.style.display = "none";
+    fileInput.addEventListener("change", async () => {
+      const file = fileInput.files && fileInput.files[0];
+      fileInput.value = "";
+      if (!file) return;
+      const hasExistingData = (QM.state.items ?? []).length > 0 || (QM.state.outfits ?? []).length > 0;
+      if (hasExistingData && !window.confirm("Importing replaces this chat's current items and outfits. Continue?")) {
+        return;
+      }
+      let payload;
+      try {
+        payload = JSON.parse(await file.text());
+      } catch {
+        QM.state.error = "That file isn't valid JSON.";
+        QM.state._notify();
+        return;
+      }
+      await QM.state.importInventory(payload);
+    });
+    importButton.addEventListener("click", () => fileInput.click());
+
+    row.append(exportButton, importButton, fileInput);
+    return row;
   },
 
   // A single row, one checkbox per group: "Show Slots: [ ] Underwear

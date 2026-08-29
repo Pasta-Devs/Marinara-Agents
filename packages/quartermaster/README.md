@@ -21,6 +21,10 @@ is not built — the dock shows the persona's existing avatar instead — and co
 - **Item locations** — `bag` (carried), `equipped:<slot>`, or `stored:<name>` (a named stash).
 - **Saved outfits** — snapshot the current equip state under a name, equip/unequip it later in
   one step.
+- **Export/import** — download the current chat's items, outfits, and settings as a JSON file, or
+  replace them by importing one back — ported from the original extension. Item/outfit ids are
+  reissued on import rather than kept as-is, so importing into a chat that already has data (or
+  importing the same file twice) never collides with what's already there.
 - **Slot-group visibility toggles** — underwear (off by default, SFW), armor, and weapons
   (both on by default) can each be hidden — disabled, not just hidden — matching the original
   extension's `SLOT_GROUPS` convention.

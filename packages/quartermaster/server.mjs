@@ -88,6 +88,7 @@ function slotGroupVisible(slot, visibility) {
 
 const PACKAGE_ID = "quartermaster";
 const INVENTORY_KIND = "inventory";
+const QM_EXPORT_FORMAT_VERSION = 1;
 const MAX_ITEM_NAME_LENGTH = 200;
 const MAX_ITEM_DESCRIPTION_LENGTH = 4000;
 const MAX_STORED_LOCATION_LENGTH = 200;
@@ -762,6 +763,104 @@ export async function activate(context) {
 
         await persistState(chatId, ownerId, state);
         return { items: state.items, outfits: state.outfits };
+      });
+
+      // Portable export/import (plan: carry a character sheet between chats
+      // without needing the tracker agent enabled at the destination — the
+      // original extension's own export/import, ported). Item/outfit ids are
+      // reissued on import rather than kept as-is: importing the same file
+      // twice, or into a chat that already has data with colliding ids,
+      // should never silently merge two unrelated items that happen to share
+      // an id. Outfit slot references are remapped through the old->new id
+      // map so an imported outfit still points at ITS OWN freshly-issued
+      // items instead of falling back to applyOutfitEquip's by-name
+      // recreation (which would work, but would leave the freshly-imported
+      // item sitting unused in the bag as a duplicate).
+      routes.get("/inventory/:chatId/:ownerId/export", async (request, reply) => {
+        const { chatId, ownerId } = request.params;
+        const state = await loadInventoryState(documents, chatId, ownerId);
+        return {
+          formatVersion: QM_EXPORT_FORMAT_VERSION,
+          exportedAt: new Date().toISOString(),
+          items: state.items,
+          outfits: state.outfits,
+          showUnderwear: state.showUnderwear,
+          showArmor: state.showArmor,
+          showWeapons: state.showWeapons,
+          appearanceFeedMode: state.appearanceFeedMode,
+        };
+      });
+
+      routes.post("/inventory/:chatId/:ownerId/import", async (request, reply) => {
+        const { chatId, ownerId } = request.params;
+        const body = request.body ?? {};
+        if (!Array.isArray(body.items) || !Array.isArray(body.outfits)) {
+          return reply.status(400).send({ error: "Import file is missing items or outfits" });
+        }
+
+        const state = await loadInventoryState(documents, chatId, ownerId);
+        state.appearanceFeedMode = APPEARANCE_FEED_MODES.has(body.appearanceFeedMode)
+          ? body.appearanceFeedMode
+          : "off";
+        state.showUnderwear = typeof body.showUnderwear === "boolean" ? body.showUnderwear : SLOT_GROUP_DEFAULTS.underwear;
+        state.showArmor = typeof body.showArmor === "boolean" ? body.showArmor : SLOT_GROUP_DEFAULTS.armor;
+        state.showWeapons = typeof body.showWeapons === "boolean" ? body.showWeapons : SLOT_GROUP_DEFAULTS.weapons;
+
+        const idMap = new Map();
+        const nextItems = [];
+        for (const raw of body.items) {
+          if (!raw || typeof raw !== "object") continue;
+          const name = normalizeText(raw.name, MAX_ITEM_NAME_LENGTH);
+          if (!name) continue;
+          const location = normalizeLocation(raw.location, state) ?? "bag";
+          const item = {
+            id: randomUUID(),
+            name,
+            description: normalizeText(raw.description, MAX_ITEM_DESCRIPTION_LENGTH),
+            quantity: normalizeQuantity(raw.quantity),
+            location: "bag",
+            defaultSlot: normalizeDefaultSlot(raw.defaultSlot) || null,
+          };
+          applyLocation(nextItems, item, location);
+          nextItems.push(item);
+          if (typeof raw.id === "string") idMap.set(raw.id, item.id);
+        }
+
+        const nextOutfits = [];
+        for (const raw of body.outfits) {
+          if (!raw || typeof raw !== "object") continue;
+          const name = normalizeText(raw.name, MAX_OUTFIT_NAME_LENGTH);
+          if (!name) continue;
+          const slots = {};
+          for (const [slot, snapshot] of Object.entries(raw.slots ?? {})) {
+            if (!EQUIP_SLOT_SET.has(slot) || !snapshot || typeof snapshot !== "object") continue;
+            const snapshotName = normalizeText(snapshot.name, MAX_ITEM_NAME_LENGTH);
+            if (!snapshotName) continue;
+            slots[slot] = {
+              itemId: idMap.get(snapshot.itemId) ?? null,
+              name: snapshotName,
+              description: normalizeText(snapshot.description, MAX_ITEM_DESCRIPTION_LENGTH),
+            };
+          }
+          nextOutfits.push({
+            id: randomUUID(),
+            name,
+            description: normalizeText(raw.description, MAX_OUTFIT_DESCRIPTION_LENGTH),
+            slots,
+          });
+        }
+
+        state.items = nextItems;
+        state.outfits = nextOutfits;
+        await persistState(chatId, ownerId, state);
+        return {
+          items: state.items,
+          outfits: state.outfits,
+          appearanceFeedMode: state.appearanceFeedMode,
+          showUnderwear: state.showUnderwear,
+          showArmor: state.showArmor,
+          showWeapons: state.showWeapons,
+        };
       });
 
       routes.patch("/inventory/:chatId/:ownerId/settings", async (request, reply) => {
