@@ -377,7 +377,7 @@ const features = [
   {
     id: "long-term-memory",
     version: "1.2.18",
-    minEngineVersion: "2.4.4",
+    minEngineVersion: "2.4.5",
     maxEngineExclusive: MAX_ENGINE_EXCLUSIVE,
     name: "Long-Term Memory",
     description:
