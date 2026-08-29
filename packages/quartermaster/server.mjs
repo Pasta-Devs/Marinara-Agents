@@ -261,6 +261,23 @@ function computeAppearanceText(state) {
 // adding party members later is a call-site change, not a rewrite.
 const QM_TRACKER_OWNER_ID = "persona";
 
+// Same rule every built-in tracker (World State, Character Tracker, Persona
+// Stats, Hierarchical Maps, the roleplay-summary agent) uses to decide
+// whether it's active for a chat — confirmed against the Engine's own
+// generation code, not guessed: chatMeta.enableAgents plus
+// chatMeta.activeAgentIds is the one signal the pipeline itself uses to
+// decide whether an agent's post_processing turn even runs, so gating our
+// own prompt-context contribution on the same fields keeps us consistent
+// with what "disabling the agent" already means everywhere else. Without
+// this, a user who disables Quartermaster after using it keeps getting its
+// last-known inventory fed to the narrator indefinitely — the exact bug
+// found in another package's contributor, which isn't self-gated this way.
+function isQuartermasterAgentActive(chatMeta) {
+  if (!chatMeta || chatMeta.enableAgents !== true) return false;
+  const activeAgentIds = Array.isArray(chatMeta.activeAgentIds) ? chatMeta.activeAgentIds : [];
+  return activeAgentIds.includes(PACKAGE_ID);
+}
+
 // Case/separator-insensitive only — "Blue Hat" and "blue-hat" are the same
 // item, but "Blue Hat" and "Hat" are never merged automatically. Matching on
 // meaning (not just formatting) would risk silently merging visually-distinct
@@ -566,13 +583,14 @@ export async function activate(context) {
   // than, agent-runtime's prepareContext above: that one feeds the TRACKER
   // AGENT its own prior state so it can decide what changed; this feeds the
   // NARRATOR a short, location-aware summary so prose stays consistent with
-  // what's actually equipped/carried. Runs unconditionally on every
-  // generation (registerPromptContext, not gated behind the agent being
-  // enabled) — contributes nothing when the owner has no items yet.
+  // what's actually equipped/carried. Gated on the agent being currently
+  // enabled for the chat (isQuartermasterAgentActive) — disabling the agent
+  // now stops this feed the same turn, matching every built-in tracker's own
+  // behavior, rather than continuing to report whatever was last written.
   // provides.inventory:true hands us the built-in [inventory:] block/command
   // instead of running both side by side.
-  const releasePromptContext = api.registerPromptContext(async ({ chatId, mode }) => {
-    if (mode !== "roleplay" || !chatId) return null;
+  const releasePromptContext = api.registerPromptContext(async ({ chatId, mode, chatMeta }) => {
+    if (mode !== "roleplay" || !chatId || !isQuartermasterAgentActive(chatMeta)) return null;
     try {
       const state = await loadInventoryState(documents, chatId, QM_TRACKER_OWNER_ID);
       // Skip the persona lookup entirely when there's nothing to report yet —

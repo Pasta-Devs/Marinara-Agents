@@ -29,8 +29,10 @@ is not built — the dock shows the persona's existing avatar instead — and co
   in the persona's appearance field resolves for Roleplay's Illustrator image generation.
 - **Narrator prompt context** — `registerPromptContext` contributes a curated, read-only summary
   of what's equipped/carried/stored (`provides: {inventory: true}` suppresses the Engine's own
-  built-in `[inventory:]` block), so the narrator sees current inventory without needing the
-  tracker agent enabled.
+  built-in `[inventory:]` block). Gated on the Quartermaster agent being currently enabled for the
+  chat (`chatMeta.enableAgents`/`activeAgentIds` — the same signal every built-in tracker uses to
+  decide it's active), so disabling the agent stops this feed the same turn instead of continuing
+  to report stale state.
 - **Quartermaster agent** (`phase: post_processing`) — reads each turn's narration and returns a
   full-snapshot JSON description of the persona's current items/equip state, reconciled into
   the same store the dock UI reads and writes, through the `agent-runtime` capability's
