@@ -173,6 +173,46 @@ function qmSortByName(list) {
   return list.slice().sort((a, b) => a.name.localeCompare(b.name));
 }
 
+// True while the user is mid-interaction with a live input/select inside
+// either view — an open <select> keeps its native dropdown's owning element
+// focused for as long as the popup stays open, so checking focus alone
+// covers both "typing in a field" and "a dropdown is open" without needing
+// a separate open/closed tracker.
+function qmIsLiveEditableElement(el) {
+  if (!el) return false;
+  const tag = el.tagName;
+  return tag === "INPUT" || tag === "SELECT" || tag === "TEXTAREA";
+}
+
+function qmFocusIsInsideLiveView() {
+  if (typeof document === "undefined") return false;
+  const active = document.activeElement;
+  if (!qmIsLiveEditableElement(active)) return false;
+  const dockRoot = QM.dock && QM.dock.root;
+  const panelRoot = QM.panel && QM.panel.container;
+  return Boolean((dockRoot && dockRoot.contains(active)) || (panelRoot && panelRoot.contains(active)));
+}
+
+// Registered once, module-wide (not per mount/unmount), since it's a no-op
+// whenever polling isn't active. Catches the user up as soon as they finish
+// editing instead of leaving them looking at up-to-5-second-stale data until
+// the next tick — "focusout" (unlike "blur") bubbles, so one delegated
+// listener covers every field/select either view ever builds. The delay
+// lets focus land on wherever it's actually going next (tabbing to another
+// field, a <select>'s popup closing) before deciding the user is done.
+if (typeof document !== "undefined") {
+  document.addEventListener(
+    "focusout",
+    () => {
+      if (!QM.state._pollTimer) return;
+      setTimeout(() => {
+        if (QM.state.chatId && !qmFocusIsInsideLiveView()) QM.state._reload();
+      }, 200);
+    },
+    true,
+  );
+}
+
 QM.state = {
   chatId: null,
   items: null,
@@ -235,7 +275,14 @@ QM.state = {
     this._activeViewers += 1;
     if (this._pollTimer) return;
     this._pollTimer = setInterval(() => {
-      if (this.chatId && typeof document !== "undefined" && !document.hidden) this._reload();
+      if (!this.chatId || typeof document === "undefined" || document.hidden) return;
+      // A repaint replaces the DOM nodes wholesale (there's no cheap way to
+      // patch just the one row that changed), so a poll landing mid-edit —
+      // typing in a description field, an open <select>'s native dropdown —
+      // would tear the control out from under the user. Skip this tick and
+      // let qmScheduleCatchUpReload pick it up the moment focus leaves.
+      if (qmFocusIsInsideLiveView()) return;
+      this._reload();
     }, 5000);
   },
 
