@@ -31,6 +31,26 @@ Since 1.2.0 the package is **staging only**: Engine `staging` testers are offere
 
 **1.5.1** is a hotfix: the world-creation escape now reaches all four creation screens. Creation ends by reading the prologue, so its chapter forge and prologue beat are as barless as the founding cast and its art — a player from an old world could sit on "Forging the first chapter" with no way out. The cancel is gated on the prologue debt, so a later chapter's forge never grows a world-killing button beside its Retry.
 
+**1.6.0 is about the story's pictures, and about what the model is asked for.** It registers 75 routes.
+
+- **Key images.** A beat may mark one moment as illustrated: a single picture that replaces the scene's background for the span it covers, with the cast sprites hidden because they are in the image. How often a world may spend one is a per-world slider, from off to every beat, and the rarity is enforced at both ends — the prompt only offers the field when the window is open, and the validator discards one that arrives outside it. The beat names who is **in the frame** rather than who is present, what each body is doing, and, only when the scene changes it, what they are wearing.
+- **A character's clothes are canon.** Minting writes one prose appearance, and a small translation derives the tag lists from it: the permanent traits, the clothes the character normally wears, and the same person seen from behind. A key image dresses them the way they always are unless the scene says otherwise, and a character drawn from behind travels without the face they cannot show. An outfit the player has equipped counts as story canon only if the world opts in — off by default, because a bought costume is not something the story agreed to.
+- **Image prompts are always English.** The rule used to be written eight times and the weakest copy decided; it is one constant now, and a scene written in the world's language is translated rather than dropped.
+- **World creation tolerates other models.** Measured against 32 legitimate ways of answering the same thing, the forge accepted 22 and now accepts 30 — role and affinity were the only fields still compared as exact strings. When it does fail the player is told why, the cancel button responds, and a half-made world offers to continue instead of starting over.
+- **Chapters no longer spoil themselves.** The planner's hook and the titles of nodes the player has not reached stay hidden until they are earned.
+- **Heroes take turns.** The chapter cast is half the roster rather than all of it, with ceilings per node and per chapter, and the beat writes only who its guide named — several scenes with no hero at all are normal.
+- **Long runs compress further.** Chapters already compressed can be combined again, recursively, so the context ceiling stops being a wall.
+- **Home.** The background picker gains a **Story CG** category listing the world's key images, newest first, and both pickers now page ten at a time instead of drawing every picture a world ever painted.
+
+Fixes in this line: levelling with no Funds no longer consumes Insight; deleting a world now takes its key images and outfits with it; the seasonal event pays 100 Aether a stack instead of 50; models that reason no longer run out of room mid-answer; and the changelog opens five versions at a time.
+
+One of those is worth naming, because it was not cosmetic. The forge's loading screen printed the
+world description in full, and the field accepts 4,000 characters. Measured against that: the block
+ran 680px tall, the centre column overflowed its box by 374px, and **Cancel ended up 309px outside
+the stage** — so a world with a long description had no way to cancel its own creation, which is the
+escape 1.5.1 had just finished wiring to all four creation screens. The description is gone from that
+screen; the heading, the live status and a foot that mentions it without printing it remain.
+
 ### It also reworks screens that already shipped
 
 This release is not only additive; the reworks it carries to interfaces already in staging are listed in the pull request body and summarised here:
@@ -40,7 +60,8 @@ This release is not only additive; the reworks it carries to interfaces already 
 - **Materials** (shipped in 1.1.0): tier drops halved and Insight XP doubled, from measured progression; and the difficulty a chapter allows is clamped server-side — it used to carry over from the previous chapter, which was an economy leak, not a cosmetic bug.
 - **Story and the VN** (shipped in 1.2.0): the backlog opens at the bottom; a shortened or surname-first speaker still finds their portrait; and `/complete` checks that its write landed before paying.
 - **Server-side economy hardening** across routes that pay: `/summon` validates every lock the screen draws (it validated none), `/battle/start` clamps difficulty before charging, and six unchecked writes that could lose an already-paid reward now conflict instead.
-- **Home** (shipped in 1.0.0): the scene background survives a banner-art repaint, deleting a world asks first and says what is lost (and deletes its art), and the picker gains the outfit switch.
+- **Home** (shipped in 1.0.0): the scene background survives a banner-art repaint, deleting a world asks first and says what is lost (and deletes its art, its key images and its outfits), and the picker gains the outfit switch, the Story CG category and pagination. Resolving the chosen background is one read rather than three whole catalogues, which used to run on every state refresh and grew with the story.
+- **Settings and the changelog** (shipped in 1.3.0): the key-images slider fills its row and keeps the number the player set, and the changelog opens five versions at a time instead of all of them.
 
 ### And two side rails, with a door inside the game
 
