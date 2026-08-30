@@ -154,8 +154,7 @@ BH.views = {
    */
   hardwareSection(settings) {
     if (!settings) return "";
-    const offload =
-      settings.gpuLayers === 0 ? "cpu" : settings.gpuLayers === -1 ? "gpu" : "custom";
+    const offload = settings.gpuLayers === 0 ? "cpu" : settings.gpuLayers === -1 ? "gpu" : "custom";
     return `<details class="bh-hw">
       <summary>Hardware</summary>
       <p class="bh-view-note">How much of this machine the local model may use. Sampling is fixed to what the
@@ -233,7 +232,10 @@ BH.views = {
             if (!check) say("Could not reach the model repository.", true);
             else if (check.indeterminate) {
               // Never imply "current" when the comparison could not be made.
-              say("Could not tell whether a newer build exists. Re-downloading is safe but not confirmed needed.", true);
+              say(
+                "Could not tell whether a newer build exists. Re-downloading is safe but not confirmed needed.",
+                true,
+              );
             } else if (check.updateAvailable) {
               say(
                 `A newer build is available (${String(check.availableOid || "").slice(0, 12)}). ` +
