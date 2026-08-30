@@ -49,6 +49,7 @@ import type { ConnectionAdmissionMode } from "../generation/connection-admission
 import { isUnsupportedNoodleVisionInputError } from "./slurp-vision.js";
 import { formatNoodleMessagesForLog } from "./slurp-generation-log.js";
 import { ensureAmbientNoodleAccounts } from "./slurp-ambient-profiles.js";
+import { generatedMediaSettings } from "./slurp-generated-media-policy.js";
 
 type PublicGenerationConnection = NonNullable<
   Awaited<ReturnType<ReturnType<typeof createConnectionsStorage>["getWithKey"]>>
@@ -417,7 +418,10 @@ export function createPublicNoodleGenerationService(db: DB) {
           generated: deduplicated.generated,
           selectedParticipants,
           personaAccount,
-          settings,
+          // Do not spend image-generation capacity on a response that contained malformed
+          // timeline JSON. Valid rows can still be committed, but the whole response must be
+          // image-free until the model returns a clean refresh.
+          settings: generatedMediaSettings(settings, parsedGenerated.rejected.length),
           imageConnection,
           debugMode,
           reviewImagePromptsBeforeSend: input.reviewImagePromptsBeforeSend,

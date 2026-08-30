@@ -19,6 +19,26 @@ const profileSurface = read("packages/slurp/src/engine/packages/client/src/compo
 const artwork = read("packages/slurp/src/engine/packages/server/src/services/slurp/slurp-artwork.operation.ts");
 const shell = read("packages/slurp/src/engine/packages/client/src/components/slurp/SlurpShell.tsx");
 const serverEntry = read("packages/slurp/src/engine/packages/server/src/services/slurp/server-entry.ts");
+const publicGeneration = read(
+  "packages/slurp/src/engine/packages/server/src/services/slurp/slurp-public-generation.service.ts",
+);
+
+const multipartReader = routes.slice(
+  routes.indexOf("async function readNoodlerMultipart"),
+  routes.indexOf("async function importNoodlerMedia"),
+);
+assert.match(
+  multipartReader,
+  /if \(!write\.acquired\) \{[\s\S]*?part\.file\.resume\(\);[\s\S]*?throw new NoodlerMediaRequestError\("Slurp data cleanup is in progress\.", 409\)/u,
+);
+assert.match(multipartReader, /return await part\.toBuffer\(\);/u);
+assert.match(multipartReader, /const buffer = write\.value;[\s\S]*?isAllowedImageBuffer\(buffer, extension\)/u);
+assert.doesNotMatch(multipartReader, /return reply\./u, "the multipart helper must not return before validating media");
+assert.match(
+  publicGeneration,
+  /settings: generatedMediaSettings\(settings, parsedGenerated\.rejected\.length\)/u,
+  "partially rejected timeline output must not reach image generation",
+);
 
 const updateRoute = routes.slice(
   routes.indexOf('app.put("/noodler/accounts/:id/stage-profile"'),
