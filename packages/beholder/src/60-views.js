@@ -92,11 +92,16 @@ BH.views = {
    * schedule, so without this a reopened view could report the previous selection —
    * the exact wrong-prompt confusion these views exist to prevent.
    */
-  async setTemplate(props, templateId) {
-    // Resolved the same way liveTemplate resolves it. Reading the chat from one source
-    // and writing to another meant a save could silently do nothing while the caller
-    // went on to report the new selection as active.
-    const chatId = props?.chatId ?? BH.dock.chatId;
+  /**
+   * Persist the selection for a named chat.
+   *
+   * The chat is passed in rather than resolved here. Resolving it at save time read
+   * whichever chat was current *then*, so a view left open across a chat switch could
+   * write the selection to the wrong one; and reading it from `props` alone missed the
+   * `BH.dock.chatId` fallback and silently saved nothing. The caller resolves it once,
+   * before it awaits anything, and the save is bound to that.
+   */
+  async setTemplate(props, templateId, chatId) {
     if (!chatId) throw new Error("no chat to save to");
     const existing = props?.metadata?.agentPromptTemplateIds;
     const next = { ...(existing && typeof existing === "object" ? existing : {}) };
@@ -298,7 +303,10 @@ BH.views = {
       document.querySelector(".bh-view-overlay") ??
       this.open("Prompt", `<p class="bh-view-lead">Checking which model will answer…</p>`);
     const props = BH.dock.props ?? {};
-    const selected = await this.liveTemplate(props?.chatId ?? BH.dock.chatId, props);
+    // Resolved once, before anything is awaited, so every read and write below refers
+    // to the chat this view is actually showing.
+    const chatId = props?.chatId ?? BH.dock.chatId;
+    const selected = await this.liveTemplate(chatId, props);
     let usingFivePass = selected === BH_FIVE_PASS_ID;
 
     // The local slot outranks the agent's connection, so ask the engine what will
@@ -312,7 +320,7 @@ BH.views = {
     // one. Select it rather than leaving the operator a way to break their own setup.
     if (servedLocally && !usingFivePass) {
       try {
-        await this.setTemplate(props, BH_FIVE_PASS_ID);
+        await this.setTemplate(props, BH_FIVE_PASS_ID, chatId);
         // Only after the save actually succeeded: claiming the switch happened when it
         // did not would show a locked picker over the wrong prompt.
         usingFivePass = true;
@@ -382,7 +390,7 @@ BH.views = {
         for (const input of body.querySelectorAll('input[name="bh-prompt"]')) {
           input.addEventListener("change", async (event) => {
             try {
-              await this.setTemplate(props, event.target.value || null);
+              await this.setTemplate(props, event.target.value || null, chatId);
               BH.toast("Prompt selection saved");
               this.close();
             } catch (error) {
