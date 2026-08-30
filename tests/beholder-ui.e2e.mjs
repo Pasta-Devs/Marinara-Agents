@@ -243,6 +243,78 @@ check(
   }),
 );
 
+// ── a hand slot offers the held item, and Drop clears it ────────────────────
+{
+  const opened = await page.evaluate(() => {
+    const card = [...document.querySelectorAll(".bh-slot-card[data-slot]")].find((c) =>
+      ["left_hand", "right_hand"].includes(c.dataset.slot),
+    );
+    if (!card) return false;
+    card.click();
+    return true;
+  });
+  await page.waitForTimeout(900);
+  check(
+    "a hand slot offers the holding row",
+    opened && (await page.evaluate(() => !!document.querySelector(".bhe-hitem"))),
+  );
+  check(
+    "drop clears the held item",
+    await page.evaluate(() => {
+      const held = document.querySelector(".bhe-hitem");
+      held.value = "torch";
+      document.querySelector(".bhe-drop").click();
+      return held.value === "" && !!document.querySelector(".bh-editor");
+    }),
+  );
+  await page.evaluate(() => document.querySelector(".bh-editor-close")?.click());
+  await page.waitForTimeout(400);
+}
+
+// ── a locked slot is restored when the stored state disagrees ───────────────
+{
+  const restored = await page.evaluate(async () => {
+    const element = document.querySelector("marinara-capability-beholder");
+    const chatId = element?.capabilityProps?.chatId;
+    const card = document.querySelector(".bh-slot-card[data-slot]");
+    const slot = card.dataset.slot;
+    card.click();
+    await new Promise((r) => setTimeout(r, 700));
+    const lock = document.querySelector(".bhe-lock");
+    lock.checked = true;
+    lock.dispatchEvent(new Event("change", { bubbles: true }));
+    document.querySelector(".bh-editor-close")?.click();
+    await new Promise((r) => setTimeout(r, 400));
+
+    // Simulate an extraction overwriting the locked slot behind the panel's back.
+    const before = await (await fetch(`/api/agents/beholder-state/${chatId}`, { credentials: "same-origin" })).json();
+    const meddled = structuredClone(before.state);
+    const character = meddled.characters[0];
+    character.body[slot] = { worn: [{ item: "intruder", damage: "pristine" }] };
+    await fetch(`/api/agents/beholder-state/${chatId}`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      credentials: "same-origin",
+      body: JSON.stringify({ state: meddled }),
+    });
+    return { slot, chatId };
+  });
+  // A refresh is what triggers enforcement.
+  await page.evaluate(() => {
+    const toggle = [...document.querySelectorAll(".bh-hud-toggle")].find((b) => b.getBoundingClientRect().width > 0);
+    toggle?.click();
+    toggle?.click();
+  });
+  await page.waitForTimeout(3500);
+  const gone = await page.evaluate(async (info) => {
+    const state = await (
+      await fetch(`/api/agents/beholder-state/${info.chatId}`, { credentials: "same-origin" })
+    ).json();
+    return !JSON.stringify(state).includes("intruder");
+  }, restored);
+  check("a locked slot is restored after something overwrites it", gone);
+}
+
 // ── layers, views, layouts ──────────────────────────────────────────────────
 for (const layer of ["color", "damage", "wounds"]) {
   check(

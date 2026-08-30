@@ -2140,6 +2140,9 @@ BH.editor = {
     editor.querySelector(".bh-editor-close").addEventListener("click", () => this.close());
     editor.querySelector(".bhe-lock").addEventListener("change", (event) => {
       BH.locks.set(characterName, slotName, event.target.checked);
+      // Pin what the slot holds right now; that is what enforcement restores to.
+      const current = BH.dock.state?.[characterName]?.body?.[slotName];
+      BH.locks.remember(characterName, slotName, event.target.checked ? (current ?? null) : undefined);
       BH.toast(event.target.checked ? "Slot locked" : "Slot unlocked");
       BH.dock.render();
     });
@@ -2149,6 +2152,11 @@ BH.editor = {
       apply.disabled = true;
       try {
         await this.applySlotEdit(BH.dock.chatId, characterName, slotName, next);
+        // Re-pin so a locked slot holds what was just applied rather than the value
+        // it was locked at — otherwise enforcement would undo the operator's own edit.
+        if (BH.locks.has(characterName, slotName)) {
+          BH.locks.remember(characterName, slotName, Object.keys(next).length ? next : null);
+        }
         BH.toast("Saved");
         this.close();
         await BH.dock.refresh();
@@ -2172,8 +2180,14 @@ BH.editor = {
 };
 
 // ── Locks ────────────────────────────────────────────────────────────────────
-// Per chat, per character+slot. Kept client-side: they express the operator's
-// intent about their own view of the doll, and nothing server-side consumes them.
+// Per chat, per character+slot. A lock is a promise that the slot keeps the value
+// the operator set, so it has to be enforced rather than merely drawn: the extractor
+// does not read locks, and would happily overwrite a locked slot on the next turn.
+//
+// Enforcement runs after each refresh. When the stored state disagrees with a locked
+// value, the locked value is written back through the same endpoint the editor uses,
+// which is the record the next prompt is built from — so the correction survives
+// instead of being re-narrated away every turn.
 BH.locks = {
   key(chatId) {
     return `marinara.beholder.locks.${chatId}`;
@@ -2200,6 +2214,79 @@ BH.locks = {
       // A blocked storage write costs the lock, not the session.
     }
   },
+  /** The value a locked slot is pinned to, captured when the lock is set. */
+  valueKey(chatId) {
+    return `marinara.beholder.lockvalues.${chatId}`;
+  },
+  values(chatId = BH.dock.chatId) {
+    if (!chatId) return {};
+    try {
+      return JSON.parse(window.localStorage.getItem(this.valueKey(chatId)) || "{}") || {};
+    } catch {
+      return {};
+    }
+  },
+  remember(character, slot, value, chatId = BH.dock.chatId) {
+    if (!chatId) return;
+    const map = this.values(chatId);
+    if (value === undefined) delete map[`${character}::${slot}`];
+    else map[`${character}::${slot}`] = value;
+    try {
+      window.localStorage.setItem(this.valueKey(chatId), JSON.stringify(map));
+    } catch {
+      // Without the pinned value the lock can only be advisory; it still marks the slot.
+    }
+  },
+
+  /**
+   * Put locked slots back the way the operator left them.
+   *
+   * Returns true when it had to write, so the caller can refresh again and show the
+   * restored value rather than the extractor's version.
+   */
+  async enforce(state, chatId = BH.dock.chatId) {
+    if (!chatId) return false;
+    const locked = this.all(chatId);
+    const pinned = this.values(chatId);
+    const keys = Object.keys(locked);
+    if (keys.length === 0) return false;
+
+    const next = { characters: [] };
+    let changed = false;
+    for (const [name, character] of Object.entries(state ?? {})) {
+      next.characters.push({
+        name,
+        ...(character.species ? { species: character.species } : {}),
+        body: { ...(character.body ?? {}) },
+      });
+    }
+    for (const key of keys) {
+      const [name, slot] = key.split("::");
+      const want = pinned[key];
+      const entry = next.characters.find((candidate) => candidate.name === name);
+      if (!entry) continue;
+      const have = entry.body[slot];
+      if (JSON.stringify(have ?? null) === JSON.stringify(want ?? null)) continue;
+      if (want === undefined || want === null) delete entry.body[slot];
+      else entry.body[slot] = want;
+      changed = true;
+    }
+    if (!changed) return false;
+    try {
+      const res = await fetch(`/api/agents/beholder-state/${encodeURIComponent(chatId)}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        credentials: "same-origin",
+        body: JSON.stringify({ state: next }),
+      });
+      if (!res.ok) return false;
+      BH.toast("Locked slots restored");
+      return true;
+    } catch {
+      return false;
+    }
+  },
+
   /** Mark locked slots in the rendered panel so the state is visible, not hidden. */
   decorate(panel, character) {
     if (!panel || !character) return;
@@ -3067,6 +3154,12 @@ BH.dock = {
       const next = await BH.fetchState(chatId);
       if (this.chatId !== chatId) return; // chat switched mid-flight
       this.adopt(next);
+      // A lock promises the slot keeps its value; the extractor does not read locks,
+      // so put back anything it overwrote and show the restored state.
+      if (await BH.locks.enforce(next, chatId)) {
+        const restored = await BH.fetchState(chatId);
+        if (this.chatId === chatId) this.adopt(restored);
+      }
     } catch (error) {
       // A read failure leaves the last known doll on screen; the next turn retries.
       console.warn("[beholder] state refresh failed", error);

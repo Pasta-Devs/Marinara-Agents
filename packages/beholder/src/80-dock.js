@@ -630,6 +630,12 @@ BH.dock = {
       const next = await BH.fetchState(chatId);
       if (this.chatId !== chatId) return; // chat switched mid-flight
       this.adopt(next);
+      // A lock promises the slot keeps its value; the extractor does not read locks,
+      // so put back anything it overwrote and show the restored state.
+      if (await BH.locks.enforce(next, chatId)) {
+        const restored = await BH.fetchState(chatId);
+        if (this.chatId === chatId) this.adopt(restored);
+      }
     } catch (error) {
       // A read failure leaves the last known doll on screen; the next turn retries.
       console.warn("[beholder] state refresh failed", error);
