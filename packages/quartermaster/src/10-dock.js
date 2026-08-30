@@ -56,6 +56,16 @@ const QM_DOCK_STYLE = `
 }
 #qm-dock-resize-handle:hover{ opacity:1; background:var(--accent, rgba(128,128,128,0.15)); }
 #qm-dock-root.qm-dock-dragging, #qm-dock-root.qm-dock-resizing{ user-select:none; }
+#qm-dock-body{
+  scrollbar-width: thin;
+  scrollbar-color: var(--border, rgba(128,128,128,0.4)) transparent;
+}
+#qm-dock-body::-webkit-scrollbar{ width:8px; height:8px; }
+#qm-dock-body::-webkit-scrollbar-track{ background:transparent; }
+#qm-dock-body::-webkit-scrollbar-thumb{
+  background:var(--border, rgba(128,128,128,0.4)); border-radius:4px;
+}
+#qm-dock-body::-webkit-scrollbar-thumb:hover{ background:var(--muted-foreground, rgba(128,128,128,0.6)); }
 @media (max-width:767px){
   #qm-dock-root{
     top:var(--qm-mobile-top,0px) !important; left:0 !important; right:0 !important; bottom:0 !important;
@@ -190,6 +200,7 @@ QM.dock = {
   // across visits.
   settingsExpanded: false,
   _windowBound: false,
+  _outsideClickBound: false,
   _interaction: null,
   _boundsObserver: null,
   _bodyObserver: null,
@@ -544,6 +555,30 @@ QM.dock = {
         });
       });
     }
+    if (!this._outsideClickBound) {
+      this._outsideClickBound = true;
+      // Matches most other Marinara menus (and the original extension):
+      // clicking anywhere outside the open dock closes it. Capture phase so
+      // an intervening stopPropagation() elsewhere in the host can't hide a
+      // click from this; pointerdown (not click) to match the drag/resize
+      // handlers' own event choice and to close as soon as the press lands,
+      // not after it releases. Two exclusions: mid-drag/resize (this
+      // .root.contains would be true anyway since the pointer started
+      // inside, but this also covers a resize handle drag that ends outside
+      // the dock's own bounds), and the toolbar launch button itself — its
+      // own click handler already toggles, so also closing here would
+      // close-then-immediately-reopen instead of just toggling once.
+      document.addEventListener(
+        "pointerdown",
+        (event) => {
+          if (!this.isOpenFlag || this._interaction || !this.root) return;
+          const target = event.target instanceof Element ? event.target : null;
+          if (!target || this.root.contains(target) || target.closest(".qm-launch")) return;
+          this.close();
+        },
+        true,
+      );
+    }
   },
 
   // Rebuilds only what changed. Forms are built once and left alone on every
@@ -735,7 +770,7 @@ QM.dock = {
     const section = document.createElement("div");
     Object.assign(section.style, {
       border: "1px solid var(--border, rgba(128,128,128,0.3))",
-      borderRadius: "4px",
+      borderRadius: "var(--radius, 4px)",
       marginBottom: "8px",
       overflow: "hidden",
     });
@@ -777,12 +812,22 @@ QM.dock = {
     header.append(chevron, label);
     header.addEventListener("click", () => {
       this.settingsExpanded = !this.settingsExpanded;
-      this.settingsContent.style.display = this.settingsExpanded ? "" : "none";
+      this.settingsContent.style.maxHeight = this.settingsExpanded ? "200px" : "0px";
       this.settingsChevron.style.transform = this.settingsExpanded ? "rotate(90deg)" : "rotate(0deg)";
     });
 
+    // max-height + overflow:hidden, not display:none/"" — display can't be
+    // transitioned, so the section used to snap open/closed instantly. 200px
+    // is a generous ceiling for what's actually two short rows; it doesn't
+    // need to track real content height since it's never the constraining
+    // factor once expanded.
     const content = document.createElement("div");
-    Object.assign(content.style, { padding: "8px", display: this.settingsExpanded ? "" : "none" });
+    Object.assign(content.style, {
+      padding: "0 8px",
+      maxHeight: this.settingsExpanded ? "200px" : "0px",
+      overflow: "hidden",
+      transition: "max-height 0.2s ease",
+    });
     content.appendChild(this._buildSlotVisibilityRow());
     content.appendChild(this._buildExportImportRow());
     this.settingsContent = content;
@@ -980,7 +1025,13 @@ QM.dock = {
       display: "flex",
       flexDirection: ringStacked ? "column" : "row",
       gap: "8px",
-      alignItems: "center",
+      // Row mode: flex-start, not center — the left stack grows taller than
+      // the right whenever the underwear toggle adds a third sub-column
+      // beneath Clothing, and centering each column independently around
+      // the row's height visibly shifted the shorter ones. Column mode
+      // (mobile/narrow) needs the opposite axis — center, so each stacked
+      // block is horizontally centered rather than left-hugging the row.
+      alignItems: ringStacked ? "center" : "flex-start",
       justifyContent: "center",
       width: "100%",
     });
@@ -1058,7 +1109,7 @@ QM.dock = {
       flexDirection: "column",
       gap: "2px",
       border: "1px solid var(--border, rgba(128,128,128,0.3))",
-      borderRadius: "4px",
+      borderRadius: "var(--radius, 4px)",
       padding: "3px 4px",
       width: "104px",
       boxSizing: "border-box",
@@ -1210,7 +1261,7 @@ QM.dock = {
       flexDirection: "column",
       gap: "3px",
       border: "1px solid var(--border, rgba(128,128,128,0.3))",
-      borderRadius: "4px",
+      borderRadius: "var(--radius, 4px)",
       padding: "4px 6px",
     });
 
@@ -1331,7 +1382,7 @@ QM.dock = {
       flexDirection: "column",
       gap: "4px",
       border: "1px solid var(--border, rgba(128,128,128,0.3))",
-      borderRadius: "4px",
+      borderRadius: "var(--radius, 4px)",
       padding: "4px 6px",
     });
 

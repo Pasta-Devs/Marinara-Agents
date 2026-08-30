@@ -3,6 +3,28 @@
 // so the two views stay visually and behaviorally consistent instead of
 // each hand-rolling their own button/input styling.
 
+// Inline styles (Object.assign(el.style, ...) below) can't express :hover,
+// :active, or :focus-visible at all — those need a real stylesheet rule.
+// Injected once, globally, since both the dock and the tracker-panel
+// accordion share QM.button(). brightness() rather than per-variant hover
+// colors so it works uniformly across every bg (--primary, --secondary, the
+// fixed danger/success reds/greens) without a hover color per variant.
+const QM_BUTTON_STYLE_ID = "qm-button-style";
+const QM_BUTTON_STYLE = `
+.qm-btn{ transition: filter 0.1s ease, transform 0.05s ease; }
+.qm-btn:hover{ filter: brightness(1.12); }
+.qm-btn:active{ filter: brightness(0.92); transform: translateY(1px); }
+.qm-btn:focus-visible{ outline: 2px solid var(--ring, var(--border, currentcolor)); outline-offset: 1px; }
+`;
+
+function qmEnsureButtonStyle() {
+  if (document.getElementById(QM_BUTTON_STYLE_ID)) return;
+  const style = document.createElement("style");
+  style.id = QM_BUTTON_STYLE_ID;
+  style.textContent = QM_BUTTON_STYLE;
+  (document.head || document.body).appendChild(style);
+}
+
 QM.textNode = function textNode(text) {
   const node = document.createElement("p");
   node.style.margin = "0 0 8px";
@@ -37,22 +59,26 @@ QM.smallInput = function smallInput(tag) {
     background: "var(--input, transparent)",
     color: "inherit",
     border: "1px solid var(--border, rgba(0,0,0,0.2))",
-    borderRadius: "4px",
+    borderRadius: "var(--radius, 4px)",
     padding: "2px 4px",
     fontSize: "12px",
   });
   // <select>'s CLOSED box respects author background/color reliably, but the
   // OPEN dropdown popup is largely native-rendered by the browser —
-  // Chromium in particular picks colors for it from the page's inherited
-  // color-scheme, ignoring var(--input)/color:inherit, which produced
-  // white-background/light-text. Forcing color-scheme: light plus explicit
-  // (non-variable) colors fixes both the closed box and the popup
-  // consistently — real theme-matching for the popup itself isn't reliably
-  // achievable across browsers.
+  // Chromium in particular picks its colors from color-scheme, ignoring
+  // var(--input)/color:inherit. Rather than hardcoding light (which put a
+  // bright white popup against a dark app), read the Engine's own theme
+  // signal — App.tsx sets document.documentElement.dataset.theme on every
+  // theme change, mirrored to :root's own color-scheme — and match it, so
+  // the popup at least looks native-dark or native-light instead of always
+  // light. Still an approximation (real per-variable popup theming isn't
+  // reliably achievable across browsers), but a matching native scheme reads
+  // far less jarring than a fixed white box in a dark app.
   if (tag === "select") {
-    el.style.colorScheme = "light";
-    el.style.background = "#fff";
-    el.style.color = "#000";
+    const isDark = document.documentElement.dataset.theme !== "light";
+    el.style.colorScheme = isDark ? "dark" : "light";
+    el.style.background = isDark ? "#1a1a1a" : "#fff";
+    el.style.color = isDark ? "#f2f2f2" : "#000";
   }
   return el;
 };
@@ -61,14 +87,16 @@ QM.smallInput = function smallInput(tag) {
 // bg/fg are CSS color values; border draws a themed outline for neutral
 // (non-colored) buttons instead of a solid fill.
 QM.button = function button(text, { bg, fg, border } = {}) {
+  qmEnsureButtonStyle();
   const el = document.createElement("button");
   el.type = "button";
+  el.className = "qm-btn";
   el.textContent = text;
   Object.assign(el.style, {
     background: bg ?? "var(--primary, #444)",
     color: fg ?? "var(--primary-foreground, #fff)",
     border: border ? "1px solid var(--border, rgba(0,0,0,0.2))" : "none",
-    borderRadius: "4px",
+    borderRadius: "var(--radius, 4px)",
     padding: "2px 8px",
     cursor: "pointer",
     fontSize: "12px",
