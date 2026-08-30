@@ -215,7 +215,7 @@ BH.dock = {
     panel.innerHTML = `
       <div class="beholder-panel-header">
         <span class="beholder-panel-title">${say("dockTitle", "Beholder")}</span>
-        <span class="beholder-panel-controls"><span class="beholder-backfill-group" role="group" aria-label="${say("backfillGroup", "Build state from the chat")}"><button type="button" class="beholder-backfill-btn fa-solid fa-clock-rotate-left" title="${say("backfillHint", "Build state from this chat's messages")}" aria-label="${say("backfill", "Build state from history")}"></button><button type="button" class="beholder-backfill-more fa-solid fa-caret-down" title="${say("backfillMoreHint", "More build options")}" aria-label="${say("backfillMore", "More build options")}"></button></span><span class="bh-header-sep" aria-hidden="true"></span><button type="button" class="beholder-tool-btn fa-solid fa-wand-magic-sparkles" data-view="prompt" title="${say("viewPromptHint", "Prompt — which prompt set this model needs")}" aria-label="${say("viewPrompt", "Prompt")}"></button><button type="button" class="beholder-tool-btn fa-solid fa-stethoscope" data-view="doctor" title="${say("viewDoctorHint", "Doctor — the last extraction, end to end")}" aria-label="${say("viewDoctor", "Doctor")}"></button><button type="button" class="beholder-tool-btn fa-solid fa-circle-question" data-view="help" title="${say("viewHelpHint", "Help — legend and writing tips")}" aria-label="${say("viewHelp", "Help")}"></button><button type="button" class="bh-dock-close fa-solid fa-xmark" title="${say("dockClose", "Close Beholder")}" aria-label="${say("dockClose", "Close Beholder")}"></button></span>
+        <span class="beholder-panel-controls"><span class="beholder-backfill-group" role="group" aria-label="${say("backfillGroup", "Build state from the chat")}"><button type="button" class="beholder-backfill-btn fa-solid fa-clock-rotate-left" title="${say("backfillHint", "Build state from this chat's messages")}" aria-label="${say("backfill", "Build state from history")}"></button><button type="button" class="beholder-backfill-more fa-solid fa-caret-down" title="${say("backfillMoreHint", "More build options")}" aria-label="${say("backfillMore", "More build options")}"></button></span><span class="bh-header-sep" aria-hidden="true"></span><button type="button" class="beholder-tool-btn fa-solid fa-wand-magic-sparkles" data-view="prompt" title="${say("viewPromptHint", "Prompt — which prompt set this model needs")}" aria-label="${say("viewPrompt", "Prompt")}"></button><button type="button" class="beholder-tool-btn fa-solid fa-stethoscope" data-view="doctor" title="${say("viewDoctorHint", "Doctor — the last extraction, end to end")}" aria-label="${say("viewDoctor", "Doctor")}"></button><button type="button" class="beholder-tool-btn fa-solid fa-magnifying-glass" data-view="inspector" title="${say("viewInspectorHint", "Inspector — the full round trip for a turn")}" aria-label="${say("viewInspector", "Inspector")}"></button><button type="button" class="beholder-tool-btn fa-solid fa-circle-question" data-view="help" title="${say("viewHelpHint", "Help — legend and writing tips")}" aria-label="${say("viewHelp", "Help")}"></button><button type="button" class="bh-dock-close fa-solid fa-xmark" title="${say("dockClose", "Close Beholder")}" aria-label="${say("dockClose", "Close Beholder")}"></button></span>
       </div>
       <div class="beholder-backfill-status" hidden></div>
       <div class="beholder-layer-bar" role="group" aria-label="${say("layerBarLabel", "Detail layers")}">
@@ -291,6 +291,7 @@ BH.dock = {
         const view = tool.dataset.view;
         if (view === "prompt") void BH.views.promptView();
         else if (view === "doctor") void BH.views.doctorView();
+        else if (view === "inspector") void BH.views.inspectorView();
         else if (view === "help") BH.views.helpView();
         return;
       }
@@ -600,6 +601,9 @@ BH.dock = {
   },
 
   async refresh() {
+    // Before the chat guard: which model answers does not depend on there being a
+    // chat, and an empty panel is exactly when someone needs to be told why.
+    void BH.banner.refresh();
     const chatId = this.chatId;
     if (!chatId) return;
     try {

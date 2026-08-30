@@ -523,7 +523,7 @@ console.log("beholder client contract: local model slot OK");
 // the doll does not draw. Both were reported from real use, not from reading the code.
 // These assert the controls exist and stay wired, since the stylesheet has always
 // carried their design and the markup is what went missing.
-const beholderChromeSource = ["50-editor.js", "52-sheet.js", "70-backfill.js", "80-dock.js"]
+const beholderChromeSource = ["50-editor.js", "52-sheet.js", "56-banner.js", "70-backfill.js", "80-dock.js"]
   .map((name) => readFileSync(join(srcDir, name), "utf8"))
   .join("\n");
 
@@ -572,6 +572,25 @@ const beholderChromeSource = ["50-editor.js", "52-sheet.js", "70-backfill.js", "
   // Dismissal, including the guard that makes removing a row safe.
   assert.match(beholderChromeSource, /key !== "Escape"/u, "Escape must close the editor");
   assert.match(beholderChromeSource, /isConnected === false/u, "a detached target must not read as an outside click");
+}
+
+{
+  // The local model was invisible to the person it was built for: the slot silently
+  // outranks the agent's connection, and the only place that said so was inside a view
+  // you had to already know to open. The panel now always states what will answer.
+  assert.match(beholderChromeSource, /bh-no-model-banner/u, "the panel must carry a which-model-answers strip");
+  assert.match(beholderChromeSource, /BH\.banner\.refresh\(\)/u, "and refresh it with the panel");
+  for (const action of ['data-action="install"', 'data-action="enable"', 'data-action="manage"'].map((a) =>
+    a.slice(13, -1),
+  )) {
+    assert.ok(beholderChromeSource.includes(`"${action}"`), `the strip must offer the ${action} action`);
+  }
+  // An install button that cannot install is worse than no button.
+  assert.match(
+    beholderChromeSource,
+    /runtimeInstalled/u,
+    "the strip must not offer a download when the local runtime is missing",
+  );
 }
 
 console.log("beholder client contract: reference-parity chrome OK");

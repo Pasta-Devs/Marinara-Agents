@@ -428,9 +428,95 @@ BH.views = {
   },
 
   // ── Doctor ────────────────────────────────────────────────────────────────
+  /**
+   * Health checks, in the reference extension's sense: is this set up correctly?
+   *
+   * Distinct from the Inspector, which shows one round trip. Doctor answers "why is
+   * nothing appearing" without the operator having to know which of the four things
+   * that could be wrong to go and look at.
+   */
+  checkRow(state, label, detail) {
+    const icon = state === "ok" ? "fa-circle-check" : state === "warn" ? "fa-triangle-exclamation" : "fa-circle-xmark";
+    return `<div class="bh-vlog-row bh-vlog-${state}">
+      <b><i class="fa-solid ${icon}" aria-hidden="true"></i> ${BH.escapeHtml(label)}</b>
+      <span>${detail}</span>
+    </div>`;
+  },
+
+  async healthChecks(chatId, chatProps, snapshot) {
+    const rows = [];
+    const agentOn =
+      BH.dock.props?.metadata?.enableAgents !== false &&
+      (BH.dock.props?.metadata?.activeAgentIds ?? []).includes("beholder");
+    rows.push(
+      agentOn
+        ? this.checkRow("ok", "Agent", "Beholder is switched on for this chat.")
+        : this.checkRow(
+            "error",
+            "Agent",
+            "Beholder is not active in this chat, so nothing will be extracted. Switch it on in the agents menu.",
+          ),
+    );
+
+    const routing = await BH.sidecar.routing();
+    const status = await BH.sidecar.status();
+    const servedLocally = routing?.source === "utility-sidecar";
+    const installed = status?.models?.[BH.sidecar.MODEL_ID] ?? null;
+    rows.push(
+      servedLocally
+        ? this.checkRow(
+            "ok",
+            "Model",
+            `Answering locally · version <code>${BH.escapeHtml(BH.sidecar.versionLabel(installed))}</code>.`,
+          )
+        : this.checkRow(
+            "warn",
+            "Model",
+            `Answering through this agent's connection. ${BH.escapeHtml(routing?.reason ?? "")}`,
+          ),
+    );
+
+    const selected = (await this.liveTemplate(chatId, chatProps)).templateId;
+    const usingFivePass = selected === BH_FIVE_PASS_ID;
+    // The pairing is the single most common way this ends up quietly broken.
+    if (servedLocally) {
+      rows.push(
+        usingFivePass
+          ? this.checkRow("ok", "Prompt", "Five per-lane prompts — what the local model was trained on.")
+          : this.checkRow(
+              "error",
+              "Prompt",
+              "The local model is answering but the single-prompt template is selected. Extraction will be poor until this is switched.",
+            ),
+      );
+    } else {
+      rows.push(
+        usingFivePass
+          ? this.checkRow(
+              "warn",
+              "Prompt",
+              "The five-pass template is selected but a general model is answering. That pairing extracts badly.",
+            )
+          : this.checkRow("ok", "Prompt", "One prompt — what a general model needs."),
+      );
+    }
+
+    const characters = snapshot?.state?.characters ?? [];
+    rows.push(
+      characters.length
+        ? this.checkRow("ok", "State", `${characters.length} character${characters.length === 1 ? "" : "s"} tracked.`)
+        : this.checkRow(
+            "warn",
+            "State",
+            "Nothing tracked yet. If this chat was already underway, use the build control in the header to read its history.",
+          ),
+    );
+    return rows.join("");
+  },
+
   /** The last extraction, end to end, so a bad turn can be looked at rather than guessed at. */
   async doctorView() {
-    this.open("Doctor", `<p class="bh-view-lead">Reading the last extraction…</p>`, async (body) => {
+    this.open("Doctor", `<p class="bh-view-lead">Checking this chat's setup…</p>`, async (body) => {
       // Captured together, before the requests. Reading the chat again afterwards let
       // a chat switch pair one chat's extraction with another chat's prompt in the same
       // report — which is exactly the thing the operator opens Doctor to rule out.
@@ -446,6 +532,7 @@ BH.views = {
         const characters = snapshot?.state?.characters ?? [];
         const slots = characters.reduce((n, c) => n + Object.keys(c.body ?? {}).length, 0);
         const selected = (await this.liveTemplate(chatId, chatProps)).templateId;
+        lines.push(`<div class="bh-vlog">${await this.healthChecks(chatId, chatProps, snapshot)}</div>`);
         lines.push(
           `<dl class="bh-doctor-facts">
              <dt>Last extraction</dt><dd>${snapshot?.createdAt ? BH.escapeHtml(new Date(snapshot.createdAt).toLocaleString()) : "none yet"}</dd>
@@ -470,6 +557,59 @@ BH.views = {
       }
       body.innerHTML = lines.join("");
     });
+  },
+
+  // ── Inspector ─────────────────────────────────────────────────────────────
+  /**
+   * The most recent round trip, captured on demand.
+   *
+   * The engine does not keep the prompt and the reply after a run, so seeing them means
+   * running the turn again with debug output on. That is a real model call, so it is a
+   * button the operator presses rather than something that happens on open.
+   */
+  async inspectorView() {
+    this.open(
+      "Inspector",
+      `<p class="bh-view-lead">The full round trip for a turn — the prompt each pass was given, the prose it
+       read, and what it answered. Nothing is kept after a run, so this re-runs the turn with capture on.</p>
+       <p class="bh-view-note">That is one model call per pass, against whichever model is answering.</p>
+       <div class="bh-model-actions">
+         <button type="button" class="bh-btn bh-btn-primary bh-inspect-run"><i class="fa-solid fa-play"></i>
+           Capture this turn</button>
+       </div>
+       <div class="bh-inspect-out"></div>`,
+      (body) => {
+        const button = body.querySelector(".bh-inspect-run");
+        const out = body.querySelector(".bh-inspect-out");
+        button.addEventListener("click", async () => {
+          const chatId = BH.dock.chatId;
+          if (!chatId) {
+            BH.toast("No chat open");
+            return;
+          }
+          button.disabled = true;
+          const original = button.innerHTML;
+          button.innerHTML = `<i class="fa-solid fa-spinner fa-spin"></i> Capturing…`;
+          out.innerHTML = "";
+          try {
+            const { passes, warning } = await BH.inspector.capture(chatId, null);
+            if (!passes.length) {
+              out.innerHTML = `<p class="bh-view-warn">The run produced no debug output. If Beholder is not
+                active in this chat there is nothing to capture.</p>`;
+              return;
+            }
+            out.innerHTML =
+              (warning ? `<p class="bh-view-note">${BH.escapeHtml(warning)}</p>` : "") +
+              passes.map((pass, index) => BH.inspector.passHtml(pass, index)).join("");
+          } catch (error) {
+            out.innerHTML = `<p class="bh-view-warn">Could not capture: ${BH.escapeHtml(error.message)}</p>`;
+          } finally {
+            button.disabled = false;
+            button.innerHTML = original;
+          }
+        });
+      },
+    );
   },
 
   // ── Help ──────────────────────────────────────────────────────────────────

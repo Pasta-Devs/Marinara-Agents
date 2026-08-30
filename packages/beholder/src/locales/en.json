@@ -18,5 +18,7 @@
   "backfillHint": "Build state from this chat's messages",
   "backfillGroup": "Build state from the chat",
   "backfillMore": "More build options",
-  "backfillMoreHint": "More build options"
+  "backfillMoreHint": "More build options",
+  "viewInspector": "Inspector",
+  "viewInspectorHint": "Inspector — the full round trip for a turn"
 }
