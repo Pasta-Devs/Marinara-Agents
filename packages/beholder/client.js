@@ -2267,8 +2267,17 @@ BH.locks = {
     for (const key of keys) {
       const [name, slot] = key.split("::");
       const want = pinned[key];
-      const entry = next.characters.find((candidate) => candidate.name === name);
-      if (!entry) continue;
+      let entry = next.characters.find((candidate) => candidate.name === name);
+      if (!entry) {
+        // The locked character is not in this turn's state. Skipping silently dropped
+        // the lock — reachable since the editor started falling back to the persona
+        // name, where an edit can be made before the extractor has ever named them.
+        // A pin that only holds while the extractor happens to mention you is not a
+        // lock, so re-create the row and enforce it.
+        if (want === undefined || want === null) continue;
+        entry = { name, body: {} };
+        next.characters.push(entry);
+      }
       const have = entry.body[slot];
       if (JSON.stringify(have ?? null) === JSON.stringify(want ?? null)) continue;
       if (want === undefined || want === null) delete entry.body[slot];
@@ -2412,6 +2421,13 @@ const BH_LOOKS_TRAINED = (value) => /beholder/i.test(String(value || ""));
 BH.views = {
   close() {
     document.querySelector(".bh-view-overlay")?.remove();
+    if (this.onKeydown) {
+      document.removeEventListener("keydown", this.onKeydown, true);
+      this.onKeydown = null;
+    }
+    // Put the caret back where it was, or the keyboard user is dropped at the top.
+    this.returnFocusTo?.focus?.();
+    this.returnFocusTo = null;
   },
 
   open(title, bodyHtml, onMount) {
@@ -2427,10 +2443,22 @@ BH.views = {
         <div class="bh-view-body">${bodyHtml}</div>
       </div>`;
     document.body.appendChild(overlay);
-    overlay.querySelector(".bh-view-close").addEventListener("click", () => this.close());
+    const closeButton = overlay.querySelector(".bh-view-close");
+    closeButton.addEventListener("click", () => this.close());
     overlay.addEventListener("click", (event) => {
       if (event.target === overlay) this.close();
     });
+    // It behaves like a modal, so it has to be dismissable and reachable like one:
+    // without this a keyboard user tabs through the whole page behind it to escape.
+    this.onKeydown = (event) => {
+      if (event.key === "Escape") {
+        event.stopPropagation();
+        this.close();
+      }
+    };
+    document.addEventListener("keydown", this.onKeydown, true);
+    this.returnFocusTo = document.activeElement;
+    closeButton.focus?.();
     onMount?.(overlay.querySelector(".bh-view-body"));
     return overlay;
   },
@@ -2465,6 +2493,13 @@ BH.views = {
     }
   },
 
+  /**
+   * Persist the selection, then update the props snapshot the views read.
+   *
+   * capabilityProps are handed over by the host and are not refreshed on our
+   * schedule, so without this a reopened view could report the previous selection —
+   * the exact wrong-prompt confusion these views exist to prevent.
+   */
   async setTemplate(props, templateId) {
     const chatId = props?.chatId;
     if (!chatId) return;
@@ -2479,6 +2514,11 @@ BH.views = {
       body: JSON.stringify({ agentPromptTemplateIds: next }),
     });
     if (!res.ok) throw new Error(`save ${res.status}`);
+    // Keep the snapshot in step with what was just persisted.
+    if (props?.metadata && typeof props.metadata === "object") props.metadata.agentPromptTemplateIds = next;
+    if (BH.dock?.props?.metadata && typeof BH.dock.props.metadata === "object") {
+      BH.dock.props.metadata.agentPromptTemplateIds = next;
+    }
   },
 
   /**
@@ -2657,6 +2697,11 @@ BH.views = {
   },
 
   async promptView() {
+    // Drawn before the network work so the dock button gives immediate feedback; the
+    // body is filled in once the answers arrive.
+    if (!document.querySelector(".bh-view-overlay")) {
+      this.open("Prompt", `<p class="bh-view-lead">Checking which model will answer…</p>`);
+    }
     const props = BH.dock.props ?? {};
     const selected = await this.liveTemplate(props?.chatId ?? BH.dock.chatId, props);
     let usingFivePass = selected === BH_FIVE_PASS_ID;
@@ -3047,7 +3092,7 @@ BH.dock = {
     panel.innerHTML = `
       <div class="beholder-panel-header">
         <span class="beholder-panel-title">${say("dockTitle", "Beholder")}</span>
-        <span class="beholder-panel-controls"><button type="button" class="beholder-tool-btn fa-solid fa-wand-magic-sparkles" data-view="prompt" title="Prompt — which prompt set this model needs" aria-label="Prompt"></button><button type="button" class="beholder-tool-btn fa-solid fa-stethoscope" data-view="doctor" title="Doctor — the last extraction, end to end" aria-label="Doctor"></button><button type="button" class="beholder-tool-btn fa-solid fa-circle-question" data-view="help" title="Help — legend and writing tips" aria-label="Help"></button><button type="button" class="bh-dock-popout fa-solid fa-arrow-up-right-from-square" title="${say("dockPopOut", "Open Beholder in a new tab")}" aria-label="${say("dockPopOut", "Open Beholder in a new tab")}"></button><button type="button" class="bh-dock-close fa-solid fa-xmark" title="${say("dockClose", "Close Beholder")}" aria-label="${say("dockClose", "Close Beholder")}"></button></span>
+        <span class="beholder-panel-controls"><button type="button" class="beholder-tool-btn fa-solid fa-wand-magic-sparkles" data-view="prompt" title="${say("viewPromptHint", "Prompt — which prompt set this model needs")}" aria-label="${say("viewPrompt", "Prompt")}"></button><button type="button" class="beholder-tool-btn fa-solid fa-stethoscope" data-view="doctor" title="${say("viewDoctorHint", "Doctor — the last extraction, end to end")}" aria-label="${say("viewDoctor", "Doctor")}"></button><button type="button" class="beholder-tool-btn fa-solid fa-circle-question" data-view="help" title="${say("viewHelpHint", "Help — legend and writing tips")}" aria-label="${say("viewHelp", "Help")}"></button><button type="button" class="bh-dock-popout fa-solid fa-arrow-up-right-from-square" title="${say("dockPopOut", "Open Beholder in a new tab")}" aria-label="${say("dockPopOut", "Open Beholder in a new tab")}"></button><button type="button" class="bh-dock-close fa-solid fa-xmark" title="${say("dockClose", "Close Beholder")}" aria-label="${say("dockClose", "Close Beholder")}"></button></span>
       </div>
       <div class="beholder-layer-bar" role="group" aria-label="${say("layerBarLabel", "Detail layers")}">
         <label class="bh-layer-cell" data-layer="color" title="${say("layerColorHint", "Color word annotation on chips")}"><input type="checkbox" name="bh-view-layer" value="color"><span>${say("layerColor", "Color")}</span></label>
