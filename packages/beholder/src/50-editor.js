@@ -57,7 +57,11 @@ BH.editor = {
   openFor(card) {
     const slotName = card.dataset.slot;
     if (!slotName) return;
-    const characterName = BH.dock.activeName;
+    // Before the first extraction there is no character yet, and the panel is showing
+    // its default-human placeholder. Editing a slot then is how someone sets a scene
+    // up by hand, so fall back to the chat's persona rather than refusing the click.
+    const characterName =
+      BH.dock.activeName || BH.dock.props?.personaInfo?.name || BH.dock.props?.personaInfo?.persona?.name || "You";
     if (!characterName) return;
     const body = BH.dock.state?.[characterName]?.body ?? {};
     const slotState = body[slotName] && typeof body[slotName] === "object" ? body[slotName] : {};

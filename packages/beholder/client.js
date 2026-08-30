@@ -2104,7 +2104,11 @@ BH.editor = {
   openFor(card) {
     const slotName = card.dataset.slot;
     if (!slotName) return;
-    const characterName = BH.dock.activeName;
+    // Before the first extraction there is no character yet, and the panel is showing
+    // its default-human placeholder. Editing a slot then is how someone sets a scene
+    // up by hand, so fall back to the chat's persona rather than refusing the click.
+    const characterName =
+      BH.dock.activeName || BH.dock.props?.personaInfo?.name || BH.dock.props?.personaInfo?.persona?.name || "You";
     if (!characterName) return;
     const body = BH.dock.state?.[characterName]?.body ?? {};
     const slotState = body[slotName] && typeof body[slotName] === "object" ? body[slotName] : {};
@@ -2353,6 +2357,28 @@ BH.views = {
     return typeof value === "string" && value.trim() ? value.trim() : null;
   },
 
+  /**
+   * The selection as the server has it.
+   *
+   * capabilityProps are a snapshot from the last time the host handed them over, so
+   * a selection made since then would be reported stale — and reporting the wrong
+   * prompt is precisely the mistake these views exist to prevent.
+   */
+  async liveTemplate(chatId, props) {
+    if (!chatId) return this.selectedTemplate(props);
+    try {
+      const res = await fetch(`/api/chats/${encodeURIComponent(chatId)}`, {
+        credentials: "same-origin",
+        headers: { Accept: "application/json" },
+      });
+      if (!res.ok) return this.selectedTemplate(props);
+      const chat = await res.json();
+      return this.selectedTemplate({ metadata: chat?.metadata });
+    } catch {
+      return this.selectedTemplate(props);
+    }
+  },
+
   async setTemplate(props, templateId) {
     const chatId = props?.chatId;
     if (!chatId) return;
@@ -2371,7 +2397,7 @@ BH.views = {
 
   async promptView() {
     const props = BH.dock.props ?? {};
-    const selected = this.selectedTemplate(props);
+    const selected = await this.liveTemplate(props?.chatId ?? BH.dock.chatId, props);
     const usingFivePass = selected === BH_FIVE_PASS_ID;
     // The model the agent will actually call, so a mismatch can be named rather
     // than left for the operator to discover through bad extractions.
@@ -2454,7 +2480,7 @@ BH.views = {
         const snapshot = res.ok ? await res.json() : null;
         const characters = snapshot?.state?.characters ?? [];
         const slots = characters.reduce((n, c) => n + Object.keys(c.body ?? {}).length, 0);
-        const selected = this.selectedTemplate(BH.dock.props ?? {});
+        const selected = await this.liveTemplate(BH.dock.chatId, BH.dock.props ?? {});
         lines.push(
           `<dl class="bh-doctor-facts">
              <dt>Last extraction</dt><dd>${snapshot?.createdAt ? BH.escapeHtml(new Date(snapshot.createdAt).toLocaleString()) : "none yet"}</dd>

@@ -393,6 +393,55 @@ check(
   }),
 );
 
+// ── a brand-new chat, before any extraction ─────────────────────────────────
+// The panel shows a placeholder doll then. Clicking a slot has to work anyway —
+// that is how a scene gets set up by hand — and the Doctor has to say plainly
+// that nothing has been tracked rather than looking broken.
+{
+  const chatId = await page.evaluate(async () => {
+    const id = document.querySelector("marinara-capability-beholder")?.capabilityProps?.chatId;
+    await fetch(`/api/agents/beholder-state/${id}`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      credentials: "same-origin",
+      body: JSON.stringify({ state: { characters: [] } }),
+    });
+    return id;
+  });
+  // reopen so the panel refetches the now-empty state
+  await page.evaluate(() => {
+    const toggle = [...document.querySelectorAll(".bh-hud-toggle")].find((b) => b.getBoundingClientRect().width > 0);
+    toggle?.click();
+    toggle?.click();
+  });
+  await page.waitForTimeout(3000);
+  check(
+    "an empty chat still draws the placeholder doll",
+    await page.evaluate(() => {
+      const panel = document.querySelector("#beholder_panel, .beholder-panel");
+      return (
+        panel?.getAttribute("data-empty") === "true" && panel.querySelectorAll(".bh-slot-card[data-slot]").length > 0
+      );
+    }),
+  );
+  const firstEdit = await page.evaluate(async () => {
+    document.querySelector(".bh-slot-card[data-slot]")?.click();
+    await new Promise((r) => setTimeout(r, 800));
+    if (!document.querySelector(".bh-editor")) return { opened: false };
+    document.querySelector(".bhe-add-worn").click();
+    const rows = [...document.querySelectorAll(".bhe-worn-list .bh-editor-row")];
+    rows[rows.length - 1].querySelector(".bhe-item").value = "firstitem";
+    document.querySelector(".bh-editor-apply").click();
+    await new Promise((r) => setTimeout(r, 3500));
+    const id = document.querySelector("marinara-capability-beholder")?.capabilityProps?.chatId;
+    const state = await (await fetch(`/api/agents/beholder-state/${id}`, { credentials: "same-origin" })).json();
+    return { opened: true, saved: JSON.stringify(state).includes("firstitem") };
+  });
+  check("a slot is editable before any extraction has run", firstEdit.opened);
+  check("that first edit is stored, creating the character", firstEdit.saved === true);
+  void chatId;
+}
+
 // ── closing ─────────────────────────────────────────────────────────────────
 check(
   "close button collapses the panel and releases the chat reflow",
