@@ -6,7 +6,7 @@ import { embedLongTermMemoryTexts, type MemoryRecallEmbeddingOptions } from "./e
 import { expandLtmGraph } from "./graph.js";
 import { searchLtmKeywordIndex } from "./keyword-index.js";
 import { getLtmMetadataMatches } from "./metadata-index.js";
-import { getPackageEmbeddingAdapter } from "./package-runtime.js";
+import { resolvePackageEmbeddingAdapter } from "./package-runtime.js";
 import { loadOrRebuildLongTermMemoryIndexes } from "./rebuild.js";
 import { reciprocalRankFuse, type LtmRankLane } from "./ranking.js";
 
@@ -64,7 +64,8 @@ function pickGraphSeedNotes(
 }
 
 export async function retrieveLongTermMemory(input: RetrieveLongTermMemoryInput) {
-  const index = await loadOrRebuildLongTermMemoryIndexes(input.root);
+  const embeddingAdapter = await resolvePackageEmbeddingAdapter(input.embeddingAdapter);
+  const index = await loadOrRebuildLongTermMemoryIndexes(input.root, embeddingAdapter);
   const query = input.queryText?.trim() ?? "";
   const characterIds = Array.from(new Set([...(input.scope?.characterIds ?? []), ...(input.characterIds ?? [])]));
   const allowed = new Set(
@@ -136,7 +137,6 @@ export async function retrieveLongTermMemory(input: RetrieveLongTermMemoryInput)
     });
   }
   let embeddingsAvailable = false;
-  const embeddingAdapter = input.embeddingAdapter ?? getPackageEmbeddingAdapter();
   if (
     (input.semanticWeight ?? 0) > 0 &&
     query &&
