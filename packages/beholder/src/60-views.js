@@ -559,6 +559,148 @@ BH.views = {
     });
   },
 
+  // ── Characters ────────────────────────────────────────────────────────────
+  /**
+   * Who the panel shows, and in what order.
+   *
+   * Presentation only, and it says so: hiding someone does not stop the extractor
+   * tracking them, and merging two names does not teach it they are the same person.
+   * A control that looks like it changes extraction and does not would be worse than
+   * having none.
+   */
+  charactersView() {
+    const render = (body) => {
+      const names = Object.keys(BH.dock.state ?? {});
+      const data = BH.roster.all();
+      const { visible, hidden } = BH.roster.arrange(names);
+      const persona = BH.dock.props?.personaInfo?.name ?? null;
+
+      const row = (name) => {
+        const you = name === persona;
+        const chips = BH.roster
+          .variantsOf(name, data)
+          .map(
+            (variant) =>
+              `<span class="bh-ch-alias" data-variant="${BH.escapeHtml(variant)}">${BH.escapeHtml(variant)}<i class="fa-solid fa-xmark" title="Unmerge"></i></span>`,
+          )
+          .join("");
+        return `<li class="bh-ch${you ? " bh-ch-you" : ""}" draggable="true" data-name="${BH.escapeHtml(name)}">
+          <i class="bh-ch-grip fa-solid fa-grip-vertical" title="Drag to reorder"></i>
+          <span class="bh-ch-main">
+            <span class="bh-ch-name">${you ? '<i class="fa-solid fa-star bh-ch-star" title="You"></i> ' : ""}${BH.escapeHtml(name)}</span>
+            ${chips ? `<span class="bh-ch-aliases">${chips}</span>` : ""}
+          </span>
+          <span class="bh-ch-tools">
+            <i class="bh-ch-merge fa-solid fa-link" title="Same person as another name"></i>
+            <i class="bh-ch-hide fa-solid fa-eye" title="Hide from the panel"></i>
+          </span>
+        </li>`;
+      };
+
+      body.innerHTML = `
+        <p class="bh-view-lead">Who this panel shows. This is display only — hiding someone does not stop
+        Beholder tracking them, and merging two names does not tell it they are the same person.</p>
+        <ul class="bh-ch-list">${visible.map(row).join("") || '<li class="bh-ch-empty">No one tracked yet.</li>'}</ul>
+        ${
+          hidden.length
+            ? `<div class="bh-ch-tray"><span class="bh-ch-tray-cap">Hidden</span><ul class="bh-ch-list">${hidden
+                .map(
+                  (name) =>
+                    `<li class="bh-ch bh-ch-hidden" data-name="${BH.escapeHtml(name)}">
+                      <span class="bh-ch-main"><span class="bh-ch-name">${BH.escapeHtml(name)}</span></span>
+                      <span class="bh-ch-tools"><i class="bh-ch-unhide fa-solid fa-eye-slash" title="Show"></i></span>
+                    </li>`,
+                )
+                .join("")}</ul></div>`
+            : ""
+        }`;
+
+      const again = () => {
+        render(body);
+        BH.dock.render();
+      };
+
+      for (const control of body.querySelectorAll(".bh-ch-hide")) {
+        control.addEventListener("click", (event) => {
+          event.stopPropagation();
+          BH.roster.setHidden(control.closest(".bh-ch").dataset.name, true);
+          again();
+        });
+      }
+      for (const control of body.querySelectorAll(".bh-ch-unhide")) {
+        control.addEventListener("click", (event) => {
+          event.stopPropagation();
+          BH.roster.setHidden(control.closest(".bh-ch").dataset.name, false);
+          again();
+        });
+      }
+      for (const chip of body.querySelectorAll(".bh-ch-alias .fa-xmark")) {
+        chip.addEventListener("click", (event) => {
+          event.stopPropagation();
+          BH.roster.removeAlias(chip.closest(".bh-ch-alias").dataset.variant);
+          again();
+        });
+      }
+      for (const control of body.querySelectorAll(".bh-ch-merge")) {
+        control.addEventListener("click", (event) => {
+          event.stopPropagation();
+          const rowElement = control.closest(".bh-ch");
+          const existing = rowElement.querySelector(".bh-ch-pick");
+          if (existing) {
+            existing.remove();
+            return;
+          }
+          const name = rowElement.dataset.name;
+          const pick = document.createElement("div");
+          pick.className = "bh-ch-pick";
+          pick.innerHTML =
+            `<span class="bh-ch-pick-lead">is</span>` +
+            visible
+              .filter((other) => other !== name)
+              .map(
+                (other) =>
+                  `<button class="bh-ch-pill" type="button" data-target="${BH.escapeHtml(other)}">${BH.escapeHtml(other)}</button>`,
+              )
+              .join("");
+          rowElement.appendChild(pick);
+          for (const pill of pick.querySelectorAll(".bh-ch-pill")) {
+            pill.addEventListener("click", () => {
+              // This row's name becomes a variant of the one picked, so the panel
+              // stops showing the same person twice.
+              BH.roster.addAlias(name, pill.dataset.target);
+              again();
+            });
+          }
+        });
+      }
+
+      // Drag to reorder, persisted as the roster order.
+      const list = body.querySelector(".bh-ch-list");
+      let dragging = null;
+      for (const item of body.querySelectorAll(".bh-ch[draggable]")) {
+        item.addEventListener("dragstart", () => {
+          dragging = item;
+          item.classList.add("bh-ch-dragging");
+        });
+        item.addEventListener("dragend", () => {
+          item.classList.remove("bh-ch-dragging");
+          dragging = null;
+          BH.roster.setOrder([...list.querySelectorAll(".bh-ch[draggable]")].map((row) => row.dataset.name));
+          BH.dock.render();
+        });
+        item.addEventListener("dragover", (event) => {
+          event.preventDefault();
+          if (!dragging || dragging === item) return;
+          const box = item.getBoundingClientRect();
+          const after = event.clientY > box.top + box.height / 2;
+          item.parentNode.insertBefore(dragging, after ? item.nextSibling : item);
+        });
+      }
+    };
+
+    this.open("Characters", `<p class="bh-view-lead">Reading the roster…</p>`, (body) => render(body));
+  },
+
   // ── Inspector ─────────────────────────────────────────────────────────────
   /**
    * The most recent round trip, captured on demand.

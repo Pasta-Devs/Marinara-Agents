@@ -215,7 +215,7 @@ BH.dock = {
     panel.innerHTML = `
       <div class="beholder-panel-header">
         <span class="beholder-panel-title">${say("dockTitle", "Beholder")}</span>
-        <span class="beholder-panel-controls"><span class="beholder-backfill-group" role="group" aria-label="${say("backfillGroup", "Build state from the chat")}"><button type="button" class="beholder-backfill-btn fa-solid fa-clock-rotate-left" title="${say("backfillHint", "Build state from this chat's messages")}" aria-label="${say("backfill", "Build state from history")}"></button><button type="button" class="beholder-backfill-more fa-solid fa-caret-down" title="${say("backfillMoreHint", "More build options")}" aria-label="${say("backfillMore", "More build options")}"></button></span><span class="bh-header-sep" aria-hidden="true"></span><button type="button" class="beholder-tool-btn fa-solid fa-wand-magic-sparkles" data-view="prompt" title="${say("viewPromptHint", "Prompt — which prompt set this model needs")}" aria-label="${say("viewPrompt", "Prompt")}"></button><button type="button" class="beholder-tool-btn fa-solid fa-stethoscope" data-view="doctor" title="${say("viewDoctorHint", "Doctor — the last extraction, end to end")}" aria-label="${say("viewDoctor", "Doctor")}"></button><button type="button" class="beholder-tool-btn fa-solid fa-magnifying-glass" data-view="inspector" title="${say("viewInspectorHint", "Inspector — the full round trip for a turn")}" aria-label="${say("viewInspector", "Inspector")}"></button><button type="button" class="beholder-tool-btn fa-solid fa-circle-question" data-view="help" title="${say("viewHelpHint", "Help — legend and writing tips")}" aria-label="${say("viewHelp", "Help")}"></button><button type="button" class="bh-dock-close fa-solid fa-xmark" title="${say("dockClose", "Close Beholder")}" aria-label="${say("dockClose", "Close Beholder")}"></button></span>
+        <span class="beholder-panel-controls"><span class="beholder-backfill-group" role="group" aria-label="${say("backfillGroup", "Build state from the chat")}"><button type="button" class="beholder-backfill-btn fa-solid fa-clock-rotate-left" title="${say("backfillHint", "Build state from this chat's messages")}" aria-label="${say("backfill", "Build state from history")}"></button><button type="button" class="beholder-backfill-more fa-solid fa-caret-down" title="${say("backfillMoreHint", "More build options")}" aria-label="${say("backfillMore", "More build options")}"></button></span><span class="bh-header-sep" aria-hidden="true"></span><button type="button" class="beholder-tool-btn fa-solid fa-wand-magic-sparkles" data-view="prompt" title="${say("viewPromptHint", "Prompt — which prompt set this model needs")}" aria-label="${say("viewPrompt", "Prompt")}"></button><button type="button" class="beholder-tool-btn fa-solid fa-stethoscope" data-view="doctor" title="${say("viewDoctorHint", "Doctor — the last extraction, end to end")}" aria-label="${say("viewDoctor", "Doctor")}"></button><button type="button" class="beholder-tool-btn fa-solid fa-users" data-view="characters" title="${say("viewCharactersHint", "Characters — hide, reorder, merge duplicates")}" aria-label="${say("viewCharacters", "Characters")}"></button><button type="button" class="beholder-tool-btn fa-solid fa-magnifying-glass" data-view="inspector" title="${say("viewInspectorHint", "Inspector — the full round trip for a turn")}" aria-label="${say("viewInspector", "Inspector")}"></button><button type="button" class="beholder-tool-btn fa-solid fa-circle-question" data-view="help" title="${say("viewHelpHint", "Help — legend and writing tips")}" aria-label="${say("viewHelp", "Help")}"></button><button type="button" class="beholder-tools-more fa-solid fa-ellipsis-vertical" title="${say("toolsMore", "Beholder tools")}" aria-label="${say("toolsMore", "Beholder tools")}" aria-haspopup="menu"></button><button type="button" class="bh-dock-close fa-solid fa-xmark" title="${say("dockClose", "Close Beholder")}" aria-label="${say("dockClose", "Close Beholder")}"></button></span>
       </div>
       <div class="beholder-backfill-status" hidden></div>
       <div class="beholder-layer-bar" role="group" aria-label="${say("layerBarLabel", "Detail layers")}">
@@ -236,6 +236,10 @@ BH.dock = {
     panel.querySelector(".beholder-backfill-more").addEventListener("click", (event) => {
       event.stopPropagation();
       BH.backfill.toggleMenu();
+    });
+    panel.querySelector(".beholder-tools-more").addEventListener("click", (event) => {
+      event.stopPropagation();
+      this.toggleToolsMenu();
     });
     panel.querySelector(".beholder-panel-header").addEventListener("pointerdown", (event) => {
       this.startInteraction("move", event);
@@ -289,10 +293,7 @@ BH.dock = {
       const tool = target.closest(".beholder-tool-btn[data-view]");
       if (tool) {
         const view = tool.dataset.view;
-        if (view === "prompt") void BH.views.promptView();
-        else if (view === "doctor") void BH.views.doctorView();
-        else if (view === "inspector") void BH.views.inspectorView();
-        else if (view === "help") BH.views.helpView();
+        this.openView(view);
         return;
       }
       // "Edit slots" opens the sheet: the list layout draws no cards to click, and a
@@ -622,6 +623,81 @@ BH.dock = {
     }
   },
 
+  /**
+   * The tool row, as a menu.
+   *
+   * Not a nicety: below the narrow breakpoint the stylesheet hides every
+   * `.beholder-tool-btn` and shows this trigger instead. Without it, Prompt, Doctor,
+   * Inspector, Characters and Help are simply unreachable on a phone.
+   */
+  closeToolsMenu() {
+    this.panel?.querySelector(".beholder-tools-menu")?.remove();
+    this.panel?.querySelector(".beholder-tools-more")?.classList.remove("bh-more-open");
+    if (this._toolsDismiss) {
+      document.removeEventListener("click", this._toolsDismiss, true);
+      document.removeEventListener("keydown", this._toolsKeydown, true);
+      this._toolsDismiss = null;
+      this._toolsKeydown = null;
+    }
+  },
+
+  toggleToolsMenu() {
+    const panel = this.panel;
+    if (!panel) return;
+    if (panel.querySelector(".beholder-tools-menu")) {
+      this.closeToolsMenu();
+      return;
+    }
+    // Built from the header's own buttons so the two can never drift apart.
+    const tools = [...panel.querySelectorAll(".beholder-tool-btn[data-view]")].map((button) => ({
+      view: button.dataset.view,
+      icon: [...button.classList].find((name) => name.startsWith("fa-") && name !== "fa-solid") ?? "fa-circle",
+      label: button.getAttribute("aria-label") || button.dataset.view,
+    }));
+    const menu = document.createElement("div");
+    menu.className = "beholder-tools-menu";
+    menu.setAttribute("role", "menu");
+    menu.innerHTML = tools
+      .map(
+        (tool) =>
+          `<button type="button" class="beholder-tools-item" data-view="${BH.escapeHtml(tool.view)}" role="menuitem">
+             <i class="fa-solid ${BH.escapeHtml(tool.icon)}"></i><span>${BH.escapeHtml(tool.label)}</span>
+           </button>`,
+      )
+      .join("");
+    panel.querySelector(".beholder-tools-more")?.classList.add("bh-more-open");
+    panel.querySelector(".beholder-panel-header")?.appendChild(menu);
+    menu.addEventListener("mousedown", (event) => event.stopPropagation());
+    for (const item of menu.querySelectorAll(".beholder-tools-item")) {
+      item.addEventListener("click", (event) => {
+        event.stopPropagation();
+        const view = item.dataset.view;
+        this.closeToolsMenu();
+        this.openView(view);
+      });
+    }
+    this._toolsDismiss = (event) => {
+      if (event.target?.closest?.(".beholder-tools-menu, .beholder-tools-more")) return;
+      this.closeToolsMenu();
+    };
+    this._toolsKeydown = (event) => {
+      if (event.key === "Escape") this.closeToolsMenu();
+    };
+    setTimeout(() => {
+      document.addEventListener("click", this._toolsDismiss, true);
+      document.addEventListener("keydown", this._toolsKeydown, true);
+    }, 0);
+  },
+
+  /** One place that maps a view name to its view, for the header and the menu alike. */
+  openView(view) {
+    if (view === "prompt") void BH.views.promptView();
+    else if (view === "doctor") void BH.views.doctorView();
+    else if (view === "characters") BH.views.charactersView();
+    else if (view === "inspector") void BH.views.inspectorView();
+    else if (view === "help") BH.views.helpView();
+  },
+
   /** Mark characters whose state changed since the last render, then draw. */
   adopt(next) {
     const previous = this.state || {};
@@ -658,7 +734,18 @@ BH.dock = {
     const unviewedForRender = new Set(this.unviewed);
     if (this.activeName) unviewedForRender.delete(this.activeName);
     const view = this.activeName ? this.viewByChar.get(this.activeName) || "front" : "front";
-    const rendered = renderDollPanel(this.state, this.activeName, unviewedForRender, view);
+    // The operator's roster choices are applied here, so every surface that reads the
+    // rendered panel agrees on who is on screen: hidden people are dropped and the
+    // rest are put in the chosen order. Object key order is insertion order, which is
+    // what the renderer walks to build its tabs.
+    const arranged = BH.roster.arrange(Object.keys(this.state));
+    const shownState = {};
+    for (const name of arranged.visible) shownState[name] = this.state[name];
+    // Hiding everyone would leave a panel with no way back, so fall through to the
+    // full state and let the characters view be the way out.
+    const stateForRender = arranged.visible.length ? shownState : this.state;
+    if (this.activeName && !stateForRender[this.activeName]) this.activeName = null;
+    const rendered = renderDollPanel(stateForRender, this.activeName, unviewedForRender, view);
     this.activeName = rendered.activeName;
     if (this.activeName) this.unviewed.delete(this.activeName);
     body.innerHTML = rendered.html || "";

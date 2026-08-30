@@ -20,5 +20,8 @@
   "backfillMore": "More build options",
   "backfillMoreHint": "More build options",
   "viewInspector": "Inspector",
-  "viewInspectorHint": "Inspector — the full round trip for a turn"
+  "viewInspectorHint": "Inspector — the full round trip for a turn",
+  "viewCharacters": "Characters",
+  "viewCharactersHint": "Characters — hide, reorder, merge duplicates",
+  "toolsMore": "Beholder tools"
 }

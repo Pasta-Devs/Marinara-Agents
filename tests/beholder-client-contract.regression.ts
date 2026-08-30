@@ -594,3 +594,35 @@ const beholderChromeSource = ["50-editor.js", "52-sheet.js", "56-banner.js", "70
 }
 
 console.log("beholder client contract: reference-parity chrome OK");
+
+{
+  // Below the narrow breakpoint the stylesheet hides every .beholder-tool-btn and
+  // reveals .beholder-tools-more instead. The package rendered the buttons and not the
+  // trigger, so on a phone every view was unreachable — asserted together so the pair
+  // cannot drift apart again.
+  const stylesheet = readFileSync(join(srcDir, "style.css"), "utf8");
+  assert.match(stylesheet, /\.beholder-tool-btn \{ display: none; \}/u, "the narrow layout hides the tool row");
+  assert.match(beholderChromeSource, /beholder-tools-more/u, "so the header must render an overflow trigger");
+  assert.match(beholderChromeSource, /beholder-tools-menu/u, "that opens a menu");
+  // Built from the header's own buttons, so a new view cannot appear in one and not
+  // the other.
+  assert.match(
+    beholderChromeSource,
+    /querySelectorAll\("\.beholder-tool-btn\[data-view\]"\)/u,
+    "the menu must be built from the header's buttons, not a second hand-kept list",
+  );
+  assert.match(beholderChromeSource, /openView\(view\)/u, "and both must route through one view dispatcher");
+}
+
+{
+  // Roster: presentation only, and applied where the panel is drawn so every surface
+  // agrees on who is on screen.
+  assert.match(beholderChromeSource, /BH\.roster\.arrange\(/u, "the panel must apply the operator's roster");
+  assert.match(
+    beholderChromeSource,
+    /arranged\.visible\.length \? shownState : this\.state/u,
+    "hiding everyone must not strand the operator with an empty panel and no way back",
+  );
+}
+
+console.log("beholder client contract: mobile reachability + roster OK");
