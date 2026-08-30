@@ -221,10 +221,9 @@ async function readNoodlerMultipart(req: FastifyRequest): Promise<{ payload: unk
       part.file.resume();
       throw new NoodlerMediaRequestError("Unsupported image file type.", 400);
     }
-    let buffer: Buffer;
     const write = await trySlurpWrite(async () => {
       try {
-        buffer = await part.toBuffer();
+        return await part.toBuffer();
       } catch (error) {
         const truncated = (part.file as typeof part.file & { truncated?: boolean }).truncated === true;
         const tooLarge = truncated || (error as { code?: string }).code === "FST_REQ_FILE_TOO_LARGE";
@@ -234,8 +233,11 @@ async function readNoodlerMultipart(req: FastifyRequest): Promise<{ payload: unk
         );
       }
     });
-    if (!write.acquired) return reply.code(409).send({ error: "Slurp data cleanup is in progress." });
-    return write.value;
+    if (!write.acquired) {
+      part.file.resume();
+      throw new NoodlerMediaRequestError("Slurp data cleanup is in progress.", 409);
+    }
+    const buffer = write.value;
     const detected = isAllowedImageBuffer(buffer, extension);
     if (!detected || (extension === ".jpeg" ? "jpg" : extension.slice(1)) !== detected.ext) {
       throw new NoodlerMediaRequestError("Unsupported or invalid image file.", 400);
