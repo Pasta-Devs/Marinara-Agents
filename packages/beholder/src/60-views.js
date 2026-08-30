@@ -116,7 +116,11 @@ BH.views = {
     if (!res.ok) throw new Error(`save ${res.status}`);
     // Keep the snapshot in step with what was just persisted.
     if (props?.metadata && typeof props.metadata === "object") props.metadata.agentPromptTemplateIds = next;
-    if (BH.dock?.props?.metadata && typeof BH.dock.props.metadata === "object") {
+    // Only when the dock is still on the chat this save targeted. A save for chat A
+    // completing after a switch to B would otherwise stamp A's selection onto B's live
+    // snapshot, and later views would read the wrong prompt for B until a refresh.
+    const dockChatId = BH.dock?.props?.chatId ?? BH.dock?.chatId;
+    if (dockChatId === chatId && BH.dock?.props?.metadata && typeof BH.dock.props.metadata === "object") {
       BH.dock.props.metadata.agentPromptTemplateIds = next;
     }
   },
@@ -318,6 +322,7 @@ BH.views = {
 
     // When the trained model is answering, the five-pass prompt is the only correct
     // one. Select it rather than leaving the operator a way to break their own setup.
+    let autoSelectFailed = false;
     if (servedLocally && !usingFivePass) {
       try {
         await this.setTemplate(props, BH_FIVE_PASS_ID, chatId);
@@ -325,9 +330,13 @@ BH.views = {
         // did not would show a locked picker over the wrong prompt.
         usingFivePass = true;
       } catch {
-        // Fall through: the banner below still says which prompt is required.
+        // The picker stays usable in this case. Locking it here would strand the
+        // operator on the wrong prompt for a local model with no way to correct it.
+        autoSelectFailed = true;
       }
     }
+    // Locked only once the correct prompt is actually the saved one.
+    const lockPicker = servedLocally && usingFivePass;
     // The model the agent will actually call, so a mismatch can be named rather
     // than left for the operator to discover through bad extractions.
     let model = "";
@@ -362,6 +371,12 @@ BH.views = {
       extraction degrades badly, so pick the one that matches the model you are pointing at.</p>
       ${BH.views.connectionBanner({ routing, servedLocally, model, installed })}
       ${
+        autoSelectFailed
+          ? `<p class="bh-view-warn"><i class="fa-solid fa-triangle-exclamation"></i> The local model is answering, but
+             the five-pass prompt could not be saved. Select it below — the local model needs it.</p>`
+          : ""
+      }
+      ${
         mismatch
           ? `<p class="bh-view-warn"><i class="fa-solid fa-triangle-exclamation"></i> This looks like a mismatch:
              ${trained ? "the model looks like the trained Beholder model, but the single-prompt template is selected." : "the model does not look like the trained Beholder model, but the five-pass template is selected."}</p>`
@@ -370,20 +385,20 @@ BH.views = {
       <div class="bh-prompt-options">
         <label class="bh-prompt-option ${usingFivePass ? "" : "bh-prompt-active"}">
           <input type="radio" name="bh-prompt" value="" ${usingFivePass ? "" : "checked"}
-            ${servedLocally ? "disabled" : ""}>
+            ${lockPicker ? "disabled" : ""}>
           <span><b>SOTA model — one prompt</b><small>One call covering every field. For a strong general model
           (GPT-5.5+, Claude Opus 4.8+, Kimi K3+).</small></span>
         </label>
         <label class="bh-prompt-option ${usingFivePass ? "bh-prompt-active" : ""}">
           <input type="radio" name="bh-prompt" value="${BH_FIVE_PASS_ID}" ${usingFivePass ? "checked" : ""}
-            ${servedLocally ? "disabled" : ""}>
+            ${lockPicker ? "disabled" : ""}>
           <span><b>Local Beholder model — five passes</b><small>Five short per-lane calls, the prompts the
           model was trained on. For GetBeholder/Beholder-GGUF served locally.</small></span>
         </label>
       </div>
       <p class="bh-view-note bh-prompt-current">Currently selected:
         <b>${usingFivePass ? "Local Beholder model — five passes" : "SOTA model — one prompt"}</b>
-        ${servedLocally ? `<span class="bh-prompt-locked">locked by the local model slot</span>` : ""}</p>
+        ${lockPicker ? `<span class="bh-prompt-locked">locked by the local model slot</span>` : ""}</p>
       ${BH.views.modelSection({ sidecarStatus, installed, servedLocally })}`,
       (body) => {
         BH.views.wireModelSection(body, { installed, servedLocally });
