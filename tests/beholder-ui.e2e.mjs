@@ -315,6 +315,48 @@ check(
   check("a locked slot is restored after something overwrites it", gone);
 }
 
+// ── with several characters, an edit lands on the one whose tab is open ─────
+// Attribution is the failure that matters here: editing while looking at one
+// character must not write to another.
+{
+  const names = await page.evaluate(() => [
+    ...new Set([...document.querySelectorAll("button[data-char]")].map((b) => b.dataset.char)),
+  ]);
+  if (names.length < 2) {
+    check("multi-character editing", true, "skipped — chat has one character");
+  } else {
+    const other = names[1];
+    const marker = `probe-other-${Date.now()}`;
+    const outcome = await page.evaluate(
+      async ([name, item]) => {
+        document.querySelector(`button[data-char="${CSS.escape(name)}"]`)?.click();
+        await new Promise((r) => setTimeout(r, 700));
+        const card = document.querySelector(".bh-slot-card[data-slot]");
+        card.click();
+        await new Promise((r) => setTimeout(r, 700));
+        document.querySelector(".bhe-add-worn").click();
+        const rows = [...document.querySelectorAll(".bhe-worn-list .bh-editor-row")];
+        rows[rows.length - 1].querySelector(".bhe-item").value = item;
+        document.querySelector(".bh-editor-apply").click();
+        await new Promise((r) => setTimeout(r, 3500));
+        const chatId = document.querySelector("marinara-capability-beholder")?.capabilityProps?.chatId;
+        const state = await (
+          await fetch(`/api/agents/beholder-state/${chatId}`, { credentials: "same-origin" })
+        ).json();
+        const onTarget = state.state.characters.find((c) => c.name === name);
+        const others = state.state.characters.filter((c) => c.name !== name);
+        return {
+          landed: JSON.stringify(onTarget ?? {}).includes(item),
+          leaked: others.some((c) => JSON.stringify(c).includes(item)),
+        };
+      },
+      [other, marker],
+    );
+    check(`an edit lands on the open character (${other})`, outcome.landed);
+    check("and does not leak onto another character", !outcome.leaked);
+  }
+}
+
 // ── layers, views, layouts ──────────────────────────────────────────────────
 for (const layer of ["color", "damage", "wounds"]) {
   check(
