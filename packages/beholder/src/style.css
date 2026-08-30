@@ -653,8 +653,14 @@
        switch (the panel has no doll grid to switch between at this width). */
     .bh-layout-switch-row { display: none; }
     /* Header tools collapse to the overflow (⋯) trigger when narrow. */
-    .beholder-tool-btn { display: none; }
-    .beholder-tools-more { display: inline-block; }
+    /* .beholder-panel-scoped so this outranks the FA shim's
+       `.beholder-panel [class*='fa-']`, which forces display:inline-block on every
+       icon in the panel and otherwise wins this on specificity. */
+    .beholder-panel .beholder-tool-btn { display: none; }
+    /* One step more specific than the base hide below, which has to be
+       .beholder-panel-scoped itself to outrank the FA shim. Without that the base
+       rule wins on source order and the trigger never appears. */
+    .beholder-panel .beholder-panel-controls .beholder-tools-more { display: inline-block; }
 }
 
 /* Per-slot CARD: one card per anatomical slot, contains chips for each
@@ -2198,7 +2204,9 @@
     background: var(--bh-border);
     opacity: 0.8;
 }
-.beholder-tools-more { display: none; }
+/* Scoped for the same reason as the tool row: the FA shim would otherwise keep this
+   overflow trigger visible on wide panels, where the tool row is already shown. */
+.beholder-panel .beholder-tools-more { display: none; }
 .beholder-tools-more.bh-more-open { opacity: 1; color: var(--bh-accent); }
 .beholder-tools-menu {
     position: absolute;
