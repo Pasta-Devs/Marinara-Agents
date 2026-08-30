@@ -215,7 +215,7 @@ BH.dock = {
     panel.innerHTML = `
       <div class="beholder-panel-header">
         <span class="beholder-panel-title">${say("dockTitle", "Beholder")}</span>
-        <span class="beholder-panel-controls"><button type="button" class="bh-dock-popout fa-solid fa-arrow-up-right-from-square" title="${say("dockPopOut", "Open Beholder in a new tab")}" aria-label="${say("dockPopOut", "Open Beholder in a new tab")}"></button><button type="button" class="bh-dock-close fa-solid fa-xmark" title="${say("dockClose", "Close Beholder")}" aria-label="${say("dockClose", "Close Beholder")}"></button></span>
+        <span class="beholder-panel-controls"><button type="button" class="beholder-tool-btn fa-solid fa-wand-magic-sparkles" data-view="prompt" title="${say("viewPromptHint", "Prompt — which prompt set this model needs")}" aria-label="${say("viewPrompt", "Prompt")}"></button><button type="button" class="beholder-tool-btn fa-solid fa-stethoscope" data-view="doctor" title="${say("viewDoctorHint", "Doctor — the last extraction, end to end")}" aria-label="${say("viewDoctor", "Doctor")}"></button><button type="button" class="beholder-tool-btn fa-solid fa-circle-question" data-view="help" title="${say("viewHelpHint", "Help — legend and writing tips")}" aria-label="${say("viewHelp", "Help")}"></button><button type="button" class="bh-dock-popout fa-solid fa-arrow-up-right-from-square" title="${say("dockPopOut", "Open Beholder in a new tab")}" aria-label="${say("dockPopOut", "Open Beholder in a new tab")}"></button><button type="button" class="bh-dock-close fa-solid fa-xmark" title="${say("dockClose", "Close Beholder")}" aria-label="${say("dockClose", "Close Beholder")}"></button></span>
       </div>
       <div class="beholder-layer-bar" role="group" aria-label="${say("layerBarLabel", "Detail layers")}">
         <label class="bh-layer-cell" data-layer="color" title="${say("layerColorHint", "Color word annotation on chips")}"><input type="checkbox" name="bh-view-layer" value="color"><span>${say("layerColor", "Color")}</span></label>
@@ -277,7 +277,19 @@ BH.dock = {
       if (tab && tab.dataset.char) {
         this.activeName = tab.dataset.char;
         this.render();
+        return;
       }
+      const tool = target.closest(".beholder-tool-btn[data-view]");
+      if (tool) {
+        const view = tool.dataset.view;
+        if (view === "prompt") void BH.views.promptView();
+        else if (view === "doctor") void BH.views.doctorView();
+        else if (view === "help") BH.views.helpView();
+        return;
+      }
+      // A slot card opens the editor for that slot on the active character.
+      const card = target.closest(".bh-slot-card[data-slot]");
+      if (card) BH.editor.openFor(card);
     });
 
     this.applyLayers();
@@ -618,6 +630,12 @@ BH.dock = {
       const next = await BH.fetchState(chatId);
       if (this.chatId !== chatId) return; // chat switched mid-flight
       this.adopt(next);
+      // A lock promises the slot keeps its value; the extractor does not read locks,
+      // so put back anything it overwrote and show the restored state.
+      if (await BH.locks.enforce(next, chatId)) {
+        const restored = await BH.fetchState(chatId);
+        if (this.chatId === chatId) this.adopt(restored);
+      }
     } catch (error) {
       // A read failure leaves the last known doll on screen; the next turn retries.
       console.warn("[beholder] state refresh failed", error);
@@ -664,6 +682,9 @@ BH.dock = {
     this.activeName = rendered.activeName;
     if (this.activeName) this.unviewed.delete(this.activeName);
     body.innerHTML = rendered.html || "";
+    // Re-applied every render: the body is rebuilt wholesale, so lock marks would
+    // otherwise vanish the first time anything else changes.
+    BH.locks.decorate(panel, this.activeName);
     this.fitDesktopContent();
   },
 };

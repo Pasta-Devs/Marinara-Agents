@@ -89,6 +89,8 @@ export default tseslint.config(
     languageOptions: {
       globals: {
         BH: "readonly",
+        BH_HAND_SLOTS: "readonly",
+        BH_FIVE_PASS_ID: "readonly",
         BH_FA_CSS: "readonly",
         BH_HOST_CSS: "readonly",
         BH_LOCALES: "readonly",
