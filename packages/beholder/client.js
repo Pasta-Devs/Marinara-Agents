@@ -2839,7 +2839,11 @@ BH.views = {
   /** The last extraction, end to end, so a bad turn can be looked at rather than guessed at. */
   async doctorView() {
     this.open("Doctor", `<p class="bh-view-lead">Reading the last extraction…</p>`, async (body) => {
+      // Captured together, before the requests. Reading the chat again afterwards let
+      // a chat switch pair one chat's extraction with another chat's prompt in the same
+      // report — which is exactly the thing the operator opens Doctor to rule out.
       const chatId = BH.dock.chatId;
+      const chatProps = BH.dock.props ?? {};
       const lines = [];
       try {
         const res = await fetch(`/api/agents/beholder-state/${encodeURIComponent(chatId)}`, {
@@ -2849,7 +2853,7 @@ BH.views = {
         const snapshot = res.ok ? await res.json() : null;
         const characters = snapshot?.state?.characters ?? [];
         const slots = characters.reduce((n, c) => n + Object.keys(c.body ?? {}).length, 0);
-        const selected = (await this.liveTemplate(BH.dock.chatId, BH.dock.props ?? {})).templateId;
+        const selected = (await this.liveTemplate(chatId, chatProps)).templateId;
         lines.push(
           `<dl class="bh-doctor-facts">
              <dt>Last extraction</dt><dd>${snapshot?.createdAt ? BH.escapeHtml(new Date(snapshot.createdAt).toLocaleString()) : "none yet"}</dd>
