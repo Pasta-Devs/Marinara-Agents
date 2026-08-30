@@ -12,7 +12,7 @@ const BH_LOOKS_TRAINED = (value) => /beholder/i.test(String(value || ""));
 
 BH.views = {
   close() {
-    document.querySelector(".bh-view-overlay")?.remove();
+    document.querySelector(".bh-view")?.remove();
     if (this.onKeydown) {
       document.removeEventListener("keydown", this.onKeydown, true);
       this.onKeydown = null;
@@ -22,37 +22,49 @@ BH.views = {
     this.returnFocusTo = null;
   },
 
+  /**
+   * Open a view inside the panel.
+   *
+   * `.bh-view` is `position:absolute; inset:0` — it is built to fill the panel, the way
+   * the reference extension does it, with a back arrow to the doll. This used to render
+   * a full-viewport overlay instead, which dimmed the entire host app to show a legend:
+   * heavier than the thing it was showing, and unlike every other surface here.
+   */
   open(title, bodyHtml, onMount) {
     this.close();
-    const overlay = document.createElement("div");
-    overlay.className = "bh-view-overlay";
-    overlay.innerHTML = `
-      <div class="bh-view">
-        <div class="bh-view-head">
-          <span class="bh-view-title">${BH.escapeHtml(title)}</span>
-          <button class="bh-view-close fa-solid fa-xmark" title="Close"></button>
-        </div>
-        <div class="bh-view-body">${bodyHtml}</div>
-      </div>`;
-    document.body.appendChild(overlay);
-    const closeButton = overlay.querySelector(".bh-view-close");
-    closeButton.addEventListener("click", () => this.close());
-    overlay.addEventListener("click", (event) => {
-      if (event.target === overlay) this.close();
+    const panel = BH.dock.panel;
+    const view = document.createElement("div");
+    view.className = "bh-view";
+    view.setAttribute("role", "dialog");
+    view.setAttribute("aria-label", title);
+    view.innerHTML = `
+      <div class="bh-view-head">
+        <button type="button" class="bh-view-back fa-solid fa-arrow-left" title="Back to the panel"
+          aria-label="Back to the panel"></button>
+        <span class="bh-view-title"><span class="bh-view-crumb">◉</span>${BH.escapeHtml(title)}</span>
+        <button type="button" class="bh-view-close fa-solid fa-xmark" title="Close"></button>
+      </div>
+      <div class="bh-view-body">${bodyHtml}</div>`;
+    (panel ?? document.body).appendChild(view);
+
+    for (const dismiss of view.querySelectorAll(".bh-view-back, .bh-view-close")) {
+      dismiss.addEventListener("click", () => this.close());
+    }
+    // The head doubles as the panel's drag grip while a view covers the header, so
+    // only the scrollable body swallows mousedown.
+    view.addEventListener("mousedown", (event) => {
+      if (!event.target.closest(".bh-view-head")) event.stopPropagation();
     });
-    // It behaves like a modal, so it has to be dismissable and reachable like one:
-    // without this a keyboard user tabs through the whole page behind it to escape.
     this.onKeydown = (event) => {
-      if (event.key === "Escape") {
-        event.stopPropagation();
-        this.close();
-      }
+      if (event.key !== "Escape") return;
+      event.stopPropagation();
+      this.close();
     };
     document.addEventListener("keydown", this.onKeydown, true);
     this.returnFocusTo = document.activeElement;
-    closeButton.focus?.();
-    onMount?.(overlay.querySelector(".bh-view-body"));
-    return overlay;
+    view.querySelector(".bh-view-back")?.focus?.();
+    onMount?.(view.querySelector(".bh-view-body"));
+    return view;
   },
 
   // ── Prompt ────────────────────────────────────────────────────────────────
@@ -308,7 +320,7 @@ BH.views = {
     // Drawn before the network work so the dock button gives immediate feedback; the
     // body is filled in once the answers arrive.
     const loading =
-      document.querySelector(".bh-view-overlay") ??
+      document.querySelector(".bh-view") ??
       this.open("Prompt", `<p class="bh-view-lead">Checking which model will answer…</p>`);
     const props = BH.dock.props ?? {};
     // Resolved once, before anything is awaited, so every read and write below refers
@@ -443,19 +455,42 @@ BH.views = {
     </div>`;
   },
 
+  /** Whether Beholder is switched on for this chat, read from the chat itself. */
+  async agentActive(chatId) {
+    // The props snapshot does not carry the chat's agent list, so reading it there
+    // reported the agent inactive while it was plainly running — a check that is wrong
+    // in the healthy case is worse than no check.
+    if (!chatId) return null;
+    try {
+      const res = await fetch(`/api/chats/${encodeURIComponent(chatId)}`, {
+        credentials: "same-origin",
+        headers: { Accept: "application/json" },
+      });
+      if (!res.ok) return null;
+      const meta = (await res.json())?.metadata ?? {};
+      if (meta.enableAgents === false) return false;
+      const active = meta.agentPromptTemplateIds ? Object.keys(meta.agentPromptTemplateIds) : [];
+      const ids = Array.isArray(meta.activeAgentIds) ? meta.activeAgentIds : active;
+      return ids.includes("beholder");
+    } catch {
+      return null;
+    }
+  },
+
   async healthChecks(chatId, chatProps, snapshot) {
     const rows = [];
-    const agentOn =
-      BH.dock.props?.metadata?.enableAgents !== false &&
-      (BH.dock.props?.metadata?.activeAgentIds ?? []).includes("beholder");
+    const agentOn = await this.agentActive(chatId);
     rows.push(
-      agentOn
+      agentOn === true
         ? this.checkRow("ok", "Agent", "Beholder is switched on for this chat.")
-        : this.checkRow(
-            "error",
-            "Agent",
-            "Beholder is not active in this chat, so nothing will be extracted. Switch it on in the agents menu.",
-          ),
+        : agentOn === false
+          ? this.checkRow(
+              "error",
+              "Agent",
+              "Beholder is not active in this chat, so nothing will be extracted. Switch it on in the agents menu.",
+            )
+          : // Unknown is reported as unknown rather than guessed either way.
+            this.checkRow("warn", "Agent", "Could not read this chat's agent settings."),
     );
 
     const routing = await BH.sidecar.routing();

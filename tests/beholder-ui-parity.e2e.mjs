@@ -109,7 +109,7 @@ try {
   for (const view of ["prompt", "doctor", "characters", "inspector", "help"]) {
     await page.locator(`.beholder-tool-btn[data-view="${view}"]`).first().click();
     await page.waitForTimeout(view === "prompt" || view === "doctor" ? 2200 : 900);
-    const open = await page.locator(".bh-view-overlay").count();
+    const open = await page.locator(".bh-view").count();
     check(`${view} view opens`, open > 0);
     const title = await page
       .locator(".bh-view-title")
@@ -119,7 +119,7 @@ try {
     check(`${view} view is titled`, !!title?.trim(), title?.trim());
     await page.keyboard.press("Escape");
     await page.waitForTimeout(500);
-    check(`${view} view closes on Escape`, (await page.locator(".bh-view-overlay").count()) === 0);
+    check(`${view} view closes on Escape`, (await page.locator(".bh-view").count()) === 0);
   }
 
   // ── doctor actually reports checks ────────────────────────────────────────
@@ -250,7 +250,7 @@ try {
     check("overflow menu lists every view", items.length >= 5, items.join(","));
     await page.evaluate(() => document.querySelector(".beholder-tools-menu .beholder-tools-item")?.click());
     await page.waitForTimeout(1800);
-    check("a view opens from the overflow menu", (await page.locator(".bh-view-overlay").count()) > 0);
+    check("a view opens from the overflow menu", (await page.locator(".bh-view").count()) > 0);
     await page.keyboard.press("Escape");
   } else {
     const width = await page.evaluate(() => document.querySelector(".beholder-panel")?.getBoundingClientRect().width);

@@ -2497,7 +2497,10 @@
     z-index: 60;
     display: flex;
     flex-direction: column;
-    background: var(--SmartThemeBlurTintColor, rgba(13, 15, 20, 0.97));
+    /* Opaque on purpose, and the same surface the editor popover uses. The reference
+       reads its host's tint variable here, which in this host resolves translucent —
+       the paper doll showed through the text and made it unreadable. */
+    background: rgb(16, 18, 24);
     border-radius: 12px;
     overflow: hidden;
     animation: 0.18s ease-out bh-view-in;
@@ -2714,6 +2717,7 @@
 .bh-vlog-row {
     display: flex;
     align-items: baseline;
+    flex-wrap: wrap;
     gap: 8px;
     font-family: var(--bh-font-data);
     font-size: 0.8em;
@@ -2723,6 +2727,10 @@
     background: rgba(255, 255, 255, 0.025);
     border-left: 2px solid var(--bh-divider);
 }
+/* The label keeps its width; the sentence takes the rest and wraps within the row
+   rather than pushing past the panel edge. */
+.bh-vlog-row > b { flex: 0 0 auto; }
+.bh-vlog-row > span { flex: 1 1 12ch; min-width: 0; overflow-wrap: anywhere; }
 .bh-vlog-row b { flex-shrink: 0; font-size: 0.85em; letter-spacing: 0.1em; }
 .bh-vlog-warn { border-left-color: var(--bh-accent); }
 .bh-vlog-warn b { color: var(--bh-accent); }
@@ -3391,6 +3399,16 @@
 
 /* Calm variant — deliberate off: muted, no gold pull, a quiet ○ marker.
    It's still persistent, just a note rather than a call to action. */
+/* The reference only ever uses this strip to ask for something, so its actions take a
+   full row and stretch. Here it also reports a healthy state — "answering locally" —
+   and a full-width button under one line of text reads as an error the operator has to
+   clear. Calm keeps the action inline beside the copy. */
+.bh-no-model-banner.bh-banner-calm .bh-banner-actions {
+    flex: 0 0 auto;
+    justify-content: flex-end;
+}
+.bh-no-model-banner.bh-banner-calm .bh-banner-actions .bh-btn { flex: 0 0 auto; }
+
 .bh-no-model-banner.bh-banner-calm {
     background: var(--bh-surface-1);
     opacity: 0.9;
@@ -3508,51 +3526,24 @@
 }
 
 /* ── Package-only chrome ─────────────────────────────────────────────────────
-   The editor form, toast, inputs and slot cards are all styled above, carried
-   over with the renderer. What follows is the surrounding chrome this build adds:
-   the editor's own frame, the overlay views (Prompt / Doctor / Help), and the
-   lock mark. Same variables, so it sits inside the panel's palette. */
+   The editor, the views and the slot cards are styled above, carried over with the
+   renderer. This build used to re-define that chrome down here as well — a simpler
+   frame, a floating card for the views, its own Apply button — and being later in the
+   file it won, so the reference styling above was loaded and never seen. That is why
+   the panel looked bolted together next to the extension it was ported from.
+   Those duplicates are gone. What is left is only what has no counterpart above:
+   the prompt picker, the local-model controls, and the lock mark. */
 
-.bh-editor {
-  position: fixed; z-index: 10050; max-height: 70vh; overflow: auto;
-  background: var(--SmartThemeBlurTintColor, rgba(20, 20, 24, .98));
-  color: var(--SmartThemeBodyColor, #e0e0e0);
-  border: 1px solid var(--SmartThemeBorderColor, rgba(255, 255, 255, .15));
-  border-radius: 10px; box-shadow: 0 12px 32px rgba(0, 0, 0, .45); padding: 10px;
-}
-.bh-editor-head { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
-.bh-editor-title { font-weight: 700; flex: 1; text-transform: capitalize; }
 .bh-editor-lock { display: inline-flex; align-items: center; gap: 4px; font-size: 11px; opacity: .85; }
-.bh-editor-close { background: none; border: 0; color: inherit; cursor: pointer; opacity: .7; }
-.bh-editor-close:hover { opacity: 1; }
-.bh-editor-foot { display: flex; justify-content: flex-end; margin-top: 10px; }
-.bh-editor-apply {
-  cursor: pointer; padding: 6px 16px; border-radius: 8px; font-weight: 700;
-  background: color-mix(in srgb, var(--bh-accent) 22%, transparent); border: 1px solid color-mix(in srgb, var(--bh-accent) 55%, transparent); color: inherit;
-}
-.bh-editor-apply:hover:not(:disabled) { background: color-mix(in srgb, var(--bh-accent) 40%, transparent); }
+/* Apply uses the reference's .bh-btn / .bh-btn-primary now. */
 .bh-editor-apply:disabled { opacity: .5; cursor: default; }
-/* missing overrides the slot, so the rest of the form is visibly inert */
-.bhe-missing-mode .bhe-worn-list, .bhe-missing-mode .bhe-wound-list,
-.bhe-missing-mode .bhe-holding-row, .bhe-missing-mode .bh-editor-add { opacity: .35; pointer-events: none; }
 
-.bh-view-overlay {
-  position: fixed; inset: 0; z-index: 10060; display: flex; align-items: center; justify-content: center;
-  background: rgba(0, 0, 0, .45); padding: 16px;
-}
-.bh-view {
-  width: min(560px, 96vw); max-height: 86vh; display: flex; flex-direction: column;
-  background: var(--SmartThemeBlurTintColor, rgba(20, 20, 24, .98));
-  color: var(--SmartThemeBodyColor, #e0e0e0);
-  border: 1px solid var(--SmartThemeBorderColor, rgba(255, 255, 255, .15));
-  border-radius: 12px; box-shadow: 0 16px 40px rgba(0, 0, 0, .5);
-}
-.bh-view-head { display: flex; align-items: center; gap: 8px; padding: 10px 12px;
-  border-bottom: 1px solid var(--SmartThemeBorderColor, rgba(255, 255, 255, .12)); }
-.bh-view-title { font-weight: 700; flex: 1; }
+
+/* The full-viewport overlay this package used to open views in is gone: views now
+   fill the panel like the reference extension's, so nothing needs to dim the host
+   app to show a legend. */
 .bh-view-close { background: none; border: 0; color: inherit; cursor: pointer; opacity: .7; }
 .bh-view-close:hover { opacity: 1; }
-.bh-view-body { padding: 12px; overflow: auto; font-size: 12.5px; line-height: 1.5; }
 .bh-view-lead { margin: 0 0 10px; }
 .bh-view-note { opacity: .8; font-size: 11.5px; margin: 8px 0 0; }
 .bh-view-warn { margin: 10px 0 0; padding: 8px 10px; border-radius: 8px;
@@ -3573,7 +3564,6 @@
 .bh-help-list { margin: 6px 0 12px; padding-left: 18px; }
 .bh-help-list li { margin-bottom: 4px; }
 
-.bh-slot-card { position: relative; }
 .bh-lock-mark { position: absolute; top: 4px; right: 4px; font-size: 9px; opacity: .75; }
 .bh-slot-card.bh-slot-locked { outline: 1px solid color-mix(in srgb, var(--bh-accent) 55%, transparent); outline-offset: -1px; }
 
