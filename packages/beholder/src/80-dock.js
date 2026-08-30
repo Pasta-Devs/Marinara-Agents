@@ -32,12 +32,12 @@ const BH_HOST_CSS = `
 .beholder-panel .beholder-resize-handle:hover{ width:1.5rem; background:var(--bh-surface-2); color:var(--bh-window-accent); opacity:1; }
 .beholder-panel-header{ touch-action:none; }
 .beholder-panel-controls{ flex-wrap:nowrap; }
-.beholder-panel-controls :is(.bh-dock-popout,.bh-dock-close){ box-sizing:border-box; display:inline-flex; width:1.75rem; height:1.75rem; align-items:center; justify-content:center; border:0; border-radius:.375rem;
+.beholder-panel-controls .bh-dock-close{ box-sizing:border-box; display:inline-flex; width:1.75rem; height:1.75rem; align-items:center; justify-content:center; border:0; border-radius:.375rem;
   padding:0; font-size:.875rem;
   background:transparent; color:var(--bh-window-accent); cursor:pointer; opacity:.8; }
-.beholder-panel-controls :is(.bh-dock-popout,.bh-dock-close):hover{ background:var(--bh-surface-2); color:var(--bh-window-accent); opacity:1; }
-.beholder-panel-controls :is(.bh-dock-popout,.bh-dock-close):focus-visible{ outline:2px solid var(--bh-window-accent); outline-offset:1px; }
-.beholder-panel.bh-detached .bh-dock-popout,.beholder-panel.bh-detached .beholder-resize-handle{ display:none !important; }
+.beholder-panel-controls .bh-dock-close:hover{ background:var(--bh-surface-2); color:var(--bh-window-accent); opacity:1; }
+.beholder-panel-controls .bh-dock-close:focus-visible{ outline:2px solid var(--bh-window-accent); outline-offset:1px; }
+.beholder-panel.bh-detached .beholder-resize-handle{ display:none !important; }
 @media (max-width:767px){
   .rpg-chat-area.bh-beholder-open{ z-index:70; }
   .beholder-panel{ inset:0 !important; width:100% !important; height:100% !important; max-height:none !important; border-radius:0 !important; z-index:80; }
@@ -215,8 +215,9 @@ BH.dock = {
     panel.innerHTML = `
       <div class="beholder-panel-header">
         <span class="beholder-panel-title">${say("dockTitle", "Beholder")}</span>
-        <span class="beholder-panel-controls"><button type="button" class="beholder-tool-btn fa-solid fa-wand-magic-sparkles" data-view="prompt" title="${say("viewPromptHint", "Prompt — which prompt set this model needs")}" aria-label="${say("viewPrompt", "Prompt")}"></button><button type="button" class="beholder-tool-btn fa-solid fa-stethoscope" data-view="doctor" title="${say("viewDoctorHint", "Doctor — the last extraction, end to end")}" aria-label="${say("viewDoctor", "Doctor")}"></button><button type="button" class="beholder-tool-btn fa-solid fa-circle-question" data-view="help" title="${say("viewHelpHint", "Help — legend and writing tips")}" aria-label="${say("viewHelp", "Help")}"></button><button type="button" class="bh-dock-popout fa-solid fa-arrow-up-right-from-square" title="${say("dockPopOut", "Open Beholder in a new tab")}" aria-label="${say("dockPopOut", "Open Beholder in a new tab")}"></button><button type="button" class="bh-dock-close fa-solid fa-xmark" title="${say("dockClose", "Close Beholder")}" aria-label="${say("dockClose", "Close Beholder")}"></button></span>
+        <span class="beholder-panel-controls"><span class="beholder-backfill-group" role="group" aria-label="${say("backfillGroup", "Build state from the chat")}"><button type="button" class="beholder-backfill-btn fa-solid fa-clock-rotate-left" title="${say("backfillHint", "Build state from this chat's messages")}" aria-label="${say("backfill", "Build state from history")}"></button><button type="button" class="beholder-backfill-more fa-solid fa-caret-down" title="${say("backfillMoreHint", "More build options")}" aria-label="${say("backfillMore", "More build options")}"></button></span><span class="bh-header-sep" aria-hidden="true"></span><button type="button" class="beholder-tool-btn fa-solid fa-wand-magic-sparkles" data-view="prompt" title="${say("viewPromptHint", "Prompt — which prompt set this model needs")}" aria-label="${say("viewPrompt", "Prompt")}"></button><button type="button" class="beholder-tool-btn fa-solid fa-stethoscope" data-view="doctor" title="${say("viewDoctorHint", "Doctor — the last extraction, end to end")}" aria-label="${say("viewDoctor", "Doctor")}"></button><button type="button" class="beholder-tool-btn fa-solid fa-circle-question" data-view="help" title="${say("viewHelpHint", "Help — legend and writing tips")}" aria-label="${say("viewHelp", "Help")}"></button><button type="button" class="bh-dock-close fa-solid fa-xmark" title="${say("dockClose", "Close Beholder")}" aria-label="${say("dockClose", "Close Beholder")}"></button></span>
       </div>
+      <div class="beholder-backfill-status" hidden></div>
       <div class="beholder-layer-bar" role="group" aria-label="${say("layerBarLabel", "Detail layers")}">
         <label class="bh-layer-cell" data-layer="color" title="${say("layerColorHint", "Color word annotation on chips")}"><input type="checkbox" name="bh-view-layer" value="color"><span>${say("layerColor", "Color")}</span></label>
         <label class="bh-layer-cell" data-layer="damage" title="${say("layerDamageHint", "Damage-tier visuals + damage word")}"><input type="checkbox" name="bh-view-layer" value="damage"><span>${say("layerDamage", "Damage")}</span></label>
@@ -229,7 +230,13 @@ BH.dock = {
     document.body.classList.remove("bh-dock-open");
 
     panel.querySelector(".bh-dock-close").addEventListener("click", () => this.close());
-    panel.querySelector(".bh-dock-popout").addEventListener("click", () => this.popOut());
+    panel.querySelector(".beholder-backfill-btn").addEventListener("click", () => {
+      void BH.backfill.run("build");
+    });
+    panel.querySelector(".beholder-backfill-more").addEventListener("click", (event) => {
+      event.stopPropagation();
+      BH.backfill.toggleMenu();
+    });
     panel.querySelector(".beholder-panel-header").addEventListener("pointerdown", (event) => {
       this.startInteraction("move", event);
     });
@@ -285,6 +292,13 @@ BH.dock = {
         if (view === "prompt") void BH.views.promptView();
         else if (view === "doctor") void BH.views.doctorView();
         else if (view === "help") BH.views.helpView();
+        return;
+      }
+      // "Edit slots" opens the sheet: the list layout draws no cards to click, and a
+      // slot with nothing in it has no card anywhere, so this is the only way to reach
+      // an empty one.
+      if (target.closest(".bh-digest-edit")) {
+        BH.sheet.open();
         return;
       }
       // A slot card opens the editor for that slot on the active character.
@@ -463,44 +477,6 @@ BH.dock = {
     });
     const area = this.findChatArea();
     if (area) this._boundsObserver.observe(area);
-  },
-
-  popOut() {
-    const panel = this.ensure();
-    if (!panel || this.isDetached()) return;
-    const popup = window.open("", "_blank");
-    if (!popup) return;
-    const popupDocument = popup.document;
-    popupDocument.title = BH.localize(this.props, "dockTitle", "Beholder");
-    popupDocument.documentElement.lang = document.documentElement.lang || "en";
-    popupDocument.documentElement.dir = document.documentElement.dir || "ltr";
-    const sourceTheme = getComputedStyle(this.findChatArea() || document.documentElement);
-    for (const variable of BH_THEME_VARIABLES) {
-      const value = sourceTheme.getPropertyValue(variable);
-      if (value) popupDocument.documentElement.style.setProperty(variable, value);
-    }
-    popupDocument.documentElement.style.colorScheme = getComputedStyle(document.documentElement).colorScheme;
-    popupDocument.body.replaceChildren();
-    popupDocument.body.style.margin = "0";
-    popupDocument.body.style.overflow = "hidden";
-    popupDocument.body.style.background = "var(--background, #111)";
-    popupDocument.body.style.color = "var(--foreground, #eee)";
-    popupDocument.body.style.fontFamily = sourceTheme.fontFamily;
-    BH.ensureStyles(popupDocument);
-
-    panel.classList.add("bh-detached");
-    popupDocument.body.appendChild(panel);
-    this.detachedWindow = popup;
-    this.syncHostLayer();
-    this._detachedResize = () => {
-      this.syncGeometry();
-      this.render();
-    };
-    popup.addEventListener("resize", this._detachedResize);
-    popup.addEventListener("beforeunload", () => this.restoreFromDetached(), { once: true });
-    this.syncGeometry();
-    this.render();
-    popup.focus();
   },
 
   restoreFromDetached() {

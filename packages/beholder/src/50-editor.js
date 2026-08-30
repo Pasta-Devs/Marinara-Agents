@@ -50,7 +50,41 @@ BH.editor = {
 
   close() {
     document.querySelector(".bh-editor")?.remove();
+    if (this.dismissHandlers) {
+      document.removeEventListener("click", this.dismissHandlers.click, true);
+      document.removeEventListener("keydown", this.dismissHandlers.keydown, true);
+      this.dismissHandlers = null;
+    }
     this.open = null;
+  },
+
+  /**
+   * Close on Escape or a click outside, the way the reference extension does.
+   *
+   * The detached-target guard matters: removing a worn row deletes the button that
+   * was clicked, so by the time this runs the target has no ancestors and reads as
+   * an outside click. Closing there would throw away the staged edit — the row would
+   * come back and the operator would think the remove did not work.
+   */
+  wireDismiss(editor) {
+    const onClick = (event) => {
+      const target = event.target;
+      if (!target || target.isConnected === false) return;
+      if (target.closest?.(".bh-editor, .bh-slot-card")) return;
+      this.close();
+    };
+    const onKeydown = (event) => {
+      if (event.key !== "Escape") return;
+      event.stopPropagation();
+      this.close();
+    };
+    this.dismissHandlers = { click: onClick, keydown: onKeydown };
+    // Deferred: the click that opened the editor is still propagating.
+    setTimeout(() => {
+      if (!editor.isConnected) return;
+      document.addEventListener("click", onClick, true);
+      document.addEventListener("keydown", onKeydown, true);
+    }, 0);
   },
 
   /** Open the editor over a slot card. */
@@ -68,12 +102,17 @@ BH.editor = {
     const isHand = BH_HAND_SLOTS.has(slotName);
     const locked = BH.locks.has(characterName, slotName);
 
+    const slotLabel = card.querySelector(".bh-slot-name")?.textContent?.trim() || slotName.replace(/_/g, " ");
+
     this.close();
     const editor = document.createElement("div");
     editor.className = "bh-editor";
+    editor.setAttribute("role", "dialog");
+    editor.setAttribute("aria-label", `Edit ${slotLabel}`);
     editor.innerHTML = `
       <div class="bh-editor-head">
-        <span class="bh-editor-title">${BH.escapeHtml(slotName.replace(/_/g, " "))}</span>
+        <span class="bh-editor-title">${BH.escapeHtml(characterName)}</span>
+        <span class="bh-editor-slot">· ${BH.escapeHtml(slotLabel)}</span>
         <label class="bh-check bh-editor-lock" title="A locked slot is left alone when an edit is applied">
           <input type="checkbox" class="bhe-lock" ${locked ? "checked" : ""}><span>lock</span>
         </label>
@@ -81,20 +120,42 @@ BH.editor = {
       </div>
       <div class="bh-editor-body">${BH.editorFormHtml(slotState, isHand)}</div>
       <div class="bh-editor-foot">
-        <button class="bh-editor-apply">Apply</button>
+        <button class="bh-btn bhe-cancel">Cancel</button>
+        <button class="bh-btn bh-btn-primary bh-editor-apply"><i class="fa-solid fa-check"></i> Apply</button>
       </div>`;
-    document.body.appendChild(editor);
+
+    // Appended to the panel, not the document: .bh-editor is position:absolute and is
+    // designed to be placed against the panel's own box. On the body it was laid out
+    // against the page instead, so it drifted the moment anything scrolled.
+    const panel = BH.dock.panel;
+    (panel ?? document.body).appendChild(editor);
     this.open = { character: characterName, slot: slotName, element: editor };
 
-    // Place it beside the card, kept inside the viewport.
-    const rect = card.getBoundingClientRect();
-    const width = Math.min(360, window.innerWidth - 16);
-    editor.style.width = `${width}px`;
-    editor.style.left = `${Math.max(8, Math.min(rect.left, window.innerWidth - width - 8))}px`;
-    editor.style.top = `${Math.max(8, Math.min(rect.bottom + 6, window.innerHeight - 40))}px`;
+    if (panel) {
+      const panelRect = panel.getBoundingClientRect();
+      const cardRect = card.getBoundingClientRect();
+      const width = Math.min(330, panelRect.width - 16);
+      editor.style.width = `${width}px`;
+      const left = Math.max(8, Math.min(cardRect.left - panelRect.left, panelRect.width - width - 8));
+      let top = cardRect.bottom - panelRect.top + 6;
+      // Flip above the card when it would fall off the bottom, rather than being
+      // clamped to the edge half-visible.
+      const height = editor.offsetHeight || 320;
+      if (top + height > panelRect.height - 8) {
+        top = Math.max(44, cardRect.top - panelRect.top - height - 6);
+      }
+      editor.style.left = `${left}px`;
+      editor.style.top = `${top}px`;
+    }
+
+    // The editor is its own surface: a click inside it is never an outside click.
+    editor.addEventListener("mousedown", (event) => event.stopPropagation());
 
     BH.wireEditorForm(editor);
-    editor.querySelector(".bh-editor-close").addEventListener("click", () => this.close());
+    this.wireDismiss(editor);
+    for (const dismiss of editor.querySelectorAll(".bh-editor-close, .bhe-cancel")) {
+      dismiss.addEventListener("click", () => this.close());
+    }
     editor.querySelector(".bhe-lock").addEventListener("change", (event) => {
       BH.locks.set(characterName, slotName, event.target.checked);
       // Pin what the slot holds right now; that is what enforcement restores to.

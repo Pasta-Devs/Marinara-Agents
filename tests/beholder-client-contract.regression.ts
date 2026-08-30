@@ -227,10 +227,16 @@ assert.match(
   /releaseHost\(element\)[\s\S]*this\.close\(\)/u,
   "floating Beholder must close when its roleplay host leaves the chat area",
 );
-assert.match(
-  beholderInterfaceSource,
-  /window\.open\("", "_blank"\)/u,
-  "the Beholder header must offer a detached browser tab",
+// The header used to offer "open in a new tab". It was removed on the operator's
+// judgement — a paper doll pinned beside the chat it describes has a reason to exist;
+// the same doll alone on a blank tab does not. Asserted so it does not drift back in.
+assert.ok(
+  !/window\.open\("", "_blank"\)/u.test(beholderInterfaceSource),
+  "the Beholder header must not offer a detached browser tab",
+);
+assert.ok(
+  !/bh-dock-popout/u.test(beholderInterfaceSource),
+  "the pop-out control must be gone from the header, not merely unwired",
 );
 assert.match(
   beholderInterfaceSource,
@@ -510,3 +516,62 @@ const INSTALLED = { repo: "GetBeholder/Beholder-GGUF", file: "Beholder-Q8_0.gguf
 }
 
 console.log("beholder client contract: local model slot OK");
+
+// ── Parity with the reference extension's chrome ─────────────────────────────
+// The panel shipped with a paper doll and almost none of the controls around it: no
+// way to build state from a chat that was already underway, and no way to reach a slot
+// the doll does not draw. Both were reported from real use, not from reading the code.
+// These assert the controls exist and stay wired, since the stylesheet has always
+// carried their design and the markup is what went missing.
+const beholderChromeSource = ["50-editor.js", "52-sheet.js", "70-backfill.js", "80-dock.js"]
+  .map((name) => readFileSync(join(srcDir, name), "utf8"))
+  .join("\n");
+
+{
+  // Build state from the chat — the control an operator reaches for when they switch
+  // Beholder on halfway through and the doll is empty.
+  assert.match(beholderChromeSource, /beholder-backfill-btn/u, "the header must offer a build-from-history control");
+  assert.match(beholderChromeSource, /beholder-backfill-more/u, "and its more-options caret");
+  assert.match(beholderChromeSource, /beholder-backfill-status/u, "with a progress strip");
+  for (const mode of ['data-mode="build"', 'data-mode="turn"', 'data-mode="rebuild"']) {
+    assert.ok(beholderChromeSource.includes(mode), `the build menu must offer ${mode}`);
+  }
+  // Every mode is one model call per message. The count is stated first, and cancel
+  // has to actually stop the walk rather than just hide the bar.
+  assert.match(beholderChromeSource, /window\.confirm\(/u, "a multi-message build must be confirmed before it runs");
+  assert.match(beholderChromeSource, /this\.cancelled/u, "and must be cancellable mid-walk");
+  assert.match(
+    beholderChromeSource,
+    /forMessageId/u,
+    "a history walk must scope each run to one message, not re-run the latest every time",
+  );
+}
+
+{
+  // The slot sheet: the only route to a slot the doll does not draw.
+  assert.match(beholderChromeSource, /bh-digest-edit/u, "the Edit slots button must be wired");
+  assert.match(beholderChromeSource, /bh-edit-sheet/u, "and open the sheet");
+  assert.match(beholderChromeSource, /bh-pick-slot/u, "which lists slots to pick from");
+  assert.match(beholderChromeSource, /bh-slot-picker/u);
+  // Regions, so the list is navigable rather than 26 flat rows.
+  for (const region of ["Head & Face", "Torso", "Arms & Hands", "Legs & Feet"]) {
+    assert.ok(beholderChromeSource.includes(region), `the picker must group slots under ${region}`);
+  }
+}
+
+{
+  // Editor chrome, matched to the reference: it is the surface the operator lives in.
+  assert.match(beholderChromeSource, /bhe-cancel/u, "the editor must offer Cancel, not only Apply");
+  assert.match(beholderChromeSource, /bh-btn-primary/u, "and mark Apply as the primary action");
+  assert.match(beholderChromeSource, /bh-editor-slot/u, "the head must name the character and the slot");
+  assert.match(
+    beholderChromeSource,
+    /cardRect\.top - panelRect\.top - height/u,
+    "and flip above a card near the bottom",
+  );
+  // Dismissal, including the guard that makes removing a row safe.
+  assert.match(beholderChromeSource, /key !== "Escape"/u, "Escape must close the editor");
+  assert.match(beholderChromeSource, /isConnected === false/u, "a detached target must not read as an outside click");
+}
+
+console.log("beholder client contract: reference-parity chrome OK");
