@@ -3568,3 +3568,27 @@
 .bh-slot-card { position: relative; }
 .bh-lock-mark { position: absolute; top: 4px; right: 4px; font-size: 9px; opacity: .75; }
 .bh-slot-card.bh-slot-locked { outline: 1px solid color-mix(in srgb, var(--bh-accent) 55%, transparent); outline-offset: -1px; }
+
+/* Which connection is answering, and the local model that may be overruling it. */
+.bh-conn { display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px; margin-top: 10px;
+  padding: 8px 10px; border-radius: 8px;
+  border: 1px solid var(--SmartThemeBorderColor, rgba(255, 255, 255, .15)); opacity: 1; }
+.bh-conn small { flex-basis: 100%; opacity: .75; }
+.bh-conn-local { border-color: color-mix(in srgb, var(--bh-accent) 60%, transparent);
+  background: color-mix(in srgb, var(--bh-accent) 12%, transparent); }
+.bh-prompt-locked { margin-left: 6px; padding: 1px 6px; border-radius: 999px; font-size: 10px;
+  background: color-mix(in srgb, var(--bh-accent) 22%, transparent); }
+.bh-prompt-option input:disabled + span { opacity: .55; }
+
+.bh-model-block { margin-top: 14px; padding-top: 12px;
+  border-top: 1px solid var(--SmartThemeBorderColor, rgba(255, 255, 255, .12)); }
+.bh-model-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
+.bh-model-update:empty { display: none; }
+.bh-pill-on, .bh-pill-off { margin-left: 6px; padding: 1px 7px; border-radius: 999px; font-size: 10px; }
+.bh-pill-on { background: color-mix(in srgb, var(--bh-accent) 26%, transparent); }
+.bh-pill-off { background: rgba(128, 128, 128, .22); }
+.bh-hw { margin-top: 12px; }
+.bh-hw > summary { cursor: pointer; font-weight: 600; }
+.bh-hw-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-top: 8px; }
+.bh-hw-row input, .bh-hw-row select { width: 130px; }
+.bh-hw-hidden { display: none; }
