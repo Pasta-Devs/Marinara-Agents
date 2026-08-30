@@ -6,10 +6,10 @@
 //
 //   BEHOLDER_UI_BASE=http://127.0.0.1:7861 \
 //   BEHOLDER_UI_CHAT="Beholder rig" \
-//   node --experimental-strip-types tests/beholder-ui.e2e.mjs
+//   node tests/beholder-ui.e2e.mjs
 //
-// Playwright is resolved from NODE_PATH so this can run against an Engine checkout's
-// install without duplicating the dependency here.
+// Plain JavaScript, so no type-stripping flag is needed, and @playwright/test resolves
+// from this repository's own devDependencies.
 import { chromium } from "@playwright/test";
 
 const BASE = process.env.BEHOLDER_UI_BASE ?? "http://127.0.0.1:7861";
@@ -260,10 +260,14 @@ check(
   );
   check(
     "drop clears the held item",
+    // Guarded: an absent element must fail this one check, not reject inside
+    // page.evaluate and take the rest of the suite down with it.
     await page.evaluate(() => {
       const held = document.querySelector(".bhe-hitem");
+      const drop = document.querySelector(".bhe-drop");
+      if (!held || !drop) return false;
       held.value = "torch";
-      document.querySelector(".bhe-drop").click();
+      drop.click();
       return held.value === "" && !!document.querySelector(".bh-editor");
     }),
   );
@@ -277,10 +281,12 @@ check(
     const element = document.querySelector("marinara-capability-beholder");
     const chatId = element?.capabilityProps?.chatId;
     const card = document.querySelector(".bh-slot-card[data-slot]");
+    if (!card) return null;
     const slot = card.dataset.slot;
     card.click();
     await new Promise((r) => setTimeout(r, 700));
     const lock = document.querySelector(".bhe-lock");
+    if (!lock) return null;
     lock.checked = true;
     lock.dispatchEvent(new Event("change", { bubbles: true }));
     document.querySelector(".bh-editor-close")?.click();
@@ -289,7 +295,13 @@ check(
     // Simulate an extraction overwriting the locked slot behind the panel's back.
     const before = await (await fetch(`/api/agents/beholder-state/${chatId}`, { credentials: "same-origin" })).json();
     const meddled = structuredClone(before.state);
-    const character = meddled.characters[0];
+    const character = meddled.characters?.[0];
+    if (!character) return null;
+    // What the lock pinned, so the check can require this exact value back rather
+    // than merely the absence of the intruder — deleting the slot also removes the
+    // intruder, and that is not restoration.
+    const pinned = JSON.stringify(character.body[slot] ?? null);
+    const characterName = character.name;
     character.body[slot] = { worn: [{ item: "intruder", damage: "pristine" }] };
     await fetch(`/api/agents/beholder-state/${chatId}`, {
       method: "PUT",
@@ -297,7 +309,7 @@ check(
       credentials: "same-origin",
       body: JSON.stringify({ state: meddled }),
     });
-    return { slot, chatId };
+    return { slot, chatId, pinned, characterName };
   });
   // A refresh is what triggers enforcement.
   await page.evaluate(() => {
@@ -306,13 +318,21 @@ check(
     toggle?.click();
   });
   await page.waitForTimeout(3500);
-  const gone = await page.evaluate(async (info) => {
-    const state = await (
-      await fetch(`/api/agents/beholder-state/${info.chatId}`, { credentials: "same-origin" })
-    ).json();
-    return !JSON.stringify(state).includes("intruder");
-  }, restored);
-  check("a locked slot is restored after something overwrites it", gone);
+  const lockOutcome = !restored
+    ? { intruderGone: false, restored: false }
+    : await page.evaluate(async (info) => {
+        const state = await (
+          await fetch(`/api/agents/beholder-state/${info.chatId}`, { credentials: "same-origin" })
+        ).json();
+        const character = (state?.state?.characters ?? []).find((row) => row?.name === info.characterName);
+        return {
+          intruderGone: !JSON.stringify(state).includes("intruder"),
+          // The pinned value has to be back, byte for byte.
+          restored: JSON.stringify(character?.body?.[info.slot] ?? null) === info.pinned,
+        };
+      }, restored);
+  check("a locked slot loses the value that overwrote it", lockOutcome.intruderGone);
+  check("a locked slot is restored to the pinned value, not merely cleared", lockOutcome.restored);
 }
 
 // ── with several characters, an edit lands on the one whose tab is open ─────

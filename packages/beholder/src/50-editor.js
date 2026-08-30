@@ -220,8 +220,17 @@ BH.locks = {
     for (const key of keys) {
       const [name, slot] = key.split("::");
       const want = pinned[key];
-      const entry = next.characters.find((candidate) => candidate.name === name);
-      if (!entry) continue;
+      let entry = next.characters.find((candidate) => candidate.name === name);
+      if (!entry) {
+        // The locked character is not in this turn's state. Skipping silently dropped
+        // the lock — reachable since the editor started falling back to the persona
+        // name, where an edit can be made before the extractor has ever named them.
+        // A pin that only holds while the extractor happens to mention you is not a
+        // lock, so re-create the row and enforce it.
+        if (want === undefined || want === null) continue;
+        entry = { name, body: {} };
+        next.characters.push(entry);
+      }
       const have = entry.body[slot];
       if (JSON.stringify(have ?? null) === JSON.stringify(want ?? null)) continue;
       if (want === undefined || want === null) delete entry.body[slot];

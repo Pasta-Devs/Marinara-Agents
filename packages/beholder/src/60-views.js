@@ -13,6 +13,13 @@ const BH_LOOKS_TRAINED = (value) => /beholder/i.test(String(value || ""));
 BH.views = {
   close() {
     document.querySelector(".bh-view-overlay")?.remove();
+    if (this.onKeydown) {
+      document.removeEventListener("keydown", this.onKeydown, true);
+      this.onKeydown = null;
+    }
+    // Put the caret back where it was, or the keyboard user is dropped at the top.
+    this.returnFocusTo?.focus?.();
+    this.returnFocusTo = null;
   },
 
   open(title, bodyHtml, onMount) {
@@ -28,10 +35,22 @@ BH.views = {
         <div class="bh-view-body">${bodyHtml}</div>
       </div>`;
     document.body.appendChild(overlay);
-    overlay.querySelector(".bh-view-close").addEventListener("click", () => this.close());
+    const closeButton = overlay.querySelector(".bh-view-close");
+    closeButton.addEventListener("click", () => this.close());
     overlay.addEventListener("click", (event) => {
       if (event.target === overlay) this.close();
     });
+    // It behaves like a modal, so it has to be dismissable and reachable like one:
+    // without this a keyboard user tabs through the whole page behind it to escape.
+    this.onKeydown = (event) => {
+      if (event.key === "Escape") {
+        event.stopPropagation();
+        this.close();
+      }
+    };
+    document.addEventListener("keydown", this.onKeydown, true);
+    this.returnFocusTo = document.activeElement;
+    closeButton.focus?.();
     onMount?.(overlay.querySelector(".bh-view-body"));
     return overlay;
   },
@@ -66,6 +85,13 @@ BH.views = {
     }
   },
 
+  /**
+   * Persist the selection, then update the props snapshot the views read.
+   *
+   * capabilityProps are handed over by the host and are not refreshed on our
+   * schedule, so without this a reopened view could report the previous selection —
+   * the exact wrong-prompt confusion these views exist to prevent.
+   */
   async setTemplate(props, templateId) {
     const chatId = props?.chatId;
     if (!chatId) return;
@@ -80,9 +106,19 @@ BH.views = {
       body: JSON.stringify({ agentPromptTemplateIds: next }),
     });
     if (!res.ok) throw new Error(`save ${res.status}`);
+    // Keep the snapshot in step with what was just persisted.
+    if (props?.metadata && typeof props.metadata === "object") props.metadata.agentPromptTemplateIds = next;
+    if (BH.dock?.props?.metadata && typeof BH.dock.props.metadata === "object") {
+      BH.dock.props.metadata.agentPromptTemplateIds = next;
+    }
   },
 
   async promptView() {
+    // Drawn before the network work so the dock button gives immediate feedback; the
+    // body is filled in once the answers arrive.
+    if (!document.querySelector(".bh-view-overlay")) {
+      this.open("Prompt", `<p class="bh-view-lead">Checking which model will answer…</p>`);
+    }
     const props = BH.dock.props ?? {};
     const selected = await this.liveTemplate(props?.chatId ?? BH.dock.chatId, props);
     const usingFivePass = selected === BH_FIVE_PASS_ID;
