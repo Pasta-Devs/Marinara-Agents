@@ -2501,8 +2501,11 @@ BH.views = {
    * the exact wrong-prompt confusion these views exist to prevent.
    */
   async setTemplate(props, templateId) {
-    const chatId = props?.chatId;
-    if (!chatId) return;
+    // Resolved the same way liveTemplate resolves it. Reading the chat from one source
+    // and writing to another meant a save could silently do nothing while the caller
+    // went on to report the new selection as active.
+    const chatId = props?.chatId ?? BH.dock.chatId;
+    if (!chatId) throw new Error("no chat to save to");
     const existing = props?.metadata?.agentPromptTemplateIds;
     const next = { ...(existing && typeof existing === "object" ? existing : {}) };
     if (templateId) next.beholder = templateId;
@@ -2718,6 +2721,8 @@ BH.views = {
     if (servedLocally && !usingFivePass) {
       try {
         await this.setTemplate(props, BH_FIVE_PASS_ID);
+        // Only after the save actually succeeded: claiming the switch happened when it
+        // did not would show a locked picker over the wrong prompt.
         usingFivePass = true;
       } catch {
         // Fall through: the banner below still says which prompt is required.
