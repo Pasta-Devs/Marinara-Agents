@@ -71,17 +71,21 @@ BH.views = {
    * prompt is precisely the mistake these views exist to prevent.
    */
   async liveTemplate(chatId, props) {
-    if (!chatId) return this.selectedTemplate(props);
+    // Reports whether the value came from the chat or from the snapshot fallback.
+    // Callers that gate a lock on it need to know: locking on an unconfirmed snapshot
+    // can pin the wrong prompt with no way to correct it.
+    const fallback = { templateId: this.selectedTemplate(props), confirmed: false };
+    if (!chatId) return fallback;
     try {
       const res = await fetch(`/api/chats/${encodeURIComponent(chatId)}`, {
         credentials: "same-origin",
         headers: { Accept: "application/json" },
       });
-      if (!res.ok) return this.selectedTemplate(props);
+      if (!res.ok) return fallback;
       const chat = await res.json();
-      return this.selectedTemplate({ metadata: chat?.metadata });
+      return { templateId: this.selectedTemplate({ metadata: chat?.metadata }), confirmed: true };
     } catch {
-      return this.selectedTemplate(props);
+      return fallback;
     }
   },
 
@@ -310,8 +314,11 @@ BH.views = {
     // Resolved once, before anything is awaited, so every read and write below refers
     // to the chat this view is actually showing.
     const chatId = props?.chatId ?? BH.dock.chatId;
-    const selected = await this.liveTemplate(chatId, props);
-    let usingFivePass = selected === BH_FIVE_PASS_ID;
+    const live = await this.liveTemplate(chatId, props);
+    let usingFivePass = live.templateId === BH_FIVE_PASS_ID;
+    // True once the value is known to match the saved chat, either because the read
+    // succeeded or because we just wrote it.
+    let confirmed = live.confirmed;
 
     // The local slot outranks the agent's connection, so ask the engine what will
     // actually answer rather than inferring it from the connection list.
@@ -329,14 +336,17 @@ BH.views = {
         // Only after the save actually succeeded: claiming the switch happened when it
         // did not would show a locked picker over the wrong prompt.
         usingFivePass = true;
+        confirmed = true;
       } catch {
         // The picker stays usable in this case. Locking it here would strand the
         // operator on the wrong prompt for a local model with no way to correct it.
         autoSelectFailed = true;
       }
     }
-    // Locked only once the correct prompt is actually the saved one.
-    const lockPicker = servedLocally && usingFivePass;
+    // Locked only once the correct prompt is known to be the saved one. An unconfirmed
+    // snapshot is not enough: it can disagree with the chat, and locking on it pins the
+    // wrong prompt against a local model with no way to correct it.
+    const lockPicker = servedLocally && usingFivePass && confirmed;
     // The model the agent will actually call, so a mismatch can be named rather
     // than left for the operator to discover through bad extractions.
     let model = "";
@@ -431,7 +441,7 @@ BH.views = {
         const snapshot = res.ok ? await res.json() : null;
         const characters = snapshot?.state?.characters ?? [];
         const slots = characters.reduce((n, c) => n + Object.keys(c.body ?? {}).length, 0);
-        const selected = await this.liveTemplate(BH.dock.chatId, BH.dock.props ?? {});
+        const selected = (await this.liveTemplate(BH.dock.chatId, BH.dock.props ?? {})).templateId;
         lines.push(
           `<dl class="bh-doctor-facts">
              <dt>Last extraction</dt><dd>${snapshot?.createdAt ? BH.escapeHtml(new Date(snapshot.createdAt).toLocaleString()) : "none yet"}</dd>
