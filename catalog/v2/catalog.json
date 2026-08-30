@@ -147,8 +147,8 @@
           },
           {
             "path": "client.js",
-            "sha256": "85734d21bbe0f6081a413450d7cfd470488df3b5719c6d588bb9deddd2dee962",
-            "bytes": 303336
+            "sha256": "01c87592de6a7a4eb15cc222f6b0788f4cc9fe1e00fbadd51a6a5de9e4e7f6b9",
+            "bytes": 303559
           }
         ],
         "permissions": [
@@ -164,8 +164,8 @@
       "iconUrl": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artwork/agent-covers/beholder.png",
       "artifact": {
         "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/beholder-1.3.6.zip",
-        "sha256": "4d0beb87eb620875fb383f61fcf7f24ffe2b6c13a3ace62cf8622ea50de6ca4a",
-        "bytes": 315282
+        "sha256": "f275dde7e103518ab2b2bc074417d71feb9d63bcee81e8f86a6e51cf53738cfe",
+        "bytes": 315505
       },
       "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Engine/blob/staging/docs/agents/built-in-agents.md#beholder"
     },

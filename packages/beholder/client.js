@@ -2438,9 +2438,9 @@ BH.views = {
   async promptView() {
     // Drawn before the network work so the dock button gives immediate feedback; the
     // body is filled in once the answers arrive.
-    if (!document.querySelector(".bh-view-overlay")) {
+    const loading =
+      document.querySelector(".bh-view-overlay") ??
       this.open("Prompt", `<p class="bh-view-lead">Checking which model will answer…</p>`);
-    }
     const props = BH.dock.props ?? {};
     const selected = await this.liveTemplate(props?.chatId ?? BH.dock.chatId, props);
     const usingFivePass = selected === BH_FIVE_PASS_ID;
@@ -2461,6 +2461,10 @@ BH.views = {
     } catch {
       // Naming the model is a courtesy; the picker works without it.
     }
+    // The requests are slower than a click. If the operator closed this view or opened
+    // another one meanwhile, finishing would yank Prompt back over what they chose.
+    if (!loading.isConnected) return;
+
     const trained = BH_LOOKS_TRAINED(model);
     const mismatch = model && trained !== usingFivePass;
 
