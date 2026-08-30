@@ -82,10 +82,201 @@ BH.views = {
     if (!res.ok) throw new Error(`save ${res.status}`);
   },
 
+  /**
+   * Which connection is answering, stated plainly.
+   *
+   * The local slot silently outranks the agent's connection server-side, so without
+   * this the operator has no way to know which model produced a bad extraction.
+   */
+  connectionBanner({ routing, servedLocally, model, installed }) {
+    if (servedLocally) {
+      const version = BH.sidecar.versionLabel(installed);
+      return `<p class="bh-view-note bh-conn bh-conn-local">
+        <i class="fa-solid fa-microchip"></i> Answering: <b>local Beholder model</b>
+        <small>${BH.escapeHtml(installed?.file || BH.sidecar.FILE)} · version <code>${BH.escapeHtml(version)}</code></small>
+        <small>The engine's model slot takes precedence over this agent's connection.</small></p>`;
+    }
+    if (routing && installed) {
+      return `<p class="bh-view-note bh-conn">
+        <i class="fa-solid fa-plug"></i> Answering: <b>agent connection</b>
+        ${model ? `<code>${BH.escapeHtml(model)}</code>` : ""}
+        <small>${BH.escapeHtml(routing.reason || "The local model slot is not serving this agent.")}</small></p>`;
+    }
+    return model
+      ? `<p class="bh-view-note bh-conn"><i class="fa-solid fa-plug"></i> Answering:
+         <b>agent connection</b> <code>${BH.escapeHtml(model)}</code></p>`
+      : `<p class="bh-view-note bh-conn">No agent connection model detected.</p>`;
+  },
+
+  /**
+   * Install, version and update for the local model — deliberately in the prompt view,
+   * because choosing the model and choosing the prompt are the same decision.
+   */
+  modelSection({ sidecarStatus, installed, servedLocally }) {
+    if (!sidecarStatus) return "";
+    if (!installed) {
+      return `<div class="bh-model-block">
+        <p class="bh-view-note"><b>Local Beholder model</b> — not installed.</p>
+        <p class="bh-view-note">Downloads ${BH.escapeHtml(BH.sidecar.FILE)} from
+          <code>${BH.escapeHtml(BH.sidecar.REPO)}</code> into the engine's own model slot. This does not
+          touch or replace the model your engine's sidecar is already running.</p>
+        ${
+          sidecarStatus.runtimeInstalled
+            ? ""
+            : `<p class="bh-view-warn"><i class="fa-solid fa-triangle-exclamation"></i>
+               The local runtime is not installed yet. Set up the engine's sidecar first; this slot reuses
+               that runtime and will not install it for you.</p>`
+        }
+        <button type="button" class="bh-btn" data-model-action="install">Download model</button>
+      </div>`;
+    }
+    return `<div class="bh-model-block">
+      <p class="bh-view-note"><b>Local Beholder model</b> installed —
+        version <code>${BH.escapeHtml(BH.sidecar.versionLabel(installed))}</code>
+        ${servedLocally ? `<span class="bh-pill-on">serving</span>` : `<span class="bh-pill-off">off</span>`}</p>
+      <div class="bh-model-actions">
+        <button type="button" class="bh-btn" data-model-action="${servedLocally ? "disable" : "enable"}">
+          ${servedLocally ? "Stop using local model" : "Use local model"}</button>
+        <button type="button" class="bh-btn" data-model-action="update-check">Check for updates</button>
+      </div>
+      <p class="bh-view-note bh-model-update"></p>
+      ${this.hardwareSection(sidecarStatus.settings)}
+    </div>`;
+  },
+
+  /**
+   * The hardware choices, and only those.
+   *
+   * Sampling is not offered: the extractor is graded against a schema and was tuned
+   * with fixed sampling, so a temperature dial here would only let someone quietly
+   * break their own setup. How much of the machine to spend on it is genuinely theirs
+   * to decide.
+   */
+  hardwareSection(settings) {
+    if (!settings) return "";
+    const offload =
+      settings.gpuLayers === 0 ? "cpu" : settings.gpuLayers === -1 ? "gpu" : "custom";
+    return `<details class="bh-hw">
+      <summary>Hardware</summary>
+      <p class="bh-view-note">How much of this machine the local model may use. Sampling is fixed to what the
+        model was trained with and is not adjustable.</p>
+      <label class="bh-hw-row"><span>Offload</span>
+        <select data-hw="offload">
+          <option value="cpu" ${offload === "cpu" ? "selected" : ""}>CPU only</option>
+          <option value="gpu" ${offload === "gpu" ? "selected" : ""}>Maximum GPU</option>
+          <option value="custom" ${offload === "custom" ? "selected" : ""}>Set GPU layers…</option>
+        </select></label>
+      <label class="bh-hw-row ${offload === "custom" ? "" : "bh-hw-hidden"}" data-hw-row="layers"><span>GPU layers</span>
+        <input type="number" data-hw="gpuLayers" min="0" max="999"
+          value="${offload === "custom" ? String(settings.gpuLayers) : "20"}"></label>
+      <label class="bh-hw-row"><span>Context</span>
+        <input type="number" data-hw="contextSize" min="512" max="131072" step="512"
+          value="${String(settings.contextSize)}"></label>
+      <label class="bh-hw-row"><span>Parallel slots</span>
+        <input type="number" data-hw="maxParallelJobs" min="1" max="8" value="${String(settings.maxParallelJobs)}"></label>
+      <button type="button" class="bh-btn" data-model-action="save-hardware">Save hardware settings</button>
+      <p class="bh-view-note">Saving restarts the local model so the change takes effect. The engine's own
+        sidecar is not affected.</p>
+    </details>`;
+  },
+
+  wireModelSection(body, { installed }) {
+    const note = body.querySelector(".bh-model-update");
+    const say = (text, warn) => {
+      if (!note) return;
+      note.textContent = text;
+      note.classList.toggle("bh-view-warn", !!warn);
+    };
+    const offloadSelect = body.querySelector('[data-hw="offload"]');
+    if (offloadSelect) {
+      offloadSelect.addEventListener("change", () => {
+        const row = body.querySelector('[data-hw-row="layers"]');
+        if (row) row.classList.toggle("bh-hw-hidden", offloadSelect.value !== "custom");
+      });
+    }
+    for (const button of body.querySelectorAll("[data-model-action]")) {
+      button.addEventListener("click", async () => {
+        const action = button.getAttribute("data-model-action");
+        const original = button.textContent;
+        button.disabled = true;
+        try {
+          if (action === "install") {
+            button.textContent = "Downloading…";
+            await BH.sidecar.install();
+            BH.toast("Model downloaded");
+            await this.promptView();
+            return;
+          }
+          if (action === "enable" || action === "disable") {
+            await BH.sidecar.setActive(action === "enable");
+            BH.toast(action === "enable" ? "Local model is now serving Beholder" : "Local model stopped");
+            await this.promptView();
+            return;
+          }
+          if (action === "save-hardware") {
+            const read = (name) => Number(body.querySelector(`[data-hw="${name}"]`)?.value);
+            const offload = body.querySelector('[data-hw="offload"]')?.value;
+            const gpuLayers = offload === "cpu" ? 0 : offload === "gpu" ? -1 : read("gpuLayers");
+            button.textContent = "Restarting…";
+            await BH.sidecar.updateSettings({
+              gpuLayers,
+              contextSize: read("contextSize"),
+              maxParallelJobs: read("maxParallelJobs"),
+            });
+            BH.toast("Hardware settings saved");
+            await this.promptView();
+            return;
+          }
+          if (action === "update-check") {
+            button.textContent = "Checking…";
+            const check = await BH.sidecar.updateCheck();
+            if (!check) say("Could not reach the model repository.", true);
+            else if (check.indeterminate) {
+              // Never imply "current" when the comparison could not be made.
+              say("Could not tell whether a newer build exists. Re-downloading is safe but not confirmed needed.", true);
+            } else if (check.updateAvailable) {
+              say(
+                `A newer build is available (${String(check.availableOid || "").slice(0, 12)}). ` +
+                  `Re-download to update; the extractor's accuracy depends on matching prompts and weights.`,
+                true,
+              );
+            } else {
+              say(`Up to date (version ${BH.sidecar.versionLabel(installed)}).`, false);
+            }
+          }
+        } catch (error) {
+          BH.toast(`Could not complete: ${error.message}`);
+          say(error.message, true);
+        } finally {
+          button.disabled = false;
+          button.textContent = original;
+        }
+      });
+    }
+  },
+
   async promptView() {
     const props = BH.dock.props ?? {};
     const selected = await this.liveTemplate(props?.chatId ?? BH.dock.chatId, props);
-    const usingFivePass = selected === BH_FIVE_PASS_ID;
+    let usingFivePass = selected === BH_FIVE_PASS_ID;
+
+    // The local slot outranks the agent's connection, so ask the engine what will
+    // actually answer rather than inferring it from the connection list.
+    const routing = await BH.sidecar.routing();
+    const sidecarStatus = await BH.sidecar.status();
+    const servedLocally = routing?.source === "utility-sidecar";
+    const installed = sidecarStatus?.models?.[BH.sidecar.MODEL_ID] ?? null;
+
+    // When the trained model is answering, the five-pass prompt is the only correct
+    // one. Select it rather than leaving the operator a way to break their own setup.
+    if (servedLocally && !usingFivePass) {
+      try {
+        await this.setTemplate(props, BH_FIVE_PASS_ID);
+        usingFivePass = true;
+      } catch {
+        // Fall through: the banner below still says which prompt is required.
+      }
+    }
     // The model the agent will actually call, so a mismatch can be named rather
     // than left for the operator to discover through bad extractions.
     let model = "";
@@ -104,7 +295,9 @@ BH.views = {
       // Naming the model is a courtesy; the picker works without it.
     }
     const trained = BH_LOOKS_TRAINED(model);
-    const mismatch = model && trained !== usingFivePass;
+    // Only meaningful when the agent connection is what answers; the local slot's
+    // prompt is decided for the operator.
+    const mismatch = !servedLocally && model && trained !== usingFivePass;
 
     this.open(
       "Prompt",
@@ -112,11 +305,7 @@ BH.views = {
       <p class="bh-view-lead">These are not interchangeable. The trained Beholder model was taught five short
       per-lane prompts; a general model needs the single long prompt. Give either one the other's prompt and
       extraction degrades badly, so pick the one that matches the model you are pointing at.</p>
-      ${
-        model
-          ? `<p class="bh-view-note">Agent connection model: <code>${BH.escapeHtml(model)}</code></p>`
-          : `<p class="bh-view-note">No agent connection model detected.</p>`
-      }
+      ${BH.views.connectionBanner({ routing, servedLocally, model, installed })}
       ${
         mismatch
           ? `<p class="bh-view-warn"><i class="fa-solid fa-triangle-exclamation"></i> This looks like a mismatch:
@@ -125,19 +314,24 @@ BH.views = {
       }
       <div class="bh-prompt-options">
         <label class="bh-prompt-option ${usingFivePass ? "" : "bh-prompt-active"}">
-          <input type="radio" name="bh-prompt" value="" ${usingFivePass ? "" : "checked"}>
+          <input type="radio" name="bh-prompt" value="" ${usingFivePass ? "" : "checked"}
+            ${servedLocally ? "disabled" : ""}>
           <span><b>SOTA model — one prompt</b><small>One call covering every field. For a strong general model
           (GPT-5.5+, Claude Opus 4.8+, Kimi K3+).</small></span>
         </label>
         <label class="bh-prompt-option ${usingFivePass ? "bh-prompt-active" : ""}">
-          <input type="radio" name="bh-prompt" value="${BH_FIVE_PASS_ID}" ${usingFivePass ? "checked" : ""}>
+          <input type="radio" name="bh-prompt" value="${BH_FIVE_PASS_ID}" ${usingFivePass ? "checked" : ""}
+            ${servedLocally ? "disabled" : ""}>
           <span><b>Local Beholder model — five passes</b><small>Five short per-lane calls, the prompts the
           model was trained on. For GetBeholder/Beholder-GGUF served locally.</small></span>
         </label>
       </div>
       <p class="bh-view-note bh-prompt-current">Currently selected:
-        <b>${usingFivePass ? "Local Beholder model — five passes" : "SOTA model — one prompt"}</b></p>`,
+        <b>${usingFivePass ? "Local Beholder model — five passes" : "SOTA model — one prompt"}</b>
+        ${servedLocally ? `<span class="bh-prompt-locked">locked by the local model slot</span>` : ""}</p>
+      ${BH.views.modelSection({ sidecarStatus, installed, servedLocally })}`,
       (body) => {
+        BH.views.wireModelSection(body, { installed, servedLocally });
         for (const input of body.querySelectorAll('input[name="bh-prompt"]')) {
           input.addEventListener("change", async (event) => {
             try {
