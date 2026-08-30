@@ -234,6 +234,7 @@ async function readNoodlerMultipart(req: FastifyRequest): Promise<{ payload: unk
       }
     });
     if (!write.acquired) {
+      part.file.resume();
       throw new NoodlerMediaRequestError("Slurp data cleanup is in progress.", 409);
     }
     const buffer = write.value;

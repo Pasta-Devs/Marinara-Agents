@@ -27,7 +27,10 @@ const multipartReader = routes.slice(
   routes.indexOf("async function readNoodlerMultipart"),
   routes.indexOf("async function importNoodlerMedia"),
 );
-assert.match(multipartReader, /if \(!write\.acquired\) \{[\s\S]*?throw new NoodlerMediaRequestError/u);
+assert.match(
+  multipartReader,
+  /if \(!write\.acquired\) \{[\s\S]*?part\.file\.resume\(\);[\s\S]*?throw new NoodlerMediaRequestError\("Slurp data cleanup is in progress\.", 409\)/u,
+);
 assert.match(multipartReader, /return await part\.toBuffer\(\);/u);
 assert.match(multipartReader, /const buffer = write\.value;[\s\S]*?isAllowedImageBuffer\(buffer, extension\)/u);
 assert.doesNotMatch(multipartReader, /return reply\./u, "the multipart helper must not return before validating media");
