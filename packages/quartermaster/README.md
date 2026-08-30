@@ -82,6 +82,16 @@ every published catalog until it's ready for testers.
 
 ## Changelog
 
+### 0.1.1
+
+UI refinement pass: dropdown popups now match the Engine's actual theme instead of always
+rendering light; the portrait ring no longer visibly shifts when the underwear toggle adds a
+third sub-column on the left; every button has real hover/press/focus feedback; border-radius is
+consistent across the whole dock instead of only the portrait frame following the theme variable;
+the dock body has a themed scrollbar; the Settings section animates open/closed instead of
+snapping; and clicking outside the open dock now closes it, matching other Marinara menus and the
+original extension.
+
 ### 0.1.0
 
 Initial capability-package port of the original "RPG Inventory" extension: equip slots arranged

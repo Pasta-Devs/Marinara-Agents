@@ -36,7 +36,7 @@ const PACKAGE_ID = "quartermaster";
 // semver ranks a prerelease BELOW its plain release (0.1.0-dev.2 < 0.1.0),
 // so once a plain 0.1.0 is installed, no prerelease build can ever look
 // newer to Download Agents.
-const VERSION = "0.1.0";
+const VERSION = "0.1.1";
 // Declared against the exact staging Engine this scaffold was built and tested
 // against. Do not lower this to reach stable users — see CONTRIBUTING.md.
 const ENGINE_MIN = "2.4.4";
