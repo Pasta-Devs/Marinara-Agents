@@ -361,8 +361,8 @@ QM.state = {
   },
 
   // Each slot carries its own name/description snapshot now (not just an
-  // item id — plan-locked this session so a saved outfit is a durable
-  // record, not a live reference: server.mjs's applyOutfitEquip recreates a
+  // item id — a saved outfit is a durable record, not a live reference:
+  // server.mjs's applyOutfitEquip recreates a
   // missing item from this same snapshot). Reads the name straight off the
   // outfit, so this shows correctly even for an item that's since been
   // deleted or dropped by a tracker-agent turn.

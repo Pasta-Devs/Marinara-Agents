@@ -453,8 +453,8 @@ QM.state = {
   },
 
   // Each slot carries its own name/description snapshot now (not just an
-  // item id — plan-locked this session so a saved outfit is a durable
-  // record, not a live reference: server.mjs's applyOutfitEquip recreates a
+  // item id — a saved outfit is a durable record, not a live reference:
+  // server.mjs's applyOutfitEquip recreates a
   // missing item from this same snapshot). Reads the name straight off the
   // outfit, so this shows correctly even for an item that's since been
   // deleted or dropped by a tracker-agent turn.
@@ -1937,8 +1937,8 @@ QM.dock = {
     const quantityInput = QM.smallInput("input");
     quantityInput.type = "number";
     // 0 is a legitimate quantity now ("used up but still tracked" — the same
-    // rule the tracker agent follows, plan §16.3), so this no longer floors
-    // at 1 the way a brand-new item's starting quantity still does.
+    // rule the tracker agent follows), so this no longer floors at 1 the way
+    // a brand-new item's starting quantity still does.
     quantityInput.min = "0";
     quantityInput.value = String(item.quantity);
     quantityInput.style.width = "48px";

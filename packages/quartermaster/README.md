@@ -2,16 +2,14 @@
 
 A per-chat RPG character sheet and inventory manager: equip slots, item locations, saved
 outfits, and a self-managed floating dock (draggable, resizable, mobile-responsive) alongside a
-native-styled tracker-panel accordion. Persona-only for now; the data model and reconciliation
-code are already owner-agnostic, so party/multi-character support is a later addition, not a
-rewrite.
+native-styled tracker-panel accordion. Persona-only for now.
 
 Requires **Marinara Engine 2.4.4+**, Roleplay mode only (`modeAllowlist: ["roleplay"]` — Game
 Mode's Tracker Panel and roleplay-tracker toolbar are gated to Roleplay by the Engine itself,
 confirmed against source, not just undocumented). Package-owned portrait/item image generation
 is not built — the dock shows the persona's existing avatar instead — and cover artwork
-(`artwork/agent-covers/quartermaster.png`) is still outstanding; both are why this stays in
-`INCOMPLETE_PACKAGE_IDS` rather than the published catalog.
+(`artwork/agent-covers/quartermaster.png`) is still outstanding. Visual refinement to the UI is
+still needed, it is not in its final state.
 
 ## What it does
 
@@ -44,6 +42,20 @@ is not built — the dock shows the persona's existing avatar instead — and co
   catalog (Inventory Tracker, Character Tracker, World State): an item not re-listed on a turn
   is treated as gone.
 
+## Planned
+
+- **Party / multi-character support** — persona-only for now, but `ownerId` is threaded through
+  every function in `server.mjs` as a real parameter rather than assumed, so extending past the
+  persona is a later addition, not a rewrite.
+- **Package-owned portrait/item images** — the dock currently shows the persona's existing
+  avatar as-is; a generated or uploaded portrait that changes with equipped gear is later work,
+  once the current layout is settled.
+- **Avatar swapping based on equipped gear** — tying the portrait image itself to what's
+  currently equipped, beyond the existing appearance-macro text feed.
+
+Quality-of-life features from the original extension not covered above are intentionally out of
+scope for now — the focus here is the inventory/outfit/appearance core, not full parity.
+
 ## Layout
 
 ```text
@@ -67,3 +79,11 @@ from `manifest.json`'s and `agents.json`'s source strings, hashes `server.mjs`/`
 committed, and writes the reproducible `artifacts/quartermaster-<version>.zip` plus the catalog
 lanes. `INCOMPLETE_PACKAGE_IDS` (`scripts/catalog-incomplete.mjs`) keeps this package out of
 every published catalog until it's ready for testers.
+
+## Changelog
+
+### 0.1.0
+
+Initial capability-package port of the original "RPG Inventory" extension: equip slots arranged
+in a portrait ring, item locations, saved outfits, export/import, the appearance macro, the
+narrator prompt-context feed, and the `post_processing` tracker agent.

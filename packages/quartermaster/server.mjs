@@ -16,13 +16,12 @@
 // the real LLM call, not two — every other package in this repo ships
 // exactly one (Memory Nag is the precedent for this exact hybrid shape:
 // client+server+routes AND a real post_processing agent, all under one
-// entry). See reconcileTrackerOutput's own comment and plan §16 for the
-// design.
+// entry). See reconcileTrackerOutput's own comment for the design.
 //
 // Also registers a prompt-context contributor (inventorySummaryText) that
 // feeds a curated, location-aware inventory summary to the NARRATOR every
 // generation — separate from the agent's own prepareContext, which feeds the
-// TRACKER AGENT its prior state instead. Plan §16.5.
+// TRACKER AGENT its prior state instead.
 //
 // location is one of:
 //   "bag"                 — carried, unequipped
@@ -99,8 +98,8 @@ function inventoryDocId(chatId, ownerId) {
   return `${chatId}:${ownerId}`;
 }
 
-// 0 is a valid quantity — "used up but still tracked" (plan §16.3) — so this
-// only rejects genuinely invalid input (non-numeric, negative), not zero.
+// 0 is a valid quantity — "used up but still tracked" — so this only rejects
+// genuinely invalid input (non-numeric, negative), not zero.
 function normalizeQuantity(value) {
   const quantity = Math.trunc(Number(value));
   return Number.isFinite(quantity) && quantity >= 0 ? quantity : 1;
@@ -246,7 +245,7 @@ function computeAppearanceText(state) {
   return "";
 }
 
-// ── Agent-driven inventory sync (plan §16) ──────────────────────────────────
+// ── Agent-driven inventory sync ──────────────────────────────────────────────
 // The single "quartermaster" agent (agents.json), running post_processing,
 // reads each turn's narration and returns a full-snapshot JSON description of
 // what the owner currently has/wears. reconcileTrackerOutput (wired up in
@@ -282,7 +281,7 @@ function isQuartermasterAgentActive(chatMeta) {
 // Case/separator-insensitive only — "Blue Hat" and "blue-hat" are the same
 // item, but "Blue Hat" and "Hat" are never merged automatically. Matching on
 // meaning (not just formatting) would risk silently merging visually-distinct
-// items once per-item images exist (plan §16.3).
+// items once per-item images exist.
 function qmNormalizeMatchKey(name) {
   return typeof name === "string" ? name.trim().toLowerCase().replace(/[-_\s]+/g, "") : "";
 }
@@ -314,7 +313,7 @@ function formatAgentRuntimeContext(items, outfitNames) {
 // macro — see persistState's own definition there).
 //
 // Full-snapshot semantics, matching every other tracker in this ecosystem
-// (Inventory Tracker/Character Tracker/World State, per plan §16.2/16.3): an
+// (Inventory Tracker/Character Tracker/World State): an
 // item not present in `data.items` this turn is removed. `equipOutfit`, when
 // it matches a saved outfit, is authoritative for equip state and overrides
 // any "equipped:<slot>" location on that outfit's own items — the outfit is
@@ -377,7 +376,7 @@ async function reconcileTrackerOutput(documents, persistState, chatId, ownerId, 
   await persistState(chatId, ownerId, state);
 }
 
-// The narrator-facing summary (plan §16.5) — deliberately separate from
+// The narrator-facing summary — deliberately separate from
 // computeAppearanceText/the {{getvar}} macro above, which stays equipped-only
 // for image generation. This one is location-aware (equipped/carried/stored
 // in one list, since item.location already encodes which) and includes only
@@ -476,7 +475,7 @@ async function loadInventoryState(documents, chatId, ownerId) {
 }
 
 // Neither slot instance's capabilityProps carries personaInfo/avatarUrl --
-// confirmed against the Engine's actual render sites this session
+// confirmed against the Engine's actual render sites
 // (RoleplayHUD.tsx's roleplay-tracker props and TrackerDataSidebar.tsx's
 // tracker-panel props are both far narrower than assumed). So the persona's
 // avatar/name are resolved server-side instead: the chat's personaId, then
@@ -556,7 +555,7 @@ export async function activate(context) {
   // agent's own prompt (via <agent_runtime_context>, referenced in the
   // prompt template) — sourced from our own canonical store rather than
   // depending on the engine's generic committed-tracker-state carryback,
-  // which isn't confirmed to apply to third-party packages (plan §16.7).
+  // which isn't confirmed to apply to third-party packages.
   const releaseAgentRuntime = api.registerService(`agent-runtime:${PACKAGE_ID}`, {
     async prepareContext({ context }) {
       if (context.chatMode !== "roleplay") return null;
@@ -580,7 +579,7 @@ export async function activate(context) {
     },
   });
 
-  // The curated narrator feed (plan §16.5) — separate from, and narrower
+  // The curated narrator feed — separate from, and narrower
   // than, agent-runtime's prepareContext above: that one feeds the TRACKER
   // AGENT its own prior state so it can decide what changed; this feeds the
   // NARRATOR a short, location-aware summary so prose stays consistent with

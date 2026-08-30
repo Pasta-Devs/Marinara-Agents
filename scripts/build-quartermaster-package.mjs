@@ -29,15 +29,13 @@ const packageRoot = join(repoRoot, "packages/quartermaster");
 const artifactsDir = join(repoRoot, "artifacts");
 
 const PACKAGE_ID = "quartermaster";
-// Bump the patch version on every build meant for a live install test, so
+// Bump the patch version for every build meant for a live install test, so
 // Download Agents offers Update instead of only Uninstall (it compares
 // version strings; an unchanged version looks identical to it even when the
-// content differs). NOT a -dev.N prerelease suffix: semver ranks a
-// prerelease BELOW its plain release (0.1.0-dev.2 < 0.1.0), so once 0.1.0
-// was ever installed, no prerelease build could ever look newer — confirmed
-// live this session. Reset this to a clean starting version (0.1.0) in one
-// commit right before this is actually proposed; the intervening bumps are
-// disposable dev-iteration numbers, not real releases.
+// content differs). Use a plain patch bump, not a -dev.N prerelease suffix:
+// semver ranks a prerelease BELOW its plain release (0.1.0-dev.2 < 0.1.0),
+// so once a plain 0.1.0 is installed, no prerelease build can ever look
+// newer to Download Agents.
 const VERSION = "0.1.0";
 // Declared against the exact staging Engine this scaffold was built and tested
 // against. Do not lower this to reach stable users — see CONTRIBUTING.md.
@@ -162,14 +160,14 @@ const manifest = {
   //   "quartermaster" agent's own post_processing output reconciles into our
   //   own store instead of native game-state — required by
   //   assertCapabilityAgentRuntimeServiceRegistration, confirmed against
-  //   capability-agent-runtime.service.ts this session. One agent def, not
+  //   capability-agent-runtime.service.ts. One agent def, not
   //   two — every other package in this repo ships exactly one; Memory Nag
   //   is the precedent for combining UI/storage identity and a real
   //   post_processing pipeline agent under that same single entry.
   // prompt-context: registerPromptContext (server.mjs) feeds a curated,
   //   location-aware inventory summary to the NARRATOR every generation —
   //   deliberately separate from agent-runtime's prepareContext, which feeds
-  //   the TRACKER AGENT its own prior state instead. See plan §16.5.
+  //   the TRACKER AGENT its own prior state instead.
   permissions: ["agent-runtime", "chat-read", "chat-write", "prompt-context", "routes", "storage", "ui"],
   // The routes permission forces this: getCapabilityPackageInstallIssue in the
   // Engine's package-manager.service.ts rejects install for any package that
@@ -206,7 +204,7 @@ catalog.packages.push({
   category: "tracker",
   // validate-catalog.mjs hard-rejects a missing documentationUrl and any
   // iconUrl that doesn't exactly equal catalogArtworkUrl(id) for every entry
-  // it can see — confirmed by reading the validator this session. Both are
+  // it can see — confirmed by reading the validator. Both are
   // no-ops for now (INCOMPLETE_PACKAGE_IDS keeps this entry out of every
   // catalog the validator actually reads), but wiring them now means there's
   // nothing left to remember at the moment this graduates out of that set.
