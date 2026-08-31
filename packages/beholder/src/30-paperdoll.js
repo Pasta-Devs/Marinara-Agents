@@ -1563,10 +1563,12 @@ function renderDollPanel(state, activeName, updatedNames, view) {
       // writing. The limit is narration with no anchor at all, which is not the same
       // thing as a scene with several people in it.
       html: `${doll}<p class="bh-placeholder-note">Showing a <b>default human</b> — nothing's tracked yet. It fills in as the scene plays out.</p>
-      <p class="bh-placeholder-scope">Beholder tracks <b>everyone in the scene</b> and keeps their things apart.
-      What it needs is a <b>point of view</b> — a passage told from someone's perspective. Writing with no
-      anchor at all, hopping between heads mid-scene, and anything laid out as a script are outside what it
-      reads. That is the trade for a model small enough to run free and offline.
+      <p class="bh-placeholder-scope">Beholder follows <b>every character in the scene</b> and keeps their
+      clothes and injuries separate.<br>
+      It works best when the writing follows <b>one person at a time</b>, so you can tell whose eyes the scene
+      is seen through. It does not work well with writing that jumps between many people's thoughts in the same
+      paragraph, or with film-script formatting.<br>
+      The model is small on purpose, so it can run for free on your own computer.
       <button type="button" class="bh-scope-more">What it reads</button></p>`,
       activeName: null,
     };

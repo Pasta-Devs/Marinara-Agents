@@ -142,13 +142,13 @@ BH.prose = {
       return {
         verdict: "described-but-unread",
         copy:
-          `${describing} recent turns describe clothing or injuries and Beholder read none of it. With the ` +
-          "checks above passing, that usually means this prose sits outside what the small local model " +
-          "handles — several characters narrated at once, or a register it was not trained on. It is a limit " +
-          "of the model, by design.",
+          `${describing} recent turns describe clothes or injuries, but Beholder found none of them. The ` +
+          "checks above look fine, so this may be writing it cannot read well — for example, writing that " +
+          "moves between many people's thoughts with no single person to follow. Having several characters " +
+          "is fine. The problem is when there is no one person to follow.",
         aside:
-          "A large general model reads this kind of prose better. You can point this agent at one, though " +
-          "that setup is not supported and you would be trading away the local, private part.",
+          "A large model reads this kind of writing better. You can connect this agent to one, but we do " +
+          "not support that, and your story would be sent to that model instead of staying on your computer.",
       };
     }
     return null;

@@ -487,10 +487,10 @@ BH.views = {
           ? this.checkRow(
               "error",
               "Agent",
-              "Beholder is not active in this chat, so nothing will be extracted. Switch it on in the agents menu.",
+              "Beholder is turned off for this chat, so nothing will be read. Turn it on in the agents menu.",
             )
           : // Unknown is reported as unknown rather than guessed either way.
-            this.checkRow("warn", "Agent", "Could not read this chat's agent settings."),
+            this.checkRow("warn", "Agent", "Could not check whether Beholder is turned on for this chat."),
     );
 
     const routing = await BH.sidecar.routing();
@@ -502,12 +502,12 @@ BH.views = {
         ? this.checkRow(
             "ok",
             "Model",
-            `Answering locally · version <code>${BH.escapeHtml(BH.sidecar.versionLabel(installed))}</code>.`,
+            `Reading with the local Beholder model · version <code>${BH.escapeHtml(BH.sidecar.versionLabel(installed))}</code>.`,
           )
         : this.checkRow(
             "warn",
             "Model",
-            `Answering through this agent's connection. ${BH.escapeHtml(routing?.reason ?? "")}`,
+            `Reading with this agent's own connection. ${BH.escapeHtml(routing?.reason ?? "")}`,
           ),
     );
 
@@ -517,11 +517,11 @@ BH.views = {
     if (servedLocally) {
       rows.push(
         usingFivePass
-          ? this.checkRow("ok", "Prompt", "Five per-lane prompts — what the local model was trained on.")
+          ? this.checkRow("ok", "Prompt", "Five short prompts — the ones the local model was trained with. Correct.")
           : this.checkRow(
               "error",
               "Prompt",
-              "The local model is answering but the single-prompt template is selected. Extraction will be poor until this is switched.",
+              "The local model is reading, but the single-prompt setting is chosen. These do not fit together, and results will be poor until you change it.",
             ),
       );
     } else {
@@ -530,9 +530,9 @@ BH.views = {
           ? this.checkRow(
               "warn",
               "Prompt",
-              "The five-pass template is selected but a general model is answering. That pairing extracts badly.",
+              "The five-prompt setting is chosen, but a large model is reading. These do not fit together, and results will be poor.",
             )
-          : this.checkRow("ok", "Prompt", "One prompt — what a general model needs."),
+          : this.checkRow("ok", "Prompt", "One prompt — what a large model needs. Correct."),
       );
     }
 
@@ -548,7 +548,7 @@ BH.views = {
         ),
       );
     } else {
-      rows.push(this.checkRow("ok", "Prose", "Nothing about these turns looks outside what Beholder reads."));
+      rows.push(this.checkRow("ok", "Prose", "These turns look like writing Beholder can read."));
     }
 
     const characters = snapshot?.state?.characters ?? [];
@@ -558,7 +558,7 @@ BH.views = {
         : this.checkRow(
             "warn",
             "State",
-            "Nothing tracked yet. If this chat was already underway, use the build control in the header to read its history.",
+            "Nothing found yet. If this chat already has messages, use the clock button at the top to read them.",
           ),
     );
     return rows.join("");
@@ -597,12 +597,12 @@ BH.views = {
         lines.push(
           `<div class="bh-editor-group-label">report</div>
            <div class="bh-report-block">
-             <p class="bh-view-note">If something looks wrong, copy this and send it over — it carries the
-             build, the model, the prompt, and what the panel is holding, so nobody has to ask.</p>
+             <p class="bh-view-note">If something looks wrong, copy this and send it to us. It contains the version,
+             the model, the prompt and what the panel found, so we do not have to ask.</p>
              <label class="bh-check bh-report-prose">
                <input type="checkbox" class="bh-report-include-prose">
-               <span>include the last few turns of roleplay
-                 <small>off by default — the report says nothing about what you wrote unless you tick this</small></span>
+               <span>also include the last few turns of your story
+                 <small>off by default. Your story is not included unless you tick this box.</small></span>
              </label>
              <div class="bh-model-actions">
                <button type="button" class="bh-btn bh-btn-primary bh-report-copy"><i class="fa-solid fa-copy"></i>
@@ -852,55 +852,68 @@ BH.views = {
     this.open(
       "Help",
       `
-      <p class="bh-view-lead">Beholder reads each turn and keeps what the prose actually says about bodies:
-      what is worn per slot, what is held, wounds, bare and missing parts, and species.</p>
+      <p class="bh-view-lead">Beholder reads each turn of your story and remembers what it says about each
+      character's body: what they are wearing on each part, what they are holding, their injuries, which parts
+      are uncovered or lost, and their species.</p>
 
       <div class="bh-editor-group-label">what it reads well</div>
-      <p class="bh-view-note"><b>Several characters at once is what it is for.</b> Keeping their clothes and
-      wounds on the right people is a trained capability, measured: across the five kinds of roleplay writing
-      it was evaluated on — chat roleplay, prose fanfic, web serial, interactive fiction, forum play-by-post —
-      it puts the right item on the right character about 95% of the time, and on some of them every time.</p>
-      <p class="bh-view-note">What it needs is a <b>point of view</b>: a passage told from someone's
-      perspective, first person or third. That is the thing it anchors to.</p>
-
-      <div class="bh-editor-group-label">what it does not</div>
-      <p class="bh-view-note">Narration with <b>no anchor at all</b> — the omniscient voice that hops between
-      heads inside one passage, describing four people's inner lives as an equal survey — and anything laid out
-      as a <b>script</b>. Not a bug and not a queue item: it is what a model this small can do, and it is
-      deliberately tiny so it can run free, offline and private.</p>
-      <p class="bh-view-note">If that is how you write, a large general model reads this kind of prose better.
-      You can point the agent at one from the Prompt view, though that pairing is not supported and you would
-      be trading away the local, private part.</p>
-      <p class="bh-view-note">Doctor will tell you when it sees prose it is likely to struggle with, rather
-      than leaving you to guess from an empty panel.</p>
-
-      <div class="bh-editor-group-label">reading the doll</div>
+      <p class="bh-view-note"><b>Scenes with several characters are fine.</b> This is what Beholder is made
+      for. In testing it put the right item on the right person about <b>95% of the time</b>.</p>
+      <p class="bh-view-note">It needs writing that <b>follows one person at a time</b>, so the reader can tell
+      whose view the scene is told from. Both of these work:</p>
       <ul class="bh-help-list">
-        <li><b>Outline</b> on a body part — the worst damage among what is worn there.</li>
-        <li><b>Fill</b> on a body part — a wound on the body itself, deepening with severity.</li>
-        <li><b>✦</b> beside a hand — something is held.</li>
-        <li>A struck-through slot with <b>MISSING</b> — an acquired loss; it also applies to everything below it.</li>
-        <li><b>BARE</b> — the slot is explicitly uncovered, which is not the same as simply having nothing recorded.</li>
+        <li>"I pulled off my coat."</li>
+        <li>"She pulled off her coat."</li>
+      </ul>
+      <p class="bh-view-note">It was tested on five kinds of roleplay writing and works with all of them: chat
+      roleplay, story fanfic, web serials, interactive fiction, and forum play-by-post.</p>
+
+      <div class="bh-editor-group-label">what it does not read well</div>
+      <ul class="bh-help-list">
+        <li>Writing that moves between many people's thoughts in one paragraph, with no single person to
+          follow.</li>
+        <li>Film or play scripts — for example <code>INT. ROOM - NIGHT</code>, or names in capitals above
+          their lines.</li>
+      </ul>
+      <p class="bh-view-note">This is not a bug. The model is very small on purpose, so it can run for free on
+      your own computer and your story never leaves it.</p>
+      <p class="bh-view-note">If that is how you write, a large model reads this kind of writing better. You
+      can connect this agent to one in the Prompt view. We do not support that, and your story would then be
+      sent to that model instead of staying on your computer.</p>
+      <p class="bh-view-note">Doctor tells you when it sees writing it may not read well, so you do not have to
+      guess from an empty panel.</p>
+
+      <div class="bh-editor-group-label">how to read the picture</div>
+      <ul class="bh-help-list">
+        <li>A coloured <b>outline</b> on a body part — the worst damage of anything worn there.</li>
+        <li>A <b>filled</b> body part — an injury to the body itself. The worse it is, the stronger the colour.</li>
+        <li><b>✦</b> next to a hand — the character is holding something.</li>
+        <li>A crossed-out part marked <b>MISSING</b> — the character has lost it. Everything below it counts as
+        lost too.</li>
+        <li><b>BARE</b> — the story said this part is uncovered. That is not the same as simply not knowing
+        yet.</li>
       </ul>
 
-      <div class="bh-editor-group-label">layers</div>
-      <p>The Color, Damage and Wounds toggles only change what is drawn. Turning one off hides that detail; it
-      does not forget it.</p>
+      <div class="bh-editor-group-label">the three switches</div>
+      <p>The Color, Damage and Wounds switches only change what you see. Turning one off hides that detail.
+      Nothing is forgotten.</p>
 
-      <div class="bh-editor-group-label">editing</div>
+      <div class="bh-editor-group-label">changing something</div>
       <ul class="bh-help-list">
-        <li>Click any slot card to correct it. Apply writes to the stored state, so the next turn is built on
-        your correction rather than the model's guess.</li>
-        <li><b>Lock</b> a slot when you have set it deliberately and want it left alone.</li>
-        <li><b>bare</b> clears what is worn on apply; <b>missing</b> overrides the whole slot.</li>
+        <li>Click any body part to correct it. <b>Apply</b> saves your change, so the next turn uses what you
+        wrote instead of what the model guessed.</li>
+        <li><b>Lock</b> a part when you have set it yourself and want Beholder to leave it alone.</li>
+        <li>Ticking <b>bare</b> removes what is worn there. Ticking <b>missing</b> replaces everything for that
+        part.</li>
       </ul>
 
-      <div class="bh-editor-group-label">writing for it</div>
+      <div class="bh-editor-group-label">writing so it reads well</div>
       <ul class="bh-help-list">
-        <li>Name the garment and the person: "she pulls off <i>her</i> gloves" is read; "they undress" is not.</li>
-        <li>Say what comes off as its own clause. One sentence that removes and adds at once is the case it
-        most often gets half right.</li>
-        <li>Scenery is ignored on purpose — a cloak on a hook belongs to nobody.</li>
+        <li>Name the clothing and the person. "She pulls off <i>her</i> gloves" works. "They undress" does
+        not.</li>
+        <li>Put taking something off in its own sentence. When one sentence removes and adds clothing at the
+        same time, Beholder often catches only half of it.</li>
+        <li>Clothing that belongs to nobody is ignored on purpose, such as a cloak hanging on a hook.</li>
       </ul>`,
     );
   },

@@ -28,7 +28,7 @@ BH.report = {
     lines.push("", "SETUP");
     add("chat", chatId ? `${chatId.slice(0, 8)}…` : "none open");
     const agentOn = await BH.views.agentActive(chatId);
-    add("agent active", agentOn === null ? "could not read" : agentOn ? "yes" : "NO — nothing will be extracted");
+    add("agent active", agentOn === null ? "could not read" : agentOn ? "yes" : "NO — nothing will be read");
 
     let status = null;
     let routing = null;
@@ -38,7 +38,7 @@ BH.report = {
       // Reported as unknown below rather than failing the whole report.
     }
     const servedLocally = routing?.source === "utility-sidecar";
-    add("answering", servedLocally ? "local Beholder model" : "this agent's connection");
+    add("reading with", servedLocally ? "local Beholder model" : "this agent's own connection");
     if (status) {
       const installed = status.models?.[BH.sidecar.MODEL_ID] ?? null;
       add("local model", installed ? BH.sidecar.versionLabel(installed) : "not installed");
@@ -57,15 +57,15 @@ BH.report = {
 
     const live = await BH.views.liveTemplate(chatId, BH.dock.props ?? {});
     const fivePass = live.templateId === BH_FIVE_PASS_ID;
-    add("prompt", fivePass ? "five per-lane passes" : "one prompt (SOTA)");
-    add("prompt source", live.confirmed ? "read from the chat" : "snapshot — could not confirm");
+    add("prompt", fivePass ? "five short prompts (local model)" : "one prompt (large model)");
+    add("prompt source", live.confirmed ? "read from the chat" : "could not confirm — using a cached copy");
     // The pairing is the single most common silent misconfiguration.
     if (servedLocally !== fivePass) {
       add(
         "PAIRING",
         servedLocally
-          ? "MISMATCH — local model with the SOTA prompt"
-          : "MISMATCH — general model with the five-pass prompt",
+          ? "WRONG PAIR — local model with the single-prompt setting"
+          : "WRONG PAIR — large model with the five-prompt setting",
       );
     }
 
