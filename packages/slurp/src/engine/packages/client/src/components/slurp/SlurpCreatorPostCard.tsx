@@ -112,8 +112,12 @@ export function LockedSlurpPostCard({
   return (
     <article
       data-noodle-post-id={post.id}
-      className="overflow-hidden rounded-xl border border-[var(--noodle-accent)]/25 bg-[linear-gradient(145deg,var(--slurp-surface-raised),var(--slurp-surface))] px-4 py-5 shadow-md shadow-black/10"
+      className="relative overflow-hidden rounded-xl border border-[var(--noodle-accent)]/30 bg-[linear-gradient(145deg,var(--slurp-surface-raised),var(--slurp-surface))] px-4 py-5 shadow-lg shadow-black/15"
     >
+      <div
+        className="pointer-events-none absolute inset-x-10 top-0 h-px bg-gradient-to-r from-transparent via-[var(--noodle-accent)]/70 to-transparent"
+        aria-hidden="true"
+      />
       {/* Author row */}
       <div className="flex gap-3">
         <button
@@ -160,8 +164,9 @@ export function LockedSlurpPostCard({
         {/* Media frame with Locked badge — only when the post has an image */}
         {(mediaSrc || post.hasImage) && (
           <div
+            data-slurp-locked-preview
             className={cn(
-              "relative mt-4 aspect-[16/11] w-full overflow-hidden rounded-xl bg-[var(--muted)] ring-1 ring-inset ring-white/10",
+              "relative mt-4 aspect-[4/3] w-full overflow-hidden rounded-xl bg-[var(--muted)] ring-1 ring-inset ring-white/10 sm:aspect-[16/10]",
             )}
           >
             {shownMediaSrc ? (
@@ -177,25 +182,38 @@ export function LockedSlurpPostCard({
                 }
                 className={cn(
                   "h-full w-full object-cover transition-[filter,transform] duration-500 motion-reduce:transition-none",
-                  // Locked images arrive already blurred (the demo teaser ships that way, real
-                  // ones are blurred server-side), so this is presentation on top, not the
-                  // protection — a heavier blur would only turn them to mush.
-                  revealed ? "scale-100 blur-0" : "scale-110 blur-sm",
+                  // Real locked images are already reduced and blurred on the server. Never blur
+                  // those bytes a second time: the extra client filter erased the silhouette and
+                  // made a working preview look like an empty card.
+                  revealed ? "scale-100" : "scale-105 saturate-[0.82]",
                 )}
               />
             ) : (
-              <span className="sr-only">
-                {localizeUi("ui.noodle.lockednoodlerpostcard.lockedImageFrom", {
-                  name: profile.displayName,
-                })}
+              <div className="flex h-full flex-col items-center justify-center gap-3 bg-[radial-gradient(circle_at_50%_35%,var(--noodle-accent)_0%,transparent_65%)] px-6 text-center">
+                <span className="rounded-full bg-black/25 p-3 text-[var(--noodle-accent)] ring-1 ring-white/10">
+                  <ImageIcon size={22} aria-hidden="true" />
+                </span>
+                <span className="text-xs font-semibold text-[var(--muted-foreground)]">
+                  {localizeUi("ui.slurp.locked.previewUnavailable")}
+                </span>
+              </div>
+            )}
+            {!revealed && (
+              <div
+                className="absolute inset-0 bg-[linear-gradient(to_top,rgba(8,4,10,0.62),transparent_52%,rgba(8,4,10,0.12))]"
+                aria-hidden="true"
+              />
+            )}
+            {!revealed && shownMediaSrc && (
+              <span className="absolute left-3 top-3 rounded-full bg-black/55 px-2.5 py-1 text-[0.65rem] font-bold uppercase tracking-[0.12em] text-white backdrop-blur-sm ring-1 ring-white/15">
+                {localizeUi("ui.slurp.locked.blurredPreview")}
               </span>
             )}
-            {!revealed && <div className="absolute inset-0 bg-black/35" aria-hidden="true" />}
-            {/* Icon only: the header badge already says "Locked", and the alt text carries it for AT. */}
+            {/* The lock is a state cue; the accessible image text already describes the preview. */}
             {!revealed && (
               <span className="absolute inset-0 flex items-center justify-center" aria-hidden="true">
-                <span className="rounded-full bg-black/70 p-2.5 text-white ring-1 ring-white/15">
-                  <Lock size={16} />
+                <span className="rounded-full bg-black/55 p-3 text-white shadow-xl backdrop-blur-sm ring-1 ring-white/20">
+                  <Lock size={18} />
                 </span>
               </span>
             )}

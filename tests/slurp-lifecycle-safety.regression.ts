@@ -85,12 +85,35 @@ assert.match(home, /ref=\{setStickyHeader\}[\s\S]*?HIDE_ON_SCROLL_CLASS/u);
 assert.match(shell, /--slurp-canvas/u, "Slurp must own a theme-safe canvas token");
 assert.match(home, /ui\.slurp\.home\.feedDetail/u, "the Home feed must explain its creator-network purpose");
 assert.match(home, /ui\.slurp\.home\.tonight/u, "the desktop discovery rail must have a Slurp identity");
+assert.match(home, /SLURP_MOMENT_WINDOW_MS = 24 \* 60 \* 60 \* 1000/u);
+assert.match(home, /data-component="SlurpHome\.Moments"/u, "Home must expose the real 24-hour Moments shelf");
+assert.match(home, /function SlurpMomentViewer/u);
+assert.match(home, /useSlurpMediaSrc\(moment\.post\.imageUrl\)/u, "Moments must use authenticated Slurp media");
+assert.match(
+  home,
+  /moment\.post\.locked[\s\S]*?onUnlock\(moment\.post\.id\)[\s\S]*?onToggleSubscription/u,
+  "locked Moments must retain both supported access paths",
+);
+assert.match(home, /ui\.slurp\.home\.latestDrops/u, "Home must separate lobby content from the post stream");
+assert.match(home, /ui\.slurp\.home\.creatorStudio/u, "the creator composer must read as a separate Studio surface");
+assert.doesNotMatch(home, /collapsible=\{false\}/u, "the Home Studio composer must stay progressively disclosed");
 assert.match(home, /ui\.slurp\.discover\.title/u);
 assert.match(home, /sm:grid-cols-2/u, "Discover must present creators as adaptive cards");
 assert.match(home, /tabs=\{\[\{ id: "emoji"/u, "the main composer must expose only its functional emoji media tab");
 assert.doesNotMatch(home, /tabs=\{\[[^\]]*id: "gif"/u, "the main composer must not expose its no-op GIF action");
 assert.match(home, /motion-reduce:transition-none/u);
 assert.match(creatorPostCard, /data-slurp-post-kind=\{postKind\}/u);
+const lockedCard = creatorPostCard.slice(
+  creatorPostCard.indexOf("export function LockedSlurpPostCard"),
+  creatorPostCard.indexOf("function noodlerUnlockPriceOf"),
+);
+assert.match(lockedCard, /data-slurp-locked-preview/u);
+assert.match(lockedCard, /scale-105 saturate-\[0\.82\]/u);
+assert.doesNotMatch(
+  lockedCard,
+  /(?:^|\s)blur-sm/u,
+  "server-blurred locked previews must not be blurred again in the client",
+);
 assert.match(creatorPostCard, /surface === "profile"[\s\S]*?rounded-xl border/u);
 assert.match(creatorPostCard, /motion-reduce:active:scale-100/u);
 assert.match(home, /function DisclosureBadge[\s\S]*?HelpTooltip/u);
@@ -151,6 +174,8 @@ assert.doesNotMatch(
 assert.match(home, /ui\.slurp\.profile\.follow[\s\S]*?ui\.slurp\.profile\.subscribe/u);
 assert.match(home, /management: true/u, "subscriber data must be marked as creator management");
 assert.match(home, /ui\.slurp\.profile\.creatorToolsDetail/u);
+assert.match(home, /ui\.slurp\.profile\.creatorRoom/u);
+assert.match(profileSurface, /sm:h-72/u, "Creator Rooms must keep an immersive desktop banner");
 assert.match(profileSurface, /<Avatar account=\{account\} size="xl"/u);
 assert.match(home, /function SourceAccountAvatar[\s\S]*?useSlurpMediaSrc\(account\.avatarUrl\)/u);
 assert.match(home, /function SourceAccountAvatar[\s\S]*?<img src=\{source\}/u);

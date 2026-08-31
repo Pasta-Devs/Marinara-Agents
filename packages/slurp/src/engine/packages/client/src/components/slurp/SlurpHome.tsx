@@ -5,6 +5,9 @@ import {
   ChevronDown,
   ChevronLeft,
   ChevronRight,
+  Clock3,
+  Eye,
+  Image as ImageIcon,
   Link,
   Loader2,
   Lock,
@@ -140,6 +143,7 @@ interface SlurpHomeProps {
 }
 
 const NOODLER_FEED_WINDOW_SIZE = 20;
+const SLURP_MOMENT_WINDOW_MS = 24 * 60 * 60 * 1000;
 
 interface NoodlerPostSubmission {
   profileId: string;
@@ -3214,6 +3218,7 @@ function StageProfileView({
         }
         account={profile}
         displayHandle={profile.handle}
+        identityEyebrow={localizeUi("ui.slurp.profile.creatorRoom")}
         handleMeta={
           <>
             {profile.disclosureMode === "hinted" && profile.publicIdentity ? (
@@ -3418,7 +3423,7 @@ function StageProfileView({
             <div className="border-b border-[var(--noodle-divider)] bg-[var(--noodle-accent)]/[0.04] px-4 py-4 sm:px-6">
               <div className="mb-3 flex items-center justify-between gap-3">
                 <span className="text-[0.68rem] font-bold uppercase tracking-[0.14em] text-[var(--noodle-accent)]">
-                  {localizeUi("ui.noodle.profile.tabs.media")}
+                  {localizeUi("ui.slurp.profile.featuredDrop")}
                 </span>
                 <span className="text-xs text-[var(--muted-foreground)]">{profile.displayName}</span>
               </div>
@@ -3858,6 +3863,8 @@ function ViewerHub({
   const setStickyHeader = useHideOnScroll(scroller);
   const [discoverCollapsed, setDiscoverCollapsed] = useState(false);
   const [visibleFeedCount, setVisibleFeedCount] = useState(NOODLER_FEED_WINDOW_SIZE);
+  const [activeMomentId, setActiveMomentId] = useState<string | null>(null);
+  const [momentCutoff] = useState(() => Date.now() - SLURP_MOMENT_WINDOW_MS);
   const profileKey = (scope?.creators ?? []).map((creator) => creator.profile.id).join("\u0000");
   useEffect(() => {
     setVisibleFeedCount(NOODLER_FEED_WINDOW_SIZE);
@@ -3897,6 +3904,17 @@ function ViewerHub({
   const searchable = (value: unknown) => (typeof value === "string" ? value.toLowerCase() : "");
   const followedCreatorIds = new Set(scope?.viewer.settings.social.followingAccountIds ?? []);
   const creators = scope?.creators ?? [];
+  const moments = creators
+    .flatMap((creator) =>
+      creator.posts
+        .filter(
+          (post) => (Boolean(post.imageUrl) || post.hasImage) && new Date(post.createdAt).getTime() >= momentCutoff,
+        )
+        .map((post) => ({ creator, post })),
+    )
+    .sort((left, right) => new Date(right.post.createdAt).getTime() - new Date(left.post.createdAt).getTime());
+  const activeMomentIndex = activeMomentId ? moments.findIndex((moment) => moment.post.id === activeMomentId) : -1;
+  const activeMoment = activeMomentIndex >= 0 ? moments[activeMomentIndex] : null;
   const feed = creators
     .filter((creator) => tab === "all" || followedCreatorIds.has(creator.profile.id))
     .flatMap((creator) => creator.posts.map((post) => ({ post, creator })))
@@ -4175,9 +4193,26 @@ function ViewerHub({
                 </button>
               ))}
             </div>
+            <button
+              type="button"
+              onClick={onRefresh}
+              disabled={isRefreshing}
+              className="ml-1 flex h-11 w-11 shrink-0 items-center justify-center rounded-lg text-[var(--noodle-accent)] transition-colors hover:bg-[var(--noodle-accent)]/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--noodle-accent)] disabled:cursor-not-allowed disabled:opacity-50"
+              title={localizeUi("ui.noodle.noodlehome.refreshTimeline")}
+              aria-label={localizeUi("ui.noodle.noodlehome.refreshTimeline")}
+            >
+              {isRefreshing ? (
+                <Loader2 size={17} className="animate-spin" />
+              ) : (
+                <RefreshCw size={17} aria-hidden="true" />
+              )}
+            </button>
           </div>
         </div>
       </div>
+      {moments.length > 0 && (
+        <SlurpMomentsShelf moments={moments} newSinceAt={newSinceAt} onOpenMoment={setActiveMomentId} />
+      )}
       <div className="hidden border-b border-[var(--noodle-divider)] py-3 @min-[1024px]:block @min-[1024px]:px-4 @min-[1280px]:hidden">
         <SubscriptionSections
           creators={(scope?.creators ?? []).filter(
@@ -4192,19 +4227,36 @@ function ViewerHub({
         />
       </div>
       {authorProfile ? (
-        <NoodlerPostComposer
-          key={authorProfile.id}
-          profile={authorProfile}
-          collapsible={false}
-          draft={authorDraft}
-          onDraftChange={onAuthorDraftChange}
-          onClearDraft={onClearAuthorDraft}
-          onDiscardDraft={onDiscardAuthorDraft}
-          onManualPost={onManualPost}
-          onGuidedPost={onGuidedPost}
-          manualPending={manualPending}
-          guidePending={guidePending}
-        />
+        <div className="bg-[var(--slurp-canvas)] px-3 py-3">
+          <section
+            aria-labelledby="slurp-creator-studio-heading"
+            className="overflow-hidden rounded-xl border border-[var(--noodle-divider)] bg-[var(--slurp-surface)] shadow-sm shadow-black/10"
+          >
+            <div className="px-4 pt-3">
+              <h2
+                id="slurp-creator-studio-heading"
+                className="text-xs font-bold uppercase tracking-[0.12em] text-[var(--noodle-accent)]"
+              >
+                {localizeUi("ui.slurp.home.creatorStudio")}
+              </h2>
+              <p className="mt-1 text-xs leading-5 text-[var(--muted-foreground)]">
+                {localizeUi("ui.slurp.home.creatorStudioDetail")}
+              </p>
+            </div>
+            <NoodlerPostComposer
+              key={authorProfile.id}
+              profile={authorProfile}
+              draft={authorDraft}
+              onDraftChange={onAuthorDraftChange}
+              onClearDraft={onClearAuthorDraft}
+              onDiscardDraft={onDiscardAuthorDraft}
+              onManualPost={onManualPost}
+              onGuidedPost={onGuidedPost}
+              manualPending={manualPending}
+              guidePending={guidePending}
+            />
+          </section>
+        </div>
       ) : authorLoading ? (
         <div className="border-b border-[var(--noodle-divider)] px-4 py-4 text-xs text-[var(--muted-foreground)]">
           {localizeUi("ui.noodle.viewerhub.resolvingYourLinkedNoodlerProfile")}
@@ -4243,25 +4295,19 @@ function ViewerHub({
           </div>
         </div>
       )}
-      <div className="px-4 py-3">
-        <button
-          type="button"
-          onClick={onRefresh}
-          disabled={isRefreshing}
-          className="flex min-h-11 w-full items-center justify-center gap-2 rounded-md border border-[var(--noodle-divider)] bg-[var(--slurp-surface)] text-sm font-bold text-[var(--noodle-accent)] transition-[background-color,scale] hover:bg-[var(--noodle-accent)]/10 active:scale-[0.96] disabled:cursor-not-allowed disabled:opacity-50"
-          title={localizeUi("ui.noodle.noodlehome.refreshTimeline")}
-          aria-label={localizeUi("ui.noodle.noodlehome.refreshTimeline")}
-        >
-          {isRefreshing ? (
-            <Loader2 size={17} className="!text-[var(--noodle-accent)] animate-spin" />
-          ) : (
-            <RefreshCw size={17} className="!text-[var(--noodle-accent)]" />
-          )}
-          {isRefreshing
-            ? localizeUi("ui.noodle.noodlehome.refreshing")
-            : localizeUi("ui.noodle.noodlehome.refreshTimeline")}
-        </button>
-      </div>
+      {!isLoading && !isError && scope && (
+        <div className="flex items-end justify-between gap-4 bg-[var(--slurp-canvas)] px-4 pb-3 pt-5">
+          <div>
+            <h2 className="text-lg font-bold tracking-tight">{localizeUi("ui.slurp.home.latestDrops")}</h2>
+            <p className="mt-1 text-xs leading-5 text-[var(--muted-foreground)]">
+              {localizeUi("ui.slurp.home.latestDropsDetail")}
+            </p>
+          </div>
+          <span className="shrink-0 rounded-full bg-[var(--slurp-surface-raised)] px-2.5 py-1 text-xs font-semibold tabular-nums text-[var(--muted-foreground)] ring-1 ring-inset ring-[var(--noodle-divider)]">
+            {localizeUi("ui.slurp.home.postCount", { count: feed.length })}
+          </span>
+        </div>
+      )}
       {isLoading ? (
         <div className="flex justify-center py-16">
           <Loader2 size={24} className="animate-spin text-[var(--noodle-accent)]" />
@@ -4318,7 +4364,283 @@ function ViewerHub({
           onAction={authorProfile ? onOpenAuthorProfile : undefined}
         />
       )}
+      {activeMoment && (
+        <SlurpMomentViewer
+          moment={activeMoment}
+          index={activeMomentIndex}
+          total={moments.length}
+          unlockPending={unlockPending}
+          subscriptionPending={togglePending}
+          onClose={() => setActiveMomentId(null)}
+          onPrevious={
+            activeMomentIndex > 0 ? () => setActiveMomentId(moments[activeMomentIndex - 1]!.post.id) : undefined
+          }
+          onNext={
+            activeMomentIndex < moments.length - 1
+              ? () => setActiveMomentId(moments[activeMomentIndex + 1]!.post.id)
+              : undefined
+          }
+          onUnlock={onUnlock}
+          onToggleSubscription={onToggleSubscription}
+          onOpenProfile={postCardCtx.openAuthorProfile}
+        />
+      )}
     </div>
+  );
+}
+
+type SlurpMoment = {
+  creator: NonNullable<ReturnType<typeof useNoodlerViewer>["data"]>["creators"][number];
+  post: NoodlerPostView;
+};
+
+function SlurpMomentsShelf({
+  moments,
+  newSinceAt,
+  onOpenMoment,
+}: {
+  moments: SlurpMoment[];
+  newSinceAt: string | null;
+  onOpenMoment: (postId: string) => void;
+}) {
+  const { t: localizeUi } = useUiTranslation();
+  const seenCreators = new Set<string>();
+  const creatorMoments = moments.filter((moment) => {
+    if (seenCreators.has(moment.creator.profile.id)) return false;
+    seenCreators.add(moment.creator.profile.id);
+    return true;
+  });
+  const seenAt = newSinceAt ? new Date(newSinceAt).getTime() : NaN;
+
+  return (
+    <section
+      data-component="SlurpHome.Moments"
+      aria-labelledby="slurp-moments-heading"
+      className="border-b border-[var(--noodle-divider)] bg-[linear-gradient(180deg,var(--slurp-surface-raised),var(--slurp-canvas))] py-4"
+    >
+      <div className="flex items-end justify-between gap-3 px-4">
+        <div>
+          <h2 id="slurp-moments-heading" className="text-base font-bold tracking-tight">
+            {localizeUi("ui.slurp.moments.title")}
+          </h2>
+          <p className="mt-0.5 text-xs text-[var(--muted-foreground)]">{localizeUi("ui.slurp.moments.detail")}</p>
+        </div>
+        <span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-[var(--noodle-accent)]/10 px-2 py-1 text-[0.65rem] font-bold text-[var(--noodle-accent)] ring-1 ring-inset ring-[var(--noodle-accent)]/20">
+          <Clock3 size={11} aria-hidden="true" /> 24h
+        </span>
+      </div>
+      <div className="mt-3 flex snap-x gap-3 overflow-x-auto px-4 pb-1 pe-8 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+        {creatorMoments.map((moment) => {
+          const isNew = !Number.isNaN(seenAt) && new Date(moment.post.createdAt).getTime() > seenAt;
+          return (
+            <button
+              key={moment.creator.profile.id}
+              type="button"
+              onClick={() => onOpenMoment(moment.post.id)}
+              className="group flex min-h-24 w-[4.75rem] shrink-0 snap-start flex-col items-center rounded-xl px-1 py-1.5 text-center focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--noodle-accent)]"
+              aria-label={localizeUi("ui.slurp.moments.open", { name: moment.creator.profile.displayName })}
+            >
+              <span
+                className={cn(
+                  "relative rounded-full p-[3px] transition-transform group-hover:scale-105 motion-reduce:transition-none motion-reduce:group-hover:scale-100",
+                  isNew
+                    ? "bg-[linear-gradient(145deg,var(--noodle-accent),#f7b66a)] shadow-md shadow-[var(--noodle-accent)]/20"
+                    : "bg-[var(--noodle-divider)]",
+                )}
+              >
+                <span className="block rounded-full bg-[var(--slurp-canvas)] p-0.5">
+                  <ProfileInitial profile={moment.creator.profile} />
+                </span>
+                {moment.post.locked && (
+                  <span className="absolute -bottom-0.5 -right-0.5 flex h-5 w-5 items-center justify-center rounded-full bg-[var(--noodle-accent)] text-zinc-950 ring-2 ring-[var(--slurp-canvas)]">
+                    <Lock size={10} aria-hidden="true" />
+                  </span>
+                )}
+              </span>
+              <span className="mt-1.5 w-full truncate text-[0.7rem] font-semibold">
+                {moment.creator.profile.displayName}
+              </span>
+              <span className="text-[0.62rem] text-[var(--muted-foreground)]">
+                {moment.creator.subscribed
+                  ? localizeUi("ui.slurp.profile.subscribed")
+                  : isNew
+                    ? localizeUi("ui.slurp.moments.new")
+                    : `@${moment.creator.profile.handle}`}
+              </span>
+            </button>
+          );
+        })}
+      </div>
+    </section>
+  );
+}
+
+function SlurpMomentViewer({
+  moment,
+  index,
+  total,
+  unlockPending,
+  subscriptionPending,
+  onClose,
+  onPrevious,
+  onNext,
+  onUnlock,
+  onToggleSubscription,
+  onOpenProfile,
+}: {
+  moment: SlurpMoment;
+  index: number;
+  total: number;
+  unlockPending: boolean;
+  subscriptionPending: boolean;
+  onClose: () => void;
+  onPrevious?: () => void;
+  onNext?: () => void;
+  onUnlock: (postId: string) => void;
+  onToggleSubscription: (creatorAccountId: string, subscribed: boolean) => void;
+  onOpenProfile?: (accountId: string) => void;
+}) {
+  const { t: localizeUi } = useUiTranslation();
+  const mediaSrc = useSlurpMediaSrc(moment.post.imageUrl);
+  const openProfile = () => {
+    onClose();
+    onOpenProfile?.(moment.creator.profile.id);
+  };
+
+  return (
+    <Modal
+      open
+      onClose={onClose}
+      title={localizeUi("ui.slurp.moments.fromCreator", { name: moment.creator.profile.displayName })}
+      width="max-w-lg"
+      panelStyle={{
+        "--background": "#120f14",
+        "--foreground": "#fff8fc",
+        "--muted-foreground": "#cdbfc8",
+        "--border": "rgba(255, 126, 193, 0.24)",
+      }}
+    >
+      <article data-component="SlurpHome.MomentViewer" className="overflow-hidden rounded-xl bg-black/25">
+        <div className="flex items-center gap-3 px-3 py-3">
+          <button
+            type="button"
+            onClick={openProfile}
+            disabled={!onOpenProfile}
+            className="rounded-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--noodle-accent)] disabled:cursor-default"
+          >
+            <ProfileInitial profile={moment.creator.profile} />
+          </button>
+          <button
+            type="button"
+            onClick={openProfile}
+            disabled={!onOpenProfile}
+            className="min-w-0 flex-1 rounded-md text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--noodle-accent)] disabled:cursor-default"
+          >
+            <span className="block truncate text-sm font-bold">{moment.creator.profile.displayName}</span>
+            <span className="block truncate text-xs text-[var(--muted-foreground)]">
+              @{moment.creator.profile.handle}
+            </span>
+          </button>
+          <span className="text-xs tabular-nums text-[var(--muted-foreground)]">
+            {index + 1}/{total}
+          </span>
+        </div>
+        <div
+          className="h-1 bg-[var(--noodle-divider)]"
+          role="progressbar"
+          aria-label={localizeUi("ui.slurp.moments.progress")}
+          aria-valuemin={1}
+          aria-valuemax={total}
+          aria-valuenow={index + 1}
+        >
+          <div
+            className="h-full bg-[var(--noodle-accent)] transition-[width] motion-reduce:transition-none"
+            style={{ width: `${((index + 1) / total) * 100}%` }}
+          />
+        </div>
+        <div className="relative flex min-h-[26rem] items-center justify-center overflow-hidden bg-black sm:min-h-[34rem]">
+          {mediaSrc ? (
+            <img
+              src={mediaSrc}
+              alt={
+                moment.post.locked
+                  ? localizeUi("ui.noodle.lockednoodlerpostcard.lockedImageFrom", {
+                      name: moment.creator.profile.displayName,
+                    })
+                  : localizeUi("ui.noodle.post.imageBy", { name: moment.creator.profile.displayName })
+              }
+              className={cn(
+                "absolute inset-0 h-full w-full object-cover",
+                moment.post.locked && "scale-105 saturate-[0.82]",
+              )}
+            />
+          ) : (
+            <div className="flex flex-col items-center gap-3 text-[var(--muted-foreground)]">
+              <ImageIcon size={30} aria-hidden="true" />
+              <span className="text-xs font-semibold">{localizeUi("ui.slurp.locked.previewUnavailable")}</span>
+            </div>
+          )}
+          <div
+            className={cn(
+              "pointer-events-none absolute inset-0 bg-gradient-to-t from-black/85 via-transparent to-black/20",
+              moment.post.locked && "from-black/90 via-black/10",
+            )}
+            aria-hidden="true"
+          />
+          {onPrevious && (
+            <button
+              type="button"
+              onClick={onPrevious}
+              className="absolute left-2 top-1/2 flex h-11 w-11 -translate-y-1/2 items-center justify-center rounded-full bg-black/45 text-white backdrop-blur-sm ring-1 ring-white/15 hover:bg-black/65 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white"
+              aria-label={localizeUi("ui.slurp.moments.previous")}
+            >
+              <ChevronLeft size={22} aria-hidden="true" />
+            </button>
+          )}
+          {onNext && (
+            <button
+              type="button"
+              onClick={onNext}
+              className="absolute right-2 top-1/2 flex h-11 w-11 -translate-y-1/2 items-center justify-center rounded-full bg-black/45 text-white backdrop-blur-sm ring-1 ring-white/15 hover:bg-black/65 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white"
+              aria-label={localizeUi("ui.slurp.moments.next")}
+            >
+              <ChevronRight size={22} aria-hidden="true" />
+            </button>
+          )}
+          <div className="absolute inset-x-0 bottom-0 px-5 pb-5 pt-16 text-white sm:px-6">
+            {moment.post.locked && (
+              <span className="mb-3 inline-flex items-center gap-1.5 rounded-full bg-black/50 px-2.5 py-1 text-[0.68rem] font-bold uppercase tracking-[0.12em] ring-1 ring-white/15 backdrop-blur-sm">
+                <Lock size={11} aria-hidden="true" /> {localizeUi("ui.slurp.locked.blurredPreview")}
+              </span>
+            )}
+            {moment.post.title && <h3 className="max-w-md text-xl font-bold leading-tight">{moment.post.title}</h3>}
+            {!moment.post.locked && moment.post.content && (
+              <p className="mt-2 line-clamp-3 max-w-md text-sm leading-6 text-white/85">{moment.post.content}</p>
+            )}
+            {moment.post.locked && (
+              <div className="mt-4 grid grid-cols-2 gap-2">
+                <button
+                  type="button"
+                  disabled={unlockPending}
+                  onClick={() => onUnlock(moment.post.id)}
+                  className="inline-flex min-h-11 items-center justify-center gap-2 rounded-lg bg-[var(--noodle-accent)] px-3 text-xs font-bold text-zinc-950 hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white disabled:opacity-50 [&_svg]:!text-zinc-950"
+                >
+                  <Eye size={15} aria-hidden="true" /> {localizeUi("ui.slurp.moments.unlock")}
+                </button>
+                <button
+                  type="button"
+                  disabled={subscriptionPending}
+                  onClick={() => onToggleSubscription(moment.creator.profile.id, moment.creator.subscribed)}
+                  className="min-h-11 rounded-lg bg-white/10 px-3 text-xs font-bold text-white ring-1 ring-inset ring-white/20 hover:bg-white/15 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white disabled:opacity-50"
+                >
+                  {localizeUi("ui.slurp.profile.subscribe")}
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
+      </article>
+    </Modal>
   );
 }
 
