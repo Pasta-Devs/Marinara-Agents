@@ -52,6 +52,7 @@ export async function generateNoodlerPostImage(input: {
   settings: Pick<
     SlurpSettings,
     | "imageGenerationPrompt"
+    | "imagePromptInterpretation"
     | "imageGenerationUseAvatarReferences"
     | "imageGenerationIncludeDescriptions"
     | "enableImageInterpretation"
@@ -209,6 +210,7 @@ export async function generateNoodlerPostImage(input: {
       ? await rewriteNoodleImagePrompt({
           db: input.db,
           prompt: rawFinalPrompt,
+          interpretationInstruction: input.settings.imagePromptInterpretation,
           instructions: imagePromptInstructions,
           characterContext,
           styleGuidance,

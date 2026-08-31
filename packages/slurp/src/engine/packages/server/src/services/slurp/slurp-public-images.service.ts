@@ -228,6 +228,7 @@ export async function generateNoodlePostImage(input: {
       ? await rewriteNoodleImagePrompt({
           db: input.db,
           prompt: rawFinalPrompt,
+          interpretationInstruction: input.settings.imagePromptInterpretation,
           instructions: imagePromptInstructions,
           characterContext,
           styleGuidance,

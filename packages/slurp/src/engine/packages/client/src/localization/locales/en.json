@@ -1337,6 +1337,7 @@
   "ui.slurp.settings.images.includeDescriptionsDetail": "Add source appearance details to image prompts.",
   "ui.slurp.settings.images.interpretPrompts": "Interpret image prompts",
   "ui.slurp.settings.images.interpretPromptsDetail": "Route image prompts through the text connection first so character style and image instructions are applied coherently.",
+  "ui.slurp.settings.images.interpretationInstructions": "Image prompt handover instructions",
   "ui.slurp.settings.images.enableForNew": "Enable images for new creators",
   "ui.slurp.settings.images.enableForNewDetail": "This changes creator setup defaults. It does not change existing creators.",
   "ui.slurp.settings.images.instructions": "Image generation instructions",
