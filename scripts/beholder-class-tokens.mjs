@@ -52,30 +52,74 @@ export function readSource(dir, extensions = [".js"]) {
  * comment, a stray string — is not a class and is not collected.
  */
 const CLASS_CONTEXTS = [
-  // Interpolation is allowed inside the value, and is tried FIRST. A class attribute
-  // written inside a template literal routinely reads
-  // `class="bh-ls-opt${on ? " bh-ls-active" : ""}"`, and the quotes belong to the
-  // conditional rather than to the attribute. Matching character by character walks
-  // into the interpolation and stops at one of those quotes, so the conditional class
-  // is never read and something plainly rendered is reported as missing.
-  /\bclass\s*=\s*"((?:\$\{[^}]*\}|\\.|[^"\\])*)"/g,
-  /\bclass\s*=\s*'((?:\$\{[^}]*\}|\\.|[^'\\])*)'/g,
-  /\bclass\s*=\s*`((?:\$\{[^}]*\}|\\.|[^`\\])*)`/g,
   /\bclassName\s*(?:=|\+=|:)\s*["'`]([^"'`]*)["'`]/g,
   /\bclassList\s*\.\s*(?:add|remove|toggle|contains|replace)\s*\(([^)]*)\)/g,
   // Selectors, which name the same classes the package renders.
   /\b(?:querySelector|querySelectorAll|closest|matches)\s*\(\s*["'`]([^"'`]*)["'`]/g,
 ];
 
+/** Finds `class=` and returns each attribute's raw value. */
+function classAttributeValues(source) {
+  // Scanned rather than matched. A class attribute written inside a template literal
+  // routinely reads `class="bh-ls-opt${on ? " bh-ls-active" : ""}"`, where the inner
+  // quotes belong to the conditional and not to the attribute — so the scanner has to
+  // step over `${...}` to find the real closing quote.
+  //
+  // A regex that expressed the same idea needed alternatives that both began at `$`,
+  // and CodeQL was right to call it: overlapping alternatives under a star backtrack
+  // exponentially on input like `${{}}${{}}…`. This walks each character exactly once
+  // and cannot, which is easier to be sure of than a cleverer pattern.
+  const values = [];
+  const opener = /\bclass\s*=\s*(["'`])/g;
+  let found;
+  while ((found = opener.exec(source)) !== null) {
+    const quote = found[1];
+    let i = opener.lastIndex;
+    let value = "";
+    while (i < source.length) {
+      const ch = source[i];
+      if (ch === "\\") {
+        i += 2;
+        continue;
+      }
+      if (ch === quote) break;
+      if (ch === "$" && source[i + 1] === "{") {
+        // Skip the interpolation, tracking nesting so a `}` inside an object literal
+        // does not end it early.
+        let depth = 0;
+        i += 1;
+        while (i < source.length) {
+          if (source[i] === "{") depth += 1;
+          else if (source[i] === "}" && --depth === 0) {
+            i += 1;
+            break;
+          }
+          i += 1;
+        }
+        // The interpolation may itself carry class names; keep them.
+        value += " ";
+        continue;
+      }
+      value += ch;
+      i += 1;
+    }
+    values.push(source.slice(found.index, i));
+    opener.lastIndex = Math.max(i, opener.lastIndex);
+  }
+  return values;
+}
+
 /** Beholder class tokens in a blob of source, read only from class contexts. */
 export function classTokens(source) {
   const tokens = new Set();
+  const chunks = [...classAttributeValues(source)];
   for (const pattern of CLASS_CONTEXTS) {
-    for (const match of source.matchAll(pattern)) {
-      for (const token of (match[1] ?? "").match(/(?:bh|beholder)-[a-z0-9-]*/g) ?? []) {
-        // A lone prefix like `bh-` carries no information about what is rendered.
-        if (token.length > 4) tokens.add(token);
-      }
+    for (const match of source.matchAll(pattern)) chunks.push(match[1] ?? "");
+  }
+  for (const chunk of chunks) {
+    for (const token of chunk.match(/(?:bh|beholder)-[a-z0-9-]*/g) ?? []) {
+      // A lone prefix like `bh-` carries no information about what is rendered.
+      if (token.length > 4) tokens.add(token);
     }
   }
   return tokens;
