@@ -59,14 +59,6 @@ type SlurpSettingsProps = {
 
 const archetypes = ["ordinary", "eccentric", "crossFandom", "raider", "organicDiscovery", "freeResource"] as const;
 const settingsSections = ["general", "creators", "images", "audience", "advanced"] as const;
-const archetypeLabels: Record<(typeof archetypes)[number], string> = {
-  ordinary: "Regular readers",
-  eccentric: "Unusual personalities",
-  crossFandom: "Shared interests",
-  raider: "Deal hunters",
-  organicDiscovery: "New discoveries",
-  freeResource: "Helpful readers",
-};
 const DEFAULT_SLURP_GENERATION_GUIDANCE =
   "All Slurp creators and viewers are adults (18+). This is an adult creator page: flirty, suggestive, teasing, and sensual posts are common, and explicit posts appear regularly when they suit the creator — but they are not required and need not be the majority. Tease the locked posts and answer flirty comments in kind. Keep each creator's personality intact: a shy creator flirts shyly, a blunt one bluntly, a funny one filthily. Ordinary posts — updates, humor, behind the scenes, project news — matter just as much and keep both the page and the character human. Keep low mood or conflict uncommon and character-specific, and do not let recent posts set the default mood.";
 const DEFAULT_SLURP_IMAGE_GENERATION_PROMPT =
@@ -218,10 +210,14 @@ export function SlurpSettings({
     }
   };
   const restoreDefaultImagePrompt = () =>
-    restore({ imageGenerationPrompt: DEFAULT_SLURP_IMAGE_GENERATION_PROMPT }, "Default image prompt restored.");
-  const saveImagePrompt = () => restore({ imageGenerationPrompt: imagePromptDraft }, "Image prompt saved.");
+    restore(
+      { imageGenerationPrompt: DEFAULT_SLURP_IMAGE_GENERATION_PROMPT },
+      t("ui.slurp.settings.prompts.imageRestored"),
+    );
+  const saveImagePrompt = () =>
+    restore({ imageGenerationPrompt: imagePromptDraft }, t("ui.slurp.settings.prompts.imageSaved"));
   const saveGenerationGuidance = () =>
-    restore({ generationGuidance: generationGuidanceDraft }, "Generation guidance saved.");
+    restore({ generationGuidance: generationGuidanceDraft }, t("ui.slurp.settings.prompts.guidanceSaved"));
 
   useEffect(() => {
     if (!accountsQuery.data?.length) {
@@ -252,7 +248,7 @@ export function SlurpSettings({
   if (settingsQuery.isError)
     return (
       <main className="flex h-full flex-col items-center justify-center gap-3 p-6 text-sm text-[var(--muted-foreground)]">
-        <p>Settings could not be loaded.</p>
+        <p>{t("ui.slurp.settings.loadError")}</p>
         <button
           type="button"
           onClick={() => void settingsQuery.refetch()}
@@ -427,7 +423,7 @@ export function SlurpSettings({
                     </select>
                   </Field>
                   <PromptCard
-                    title="Generation guidance"
+                    title={t("ui.slurp.settings.prompts.generationGuidance")}
                     value={settings.generationGuidance}
                     isDefault={generationGuidanceIsDefault}
                     onEdit={() => {
@@ -437,7 +433,7 @@ export function SlurpSettings({
                     onRestore={() =>
                       void restore(
                         { generationGuidance: DEFAULT_SLURP_GENERATION_GUIDANCE },
-                        "Default guidance restored.",
+                        t("ui.slurp.settings.prompts.guidanceRestored"),
                       )
                     }
                   />
@@ -462,10 +458,14 @@ export function SlurpSettings({
                           ))}
                       </select>
                       {connectionsQuery.isLoading && (
-                        <p className="text-xs font-normal text-[var(--muted-foreground)]">Loading connections...</p>
+                        <p className="text-xs font-normal text-[var(--muted-foreground)]">
+                          {t("ui.slurp.settings.connections.loading")}
+                        </p>
                       )}
                       {connectionsQuery.isError && (
-                        <p className="text-xs font-normal text-red-400">Connections could not be loaded.</p>
+                        <p className="text-xs font-normal text-red-400">
+                          {t("ui.slurp.settings.connections.loadError")}
+                        </p>
                       )}
                     </Field>
                     <Field label={t("ui.slurp.settings.postsPerDay")} detail={t("ui.slurp.settings.postsPerDayDetail")}>
@@ -519,10 +519,12 @@ export function SlurpSettings({
                       ))}
                     </select>
                     {(imageSettingsQuery.isLoading || connectionsQuery.isLoading) && (
-                      <p className="text-xs font-normal text-[var(--muted-foreground)]">Loading image settings...</p>
+                      <p className="text-xs font-normal text-[var(--muted-foreground)]">
+                        {t("ui.slurp.settings.images.loading")}
+                      </p>
                     )}
                     {(imageSettingsQuery.isError || connectionsQuery.isError) && (
-                      <p className="text-xs font-normal text-red-400">Image settings could not be loaded.</p>
+                      <p className="text-xs font-normal text-red-400">{t("ui.slurp.settings.images.loadError")}</p>
                     )}
                   </Field>
                   <div className="grid gap-3 sm:grid-cols-2">
@@ -989,7 +991,7 @@ export function SlurpSettings({
                     </p>
                     <div className="mt-3 grid gap-4 sm:grid-cols-2">
                       {archetypes.map((key) => (
-                        <Field key={key} label={archetypeLabels[key]}>
+                        <Field key={key} label={t(`ui.slurp.settings.audience.archetypes.${key}`)}>
                           <NumberSetting
                             value={settings.fanArchetypeWeights[key] ?? 0}
                             min={0}
@@ -1077,7 +1079,9 @@ export function SlurpSettings({
                     <span className="block truncate text-xs text-[var(--muted-foreground)]">@{creator.handle}</span>
                   </span>
                   {creator.autoPosting.enabled && (
-                    <span className="text-[0.625rem] font-semibold text-[var(--noodle-accent)]">Auto-post</span>
+                    <span className="text-[0.625rem] font-semibold text-[var(--noodle-accent)]">
+                      {t("ui.slurp.settings.creators.autoPostShort")}
+                    </span>
                   )}
                 </label>
               ))}
@@ -1192,7 +1196,7 @@ export function SlurpSettings({
       </Modal>
       <PromptEditor
         open={generationGuidanceEditorOpen}
-        title="Edit generation guidance"
+        title={t("ui.slurp.settings.prompts.editGenerationGuidance")}
         value={generationGuidanceDraft}
         onChange={setGenerationGuidanceDraft}
         onClose={() => {
@@ -1207,7 +1211,7 @@ export function SlurpSettings({
       />
       <PromptEditor
         open={imagePromptEditorOpen}
-        title="Edit image generation prompt"
+        title={t("ui.slurp.settings.prompts.editImagePrompt")}
         value={imagePromptDraft}
         onChange={setImagePromptDraft}
         onClose={() => {
@@ -1356,6 +1360,7 @@ function PromptCard({
   onEdit: () => void;
   onRestore: () => void;
 }) {
+  const { t } = useTranslation();
   return (
     <div className="space-y-3 rounded-md border border-[var(--border)] p-4">
       <div className="flex items-start gap-3">
@@ -1366,7 +1371,7 @@ function PromptCard({
           <div className="flex flex-wrap items-center gap-2">
             <p className="text-sm font-semibold">{title}</p>
             <span className="rounded-full border border-[var(--noodle-accent)]/30 bg-[var(--noodle-accent)]/10 px-2 py-0.5 text-[0.625rem] font-semibold text-[var(--noodle-accent)]">
-              {isDefault ? "Default" : "Custom"}
+              {isDefault ? t("ui.slurp.settings.prompts.default") : t("ui.slurp.settings.prompts.custom")}
             </span>
           </div>
           <p className="mt-2 line-clamp-3 whitespace-pre-line text-xs leading-5 text-[var(--muted-foreground)]">
@@ -1382,7 +1387,7 @@ function PromptCard({
           className="inline-flex min-h-10 items-center gap-1.5 rounded-md border border-[var(--noodle-accent)]/35 px-3 text-xs font-semibold text-[var(--noodle-accent)] hover:bg-[var(--noodle-accent)]/10 disabled:opacity-45"
         >
           <RotateCcw size={13} />
-          Restore default
+          {t("ui.slurp.settings.prompts.restoreDefault")}
         </button>
         <button
           type="button"
@@ -1390,7 +1395,7 @@ function PromptCard({
           className="inline-flex min-h-10 items-center gap-2 rounded-md border border-[var(--border)] px-3 text-xs font-semibold hover:bg-[var(--accent)]"
         >
           <Pencil size={14} className="text-[var(--noodle-accent)]" />
-          Edit prompt
+          {t("ui.slurp.settings.prompts.edit")}
         </button>
       </div>
     </div>
@@ -1415,6 +1420,7 @@ function PromptEditor({
   onRestore: () => void;
   pending: boolean;
 }) {
+  const { t } = useTranslation();
   return (
     <Modal open={open} onClose={onClose} title={title} width="max-w-3xl" closeDisabled={pending}>
       <div className="space-y-4">
@@ -1435,7 +1441,7 @@ function PromptEditor({
             className="inline-flex min-h-10 items-center justify-center gap-1.5 rounded-md border border-[var(--noodle-accent)]/35 px-3 text-xs font-semibold text-[var(--noodle-accent)] disabled:opacity-45"
           >
             <RotateCcw size={13} />
-            Restore default
+            {t("ui.slurp.settings.prompts.restoreDefault")}
           </button>
           <div className="flex gap-2">
             <button
@@ -1444,7 +1450,7 @@ function PromptEditor({
               disabled={pending}
               className="min-h-10 flex-1 rounded-md border border-[var(--border)] px-4 text-xs font-semibold sm:flex-none"
             >
-              Cancel
+              {t("ui.slurp.actions.cancel")}
             </button>
             <button
               type="button"
@@ -1453,7 +1459,7 @@ function PromptEditor({
               className="inline-flex min-h-10 flex-1 items-center justify-center gap-1.5 rounded-md bg-[var(--noodle-accent)] px-4 text-xs font-bold text-zinc-950 disabled:opacity-45"
             >
               {pending ? <Loader2 size={13} className="animate-spin" /> : <Save size={13} />}
-              Save prompt
+              {t("ui.slurp.settings.prompts.save")}
             </button>
           </div>
         </div>

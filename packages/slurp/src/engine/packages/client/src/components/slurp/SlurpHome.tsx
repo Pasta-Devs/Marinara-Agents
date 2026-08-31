@@ -2872,7 +2872,7 @@ function SlurpProfileMediaTile({
         <img
           src={source}
           alt={post.title || ""}
-          className="h-full w-full object-cover transition-transform duration-300 hover:scale-[1.03]"
+          className="h-full w-full object-cover transition-transform duration-300 hover:scale-[1.03] motion-reduce:transition-none motion-reduce:hover:scale-100"
         />
       ) : (
         <div className="h-full w-full bg-[var(--muted)]" />
@@ -3349,7 +3349,10 @@ function StageProfileView({
           managedCreator ? (
             <details className="group border-b border-[var(--noodle-divider)] bg-[var(--slurp-surface-raised,var(--background))]">
               <summary className="flex min-h-14 cursor-pointer list-none items-center gap-3 px-4 text-left hover:bg-[var(--accent)]/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--noodle-accent)] [&::-webkit-details-marker]:hidden sm:px-5">
-                <ChevronDown size={15} className="transition-transform group-open:rotate-180" />
+                <ChevronDown
+                  size={15}
+                  className="transition-transform group-open:rotate-180 motion-reduce:transition-none"
+                />
                 <span className="min-w-0 flex-1">
                   <span className="block text-sm font-bold text-[var(--foreground)]">
                     {localizeUi("ui.slurp.profile.creatorTools")}

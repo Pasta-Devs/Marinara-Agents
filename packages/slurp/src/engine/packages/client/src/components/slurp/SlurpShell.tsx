@@ -662,7 +662,7 @@ export function NoodleShell({
                     onClick={onOpenHomeDestination}
                     aria-current={homeActive ? "page" : undefined}
                     className={cn(
-                      "flex min-h-11 w-full items-center gap-3 rounded-lg px-3 text-left text-sm font-semibold transition-[background-color,color,transform] hover:bg-[var(--accent)] active:scale-[0.96] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--noodle-accent)]",
+                      "flex min-h-11 w-full items-center gap-3 rounded-lg px-3 text-left text-sm font-semibold transition-[background-color,color,transform] hover:bg-[var(--accent)] active:scale-[0.96] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--noodle-accent)] motion-reduce:transition-none motion-reduce:active:scale-100",
                       homeActive && "bg-[var(--noodle-accent)]/12 text-[var(--foreground)]",
                     )}
                   >
@@ -675,7 +675,7 @@ export function NoodleShell({
                       onClick={onOpenSearch}
                       aria-current={activeView === "search" ? "page" : undefined}
                       className={cn(
-                        "flex min-h-11 w-full items-center gap-3 rounded-lg px-3 text-left text-sm font-semibold transition-[background-color,color,transform] hover:bg-[var(--accent)] active:scale-[0.96] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--noodle-accent)]",
+                        "flex min-h-11 w-full items-center gap-3 rounded-lg px-3 text-left text-sm font-semibold transition-[background-color,color,transform] hover:bg-[var(--accent)] active:scale-[0.96] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--noodle-accent)] motion-reduce:transition-none motion-reduce:active:scale-100",
                         activeView === "search" && "bg-[var(--noodle-accent)]/10",
                       )}
                     >
@@ -693,7 +693,7 @@ export function NoodleShell({
                       onClick={onOpenProfile}
                       aria-current={activeView === "profile" ? "page" : undefined}
                       className={cn(
-                        "flex min-h-11 w-full items-center gap-3 rounded-lg px-3 text-left text-sm font-semibold transition-[background-color,color,transform] hover:bg-[var(--accent)] active:scale-[0.96] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--noodle-accent)]",
+                        "flex min-h-11 w-full items-center gap-3 rounded-lg px-3 text-left text-sm font-semibold transition-[background-color,color,transform] hover:bg-[var(--accent)] active:scale-[0.96] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--noodle-accent)] motion-reduce:transition-none motion-reduce:active:scale-100",
                         activeView === "profile" && "bg-[var(--noodle-accent)]/10",
                       )}
                     >
@@ -708,7 +708,7 @@ export function NoodleShell({
                     onClick={onOpenSettings}
                     aria-current={activeView === "settings" ? "page" : undefined}
                     className={cn(
-                      "flex min-h-11 w-full items-center gap-3 rounded-lg px-3 text-left text-sm font-semibold transition-[background-color,color,transform] hover:bg-[var(--accent)] active:scale-[0.96] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--noodle-accent)]",
+                      "flex min-h-11 w-full items-center gap-3 rounded-lg px-3 text-left text-sm font-semibold transition-[background-color,color,transform] hover:bg-[var(--accent)] active:scale-[0.96] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--noodle-accent)] motion-reduce:transition-none motion-reduce:active:scale-100",
                       activeView === "settings" && "bg-[var(--noodle-accent)]/10",
                     )}
                   >
@@ -720,7 +720,7 @@ export function NoodleShell({
                   <button
                     type="button"
                     onClick={(event) => onCompose(event.currentTarget)}
-                    className="mt-5 h-12 rounded-full bg-[var(--noodle-accent)] px-6 text-sm font-bold text-zinc-950 transition-[opacity,scale] hover:opacity-90 active:scale-[0.96]"
+                    className="mt-5 h-12 rounded-full bg-[var(--noodle-accent)] px-6 text-sm font-bold text-zinc-950 transition-[opacity,scale] hover:opacity-90 active:scale-[0.96] motion-reduce:transition-none motion-reduce:active:scale-100"
                   >
                     {localizeUi("ui.noodle.noodlehome.post")}
                   </button>
