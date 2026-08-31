@@ -636,9 +636,10 @@ console.log("beholder client contract: mobile reachability + roster OK");
 // Fixtures are written here rather than lifted from the evaluation corpus: that corpus
 // is private, and a public test is exactly the wrong place for it.
 const proseSource = readFileSync(join(srcDir, "72-prose.js"), "utf8");
-const loadProse = new Function(`const BH = {}; ${proseSource}; return BH.prose;`) as () => {
+const vocabSource = readFileSync(join(srcDir, "11-garment-vocab.js"), "utf8");
+const loadProse = new Function(`const BH = {}; ${vocabSource}\n${proseSource}; return BH.prose;`) as () => {
   isScript(text: string): boolean;
-  isSubstantial(text: string): boolean;
+  describesState(text: string): boolean;
 };
 const prose = loadProse();
 
@@ -665,10 +666,15 @@ const prose = loadProse();
     assert.ok(!prose.isScript(text), `roleplay fixture ${index} must not be flagged as a script`);
   }
 
-  // Substantiality gates the low-yield warning: a one-line turn producing nothing is
-  // not evidence of anything.
-  assert.equal(prose.isSubstantial("She nods."), false, "a short turn is not substantial");
-  assert.equal(prose.isSubstantial(notScripts[0].repeat(3)), true, "a full paragraph is");
+  // Vocabulary gates the warning. Length does not: a long turn of pure dialogue has
+  // nothing to extract, and warning that Beholder "found nothing" in it would be noise.
+  assert.equal(
+    prose.describesState("She nods. They talk for a while about the weather, and about nothing much at all."),
+    false,
+    "a turn that mentions no clothing or injury does not describe extractable state",
+  );
+  assert.equal(prose.describesState("He shrugged the cloak off his shoulders."), true, "a garment does");
+  assert.equal(prose.describesState("The gash on her arm had stopped bleeding."), true, "an injury does");
 }
 
 {
@@ -680,7 +686,11 @@ const prose = loadProse();
     !/omniscient/i.test(proseSource.replace(/\/\/[^\n]*|\/\*[\s\S]*?\*\//g, "")),
     "the prose check must not classify narration as omniscient outside its comments",
   );
-  assert.match(proseSource, /low-yield/u, "it reports low yield instead");
+  assert.match(proseSource, /described-but-unread/u, "it reports what it observed instead");
+  // The gate is the vocabulary, not word count — length says nothing about whether a
+  // passage has any physical state in it.
+  assert.ok(!/isSubstantial/u.test(proseSource), "word count must not gate the warning");
+  assert.match(proseSource, /describing >= 3/u, "and one turn is not enough to conclude from");
   assert.match(proseSource, /not supported/u, "and names the SOTA option as unsupported");
 }
 

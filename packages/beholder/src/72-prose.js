@@ -12,13 +12,23 @@
 //      96% of script passages caught, and zero false alarms in 200 passages of ordinary
 //      roleplay. Worth stating outright.
 //
-//   2. Yield. Whether prose has been read and produced nothing. This is an observation,
-//      not a classification, which is the point: several attempts at detecting
-//      omniscient narration by shape were tried and all of them landed at chance
-//      against the same corpus — around one in five ordinary roleplay passages
-//      false-flagged for the same catch rate. A warning that wrong is worse than none,
-//      so it is not shipped. Low yield says the same thing without pretending to know
-//      why, and it also catches registers nobody thought to look for.
+//   2. Prose that describes bodies and yielded nothing anyway. Not a classification —
+//      an observation, and a gated one.
+//
+//      The gate is vocabulary, because length is not: a long turn of pure dialogue has
+//      nothing to extract, and warning that Beholder "found nothing" in it is noise. On
+//      the register corpus a passage naming a garment or an injury has state to find
+//      49% of the time against 15% for one that names neither, and across a window of
+//      eight turns the gate is far sharper still: where three or more turns name
+//      clothing or injuries, 97-100% of those windows genuinely contain something
+//      extractable, on every in-scope register. So when the gate opens and the panel is
+//      still empty, something really was missed — which is the only condition under
+//      which saying so is fair.
+//
+// Detecting omniscient narration by shape was tried and abandoned: every feature —
+// recurring names, attributed interiority, titles, sentence length — landed at chance
+// against the same corpus, around one ordinary roleplay passage in five false-flagged
+// for the same catch rate. A warning that wrong is worse than none.
 
 /** Scene headings, camera directions and speaker cues — the shape of a script. */
 const BH_SCRIPT_SLUG = /^[ \t]*(INT|EXT|INT\.\/EXT|I\/E)[.\s]/im;
@@ -26,6 +36,12 @@ const BH_SCRIPT_CAMERA =
   /\b(CLOSE ?UP|CUT TO|FADE (IN|OUT)|DISSOLVE TO|MONTAGE|ANGLE ON|PAN (TO|ACROSS)|V\.O\.|O\.S\.|SMASH CUT)\b/;
 /** A speaker cue is a whole line in caps, optionally with a parenthetical. */
 const BH_SCRIPT_CUE = /^[ \t]*[A-Z][A-Z0-9 .'\-]{2,28}(\([^)]{1,20}\))?[ \t]*$/gm;
+
+/** Injury words, the other half of "this passage describes a body". */
+const BH_WOUND_RX =
+  /\b(wound|cut|gash|bruise|burn|scar|blood|bleeding|broken|fracture|stab|slash|bite|graze|welt)\w*\b/i;
+/** Built once from the generated vocabulary; 158 alternatives is not worth rebuilding. */
+let BH_GARMENT_RX = null;
 
 BH.prose = {
   /** True when a passage is written as a script rather than as prose. */
@@ -37,9 +53,19 @@ BH.prose = {
     return (body.match(BH_SCRIPT_CUE) ?? []).length >= 2;
   },
 
-  /** Substantial enough to expect something from. */
-  isSubstantial(text) {
-    return typeof text === "string" && text.trim().split(/\s+/).length >= 40;
+  /**
+   * Does this passage describe something Beholder could extract?
+   *
+   * Word count was the wrong gate — length says nothing about whether there is any
+   * physical state in a passage, so it warned about dialogue-heavy turns that were
+   * empty for the ordinary reason that nobody's clothes came up.
+   */
+  describesState(text) {
+    const body = typeof text === "string" ? text : "";
+    if (!BH_GARMENT_RX) {
+      BH_GARMENT_RX = new RegExp(`\\b(?:${BH_GARMENT_WORDS.join("|")})s?\\b`, "i");
+    }
+    return BH_GARMENT_RX.test(body) || BH_WOUND_RX.test(body);
   },
 
   /**
@@ -69,7 +95,7 @@ BH.prose = {
 
     const bodies = messages.map((row) => row.content ?? row.text ?? "").filter(Boolean);
     const scripted = bodies.filter((body) => this.isScript(body)).length;
-    const substantial = bodies.filter((body) => this.isSubstantial(body)).length;
+    const describing = bodies.filter((body) => this.describesState(body)).length;
 
     if (scripted >= 2 || (scripted === 1 && bodies.length === 1)) {
       return {
@@ -86,17 +112,20 @@ BH.prose = {
       (total, character) => total + Object.keys(character?.body ?? {}).length,
       0,
     );
-    // Read several substantial turns and produced nothing worth showing.
-    if (substantial >= 3 && (tracked === 0 || slots <= 1)) {
+    // Three turns that describe clothing or injuries and still produced nothing. One
+    // such turn proves little — roughly half of them have nothing to find even so — but
+    // three in a row is unlikely to be the prose simply not mentioning anything.
+    if (describing >= 3 && (tracked === 0 || slots <= 1)) {
       return {
-        verdict: "low-yield",
+        verdict: "described-but-unread",
         copy:
-          `Beholder has read ${substantial} substantial turns and found almost nothing. That usually means ` +
-          "this prose sits outside what the small local model handles — several characters narrated at once, " +
-          "or a register it was not trained on. It is a limit of the model, by design.",
+          `${describing} recent turns describe clothing or injuries and Beholder read none of it. With the ` +
+          "checks above passing, that usually means this prose sits outside what the small local model " +
+          "handles — several characters narrated at once, or a register it was not trained on. It is a limit " +
+          "of the model, by design.",
         aside:
-          "A large general model can do better on prose like this. You can point this agent at one, though " +
-          "that setup is not supported.",
+          "A large general model reads this kind of prose better. You can point this agent at one, though " +
+          "that setup is not supported and you would be trading away the local, private part.",
       };
     }
     return null;
