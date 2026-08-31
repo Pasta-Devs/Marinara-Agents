@@ -227,10 +227,16 @@ assert.match(
   /releaseHost\(element\)[\s\S]*this\.close\(\)/u,
   "floating Beholder must close when its roleplay host leaves the chat area",
 );
-assert.match(
-  beholderInterfaceSource,
-  /window\.open\("", "_blank"\)/u,
-  "the Beholder header must offer a detached browser tab",
+// The header used to offer "open in a new tab". It was removed on the operator's
+// judgement — a paper doll pinned beside the chat it describes has a reason to exist;
+// the same doll alone on a blank tab does not. Asserted so it does not drift back in.
+assert.ok(
+  !/window\.open\("", "_blank"\)/u.test(beholderInterfaceSource),
+  "the Beholder header must not offer a detached browser tab",
+);
+assert.ok(
+  !/bh-dock-popout/u.test(beholderInterfaceSource),
+  "the pop-out control must be gone from the header, not merely unwired",
 );
 assert.match(
   beholderInterfaceSource,
@@ -325,7 +331,11 @@ const freshClient =
   `(() => {\n"use strict";\n` +
   `const BH_STYLE_CSS = ${JSON.stringify(readFileSync(join(srcDir, "style.css"), "utf8"))};\n` +
   `const BH_FA_CSS = ${JSON.stringify(readFileSync(join(srcDir, "fa-embed.css"), "utf8"))};\n` +
-  `const BH_LOCALES = ${JSON.stringify(clientLocales)};\n\n` +
+  `const BH_LOCALES = ${JSON.stringify(clientLocales)};\n` +
+  // This preamble mirrors scripts/build-beholder-package.mjs by hand, which is the
+  // price of checking staleness independently of the builder. Anything added there has
+  // to be added here too, or this fails with a 400 KB diff that says nothing.
+  `const BH_PACKAGE_VERSION = ${JSON.stringify(manifest.version)};\n\n` +
   `${clientModules.map((name) => `// ===== ${name} =====\n${readFileSync(join(srcDir, name), "utf8")}`).join("\n")}\n` +
   `})();\n`;
 assert.equal(client, freshClient, "client.js is stale relative to Beholder source — rebuild the package");
@@ -510,3 +520,218 @@ const INSTALLED = { repo: "GetBeholder/Beholder-GGUF", file: "Beholder-Q8_0.gguf
 }
 
 console.log("beholder client contract: local model slot OK");
+
+// ── The chrome ported so far ─────────────────────────────────────────────────
+// Not "parity" — that word was used here while three whole features were missing.
+// beholder-parity.regression.ts is the file that measures how much is actually
+// ported; this one only checks that what was ported still works.
+// The panel shipped with a paper doll and almost none of the controls around it: no
+// way to build state from a chat that was already underway, and no way to reach a slot
+// the doll does not draw. Both were reported from real use, not from reading the code.
+// These assert the controls exist and stay wired, since the stylesheet has always
+// carried their design and the markup is what went missing.
+const beholderChromeSource = ["50-editor.js", "52-sheet.js", "56-banner.js", "70-backfill.js", "80-dock.js"]
+  .map((name) => readFileSync(join(srcDir, name), "utf8"))
+  .join("\n");
+
+{
+  // Build state from the chat — the control an operator reaches for when they switch
+  // Beholder on halfway through and the doll is empty.
+  assert.match(beholderChromeSource, /beholder-backfill-btn/u, "the header must offer a build-from-history control");
+  assert.match(beholderChromeSource, /beholder-backfill-more/u, "and its more-options caret");
+  assert.match(beholderChromeSource, /beholder-backfill-status/u, "with a progress strip");
+  for (const mode of ['data-mode="build"', 'data-mode="turn"', 'data-mode="rebuild"']) {
+    assert.ok(beholderChromeSource.includes(mode), `the build menu must offer ${mode}`);
+  }
+  // Every mode is one model call per message. The count is stated first, and cancel
+  // has to actually stop the walk rather than just hide the bar.
+  assert.match(beholderChromeSource, /window\.confirm\(/u, "a multi-message build must be confirmed before it runs");
+  assert.match(beholderChromeSource, /this\.cancelled/u, "and must be cancellable mid-walk");
+  assert.match(
+    beholderChromeSource,
+    /forMessageId/u,
+    "a history walk must scope each run to one message, not re-run the latest every time",
+  );
+}
+
+{
+  // The slot sheet: the only route to a slot the doll does not draw.
+  assert.match(beholderChromeSource, /bh-digest-edit/u, "the Edit slots button must be wired");
+  assert.match(beholderChromeSource, /bh-edit-sheet/u, "and open the sheet");
+  assert.match(beholderChromeSource, /bh-pick-slot/u, "which lists slots to pick from");
+  assert.match(beholderChromeSource, /bh-slot-picker/u);
+  // Regions, so the list is navigable rather than 26 flat rows.
+  for (const region of ["Head & Face", "Torso", "Arms & Hands", "Legs & Feet"]) {
+    assert.ok(beholderChromeSource.includes(region), `the picker must group slots under ${region}`);
+  }
+}
+
+{
+  // Editor chrome, matched to the reference: it is the surface the operator lives in.
+  assert.match(beholderChromeSource, /bhe-cancel/u, "the editor must offer Cancel, not only Apply");
+  assert.match(beholderChromeSource, /bh-btn-primary/u, "and mark Apply as the primary action");
+  assert.match(beholderChromeSource, /bh-editor-slot/u, "the head must name the character and the slot");
+  assert.match(
+    beholderChromeSource,
+    /cardRect\.top - panelRect\.top - height/u,
+    "and flip above a card near the bottom",
+  );
+  // Dismissal, including the guard that makes removing a row safe.
+  assert.match(beholderChromeSource, /key !== "Escape"/u, "Escape must close the editor");
+  assert.match(beholderChromeSource, /isConnected === false/u, "a detached target must not read as an outside click");
+}
+
+{
+  // The local model was invisible to the person it was built for: the slot silently
+  // outranks the agent's connection, and the only place that said so was inside a view
+  // you had to already know to open. The panel now always states what will answer.
+  assert.match(beholderChromeSource, /bh-no-model-banner/u, "the panel must carry a which-model-answers strip");
+  assert.match(beholderChromeSource, /BH\.banner\.refresh\(\)/u, "and refresh it with the panel");
+  for (const action of ['data-action="install"', 'data-action="enable"', 'data-action="manage"'].map((a) =>
+    a.slice(13, -1),
+  )) {
+    assert.ok(beholderChromeSource.includes(`"${action}"`), `the strip must offer the ${action} action`);
+  }
+  // An install button that cannot install is worse than no button.
+  assert.match(
+    beholderChromeSource,
+    /runtimeInstalled/u,
+    "the strip must not offer a download when the local runtime is missing",
+  );
+}
+
+console.log("beholder client contract: ported chrome OK");
+
+{
+  // Below the narrow breakpoint the stylesheet hides every .beholder-tool-btn and
+  // reveals .beholder-tools-more instead. The package rendered the buttons and not the
+  // trigger, so on a phone every view was unreachable — asserted together so the pair
+  // cannot drift apart again.
+  const stylesheet = readFileSync(join(srcDir, "style.css"), "utf8");
+  // Whitespace-tolerant: the rule was pinned as a one-line literal and broke the moment
+  // prettier reformatted the stylesheet, which says nothing about whether the row hides.
+  assert.match(stylesheet, /\.beholder-tool-btn\s*\{\s*display:\s*none;/u, "the narrow layout hides the tool row");
+  assert.match(beholderChromeSource, /beholder-tools-more/u, "so the header must render an overflow trigger");
+  assert.match(beholderChromeSource, /beholder-tools-menu/u, "that opens a menu");
+  // Built from the header's own buttons, so a new view cannot appear in one and not
+  // the other.
+  assert.match(
+    beholderChromeSource,
+    /querySelectorAll\("\.beholder-tool-btn\[data-view\]"\)/u,
+    "the menu must be built from the header's buttons, not a second hand-kept list",
+  );
+  assert.match(beholderChromeSource, /openView\(view\)/u, "and both must route through one view dispatcher");
+}
+
+{
+  // Roster: presentation only, and applied where the panel is drawn so every surface
+  // agrees on who is on screen.
+  assert.match(beholderChromeSource, /BH\.roster\.arrange\(/u, "the panel must apply the operator's roster");
+  assert.match(
+    beholderChromeSource,
+    /arranged\.visible\.length \? shownState : this\.state/u,
+    "hiding everyone must not strand the operator with an empty panel and no way back",
+  );
+}
+
+console.log("beholder client contract: mobile reachability + roster OK");
+
+// ── The prose check ──────────────────────────────────────────────────────────
+// Beholder anchors on one focal character per passage; scripts and scenes that narrate
+// several people at once are outside what it does. Telling someone that is better than
+// leaving them with an empty panel — but only if the detector is right, so this pins
+// the two claims the code makes.
+//
+// Fixtures are written here rather than lifted from the evaluation corpus: that corpus
+// is private, and a public test is exactly the wrong place for it.
+const proseSource = readFileSync(join(srcDir, "72-prose.js"), "utf8");
+const vocabSource = readFileSync(join(srcDir, "11-garment-vocab.js"), "utf8");
+const loadProse = new Function(`const BH = {}; ${vocabSource}\n${proseSource}; return BH.prose;`) as () => {
+  isScript(text: string): boolean;
+  describesState(text: string): boolean;
+};
+const prose = loadProse();
+
+{
+  const scripts = [
+    "INT. BEDROOM - NIGHT\nA radio plays. She crosses to the window and pulls the curtain back.",
+    "The camera holds on the doorway.\nCUT TO: the hallway, empty, the coat still on its hook.",
+    "MARGOT\nYou said you'd be here at six.\n\nDANIEL\n(quietly)\nI said I'd try.",
+  ];
+  for (const [index, text] of scripts.entries()) {
+    assert.ok(prose.isScript(text), `script fixture ${index} must be recognised as a script`);
+  }
+
+  // Ordinary roleplay, including the shapes that could trip a naive detector: a single
+  // shouted line, in-character caps, and asterisked action.
+  const notScripts = [
+    "Maggie shrugged the cloak off her shoulders and hung it by the door. The cut on her forearm had stopped bleeding, though the sleeve was ruined.",
+    'She rounded on him. "STOP!"\nThe word cracked across the yard and he froze with the lantern still raised.',
+    "*breathes calmly* I'm fine. Really.",
+    "Caelvir sat at one end of the long table. The distance between them was deliberate, and he let it sit there while the servants poured.",
+    "OOC: sorry for the delay!\nShe steps through the gate, boots loud on the wet stone.",
+  ];
+  for (const [index, text] of notScripts.entries()) {
+    assert.ok(!prose.isScript(text), `roleplay fixture ${index} must not be flagged as a script`);
+  }
+
+  // Vocabulary gates the warning. Length does not: a long turn of pure dialogue has
+  // nothing to extract, and warning that Beholder "found nothing" in it would be noise.
+  assert.equal(
+    prose.describesState("She nods. They talk for a while about the weather, and about nothing much at all."),
+    false,
+    "a turn that mentions no clothing or injury does not describe extractable state",
+  );
+  assert.equal(prose.describesState("He shrugged the cloak off his shoulders."), true, "a garment does");
+  assert.equal(prose.describesState("The gash on her arm had stopped bleeding."), true, "an injury does");
+}
+
+{
+  // The code must not claim to detect omniscient narration. Every shape-based attempt
+  // measured at chance against the register corpus — about one ordinary roleplay
+  // passage in five false-flagged for the same catch rate — so the honest signal is
+  // low yield, which reports what happened instead of guessing why.
+  assert.ok(
+    !/omniscient/i.test(proseSource.replace(/\/\/[^\n]*|\/\*[\s\S]*?\*\//g, "")),
+    "the prose check must not classify narration as omniscient outside its comments",
+  );
+  assert.match(proseSource, /described-but-unread/u, "it reports what it observed instead");
+  // The gate is the vocabulary, not word count — length says nothing about whether a
+  // passage has any physical state in it.
+  assert.ok(!/isSubstantial/u.test(proseSource), "word count must not gate the warning");
+  assert.match(proseSource, /describing >= 3/u, "and one turn is not enough to conclude from");
+  // Matched loosely: the requirement is that the large-model option is named as
+  // unsupported, not that it is worded a particular way — the copy gets rewritten for
+  // readability and the test should not fight that.
+  assert.match(proseSource, /(not support|unsupported)/u, "the large-model alternative must be named as unsupported");
+  assert.match(proseSource, /staying on your computer/u, "and the privacy cost of taking it must be stated");
+}
+
+console.log("beholder client contract: prose check OK");
+
+{
+  // The boundary is stated to everyone on the empty panel, which is the screen a new
+  // user looks at and the one where "this is broken" gets decided. Detection cannot
+  // carry this: classifying multi-character narration by shape measured 42% catch at
+  // 4% false alarm once period-style markers (semicolons, honorifics) were removed —
+  // and those markers were carrying half the signal, so the classifier was largely
+  // recognising Victorian prose rather than omniscient prose. Saying it up front
+  // reaches 100% of users with no false alarms at all.
+  const dollSource = readFileSync(join(srcDir, "30-paperdoll.js"), "utf8");
+  assert.match(dollSource, /bh-placeholder-scope/u, "the empty panel must state what Beholder reads");
+  // Worded to match what the model actually does. An earlier draft said "one focal
+  // character per passage", which reads as "cannot do multiple characters" — the
+  // opposite of true: attribution measures 0.95 across the supported registers, and
+  // keeping characters apart is a trained, first-class capability. The boundary is the
+  // missing point of view, not the number of people in the scene.
+  // Checked by meaning, not by sentence: the note must say Beholder handles everyone in
+  // the scene, and must locate the limit in whose view the writing follows rather than
+  // in how many people are in it.
+  assert.match(dollSource, /every character in the scene/u, "must not undersell multi-character tracking");
+  assert.match(dollSource, /one person at a time/u, "the limit is whose view the writing follows");
+  assert.ok(!/one focal character/u.test(dollSource), "the misleading phrasing must not come back");
+  assert.match(dollSource, /script/u, "and the script case");
+  assert.match(beholderChromeSource, /bh-scope-more/u, "with a route to the full explanation");
+}
+
+console.log("beholder client contract: stated scope OK");

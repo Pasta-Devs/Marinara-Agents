@@ -99,7 +99,7 @@ for (const [view, title] of [
   }
   await page.evaluate(() => document.querySelector(".bh-view-close")?.click());
   await page.waitForTimeout(500);
-  check(`${title} view closes`, await page.evaluate(() => !document.querySelector(".bh-view-overlay")));
+  check(`${title} view closes`, await page.evaluate(() => !document.querySelector(".bh-view")));
 }
 
 // ── prompt selection persists ───────────────────────────────────────────────

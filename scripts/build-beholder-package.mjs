@@ -55,7 +55,9 @@ for (const name of (await readdir(localeDir)).filter((file) => file.endsWith(".j
 const constants =
   `const BH_STYLE_CSS = ${JSON.stringify(styleCss)};\n` +
   `const BH_FA_CSS = ${JSON.stringify(faCss)};\n` +
-  `const BH_LOCALES = ${JSON.stringify(locales)};\n`;
+  `const BH_LOCALES = ${JSON.stringify(locales)};\n` +
+  // Stamped in so a pasted diagnostic report says which build produced it.
+  `const BH_PACKAGE_VERSION = ${JSON.stringify(VERSION)};\n`;
 
 const banner =
   `// Beholder ${VERSION} — Marinara Engine roleplay-toolbar capability (single-file client bundle)\n` +
