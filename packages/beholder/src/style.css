@@ -2772,6 +2772,9 @@
     font-size: 0.92em;
 }
 .bh-turns tr:last-child td { border-bottom: none; }
+/* "nothing here yet" is a normal state for a fresh chat, so it reads as quiet
+   information rather than as a row of missing data. */
+.bh-turns-empty { opacity: 0.5; }
 .bh-tips {
     margin: 0;
     padding-left: 18px;
@@ -3579,7 +3582,6 @@
 .bh-help-list { margin: 6px 0 12px; padding-left: 18px; }
 .bh-help-list li { margin-bottom: 4px; }
 
-.bh-lock-mark { position: absolute; top: 4px; right: 4px; font-size: 9px; opacity: .75; }
 .bh-slot-card.bh-slot-locked { outline: 1px solid color-mix(in srgb, var(--bh-accent) 55%, transparent); outline-offset: -1px; }
 
 /* Which connection is answering, and the local model that may be overruling it. */

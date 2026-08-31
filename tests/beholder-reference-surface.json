@@ -4,13 +4,13 @@
     "scripts/sync-reference-surface.mjs and checked by tests/beholder-parity.regression.ts.",
     "",
     "This file exists because 'do we have X' was answered three times by grepping the",
-    "package and finding a hit in style.css — which carries ST's whole stylesheet, so it",
+    "package and finding a hit in style.css \u2014 which carries ST's whole stylesheet, so it",
     "matches whether or not anything renders. Every answer was wrong. The check now",
     "looks only at what the package's JS builds.",
     "",
-    "status: rendered   — the package builds this",
-    "        missing    — it does not, and should; the test fails while any of these remain",
-    "        not-ported — deliberate, with the reason recorded"
+    "status: rendered   \u2014 the package builds this",
+    "        missing    \u2014 it does not, and should; the test fails while any of these remain",
+    "        not-ported \u2014 deliberate, with the reason recorded"
   ],
   "generatedFrom": "GetBeholder/Beholder-ST",
   "classes": {
@@ -286,35 +286,35 @@
     },
     "bh-conn-active": {
       "status": "not-ported",
-      "reason": "WebLLM/endpoint connection chooser — model choice lives in the Prompt view here"
+      "reason": "WebLLM/endpoint connection chooser \u2014 model choice lives in the Prompt view here"
     },
     "bh-conn-opt": {
       "status": "not-ported",
-      "reason": "WebLLM/endpoint connection chooser — model choice lives in the Prompt view here"
+      "reason": "WebLLM/endpoint connection chooser \u2014 model choice lives in the Prompt view here"
     },
     "bh-conn-opt-body": {
       "status": "not-ported",
-      "reason": "WebLLM/endpoint connection chooser — model choice lives in the Prompt view here"
+      "reason": "WebLLM/endpoint connection chooser \u2014 model choice lives in the Prompt view here"
     },
     "bh-conn-opt-title": {
       "status": "not-ported",
-      "reason": "WebLLM/endpoint connection chooser — model choice lives in the Prompt view here"
+      "reason": "WebLLM/endpoint connection chooser \u2014 model choice lives in the Prompt view here"
     },
     "bh-conn-status": {
       "status": "not-ported",
-      "reason": "WebLLM/endpoint connection chooser — model choice lives in the Prompt view here"
+      "reason": "WebLLM/endpoint connection chooser \u2014 model choice lives in the Prompt view here"
     },
     "bh-conn-tag": {
       "status": "not-ported",
-      "reason": "WebLLM/endpoint connection chooser — model choice lives in the Prompt view here"
+      "reason": "WebLLM/endpoint connection chooser \u2014 model choice lives in the Prompt view here"
     },
     "bh-conn-tag-easy": {
       "status": "not-ported",
-      "reason": "WebLLM/endpoint connection chooser — model choice lives in the Prompt view here"
+      "reason": "WebLLM/endpoint connection chooser \u2014 model choice lives in the Prompt view here"
     },
     "bh-conn-tag-fast": {
       "status": "not-ported",
-      "reason": "WebLLM/endpoint connection chooser — model choice lives in the Prompt view here"
+      "reason": "WebLLM/endpoint connection chooser \u2014 model choice lives in the Prompt view here"
     },
     "bh-digest": {
       "status": "rendered"
@@ -384,23 +384,23 @@
     },
     "bh-dot": {
       "status": "not-ported",
-      "reason": "WebLLM readiness indicator — no in-browser engine to report on"
+      "reason": "WebLLM readiness indicator \u2014 no in-browser engine to report on"
     },
     "bh-dot-": {
       "status": "not-ported",
-      "reason": "WebLLM readiness indicator — no in-browser engine to report on"
+      "reason": "WebLLM readiness indicator \u2014 no in-browser engine to report on"
     },
     "bh-dot-bad": {
       "status": "not-ported",
-      "reason": "WebLLM readiness indicator — no in-browser engine to report on"
+      "reason": "WebLLM readiness indicator \u2014 no in-browser engine to report on"
     },
     "bh-dot-busy": {
       "status": "not-ported",
-      "reason": "WebLLM readiness indicator — no in-browser engine to report on"
+      "reason": "WebLLM readiness indicator \u2014 no in-browser engine to report on"
     },
     "bh-dot-ok": {
       "status": "not-ported",
-      "reason": "WebLLM readiness indicator — no in-browser engine to report on"
+      "reason": "WebLLM readiness indicator \u2014 no in-browser engine to report on"
     },
     "bh-edit-sheet": {
       "status": "rendered"
@@ -487,88 +487,88 @@
       "status": "rendered"
     },
     "bh-legend-bar": {
-      "status": "missing"
+      "status": "rendered"
     },
     "bh-legend-dot": {
-      "status": "missing"
+      "status": "rendered"
     },
     "bh-legend-row": {
-      "status": "missing"
+      "status": "rendered"
     },
     "bh-lm-action": {
       "status": "not-ported",
-      "reason": "WebLLM in-browser model card — the engine runs the model server-side, so this has no counterpart"
+      "reason": "WebLLM in-browser model card \u2014 the engine runs the model server-side, so this has no counterpart"
     },
     "bh-lm-btn": {
       "status": "not-ported",
-      "reason": "WebLLM in-browser model card — the engine runs the model server-side, so this has no counterpart"
+      "reason": "WebLLM in-browser model card \u2014 the engine runs the model server-side, so this has no counterpart"
     },
     "bh-lm-copy": {
       "status": "not-ported",
-      "reason": "WebLLM in-browser model card — the engine runs the model server-side, so this has no counterpart"
+      "reason": "WebLLM in-browser model card \u2014 the engine runs the model server-side, so this has no counterpart"
     },
     "bh-lm-head": {
       "status": "not-ported",
-      "reason": "WebLLM in-browser model card — the engine runs the model server-side, so this has no counterpart"
+      "reason": "WebLLM in-browser model card \u2014 the engine runs the model server-side, so this has no counterpart"
     },
     "bh-lm-hint": {
       "status": "not-ported",
-      "reason": "WebLLM in-browser model card — the engine runs the model server-side, so this has no counterpart"
+      "reason": "WebLLM in-browser model card \u2014 the engine runs the model server-side, so this has no counterpart"
     },
     "bh-lm-modelid": {
       "status": "not-ported",
-      "reason": "WebLLM in-browser model card — the engine runs the model server-side, so this has no counterpart"
+      "reason": "WebLLM in-browser model card \u2014 the engine runs the model server-side, so this has no counterpart"
     },
     "bh-lm-progress": {
       "status": "not-ported",
-      "reason": "WebLLM in-browser model card — the engine runs the model server-side, so this has no counterpart"
+      "reason": "WebLLM in-browser model card \u2014 the engine runs the model server-side, so this has no counterpart"
     },
     "bh-lm-progress-bar": {
       "status": "not-ported",
-      "reason": "WebLLM in-browser model card — the engine runs the model server-side, so this has no counterpart"
+      "reason": "WebLLM in-browser model card \u2014 the engine runs the model server-side, so this has no counterpart"
     },
     "bh-lm-progress-fill": {
       "status": "not-ported",
-      "reason": "WebLLM in-browser model card — the engine runs the model server-side, so this has no counterpart"
+      "reason": "WebLLM in-browser model card \u2014 the engine runs the model server-side, so this has no counterpart"
     },
     "bh-lm-progress-label": {
       "status": "not-ported",
-      "reason": "WebLLM in-browser model card — the engine runs the model server-side, so this has no counterpart"
+      "reason": "WebLLM in-browser model card \u2014 the engine runs the model server-side, so this has no counterpart"
     },
     "bh-lm-progress-pct": {
       "status": "not-ported",
-      "reason": "WebLLM in-browser model card — the engine runs the model server-side, so this has no counterpart"
+      "reason": "WebLLM in-browser model card \u2014 the engine runs the model server-side, so this has no counterpart"
     },
     "bh-lm-readiness": {
       "status": "not-ported",
-      "reason": "WebLLM in-browser model card — the engine runs the model server-side, so this has no counterpart"
+      "reason": "WebLLM in-browser model card \u2014 the engine runs the model server-side, so this has no counterpart"
     },
     "bh-lm-readiness-label": {
       "status": "not-ported",
-      "reason": "WebLLM in-browser model card — the engine runs the model server-side, so this has no counterpart"
+      "reason": "WebLLM in-browser model card \u2014 the engine runs the model server-side, so this has no counterpart"
     },
     "bh-lm-readiness-row": {
       "status": "not-ported",
-      "reason": "WebLLM in-browser model card — the engine runs the model server-side, so this has no counterpart"
+      "reason": "WebLLM in-browser model card \u2014 the engine runs the model server-side, so this has no counterpart"
     },
     "bh-lm-readiness-value": {
       "status": "not-ported",
-      "reason": "WebLLM in-browser model card — the engine runs the model server-side, so this has no counterpart"
+      "reason": "WebLLM in-browser model card \u2014 the engine runs the model server-side, so this has no counterpart"
     },
     "bh-lm-title": {
       "status": "not-ported",
-      "reason": "WebLLM in-browser model card — the engine runs the model server-side, so this has no counterpart"
+      "reason": "WebLLM in-browser model card \u2014 the engine runs the model server-side, so this has no counterpart"
     },
     "bh-lm-update": {
       "status": "not-ported",
-      "reason": "WebLLM in-browser model card — the engine runs the model server-side, so this has no counterpart"
+      "reason": "WebLLM in-browser model card \u2014 the engine runs the model server-side, so this has no counterpart"
     },
     "bh-localmodel-card": {
       "status": "not-ported",
-      "reason": "WebLLM in-browser model card — the engine runs the model server-side, so this has no counterpart"
+      "reason": "WebLLM in-browser model card \u2014 the engine runs the model server-side, so this has no counterpart"
     },
     "bh-lock-toggle": {
-      "status": "missing"
+      "status": "rendered"
     },
     "bh-ls-opt": {
       "status": "rendered"
@@ -662,7 +662,7 @@
     },
     "bh-proscons": {
       "status": "not-ported",
-      "reason": "WebLLM/endpoint connection chooser — model choice lives in the Prompt view here"
+      "reason": "WebLLM/endpoint connection chooser \u2014 model choice lives in the Prompt view here"
     },
     "bh-row-actions": {
       "status": "rendered"
@@ -719,7 +719,7 @@
       "status": "rendered"
     },
     "bh-slot-lock-glyph": {
-      "status": "missing"
+      "status": "rendered"
     },
     "bh-slot-missing": {
       "status": "rendered"
@@ -755,13 +755,13 @@
       "status": "rendered"
     },
     "bh-tier-holding": {
-      "status": "missing"
+      "status": "rendered"
     },
     "bh-tips": {
-      "status": "missing"
+      "status": "rendered"
     },
     "bh-turns": {
-      "status": "missing"
+      "status": "rendered"
     },
     "bh-update-banner": {
       "status": "missing"
@@ -812,16 +812,16 @@
       "status": "rendered"
     },
     "bh-vital": {
-      "status": "missing"
+      "status": "rendered"
     },
     "bh-vital-label": {
-      "status": "missing"
+      "status": "rendered"
     },
     "bh-vital-value": {
-      "status": "missing"
+      "status": "rendered"
     },
     "bh-vitals": {
-      "status": "missing"
+      "status": "rendered"
     },
     "bh-vlog": {
       "status": "rendered"
@@ -830,7 +830,7 @@
       "status": "rendered"
     },
     "bh-vlog-error": {
-      "status": "missing"
+      "status": "rendered"
     },
     "bh-vlog-row": {
       "status": "rendered"

@@ -564,6 +564,75 @@ BH.views = {
     return rows.join("");
   },
 
+  /**
+   * The setup facts as a scannable grid, above the prose of the checks.
+   *
+   * Same rows as the copyable report, from the same function, because a grid that says
+   * one thing while the pasted report says another is worse than not having the grid.
+   */
+  async vitalsHtml() {
+    let rows = [];
+    try {
+      rows = await BH.report.vitals();
+    } catch {
+      return "";
+    }
+    if (!rows.length) return "";
+    return `<div class="bh-vitals">${rows
+      .map(
+        (row) => `<div class="bh-vital">
+          <span class="bh-dot bh-dot-${BH.escapeHtml(row.dot)}"></span>
+          <span class="bh-vital-label">${BH.escapeHtml(row.label)}</span>
+          <span class="bh-vital-value">${BH.escapeHtml(String(row.value))}</span>
+        </div>`,
+      )
+      .join("")}</div>`;
+  },
+
+  /**
+   * What Beholder has actually been doing, most recent first.
+   *
+   * "It is not working" is usually one of three things — it never ran, it ran and
+   * failed, or it ran fine and found nothing — and those look identical from the panel.
+   * Timings and slot counts separate them without anyone having to describe symptoms.
+   *
+   * Failures are shown, not filtered: a run that errored is the most useful row here.
+   */
+  async recentRunsHtml(chatId) {
+    if (!chatId) return "";
+    let runs = [];
+    try {
+      const res = await fetch(`/api/agents/beholder-runs/${encodeURIComponent(chatId)}?limit=5`, {
+        credentials: "same-origin",
+        headers: { Accept: "application/json" },
+      });
+      if (!res.ok) return "";
+      runs = await res.json();
+    } catch {
+      return "";
+    }
+    const body = runs.length
+      ? runs
+          .map((run) => {
+            const when = run.createdAt ? new Date(run.createdAt).toLocaleTimeString() : "—";
+            const took = typeof run.durationMs === "number" ? `${(run.durationMs / 1000).toFixed(1)} s` : "—";
+            // A failed run applies nothing, so "no change" would be a lie — say so.
+            const found = !run.success
+              ? `<span class="bh-vlog-error">failed${run.error ? ` — ${BH.escapeHtml(String(run.error).slice(0, 80))}` : ""}</span>`
+              : run.slots
+                ? `${run.slots} slot${run.slots === 1 ? "" : "s"} · ${run.characters} character${run.characters === 1 ? "" : "s"}`
+                : "nothing found";
+            return `<tr><td>${BH.escapeHtml(when)}</td><td>${took}</td><td>${found}</td></tr>`;
+          })
+          .join("")
+      : `<tr><td colspan="3" class="bh-turns-empty">Nothing read yet in this chat.</td></tr>`;
+    return `<div class="bh-editor-group-label">recent reads</div>
+      <table class="bh-turns">
+        <thead><tr><th>when</th><th>took</th><th>found</th></tr></thead>
+        <tbody>${body}</tbody>
+      </table>`;
+  },
+
   /** The last extraction, end to end, so a bad turn can be looked at rather than guessed at. */
   async doctorView() {
     this.open("Doctor", `<p class="bh-view-lead">Checking this chat's setup…</p>`, async (body) => {
@@ -582,7 +651,9 @@ BH.views = {
         const characters = snapshot?.state?.characters ?? [];
         const slots = characters.reduce((n, c) => n + Object.keys(c.body ?? {}).length, 0);
         const selected = (await this.liveTemplate(chatId, chatProps)).templateId;
+        lines.push(await this.vitalsHtml());
         lines.push(`<div class="bh-vlog">${await this.healthChecks(chatId, chatProps, snapshot)}</div>`);
+        lines.push(await this.recentRunsHtml(chatId));
         lines.push(
           `<dl class="bh-doctor-facts">
              <dt>Last extraction</dt><dd>${snapshot?.createdAt ? BH.escapeHtml(new Date(snapshot.createdAt).toLocaleString()) : "none yet"}</dd>
@@ -856,6 +927,17 @@ BH.views = {
       character's body: what they are wearing on each part, what they are holding, their injuries, which parts
       are uncovered or lost, and their species.</p>
 
+      <div class="bh-editor-group-label">reading the panel</div>
+      <p class="bh-view-note">The colours on each body part mean this:</p>
+      <div class="bh-legend-row"><span class="bh-legend-bar bh-tier-0"></span>in good condition</div>
+      <div class="bh-legend-row"><span class="bh-legend-bar bh-tier-2"></span>damaged</div>
+      <div class="bh-legend-row"><span class="bh-legend-bar bh-tier-4"></span>broken</div>
+      <div class="bh-legend-row"><span class="bh-legend-bar bh-tier-holding"></span>something held in the hand</div>
+      <div class="bh-legend-row"><span class="bh-legend-dot"></span>an injury to the body itself</div>
+      <p class="bh-view-note">A ring <b>around</b> a body part is the state of what is worn on it. Colour
+      <b>inside</b> the body part is the body itself. Click any part to change it, or to lock it so the story
+      cannot change it back.</p>
+
       <div class="bh-editor-group-label">what it reads well</div>
       <p class="bh-view-note"><b>Scenes with several characters are fine.</b> This is what Beholder is made
       for. In testing it put the right item on the right person about <b>95% of the time</b>.</p>
@@ -908,7 +990,7 @@ BH.views = {
       </ul>
 
       <div class="bh-editor-group-label">telling it something directly</div>
-      <p class="bh-view-note">The box above the message field sends a fact straight to Beholder, without
+      <p class="bh-view-note">The box at the bottom of this panel sends a fact straight to Beholder, without
       writing it into the story. Say what <b>happened</b>, and name the person:</p>
       <ul class="bh-help-list">
         <li>"Maggie takes off her boots."</li>
@@ -920,7 +1002,7 @@ BH.views = {
       off. Slots you change this way are locked, so the next turn does not undo them.</p>
 
       <div class="bh-editor-group-label">writing so it reads well</div>
-      <ul class="bh-help-list">
+      <ul class="bh-tips">
         <li>Name the clothing and the person. "She pulls off <i>her</i> gloves" works. "They undress" does
         not.</li>
         <li>Put taking something off in its own sentence. When one sentence removes and adds clothing at the

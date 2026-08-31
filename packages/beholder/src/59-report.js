@@ -11,6 +11,89 @@
 // is not a reason to hand it over. What goes in by default are shapes and counts.
 
 BH.report = {
+  /**
+   * The setup facts, structured, with a severity for each.
+   *
+   * Doctor shows these as a grid and the report prints them as text. They are computed
+   * here once because two renderings of "is this set up correctly" that disagree is
+   * worse than either alone — the operator would paste one and be looking at the other.
+   *
+   * The reference extension's vitals also cover WebGPU, browser RAM and the in-browser
+   * model. None of that is ported: this package does not run the model in the browser,
+   * so those rows would be answering a question nobody here can ask.
+   */
+  async vitals() {
+    const rows = [];
+    const chatId = BH.dock.chatId ?? null;
+
+    const agentOn = await BH.views.agentActive(chatId);
+    rows.push({
+      dot: agentOn === true ? "ok" : agentOn === false ? "bad" : "warn",
+      label: "Agent",
+      value: agentOn === null ? "could not read" : agentOn ? "on for this chat" : "OFF — nothing will be read",
+    });
+
+    let status = null;
+    let routing = null;
+    try {
+      [status, routing] = await Promise.all([BH.sidecar.status(), BH.sidecar.routing()]);
+    } catch {
+      // Reported as unknown below rather than failing the whole panel.
+    }
+    const servedLocally = routing?.source === "utility-sidecar";
+    rows.push({
+      dot: "ok",
+      label: "Reading with",
+      value: servedLocally ? "local Beholder model" : "this agent's own connection",
+    });
+
+    if (status) {
+      const installed = status.models?.[BH.sidecar.MODEL_ID] ?? null;
+      rows.push({
+        dot: installed ? "ok" : "warn",
+        label: "Local model",
+        value: installed ? BH.sidecar.versionLabel(installed) : "not installed",
+      });
+      if (!status.runtimeInstalled) rows.push({ dot: "bad", label: "Local runtime", value: "MISSING" });
+      if (status.error) rows.push({ dot: "bad", label: "Local error", value: status.error });
+      if (status.settings) {
+        rows.push({
+          dot: "ok",
+          label: "Hardware",
+          value: `ctx ${status.settings.contextSize} · gpuLayers ${status.settings.gpuLayers} · slots ${status.settings.maxParallelJobs}`,
+        });
+      }
+    } else {
+      rows.push({ dot: "warn", label: "Local model", value: "engine has no local model slot" });
+    }
+    if (!servedLocally && routing?.reason) rows.push({ dot: "warn", label: "Why not local", value: routing.reason });
+
+    const live = await BH.views.liveTemplate(chatId, BH.dock.props ?? {});
+    const fivePass = live.templateId === BH_FIVE_PASS_ID;
+    rows.push({
+      dot: "ok",
+      label: "Prompt",
+      value: fivePass ? "five short prompts (local model)" : "one prompt (large model)",
+    });
+    rows.push({
+      dot: live.confirmed ? "ok" : "warn",
+      label: "Prompt source",
+      value: live.confirmed ? "read from the chat" : "could not confirm — using a cached copy",
+    });
+    // The pairing is the single most common silent misconfiguration: each half looks
+    // fine on its own, and only the combination is wrong.
+    if (servedLocally !== fivePass) {
+      rows.push({
+        dot: "bad",
+        label: "Pairing",
+        value: servedLocally
+          ? "WRONG PAIR — local model with the single-prompt setting"
+          : "WRONG PAIR — large model with the five-prompt setting",
+      });
+    }
+    return rows;
+  },
+
   /** Everything worth knowing, as plain text. */
   async build({ includeProse = false } = {}) {
     const lines = [];
@@ -24,49 +107,13 @@ BH.report = {
     add("generated", new Date().toISOString());
 
     // ── setup ────────────────────────────────────────────────────────────────
+    // The same rows Doctor shows as a grid, so what gets pasted and what was on screen
+    // are the same facts rather than two implementations of them.
     const chatId = BH.dock.chatId ?? null;
     lines.push("", "SETUP");
     add("chat", chatId ? `${chatId.slice(0, 8)}…` : "none open");
-    const agentOn = await BH.views.agentActive(chatId);
-    add("agent active", agentOn === null ? "could not read" : agentOn ? "yes" : "NO — nothing will be read");
-
-    let status = null;
-    let routing = null;
-    try {
-      [status, routing] = await Promise.all([BH.sidecar.status(), BH.sidecar.routing()]);
-    } catch {
-      // Reported as unknown below rather than failing the whole report.
-    }
-    const servedLocally = routing?.source === "utility-sidecar";
-    add("reading with", servedLocally ? "local Beholder model" : "this agent's own connection");
-    if (status) {
-      const installed = status.models?.[BH.sidecar.MODEL_ID] ?? null;
-      add("local model", installed ? BH.sidecar.versionLabel(installed) : "not installed");
-      add("local runtime", status.runtimeInstalled ? "installed" : "MISSING");
-      if (status.error) add("local error", status.error);
-      if (status.settings) {
-        add(
-          "hardware",
-          `ctx ${status.settings.contextSize} · gpuLayers ${status.settings.gpuLayers} · slots ${status.settings.maxParallelJobs}`,
-        );
-      }
-    } else {
-      add("local model", "engine has no local model slot");
-    }
-    if (!servedLocally && routing?.reason) add("why not local", routing.reason);
-
-    const live = await BH.views.liveTemplate(chatId, BH.dock.props ?? {});
-    const fivePass = live.templateId === BH_FIVE_PASS_ID;
-    add("prompt", fivePass ? "five short prompts (local model)" : "one prompt (large model)");
-    add("prompt source", live.confirmed ? "read from the chat" : "could not confirm — using a cached copy");
-    // The pairing is the single most common silent misconfiguration.
-    if (servedLocally !== fivePass) {
-      add(
-        "PAIRING",
-        servedLocally
-          ? "WRONG PAIR — local model with the single-prompt setting"
-          : "WRONG PAIR — large model with the five-prompt setting",
-      );
+    for (const row of await this.vitals()) {
+      add(row.label.toLowerCase(), row.value);
     }
 
     // ── what the panel holds ─────────────────────────────────────────────────

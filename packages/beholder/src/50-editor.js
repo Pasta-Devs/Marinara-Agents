@@ -113,9 +113,11 @@ BH.editor = {
       <div class="bh-editor-head">
         <span class="bh-editor-title">${BH.escapeHtml(characterName)}</span>
         <span class="bh-editor-slot">· ${BH.escapeHtml(slotLabel)}</span>
-        <label class="bh-check bh-editor-lock" title="A locked slot is left alone when an edit is applied">
-          <input type="checkbox" class="bhe-lock" ${locked ? "checked" : ""}><span>lock</span>
-        </label>
+        <span class="bh-lock-toggle bh-editor-lock ${locked ? "bh-locked-on" : ""}" role="switch"
+          tabindex="0" aria-checked="${locked ? "true" : "false"}"
+          title="Locked slots ignore what the model reads — your value stays until you unlock it.">
+          <i class="fa-solid ${locked ? "fa-lock" : "fa-lock-open"}" aria-hidden="true"></i><span>${locked ? "locked" : "lock"}</span>
+        </span>
         <button class="bh-editor-close fa-solid fa-xmark" title="Close"></button>
       </div>
       <div class="bh-editor-body">${BH.editorFormHtml(slotState, isHand)}</div>
@@ -156,13 +158,28 @@ BH.editor = {
     for (const dismiss of editor.querySelectorAll(".bh-editor-close, .bhe-cancel")) {
       dismiss.addEventListener("click", () => this.close());
     }
-    editor.querySelector(".bhe-lock").addEventListener("change", (event) => {
-      BH.locks.set(characterName, slotName, event.target.checked);
+    // A switch rather than a checkbox, matching the reference extension: the state is
+    // legible at a glance from the padlock instead of from a tick, and the label says
+    // which state it is currently in rather than what the control is called.
+    const lockToggle = editor.querySelector(".bh-lock-toggle");
+    const toggleLock = () => {
+      const on = !BH.locks.has(characterName, slotName);
+      BH.locks.set(characterName, slotName, on);
       // Pin what the slot holds right now; that is what enforcement restores to.
       const current = BH.dock.state?.[characterName]?.body?.[slotName];
-      BH.locks.remember(characterName, slotName, event.target.checked ? (current ?? null) : undefined);
-      BH.toast(event.target.checked ? "Slot locked" : "Slot unlocked");
+      BH.locks.remember(characterName, slotName, on ? (current ?? null) : undefined);
+      lockToggle.classList.toggle("bh-locked-on", on);
+      lockToggle.setAttribute("aria-checked", on ? "true" : "false");
+      lockToggle.querySelector("i").className = `fa-solid ${on ? "fa-lock" : "fa-lock-open"}`;
+      lockToggle.querySelector("span").textContent = on ? "locked" : "lock";
+      BH.toast(on ? `${characterName} · ${slotLabel} locked — the story will not change it` : "Slot unlocked");
       BH.dock.render();
+    };
+    lockToggle.addEventListener("click", toggleLock);
+    lockToggle.addEventListener("keydown", (event) => {
+      if (event.key !== "Enter" && event.key !== " ") return;
+      event.preventDefault();
+      toggleLock();
     });
     editor.querySelector(".bh-editor-apply").addEventListener("click", async () => {
       const next = BH.collectEditorForm(editor, isHand);
@@ -321,13 +338,19 @@ BH.locks = {
     for (const card of panel.querySelectorAll(".bh-slot-card[data-slot]")) {
       const locked = map[`${character}::${card.dataset.slot}`] === true;
       card.classList.toggle("bh-slot-locked", locked);
-      if (locked && !card.querySelector(".bh-lock-mark")) {
+      // The reference extension's glyph: a small gold padlock inline after the slot
+      // name. This used to be a corner pin of our own invention, which the ported
+      // stylesheet had no rule for and which collided with the damage bar on small
+      // cards. Same class as the reference, so the same style applies.
+      if (locked && !card.querySelector(".bh-slot-lock-glyph")) {
         const mark = document.createElement("span");
-        mark.className = "bh-lock-mark fa-solid fa-lock";
-        mark.title = "Locked — edits leave this slot alone";
-        card.appendChild(mark);
+        mark.className = "bh-slot-lock-glyph fa-solid fa-lock";
+        mark.title = "Locked — the story will not change this slot";
+        const name = card.querySelector(".bh-slot-name");
+        if (name) name.after(mark);
+        else card.appendChild(mark);
       } else if (!locked) {
-        card.querySelector(".bh-lock-mark")?.remove();
+        card.querySelector(".bh-slot-lock-glyph")?.remove();
       }
     }
   },

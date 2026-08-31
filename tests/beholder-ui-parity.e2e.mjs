@@ -129,6 +129,62 @@ try {
     [...document.querySelectorAll(".bh-view-body .bh-vlog-row b")].map((b) => b.textContent.trim().replace(/^\W+/, "")),
   );
   check("doctor runs health checks", checksSeen.length >= 3, checksSeen.join(" | "));
+
+  // The vitals grid and the copyable report are rendered from one function, so this
+  // also guards against them drifting into two different answers.
+  const vitals = await page.evaluate(() =>
+    [...document.querySelectorAll(".bh-vitals .bh-vital")].map((row) => ({
+      label: row.querySelector(".bh-vital-label")?.textContent?.trim() ?? "",
+      value: row.querySelector(".bh-vital-value")?.textContent?.trim() ?? "",
+      dot: row.querySelector(".bh-dot")?.className ?? "",
+    })),
+  );
+  check("doctor shows a vitals grid", vitals.length >= 4, vitals.map((v) => v.label).join(" | "));
+  check(
+    "every vital has a label, a value and a severity dot",
+    vitals.length > 0 && vitals.every((v) => v.label && v.value && /bh-dot-/.test(v.dot)),
+    JSON.stringify(vitals[0] ?? null),
+  );
+  const reportSetup = await page.evaluate(async () => {
+    const button = document.querySelector(".bh-report-show");
+    button?.click();
+    await new Promise((r) => setTimeout(r, 1500));
+    return document.querySelector(".bh-report-text")?.textContent ?? "";
+  });
+  check(
+    "the pasted report carries the same vitals as the grid",
+    vitals.every((v) => reportSetup.includes(v.value)),
+    vitals
+      .filter((v) => !reportSetup.includes(v.value))
+      .map((v) => v.label)
+      .join(",") || "all present",
+  );
+
+  // Recent reads separate "never ran" from "ran and found nothing" from "failed",
+  // which look identical from the panel alone.
+  const turns = await page.evaluate(() =>
+    [...document.querySelectorAll(".bh-turns tbody tr")].map((row) =>
+      [...row.querySelectorAll("td")].map((cell) => cell.textContent.trim()),
+    ),
+  );
+  check("doctor lists recent reads", turns.length > 0, `${turns.length} rows`);
+  check(
+    "each read reports when, how long and what it found",
+    turns.every((row) => row.length === 3 && row.every(Boolean)),
+    JSON.stringify(turns[0] ?? null),
+  );
+  await page.keyboard.press("Escape");
+  await page.waitForTimeout(400);
+
+  // ── help explains the colours ─────────────────────────────────────────────
+  await page.locator('.beholder-tool-btn[data-view="help"]').first().click();
+  await page.waitForTimeout(1200);
+  check("help shows the colour legend", (await page.locator(".bh-legend-row").count()) >= 4);
+  check(
+    "the legend has both a worn bar and a wound dot",
+    (await page.locator(".bh-legend-bar").count()) >= 3 && (await page.locator(".bh-legend-dot").count()) >= 1,
+  );
+  check("help lists writing tips", (await page.locator(".bh-tips li").count()) >= 3);
   await page.keyboard.press("Escape");
   await page.waitForTimeout(400);
 
@@ -147,7 +203,7 @@ try {
         slot: node.querySelector(".bh-editor-slot")?.textContent?.trim() ?? "",
         hasCancel: !!node.querySelector(".bhe-cancel"),
         hasPrimaryApply: !!node.querySelector(".bh-editor-apply.bh-btn-primary"),
-        hasLock: !!node.querySelector(".bhe-lock"),
+        hasLock: !!node.querySelector(".bh-lock-toggle"),
       };
     });
     check("editor opens", !!editor);
@@ -178,6 +234,48 @@ try {
     check("removing a row keeps the editor open", survived === true);
     await page.keyboard.press("Escape");
     await page.waitForTimeout(300);
+
+    // ── locking a slot ──────────────────────────────────────────────────────
+    // A switch, not a checkbox: the padlock and the word both have to change, and the
+    // card has to carry the mark once the editor is gone, or a locked slot is
+    // indistinguishable from an unlocked one at a glance.
+    await card.click();
+    await page.waitForTimeout(800);
+    const toggle = page.locator(".bh-lock-toggle").first();
+    check("the editor offers a lock switch", (await toggle.count()) === 1);
+    const lockBefore = await toggle.textContent();
+    await toggle.click();
+    await page.waitForTimeout(700);
+    const lockAfter = await toggle.textContent();
+    check(
+      "the lock switch says which state it is in",
+      lockBefore.trim() !== lockAfter.trim(),
+      `${lockBefore.trim()} -> ${lockAfter.trim()}`,
+    );
+    check("and reports that state to a screen reader", (await toggle.getAttribute("aria-checked")) === "true");
+    await page.keyboard.press("Escape");
+    await page.waitForTimeout(900);
+    check("a locked slot is marked on the card", (await page.locator(".bh-slot-lock-glyph").count()) >= 1);
+    // The mark uses the reference's class so the ported stylesheet reaches it; an
+    // unstyled glyph is the failure this replaced.
+    const glyphStyled = await page.evaluate(() => {
+      const glyph = document.querySelector(".bh-slot-lock-glyph");
+      if (!glyph) return null;
+      const style = getComputedStyle(glyph);
+      return { size: style.fontSize, margin: style.marginLeft };
+    });
+    check(
+      "and the mark is styled by the ported stylesheet",
+      glyphStyled?.margin === "5px",
+      JSON.stringify(glyphStyled),
+    );
+    // Put it back so the run leaves no lock behind for the note-box checks.
+    await card.click();
+    await page.waitForTimeout(700);
+    await page.locator(".bh-lock-toggle").first().click();
+    await page.waitForTimeout(500);
+    await page.keyboard.press("Escape");
+    await page.waitForTimeout(500);
   }
 
   // ── the slot sheet ────────────────────────────────────────────────────────
