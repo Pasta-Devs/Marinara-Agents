@@ -10,7 +10,6 @@ const APP_VERSION = (
   }
 ).version;
 const NOODLE_BLUE_RGB = "rgb(126, 167, 255)";
-const NOODLE_LIGHT_FOREGROUND = "color(srgb 0.360482 0.453112 0.708674 / 0.986)";
 
 function createDeferred() {
   let resolve!: () => void;
@@ -92,34 +91,37 @@ async function setStoredTheme(page: Page, theme: "dark" | "light") {
   );
 }
 
-async function expectSurfaceAccent(locator: Locator, accent: string, foreground: string) {
+async function expectSurfaceAccent(locator: Locator, accent: string) {
   await expect
     .poll(() =>
-      locator.evaluate(
-        (element, expected) => {
-          const probe = document.createElement("span");
-          probe.style.color = "var(--noodle-accent-foreground)";
-          element.appendChild(probe);
+      locator.evaluate((element) => {
+        const target = element as HTMLElement;
+        const property = "--noodle-accent-foreground";
+        const originalValue = target.style.getPropertyValue(property);
+        const originalPriority = target.style.getPropertyPriority(property);
+        const originalColor = target.style.getPropertyValue("color");
+        const originalColorPriority = target.style.getPropertyPriority("color");
+        const sentinel = "rgb(1, 2, 3)";
+        try {
+          target.style.setProperty("color", sentinel, "important");
+          const resolvedSentinel = getComputedStyle(element).color;
+          if (originalColor) target.style.setProperty("color", originalColor, originalColorPriority);
+          else target.style.removeProperty("color");
+          target.style.setProperty(property, sentinel);
           const elementStyle = getComputedStyle(element);
-          const resolvedForeground = getComputedStyle(probe).color;
-          const result = {
+          return {
             accent: elementStyle.getPropertyValue("--noodle-accent").trim(),
-            color: elementStyle.color,
-            expected,
-            resolvedForeground,
+            usesForeground: elementStyle.color === resolvedSentinel,
           };
-          probe.remove();
-          return result;
-        },
-        { accent, foreground },
-      ),
+        } finally {
+          if (originalColor) target.style.setProperty("color", originalColor, originalColorPriority);
+          else target.style.removeProperty("color");
+          if (originalValue) target.style.setProperty(property, originalValue, originalPriority);
+          else target.style.removeProperty(property);
+        }
+      }),
     )
-    .toEqual({
-      accent,
-      color: foreground,
-      expected: { accent, foreground },
-      resolvedForeground: foreground,
-    });
+    .toEqual({ accent, usesForeground: true });
 }
 
 test.beforeEach(async ({ page }) => {
@@ -1146,18 +1148,10 @@ test.describe("package-owned Noodle interface", () => {
       await openNoodle(page);
       await expect(page.locator("html")).toHaveAttribute("data-theme", "light");
       await expect(ownComment).toBeVisible();
-      await expectSurfaceAccent(
-        ownComment.locator("[data-noodle-avatar-fallback]"),
-        "#7EA7FF",
-        NOODLE_LIGHT_FOREGROUND,
-      );
-      await expectSurfaceAccent(
-        ownComment.locator("[data-noodle-comment-metadata]"),
-        "#7EA7FF",
-        NOODLE_LIGHT_FOREGROUND,
-      );
+      await expectSurfaceAccent(ownComment.locator("[data-noodle-avatar-fallback]"), "#7EA7FF");
+      await expectSurfaceAccent(ownComment.locator("[data-noodle-comment-metadata]"), "#7EA7FF");
       for (const name of ["Like comment", "Edit comment", "Delete comment"]) {
-        await expectSurfaceAccent(ownComment.getByRole("button", { name }), "#7EA7FF", NOODLE_LIGHT_FOREGROUND);
+        await expectSurfaceAccent(ownComment.getByRole("button", { name }), "#7EA7FF");
       }
 
       await characterComment.getByRole("button", { name: "Edit comment" }).click();

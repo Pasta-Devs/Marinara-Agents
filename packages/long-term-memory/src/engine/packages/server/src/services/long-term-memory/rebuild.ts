@@ -16,7 +16,7 @@ import { buildLtmKeywordIndex } from "./keyword-index.js";
 import { buildLtmMetadataIndex } from "./metadata-index.js";
 import { getLongTermMemoryDirectories, getLongTermMemoryRoot, safeJoin } from "./paths.js";
 import { LongTermMemoryStorage } from "./storage.js";
-import { getPackageEmbeddingAdapter } from "./package-runtime.js";
+import { resolvePackageEmbeddingAdapter, type PackageEmbeddingAdapter } from "./package-runtime.js";
 import {
   markLtmIndexesBuilding,
   markLtmIndexesClean,
@@ -27,7 +27,7 @@ import { withLtmVaultLock } from "./vault-lock.js";
 
 const autoUpgradeFailures = new Set<string>();
 
-type EmbeddingAdapter = NonNullable<ReturnType<typeof getPackageEmbeddingAdapter>>;
+type EmbeddingAdapter = PackageEmbeddingAdapter;
 
 function autoUpgradeFailureKey(root: string, spaceId: string) {
   return `${root}\u0000${spaceId}`;
@@ -50,8 +50,7 @@ function clearAutoUpgradeFailure(root: string, adapter: EmbeddingAdapter | null)
   if (adapter) autoUpgradeFailures.delete(autoUpgradeFailureKey(root, adapter.spaceId));
 }
 
-async function tryUpgradeSemanticIndex(root: string, index: LtmRecallIndex) {
-  const adapter = getPackageEmbeddingAdapter();
+async function tryUpgradeSemanticIndex(root: string, index: LtmRecallIndex, adapter: EmbeddingAdapter | null) {
   if (!adapter) return index;
   const failureKey = autoUpgradeFailureKey(root, adapter.spaceId);
   if (autoUpgradeFailures.has(failureKey)) return index;
@@ -107,10 +106,10 @@ export async function rebuildLongTermMemoryIndexes(
   options: MemoryRecallEmbeddingOptions & { root?: string; generatedAt?: string } = {},
 ) {
   const root = options.root ?? getLongTermMemoryRoot();
+  const embeddingAdapter = await resolvePackageEmbeddingAdapter(options.embeddingAdapter);
   return withLtmVaultLock(root, async () => {
     await markLtmIndexesBuilding(root);
     try {
-      const embeddingAdapter = options.embeddingAdapter ?? getPackageEmbeddingAdapter();
       clearAutoUpgradeFailure(root, embeddingAdapter ?? null);
       const notes = await new LongTermMemoryStorage(root).listNotes();
       await writeLtmNoteSummary(root, notes);
@@ -169,7 +168,12 @@ export async function rebuildLongTermMemoryIndexes(
   });
 }
 
-export async function loadOrRebuildLongTermMemoryIndexes(root = getLongTermMemoryRoot()) {
+export async function loadOrRebuildLongTermMemoryIndexes(
+  root = getLongTermMemoryRoot(),
+  resolvedEmbeddingAdapter?: EmbeddingAdapter | null,
+) {
+  const embeddingAdapter =
+    resolvedEmbeddingAdapter !== undefined ? resolvedEmbeddingAdapter : await resolvePackageEmbeddingAdapter();
   const path = longTermMemoryRecallIndexPath(root);
   try {
     const index = parseLtmRecallIndex(JSON.parse(await readFile(path, "utf8")));
@@ -177,12 +181,12 @@ export async function loadOrRebuildLongTermMemoryIndexes(root = getLongTermMemor
     if (index.sourceHash !== stableJsonHash(chunkNotes(notes, { includeSourceNotes: false }))) {
       throw new Error("Stale long-term memory recall index.");
     }
-    const usableEmbeddings = getUsableEmbeddingState(index, getPackageEmbeddingAdapter());
+    const usableEmbeddings = getUsableEmbeddingState(index, embeddingAdapter);
     if (usableEmbeddings) return index;
-    return await tryUpgradeSemanticIndex(root, index);
+    return await tryUpgradeSemanticIndex(root, index, embeddingAdapter);
   } catch (error) {
     await quarantineLtmIndexArtifact(root, path).catch(() => {});
-    await rebuildLongTermMemoryIndexes({ root });
+    await rebuildLongTermMemoryIndexes({ root, embeddingAdapter });
     return parseLtmRecallIndex(JSON.parse(await readFile(path, "utf8")));
   }
 }

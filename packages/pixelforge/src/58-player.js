@@ -682,14 +682,9 @@ PF.player = {
         if (Object.keys(keep).length) player.rel[zoneId] = keep;
         else delete player.rel[zoneId];
       }
-      const giverName = (g) => {
-        const text = str(g);
-        const bar = text.indexOf("|");
-        return bar >= 0 ? text.slice(bar + 1) : text;
-      };
-      const severedQuests = player.quests.active.filter((q) => minted.has(giverName(q.g)));
+      const severedQuests = player.quests.active.filter((q) => minted.has(this.giverOf(q.g)));
       if (severedQuests.length) {
-        player.quests.active = player.quests.active.filter((q) => !minted.has(giverName(q.g)));
+        player.quests.active = player.quests.active.filter((q) => !minted.has(this.giverOf(q.g)));
         touched = true;
       }
       if (!touched) {
@@ -790,18 +785,13 @@ PF.player = {
       for (const npc of world.zones[zoneId].npcs ?? []) if (npc && npc.name) known.add(npc.name);
     }
     if (!known.size) return { dropped: [], notices };
-    const giverName = (g) => {
-      const text = str(g);
-      const bar = text.indexOf("|");
-      return bar >= 0 ? text.slice(bar + 1) : text;
-    };
-    const dangling = active.filter((q) => !known.has(giverName(q.g)));
+    const dangling = active.filter((q) => !known.has(this.giverOf(q.g)));
     if (!dangling.length) return { dropped: [], notices };
     if (dangling.length === active.length) {
       // ALL of them. That is a statement about the world, not the quests.
       return { dropped: [], notices };
     }
-    player.quests.active = active.filter((q) => known.has(giverName(q.g)));
+    player.quests.active = active.filter((q) => known.has(this.giverOf(q.g)));
     // A LOSS, and the sentence has to say so. The rows above are PARKED — set
     // aside, recoverable, and their copy says as much — while this quest is
     // dropped and nothing brings it back. "No one left to hand it back to" is
@@ -889,20 +879,42 @@ PF.player = {
 
   /** Dedupe active quests by id. `liveCount` is how many of the leading rows
    *  came from the LIVE block: the row the player is playing wins outright, and
-   *  two parked copies of one quest fall back to whichever got further. */
+   *  two parked copies of one quest fall back to whichever got further.
+   *
+   *  BOARD INSTANCES DEDUPE AT TEMPLATE GRAIN, which is wider than the id and has
+   *  to be (0.13). A board instance id carries the day it was offered on
+   *  (`b1.d37.<template>` — 61-pack `instanceId`), so two instances of ONE template
+   *  taken on different days never collide by id, and the "at most one live
+   *  instance per template" invariant the offer layer enforces has NO owner below
+   *  it. The restore paths are exactly where that bites: a mint severance parks a
+   *  row, the player takes the same work again tomorrow, and the mint restore
+   *  CONCATs the parked copy back onto the live list — two live rows for one job,
+   *  both of which the progress site would advance.
+   *
+   *  The preference order does not move: live first, then furthest along. Only what
+   *  counts as "the same quest" widens.
+   *
+   *  Read through `PF.pack` rather than re-deriving the id shape here, in 20-world's
+   *  `PF.art?.setTheme` idiom: this file owns the ROW and the pack layer owns the
+   *  convention for the ids it mints, and a second copy of that shape is how the
+   *  dedupe comes to disagree with the counter about which template a row belongs
+   *  to. Absent pack layer, absent convention — the key falls back to the id, which
+   *  is the behaviour this function had before the board existed and the right one
+   *  for any world with no board in it. */
   _dedupeActive(active, liveCount) {
     const held = new Map();
     active.forEach((q, index) => {
       const id = str(q?.id);
       if (!id) return;
+      const key = PF.pack?.templateOf?.(id) ?? id;
       const live = index < liveCount;
-      const prior = held.get(id);
+      const prior = held.get(key);
       if (!prior) {
-        held.set(id, { q, live });
+        held.set(key, { q, live });
         return;
       }
       if (prior.live) return;
-      if (live || posInt(q?.have, 0) > posInt(prior.q?.have, 0)) held.set(id, { q, live });
+      if (live || posInt(q?.have, 0) > posInt(prior.q?.have, 0)) held.set(key, { q, live });
     });
     return [...held.values()].map((row) => row.q);
   },
@@ -1405,6 +1417,21 @@ PF.player = {
     }
   },
 
+  /** WHO IS OWED THIS QUEST: the half of a row's `g` after the bar.
+   *
+   *  `g` is `"zoneId|Name"` and every reader of it wants the name — severance
+   *  asks whether a mint took the giver away, the repair pass asks whether the
+   *  world still stands them up, and 61-pack's completion asks whether there is
+   *  anybody left to thank. This was written out three times in two files before
+   *  the third caller existed to make the point; one door means a `g` that ever
+   *  changes shape changes it in one place. A bar-less value is the whole name,
+   *  which is what a row written before the zone half existed carries. */
+  giverOf(g) {
+    const text = str(g);
+    const bar = text.indexOf("|");
+    return bar >= 0 ? text.slice(bar + 1) : text;
+  },
+
   /** Quest state. `action` is accept | progress | complete | abandon. Board
    *  completions ("b:") are world-FREE (the board is a generated template); pack
    *  completions ("p:") are world-bound and live under quests. */
@@ -1444,8 +1471,10 @@ PF.player = {
     if (action !== "complete") return false;
     active.splice(index, 1);
     // The completion counter is keyed by the quest's TEMPLATE, not its instance:
-    // "b1.d37.2" is the third delivery this world generated, and what the board
-    // needs to know is how many deliveries the player has run.
+    // `b1.d<day>.<templateId>` says which board posted the work, which DAY it was
+    // posted on and which template it came from, and what the board needs to know
+    // is how many times the player has run THAT piece of work — so two carp
+    // orders a week apart are one counter at two, never two counters at one.
     const template = str(payload?.template ?? row.id);
     const board = template.startsWith("p:") ? p.quests.done_pack : p.quests_done_board;
     const cap = board === p.quests.done_pack ? CAPS.packDone : CAPS.boardDone;
@@ -1460,7 +1489,23 @@ PF.player = {
       this._trimCounters(board, cap - 1);
     }
     if (template && template !== "__proto__") board[template] = posInt(standing, 0) + 1;
-    this.award(core, { money: row.r?.money, xp: row.r?.xp, verb: row.verb }, gen);
+    // NO VERB, AND NO FALLBACK TO THE ROW'S (the maintainer's reward ruling,
+    // plan §2.6). Quests never grant SKILL experience. A quest's task may raise a
+    // skill — catching fish for a catch order levels fishing, because the
+    // CATCHING does, through fish()'s own award — but the reward itself is money
+    // and the giver's rapport and nothing else.
+    //
+    // `r.xp` still rides the payload rather than being dropped here, and that is
+    // the point of the line: 61-pack's derivation writes xp = 0 by construction,
+    // so an honest row has nothing to pay, and this is what answers a row that
+    // never came from the derivation — a hand-edited chatMeta, a save from
+    // another build, a forward client's row. `accept` above copies `r` as given
+    // (the row is a closed literal and this mutator trusts its caller), so a
+    // planted xp reaches here intact; award() applies the money and drops the
+    // experience on the floor precisely because there is no verb to key a ladder
+    // off. Passing `row.verb` instead — which is what this line used to do —
+    // minted {"catch":{"l":1,"x":5}} into a block that had never fished.
+    this.award(core, { money: row.r?.money, xp: row.r?.xp, verb: null }, gen);
     this._touch(core);
     return true;
   },

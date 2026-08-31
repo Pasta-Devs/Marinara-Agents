@@ -53,7 +53,13 @@ import {
 } from "./display-labels";
 import { selectLtmPluralForm, useLtmTranslation, type LtmTranslationFunction } from "./localization";
 import { LtmWorkspace, type LtmWorkspacePane } from "./LtmWorkspace";
-import { buildScopeIndexes, deriveScopeBranches, deriveScopeConversations, type ScopeTargets } from "./scope-targets";
+import {
+  buildScopeIndexes,
+  deriveScopeBranchChats,
+  deriveScopeBranches,
+  deriveScopeConversations,
+  type ScopeTargets,
+} from "./scope-targets";
 import {
   AvailabilityTabRail,
   TargetPicker,
@@ -1691,19 +1697,17 @@ export default function MemoryVault({
         comment: persona.comment,
       })),
       chats: [...familyTargets, ...ungroupedTargets],
-      branches: chats
-        .filter((chat) => Boolean(chat.groupId))
-        .map(
-          (chat) =>
-            ({
-              id: chat.id,
-              label: chat.label,
-              mode: chat.mode,
-              groupId: chat.groupId ?? undefined,
-              characterIds: chat.characterIds,
-              personaId: chat.personaId,
-            }) satisfies AvailabilityChatTarget,
-        ),
+      branches: deriveScopeBranchChats(chats).map(
+        (chat) =>
+          ({
+            id: chat.id,
+            label: chat.label,
+            mode: chat.mode,
+            groupId: chat.groupId ?? undefined,
+            characterIds: chat.characterIds,
+            personaId: chat.personaId,
+          }) satisfies AvailabilityChatTarget,
+      ),
     };
   }, [scopeTargets.data?.chats, scopeTargets.data?.characters, scopeTargets.data?.groups, scopeTargets.data?.personas]);
   const subjectLabel = (subject: LtmSubject) => {
@@ -1924,7 +1928,16 @@ export default function MemoryVault({
     setMobilePaneAndFocus("navigator");
   }
   async function invalidate() {
-    await invalidateLtmQueries(client, [queryKeys.notes, queryKeys.status, queryKeys.activity]);
+    await invalidateLtmQueries(client, [
+      queryKeys.notes,
+      queryKeys.status,
+      queryKeys.activity,
+      queryKeys.review,
+      queryKeys.pendingDrafts,
+      queryKeys.rejectedSuggestions,
+      queryKeys.integrity,
+      queryKeys.lastInjectionRoot,
+    ]);
   }
   async function undoArchive(recovery: ArchiveUndoState) {
     if (archiveUndo !== recovery) return;
@@ -2740,7 +2753,11 @@ export default function MemoryVault({
                     <ScopeTargetPicker
                       kind="branch"
                       label={localizeUi("ui.longTermMemory.memoryvault.branch")}
-                      value={selectedChat?.label ?? localizeUi("ui.longTermMemory.memoryvault.allBranches")}
+                      value={
+                        selectedChat?.groupId
+                          ? selectedChat.label
+                          : localizeUi("ui.longTermMemory.memoryvault.allBranches")
+                      }
                       allLabel={localizeUi("ui.longTermMemory.memoryvault.allBranches")}
                       searchLabel={localizeUi("ui.longTermMemory.memoryvault.searchBranches")}
                       targets={branchScopeTargets}

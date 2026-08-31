@@ -115,6 +115,47 @@ is wide enough that it always reached the road band the compiler holds in reserv
 asked for out in the wood simply never existed. A walkway over a pool is also a perfectly good place
 to stand and fish from.
 
+## Work on the board (0.13.0)
+
+Every settlement now has a **notice board** — a job terminal in a colony — standing where people
+already gather: beside the inn's door, on the green, or on the road you spawn onto. Walk up to it
+and a **Board** button appears. Reading it costs nothing and sends nothing.
+
+**Four jobs a day, and they are the day's, not the board's forever.** Take one and it goes on your
+jobs list; the offer stays on the board dimmed, as the day's receipt. Jobs never expire and never
+cost you anything to ignore, so nothing on the board is a deadline. You can carry ten at once, and
+when the list is full the board says so and names the two ways out of it — finish one, or set one
+aside.
+
+**Three kinds of work, and each finishes where it happens.** Catch this many fish and bring it back
+to the board. Take word to somebody, which finishes the moment you greet them. Walk out to a place,
+which finishes the moment you get there. Nothing has to be carried, and nothing has to be handed
+over twice.
+
+**What a job pays is money and the giver remembering you** — and that is the whole of it: a job
+never hands you skill experience. Catching fish for a fishing order still levels your fishing,
+because the *catching* does, but the reward is coins and a person who now knows you did them a
+favour. **This is the release that gives you an income**, so the first rod stops being a thing you
+have to have saved for.
+
+**The journal grows a second tab.** Your jobs live beside your day ledger — what you are carrying,
+with counts on it, and two tallies of what you have finished: the work this world posted, and the
+generic work that travels with you into the next one. Setting a job aside is here and only here (a
+board is the last place you want a mis-press), and it takes two presses.
+
+**Where the work comes from.** A chat that generates its own world now makes a **second** generation
+call after the brief is sealed, writing the jobs its own people would actually post — a miller who
+wants fish, a forager who wants word carried — plus a matrix of things they say, which a later
+release will put behind an Ask key. It happens once, at creation, behind the same loading screen;
+after that the board restocks itself every day with no calls at all. If that second call fails,
+nothing is lost and trying again is free: your world is already written and settled.
+
+**Worlds made before 0.13 have no work written for them**, and their boards say so plainly rather
+than pretending — "No work posted here", never "not yet" and never "check back". Chats that declined
+generation get a hand-written stock set of jobs instead, posted by the four people the default
+village stands up. Jobs you have already taken are never affected by any of this: they stay on your
+list and finish normally, whatever the board is offering.
+
 ## Art
 
 Two tiers, resolved at runtime with graceful degradation:
@@ -137,7 +178,7 @@ Two tiers, resolved at runtime with graceful degradation:
 packages/pixelforge/
 ├── src/                  # plain-JS modules, concatenated in filename order into client.js
 ├── docs/brief-schema.md  # the World Brief schema v1 spec (sealed; amendments inline)
-├── docs/player-state.md  # the player block + the verbs: wire contract, stamps, quarantine, ladder, gate, fishing, the wrap-up
+├── docs/player-state.md  # the player block + the verbs: wire contract, stamps, quarantine, ladder, gate, fishing, the wrap-up, the quest layer and its content pack
 ├── test-brief.mjs        # standalone validator/compiler/spatial regression harness
 ├── build/
 │   ├── build-art.mjs     # deterministic Tier-1 art generator (writes build/assets/, untracked)

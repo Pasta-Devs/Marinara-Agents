@@ -41,3 +41,7 @@ export function resolveChatLtmScope(chat: {
     { chatIds: [chat.id] },
   ) satisfies LtmScope;
 }
+
+export function resolveChatLtmWriteScope(chat: { id: string }) {
+  return { chatId: chat.id, chatIds: [chat.id] } satisfies LtmScope;
+}

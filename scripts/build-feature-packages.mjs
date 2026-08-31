@@ -154,7 +154,9 @@ const slurpOwnedSourcePaths = [
   "packages/server/src/services/slurp",
   "packages/server/src/services/storage/slurp.storage.ts",
 ];
-const reuseExistingRuntime = process.env.MARINARA_REUSE_FEATURE_RUNTIME === "1";
+// Release builds must bundle the current source; runtime reuse is for explicit non-release verification builds.
+const releaseBuild = process.env.MARINARA_RELEASE_BUILD !== "0";
+const reuseExistingRuntime = !releaseBuild && process.env.MARINARA_REUSE_FEATURE_RUNTIME === "1";
 const rebuiltFeatureClients = new Set(
   String(process.env.MARINARA_REBUILD_FEATURE_CLIENTS || "")
     .split(",")
@@ -317,7 +319,7 @@ const features = [
   },
   {
     id: "slurp",
-    version: "1.0.19",
+    version: "1.0.23",
     minEngineVersion: "2.4.3",
     maxEngineExclusive: MAX_ENGINE_EXCLUSIVE,
     name: "Slurp",
@@ -374,8 +376,8 @@ const features = [
   },
   {
     id: "long-term-memory",
-    version: "1.2.14",
-    minEngineVersion: "2.4.1",
+    version: "1.2.18",
+    minEngineVersion: "2.4.5",
     maxEngineExclusive: MAX_ENGINE_EXCLUSIVE,
     name: "Long-Term Memory",
     description:
@@ -391,7 +393,7 @@ const features = [
     ownedSourcePaths: longTermMemoryOwnedSourcePaths,
     engineBoundaryPath: join(packagesDir, "long-term-memory/engine-boundary.json"),
     boundaryDisplayName: "Long-Term Memory",
-    capabilityApi: { major: 1, minor: 6 },
+    capabilityApi: { major: 1, minor: 15 },
     contributions: {
       agentDetail: { agentIds: ["long-term-memory"] },
       slots: ["chat-settings"],
@@ -562,7 +564,7 @@ const longTermMemoryBoundary = selectedFeatures.some((feature) => feature.id ===
       sourceRoot: longTermMemorySourceRoot,
       boundaryPath: join(packagesDir, "long-term-memory/engine-boundary.json"),
       displayName: "Long-Term Memory",
-      capabilityApi: { major: 1, minor: 6 },
+      capabilityApi: { major: 1, minor: 15 },
     })
   : null;
 const memoryNagBoundary = selectedFeatures.some((feature) => feature.id === "memory-nag")

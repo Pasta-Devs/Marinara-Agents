@@ -3498,3 +3498,97 @@
     border-radius: 4px; color: inherit;
     padding: 0.2em 0.4em; font-size: var(--bh-text-meta, 0.78em);
 }
+
+/* ── Package-only chrome ─────────────────────────────────────────────────────
+   The editor form, toast, inputs and slot cards are all styled above, carried
+   over with the renderer. What follows is the surrounding chrome this build adds:
+   the editor's own frame, the overlay views (Prompt / Doctor / Help), and the
+   lock mark. Same variables, so it sits inside the panel's palette. */
+
+.bh-editor {
+  position: fixed; z-index: 10050; max-height: 70vh; overflow: auto;
+  background: var(--SmartThemeBlurTintColor, rgba(20, 20, 24, .98));
+  color: var(--SmartThemeBodyColor, #e0e0e0);
+  border: 1px solid var(--SmartThemeBorderColor, rgba(255, 255, 255, .15));
+  border-radius: 10px; box-shadow: 0 12px 32px rgba(0, 0, 0, .45); padding: 10px;
+}
+.bh-editor-head { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
+.bh-editor-title { font-weight: 700; flex: 1; text-transform: capitalize; }
+.bh-editor-lock { display: inline-flex; align-items: center; gap: 4px; font-size: 11px; opacity: .85; }
+.bh-editor-close { background: none; border: 0; color: inherit; cursor: pointer; opacity: .7; }
+.bh-editor-close:hover { opacity: 1; }
+.bh-editor-foot { display: flex; justify-content: flex-end; margin-top: 10px; }
+.bh-editor-apply {
+  cursor: pointer; padding: 6px 16px; border-radius: 8px; font-weight: 700;
+  background: color-mix(in srgb, var(--bh-accent) 22%, transparent); border: 1px solid color-mix(in srgb, var(--bh-accent) 55%, transparent); color: inherit;
+}
+.bh-editor-apply:hover:not(:disabled) { background: color-mix(in srgb, var(--bh-accent) 40%, transparent); }
+.bh-editor-apply:disabled { opacity: .5; cursor: default; }
+/* missing overrides the slot, so the rest of the form is visibly inert */
+.bhe-missing-mode .bhe-worn-list, .bhe-missing-mode .bhe-wound-list,
+.bhe-missing-mode .bhe-holding-row, .bhe-missing-mode .bh-editor-add { opacity: .35; pointer-events: none; }
+
+.bh-view-overlay {
+  position: fixed; inset: 0; z-index: 10060; display: flex; align-items: center; justify-content: center;
+  background: rgba(0, 0, 0, .45); padding: 16px;
+}
+.bh-view {
+  width: min(560px, 96vw); max-height: 86vh; display: flex; flex-direction: column;
+  background: var(--SmartThemeBlurTintColor, rgba(20, 20, 24, .98));
+  color: var(--SmartThemeBodyColor, #e0e0e0);
+  border: 1px solid var(--SmartThemeBorderColor, rgba(255, 255, 255, .15));
+  border-radius: 12px; box-shadow: 0 16px 40px rgba(0, 0, 0, .5);
+}
+.bh-view-head { display: flex; align-items: center; gap: 8px; padding: 10px 12px;
+  border-bottom: 1px solid var(--SmartThemeBorderColor, rgba(255, 255, 255, .12)); }
+.bh-view-title { font-weight: 700; flex: 1; }
+.bh-view-close { background: none; border: 0; color: inherit; cursor: pointer; opacity: .7; }
+.bh-view-close:hover { opacity: 1; }
+.bh-view-body { padding: 12px; overflow: auto; font-size: 12.5px; line-height: 1.5; }
+.bh-view-lead { margin: 0 0 10px; }
+.bh-view-note { opacity: .8; font-size: 11.5px; margin: 8px 0 0; }
+.bh-view-warn { margin: 10px 0 0; padding: 8px 10px; border-radius: 8px;
+  background: rgba(220, 140, 60, .16); border: 1px solid rgba(220, 140, 60, .5); }
+
+.bh-prompt-options { display: flex; flex-direction: column; gap: 8px; margin-top: 12px; }
+.bh-prompt-option { display: flex; gap: 10px; align-items: flex-start; cursor: pointer;
+  padding: 10px; border-radius: 10px; border: 1px solid var(--SmartThemeBorderColor, rgba(255, 255, 255, .15)); }
+.bh-prompt-option small { display: block; opacity: .75; margin-top: 2px; }
+.bh-prompt-option.bh-prompt-active { border-color: color-mix(in srgb, var(--bh-accent) 75%, transparent); background: color-mix(in srgb, var(--bh-accent) 12%, transparent); }
+.bh-prompt-current { margin-top: 12px; }
+
+.bh-doctor-facts { display: grid; grid-template-columns: max-content 1fr; gap: 4px 12px; margin: 0 0 12px; }
+.bh-doctor-facts dt { opacity: .7; }
+.bh-doctor-facts dd { margin: 0; }
+.bh-doctor-json { max-height: 40vh; overflow: auto; padding: 8px; border-radius: 8px; font-size: 11px;
+  background: rgba(0, 0, 0, .35); border: 1px solid var(--SmartThemeBorderColor, rgba(255, 255, 255, .12)); }
+.bh-help-list { margin: 6px 0 12px; padding-left: 18px; }
+.bh-help-list li { margin-bottom: 4px; }
+
+.bh-slot-card { position: relative; }
+.bh-lock-mark { position: absolute; top: 4px; right: 4px; font-size: 9px; opacity: .75; }
+.bh-slot-card.bh-slot-locked { outline: 1px solid color-mix(in srgb, var(--bh-accent) 55%, transparent); outline-offset: -1px; }
+
+/* Which connection is answering, and the local model that may be overruling it. */
+.bh-conn { display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px; margin-top: 10px;
+  padding: 8px 10px; border-radius: 8px;
+  border: 1px solid var(--SmartThemeBorderColor, rgba(255, 255, 255, .15)); opacity: 1; }
+.bh-conn small { flex-basis: 100%; opacity: .75; }
+.bh-conn-local { border-color: color-mix(in srgb, var(--bh-accent) 60%, transparent);
+  background: color-mix(in srgb, var(--bh-accent) 12%, transparent); }
+.bh-prompt-locked { margin-left: 6px; padding: 1px 6px; border-radius: 999px; font-size: 10px;
+  background: color-mix(in srgb, var(--bh-accent) 22%, transparent); }
+.bh-prompt-option input:disabled + span { opacity: .55; }
+
+.bh-model-block { margin-top: 14px; padding-top: 12px;
+  border-top: 1px solid var(--SmartThemeBorderColor, rgba(255, 255, 255, .12)); }
+.bh-model-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
+.bh-model-update:empty { display: none; }
+.bh-pill-on, .bh-pill-off { margin-left: 6px; padding: 1px 7px; border-radius: 999px; font-size: 10px; }
+.bh-pill-on { background: color-mix(in srgb, var(--bh-accent) 26%, transparent); }
+.bh-pill-off { background: rgba(128, 128, 128, .22); }
+.bh-hw { margin-top: 12px; }
+.bh-hw > summary { cursor: pointer; font-weight: 600; }
+.bh-hw-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-top: 8px; }
+.bh-hw-row input, .bh-hw-row select { width: 130px; }
+.bh-hw-hidden { display: none; }

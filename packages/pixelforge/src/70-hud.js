@@ -102,6 +102,25 @@ PF.Hud = class {
       style:
         "display:none;flex-direction:column;gap:6px;align-items:flex-end;max-height:40vh;overflow:auto;pointer-events:auto;",
     });
+    // 0.13's reading surface, on the fishing verb's gating shape and its menu
+    // idiom. Proximity-gated on `nearBoard` ALONE — no offer test, no purse test,
+    // no pack test: reading a board costs nothing, sends nothing, and a board
+    // that hid itself on a world with no work would be the one board a player
+    // most needs to be able to walk up to and be told so.
+    //
+    // THE EXPOSURE IS TRIGGER-ONLY, and that containment is deliberate (plan
+    // §2.1, M5 provisional pending the 0.12 browser playtest): everything about
+    // WHERE this lives is these two lines plus the census entry and the gating in
+    // update(). Nothing about the menu below or the pack behind it knows it was
+    // reached from a button in this column, so a post-playtest reshape — a
+    // different trigger, a different surface — moves the entry and the gate and
+    // leaves the work untouched.
+    this.boardBtn = this._btn("📋 Board", () => this.toggleBoard());
+    this.boardBtn.style.display = "none";
+    this.boardMenu = PF.el("div", {
+      style:
+        "display:none;flex-direction:column;gap:6px;align-items:flex-end;max-height:40vh;overflow:auto;pointer-events:auto;",
+    });
     this.waitBtn = this._btn("⏩ Wait…", () => this.toggleWait());
     this.keyboardBtn = this._btn("Keyboard", () => core.setMode("dialogue"));
     this.resumeBtn = this._btn("▶ Resume walking", () => core.resume());
@@ -124,6 +143,8 @@ PF.Hud = class {
         this.fishBtn,
         this.sleepMenu,
         this.sleepBtn,
+        this.boardMenu,
+        this.boardBtn,
         this.waitMenu,
         this.waitBtn,
         this.keyboardBtn,
@@ -240,11 +261,18 @@ PF.Hud = class {
     this.journalBody = PF.el("div", {
       style: "flex:1 1 auto;overflow:auto;display:flex;flex-direction:column;gap:10px;",
     });
+    // THE TAB STRIP (0.13 §2.4), and the panel's interior is now three rows:
+    // header, strip, body — with the BODY the only thing that scrolls. The strip
+    // and the header both sit on `flex:0 0 auto` so a long list cannot push the
+    // tabs off the top of the surface, which is the one layout mistake a scroller
+    // wrapped around the whole interior makes.
+    this.journalTabs = PF.el("div", { style: "display:flex;gap:6px;flex:0 0 auto;" });
     this.journalEl = PF.el("div", { style: panelStyle, "aria-label": "journal" }, [
       PF.el("div", { style: panelHead }, [
         PF.el("div", { style: panelTitle, text: "Journal" }),
         this._btn("✕ Close", () => this.closeJournal()),
       ]),
+      this.journalTabs,
       this.journalBody,
     ]);
     // The sheet's two columns: the sprite on the left with the themed generic
@@ -295,6 +323,66 @@ PF.Hud = class {
     this._journalMemo = null;
     this._sheet = false;
     this._sheetKey = null;
+    // ── THE TABS THEMSELVES (0.13 §2.4) ──────────────────────────────────────
+    // A LIST of {label, render, memoSync}, and it is a list rather than two
+    // branches because the third occupant is already committed (P8's extended
+    // view). Nothing below this line counts them: the strip is built by walking
+    // the list, the active tab is an INDEX into it, and `_journalSync` asks
+    // whichever one is active. Landing a third tab is one more entry here.
+    //
+    // WHAT THE TWO FIELDS DO, and why the memo is one slot rather than one per
+    // tab. `memoSync(held)` is asked once a frame while the panel is up and
+    // answers the only question the frame has: has what I draw MOVED — handing
+    // back the new memo when it has and `null` when it has not. `render()` draws
+    // the body from live state. The slot belongs to whichever tab is active and
+    // is nulled when the panel opens and when the tab switches, so the two never
+    // have to agree about its shape: the ledger watches two array identities and
+    // two lengths (a wholesale rebuild and an append that kept its array), the
+    // quest tab watches a value-key string, and neither knows the other exists.
+    this._journalTabs = [
+      {
+        label: "Journal",
+        render: () => {
+          const held = this._ledgerArrays();
+          this._renderJournal(held.lines ?? [], held.notices ?? []);
+        },
+        memoSync: (held) => {
+          const { lines, notices } = this._ledgerArrays();
+          const lineCount = lines?.length ?? 0;
+          const noticeCount = notices?.length ?? 0;
+          if (
+            held &&
+            held.lines === lines &&
+            held.notices === notices &&
+            held.lineCount === lineCount &&
+            held.noticeCount === noticeCount
+          )
+            return null;
+          return { lines, notices, lineCount, noticeCount };
+        },
+      },
+      {
+        label: "Jobs",
+        render: () => this._renderQuests(),
+        memoSync: (held) => {
+          const key = this._questValueKey();
+          if (held === key) return null;
+          // ANY REPAINT THIS TAB DID NOT ASK FOR DROPS THE ARMED CONFIRM (§2.3).
+          // A confirm is armed on one row; if the list moved under it — a catch
+          // landed, a severance took rows away, the purse changed — the row the
+          // second press would land on is not the row the first press meant.
+          // The arming press repaints through `_repaintQuests`, which seeds this
+          // slot itself, so it is never the repaint that disarms it.
+          this._dropQuestPress();
+          return key;
+        },
+      },
+    ];
+    this._journalTab = 0;
+    // The instance id of the row whose "set aside" has been pressed once, and the
+    // sentence the last press left behind (see `_dropQuestPress`).
+    this._dropQuestPress();
+    this._buildTabs();
     this.refreshChips();
   }
 
@@ -526,6 +614,229 @@ PF.Hud = class {
     );
   }
 
+  // ── THE BOARD (plan §2.1) ──────────────────────────────────────────────────
+  // Two sections in one list, and the surface owns NONE of the rules: what is
+  // offered, what state each offer is in and whether a job can be handed in are
+  // all answered by 61-pack's `boardOffers`, re-read at every press. This is the
+  // drawing.
+
+  /** Open the board, or close it. The fishing menu's shape one method up: a
+   *  refusal is answered WHERE IT WAS PRESSED rather than behind a list whose
+   *  every row then refuses. */
+  toggleBoard() {
+    const open = this.boardMenu.style.display !== "flex";
+    if (!open) {
+      this.boardMenu.style.display = "none";
+      return;
+    }
+    const view = PF.pack.boardOffers(this.core);
+    if (!view.available) {
+      this.boardMenu.style.display = "none";
+      this.toast(this.boardRefusal(view.reason));
+      return;
+    }
+    this._renderBoard(view);
+    this.boardMenu.style.display = "flex";
+  }
+
+  closeBoard() {
+    this.boardMenu.style.display = "none";
+  }
+
+  /** BOTH SECTIONS, every time. A press changes both — accepting puts a row in
+   *  the jobs list AND dims the offer it came from, handing one in empties a job
+   *  AND can free the cap that was dimming every offer on the board — so the
+   *  handlers below re-render the whole list rather than patching a row.
+   *  Event-driven and never per frame: update() only decides whether the BUTTON
+   *  is on screen.
+   *
+   *  THE JOBS SECTION LEADS WHEN IT HOLDS SOMETHING FINISHED. A player walking
+   *  back with five carp wants the hand-in above the fold, not under four fresh
+   *  offers; with nothing finished, the day's work is the reason they walked up.
+   *
+   *  A row accepted today renders in BOTH sections on purpose (plan §2.1): the
+   *  dimmed offer is the day's receipt — it is what the board posted — and the
+   *  jobs row is the live object with the count on it. */
+  _renderBoard(view) {
+    const chip = (text, dim) => PF.el("span", { style: dim ? `${this.S.chip}opacity:0.55;` : this.S.chip, text });
+    const offers = [];
+    if (!view.folded.ids.length) {
+      // THE PACKLESS WORLD'S OWN STATE (Q9), and it is deliberately none of the
+      // others. Not "not yet", not "check back", not "everything is taken" — a
+      // world sealed before this release, or one whose owner declined the second
+      // call, has no work in it and will not grow any on its own. The board is
+      // still standing there to say so, which is the whole reason the fixture is
+      // unconditional.
+      offers.push(chip("No work posted here.", true));
+    } else {
+      offers.push(chip("Today's work"));
+      for (const offer of view.offers) {
+        const money = PF.economy.money(this.core.sim.world, offer.reward.money);
+        const label = `${offer.template.title} — ${money}`;
+        if (offer.state === "open") {
+          offers.push(this._btn(label, () => this.acceptWork(offer.template.id)));
+          continue;
+        }
+        // DIMMED AND STILL PRESSABLE, on the berth button's rule: a control that
+        // vanishes teaches the player nothing about why. The press says which of
+        // the three reasons it is.
+        //
+        // AND THE COPY NAMES NO DIRECTION. It used to say "below", which was true
+        // on the day it was written and false the moment the row it points at
+        // finished: a finished job lifts the jobs section ABOVE the offers (see
+        // the ordering rule at the foot of this method), so the receipt was
+        // telling the player to look the wrong way at exactly the moment they had
+        // something to hand in. The list is named instead of placed.
+        //
+        // TWO OF THE STATES CARRY THEIR OWN WORDS and the other two keep the
+        // price. `taken` and `filled` are things the player DID today, and a row
+        // still quoting its fee after it has been paid out reads as work still on
+        // offer; `dup` and `at-cap` are about the list rather than the row, and
+        // the fee is still the honest label for work that is genuinely open to
+        // somebody with room for it.
+        const state = offer.state;
+        const row = this._btn(
+          state === "taken"
+            ? `${offer.template.title} — taken — see your jobs list`
+            : state === "filled"
+              ? `${offer.template.title} — filled today`
+              : label,
+          () => this.acceptWork(offer.template.id),
+        );
+        row.style.opacity = "0.45";
+        offers.push(row);
+      }
+    }
+    const jobs = [];
+    if (view.jobs.length) {
+      jobs.push(chip("Your jobs here"));
+      for (const row of view.jobs) {
+        const text = PF.pack.rowText(row, view.folded);
+        const done = Math.round(Number(row.have) || 0) >= Math.max(1, Math.round(Number(row.n) || 1));
+        if (!done) {
+          jobs.push(chip(text, true));
+          continue;
+        }
+        jobs.push(this._btn(`${text} — hand it in`, () => this.turnInJob(row.id)));
+      }
+    }
+    const finished = view.jobs.some(
+      (row) => Math.round(Number(row.have) || 0) >= Math.max(1, Math.round(Number(row.n) || 1)),
+    );
+    this.boardMenu.replaceChildren(...(finished ? [...jobs, ...offers] : [...offers, ...jobs]));
+  }
+
+  /** Take an offer. The offer is re-read inside `accept`, so a menu drawn a press
+   *  ago cannot take a row twice or take one past the cap; this turns the answer
+   *  into a sentence and redraws both sections. */
+  acceptWork(templateId) {
+    const result = PF.pack.accept(this.core, templateId);
+    if (!result.ok) {
+      this.toast(this.boardRefusal(result.reason));
+      // A refusal that came from the BOARD's own state — taken, duplicated, at
+      // the cap — is still a change the list may not be showing (another press
+      // filled the cap), so the redraw happens on both arms. A refusal about the
+      // place or the mode leaves nothing to draw and the menu is already closing.
+      const view = PF.pack.boardOffers(this.core);
+      if (view.available) this._renderBoard(view);
+      else this.closeBoard();
+      return;
+    }
+    this.toast(`Taken on: ${result.title}`);
+    const view = PF.pack.boardOffers(this.core);
+    if (view.available) this._renderBoard(view);
+  }
+
+  /** Hand a finished job in. `turnIn` re-finds the row and re-checks `have >= n`
+   *  at the press, so a row that moved under the menu cannot be paid twice. */
+  turnInJob(id) {
+    const result = PF.pack.turnIn(this.core, id);
+    if (!result.ok) {
+      this.toast(this.boardRefusal(result.reason));
+      const refused = PF.pack.boardOffers(this.core);
+      if (refused.available) this._renderBoard(refused);
+      else this.closeBoard();
+      return;
+    }
+    // The purse moved, so the chips have.
+    this.refreshChips();
+    const paid = PF.economy.money(this.core.sim.world, result.money);
+    this.toast(result.giver ? `Handed in to ${result.giver} — ${paid}` : `Handed in — ${paid}`);
+    const view = PF.pack.boardOffers(this.core);
+    if (view.available) this._renderBoard(view);
+  }
+
+  /** The board's refusals, turned into sentences — the fishing verb's
+   *  reason-to-sentence map, not a fork of it.
+   *
+   *  `not-at-board` and `no-world` are absent for fishRefusal's own reason: the
+   *  button is not on screen where there is no board, so a line for them would be
+   *  copy nobody can reach — which is exactly why the fall-through has to be a
+   *  real sentence.
+   *
+   *  THE AT-CAP COPY NAMES BOTH RELIEFS and both are now built: finishing is the
+   *  board's own hand-in, and setting aside is the quest tab's per-row confirm
+   *  (§2.3, `setAsideJob`). The wording is §2.1's verbatim, and it was written
+   *  one slice before the affordance it points at because the arc ships as ONE
+   *  submission — no player is ever handed a build where "set aside" points at
+   *  nothing.
+   *
+   *  AND IT IS THE ONE MAP, read from both surfaces. The name is the board's
+   *  because the board is where it was written, not because the sentences are:
+   *  every reason in it is a reason about a JOB, and the two places a job can be
+   *  pressed answer them identically. A second map for the tab is how one of them
+   *  comes to say something the other does not.
+   *
+   *  `unknown-id` IS THE BOARD'S OWN, corrected: slice 3 filed it with the
+   *  surfaces the board cannot reach, and the board reaches it every time a row
+   *  leaves `quests.active` under an open menu — a mint severance parking it, the
+   *  repair pass dropping it, a rebuild landing between the draw and the press.
+   *  The press then re-finds nothing and the generic fall-through said "there is
+   *  nothing to do at the board", which is a sentence about the BOARD written for
+   *  a row that went away. `abandon-unknown` is that same fact one surface along
+   *  — the quest tab pressing a row the block no longer holds — and it shipped
+   *  with this enumeration a slice before its producer existed, which is why the
+   *  two read alike (plan §2.3's refusal list is complete here). */
+  boardRefusal(reason) {
+    if (reason === "wrong-mode") return "Not while you're talking — resume walking first";
+    if (reason === "gate-held") return "Not yet — your world is still being written.";
+    if (reason === "at-cap") return "Your job list is full — finish or set aside a job first.";
+    if (reason === "taken") return "You took that one today — it is on your jobs list.";
+    if (reason === "filled") return "That work is done for today — the board posts it again another day.";
+    if (reason === "dup") return "You are already on that one.";
+    if (reason === "not-done") return "That one isn't finished yet.";
+    // The row left today's selection between the draw and the press — the day
+    // rolled over under an open menu, or a rebuild landed beneath it. A sentence
+    // about the ROW, on `unknown-id`'s own reasoning one line down.
+    if (reason === "not-offered") return "The board isn't posting that one now.";
+    if (reason === "unknown-id") return "That job is no longer on your list.";
+    if (reason === "abandon-unknown") return "That job is no longer on your list.";
+    return "There is nothing to do at the board just now.";
+  }
+
+  /** A JOB THAT FINISHED WHERE THE PLAYER WAS STANDING, rather than at the board.
+   *  The visit and deliver verbs complete at their own sites (61-pack), and a
+   *  completion the player is never told about is a purse that moved for no
+   *  reason they can see — the board's hand-in toasts, and a session of fishing
+   *  toasts, so an errand run and a walk taken have to as well.
+   *
+   *  ONE PLACE FOR THE COPY, called from three sites (the frame loop's arrival,
+   *  50-spatial's drift arm, and Talk's accepted turn). It takes the LIST rather
+   *  than one row because both verbs are answered with a filter: two rows asking
+   *  for the same walk are both filled by taking it, and each is its own sentence.
+   *  An empty list says nothing and touches nothing, which is the ordinary case
+   *  for every arrival and every greeting in the game. */
+  questFilled(done) {
+    if (!Array.isArray(done) || !done.length) return;
+    const world = this.core.sim?.world;
+    for (const row of done) {
+      const paid = PF.economy.money(world, row.money);
+      this.toast(row.giver ? `Done for ${row.giver} — ${paid}` : `Job done — ${paid}`);
+    }
+    // The purse moved, so the chips have.
+    this.refreshChips();
+  }
+
   /** Take the rod the button is offering. The offer is re-read inside buyRod, so
    *  a frame-old button cannot overcharge anybody; this turns the refusals into
    *  sentences, exactly as rentBerth's caller does. */
@@ -608,11 +919,19 @@ PF.Hud = class {
    *  `preventDefault` either way, because the host's own Escape handling is not
    *  ours to cancel, so "the key meant something here" is not a question it has
    *  to ask. The return is the honest answer for a caller that does — today that
-   *  is the harness, which pins it. */
+   *  is the harness, which pins it.
+   *
+   *  THE BOARD'S LIST CLOSES HERE TOO (0.13 §2.1). It is not a panel — it is a
+   *  floating list in the action column, like the fishing and sleeping menus —
+   *  but Escape is the only key that can reach any of them, and a list of work
+   *  left standing over a closed surface is the one of the four that holds a
+   *  press with consequences behind it. It rides the return for the same reason
+   *  the panels do: "something was open" is the honest answer either way. */
   closePanels() {
-    const open = this._journal || this._sheet;
+    const open = this._journal || this._sheet || this.boardMenu.style.display === "flex";
     this.closeJournal();
     this.closeSheet();
+    this.closeBoard();
     return open;
   }
 
@@ -624,9 +943,26 @@ PF.Hud = class {
     }
     // One surface at a time: both are full-screen, so a second one opening over
     // the first would be a panel nobody can see under a panel nobody closed.
+    // THE BOARD COUNTS AS ONE OF THEM, and it is the one with consequences: the
+    // quest tab can retire the very row a standing board is drawing, and a board
+    // left mounted underneath comes back out showing it. `update`'s nearBoard arm
+    // already closes the list when the player walks away from the fixture; this
+    // is that same rule for the other way they leave it.
     this.closeSheet();
+    this.closeBoard();
     this._journal = true;
+    // THESE TWO ARE DEFENSIVE SYMMETRY, and saying so is the point: the CLOSE
+    // side is the load-bearing one, and every close routes through
+    // `closeJournal` — the chip, and Escape via `closePanels` — so nothing can
+    // reach this line with a press still armed or a slot still held. (Leaving
+    // the world is NOT one of them: `update` HIDES the journal and leaves
+    // `_journal` true, so the panel comes back as it was on the next in-world
+    // frame. It never reaches this line at all.)
+    // They are unkillable by construction and a mutation test will never red on
+    // them; they stay because an open that assumed a clean slot would be resting
+    // on a guarantee written in another method.
     this._journalMemo = null;
+    this._dropQuestPress();
     this._journalSync();
     this.journalEl.style.display = "flex";
   }
@@ -634,32 +970,100 @@ PF.Hud = class {
   closeJournal() {
     this._journal = false;
     this._journalMemo = null;
+    // A CLOSED PANEL HOLDS NO ARMED CONFIRM (§2.3). The tab it was armed on is
+    // repainted from scratch on the next open, and a press half-made an hour ago
+    // is not permission for the press that reopens the panel.
+    this._dropQuestPress();
     this.journalEl.style.display = "none";
   }
 
-  /** The journal's memo: the two ARRAYS and their two lengths (plan §2.5). The
-   *  identities catch a wholesale replacement — `_compactLedger` rebuilds
-   *  `ledger.lines` on every append, and a restore assigns a fresh band — and
-   *  the lengths catch an append that kept the array it pushed onto, which is
-   *  exactly what `notice()` does while the band is under its cap.
+  /** THE STRIP, built by WALKING THE LIST (§2.4). Nothing here knows there are
+   *  two of them: a third descriptor lands a third button with no other change,
+   *  which is the whole reason the tabs are a list. Rebuildable rather than
+   *  inlined into the constructor for the same reason — a list that can only be
+   *  read once at mount is a list with a two-tab assumption in it. */
+  _buildTabs() {
+    this._tabBtns = this._journalTabs.map((tab, index) => this._btn(tab.label, () => this._selectTab(index)));
+    this.journalTabs.replaceChildren(...this._tabBtns);
+    this._paintTabs();
+  }
+
+  /** Which tab is active, said TWICE: the style property every other state in
+   *  this file is said in, and the pressed state a screen reader can actually
+   *  read. Opacity alone is a mark only a sighted user gets — the cutscene
+   *  caption at the top of this file carries the same argument — so the shade and
+   *  the attribute move together in one loop.
+   *
+   *  WHAT IS STILL FORBIDDEN IS `role`/`aria-modal`, and the distinction is the
+   *  whole reason the pressed state is safe: `_hostOwnsKeyboard` (90-element)
+   *  believes any visible `[role="dialog"][aria-modal="true"]`, so a strip that
+   *  dressed its buttons as DIALOG furniture would make the keys that close the
+   *  panel inert the moment it opened. `aria-pressed` matches neither half of
+   *  that selector. The panel beside them carries the same prohibition and the
+   *  harness pins both. */
+  _paintTabs() {
+    for (let i = 0; i < this._tabBtns.length; i++) {
+      const active = i === this._journalTab;
+      this._tabBtns[i].style.opacity = active ? "1" : "0.5";
+      // The same state, said again in the channel opacity cannot reach — the
+      // caption's reasoning at the top of this file, applied to the strip. This
+      // is NOT the furniture the paragraph above forbids: `_hostOwnsKeyboard`
+      // believes `[role="dialog"][aria-modal="true"]`, and a pressed state
+      // matches neither half of that selector, so the keys that close the panel
+      // stay live. `aria-pressed` and not `role="tab"` because a tablist owes a
+      // reader `aria-controls` and arrow-key navigation, and the strip has
+      // neither to give.
+      this._tabBtns[i].setAttribute("aria-pressed", active ? "true" : "false");
+    }
+  }
+
+  /** Switch tabs. Three things go with the switch and each is its own rule:
+   *  the MEMO (the slot belongs to the tab that is active, and the incoming tab
+   *  has never seen it), the ARMED CONFIRM (§2.3 — a half-made press does not
+   *  survive leaving the surface it was made on), and the SCROLL POSITION, which
+   *  is reset because the body is one scroller shared by every tab and arriving
+   *  at a short list two hundred pixels down is arriving at a blank panel.
+   *
+   *  Re-pressing the ACTIVE tab is a no-op on purpose: it is not a switch, so it
+   *  neither repaints nor disarms anything. */
+  _selectTab(index) {
+    if (index === this._journalTab || !this._journalTabs[index]) return;
+    this._journalTab = index;
+    this._journalMemo = null;
+    this._dropQuestPress();
+    this.journalBody.scrollTop = 0;
+    this._paintTabs();
+    this._journalSync();
+  }
+
+  /** THE PANEL'S ONE PER-FRAME QUESTION, asked of whichever tab is up. The tab
+   *  answers with its new memo or with `null` for "nothing I draw has moved",
+   *  and this seeds the slot and paints. Two lines of driver and no branch per
+   *  tab: everything that differs between them lives in the descriptors. */
+  _journalSync() {
+    const tab = this._journalTabs[this._journalTab];
+    if (!tab) return;
+    const memo = tab.memoSync(this._journalMemo);
+    if (memo === null) return;
+    this._journalMemo = memo;
+    tab.render();
+  }
+
+  /** The ledger tab's two arrays, through ONE reader — which is what makes "the
+   *  memo is the projection of what the tab draws" true rather than nearly true
+   *  (the sheet's `_num` discipline). The memo watches their IDENTITIES because
+   *  `_compactLedger` rebuilds `ledger.lines` on every append and a restore
+   *  assigns a fresh band, and their LENGTHS because `notice()` pushes onto the
+   *  array it already had while the band is under its cap.
    *
    *  What it deliberately does NOT track is the told flag: the band shows told
    *  and untold rows alike, so a burn changes nothing the panel draws. */
-  _journalSync() {
+  _ledgerArrays() {
     const player = PF.player.get(this.core);
-    const lines = Array.isArray(player?.ledger?.lines) ? player.ledger.lines : null;
-    const notices = Array.isArray(player?.ledger?.notices) ? player.ledger.notices : null;
-    const memo = this._journalMemo;
-    if (
-      memo &&
-      memo.lines === lines &&
-      memo.notices === notices &&
-      memo.lineCount === (lines?.length ?? 0) &&
-      memo.noticeCount === (notices?.length ?? 0)
-    )
-      return;
-    this._journalMemo = { lines, notices, lineCount: lines?.length ?? 0, noticeCount: notices?.length ?? 0 };
-    this._renderJournal(lines ?? [], notices ?? []);
+    return {
+      lines: Array.isArray(player?.ledger?.lines) ? player.ledger.lines : null,
+      notices: Array.isArray(player?.ledger?.notices) ? player.ledger.notices : null,
+    };
   }
 
   /** ONE LIST, day-grouped from each line's own day, newest day first — and the
@@ -720,13 +1124,272 @@ PF.Hud = class {
       body.appendChild(PF.el("div", { style: dim, text: "Nothing written down yet." }));
   }
 
+  // ── THE QUEST TAB (0.13 §2.4) ─────────────────────────────────────────────
+  // What the player is carrying, what they have finished, and what a world they
+  // no longer stand in is holding for them. It renders through the SHARED row
+  // renderer (61-pack `rowText`) and adds no branch of its own to it: the board's
+  // jobs section and this list are the same sentences, because they are the same
+  // rows and there is one function that turns a row into words.
+
+  /** The two press-driven pieces of state this tab draws, dropped together. They
+   *  are HUD-side and nowhere else — an abandon is free and player-initiated, so
+   *  there is nothing to persist and nothing a reload should remember — and
+   *  neither is in the value key, deliberately: a press paints its own answer
+   *  immediately (`_repaintQuests`), while the key is what catches the BLOCK
+   *  moving underneath. Anything that moves the block drops both, which is the
+   *  point: the row a second press would land on must be the row the first press
+   *  meant. */
+  _dropQuestPress() {
+    this._armedAbandon = null;
+    this._questSaid = "";
+  }
+
+  /** A press has changed what this tab draws, so paint it AND seed the memo with
+   *  the key the paint was made from. Seeding is what keeps the armed confirm
+   *  alive: the next frame compares equal, `memoSync` answers "nothing moved",
+   *  and nothing disarms the press the player has half-made. Only ever called
+   *  from this tab's own buttons, which exist only while this tab is painted. */
+  _repaintQuests() {
+    this._journalMemo = this._questValueKey();
+    this._renderQuests();
+  }
+
+  /** Where this world's board is, read ONCE for both the value key and the empty
+   *  state (the sheet's one-reader discipline). The fixture is unconditional and
+   *  lives on the settlement root, so this answers on every world that has one —
+   *  and `null` rather than a guess on one that somehow has not, which is the
+   *  only case the empty state has nothing to point at. */
+  _boardWhere() {
+    const world = this.core.sim?.world;
+    const zone = PF.own(world?.zones, world?.startZone) ?? null;
+    const board = (Array.isArray(zone?.features) ? zone.features : []).find(
+      (row) => row?.id === PF.world.BOARD_FEATURE_ID,
+    );
+    return board ? { board: String(board.name), zone: String(zone.name) } : null;
+  }
+
+  /** How many quest rows the stamp bag is holding for another world. A severance
+   *  parks the world-bound half of the block (58-player `applyStamps`) and the
+   *  notice band narrates it in story order; this is the same fact told where the
+   *  rows themselves are missing from. */
+  _parkedQuests() {
+    const parked = PF.quarantine?.peek?.("stamp")?.fields?.questsActive;
+    return Array.isArray(parked) ? parked.length : 0;
+  }
+
+  /** THE EMPTY STATE (§2.4): present-tense fact, a pointer and not a promise, no
+   *  nag — and it must not contradict the board it points at. The two arms are
+   *  the board's own test (`folded.ids.length`), so a packless or demoted world
+   *  says the same thing here that the board says there ("No work posted here")
+   *  rather than sending the player across the settlement to read it. */
+  _questEmpty(folded) {
+    const where = this._boardWhere();
+    if (!where) return "Nothing taken on.";
+    return folded?.ids?.length
+      ? `Nothing taken on. ${where.board} in ${where.zone} has work.`
+      : `Nothing taken on. ${where.board} in ${where.zone} has none posted.`;
+  }
+
+  /** The counter's own word when the pack cannot name it: the last segment of the
+   *  template id (`p:<pack>:<slug>` and `b:<slug>` both end in it). A finished
+   *  job's counter outlives the pack that minted it — a demotion, a world sealed
+   *  against another brief, a `b:` counter that travelled here from somewhere
+   *  else — so the tally has to be legible without a title, exactly as a live row
+   *  is (`rowText`'s own fallback). */
+  _slugOf(id) {
+    const text = String(id ?? "");
+    return text.slice(text.lastIndexOf(":") + 1) || text;
+  }
+
+  /** THE LIVE VALUE KEY (§2.4, the sheet's projection invariant adopted verbatim
+   *  — see `_sheetValueKey`). Every field of every live row, both completion maps
+   *  as sorted `template:count` joins (NEVER sums: trimming a counter and
+   *  incrementing another is a sum that does not move), the world's theme, and
+   *  THE PACK'S OWN IDENTITY.
+   *
+   *  THE PACK HASH IS THE TERM WITH TEETH. A demotion moves no quest state at all
+   *  — the rows stay, complete and abandon exactly as before — and changes every
+   *  TITLE on this tab, because the titles come out of the fold. Without the hash
+   *  in the key the tab would sit there showing a demoted world the sealed pack's
+   *  words until something unrelated moved.
+   *
+   *  TWO TERMS BEYOND §2.4'S LIST, and both are the invariant asking for them
+   *  rather than the list being widened for comfort: the tab also draws the
+   *  PARKED-ROW notice and the empty state's BOARD AND ZONE NAMES, and a key that
+   *  did not carry them would leave those two halves unable to re-render. (A
+   *  severance under an open panel moves the rows as well, and a rebuild usually
+   *  moves the theme — "usually" is exactly what a projection may not rest on.)
+   *
+   *  Rows join their nine fields with `|` (§2.4's own separator), rows join with
+   *  `,`, and the sections with `~`. THREE SEPARATORS ARE NOT THREE FENCES, and
+   *  the earlier claim here that a value carrying one could not forge a boundary
+   *  above it was simply wrong: `g` is `"zoneId|Name"` and carries the field
+   *  separator in every row this build mints (58-player's `giverOf` still
+   *  tolerates a bar-less legacy value, which is the only kind that does not),
+   *  and a board or zone name with a `~` in it lands at the top level. What
+   *  makes that harmless is not the separators but what happens to the key
+   *  afterwards — NOTHING PARSES IT. It is built, compared whole against the
+   *  last one, and thrown away; no reader ever splits it back into fields, so
+   *  there is no structure for a forged boundary to mislead. The only failure a
+   *  separator in a value could ever buy is a COLLISION — two different blocks
+   *  rendering the same string — which takes a row hand-built to collide (the
+   *  numeric fields go through `_num` and cannot carry one), and which costs
+   *  exactly one missed repaint: a line left stale until the next thing moves.
+   *  Not a wrong render, not a lost mutation. */
+  _questValueKey() {
+    const player = PF.player.get(this.core);
+    const world = this.core.sim?.world;
+    const text = (value) => (typeof value === "string" ? value : "");
+    const byKey = (a, b) => (a[0] < b[0] ? -1 : a[0] > b[0] ? 1 : 0);
+    const tally = (map) =>
+      Object.entries(map ?? {})
+        .sort(byKey)
+        .map(([id, n]) => `${id}:${this._num(n)}`)
+        .join(",");
+    const rows = (Array.isArray(player?.quests?.active) ? player.quests.active : [])
+      .map((row) =>
+        [
+          text(row?.id),
+          text(row?.verb),
+          text(row?.target),
+          this._num(row?.have),
+          this._num(row?.n),
+          text(row?.g),
+          this._num(row?.day),
+          this._num(row?.r?.money),
+          this._num(row?.r?.xp),
+        ].join("|"),
+      )
+      .join(",");
+    const where = this._boardWhere();
+    return [
+      rows,
+      tally(player?.quests?.done_pack),
+      tally(player?.quests_done_board),
+      world?.theme ?? "",
+      PF.save.packFold(this.core)?.pack?.briefHash ?? "",
+      this._parkedQuests(),
+      where ? `${where.board}@${where.zone}` : "",
+    ].join("~");
+  }
+
+  /** The tab, top to bottom: what a lost world is holding, what the last press
+   *  said, the live list (or the empty state), then the two done groups. */
+  _renderQuests() {
+    const body = this.journalBody;
+    body.replaceChildren();
+    const dim = "opacity:0.7;";
+    const head = (label) => PF.el("div", { style: `font:700 12px/1.6 inherit;${dim}`, text: label });
+    const player = PF.player.get(this.core);
+    const folded = PF.save.packFold(this.core);
+    const rows = Array.isArray(player?.quests?.active) ? player.quests.active : [];
+
+    // THE LOSS, SAID WHERE THE HOLE IS (§2.4). The notice band on the tab beside
+    // this one narrates the severance in story order and is the record of it;
+    // this line is why the list under it is shorter than the player remembers.
+    if (this._parkedQuests())
+      body.appendChild(PF.el("div", { style: dim, text: "Some tasks belong to another world and are set aside." }));
+    if (this._questSaid) body.appendChild(PF.el("div", { style: dim, text: this._questSaid }));
+
+    if (!rows.length) {
+      body.appendChild(PF.el("div", { style: dim, text: this._questEmpty(folded) }));
+    } else {
+      const live = PF.el("div", { style: "display:flex;flex-direction:column;gap:6px;" }, [head("Your job list")]);
+      for (const row of rows) {
+        const id = String(row?.id ?? "");
+        // THE ABANDON AFFORDANCE, and it is on THIS tab and only this one (§2.3).
+        // One press arms it and the second lets the job go; the armed state is a
+        // style property and a word, held hud-side, dropped by anything that
+        // moves the list. Free, and never anything but the player's own doing —
+        // nothing in the package abandons a quest for them.
+        const armed = this._armedAbandon === id;
+        const drop = this._btn(armed ? "Set it aside?" : "Set aside", () => this.setAsideJob(id));
+        drop.style.opacity = armed ? "1" : "0.55";
+        live.appendChild(
+          PF.el("div", { style: "display:flex;align-items:center;justify-content:space-between;gap:8px;" }, [
+            PF.el("div", { text: PF.pack.rowText(row, folded) }),
+            drop,
+          ]),
+        );
+      }
+      body.appendChild(live);
+    }
+
+    // THE TWO DONE GROUPS, and the split is the counter classes' own (§2.2e). A
+    // `p:` counter was minted by work this world's pack posted and means nothing
+    // anywhere else; a `b:` counter came off the generic templates, whose targets
+    // are ROLE-grain and whose givers are the stock cast, so it means the same
+    // thing in the next world — which is what `quests_done_board` claims about
+    // itself, said out loud where the player can read it.
+    for (const [label, map, cap] of [
+      ["Done — this world's", player?.quests?.done_pack, PF.player.CAPS.packDone],
+      ["Done — travels with you", player?.quests_done_board, PF.player.CAPS.boardDone],
+    ]) {
+      const byKey = (a, b) => (a[0] < b[0] ? -1 : a[0] > b[0] ? 1 : 0);
+      const tallies = Object.entries(map ?? {}).sort(byKey);
+      if (!tallies.length) continue;
+      const group = PF.el("div", { style: "display:flex;flex-direction:column;gap:2px;" }, [head(label)]);
+      for (const [id, count] of tallies)
+        group.appendChild(
+          PF.el("div", {
+            style: dim,
+            text: `${folded?.byId?.get(id)?.title || this._slugOf(id)} ×${this._num(count)}`,
+          }),
+        );
+      // A BOUNDED TALLY SAYS SO WHEN IT IS AT THE BOUND. These maps EVICT — the
+      // least-earned counter goes to make room for a new kind of work — so a full
+      // one is a list that has already lost something, and a tally that let the
+      // player read it as a complete history would be lying quietly.
+      if (tallies.length >= cap)
+        group.appendChild(PF.el("div", { style: dim, text: `Only the last ${cap} kinds of work are kept.` }));
+      body.appendChild(group);
+    }
+  }
+
+  /** Let one job go. THE FIRST PRESS ARMS AND CHANGES NOTHING — no mutator runs,
+   *  no line is written — and the second one does it. A confirm rather than an
+   *  undo because there is nothing to undo to: the row carries the count the
+   *  player earned toward it, and re-accepting tomorrow's copy of the same
+   *  template starts at zero.
+   *
+   *  THE VANISHED ROW SELF-HEALS through the mutator rather than through a guard
+   *  here: `quest("abandon")` refuses an id it cannot find, so a row that left the
+   *  list between the paint and the press (a severance, the repair pass, a
+   *  rebuild) comes back as a refusal and a repaint that no longer shows it. The
+   *  generation fence answers with the same value on purpose — from where the
+   *  player is standing, a block that moved under them and a row that was never
+   *  there are the same sentence. */
+  setAsideJob(id) {
+    if (this._armedAbandon !== id) {
+      this._dropQuestPress();
+      this._armedAbandon = id;
+      this._repaintQuests();
+      return;
+    }
+    const result = PF.pack.abandon(this.core, id);
+    this._dropQuestPress();
+    // SAID IN THE PANEL AND NOT IN A TOAST, because a toast cannot be read from
+    // here: the panels are full-surface and opaque and sit above the toast
+    // surface in the root's own order, so a sentence sent there while one is open
+    // is a sentence nobody sees.
+    this._questSaid = result.ok
+      ? result.giver
+        ? `Set aside ${result.giver}'s job.`
+        : "Set aside."
+      : this.boardRefusal(result.reason);
+    this._repaintQuests();
+  }
+
   toggleSheet() {
     if (!this._panelsAllowed()) return;
     if (this._sheet) {
       this.closeSheet();
       return;
     }
+    // The other full-surface panel, and the board goes down for it too — a rule
+    // that covered only the journal would be a rule waiting for the next tab.
     this.closeJournal();
+    this.closeBoard();
     this._sheet = true;
     this._sheetKey = this._sheetValueKey();
     this._renderSheet();
@@ -998,24 +1661,52 @@ PF.Hud = class {
     // player can be looking at a retry button that will keep giving the same
     // answer. It has to be in the memo key or the sentence never changes.
     const gateWhy = gate === "failed" ? (PF.save.gate.failure ?? null) : null;
+    // WHICH ARTIFACT the gate is waiting on — the world itself or the content
+    // written for it (0.13's second generation call). Two different screens: at the
+    // brief stage nothing has been settled on this chat at all, and at the pack
+    // stage the SETTING is sealed and kept whatever happens next. What is not
+    // settled at the pack stage is the world in front of the player: the stamp
+    // outlives the pack call itself, so this stage also covers a pack that sealed
+    // and an install that then threw — see `PF.save.gateStageNote`, whose whole
+    // job is a sentence true on every one of those arms. In the memo key for the
+    // same reason `gateWhy` is: a stage that changed without the state changing
+    // would leave the wrong sentence up.
+    const gateStage = gate ? (PF.save.gate.stage ?? "brief") : null;
     if (
       mode !== this._mode ||
       spatialAvail !== this._spatialAvail ||
       gate !== this._gate ||
-      gateWhy !== this._gateWhy
+      gateWhy !== this._gateWhy ||
+      gateStage !== this._gateStage
     ) {
       this._mode = mode;
       this._spatialAvail = spatialAvail;
       this._gate = gate;
       this._gateWhy = gateWhy;
+      this._gateStage = gateStage;
       const inWorld = mode === "walk" && !gate;
       this.gateEl.style.display = gate ? "flex" : "none";
       this.gateRetry.style.display = gate === "failed" ? "" : "none";
-      this.gateTitle.textContent = gate === "failed" ? "The world didn't finish being written." : "Writing your world…";
+      this.gateTitle.textContent =
+        gate === "failed"
+          ? gateStage === "pack"
+            ? // NOT "the work for this world didn't finish being written": the pack
+              // stage is stamped on both sides of the pack's own seal, so on the
+              // arm where the work IS written and the install threw, that title
+              // named the wrong thing as missing. What is true on every arm is
+              // that the world did not finish coming up, which is also the thing
+              // the player is looking at a spinner instead of.
+              "This world didn't finish opening."
+            : "The world didn't finish being written."
+          : gateStage === "pack"
+            ? "Writing what your world has to say…"
+            : "Writing your world…";
       this.gateBody.textContent =
         gate === "failed"
-          ? `${PF.save.gateReason(gateWhy)} Nothing was lost and nothing was decided for you — this chat is exactly as you left it. Try again whenever you like.`
-          : "One generation call is shaping the settlement, its people and the places in it. This can take a minute.";
+          ? `${PF.save.gateReason(gateWhy, gateStage)} ${PF.save.gateStageNote(gateStage)}`
+          : gateStage === "pack"
+            ? "The settlement is written. One more call is filling in what its people say and the work they have to offer."
+            : "One generation call is shaping the settlement, its people and the places in it. This can take a minute.";
       this.topbar.style.display = gate ? "none" : "";
       // Replay: the host owns the whole screen. Combat: keep a minimal HUD —
       // the mode is inferred from the narrative gameActiveState, which can flip
@@ -1035,6 +1726,8 @@ PF.Hud = class {
         this._fish = null;
         this.sleepBtn.style.display = "none";
         this._sleep = null;
+        this.boardBtn.style.display = "none";
+        this._board = null;
       }
       // THE PANEL OPENERS, on the berth button's cadence and for a reason of
       // their own: the gate hides the whole topbar, but the topbar STAYS UP in
@@ -1066,6 +1759,7 @@ PF.Hud = class {
       this.waitMenu.style.display = "none";
       this.fishMenu.style.display = "none";
       this.sleepMenu.style.display = "none";
+      this.boardMenu.style.display = "none";
       if (mode === "dialogue" && !gate) this.toast("Type in the message box below — Resume to keep walking");
     }
     // Nothing below the gate means anything: there is no beat to caption, nobody
@@ -1167,6 +1861,22 @@ PF.Hud = class {
         this.sleepBtn.style.display = bed.bed ? "" : "none";
         if (bed.bed) this.sleepBtn.style.opacity = bed.available ? "1" : "0.45";
         else this.sleepMenu.style.display = "none";
+      }
+      // THE BOARD, and it is the simplest gate in this block: the fixture within
+      // reach or nothing. No offer is read here and no state is answered — a
+      // board is a thing you walk up to, and everything it might refuse is
+      // answered at menu-open and at each press instead (§2.2d). It never dims
+      // either, because there is no refusal that belongs to standing in front of
+      // it: an empty board says so in words, in the menu, where the words fit.
+      const board = sim.nearBoard;
+      const boardKey = board ? `${board.id}:${board.name}` : "";
+      if (boardKey !== this._board) {
+        this._board = boardKey;
+        this.boardBtn.style.display = board ? "" : "none";
+        // Walking away closes the list with the button, exactly as the bank
+        // does: a board's offers are the offers of a board you are standing at.
+        if (board) this.boardBtn.textContent = `📋 ${board.name}`;
+        else this.closeBoard();
       }
       const clock = sim.clockLabel();
       if (clock !== this._clock) {

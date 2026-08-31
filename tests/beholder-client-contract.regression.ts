@@ -378,3 +378,135 @@ assert.doesNotThrow(
   () => renderDollPanel({ Maggie: { body: { chest: null, head: undefined } } }, "Maggie", new Set(), "front"),
   "a null slot must render, not throw",
 );
+
+// ── The local model slot ─────────────────────────────────────────────────────
+// The slot silently outranks the agent's configured connection server-side, so the
+// UI's one job is to say which model is actually answering and to stop the operator
+// pairing the trained model with the wrong prompt. Both are rendered from server
+// state, so they are checked here rather than left to a live click-through.
+const viewsSource = ["00-prelude.js", "55-sidecar.js", "60-views.js"]
+  .map((name) => readFileSync(join(srcDir, name), "utf8"))
+  .join("\n");
+const loadViews = new Function(
+  "fetch",
+  `const window = { addEventListener() {} }; const document = { querySelector: () => null, createElement: () => ({ style: {}, classList: { add() {}, toggle() {} }, appendChild() {}, setAttribute() {} }), head: { appendChild() {} } };
+   ${viewsSource}
+   return BH;`,
+) as (fetch: unknown) => {
+  views: {
+    connectionBanner(args: Record<string, unknown>): string;
+    modelSection(args: Record<string, unknown>): string;
+    hardwareSection(settings: unknown): string;
+  };
+  sidecar: { versionLabel(model: unknown): string; MODEL_ID: string };
+};
+const BH_VIEWS = loadViews(() => Promise.reject(new Error("no network in contract test")));
+
+const INSTALLED = { repo: "GetBeholder/Beholder-GGUF", file: "Beholder-Q8_0.gguf", oid: "abc123def4567890" };
+
+{
+  // Served locally: the banner must name the local model, not the agent connection.
+  const banner = BH_VIEWS.views.connectionBanner({
+    routing: { source: "utility-sidecar" },
+    servedLocally: true,
+    model: "gpt-5.5",
+    installed: INSTALLED,
+  });
+  assert.match(banner, /local Beholder model/, "a locally served agent must say so");
+  assert.ok(
+    !/gpt-5\.5/.test(banner),
+    "naming the agent connection while the local slot answers would point the operator at the wrong model",
+  );
+  assert.match(banner, /abc123def456/, "the banner states the installed version");
+
+  // Not served: the banner must name the connection that will answer, and why.
+  const remote = BH_VIEWS.views.connectionBanner({
+    routing: { source: "agent-connection", reason: "The utility slot is not running." },
+    servedLocally: false,
+    model: "gpt-5.5",
+    installed: INSTALLED,
+  });
+  assert.match(remote, /agent connection/);
+  assert.match(remote, /gpt-5\.5/);
+  assert.match(remote, /not running/, "the reason the local model is not answering must be shown");
+}
+
+{
+  // Version honesty: never imply "current" when the version cannot be read.
+  assert.equal(BH_VIEWS.sidecar.versionLabel(null), "not installed");
+  assert.equal(BH_VIEWS.sidecar.versionLabel({ oid: null }), "version unknown");
+  assert.equal(BH_VIEWS.sidecar.versionLabel(INSTALLED), "abc123def456");
+}
+
+{
+  // Not installed, no runtime: the install path must warn rather than fail at spawn.
+  const fresh = BH_VIEWS.views.modelSection({
+    sidecarStatus: { runtimeInstalled: false, settings: null },
+    installed: null,
+    servedLocally: false,
+  });
+  assert.match(fresh, /data-model-action="install"/);
+  assert.match(fresh, /runtime is not installed/, "a missing runtime has to be surfaced before the download");
+  assert.match(fresh, /does not\s+touch or replace/i, "the operator must be told the main sidecar is unaffected");
+
+  // Installed and serving: the action offered is to stop, not to install again.
+  const serving = BH_VIEWS.views.modelSection({
+    sidecarStatus: { runtimeInstalled: true, settings: { contextSize: 8192, gpuLayers: 0, maxParallelJobs: 1 } },
+    installed: INSTALLED,
+    servedLocally: true,
+  });
+  assert.match(serving, /data-model-action="disable"/);
+  assert.ok(!/data-model-action="install"/.test(serving), "an installed model must not offer a fresh install");
+  assert.match(serving, /serving/);
+}
+
+{
+  // Hardware only. A sampling control here would let someone quietly break extraction.
+  const hw = BH_VIEWS.views.hardwareSection({ contextSize: 8192, gpuLayers: 0, maxParallelJobs: 2 });
+  for (const field of ["contextSize", "gpuLayers", "maxParallelJobs"]) {
+    assert.ok(hw.includes(`data-hw="${field}"`), `${field} must be operator-controllable`);
+  }
+  for (const forbidden of ["temperature", "topP", "topK", "top_p", "top_k"]) {
+    assert.ok(
+      !new RegExp(forbidden, "i").test(hw),
+      `${forbidden} must not be exposed — sampling is fixed to what the model was trained with`,
+    );
+  }
+  assert.match(hw, /CPU only/, "the CPU/GPU choice is the point of this section");
+  assert.match(hw, /sidecar is not affected/i, "restarting this slot must be distinguished from the main sidecar");
+
+  // The current values must round-trip into the form, or saving silently resets them.
+  assert.match(hw, /value="8192"/);
+  assert.match(hw, /data-hw="maxParallelJobs"[^>]*value="2"/);
+  assert.match(
+    BH_VIEWS.views.hardwareSection({ contextSize: 4096, gpuLayers: -1, maxParallelJobs: 1 }),
+    /<option value="gpu" selected>/,
+    "max-GPU offload must read back as selected",
+  );
+  assert.match(
+    BH_VIEWS.views.hardwareSection({ contextSize: 4096, gpuLayers: 24, maxParallelJobs: 1 }),
+    /data-hw="gpuLayers"[^>]*value="24"/,
+    "an explicit layer count must read back, not fall to the placeholder",
+  );
+}
+
+{
+  // Server-supplied strings reach markup; a repo name or reason is no more trusted
+  // than a prose colour word.
+  const hostile = BH_VIEWS.views.connectionBanner({
+    routing: { source: "agent-connection", reason: BREAKOUT },
+    servedLocally: false,
+    model: BREAKOUT,
+    installed: { ...INSTALLED, file: BREAKOUT },
+  });
+  assert.ok(!hostile.includes(BREAKOUT), "the routing reason and model name must be escaped");
+  const hostileLocal = BH_VIEWS.views.connectionBanner({
+    routing: { source: "utility-sidecar" },
+    servedLocally: true,
+    model: "",
+    installed: { ...INSTALLED, file: BREAKOUT, oid: BREAKOUT },
+  });
+  assert.ok(!hostileLocal.includes(BREAKOUT), "the model file name and version must be escaped");
+}
+
+console.log("beholder client contract: local model slot OK");

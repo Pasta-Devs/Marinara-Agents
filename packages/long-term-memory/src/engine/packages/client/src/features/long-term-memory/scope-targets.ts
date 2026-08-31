@@ -46,6 +46,10 @@ export function buildScopeIndexes(chats: ScopeTargetChat[]): ScopeIndexes {
   return { chatsById, characterIdsByChatId, chatsByCharacterId };
 }
 
+export function deriveScopeBranchChats(chats: ScopeTargetChat[]) {
+  return chats.filter((chat) => Boolean(chat.groupId));
+}
+
 export function deriveScopeConversations(
   chats: ScopeTargetChat[],
   groups: ScopeTargetGroup[],
@@ -53,12 +57,15 @@ export function deriveScopeConversations(
   indexes: ScopeIndexes,
   getGroupLabel: (group: ScopeTargetGroup) => string = (group) => group.label,
 ) {
+  const visibleChatIds = new Set(chats.map((chat) => chat.id));
   return [
-    ...groups.map((group) => ({
-      id: `group:${group.id}`,
-      label: getGroupLabel(group),
-      chatIds: group.chatIds,
-    })),
+    ...groups
+      .map((group) => ({
+        id: `group:${group.id}`,
+        label: getGroupLabel(group),
+        chatIds: group.chatIds.filter((id) => visibleChatIds.has(id)),
+      }))
+      .filter((group) => group.chatIds.length),
     ...chats
       .filter((chat) => !chat.groupId)
       .map((chat) => ({
@@ -76,5 +83,5 @@ export function deriveScopeConversations(
 export function deriveScopeBranches(conversation: { chatIds: string[] } | undefined, indexes: ScopeIndexes) {
   return (conversation?.chatIds ?? [])
     .map((id) => indexes.chatsById.get(id))
-    .filter((chat): chat is ScopeTargetChat => Boolean(chat));
+    .filter((chat): chat is ScopeTargetChat => Boolean(chat?.groupId));
 }

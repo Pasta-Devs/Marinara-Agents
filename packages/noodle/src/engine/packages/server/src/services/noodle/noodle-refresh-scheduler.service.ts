@@ -4,6 +4,7 @@ import { createNoodleStorage } from "../storage/noodle.storage.js";
 import { AUTOMATIC_GENERATION_HEADER } from "../generation/connection-admission.js";
 import {
   dueNoodleRefreshTimes,
+  exponentialNoodleRefreshRetryDelayMs,
   markNoodleRefreshAttempt,
   markNoodleRefreshFailure,
   markNoodleRefreshSuccess,
@@ -18,9 +19,6 @@ const NOODLE_SCHEDULER_MAX_POLL_MS = 60_000;
 const NOODLE_SCHEDULER_DISABLED_POLL_MS = 15 * 60_000;
 const NOODLE_SCHEDULER_CONFIGURATION_RETRY_MS = 15 * 60_000;
 const NOODLE_SCHEDULER_BUSY_RETRY_MS = 60_000;
-const NOODLE_SCHEDULER_RATE_LIMIT_RETRY_MS = 5 * 60_000;
-const NOODLE_SCHEDULER_FAILURE_BASE_RETRY_MS = 5 * 60_000;
-const NOODLE_SCHEDULER_FAILURE_MAX_RETRY_MS = 60 * 60_000;
 const NOODLE_SCHEDULER_CONFIGURATION_STATUS_CODES = new Set([400, 401, 403, 404, 405, 410, 422]);
 
 function responseError(payload: string): string {
@@ -35,14 +33,10 @@ function responseError(payload: string): string {
 
 export function noodleRefreshRetryDelayMs(statusCode: number, failureAttempts: number): number {
   if (statusCode === 409) return NOODLE_SCHEDULER_BUSY_RETRY_MS;
-  if (statusCode === 429) return NOODLE_SCHEDULER_RATE_LIMIT_RETRY_MS;
   if (NOODLE_SCHEDULER_CONFIGURATION_STATUS_CODES.has(statusCode)) {
     return NOODLE_SCHEDULER_CONFIGURATION_RETRY_MS;
   }
-  return Math.min(
-    NOODLE_SCHEDULER_FAILURE_MAX_RETRY_MS,
-    NOODLE_SCHEDULER_FAILURE_BASE_RETRY_MS * 2 ** Math.max(0, failureAttempts),
-  );
+  return exponentialNoodleRefreshRetryDelayMs(failureAttempts);
 }
 
 export function nextNoodleSchedulerPollDelayMs(schedule: PersistedNoodleRefreshSchedule, at: Date): number {

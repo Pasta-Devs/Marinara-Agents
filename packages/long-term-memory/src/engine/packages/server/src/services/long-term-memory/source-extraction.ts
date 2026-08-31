@@ -80,7 +80,7 @@ async function bindSourceNoteToExtractionContext(options: {
 }) {
   const { sourceNote } = options;
   if (
-    stableJsonHash(sourceNote.scope) === stableJsonHash(options.scope) &&
+    stableJsonHash(sourceNote.destinationScope ?? sourceNote.scope) === stableJsonHash(options.scope) &&
     stableJsonHash(sourceNote.modes) === stableJsonHash(options.modes)
   ) {
     return sourceNote;
@@ -88,7 +88,7 @@ async function bindSourceNoteToExtractionContext(options: {
 
   return options.storage.updateNote(
     sourceNote.id,
-    { scope: options.scope, modes: options.modes },
+    { destinationScope: options.scope, modes: options.modes },
     {
       actor: "maintenance_api",
       cause: "source_extraction.context_bound",
@@ -363,7 +363,7 @@ async function extractLongTermMemoryFromSourceNoteInner(
     );
   }
 
-  const requestedScope = options.scope ?? sourceNote.scope;
+  const requestedScope = options.scope ?? sourceNote.destinationScope ?? sourceNote.scope;
   const importedWithoutChatContext =
     !options.chatId && (sourceNote.provenance?.kind === "character" || sourceNote.provenance?.kind === "lorebook");
   const requestedModes = options.modes?.length
@@ -395,7 +395,7 @@ async function extractLongTermMemoryFromSourceNoteInner(
     );
   }
 
-  const scope = sourceNote.scope;
+  const scope = sourceNote.destinationScope ?? sourceNote.scope;
   const modes = sourceNote.modes;
   const allowedBuckets = [...DEFAULT_LTM_ALLOWED_STREAMS_BY_MODE[resolvedMode]];
   const extractionConfig = await getLtmExtractionConfig(options.root, resolvedMode);

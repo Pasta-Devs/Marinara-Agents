@@ -1,16 +1,14 @@
-import { getPackageEmbeddingAdapter } from "./package-runtime.js";
-
 // ponytail: mirror the Engine's fixed host limits; negotiate only if they become dynamic.
 const MAX_EMBEDDING_TEXTS = 128;
 const MAX_EMBEDDING_CHARACTERS = 200_000;
 
 export type MemoryRecallEmbeddingOptions = {
-  embeddingAdapter?: ReturnType<typeof getPackageEmbeddingAdapter>;
+  embeddingAdapter?: PackageEmbeddingAdapter | null;
   signal?: AbortSignal;
 };
 
 export async function embedLongTermMemoryTexts(texts: string[], options: MemoryRecallEmbeddingOptions = {}) {
-  const adapter = options.embeddingAdapter ?? getPackageEmbeddingAdapter();
+  const adapter = options.embeddingAdapter;
   if (!adapter || texts.length === 0) return null;
   const vectors: number[][] = [];
   let batch: string[] = [];
@@ -37,3 +35,4 @@ export async function embedLongTermMemoryTexts(texts: string[], options: MemoryR
   }
   return vectors;
 }
+import type { PackageEmbeddingAdapter } from "./package-runtime.js";
