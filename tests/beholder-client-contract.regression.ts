@@ -699,3 +699,20 @@ const prose = loadProse();
 }
 
 console.log("beholder client contract: prose check OK");
+
+{
+  // The boundary is stated to everyone on the empty panel, which is the screen a new
+  // user looks at and the one where "this is broken" gets decided. Detection cannot
+  // carry this: classifying multi-character narration by shape measured 42% catch at
+  // 4% false alarm once period-style markers (semicolons, honorifics) were removed —
+  // and those markers were carrying half the signal, so the classifier was largely
+  // recognising Victorian prose rather than omniscient prose. Saying it up front
+  // reaches 100% of users with no false alarms at all.
+  const dollSource = readFileSync(join(srcDir, "30-paperdoll.js"), "utf8");
+  assert.match(dollSource, /bh-placeholder-scope/u, "the empty panel must state what Beholder reads");
+  assert.match(dollSource, /one focal character per passage/u, "naming the actual boundary");
+  assert.match(dollSource, /script/u, "and the script case");
+  assert.match(beholderChromeSource, /bh-scope-more/u, "with a route to the full explanation");
+}
+
+console.log("beholder client contract: stated scope OK");

@@ -3590,3 +3590,27 @@
 .bh-hw-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-top: 8px; }
 .bh-hw-row input, .bh-hw-row select { width: 130px; }
 .bh-hw-hidden { display: none; }
+
+/* The boundary, stated on the empty panel — quieter than the placeholder note above
+   it, because it is context rather than an alert. Everyone sees it once; nobody has to
+   be detected. */
+.bh-placeholder-scope {
+    margin: 6px 14px 12px;
+    padding: 9px 12px;
+    font-size: var(--bh-text-meta);
+    line-height: 1.55;
+    opacity: 0.72;
+    border-left: 2px solid var(--bh-divider);
+}
+.bh-placeholder-scope b { opacity: 0.95; }
+.bh-scope-more {
+    display: inline;
+    margin-left: 4px;
+    padding: 0;
+    background: none;
+    border: 0;
+    font: inherit;
+    color: var(--bh-chroma, var(--primary));
+    cursor: pointer;
+    text-decoration: underline;
+}

@@ -299,6 +299,11 @@ BH.dock = {
       // "Edit slots" opens the sheet: the list layout draws no cards to click, and a
       // slot with nothing in it has no card anywhere, so this is the only way to reach
       // an empty one.
+      // From the empty-panel note straight to the full explanation.
+      if (target.closest(".bh-scope-more")) {
+        BH.views.helpView();
+        return;
+      }
       if (target.closest(".bh-digest-edit")) {
         BH.sheet.open();
         return;
