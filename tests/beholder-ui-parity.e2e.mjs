@@ -551,6 +551,28 @@ try {
     badgeText.length <= 4,
     `${badgeText.length} badges for a two-slot change`,
   );
+  // A removal has to show too. The delta used to be computed over the current state
+  // only, which cannot see a slot that is gone: taking a garment off deletes the slot,
+  // so the message that did it reported no change at all — on a panel whose whole
+  // purpose is tracking things being put on and taken off.
+  await page.fill(".beholder-notebox-input", "Maggie takes off her belt.");
+  await page.click(".beholder-notebox-btn");
+  await page.waitForFunction(() => document.querySelector(".beholder-notebox-input")?.value === "", null, {
+    timeout: 90000,
+  });
+  await page.waitForTimeout(3000);
+  const removalBadges = await page.evaluate(() =>
+    [...document.querySelectorAll(".bh-msg-badge")].map((badge) => ({
+      what: badge.querySelector(".bh-msg-text")?.textContent ?? "",
+      kind: (badge.className.match(/bh-msg-(add|clear|hold|wound|heal|mod)/) ?? [])[1] ?? "",
+    })),
+  );
+  check(
+    "taking something off is shown as a change",
+    removalBadges.some((b) => b.kind === "clear"),
+    removalBadges.map((b) => `${b.what}:${b.kind}`).join(" ") || "no badges",
+  );
+
   // They are Beholder's output; leaving them behind would be marking up someone's chat
   // with a feature they turned off.
   await page.evaluate(() => document.querySelector(".bh-hud-toggle")?.click());
