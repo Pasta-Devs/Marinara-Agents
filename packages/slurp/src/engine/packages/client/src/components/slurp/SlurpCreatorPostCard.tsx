@@ -112,7 +112,7 @@ export function LockedSlurpPostCard({
   return (
     <article
       data-noodle-post-id={post.id}
-      className="border-b border-[var(--noodle-divider)] px-4 py-5 transition-colors hover:bg-[var(--accent)]/25"
+      className="rounded-lg border border-[var(--noodle-divider)] bg-[var(--slurp-surface)] px-4 py-5 shadow-sm shadow-black/5 transition-colors hover:bg-[var(--slurp-surface-raised)]"
     >
       {/* Author row */}
       <div className="flex gap-3">

@@ -58,6 +58,12 @@ export function getNoodleAccentStyle(accent: string, style: CSSProperties = {}):
     "--noodle-accent-foreground":
       "light-dark(color-mix(in srgb, var(--noodle-accent) 65%, var(--foreground)), var(--noodle-accent))",
     "--noodle-divider": "var(--marinara-chat-chrome-panel-divider)",
+    "--slurp-canvas":
+      "light-dark(color-mix(in srgb, var(--background) 97%, var(--foreground)), color-mix(in srgb, var(--background) 92%, #2d1723))",
+    "--slurp-surface":
+      "light-dark(color-mix(in srgb, var(--background) 99%, var(--foreground)), color-mix(in srgb, var(--background) 96%, #3b1c2c))",
+    "--slurp-surface-raised":
+      "light-dark(color-mix(in srgb, var(--background) 96%, var(--foreground)), color-mix(in srgb, var(--background) 91%, #472036))",
     ...style,
   } as CSSProperties;
 }
@@ -407,7 +413,8 @@ export function NoodleShell({
     <NoodleAccentContext.Provider value={accent}>
       <div
         className={cn(
-          "mari-chrome-token-scope relative flex h-full min-h-0 flex-col bg-[var(--background)] text-[var(--foreground)]",
+          "mari-chrome-token-scope relative flex h-full min-h-0 flex-col bg-[var(--background)] text-[var(--foreground)] antialiased",
+          slurpActive && "bg-[var(--slurp-canvas)]",
           NOODLE_ICON_SCOPE_CLASS,
         )}
         data-component="NoodleView"
@@ -637,23 +644,26 @@ export function NoodleShell({
           )}
         </AnimatePresence>
         <div className="flex min-h-0 flex-1 justify-center overflow-hidden">
-          <div className="flex min-h-0 w-full max-w-[1264px] justify-center">
-            <aside className="hidden w-[17rem] shrink-0 border-r border-[var(--noodle-divider)] bg-[var(--background)] @min-[1024px]:flex @min-[1024px]:flex-col">
-              <div className="flex min-h-0 flex-1 flex-col px-5 py-4">
+          <div className="flex min-h-0 w-full max-w-[1320px] justify-center">
+            <aside className="hidden w-[14rem] shrink-0 border-r border-[var(--noodle-divider)] bg-[var(--background)] @min-[1024px]:flex @min-[1024px]:flex-col">
+              <div className="flex min-h-0 flex-1 flex-col px-4 py-4">
                 <div className="mb-5 flex h-12 items-center">
                   <NoodleLogo
                     src={noodlerActive || slurpActive ? NOODLER_LOGO_SRC : NOODLE_LOGO_SRC}
                     className="h-10 w-16"
                   />
                 </div>
-                <nav className="space-y-1">
+                <nav
+                  className="space-y-1"
+                  aria-label={slurpActive ? localizeUi("ui.slurp.navigation.menuNavigation") : undefined}
+                >
                   <button
                     type="button"
                     onClick={onOpenHomeDestination}
                     aria-current={homeActive ? "page" : undefined}
                     className={cn(
-                      "flex min-h-11 w-full items-center gap-4 rounded-full px-3 text-left text-[0.95rem] font-semibold hover:bg-[var(--accent)]",
-                      homeActive && "bg-[var(--noodle-accent)]/10",
+                      "flex min-h-11 w-full items-center gap-3 rounded-lg px-3 text-left text-sm font-semibold transition-[background-color,color,transform] hover:bg-[var(--accent)] active:scale-[0.96] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--noodle-accent)]",
+                      homeActive && "bg-[var(--noodle-accent)]/12 text-[var(--foreground)]",
                     )}
                   >
                     <Home size={22} className="!text-[var(--noodle-accent)]" />
@@ -665,7 +675,7 @@ export function NoodleShell({
                       onClick={onOpenSearch}
                       aria-current={activeView === "search" ? "page" : undefined}
                       className={cn(
-                        "flex min-h-11 w-full items-center gap-4 rounded-full px-3 text-left text-[0.95rem] font-semibold hover:bg-[var(--accent)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--noodle-accent)]",
+                        "flex min-h-11 w-full items-center gap-3 rounded-lg px-3 text-left text-sm font-semibold transition-[background-color,color,transform] hover:bg-[var(--accent)] active:scale-[0.96] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--noodle-accent)]",
                         activeView === "search" && "bg-[var(--noodle-accent)]/10",
                       )}
                     >
@@ -683,7 +693,7 @@ export function NoodleShell({
                       onClick={onOpenProfile}
                       aria-current={activeView === "profile" ? "page" : undefined}
                       className={cn(
-                        "flex min-h-11 w-full items-center gap-4 rounded-full px-3 text-left text-[0.95rem] font-semibold hover:bg-[var(--accent)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--noodle-accent)]",
+                        "flex min-h-11 w-full items-center gap-3 rounded-lg px-3 text-left text-sm font-semibold transition-[background-color,color,transform] hover:bg-[var(--accent)] active:scale-[0.96] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--noodle-accent)]",
                         activeView === "profile" && "bg-[var(--noodle-accent)]/10",
                       )}
                     >
@@ -698,7 +708,7 @@ export function NoodleShell({
                     onClick={onOpenSettings}
                     aria-current={activeView === "settings" ? "page" : undefined}
                     className={cn(
-                      "flex min-h-11 w-full items-center gap-4 rounded-full px-3 text-left text-[0.95rem] font-semibold hover:bg-[var(--accent)]",
+                      "flex min-h-11 w-full items-center gap-3 rounded-lg px-3 text-left text-sm font-semibold transition-[background-color,color,transform] hover:bg-[var(--accent)] active:scale-[0.96] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--noodle-accent)]",
                       activeView === "settings" && "bg-[var(--noodle-accent)]/10",
                     )}
                   >
@@ -777,7 +787,7 @@ export function NoodleShell({
                     data-component="NoodleView.AccountSwitcher"
                     type="button"
                     onClick={() => onAccountSwitcherOpenChange(!accountSwitcherOpen)}
-                    className="flex min-h-16 w-full items-center gap-3 rounded-full px-3 text-left transition-colors hover:bg-[var(--accent)]"
+                    className="flex min-h-16 w-full items-center gap-3 rounded-lg px-3 text-left transition-colors hover:bg-[var(--accent)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--noodle-accent)]"
                     title={localizeUi("ui.noodle.noodleshell.switchAccount")}
                   >
                     {personaAccount ? (
@@ -803,7 +813,7 @@ export function NoodleShell({
               </div>
             </aside>
 
-            <main className="flex min-h-0 w-full flex-1 flex-col pb-[calc(56px+var(--slurp-bottom-safe-inset))] @min-[1024px]:max-w-[640px] @min-[1024px]:border-r @min-[1024px]:border-[var(--noodle-divider)] @min-[1024px]:pb-0">
+            <main className="flex min-h-0 w-full flex-1 flex-col pb-[calc(56px+var(--slurp-bottom-safe-inset))] @min-[1024px]:max-w-[680px] @min-[1024px]:border-r @min-[1024px]:border-[var(--noodle-divider)] @min-[1024px]:pb-0">
               {children}
             </main>
             {rightRail}

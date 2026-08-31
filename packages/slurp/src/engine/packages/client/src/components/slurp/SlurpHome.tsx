@@ -1322,7 +1322,7 @@ export function SlurpHome({ navigation, onNavigate }: SlurpHomeProps) {
   // Reserve the same rail width as the feed view (see NoodleHome's "settings" rail) so
   // non-feed screens don't stretch the shell wider and look like a different layout.
   const emptyRightRail = (
-    <aside className="hidden w-[22rem] shrink-0 px-4 py-3 @min-[1280px]:block" aria-hidden="true" />
+    <aside className="hidden w-[20rem] shrink-0 px-4 py-3 @min-[1280px]:block" aria-hidden="true" />
   );
 
   if (navigation.mode === "creator-settings") {
@@ -1691,9 +1691,17 @@ export function SlurpHome({ navigation, onNavigate }: SlurpHomeProps) {
   // Creator discovery stays in the wide-screen rail. Narrow layouts omit it so the
   // timeline remains the primary surface instead of stacking sidebar content above it.
   const feedRightRail = (
-    <aside className="hidden w-[22rem] shrink-0 px-4 py-3 @min-[1280px]:block">
+    <aside className="hidden w-[20rem] shrink-0 px-4 py-4 @min-[1280px]:block" aria-labelledby="slurp-tonight-heading">
       <div className="sticky top-3 space-y-4">
-        <label className="flex h-11 items-center gap-2 rounded-full border border-[var(--noodle-divider)] bg-[var(--background)] px-4 text-sm transition-colors focus-within:border-[var(--noodle-accent)]">
+        <div className="space-y-1 px-1">
+          <h2 id="slurp-tonight-heading" className="text-base font-bold tracking-tight">
+            {localizeUi("ui.slurp.home.tonight")}
+          </h2>
+          <p className="text-xs leading-5 text-[var(--muted-foreground)]">
+            {localizeUi("ui.slurp.home.tonightDetail")}
+          </p>
+        </div>
+        <label className="flex min-h-11 items-center gap-2 rounded-lg border border-[var(--noodle-divider)] bg-[var(--slurp-surface)] px-3 text-sm transition-colors focus-within:border-[var(--noodle-accent)]">
           <Search size={17} className="shrink-0 !text-[var(--noodle-accent)]" />
           <input
             value={feedSearch}
@@ -1705,7 +1713,7 @@ export function SlurpHome({ navigation, onNavigate }: SlurpHomeProps) {
             <button
               type="button"
               onClick={() => setFeedSearch("")}
-              className="flex h-6 w-6 items-center justify-center rounded-full text-[var(--noodle-accent)] hover:bg-[var(--noodle-accent)]/10"
+              className="flex h-8 w-8 items-center justify-center rounded-md text-[var(--noodle-accent)] hover:bg-[var(--noodle-accent)]/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--noodle-accent)]"
               title={localizeUi("ui.noodle.noodlehome.clearSearch")}
             >
               <X size={13} />
@@ -4087,7 +4095,13 @@ function ViewerHub({
           triggerRef={mobileDrawerTriggerRef}
         />
         <div className="border-b border-[var(--noodle-divider)] bg-[var(--background)]/95 backdrop-blur">
-          <div className="flex items-center pr-2">
+          <div className="hidden px-4 pb-1 pt-4 @min-[1024px]:block">
+            <h1 className="text-xl font-bold tracking-tight text-balance">{localizeUi("ui.slurp.navigation.home")}</h1>
+            <p className="mt-1 max-w-xl text-xs leading-5 text-[var(--muted-foreground)] text-pretty">
+              {localizeUi("ui.slurp.home.feedDetail")}
+            </p>
+          </div>
+          <div className="flex items-center px-2">
             <div
               className="grid min-w-0 flex-1 grid-cols-2"
               role="tablist"
@@ -4106,13 +4120,13 @@ function ViewerHub({
                   role="tab"
                   aria-selected={tab === option.id}
                   className={cn(
-                    "relative flex h-12 items-center justify-center text-sm font-bold text-[var(--muted-foreground)] transition-colors hover:bg-[var(--accent)] hover:text-[var(--foreground)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--noodle-accent)]",
+                    "relative flex min-h-11 items-center justify-center rounded-md text-sm font-bold text-[var(--muted-foreground)] transition-colors hover:bg-[var(--accent)] hover:text-[var(--foreground)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--noodle-accent)]",
                     tab === option.id && "text-[var(--foreground)]",
                   )}
                 >
                   {option.label}
                   {tab === option.id && (
-                    <span className="absolute bottom-0 left-1/2 h-1 w-14 -translate-x-1/2 rounded-full bg-[var(--noodle-accent)]" />
+                    <span className="absolute bottom-0 left-1/2 h-0.5 w-12 -translate-x-1/2 rounded-full bg-[var(--noodle-accent)]" />
                   )}
                 </button>
               ))}
@@ -4185,12 +4199,12 @@ function ViewerHub({
           </div>
         </div>
       )}
-      <div className="border-b border-[var(--noodle-divider)] px-4 py-2">
+      <div className="px-4 py-3">
         <button
           type="button"
           onClick={onRefresh}
           disabled={isRefreshing}
-          className="flex h-9 w-full items-center justify-center gap-2 rounded-full text-sm font-bold text-[var(--noodle-accent)] transition-colors hover:bg-[var(--noodle-accent)]/10 disabled:cursor-not-allowed disabled:opacity-50"
+          className="flex min-h-11 w-full items-center justify-center gap-2 rounded-md border border-[var(--noodle-divider)] bg-[var(--slurp-surface)] text-sm font-bold text-[var(--noodle-accent)] transition-[background-color,scale] hover:bg-[var(--noodle-accent)]/10 active:scale-[0.96] disabled:cursor-not-allowed disabled:opacity-50"
           title={localizeUi("ui.noodle.noodlehome.refreshTimeline")}
           aria-label={localizeUi("ui.noodle.noodlehome.refreshTimeline")}
         >
@@ -4225,7 +4239,7 @@ function ViewerHub({
                   : localizeUi("ui.noodle.viewerhub.noPostsYet")}
             </p>
           ) : (
-            <div>
+            <div className="space-y-3 bg-[var(--slurp-canvas)] px-3 pb-5">
               {visibleFeed.map((item, index) => (
                 <Fragment key={item.post.id}>
                   {index === dividerIndex && <NewSinceLastVisitDivider />}
