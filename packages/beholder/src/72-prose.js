@@ -74,6 +74,27 @@ BH.prose = {
    * Returns null when there is nothing to say — the common case, and the panel should
    * stay quiet then rather than editorialise about someone's writing.
    */
+  /** The recent assistant turns, as plain strings. Shared with the report. */
+  async sample(chatId) {
+    if (!chatId) return [];
+    try {
+      const res = await fetch(`/api/chats/${encodeURIComponent(chatId)}/messages?limit=12`, {
+        credentials: "same-origin",
+        headers: { Accept: "application/json" },
+      });
+      if (!res.ok) return [];
+      const payload = await res.json();
+      const rows = Array.isArray(payload) ? payload : (payload?.messages ?? []);
+      return rows
+        .filter((row) => row && !row.isUser && row.role !== "user")
+        .slice(-8)
+        .map((row) => row.content ?? row.text ?? "")
+        .filter(Boolean);
+    } catch {
+      return [];
+    }
+  },
+
   async assess(chatId, state) {
     if (!chatId) return null;
     let messages = [];

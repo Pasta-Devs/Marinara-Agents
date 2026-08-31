@@ -592,6 +592,26 @@ BH.views = {
              <dt>Prompt in use</dt><dd>${selected === BH_FIVE_PASS_ID ? "five passes (local model)" : "one prompt (SOTA model)"}</dd>
            </dl>`,
         );
+        // The report comes before the raw state: it is the thing to hand over when
+        // something is wrong, and burying it under a JSON dump is how it goes unused.
+        lines.push(
+          `<div class="bh-editor-group-label">report</div>
+           <div class="bh-report-block">
+             <p class="bh-view-note">If something looks wrong, copy this and send it over — it carries the
+             build, the model, the prompt, and what the panel is holding, so nobody has to ask.</p>
+             <label class="bh-check bh-report-prose">
+               <input type="checkbox" class="bh-report-include-prose">
+               <span>include the last few turns of roleplay
+                 <small>off by default — the report says nothing about what you wrote unless you tick this</small></span>
+             </label>
+             <div class="bh-model-actions">
+               <button type="button" class="bh-btn bh-btn-primary bh-report-copy"><i class="fa-solid fa-copy"></i>
+                 Copy report</button>
+               <button type="button" class="bh-btn bh-report-show">Show it</button>
+             </div>
+             <pre class="bh-doctor-json bh-report-text" hidden></pre>
+           </div>`,
+        );
         lines.push(
           `<div class="bh-editor-group-label">state as stored</div>
            <pre class="bh-doctor-json">${BH.escapeHtml(JSON.stringify(snapshot?.state ?? {}, null, 2))}</pre>`,
@@ -606,6 +626,29 @@ BH.views = {
         lines.push(`<p class="bh-view-warn">Could not read the state: ${BH.escapeHtml(error.message)}</p>`);
       }
       body.innerHTML = lines.join("");
+
+      const block = body.querySelector(".bh-report-block");
+      if (block) {
+        const includeProse = () => !!block.querySelector(".bh-report-include-prose")?.checked;
+        const textBox = block.querySelector(".bh-report-text");
+        block.querySelector(".bh-report-copy")?.addEventListener("click", async (event) => {
+          const button = event.currentTarget;
+          button.disabled = true;
+          try {
+            const text = await BH.report.build({ includeProse: includeProse() });
+            textBox.textContent = text;
+            await BH.report.copy(text, button);
+          } catch (error) {
+            BH.toast(`Could not build the report: ${error.message}`);
+          } finally {
+            button.disabled = false;
+          }
+        });
+        block.querySelector(".bh-report-show")?.addEventListener("click", async () => {
+          textBox.textContent = await BH.report.build({ includeProse: includeProse() });
+          textBox.hidden = !textBox.hidden;
+        });
+      }
     });
   },
 

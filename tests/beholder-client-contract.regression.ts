@@ -331,7 +331,11 @@ const freshClient =
   `(() => {\n"use strict";\n` +
   `const BH_STYLE_CSS = ${JSON.stringify(readFileSync(join(srcDir, "style.css"), "utf8"))};\n` +
   `const BH_FA_CSS = ${JSON.stringify(readFileSync(join(srcDir, "fa-embed.css"), "utf8"))};\n` +
-  `const BH_LOCALES = ${JSON.stringify(clientLocales)};\n\n` +
+  `const BH_LOCALES = ${JSON.stringify(clientLocales)};\n` +
+  // This preamble mirrors scripts/build-beholder-package.mjs by hand, which is the
+  // price of checking staleness independently of the builder. Anything added there has
+  // to be added here too, or this fails with a 400 KB diff that says nothing.
+  `const BH_PACKAGE_VERSION = ${JSON.stringify(manifest.version)};\n\n` +
   `${clientModules.map((name) => `// ===== ${name} =====\n${readFileSync(join(srcDir, name), "utf8")}`).join("\n")}\n` +
   `})();\n`;
 assert.equal(client, freshClient, "client.js is stale relative to Beholder source — rebuild the package");
