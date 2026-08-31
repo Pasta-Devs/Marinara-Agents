@@ -1,1 +1,4 @@
 node_modules/
+# Also without the slash: a directory-only pattern does not match a SYMLINK named
+# node_modules, and one of those was committed once and broke CI's install.
+node_modules

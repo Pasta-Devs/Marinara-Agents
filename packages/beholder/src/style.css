@@ -205,6 +205,21 @@
 .beholder-notebox .beholder-notebox-input { flex: 1 1 auto; min-width: 0; }
 .beholder-notebox .beholder-notebox-btn { flex: 0 0 auto; }
 
+/* The reference extension mounts that bar above the host's chat input. This package
+   mounts it in Beholder's own panel footer instead — the engine's composer has no
+   stable hook to anchor to — so it needs a footer's chrome and a lane kept clear of
+   the resize grip, a 1.5rem square pinned to the panel's bottom-right corner that
+   otherwise sits on top of the send button and swallows the click. */
+.beholder-panel .beholder-notebox {
+    position: relative;
+    z-index: 2;
+    margin: 0;
+    padding: var(--bh-space-2, 6px) calc(1.5rem + var(--bh-space-3, 10px)) var(--bh-space-2, 6px)
+        var(--bh-space-3, 10px);
+    border-top: 1px solid var(--bh-divider);
+    background: var(--bh-surface-1);
+}
+
 .beholder-panel.beholder-dragging {
     opacity: 0.85;
 }
@@ -653,8 +668,14 @@
        switch (the panel has no doll grid to switch between at this width). */
     .bh-layout-switch-row { display: none; }
     /* Header tools collapse to the overflow (⋯) trigger when narrow. */
-    .beholder-tool-btn { display: none; }
-    .beholder-tools-more { display: inline-block; }
+    /* .beholder-panel-scoped so this outranks the FA shim's
+       `.beholder-panel [class*='fa-']`, which forces display:inline-block on every
+       icon in the panel and otherwise wins this on specificity. */
+    .beholder-panel .beholder-tool-btn { display: none; }
+    /* One step more specific than the base hide below, which has to be
+       .beholder-panel-scoped itself to outrank the FA shim. Without that the base
+       rule wins on source order and the trigger never appears. */
+    .beholder-panel .beholder-panel-controls .beholder-tools-more { display: inline-block; }
 }
 
 /* Per-slot CARD: one card per anatomical slot, contains chips for each
@@ -1463,6 +1484,54 @@
     letter-spacing: 0.1em;
     font-size: 1.05em;
 }
+/* The reference set placement, padding and stacking inline from its own JavaScript, so
+   the ported rules describe a box that never positioned itself. Only the coordinates
+   come from script here; everything that is not per-instance belongs in the sheet.
+   Above the panel's own layer, including the 80 it takes on a phone. */
+.beholder-onboard {
+    position: fixed;
+    z-index: 200;
+    padding: var(--bh-space-3, 10px) var(--bh-space-3, 10px) var(--bh-space-2, 6px);
+}
+.beholder-onboard .bh-onboard-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--bh-space-2, 6px);
+}
+.beholder-onboard .bh-onboard-close {
+    border: 0;
+    background: none;
+    color: inherit;
+    opacity: 0.6;
+    cursor: pointer;
+    font-size: 0.95em;
+}
+.beholder-onboard .bh-onboard-close:hover { opacity: 1; }
+.beholder-onboard .bh-onboard-tips {
+    margin: var(--bh-space-2, 6px) 0 0;
+    padding-left: 18px;
+}
+.beholder-onboard .bh-onboard-tips li { margin-bottom: 4px; }
+.beholder-onboard .bh-onboard-foot {
+    display: flex;
+    justify-content: flex-end;
+    margin-top: var(--bh-space-2, 6px);
+}
+/* Sitting on top of the panel because there was no room beside it: the arrow would be
+   pointing at the thing it is covering. */
+.beholder-onboard[data-side="over"] .bh-onboard-arrow { display: none; }
+/* The help view's closing line, which the reference styled inline. */
+.bh-help-sign {
+    margin: 0 0 6px;
+    text-align: center;
+    font-family: var(--bh-font-display);
+    font-size: 1.08em;
+    opacity: 0.8;
+}
+/* The token only. The reference hard-codes a fallback gold that this package has
+   deliberately retired in favour of the themed one. */
+.bh-help-sign span { color: var(--bh-gold); }
 @keyframes bh-onboard-in {
     from { opacity: 0; transform: scale(0.95); }
     to   { opacity: 1; transform: scale(1); }
@@ -2177,6 +2246,14 @@
     box-shadow: none;
 }
 .bh-btn[disabled] { opacity: 0.45; pointer-events: none; }
+/* A destructive button waiting for its second press. Filled rather than outlined, so
+   the armed state is obvious at a glance and cannot be confused with the resting one. */
+.bh-btn-danger.bh-btn-armed {
+    background: rgb(255, 152, 136);
+    border-color: rgb(255, 152, 136);
+    color: rgb(32, 12, 10);
+    font-weight: 600;
+}
 
 /* ─── Header tool icons + overflow menu ──────────────────────────────────
    The flat icon row (settings / doctor / inspector / help) + a "⋯" overflow
@@ -2198,7 +2275,9 @@
     background: var(--bh-border);
     opacity: 0.8;
 }
-.beholder-tools-more { display: none; }
+/* Scoped for the same reason as the tool row: the FA shim would otherwise keep this
+   overflow trigger visible on wide panels, where the tool row is already shown. */
+.beholder-panel .beholder-tools-more { display: none; }
 .beholder-tools-more.bh-more-open { opacity: 1; color: var(--bh-accent); }
 .beholder-tools-menu {
     position: absolute;
@@ -2489,7 +2568,10 @@
     z-index: 60;
     display: flex;
     flex-direction: column;
-    background: var(--SmartThemeBlurTintColor, rgba(13, 15, 20, 0.97));
+    /* Opaque on purpose, and the same surface the editor popover uses. The reference
+       reads its host's tint variable here, which in this host resolves translucent —
+       the paper doll showed through the text and made it unreadable. */
+    background: rgb(16, 18, 24);
     border-radius: 12px;
     overflow: hidden;
     animation: 0.18s ease-out bh-view-in;
@@ -2706,6 +2788,7 @@
 .bh-vlog-row {
     display: flex;
     align-items: baseline;
+    flex-wrap: wrap;
     gap: 8px;
     font-family: var(--bh-font-data);
     font-size: 0.8em;
@@ -2715,6 +2798,10 @@
     background: rgba(255, 255, 255, 0.025);
     border-left: 2px solid var(--bh-divider);
 }
+/* The label keeps its width; the sentence takes the rest and wraps within the row
+   rather than pushing past the panel edge. */
+.bh-vlog-row > b { flex: 0 0 auto; }
+.bh-vlog-row > span { flex: 1 1 12ch; min-width: 0; overflow-wrap: anywhere; }
 .bh-vlog-row b { flex-shrink: 0; font-size: 0.85em; letter-spacing: 0.1em; }
 .bh-vlog-warn { border-left-color: var(--bh-accent); }
 .bh-vlog-warn b { color: var(--bh-accent); }
@@ -2741,6 +2828,9 @@
     font-size: 0.92em;
 }
 .bh-turns tr:last-child td { border-bottom: none; }
+/* "nothing here yet" is a normal state for a fresh chat, so it reads as quiet
+   information rather than as a row of missing data. */
+.bh-turns-empty { opacity: 0.5; }
 .bh-tips {
     margin: 0;
     padding-left: 18px;
@@ -3376,6 +3466,14 @@
     );
 }
 .bh-no-model-banner .bh-banner-spin { color: var(--bh-gold-deep); }
+/* The reference relies on FontAwesome's own fa-spin. This package ships an icon shim
+   rather than the whole library, and fa-spin is not part of it — so the spinner sat
+   perfectly still, which reads as a hang rather than as work in progress. */
+@keyframes bh-banner-spin { to { transform: rotate(360deg); } }
+.bh-banner-spin { display: inline-block; animation: bh-banner-spin 0.9s linear infinite; }
+@media (prefers-reduced-motion: reduce) {
+    .bh-banner-spin { animation: none; }
+}
 .bh-no-model-banner.bh-banner-warn .bh-banner-icon {
     color: var(--bh-gold-deep);
     text-shadow: color-mix(in srgb, var(--bh-accent) 45%, transparent) 0 0 8px;
@@ -3383,6 +3481,16 @@
 
 /* Calm variant — deliberate off: muted, no gold pull, a quiet ○ marker.
    It's still persistent, just a note rather than a call to action. */
+/* The reference only ever uses this strip to ask for something, so its actions take a
+   full row and stretch. Here it also reports a healthy state — "answering locally" —
+   and a full-width button under one line of text reads as an error the operator has to
+   clear. Calm keeps the action inline beside the copy. */
+.bh-no-model-banner.bh-banner-calm .bh-banner-actions {
+    flex: 0 0 auto;
+    justify-content: flex-end;
+}
+.bh-no-model-banner.bh-banner-calm .bh-banner-actions .bh-btn { flex: 0 0 auto; }
+
 .bh-no-model-banner.bh-banner-calm {
     background: var(--bh-surface-1);
     opacity: 0.9;
@@ -3500,51 +3608,24 @@
 }
 
 /* ── Package-only chrome ─────────────────────────────────────────────────────
-   The editor form, toast, inputs and slot cards are all styled above, carried
-   over with the renderer. What follows is the surrounding chrome this build adds:
-   the editor's own frame, the overlay views (Prompt / Doctor / Help), and the
-   lock mark. Same variables, so it sits inside the panel's palette. */
+   The editor, the views and the slot cards are styled above, carried over with the
+   renderer. This build used to re-define that chrome down here as well — a simpler
+   frame, a floating card for the views, its own Apply button — and being later in the
+   file it won, so the reference styling above was loaded and never seen. That is why
+   the panel looked bolted together next to the extension it was ported from.
+   Those duplicates are gone. What is left is only what has no counterpart above:
+   the prompt picker, the local-model controls, and the lock mark. */
 
-.bh-editor {
-  position: fixed; z-index: 10050; max-height: 70vh; overflow: auto;
-  background: var(--SmartThemeBlurTintColor, rgba(20, 20, 24, .98));
-  color: var(--SmartThemeBodyColor, #e0e0e0);
-  border: 1px solid var(--SmartThemeBorderColor, rgba(255, 255, 255, .15));
-  border-radius: 10px; box-shadow: 0 12px 32px rgba(0, 0, 0, .45); padding: 10px;
-}
-.bh-editor-head { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
-.bh-editor-title { font-weight: 700; flex: 1; text-transform: capitalize; }
 .bh-editor-lock { display: inline-flex; align-items: center; gap: 4px; font-size: 11px; opacity: .85; }
-.bh-editor-close { background: none; border: 0; color: inherit; cursor: pointer; opacity: .7; }
-.bh-editor-close:hover { opacity: 1; }
-.bh-editor-foot { display: flex; justify-content: flex-end; margin-top: 10px; }
-.bh-editor-apply {
-  cursor: pointer; padding: 6px 16px; border-radius: 8px; font-weight: 700;
-  background: color-mix(in srgb, var(--bh-accent) 22%, transparent); border: 1px solid color-mix(in srgb, var(--bh-accent) 55%, transparent); color: inherit;
-}
-.bh-editor-apply:hover:not(:disabled) { background: color-mix(in srgb, var(--bh-accent) 40%, transparent); }
+/* Apply uses the reference's .bh-btn / .bh-btn-primary now. */
 .bh-editor-apply:disabled { opacity: .5; cursor: default; }
-/* missing overrides the slot, so the rest of the form is visibly inert */
-.bhe-missing-mode .bhe-worn-list, .bhe-missing-mode .bhe-wound-list,
-.bhe-missing-mode .bhe-holding-row, .bhe-missing-mode .bh-editor-add { opacity: .35; pointer-events: none; }
 
-.bh-view-overlay {
-  position: fixed; inset: 0; z-index: 10060; display: flex; align-items: center; justify-content: center;
-  background: rgba(0, 0, 0, .45); padding: 16px;
-}
-.bh-view {
-  width: min(560px, 96vw); max-height: 86vh; display: flex; flex-direction: column;
-  background: var(--SmartThemeBlurTintColor, rgba(20, 20, 24, .98));
-  color: var(--SmartThemeBodyColor, #e0e0e0);
-  border: 1px solid var(--SmartThemeBorderColor, rgba(255, 255, 255, .15));
-  border-radius: 12px; box-shadow: 0 16px 40px rgba(0, 0, 0, .5);
-}
-.bh-view-head { display: flex; align-items: center; gap: 8px; padding: 10px 12px;
-  border-bottom: 1px solid var(--SmartThemeBorderColor, rgba(255, 255, 255, .12)); }
-.bh-view-title { font-weight: 700; flex: 1; }
+
+/* The full-viewport overlay this package used to open views in is gone: views now
+   fill the panel like the reference extension's, so nothing needs to dim the host
+   app to show a legend. */
 .bh-view-close { background: none; border: 0; color: inherit; cursor: pointer; opacity: .7; }
 .bh-view-close:hover { opacity: 1; }
-.bh-view-body { padding: 12px; overflow: auto; font-size: 12.5px; line-height: 1.5; }
 .bh-view-lead { margin: 0 0 10px; }
 .bh-view-note { opacity: .8; font-size: 11.5px; margin: 8px 0 0; }
 .bh-view-warn { margin: 10px 0 0; padding: 8px 10px; border-radius: 8px;
@@ -3565,8 +3646,6 @@
 .bh-help-list { margin: 6px 0 12px; padding-left: 18px; }
 .bh-help-list li { margin-bottom: 4px; }
 
-.bh-slot-card { position: relative; }
-.bh-lock-mark { position: absolute; top: 4px; right: 4px; font-size: 9px; opacity: .75; }
 .bh-slot-card.bh-slot-locked { outline: 1px solid color-mix(in srgb, var(--bh-accent) 55%, transparent); outline-offset: -1px; }
 
 /* Which connection is answering, and the local model that may be overruling it. */
@@ -3592,3 +3671,27 @@
 .bh-hw-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-top: 8px; }
 .bh-hw-row input, .bh-hw-row select { width: 130px; }
 .bh-hw-hidden { display: none; }
+
+/* The boundary, stated on the empty panel — quieter than the placeholder note above
+   it, because it is context rather than an alert. Everyone sees it once; nobody has to
+   be detected. */
+.bh-placeholder-scope {
+    margin: 6px 14px 12px;
+    padding: 9px 12px;
+    font-size: var(--bh-text-meta);
+    line-height: 1.55;
+    opacity: 0.72;
+    border-left: 2px solid var(--bh-divider);
+}
+.bh-placeholder-scope b { opacity: 0.95; }
+.bh-scope-more {
+    display: inline;
+    margin-left: 4px;
+    padding: 0;
+    background: none;
+    border: 0;
+    font: inherit;
+    color: var(--bh-chroma, var(--primary));
+    cursor: pointer;
+    text-decoration: underline;
+}
