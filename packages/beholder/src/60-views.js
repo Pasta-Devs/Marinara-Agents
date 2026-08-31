@@ -907,6 +907,18 @@ BH.views = {
         part.</li>
       </ul>
 
+      <div class="bh-editor-group-label">telling it something directly</div>
+      <p class="bh-view-note">The box above the message field sends a fact straight to Beholder, without
+      writing it into the story. Say what <b>happened</b>, and name the person:</p>
+      <ul class="bh-help-list">
+        <li>"Maggie takes off her boots."</li>
+        <li>"Maggie is now wearing black gloves."</li>
+        <li>"Maggie has a deep cut on her left arm."</li>
+      </ul>
+      <p class="bh-view-note">For damage, say it as a thing the item has, not as a word in front of it.
+      "Maggie wears a belt with a tear in it" works; "Maggie is wearing a torn belt" is read as the belt coming
+      off. Slots you change this way are locked, so the next turn does not undo them.</p>
+
       <div class="bh-editor-group-label">writing so it reads well</div>
       <ul class="bh-help-list">
         <li>Name the clothing and the person. "She pulls off <i>her</i> gloves" works. "They undress" does

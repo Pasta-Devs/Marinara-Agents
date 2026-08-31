@@ -205,6 +205,21 @@
 .beholder-notebox .beholder-notebox-input { flex: 1 1 auto; min-width: 0; }
 .beholder-notebox .beholder-notebox-btn { flex: 0 0 auto; }
 
+/* The reference extension mounts that bar above the host's chat input. This package
+   mounts it in Beholder's own panel footer instead — the engine's composer has no
+   stable hook to anchor to — so it needs a footer's chrome and a lane kept clear of
+   the resize grip, a 1.5rem square pinned to the panel's bottom-right corner that
+   otherwise sits on top of the send button and swallows the click. */
+.beholder-panel .beholder-notebox {
+    position: relative;
+    z-index: 2;
+    margin: 0;
+    padding: var(--bh-space-2, 6px) calc(1.5rem + var(--bh-space-3, 10px)) var(--bh-space-2, 6px)
+        var(--bh-space-3, 10px);
+    border-top: 1px solid var(--bh-divider);
+    background: var(--bh-surface-1);
+}
+
 .beholder-panel.beholder-dragging {
     opacity: 0.85;
 }

@@ -608,7 +608,9 @@ console.log("beholder client contract: ported chrome OK");
   // trigger, so on a phone every view was unreachable — asserted together so the pair
   // cannot drift apart again.
   const stylesheet = readFileSync(join(srcDir, "style.css"), "utf8");
-  assert.match(stylesheet, /\.beholder-tool-btn \{ display: none; \}/u, "the narrow layout hides the tool row");
+  // Whitespace-tolerant: the rule was pinned as a one-line literal and broke the moment
+  // prettier reformatted the stylesheet, which says nothing about whether the row hides.
+  assert.match(stylesheet, /\.beholder-tool-btn\s*\{\s*display:\s*none;/u, "the narrow layout hides the tool row");
   assert.match(beholderChromeSource, /beholder-tools-more/u, "so the header must render an overflow trigger");
   assert.match(beholderChromeSource, /beholder-tools-menu/u, "that opens a menu");
   // Built from the header's own buttons, so a new view cannot appear in one and not

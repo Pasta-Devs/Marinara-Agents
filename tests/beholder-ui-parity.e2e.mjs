@@ -225,6 +225,60 @@ try {
     check("sheet closes on Escape", (await page.locator(".bh-edit-sheet").count()) === 0);
   }
 
+  // ── the note box ──────────────────────────────────────────────────────────
+  // The one feature here that changes real state rather than only rendering, so it is
+  // checked by its effect: a sentence goes in, the panel comes back different, and the
+  // slots it touched end up locked. The character NOT mentioned must survive untouched —
+  // the first working version wiped every other character, because a directive was
+  // routed through the retry path that excludes the message being redone.
+  check("note box is present", (await page.locator(".beholder-notebox-input").count()) === 1);
+  // Read through the server's own state route and localStorage, never through the
+  // package's internals: `BH` lives inside the bundle's IIFE, so `window.BH?.dock` is
+  // undefined from here and every assertion built on it would pass while seeing nothing.
+  const readState = () =>
+    page.evaluate(async () => {
+      const host = document.querySelector("marinara-capability-beholder");
+      const chatId = host?.capabilityProps?.chatId;
+      if (!chatId) return null;
+      const res = await fetch(`/api/agents/beholder-state/${chatId}`, { credentials: "same-origin" });
+      if (!res.ok) return null;
+      const payload = await res.json();
+      const characters = payload?.state?.characters ?? [];
+      const lockKey = Object.keys(localStorage).find((k) => k.startsWith("marinara.beholder.locks"));
+      return {
+        names: characters.map((c) => c.name).sort(),
+        slots: Object.fromEntries(characters.map((c) => [c.name, Object.keys(c.body ?? {}).sort()])),
+        locks: Object.keys(JSON.parse(localStorage.getItem(lockKey ?? "") || "{}")).length,
+      };
+    });
+
+  const before = await readState();
+  check("note box test can read the state store", before !== null && before.names.length > 0, JSON.stringify(before));
+  await page.fill(".beholder-notebox-input", "Maggie is now wearing black gloves.");
+  await page.click(".beholder-notebox-btn");
+  // The whole five-pass run happens server-side before the panel refreshes.
+  await page.waitForFunction(() => document.querySelector(".beholder-notebox-input")?.value === "", null, {
+    timeout: 90000,
+  });
+  check("note box clears after sending", true);
+  const after = await readState();
+  check(
+    "note box does not drop the other characters",
+    JSON.stringify(after?.names) === JSON.stringify(before?.names),
+    `${before?.names.join(",")} -> ${after?.names.join(",")}`,
+  );
+  const hands = after?.slots?.Maggie ?? [];
+  check(
+    "note box changed the state it was told about",
+    hands.includes("left_hand") || hands.includes("right_hand"),
+    hands.join(","),
+  );
+  check(
+    "note box locks what it changed",
+    (after?.locks ?? 0) > (before?.locks ?? 0),
+    `${before?.locks} -> ${after?.locks}`,
+  );
+
   // ── mobile: every view still reachable ────────────────────────────────────
   // The rule is a container query on the panel (max-width: 360px), not a viewport
   // media query, so the viewport has to be narrow enough that the panel itself is —

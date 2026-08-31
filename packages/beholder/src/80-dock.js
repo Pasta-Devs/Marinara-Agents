@@ -358,6 +358,9 @@ BH.dock = {
     panel.classList.remove("bh-collapsed");
     this.syncHostLayer();
     BH.syncToggles();
+    // The note box lives beside the chat input, not in the panel, so it comes and goes
+    // with the panel rather than sitting there when Beholder is closed.
+    BH.notebox.mount();
     void this.refresh();
   },
 
@@ -369,6 +372,7 @@ BH.dock = {
       return;
     }
     if (this.panel) this.panel.classList.add("bh-collapsed");
+    BH.notebox.unmount();
     this.syncHostLayer();
     BH.syncToggles();
   },
