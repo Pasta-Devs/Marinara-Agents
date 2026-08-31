@@ -1,6 +1,6 @@
 // ──────────────────────────────────────────────
-// NoodleR post card — the Patreon-style, media-forward variant of the post card
-// used only in the NoodleR viewer hub. Shares all leaf helpers, the ctx contract,
+// Slurp post card — the membership-style, media-forward variant of the post card
+// used by the Slurp creator feed. Shares all leaf helpers, the ctx contract,
 // and the reply/edit/poll machinery's building blocks with NoodlePostCard; only the
 // layout (two-line header, filled access pill, full-width body, image-on-top) differs.
 // The public Noodle feed keeps the original NoodlePostCard.
@@ -112,7 +112,7 @@ export function LockedSlurpPostCard({
   return (
     <article
       data-noodle-post-id={post.id}
-      className="rounded-lg border border-[var(--noodle-divider)] bg-[var(--slurp-surface)] px-4 py-5 shadow-sm shadow-black/5 transition-colors hover:bg-[var(--slurp-surface-raised)]"
+      className="overflow-hidden rounded-xl border border-[var(--noodle-accent)]/25 bg-[linear-gradient(145deg,var(--slurp-surface-raised),var(--slurp-surface))] px-4 py-5 shadow-md shadow-black/10"
     >
       {/* Author row */}
       <div className="flex gap-3">
@@ -120,7 +120,7 @@ export function LockedSlurpPostCard({
           type="button"
           onClick={openProfile}
           disabled={!openProfile}
-          className="h-fit rounded-full text-left transition-opacity enabled:hover:opacity-80 disabled:cursor-default"
+          className="h-fit rounded-full text-left transition-opacity enabled:hover:opacity-80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--noodle-accent)] disabled:cursor-default"
           title={
             openProfile
               ? localizeUi("ui.noodle.noodlehome.viewValue1", {
@@ -137,7 +137,7 @@ export function LockedSlurpPostCard({
               type="button"
               onClick={openProfile}
               disabled={!openProfile}
-              className="font-semibold transition-colors enabled:hover:text-[var(--noodle-accent)] disabled:cursor-default"
+              className="rounded-sm font-semibold transition-colors enabled:hover:text-[var(--noodle-accent)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--noodle-accent)] disabled:cursor-default"
             >
               {profile.displayName}
             </button>
@@ -161,7 +161,7 @@ export function LockedSlurpPostCard({
         {(mediaSrc || post.hasImage) && (
           <div
             className={cn(
-              "relative mt-3 aspect-[4/3] w-full overflow-hidden rounded-lg bg-[var(--muted)] ring-1 ring-inset ring-white/10",
+              "relative mt-4 aspect-[16/11] w-full overflow-hidden rounded-xl bg-[var(--muted)] ring-1 ring-inset ring-white/10",
             )}
           >
             {shownMediaSrc ? (
@@ -232,7 +232,7 @@ export function LockedSlurpPostCard({
               type="button"
               disabled={unlockPending || subscriptionPending}
               onClick={() => setUnlockSheetOpen(true)}
-              className="mt-4 inline-flex min-h-10 items-center gap-2 rounded-md bg-[#ff7ec1] px-4 text-xs font-bold text-[#17121b] transition-[opacity,scale] hover:bg-[#ff9dce] active:scale-[0.96] disabled:cursor-not-allowed disabled:opacity-50 [&_svg]:!text-[#17121b]"
+              className="mt-5 inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-lg bg-[var(--noodle-accent)] px-4 text-sm font-bold text-zinc-950 shadow-sm shadow-black/10 transition-[opacity,transform] hover:opacity-90 active:scale-[0.99] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--noodle-accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--slurp-surface)] motion-reduce:transition-none motion-reduce:active:scale-100 disabled:cursor-not-allowed disabled:opacity-50 [&_svg]:!text-zinc-950"
             >
               <Eye size={14} /> {localizeUi("ui.noodle.lockednoodlerpostcard.unlock")}
             </button>
@@ -240,7 +240,7 @@ export function LockedSlurpPostCard({
         )}
 
         {/* Footer */}
-        <div className="mt-4 flex items-center gap-4 text-sm tabular-nums text-[var(--muted-foreground)]">
+        <div className="mt-5 flex items-center gap-4 border-t border-[var(--noodle-divider)] pt-4 text-sm tabular-nums text-[var(--muted-foreground)]">
           {/* The icons are decorative, so the counts carry their own labels for screen readers. */}
           <span className="flex items-center gap-1.5">
             <Heart size={18} aria-hidden="true" /> {likeCount}
@@ -478,6 +478,7 @@ export function SlurpCreatorPostCard({
   const postInteractions = post.interactions;
   const rootPostInteractions = postInteractions.filter((interaction) => !interaction.parentInteractionId);
   const poll = readNoodlePollFromMetadata(post.metadata);
+  const postKind = post.imageUrl ? "media" : poll ? "poll" : "text";
   const pollVotes = poll
     ? rootPostInteractions.filter(
         (interaction) =>
@@ -746,11 +747,12 @@ export function SlurpCreatorPostCard({
     <article
       key={post.id}
       data-noodle-post-id={post.id}
+      data-slurp-post-kind={postKind}
       tabIndex={-1}
       className={
         surface === "profile"
-          ? "border-b border-[var(--noodle-divider)] px-4 py-3 transition-colors hover:bg-[var(--accent)]/25"
-          : "border-b border-[var(--noodle-divider)] px-4 py-5 transition-colors hover:bg-[var(--accent)]/25"
+          ? "border-b border-[var(--noodle-divider)] px-4 py-5 transition-colors last:border-b-0 hover:bg-[var(--accent)]/20"
+          : "rounded-xl border border-[var(--noodle-divider)] bg-[var(--slurp-surface)] px-4 py-5 shadow-sm shadow-black/10 transition-[background-color,border-color,box-shadow] hover:border-[var(--noodle-accent)]/25 hover:bg-[var(--slurp-surface-raised)] hover:shadow-md motion-reduce:transition-none"
       }
     >
       <div className="flex gap-3">
@@ -780,7 +782,7 @@ export function SlurpCreatorPostCard({
                 type="button"
                 onClick={openPostAuthor}
                 disabled={!canOpenAuthorProfile}
-                className="font-semibold transition-colors enabled:hover:text-[var(--noodle-accent)] disabled:cursor-default"
+                className="rounded-sm font-semibold transition-colors enabled:hover:text-[var(--noodle-accent)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--noodle-accent)] disabled:cursor-default"
               >
                 {author?.displayName ?? localizeUi("ui.noodle.noodlepostcard.noodleUser")}
               </button>
@@ -789,7 +791,12 @@ export function SlurpCreatorPostCard({
                 title={localizeUi(
                   post.access === "locked" ? "ui.noodle.postaccess.unlocked.hint" : "ui.noodle.postaccess.public.hint",
                 )}
-                className="rounded-full bg-[var(--noodle-accent)]/15 px-2 py-0.5 text-[0.68rem] font-bold text-[var(--noodle-accent)]"
+                className={cn(
+                  "rounded-md px-2 py-1 text-[0.68rem] font-bold ring-1 ring-inset",
+                  post.access === "locked"
+                    ? "bg-[var(--noodle-accent)]/15 text-[var(--noodle-accent)] ring-[var(--noodle-accent)]/25"
+                    : "bg-[var(--accent)] text-[var(--muted-foreground)] ring-[var(--noodle-divider)]",
+                )}
               >
                 {localizeUi(post.access === "locked" ? "ui.noodle.postaccess.unlocked" : "ui.noodle.postaccess.public")}
               </span>
@@ -849,7 +856,7 @@ export function SlurpCreatorPostCard({
             onClick={() =>
               setImageLightbox(createNoodleLightboxImage(post.id, displayedImageUrl, post.imagePrompt ?? ""))
             }
-            className="mt-3 block w-full overflow-hidden rounded-lg text-left ring-1 ring-inset ring-white/10 ring-offset-[var(--background)] transition-opacity hover:opacity-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--noodle-accent)] focus-visible:ring-offset-2"
+            className="mt-4 block w-full overflow-hidden rounded-xl bg-black/10 text-left ring-1 ring-inset ring-white/10 ring-offset-[var(--background)] transition-opacity hover:opacity-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--noodle-accent)] focus-visible:ring-offset-2 motion-reduce:transition-none"
             title={localizeUi("ui.noodle.noodlepostcard.openImage")}
             aria-label={localizeUi("ui.noodle.noodlepostcard.openPostImage")}
           >
@@ -960,10 +967,10 @@ export function SlurpCreatorPostCard({
             onOpenProfile={openProfile}
           />
         )}
-        <div className="mt-4 flex max-w-md items-center justify-between gap-1 tabular-nums">
+        <div className="mt-5 flex items-center gap-2 border-t border-[var(--noodle-divider)] pt-3 tabular-nums">
           <button
             type="button"
-            className={cn(noodleIconButtonClass, "rounded-full", likedByPersona && "bg-[var(--noodle-accent)]/10")}
+            className={cn(noodleIconButtonClass, "rounded-lg", likedByPersona && "bg-[var(--noodle-accent)]/10")}
             disabled={!personaAccount || postLikePending}
             onClick={() => reactToPost(post, "like", likedByPersona)}
             title={
@@ -988,7 +995,7 @@ export function SlurpCreatorPostCard({
           </button>
           <button
             type="button"
-            className={cn(noodleIconButtonClass, "rounded-full", repostedByPersona && "bg-[var(--noodle-accent)]/10")}
+            className={cn(noodleIconButtonClass, "rounded-lg", repostedByPersona && "bg-[var(--noodle-accent)]/10")}
             disabled={!personaAccount || postRepostPending}
             onClick={() => reactToPost(post, "repost", repostedByPersona)}
             title={
@@ -1004,7 +1011,7 @@ export function SlurpCreatorPostCard({
           </button>
           <button
             type="button"
-            className={cn(noodleIconButtonClass, "rounded-full hover:text-[var(--noodle-accent)]")}
+            className={cn(noodleIconButtonClass, "rounded-lg hover:text-[var(--noodle-accent)]")}
             disabled={!personaAccount}
             onClick={() => openReplyComposer(post.id)}
             title={localizeUi("ui.noodle.noodlepostcard.reply")}

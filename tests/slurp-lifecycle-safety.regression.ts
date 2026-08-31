@@ -16,6 +16,7 @@ const home = read("packages/slurp/src/engine/packages/client/src/components/slur
 const storage = read("packages/slurp/src/engine/packages/server/src/services/storage/slurp.storage.ts");
 const settings = read("packages/slurp/src/engine/packages/client/src/components/slurp/SlurpSettings.tsx");
 const profileSurface = read("packages/slurp/src/engine/packages/client/src/components/slurp/SlurpProfileSurface.tsx");
+const creatorPostCard = read("packages/slurp/src/engine/packages/client/src/components/slurp/SlurpCreatorPostCard.tsx");
 const artwork = read("packages/slurp/src/engine/packages/server/src/services/slurp/slurp-artwork.operation.ts");
 const shell = read("packages/slurp/src/engine/packages/client/src/components/slurp/SlurpShell.tsx");
 const serverEntry = read("packages/slurp/src/engine/packages/server/src/services/slurp/server-entry.ts");
@@ -87,6 +88,9 @@ assert.match(home, /ui\.slurp\.home\.tonight/u, "the desktop discovery rail must
 assert.match(home, /tabs=\{\[\{ id: "emoji"/u, "the main composer must expose only its functional emoji media tab");
 assert.doesNotMatch(home, /tabs=\{\[[^\]]*id: "gif"/u, "the main composer must not expose its no-op GIF action");
 assert.match(home, /motion-reduce:transition-none/u);
+assert.match(creatorPostCard, /data-slurp-post-kind=\{postKind\}/u);
+assert.match(creatorPostCard, /surface === "profile"[\s\S]*?rounded-xl border/u);
+assert.match(creatorPostCard, /motion-reduce:active:scale-100/u);
 assert.match(home, /function DisclosureBadge[\s\S]*?HelpTooltip/u);
 assert.match(home, /confirmProviderDisclosure/u);
 assert.doesNotMatch(home, /findLastIndex/u, "Slurp hub must support the Engine ES2020 target");
