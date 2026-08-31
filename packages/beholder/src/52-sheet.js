@@ -146,7 +146,14 @@ BH.sheet = {
         .map((slot) => {
           const summary = this.summary(body[slot]);
           const locked = BH.locks.has(character, slot);
-          const marks = locked ? `<i class="fa-solid fa-lock bh-pick-mark bh-pick-lock"></i>` : "";
+          // Both marks, as the reference shows them. The lock and the pencil answer
+          // different questions — "the story cannot change this" versus "this value is
+          // mine" — and this list claimed to show both while only ever drawing the lock.
+          const marks =
+            (locked ? `<i class="fa-solid fa-lock bh-pick-mark bh-pick-lock"></i>` : "") +
+            (BH.locks.wasEdited(character, slot)
+              ? `<span class="bh-pick-mark bh-pick-edited" title="You set this by hand">✎</span>`
+              : "");
           return `<button type="button" class="bh-pick-slot" data-slot="${BH.escapeHtml(slot)}">
             <span class="bh-pick-label">${BH.escapeHtml(BH_SLOT_LABELS[slot] || slot)}</span>
             <span class="bh-pick-summary ${summary.cls}">${BH.escapeHtml(summary.text)}</span>

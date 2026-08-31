@@ -135,7 +135,7 @@
       "status": "rendered"
     },
     "bh-btn-danger": {
-      "status": "missing"
+      "status": "rendered"
     },
     "bh-btn-primary": {
       "status": "rendered"
@@ -177,7 +177,7 @@
       "status": "rendered"
     },
     "bh-ch-pick-input": {
-      "status": "missing"
+      "status": "rendered"
     },
     "bh-ch-pick-lead": {
       "status": "rendered"
@@ -625,7 +625,7 @@
       "status": "rendered"
     },
     "bh-pick-edited": {
-      "status": "missing"
+      "status": "rendered"
     },
     "bh-pick-label": {
       "status": "rendered"

@@ -290,6 +290,33 @@ try {
     await page.keyboard.press("Escape");
     await page.waitForTimeout(300);
 
+    // Apply a real edit. Everything above only opens and closes the editor, so nothing
+    // proved that Apply reaches the server — and the hand-edited mark below needs an
+    // actual edit to mark.
+    await card.click();
+    await page.waitForTimeout(800);
+    const editedSlot = await page.evaluate(async () => {
+      document.querySelector(".bhe-add-worn")?.click();
+      await new Promise((r) => setTimeout(r, 300));
+      const field = document.querySelector(".bhe-item");
+      if (!field) return null;
+      field.value = "parity test scarf";
+      field.dispatchEvent(new Event("input", { bubbles: true }));
+      const slot = document.querySelector(".bh-editor")?.getAttribute("aria-label") ?? "";
+      document.querySelector(".bh-editor-apply")?.click();
+      return slot;
+    });
+    await page.waitForTimeout(3500);
+    const persisted = await page.evaluate(async () => {
+      const host = document.querySelector("marinara-capability-beholder");
+      const res = await fetch(`/api/agents/beholder-state/${host?.capabilityProps?.chatId}`, {
+        credentials: "same-origin",
+      });
+      const payload = await res.json();
+      return JSON.stringify(payload?.state ?? {}).includes("parity test scarf");
+    });
+    check("an applied edit reaches the server", persisted, editedSlot ?? "no editor field");
+
     // ── locking a slot ──────────────────────────────────────────────────────
     // A switch, not a checkbox: the padlock and the word both have to change, and the
     // card has to carry the mark once the editor is gone, or a locked slot is
@@ -362,6 +389,14 @@ try {
   check("Edit slots opens the sheet", !!sheet);
   check("sheet groups slots by region", (sheet?.regions?.length ?? 0) >= 3, (sheet?.regions ?? []).join(", "));
   check("sheet lists slots, including empty ones", (sheet?.slots ?? 0) > 10, String(sheet?.slots ?? 0));
+  // The lock and the pencil answer different questions — "the story cannot change this"
+  // versus "this value is mine" — and the list claimed to show both while only ever
+  // drawing the lock.
+  check(
+    "the sheet marks slots you set by hand",
+    (await page.locator(".bh-pick-edited").count()) >= 1,
+    `${await page.locator(".bh-pick-edited").count()} pencil marks`,
+  );
   if (sheet) {
     const intoEditor = await page.evaluate(async () => {
       document.querySelector(".bh-pick-slot")?.click();
@@ -431,6 +466,69 @@ try {
     (after?.locks ?? 0) > (before?.locks ?? 0),
     `${before?.locks} -> ${after?.locks}`,
   );
+
+  // ── merging two names for the same person ─────────────────────────────────
+  // The pills only offer names currently on screen, and the one you want often is not
+  // among them: the extractor wrote "the guard" once and has settled on a name since.
+  await page.locator('.beholder-tool-btn[data-view="characters"]').first().click();
+  await page.waitForTimeout(1500);
+  await page.locator(".bh-ch-merge").first().click();
+  await page.waitForTimeout(800);
+  check("merging offers the names on screen", (await page.locator(".bh-ch-pill").count()) >= 1);
+  check("and a field for one that is not", (await page.locator(".bh-ch-pick-input").count()) === 1);
+  const beforeRows = await page.locator(".bh-ch").count();
+  // Typed rather than picked, but into a name that IS on screen, so the row has
+  // something to fold into and the panel stops showing one person twice. Merging into a
+  // name nobody uses yet is also allowed — it just records the alias for later, and the
+  // toast says so — but it cannot be observed as a row disappearing.
+  const otherName = await page.locator(".bh-ch-pill").first().getAttribute("data-target");
+  await page.fill(".bh-ch-pick-input", otherName ?? "");
+  await page.locator(".bh-ch-pick-input").press("Enter");
+  await page.waitForTimeout(1200);
+  check(
+    "typing a name merges the row away",
+    (await page.locator(".bh-ch").count()) < beforeRows,
+    `${beforeRows} rows -> ${await page.locator(".bh-ch").count()} (merged into ${otherName})`,
+  );
+  await page.keyboard.press("Escape");
+  await page.waitForTimeout(500);
+
+  // ── clearing everything ───────────────────────────────────────────────────
+  // Runs late on purpose: it really does empty the chat's state, so nothing after it
+  // may depend on what was seeded. Two presses, and the first must NOT clear.
+  await page.locator('.beholder-tool-btn[data-view="doctor"]').first().click();
+  await page.waitForTimeout(7000);
+  const clearButton = page.locator(".bh-clear-state");
+  check("doctor offers a way to start over", (await clearButton.count()) === 1);
+  check("and marks it as destructive", ((await clearButton.getAttribute("class")) ?? "").includes("bh-btn-danger"));
+  await clearButton.click();
+  await page.waitForTimeout(600);
+  check("one press only arms it", (await page.locator(".bh-clear-state.bh-btn-armed").count()) === 1);
+  const stillThere = await page.evaluate(async () => {
+    const host = document.querySelector("marinara-capability-beholder");
+    const res = await fetch(`/api/agents/beholder-state/${host?.capabilityProps?.chatId}`, {
+      credentials: "same-origin",
+    });
+    return ((await res.json())?.state?.characters ?? []).length;
+  });
+  check("and changes nothing on its own", stillThere > 0, `${stillThere} characters still tracked`);
+  await clearButton.click();
+  await page.waitForTimeout(2500);
+  const afterClear = await page.evaluate(async () => {
+    const host = document.querySelector("marinara-capability-beholder");
+    const res = await fetch(`/api/agents/beholder-state/${host?.capabilityProps?.chatId}`, {
+      credentials: "same-origin",
+    });
+    // Only this chat's keys. A dismissed model update is not about who was tracked
+    // here and must survive.
+    const chatId = host?.capabilityProps?.chatId;
+    const lockKeys = Object.keys(localStorage).filter((k) => k.endsWith(`.${chatId}`));
+    return { characters: ((await res.json())?.state?.characters ?? []).length, lockKeys: lockKeys.length };
+  });
+  check("the second press clears it", afterClear.characters === 0, `${afterClear.characters} characters`);
+  // Locks and edit marks describe slots that no longer exist; left behind, they would
+  // restore the cleared values on the next turn.
+  check("and takes the locks and edit marks with it", afterClear.lockKeys === 0, `${afterClear.lockKeys} keys left`);
 
   // ── mobile: every view still reachable ────────────────────────────────────
   // The rule is a container query on the panel (max-width: 360px), not a viewport

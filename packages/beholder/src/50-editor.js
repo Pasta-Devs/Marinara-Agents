@@ -45,6 +45,9 @@ BH.editor = {
         write.status === 404 ? "no extraction to correct yet — let one turn run first" : `save ${write.status}`;
       throw new Error(detail);
     }
+    // Recorded only once the write succeeded, so a failed save never leaves a slot
+    // claiming to hold the operator's value while it holds the extractor's.
+    BH.locks.markEdited(characterName, slotName, chatId);
     return state;
   },
 
@@ -270,6 +273,61 @@ BH.locks = {
       window.localStorage.setItem(this.valueKey(chatId), JSON.stringify(map));
     } catch {
       // Without the pinned value the lock can only be advisory; it still marks the slot.
+    }
+  },
+
+  /**
+   * Slots the operator set by hand, as opposed to slots the story produced.
+   *
+   * Separate from locks on purpose: they answer different questions. A lock says "do
+   * not change this"; an edit mark says "this value is mine". Most hand-set values are
+   * not locked — the operator fixes one detail and lets the story carry on — and
+   * without the mark there is nothing distinguishing their correction from the
+   * extractor's own output when they come back to it later.
+   */
+  editedKey(chatId) {
+    return `marinara.beholder.edited.${chatId}`;
+  },
+  edited(chatId = BH.dock.chatId) {
+    if (!chatId) return {};
+    try {
+      return JSON.parse(window.localStorage.getItem(this.editedKey(chatId)) || "{}") || {};
+    } catch {
+      return {};
+    }
+  },
+  wasEdited(character, slot, chatId = BH.dock.chatId) {
+    return this.edited(chatId)[`${character}::${slot}`] === true;
+  },
+  /**
+   * Forget every per-chat choice attached to a state that no longer exists.
+   *
+   * The roster goes too. Hiding, ordering and merging are choices about particular
+   * people, and once those people are gone a leftover alias would quietly fold the next
+   * character of that name into a merge the operator made for someone else.
+   *
+   * What survives is anything not about this chat — the dismissed model update, for
+   * one, which has nothing to do with who was being tracked here.
+   */
+  clearAll(chatId = BH.dock.chatId) {
+    if (!chatId) return;
+    for (const key of [this.key(chatId), this.valueKey(chatId), this.editedKey(chatId), BH.roster.key(chatId)]) {
+      try {
+        window.localStorage.removeItem(key);
+      } catch {
+        // Nothing to do; the state itself is already gone either way.
+      }
+    }
+  },
+
+  markEdited(character, slot, chatId = BH.dock.chatId) {
+    if (!chatId) return;
+    const map = this.edited(chatId);
+    map[`${character}::${slot}`] = true;
+    try {
+      window.localStorage.setItem(this.editedKey(chatId), JSON.stringify(map));
+    } catch {
+      // Losing the mark costs a visual cue, never the edit itself.
     }
   },
 

@@ -687,6 +687,19 @@ BH.views = {
           `<div class="bh-editor-group-label">state as stored</div>
            <pre class="bh-doctor-json">${BH.escapeHtml(JSON.stringify(snapshot?.state ?? {}, null, 2))}</pre>`,
         );
+        // Last, and marked as destructive. When the state has gone badly wrong there is
+        // otherwise no way back except editing every slot by hand, but this throws away
+        // work, so it asks first and says exactly what it will take.
+        lines.push(
+          `<div class="bh-editor-group-label">start over</div>
+           <p class="bh-view-note">Clearing removes everyone Beholder is tracking in this chat, along with your
+           locks, hand-set values, and the order and merges you set for this chat. Your story is not touched.
+           The next turn starts again from nothing.</p>
+           <div class="bh-model-actions">
+             <button type="button" class="bh-btn bh-btn-danger bh-clear-state"><i class="fa-solid fa-eraser"></i>
+               Clear what Beholder tracks</button>
+           </div>`,
+        );
         if (characters.length === 0) {
           lines.push(
             `<p class="bh-view-note">Nothing tracked yet. Beholder reads a turn after it is generated, so the
@@ -720,6 +733,45 @@ BH.views = {
           textBox.hidden = !textBox.hidden;
         });
       }
+
+      // Two presses, not a dialog: the button becomes the confirmation, so the choice
+      // is made where the consequence is written rather than in a box that covers it.
+      const clear = body.querySelector(".bh-clear-state");
+      let armed = false;
+      clear?.addEventListener("click", async () => {
+        if (!armed) {
+          armed = true;
+          clear.classList.add("bh-btn-armed");
+          clear.innerHTML = `<i class="fa-solid fa-eraser"></i> Press again to clear`;
+          // Disarms itself, so a stray click cannot sit there waiting to be completed.
+          window.setTimeout(() => {
+            armed = false;
+            clear.classList.remove("bh-btn-armed");
+            clear.innerHTML = `<i class="fa-solid fa-eraser"></i> Clear what Beholder tracks`;
+          }, 5000);
+          return;
+        }
+        clear.disabled = true;
+        try {
+          const res = await fetch(`/api/agents/beholder-state/${encodeURIComponent(chatId)}`, {
+            method: "PUT",
+            headers: { "Content-Type": "application/json" },
+            credentials: "same-origin",
+            body: JSON.stringify({ state: { characters: [] } }),
+          });
+          if (!res.ok) throw new Error(`${res.status}`);
+          // The locks and edit marks describe slots that no longer exist; leaving them
+          // would restore the cleared values on the next turn.
+          BH.locks.clearAll(chatId);
+          await BH.dock.refresh();
+          BH.dock.render();
+          BH.toast("Cleared — Beholder starts again from the next turn");
+          this.close();
+        } catch (error) {
+          BH.toast(`Could not clear: ${error.message}`);
+          clear.disabled = false;
+        }
+      });
     });
   },
 
@@ -825,16 +877,40 @@ BH.views = {
                 (other) =>
                   `<button class="bh-ch-pill" type="button" data-target="${BH.escapeHtml(other)}">${BH.escapeHtml(other)}</button>`,
               )
-              .join("");
+              .join("") +
+            // The pills only offer names currently on screen, and the name you want is
+            // often not one of them: the extractor wrote "the guard" once and has since
+            // settled on "Rhys", so the row to merge away has no partner to point at.
+            `<input class="bh-ch-pick-input" type="text" placeholder="or type a name…"
+               aria-label="Merge ${BH.escapeHtml(name)} into a name you type">`;
           rowElement.appendChild(pick);
+          const mergeInto = (target) => {
+            const clean = String(target ?? "").trim();
+            if (!clean || clean.toLowerCase() === name.toLowerCase()) return;
+            // This row's name becomes a variant of the one picked, so the panel stops
+            // showing the same person twice.
+            BH.roster.addAlias(name, clean);
+            // Merging into a name nobody is being tracked under yet is allowed — it is
+            // how you fix a name before the story settles on it — but there is no row to
+            // fold into, so the panel does not visibly change. Without this the action
+            // looks like it failed.
+            if (!visible.some((other) => other.toLowerCase() === clean.toLowerCase())) {
+              BH.toast(`Noted — ${name} will be shown as ${clean} once ${clean} appears`);
+            }
+            again();
+          };
           for (const pill of pick.querySelectorAll(".bh-ch-pill")) {
-            pill.addEventListener("click", () => {
-              // This row's name becomes a variant of the one picked, so the panel
-              // stops showing the same person twice.
-              BH.roster.addAlias(name, pill.dataset.target);
-              again();
-            });
+            pill.addEventListener("click", () => mergeInto(pill.dataset.target));
           }
+          const typed = pick.querySelector(".bh-ch-pick-input");
+          typed.addEventListener("keydown", (keyEvent) => {
+            // Scoped to this field: Escape closing the whole view while someone is
+            // halfway through typing a name would lose the row they were working on.
+            keyEvent.stopPropagation();
+            if (keyEvent.key === "Enter") mergeInto(typed.value);
+            else if (keyEvent.key === "Escape") pick.remove();
+          });
+          typed.focus();
         });
       }
 

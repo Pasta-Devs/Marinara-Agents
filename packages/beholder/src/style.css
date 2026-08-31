@@ -2198,6 +2198,14 @@
     box-shadow: none;
 }
 .bh-btn[disabled] { opacity: 0.45; pointer-events: none; }
+/* A destructive button waiting for its second press. Filled rather than outlined, so
+   the armed state is obvious at a glance and cannot be confused with the resting one. */
+.bh-btn-danger.bh-btn-armed {
+    background: rgb(255, 152, 136);
+    border-color: rgb(255, 152, 136);
+    color: rgb(32, 12, 10);
+    font-weight: 600;
+}
 
 /* ─── Header tool icons + overflow menu ──────────────────────────────────
    The flat icon row (settings / doctor / inspector / help) + a "⋯" overflow
