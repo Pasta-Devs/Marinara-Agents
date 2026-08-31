@@ -1,4 +1,5 @@
 // React Query: Noodle hooks
+import type { InfiniteData, QueryClient } from "@tanstack/react-query";
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "../lib/api-client";
 import { useUIStore } from "../stores/noodle-package.store";
@@ -57,6 +58,14 @@ function preservePollVotes(current: NoodleBootstrap | undefined, next: NoodleBoo
   if (!current) return next;
   const interactions = mergeNoodlePollVoteInteractions(current.interactions, next.posts, next.interactions);
   return interactions === next.interactions ? next : { ...next, interactions };
+}
+
+function updateFeedInteractions(qc: QueryClient, updater: (interactions: NoodleInteraction[]) => NoodleInteraction[]) {
+  qc.setQueryData<InfiniteData<NoodlePostPage>>(noodleKeys.feed(), (current) =>
+    current
+      ? { ...current, pages: current.pages.map((page) => ({ ...page, interactions: updater(page.interactions) })) }
+      : current,
+  );
 }
 
 export function useNoodle(enabled = true) {
@@ -339,16 +348,14 @@ export function useCreateNoodleInteraction() {
     }: NoodleCreateInteractionInput & { postId: string; actorKind: NoodleAccountKind; actorEntityId: string }) =>
       api.post<NoodleInteraction>(`/noodle/posts/${encodeURIComponent(postId)}/interactions`, input),
     onSuccess: (interaction) => {
+      const merge = (interactions: NoodleInteraction[]) =>
+        interactions.some((item) => item.id === interaction.id)
+          ? interactions.map((item) => (item.id === interaction.id ? interaction : item))
+          : [...interactions, interaction];
       qc.setQueryData<NoodleBootstrap | undefined>(noodleKeys.bootstrap(), (current) =>
-        current
-          ? {
-              ...current,
-              interactions: current.interactions.some((item) => item.id === interaction.id)
-                ? current.interactions.map((item) => (item.id === interaction.id ? interaction : item))
-                : [...current.interactions, interaction],
-            }
-          : current,
+        current ? { ...current, interactions: merge(current.interactions) } : current,
       );
+      updateFeedInteractions(qc, merge);
     },
   });
 }
@@ -369,11 +376,11 @@ export function useRemoveNoodleInteraction() {
       return api.delete<NoodleInteraction>(`/noodle/posts/${encodeURIComponent(postId)}/interactions?${params}`);
     },
     onSuccess: (interaction) => {
+      const remove = (interactions: NoodleInteraction[]) => interactions.filter((item) => item.id !== interaction.id);
       qc.setQueryData<NoodleBootstrap | undefined>(noodleKeys.bootstrap(), (current) =>
-        current
-          ? { ...current, interactions: current.interactions.filter((item) => item.id !== interaction.id) }
-          : current,
+        current ? { ...current, interactions: remove(current.interactions) } : current,
       );
+      updateFeedInteractions(qc, remove);
     },
   });
 }
@@ -391,14 +398,12 @@ export function useUpdateNoodleInteraction() {
         input,
       ),
     onSuccess: (interaction) => {
+      const patch = (interactions: NoodleInteraction[]) =>
+        interactions.map((item) => (item.id === interaction.id ? interaction : item));
       qc.setQueryData<NoodleBootstrap | undefined>(noodleKeys.bootstrap(), (current) =>
-        current
-          ? {
-              ...current,
-              interactions: current.interactions.map((item) => (item.id === interaction.id ? interaction : item)),
-            }
-          : current,
+        current ? { ...current, interactions: patch(current.interactions) } : current,
       );
+      updateFeedInteractions(qc, patch);
     },
   });
 }
@@ -412,11 +417,11 @@ export function useDeleteNoodleInteraction() {
       ),
     onSuccess: (interactions) => {
       const deletedIds = new Set(interactions.map((interaction) => interaction.id));
+      const remove = (current: NoodleInteraction[]) => current.filter((item) => !deletedIds.has(item.id));
       qc.setQueryData<NoodleBootstrap | undefined>(noodleKeys.bootstrap(), (current) =>
-        current
-          ? { ...current, interactions: current.interactions.filter((item) => !deletedIds.has(item.id)) }
-          : current,
+        current ? { ...current, interactions: remove(current.interactions) } : current,
       );
+      updateFeedInteractions(qc, remove);
     },
   });
 }
