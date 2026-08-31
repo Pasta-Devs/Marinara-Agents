@@ -364,6 +364,10 @@ BH.dock = {
     // Once per browser, and only with the panel actually on screen, so the note has
     // something to point at.
     BH.onboard.maybeShow();
+    // Badges belong to the message list, not the panel, but they come and go with
+    // Beholder: they are its output, and leaving them behind when it is closed would
+    // be marking up someone's chat with a feature they turned off.
+    BH.badges.watch();
     void this.refresh();
   },
 
@@ -376,6 +380,7 @@ BH.dock = {
     }
     if (this.panel) this.panel.classList.add("bh-collapsed");
     BH.notebox.unmount();
+    BH.badges.stop();
     this.syncHostLayer();
     BH.syncToggles();
   },
@@ -636,6 +641,10 @@ BH.dock = {
       // A read failure leaves the last known doll on screen; the next turn retries.
       console.warn("[beholder] state refresh failed", error);
     }
+    // After the state, never before it. A badge is coloured by what the slot holds
+    // NOW, so running this first read an empty state and painted every change as a
+    // removal — the gloves a message had just added were shown as gloves taken off.
+    void BH.badges.refresh(chatId);
   },
 
   /**

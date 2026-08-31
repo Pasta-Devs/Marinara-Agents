@@ -494,6 +494,41 @@ try {
     `${before?.locks} -> ${after?.locks}`,
   );
 
+  // ── what each message changed ─────────────────────────────────────────────
+  // Placed after the note box, which has just produced a real change to point at. These
+  // rows live in the host's message list, which this package does not own, so the checks
+  // cover the rules that make writing there acceptable as well as the rendering.
+  await page.waitForTimeout(2500);
+  check("a message carries a row of badges", (await page.locator(".beholder-msg-badges").count()) >= 1);
+  const badgeText = await page.evaluate(() =>
+    [...document.querySelectorAll(".bh-msg-badge")].map((badge) => ({
+      who: badge.querySelector(".bh-msg-char")?.textContent ?? "",
+      what: badge.querySelector(".bh-msg-text")?.textContent ?? "",
+      kind: (badge.className.match(/bh-msg-(add|clear|hold|wound|heal|mod)/) ?? [])[1] ?? "",
+    })),
+  );
+  check("each badge names who and what", badgeText.length >= 1 && badgeText.every((b) => b.who && b.what));
+  // Coloured by what the slot holds NOW. Computing this before the state loaded painted
+  // an addition as a removal — the gloves the message had just added read as taken off.
+  check(
+    "and is coloured by the kind of change",
+    badgeText.some((b) => b.kind === "add"),
+    badgeText.map((b) => `${b.who}/${b.what}:${b.kind}`).join(" "),
+  );
+  check(
+    "the badges describe the change, not the whole body",
+    badgeText.length <= 4,
+    `${badgeText.length} badges for a two-slot change`,
+  );
+  // They are Beholder's output; leaving them behind would be marking up someone's chat
+  // with a feature they turned off.
+  await page.evaluate(() => document.querySelector(".bh-hud-toggle")?.click());
+  await page.waitForTimeout(1500);
+  check("closing Beholder takes them away", (await page.locator(".beholder-msg-badges").count()) === 0);
+  await page.evaluate(() => document.querySelector(".bh-hud-toggle")?.click());
+  await page.waitForTimeout(4000);
+  check("reopening brings them back", (await page.locator(".beholder-msg-badges").count()) >= 1);
+
   // ── merging two names for the same person ─────────────────────────────────
   // The pills only offer names currently on screen, and the one you want often is not
   // among them: the extractor wrote "the guard" once and has settled on a name since.

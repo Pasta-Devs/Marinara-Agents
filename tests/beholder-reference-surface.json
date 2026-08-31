@@ -36,10 +36,10 @@
       "status": "rendered"
     },
     "beholder-msg-badges": {
-      "status": "missing"
+      "status": "rendered"
     },
     "beholder-msg-noop": {
-      "status": "missing"
+      "status": "rendered"
     },
     "beholder-notebox-btn": {
       "status": "rendered"
@@ -454,7 +454,8 @@
       "status": "rendered"
     },
     "bh-field": {
-      "status": "missing"
+      "status": "not-ported",
+      "reason": "Wraps the label/input pairs of the reference extension's custom-endpoint form \u2014 extractor URL, model name, API key. Extraction here runs server-side through the agent connection or the engine model slot, so there is no endpoint for the operator to type and no form for this class to wrap."
     },
     "bh-figure": {
       "status": "rendered"
@@ -574,16 +575,16 @@
       "status": "rendered"
     },
     "bh-msg-": {
-      "status": "missing"
+      "status": "rendered"
     },
     "bh-msg-badge": {
-      "status": "missing"
+      "status": "rendered"
     },
     "bh-msg-char": {
-      "status": "missing"
+      "status": "rendered"
     },
     "bh-msg-text": {
-      "status": "missing"
+      "status": "rendered"
     },
     "bh-no-model-banner": {
       "status": "rendered"
