@@ -35,9 +35,14 @@ BH.toast = function toast(message, ms = 2600) {
     document.body.appendChild(el);
   }
   el.textContent = String(message);
-  el.classList.add("bh-toast-show");
+  // bh-toast-in, which is the class the ported stylesheet actually styles. This used to
+  // add "bh-toast-show", a name of our own that no rule matches — and since .bh-toast
+  // rests at opacity 0 and only .bh-toast-in raises it, every toast this package has
+  // ever raised was invisible. Nothing failed and nothing was logged; the messages
+  // simply never appeared.
+  el.classList.add("bh-toast-in");
   clearTimeout(bhToastTimer);
-  bhToastTimer = setTimeout(() => el.classList.remove("bh-toast-show"), ms);
+  bhToastTimer = setTimeout(() => el.classList.remove("bh-toast-in"), ms);
 };
 
 BH.selectHtml = function selectHtml(cls, values, current) {

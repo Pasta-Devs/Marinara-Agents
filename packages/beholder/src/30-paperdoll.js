@@ -1551,7 +1551,25 @@ function renderDollPanel(state, activeName, updatedNames, view) {
     // history" replaces this with real state.
     const doll = renderCharacterDoll("—", {}, view, { placeholder: true });
     return {
-      html: `${doll}<p class="bh-placeholder-note">Showing a <b>default human</b> — nothing's tracked yet. It fills in as the scene plays out.</p>`,
+      // The empty panel is the one screen every new user looks at, and the one where
+      // "this is broken" gets decided, so the boundary is stated here to everyone
+      // rather than left to a detector that cannot reliably recognise the prose it
+      // applies to.
+      //
+      // Worded carefully, because an earlier draft got it backwards. Beholder tracks
+      // many characters at once and is trained to keep them apart — attribution, the
+      // right item on the right character, measures 0.95 across the supported
+      // registers and 1.00 on several. What it needs is a point of view in the
+      // writing. The limit is narration with no anchor at all, which is not the same
+      // thing as a scene with several people in it.
+      html: `${doll}<p class="bh-placeholder-note">Showing a <b>default human</b> — nothing's tracked yet. It fills in as the scene plays out.</p>
+      <p class="bh-placeholder-scope">Beholder follows <b>every character in the scene</b> and keeps their
+      clothes and injuries separate.<br>
+      It works best when the writing follows <b>one person at a time</b>, so you can tell whose eyes the scene
+      is seen through. It does not work well with writing that jumps between many people's thoughts in the same
+      paragraph, or with film-script formatting.<br>
+      The model is small on purpose, so it can run for free on your own computer.
+      <button type="button" class="bh-scope-more">What it reads</button></p>`,
       activeName: null,
     };
   }

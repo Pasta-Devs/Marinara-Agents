@@ -45,12 +45,49 @@ BH.editor = {
         write.status === 404 ? "no extraction to correct yet — let one turn run first" : `save ${write.status}`;
       throw new Error(detail);
     }
+    // Recorded only once the write succeeded, so a failed save never leaves a slot
+    // claiming to hold the operator's value while it holds the extractor's.
+    BH.locks.markEdited(characterName, slotName, chatId);
     return state;
   },
 
   close() {
     document.querySelector(".bh-editor")?.remove();
+    if (this.dismissHandlers) {
+      document.removeEventListener("click", this.dismissHandlers.click, true);
+      document.removeEventListener("keydown", this.dismissHandlers.keydown, true);
+      this.dismissHandlers = null;
+    }
     this.open = null;
+  },
+
+  /**
+   * Close on Escape or a click outside, the way the reference extension does.
+   *
+   * The detached-target guard matters: removing a worn row deletes the button that
+   * was clicked, so by the time this runs the target has no ancestors and reads as
+   * an outside click. Closing there would throw away the staged edit — the row would
+   * come back and the operator would think the remove did not work.
+   */
+  wireDismiss(editor) {
+    const onClick = (event) => {
+      const target = event.target;
+      if (!target || target.isConnected === false) return;
+      if (target.closest?.(".bh-editor, .bh-slot-card")) return;
+      this.close();
+    };
+    const onKeydown = (event) => {
+      if (event.key !== "Escape") return;
+      event.stopPropagation();
+      this.close();
+    };
+    this.dismissHandlers = { click: onClick, keydown: onKeydown };
+    // Deferred: the click that opened the editor is still propagating.
+    setTimeout(() => {
+      if (!editor.isConnected) return;
+      document.addEventListener("click", onClick, true);
+      document.addEventListener("keydown", onKeydown, true);
+    }, 0);
   },
 
   /** Open the editor over a slot card. */
@@ -68,40 +105,84 @@ BH.editor = {
     const isHand = BH_HAND_SLOTS.has(slotName);
     const locked = BH.locks.has(characterName, slotName);
 
+    const slotLabel = card.querySelector(".bh-slot-name")?.textContent?.trim() || slotName.replace(/_/g, " ");
+
     this.close();
     const editor = document.createElement("div");
     editor.className = "bh-editor";
+    editor.setAttribute("role", "dialog");
+    editor.setAttribute("aria-label", `Edit ${slotLabel}`);
     editor.innerHTML = `
       <div class="bh-editor-head">
-        <span class="bh-editor-title">${BH.escapeHtml(slotName.replace(/_/g, " "))}</span>
-        <label class="bh-check bh-editor-lock" title="A locked slot is left alone when an edit is applied">
-          <input type="checkbox" class="bhe-lock" ${locked ? "checked" : ""}><span>lock</span>
-        </label>
+        <span class="bh-editor-title">${BH.escapeHtml(characterName)}</span>
+        <span class="bh-editor-slot">· ${BH.escapeHtml(slotLabel)}</span>
+        <span class="bh-lock-toggle bh-editor-lock ${locked ? "bh-locked-on" : ""}" role="switch"
+          tabindex="0" aria-checked="${locked ? "true" : "false"}"
+          title="Locked slots ignore what the model reads — your value stays until you unlock it.">
+          <i class="fa-solid ${locked ? "fa-lock" : "fa-lock-open"}" aria-hidden="true"></i><span>${locked ? "locked" : "lock"}</span>
+        </span>
         <button class="bh-editor-close fa-solid fa-xmark" title="Close"></button>
       </div>
       <div class="bh-editor-body">${BH.editorFormHtml(slotState, isHand)}</div>
       <div class="bh-editor-foot">
-        <button class="bh-editor-apply">Apply</button>
+        <button class="bh-btn bhe-cancel">Cancel</button>
+        <button class="bh-btn bh-btn-primary bh-editor-apply"><i class="fa-solid fa-check"></i> Apply</button>
       </div>`;
-    document.body.appendChild(editor);
+
+    // Appended to the panel, not the document: .bh-editor is position:absolute and is
+    // designed to be placed against the panel's own box. On the body it was laid out
+    // against the page instead, so it drifted the moment anything scrolled.
+    const panel = BH.dock.panel;
+    (panel ?? document.body).appendChild(editor);
     this.open = { character: characterName, slot: slotName, element: editor };
 
-    // Place it beside the card, kept inside the viewport.
-    const rect = card.getBoundingClientRect();
-    const width = Math.min(360, window.innerWidth - 16);
-    editor.style.width = `${width}px`;
-    editor.style.left = `${Math.max(8, Math.min(rect.left, window.innerWidth - width - 8))}px`;
-    editor.style.top = `${Math.max(8, Math.min(rect.bottom + 6, window.innerHeight - 40))}px`;
+    if (panel) {
+      const panelRect = panel.getBoundingClientRect();
+      const cardRect = card.getBoundingClientRect();
+      const width = Math.min(330, panelRect.width - 16);
+      editor.style.width = `${width}px`;
+      const left = Math.max(8, Math.min(cardRect.left - panelRect.left, panelRect.width - width - 8));
+      let top = cardRect.bottom - panelRect.top + 6;
+      // Flip above the card when it would fall off the bottom, rather than being
+      // clamped to the edge half-visible.
+      const height = editor.offsetHeight || 320;
+      if (top + height > panelRect.height - 8) {
+        top = Math.max(44, cardRect.top - panelRect.top - height - 6);
+      }
+      editor.style.left = `${left}px`;
+      editor.style.top = `${top}px`;
+    }
+
+    // The editor is its own surface: a click inside it is never an outside click.
+    editor.addEventListener("mousedown", (event) => event.stopPropagation());
 
     BH.wireEditorForm(editor);
-    editor.querySelector(".bh-editor-close").addEventListener("click", () => this.close());
-    editor.querySelector(".bhe-lock").addEventListener("change", (event) => {
-      BH.locks.set(characterName, slotName, event.target.checked);
+    this.wireDismiss(editor);
+    for (const dismiss of editor.querySelectorAll(".bh-editor-close, .bhe-cancel")) {
+      dismiss.addEventListener("click", () => this.close());
+    }
+    // A switch rather than a checkbox, matching the reference extension: the state is
+    // legible at a glance from the padlock instead of from a tick, and the label says
+    // which state it is currently in rather than what the control is called.
+    const lockToggle = editor.querySelector(".bh-lock-toggle");
+    const toggleLock = () => {
+      const on = !BH.locks.has(characterName, slotName);
+      BH.locks.set(characterName, slotName, on);
       // Pin what the slot holds right now; that is what enforcement restores to.
       const current = BH.dock.state?.[characterName]?.body?.[slotName];
-      BH.locks.remember(characterName, slotName, event.target.checked ? (current ?? null) : undefined);
-      BH.toast(event.target.checked ? "Slot locked" : "Slot unlocked");
+      BH.locks.remember(characterName, slotName, on ? (current ?? null) : undefined);
+      lockToggle.classList.toggle("bh-locked-on", on);
+      lockToggle.setAttribute("aria-checked", on ? "true" : "false");
+      lockToggle.querySelector("i").className = `fa-solid ${on ? "fa-lock" : "fa-lock-open"}`;
+      lockToggle.querySelector("span").textContent = on ? "locked" : "lock";
+      BH.toast(on ? `${characterName} · ${slotLabel} locked — the story will not change it` : "Slot unlocked");
       BH.dock.render();
+    };
+    lockToggle.addEventListener("click", toggleLock);
+    lockToggle.addEventListener("keydown", (event) => {
+      if (event.key !== "Enter" && event.key !== " ") return;
+      event.preventDefault();
+      toggleLock();
     });
     editor.querySelector(".bh-editor-apply").addEventListener("click", async () => {
       const next = BH.collectEditorForm(editor, isHand);
@@ -196,6 +277,61 @@ BH.locks = {
   },
 
   /**
+   * Slots the operator set by hand, as opposed to slots the story produced.
+   *
+   * Separate from locks on purpose: they answer different questions. A lock says "do
+   * not change this"; an edit mark says "this value is mine". Most hand-set values are
+   * not locked — the operator fixes one detail and lets the story carry on — and
+   * without the mark there is nothing distinguishing their correction from the
+   * extractor's own output when they come back to it later.
+   */
+  editedKey(chatId) {
+    return `marinara.beholder.edited.${chatId}`;
+  },
+  edited(chatId = BH.dock.chatId) {
+    if (!chatId) return {};
+    try {
+      return JSON.parse(window.localStorage.getItem(this.editedKey(chatId)) || "{}") || {};
+    } catch {
+      return {};
+    }
+  },
+  wasEdited(character, slot, chatId = BH.dock.chatId) {
+    return this.edited(chatId)[`${character}::${slot}`] === true;
+  },
+  /**
+   * Forget every per-chat choice attached to a state that no longer exists.
+   *
+   * The roster goes too. Hiding, ordering and merging are choices about particular
+   * people, and once those people are gone a leftover alias would quietly fold the next
+   * character of that name into a merge the operator made for someone else.
+   *
+   * What survives is anything not about this chat — the dismissed model update, for
+   * one, which has nothing to do with who was being tracked here.
+   */
+  clearAll(chatId = BH.dock.chatId) {
+    if (!chatId) return;
+    for (const key of [this.key(chatId), this.valueKey(chatId), this.editedKey(chatId), BH.roster.key(chatId)]) {
+      try {
+        window.localStorage.removeItem(key);
+      } catch {
+        // Nothing to do; the state itself is already gone either way.
+      }
+    }
+  },
+
+  markEdited(character, slot, chatId = BH.dock.chatId) {
+    if (!chatId) return;
+    const map = this.edited(chatId);
+    map[`${character}::${slot}`] = true;
+    try {
+      window.localStorage.setItem(this.editedKey(chatId), JSON.stringify(map));
+    } catch {
+      // Losing the mark costs a visual cue, never the edit itself.
+    }
+  },
+
+  /**
    * Put locked slots back the way the operator left them.
    *
    * Returns true when it had to write, so the caller can refresh again and show the
@@ -260,13 +396,19 @@ BH.locks = {
     for (const card of panel.querySelectorAll(".bh-slot-card[data-slot]")) {
       const locked = map[`${character}::${card.dataset.slot}`] === true;
       card.classList.toggle("bh-slot-locked", locked);
-      if (locked && !card.querySelector(".bh-lock-mark")) {
+      // The reference extension's glyph: a small gold padlock inline after the slot
+      // name. This used to be a corner pin of our own invention, which the ported
+      // stylesheet had no rule for and which collided with the damage bar on small
+      // cards. Same class as the reference, so the same style applies.
+      if (locked && !card.querySelector(".bh-slot-lock-glyph")) {
         const mark = document.createElement("span");
-        mark.className = "bh-lock-mark fa-solid fa-lock";
-        mark.title = "Locked — edits leave this slot alone";
-        card.appendChild(mark);
+        mark.className = "bh-slot-lock-glyph fa-solid fa-lock";
+        mark.title = "Locked — the story will not change this slot";
+        const name = card.querySelector(".bh-slot-name");
+        if (name) name.after(mark);
+        else card.appendChild(mark);
       } else if (!locked) {
-        card.querySelector(".bh-lock-mark")?.remove();
+        card.querySelector(".bh-slot-lock-glyph")?.remove();
       }
     }
   },

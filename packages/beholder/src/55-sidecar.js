@@ -25,6 +25,10 @@ BH.sidecar = {
         credentials: "same-origin",
         headers: { Accept: "application/json", ...(init?.body ? { "Content-Type": "application/json" } : {}) },
         ...init,
+        // After the spread, not before it: every one of these answers is about right
+        // now — is the model loaded, which connection is answering, is there a newer
+        // build — so a cached copy is a wrong answer and no caller may opt back in.
+        cache: "no-store",
       });
       // A 404 on status means this engine has no utility slot at all. Stop asking.
       if (res.status === 404 && path === "/status") {

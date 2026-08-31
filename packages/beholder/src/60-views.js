@@ -12,7 +12,7 @@ const BH_LOOKS_TRAINED = (value) => /beholder/i.test(String(value || ""));
 
 BH.views = {
   close() {
-    document.querySelector(".bh-view-overlay")?.remove();
+    document.querySelector(".bh-view")?.remove();
     if (this.onKeydown) {
       document.removeEventListener("keydown", this.onKeydown, true);
       this.onKeydown = null;
@@ -22,37 +22,55 @@ BH.views = {
     this.returnFocusTo = null;
   },
 
+  /**
+   * Open a view inside the panel.
+   *
+   * `.bh-view` is `position:absolute; inset:0` — it is built to fill the panel, the way
+   * the reference extension does it, with a back arrow to the doll. This used to render
+   * a full-viewport overlay instead, which dimmed the entire host app to show a legend:
+   * heavier than the thing it was showing, and unlike every other surface here.
+   */
   open(title, bodyHtml, onMount) {
     this.close();
-    const overlay = document.createElement("div");
-    overlay.className = "bh-view-overlay";
-    overlay.innerHTML = `
-      <div class="bh-view">
-        <div class="bh-view-head">
-          <span class="bh-view-title">${BH.escapeHtml(title)}</span>
-          <button class="bh-view-close fa-solid fa-xmark" title="Close"></button>
-        </div>
-        <div class="bh-view-body">${bodyHtml}</div>
-      </div>`;
-    document.body.appendChild(overlay);
-    const closeButton = overlay.querySelector(".bh-view-close");
-    closeButton.addEventListener("click", () => this.close());
-    overlay.addEventListener("click", (event) => {
-      if (event.target === overlay) this.close();
+    const panel = BH.dock.panel;
+    const view = document.createElement("div");
+    view.className = "bh-view";
+    view.setAttribute("role", "dialog");
+    view.setAttribute("aria-label", title);
+    view.innerHTML = `
+      <div class="bh-view-head">
+        <button type="button" class="bh-view-back fa-solid fa-arrow-left" title="Back to the panel"
+          aria-label="Back to the panel"></button>
+        <span class="bh-view-title"><span class="bh-view-crumb">◉</span>${BH.escapeHtml(title)}</span>
+        <button type="button" class="bh-view-close fa-solid fa-xmark" title="Close"></button>
+      </div>
+      <div class="bh-view-body">${bodyHtml}</div>`;
+    (panel ?? document.body).appendChild(view);
+
+    for (const dismiss of view.querySelectorAll(".bh-view-back, .bh-view-close")) {
+      dismiss.addEventListener("click", () => this.close());
+    }
+    // The head doubles as the panel's drag grip while a view covers the header, so
+    // only the scrollable body swallows mousedown.
+    view.addEventListener("mousedown", (event) => {
+      if (!event.target.closest(".bh-view-head")) event.stopPropagation();
     });
-    // It behaves like a modal, so it has to be dismissable and reachable like one:
-    // without this a keyboard user tabs through the whole page behind it to escape.
     this.onKeydown = (event) => {
-      if (event.key === "Escape") {
-        event.stopPropagation();
-        this.close();
-      }
+      if (event.key !== "Escape") return;
+      // A field can claim Escape for itself. This handler is on `document` with capture,
+      // which means it runs before ANY listener on a descendant — capture travels from
+      // the root down to the target — so a field cannot win this by listening harder.
+      // It has to be decided here. Without it, pressing Escape to abandon a half-typed
+      // name closed the whole view and lost the row being worked on.
+      if (event.target?.closest?.("[data-bh-escape='self']")) return;
+      event.stopPropagation();
+      this.close();
     };
     document.addEventListener("keydown", this.onKeydown, true);
     this.returnFocusTo = document.activeElement;
-    closeButton.focus?.();
-    onMount?.(overlay.querySelector(".bh-view-body"));
-    return overlay;
+    view.querySelector(".bh-view-back")?.focus?.();
+    onMount?.(view.querySelector(".bh-view-body"));
+    return view;
   },
 
   // ── Prompt ────────────────────────────────────────────────────────────────
@@ -308,7 +326,7 @@ BH.views = {
     // Drawn before the network work so the dock button gives immediate feedback; the
     // body is filled in once the answers arrive.
     const loading =
-      document.querySelector(".bh-view-overlay") ??
+      document.querySelector(".bh-view") ??
       this.open("Prompt", `<p class="bh-view-lead">Checking which model will answer…</p>`);
     const props = BH.dock.props ?? {};
     // Resolved once, before anything is awaited, so every read and write below refers
@@ -428,9 +446,202 @@ BH.views = {
   },
 
   // ── Doctor ────────────────────────────────────────────────────────────────
+  /**
+   * Health checks, in the reference extension's sense: is this set up correctly?
+   *
+   * Distinct from the Inspector, which shows one round trip. Doctor answers "why is
+   * nothing appearing" without the operator having to know which of the four things
+   * that could be wrong to go and look at.
+   */
+  checkRow(state, label, detail) {
+    const icon = state === "ok" ? "fa-circle-check" : state === "warn" ? "fa-triangle-exclamation" : "fa-circle-xmark";
+    return `<div class="bh-vlog-row bh-vlog-${state}">
+      <b><i class="fa-solid ${icon}" aria-hidden="true"></i> ${BH.escapeHtml(label)}</b>
+      <span>${detail}</span>
+    </div>`;
+  },
+
+  /** Whether Beholder is switched on for this chat, read from the chat itself. */
+  async agentActive(chatId) {
+    // The props snapshot does not carry the chat's agent list, so reading it there
+    // reported the agent inactive while it was plainly running — a check that is wrong
+    // in the healthy case is worse than no check.
+    if (!chatId) return null;
+    try {
+      const res = await fetch(`/api/chats/${encodeURIComponent(chatId)}`, {
+        credentials: "same-origin",
+        headers: { Accept: "application/json" },
+      });
+      if (!res.ok) return null;
+      const meta = (await res.json())?.metadata ?? {};
+      if (meta.enableAgents === false) return false;
+      const active = meta.agentPromptTemplateIds ? Object.keys(meta.agentPromptTemplateIds) : [];
+      const ids = Array.isArray(meta.activeAgentIds) ? meta.activeAgentIds : active;
+      return ids.includes("beholder");
+    } catch {
+      return null;
+    }
+  },
+
+  async healthChecks(chatId, chatProps, snapshot) {
+    const rows = [];
+    const agentOn = await this.agentActive(chatId);
+    rows.push(
+      agentOn === true
+        ? this.checkRow("ok", "Agent", "Beholder is switched on for this chat.")
+        : agentOn === false
+          ? this.checkRow(
+              "error",
+              "Agent",
+              "Beholder is turned off for this chat, so nothing will be read. Turn it on in the agents menu.",
+            )
+          : // Unknown is reported as unknown rather than guessed either way.
+            this.checkRow("warn", "Agent", "Could not check whether Beholder is turned on for this chat."),
+    );
+
+    const routing = await BH.sidecar.routing();
+    const status = await BH.sidecar.status();
+    const servedLocally = routing?.source === "utility-sidecar";
+    const installed = status?.models?.[BH.sidecar.MODEL_ID] ?? null;
+    rows.push(
+      servedLocally
+        ? this.checkRow(
+            "ok",
+            "Model",
+            `Reading with the local Beholder model · version <code>${BH.escapeHtml(BH.sidecar.versionLabel(installed))}</code>.`,
+          )
+        : this.checkRow(
+            "warn",
+            "Model",
+            `Reading with this agent's own connection. ${BH.escapeHtml(routing?.reason ?? "")}`,
+          ),
+    );
+
+    const selected = (await this.liveTemplate(chatId, chatProps)).templateId;
+    const usingFivePass = selected === BH_FIVE_PASS_ID;
+    // The pairing is the single most common way this ends up quietly broken.
+    if (servedLocally) {
+      rows.push(
+        usingFivePass
+          ? this.checkRow("ok", "Prompt", "Five short prompts — the ones the local model was trained with. Correct.")
+          : this.checkRow(
+              "error",
+              "Prompt",
+              "The local model is reading, but the single-prompt setting is chosen. These do not fit together, and results will be poor until you change it.",
+            ),
+      );
+    } else {
+      rows.push(
+        usingFivePass
+          ? this.checkRow(
+              "warn",
+              "Prompt",
+              "The five-prompt setting is chosen, but a large model is reading. These do not fit together, and results will be poor.",
+            )
+          : this.checkRow("ok", "Prompt", "One prompt — what a large model needs. Correct."),
+      );
+    }
+
+    // Prose last: it is the check that explains the others when they all look fine and
+    // the doll is still empty.
+    const prose = await BH.prose.assess(chatId, BH.dock.state);
+    if (prose) {
+      rows.push(
+        this.checkRow(
+          "warn",
+          "Prose",
+          `${BH.escapeHtml(prose.copy)}${prose.aside ? ` <small style="opacity:.75">${BH.escapeHtml(prose.aside)}</small>` : ""}`,
+        ),
+      );
+    } else {
+      rows.push(this.checkRow("ok", "Prose", "These turns look like writing Beholder can read."));
+    }
+
+    const characters = snapshot?.state?.characters ?? [];
+    rows.push(
+      characters.length
+        ? this.checkRow("ok", "State", `${characters.length} character${characters.length === 1 ? "" : "s"} tracked.`)
+        : this.checkRow(
+            "warn",
+            "State",
+            "Nothing found yet. If this chat already has messages, use the clock button at the top to read them.",
+          ),
+    );
+    return rows.join("");
+  },
+
+  /**
+   * The setup facts as a scannable grid, above the prose of the checks.
+   *
+   * Same rows as the copyable report, from the same function, because a grid that says
+   * one thing while the pasted report says another is worse than not having the grid.
+   */
+  async vitalsHtml() {
+    let rows;
+    try {
+      rows = await BH.report.vitals();
+    } catch {
+      return "";
+    }
+    if (!rows.length) return "";
+    return `<div class="bh-vitals">${rows
+      .map(
+        (row) => `<div class="bh-vital">
+          <span class="bh-dot bh-dot-${BH.escapeHtml(row.dot)}"></span>
+          <span class="bh-vital-label">${BH.escapeHtml(row.label)}</span>
+          <span class="bh-vital-value">${BH.escapeHtml(String(row.value))}</span>
+        </div>`,
+      )
+      .join("")}</div>`;
+  },
+
+  /**
+   * What Beholder has actually been doing, most recent first.
+   *
+   * "It is not working" is usually one of three things — it never ran, it ran and
+   * failed, or it ran fine and found nothing — and those look identical from the panel.
+   * Timings and slot counts separate them without anyone having to describe symptoms.
+   *
+   * Failures are shown, not filtered: a run that errored is the most useful row here.
+   */
+  async recentRunsHtml(chatId) {
+    if (!chatId) return "";
+    let runs;
+    try {
+      const res = await fetch(`/api/agents/beholder-runs/${encodeURIComponent(chatId)}?limit=5`, {
+        credentials: "same-origin",
+        headers: { Accept: "application/json" },
+      });
+      if (!res.ok) return "";
+      runs = await res.json();
+    } catch {
+      return "";
+    }
+    const body = runs.length
+      ? runs
+          .map((run) => {
+            const when = run.createdAt ? new Date(run.createdAt).toLocaleTimeString() : "—";
+            const took = typeof run.durationMs === "number" ? `${(run.durationMs / 1000).toFixed(1)} s` : "—";
+            // A failed run applies nothing, so "no change" would be a lie — say so.
+            const found = !run.success
+              ? `<span class="bh-vlog-error">failed${run.error ? ` — ${BH.escapeHtml(String(run.error).slice(0, 80))}` : ""}</span>`
+              : run.slots
+                ? `${run.slots} slot${run.slots === 1 ? "" : "s"} · ${run.characters} character${run.characters === 1 ? "" : "s"}`
+                : "nothing found";
+            return `<tr><td>${BH.escapeHtml(when)}</td><td>${took}</td><td>${found}</td></tr>`;
+          })
+          .join("")
+      : `<tr><td colspan="3" class="bh-turns-empty">Nothing read yet in this chat.</td></tr>`;
+    return `<div class="bh-editor-group-label">recent reads</div>
+      <table class="bh-turns">
+        <thead><tr><th>when</th><th>took</th><th>found</th></tr></thead>
+        <tbody>${body}</tbody>
+      </table>`;
+  },
+
   /** The last extraction, end to end, so a bad turn can be looked at rather than guessed at. */
   async doctorView() {
-    this.open("Doctor", `<p class="bh-view-lead">Reading the last extraction…</p>`, async (body) => {
+    this.open("Doctor", `<p class="bh-view-lead">Checking this chat's setup…</p>`, async (body) => {
       // Captured together, before the requests. Reading the chat again afterwards let
       // a chat switch pair one chat's extraction with another chat's prompt in the same
       // report — which is exactly the thing the operator opens Doctor to rule out.
@@ -446,6 +657,9 @@ BH.views = {
         const characters = snapshot?.state?.characters ?? [];
         const slots = characters.reduce((n, c) => n + Object.keys(c.body ?? {}).length, 0);
         const selected = (await this.liveTemplate(chatId, chatProps)).templateId;
+        lines.push(await this.vitalsHtml());
+        lines.push(`<div class="bh-vlog">${await this.healthChecks(chatId, chatProps, snapshot)}</div>`);
+        lines.push(await this.recentRunsHtml(chatId));
         lines.push(
           `<dl class="bh-doctor-facts">
              <dt>Last extraction</dt><dd>${snapshot?.createdAt ? BH.escapeHtml(new Date(snapshot.createdAt).toLocaleString()) : "none yet"}</dd>
@@ -455,9 +669,42 @@ BH.views = {
              <dt>Prompt in use</dt><dd>${selected === BH_FIVE_PASS_ID ? "five passes (local model)" : "one prompt (SOTA model)"}</dd>
            </dl>`,
         );
+        // The report comes before the raw state: it is the thing to hand over when
+        // something is wrong, and burying it under a JSON dump is how it goes unused.
+        lines.push(
+          `<div class="bh-editor-group-label">report</div>
+           <div class="bh-report-block">
+             <p class="bh-view-note">If something looks wrong, copy this and send it to us. It contains the version,
+             the model, the prompt and what the panel found, so we do not have to ask.</p>
+             <label class="bh-check bh-report-prose">
+               <input type="checkbox" class="bh-report-include-prose">
+               <span>also include the last few turns of your story
+                 <small>off by default. Your story is not included unless you tick this box.</small></span>
+             </label>
+             <div class="bh-model-actions">
+               <button type="button" class="bh-btn bh-btn-primary bh-report-copy"><i class="fa-solid fa-copy"></i>
+                 Copy report</button>
+               <button type="button" class="bh-btn bh-report-show">Show it</button>
+             </div>
+             <pre class="bh-doctor-json bh-report-text" hidden></pre>
+           </div>`,
+        );
         lines.push(
           `<div class="bh-editor-group-label">state as stored</div>
            <pre class="bh-doctor-json">${BH.escapeHtml(JSON.stringify(snapshot?.state ?? {}, null, 2))}</pre>`,
+        );
+        // Last, and marked as destructive. When the state has gone badly wrong there is
+        // otherwise no way back except editing every slot by hand, but this throws away
+        // work, so it asks first and says exactly what it will take.
+        lines.push(
+          `<div class="bh-editor-group-label">start over</div>
+           <p class="bh-view-note">Clearing removes everyone Beholder is tracking in this chat, along with your
+           locks, hand-set values, and the order and merges you set for this chat. Your story is not touched.
+           The next turn starts again from nothing.</p>
+           <div class="bh-model-actions">
+             <button type="button" class="bh-btn bh-btn-danger bh-clear-state"><i class="fa-solid fa-eraser"></i>
+               Clear what Beholder tracks</button>
+           </div>`,
         );
         if (characters.length === 0) {
           lines.push(
@@ -469,7 +716,290 @@ BH.views = {
         lines.push(`<p class="bh-view-warn">Could not read the state: ${BH.escapeHtml(error.message)}</p>`);
       }
       body.innerHTML = lines.join("");
+
+      const block = body.querySelector(".bh-report-block");
+      if (block) {
+        const includeProse = () => !!block.querySelector(".bh-report-include-prose")?.checked;
+        const textBox = block.querySelector(".bh-report-text");
+        block.querySelector(".bh-report-copy")?.addEventListener("click", async (event) => {
+          const button = event.currentTarget;
+          button.disabled = true;
+          try {
+            const text = await BH.report.build({ includeProse: includeProse() });
+            textBox.textContent = text;
+            await BH.report.copy(text, button);
+          } catch (error) {
+            BH.toast(`Could not build the report: ${error.message}`);
+          } finally {
+            button.disabled = false;
+          }
+        });
+        block.querySelector(".bh-report-show")?.addEventListener("click", async () => {
+          textBox.textContent = await BH.report.build({ includeProse: includeProse() });
+          textBox.hidden = !textBox.hidden;
+        });
+      }
+
+      // Two presses, not a dialog: the button becomes the confirmation, so the choice
+      // is made where the consequence is written rather than in a box that covers it.
+      const clear = body.querySelector(".bh-clear-state");
+      let armed = false;
+      clear?.addEventListener("click", async () => {
+        if (!armed) {
+          armed = true;
+          clear.classList.add("bh-btn-armed");
+          clear.innerHTML = `<i class="fa-solid fa-eraser"></i> Press again to clear`;
+          // Disarms itself, so a stray click cannot sit there waiting to be completed.
+          window.setTimeout(() => {
+            armed = false;
+            clear.classList.remove("bh-btn-armed");
+            clear.innerHTML = `<i class="fa-solid fa-eraser"></i> Clear what Beholder tracks`;
+          }, 5000);
+          return;
+        }
+        clear.disabled = true;
+        try {
+          const res = await fetch(`/api/agents/beholder-state/${encodeURIComponent(chatId)}`, {
+            method: "PUT",
+            headers: { "Content-Type": "application/json" },
+            credentials: "same-origin",
+            body: JSON.stringify({ state: { characters: [] } }),
+          });
+          if (!res.ok) throw new Error(`${res.status}`);
+          // The locks and edit marks describe slots that no longer exist; leaving them
+          // would restore the cleared values on the next turn.
+          BH.locks.clearAll(chatId);
+          await BH.dock.refresh();
+          BH.dock.render();
+          BH.toast("Cleared — Beholder starts again from the next turn");
+          this.close();
+        } catch (error) {
+          BH.toast(`Could not clear: ${error.message}`);
+          clear.disabled = false;
+        }
+      });
     });
+  },
+
+  // ── Characters ────────────────────────────────────────────────────────────
+  /**
+   * Who the panel shows, and in what order.
+   *
+   * Presentation only, and it says so: hiding someone does not stop the extractor
+   * tracking them, and merging two names does not teach it they are the same person.
+   * A control that looks like it changes extraction and does not would be worse than
+   * having none.
+   */
+  charactersView() {
+    const render = (body) => {
+      const names = Object.keys(BH.dock.state ?? {});
+      const data = BH.roster.all();
+      const { visible, hidden } = BH.roster.arrange(names);
+      const persona = BH.dock.props?.personaInfo?.name ?? null;
+
+      const row = (name) => {
+        const you = name === persona;
+        const chips = BH.roster
+          .variantsOf(name, data)
+          .map(
+            (variant) =>
+              `<span class="bh-ch-alias" data-variant="${BH.escapeHtml(variant)}">${BH.escapeHtml(variant)}<i class="fa-solid fa-xmark" title="Unmerge"></i></span>`,
+          )
+          .join("");
+        return `<li class="bh-ch${you ? " bh-ch-you" : ""}" draggable="true" data-name="${BH.escapeHtml(name)}">
+          <i class="bh-ch-grip fa-solid fa-grip-vertical" title="Drag to reorder"></i>
+          <span class="bh-ch-main">
+            <span class="bh-ch-name">${you ? '<i class="fa-solid fa-star bh-ch-star" title="You"></i> ' : ""}${BH.escapeHtml(name)}</span>
+            ${chips ? `<span class="bh-ch-aliases">${chips}</span>` : ""}
+          </span>
+          <span class="bh-ch-tools">
+            <i class="bh-ch-merge fa-solid fa-link" title="Same person as another name"></i>
+            <i class="bh-ch-hide fa-solid fa-eye" title="Hide from the panel"></i>
+          </span>
+        </li>`;
+      };
+
+      body.innerHTML = `
+        <p class="bh-view-lead">Who this panel shows. This is display only — hiding someone does not stop
+        Beholder tracking them, and merging two names does not tell it they are the same person.</p>
+        <ul class="bh-ch-list">${visible.map(row).join("") || '<li class="bh-ch-empty">No one tracked yet.</li>'}</ul>
+        ${
+          hidden.length
+            ? `<div class="bh-ch-tray"><span class="bh-ch-tray-cap">Hidden</span><ul class="bh-ch-list">${hidden
+                .map(
+                  (name) =>
+                    `<li class="bh-ch bh-ch-hidden" data-name="${BH.escapeHtml(name)}">
+                      <span class="bh-ch-main"><span class="bh-ch-name">${BH.escapeHtml(name)}</span></span>
+                      <span class="bh-ch-tools"><i class="bh-ch-unhide fa-solid fa-eye-slash" title="Show"></i></span>
+                    </li>`,
+                )
+                .join("")}</ul></div>`
+            : ""
+        }`;
+
+      const again = () => {
+        render(body);
+        BH.dock.render();
+      };
+
+      for (const control of body.querySelectorAll(".bh-ch-hide")) {
+        control.addEventListener("click", (event) => {
+          event.stopPropagation();
+          BH.roster.setHidden(control.closest(".bh-ch").dataset.name, true);
+          again();
+        });
+      }
+      for (const control of body.querySelectorAll(".bh-ch-unhide")) {
+        control.addEventListener("click", (event) => {
+          event.stopPropagation();
+          BH.roster.setHidden(control.closest(".bh-ch").dataset.name, false);
+          again();
+        });
+      }
+      for (const chip of body.querySelectorAll(".bh-ch-alias .fa-xmark")) {
+        chip.addEventListener("click", (event) => {
+          event.stopPropagation();
+          BH.roster.removeAlias(chip.closest(".bh-ch-alias").dataset.variant);
+          again();
+        });
+      }
+      for (const control of body.querySelectorAll(".bh-ch-merge")) {
+        control.addEventListener("click", (event) => {
+          event.stopPropagation();
+          const rowElement = control.closest(".bh-ch");
+          const existing = rowElement.querySelector(".bh-ch-pick");
+          if (existing) {
+            existing.remove();
+            return;
+          }
+          const name = rowElement.dataset.name;
+          const pick = document.createElement("div");
+          pick.className = "bh-ch-pick";
+          pick.innerHTML =
+            `<span class="bh-ch-pick-lead">is</span>` +
+            visible
+              .filter((other) => other !== name)
+              .map(
+                (other) =>
+                  `<button class="bh-ch-pill" type="button" data-target="${BH.escapeHtml(other)}">${BH.escapeHtml(other)}</button>`,
+              )
+              .join("") +
+            // The pills only offer names currently on screen, and the name you want is
+            // often not one of them: the extractor wrote "the guard" once and has since
+            // settled on "Rhys", so the row to merge away has no partner to point at.
+            `<input class="bh-ch-pick-input" type="text" placeholder="or type a name…"
+               data-bh-escape="self"
+               aria-label="Merge ${BH.escapeHtml(name)} into a name you type">`;
+          rowElement.appendChild(pick);
+          const mergeInto = (target) => {
+            const clean = String(target ?? "").trim();
+            if (!clean || clean.toLowerCase() === name.toLowerCase()) return;
+            // This row's name becomes a variant of the one picked, so the panel stops
+            // showing the same person twice.
+            BH.roster.addAlias(name, clean);
+            // Merging into a name nobody is being tracked under yet is allowed — it is
+            // how you fix a name before the story settles on it — but there is no row to
+            // fold into, so the panel does not visibly change. Without this the action
+            // looks like it failed.
+            if (!visible.some((other) => other.toLowerCase() === clean.toLowerCase())) {
+              BH.toast(`Noted — ${name} will be shown as ${clean} once ${clean} appears`);
+            }
+            again();
+          };
+          for (const pill of pick.querySelectorAll(".bh-ch-pill")) {
+            pill.addEventListener("click", () => mergeInto(pill.dataset.target));
+          }
+          const typed = pick.querySelector(".bh-ch-pick-input");
+          // The field carries data-bh-escape="self", so the view leaves Escape alone
+          // here and an ordinary listener is enough.
+          typed.addEventListener("keydown", (keyEvent) => {
+            if (keyEvent.key !== "Enter" && keyEvent.key !== "Escape") return;
+            keyEvent.preventDefault();
+            if (keyEvent.key === "Enter") mergeInto(typed.value);
+            else pick.remove();
+          });
+          typed.focus();
+        });
+      }
+
+      // Drag to reorder, persisted as the roster order.
+      const list = body.querySelector(".bh-ch-list");
+      let dragging = null;
+      for (const item of body.querySelectorAll(".bh-ch[draggable]")) {
+        item.addEventListener("dragstart", () => {
+          dragging = item;
+          item.classList.add("bh-ch-dragging");
+        });
+        item.addEventListener("dragend", () => {
+          item.classList.remove("bh-ch-dragging");
+          dragging = null;
+          BH.roster.setOrder([...list.querySelectorAll(".bh-ch[draggable]")].map((row) => row.dataset.name));
+          BH.dock.render();
+        });
+        item.addEventListener("dragover", (event) => {
+          event.preventDefault();
+          if (!dragging || dragging === item) return;
+          const box = item.getBoundingClientRect();
+          const after = event.clientY > box.top + box.height / 2;
+          item.parentNode.insertBefore(dragging, after ? item.nextSibling : item);
+        });
+      }
+    };
+
+    this.open("Characters", `<p class="bh-view-lead">Reading the roster…</p>`, (body) => render(body));
+  },
+
+  // ── Inspector ─────────────────────────────────────────────────────────────
+  /**
+   * The most recent round trip, captured on demand.
+   *
+   * The engine does not keep the prompt and the reply after a run, so seeing them means
+   * running the turn again with debug output on. That is a real model call, so it is a
+   * button the operator presses rather than something that happens on open.
+   */
+  async inspectorView() {
+    this.open(
+      "Inspector",
+      `<p class="bh-view-lead">The full round trip for a turn — the prompt each pass was given, the prose it
+       read, and what it answered. Nothing is kept after a run, so this re-runs the turn with capture on.</p>
+       <p class="bh-view-note">That is one model call per pass, against whichever model is answering.</p>
+       <div class="bh-model-actions">
+         <button type="button" class="bh-btn bh-btn-primary bh-inspect-run"><i class="fa-solid fa-play"></i>
+           Capture this turn</button>
+       </div>
+       <div class="bh-inspect-out"></div>`,
+      (body) => {
+        const button = body.querySelector(".bh-inspect-run");
+        const out = body.querySelector(".bh-inspect-out");
+        button.addEventListener("click", async () => {
+          const chatId = BH.dock.chatId;
+          if (!chatId) {
+            BH.toast("No chat open");
+            return;
+          }
+          button.disabled = true;
+          const original = button.innerHTML;
+          button.innerHTML = `<i class="fa-solid fa-spinner fa-spin"></i> Capturing…`;
+          out.innerHTML = "";
+          try {
+            const { passes, warning } = await BH.inspector.capture(chatId, null);
+            if (!passes.length) {
+              out.innerHTML = `<p class="bh-view-warn">The run produced no debug output. If Beholder is not
+                active in this chat there is nothing to capture.</p>`;
+              return;
+            }
+            out.innerHTML =
+              (warning ? `<p class="bh-view-note">${BH.escapeHtml(warning)}</p>` : "") +
+              passes.map((pass, index) => BH.inspector.passHtml(pass, index)).join("");
+          } catch (error) {
+            out.innerHTML = `<p class="bh-view-warn">Could not capture: ${BH.escapeHtml(error.message)}</p>`;
+          } finally {
+            button.disabled = false;
+            button.innerHTML = original;
+          }
+        });
+      },
+    );
   },
 
   // ── Help ──────────────────────────────────────────────────────────────────
@@ -477,37 +1007,95 @@ BH.views = {
     this.open(
       "Help",
       `
-      <p class="bh-view-lead">Beholder reads each turn and keeps what the prose actually says about bodies:
-      what is worn per slot, what is held, wounds, bare and missing parts, and species.</p>
+      <p class="bh-view-lead">Beholder reads each turn of your story and remembers what it says about each
+      character's body: what they are wearing on each part, what they are holding, their injuries, which parts
+      are uncovered or lost, and their species.</p>
 
-      <div class="bh-editor-group-label">reading the doll</div>
+      <div class="bh-editor-group-label">reading the panel</div>
+      <p class="bh-view-note">The colours on each body part mean this:</p>
+      <div class="bh-legend-row"><span class="bh-legend-bar bh-tier-0"></span>in good condition</div>
+      <div class="bh-legend-row"><span class="bh-legend-bar bh-tier-2"></span>damaged</div>
+      <div class="bh-legend-row"><span class="bh-legend-bar bh-tier-4"></span>broken</div>
+      <div class="bh-legend-row"><span class="bh-legend-bar bh-tier-holding"></span>something held in the hand</div>
+      <div class="bh-legend-row"><span class="bh-legend-dot"></span>an injury to the body itself</div>
+      <p class="bh-view-note">A ring <b>around</b> a body part is the state of what is worn on it. Colour
+      <b>inside</b> the body part is the body itself. Click any part to change it, or to lock it so the story
+      cannot change it back.</p>
+
+      <div class="bh-editor-group-label">what it reads well</div>
+      <p class="bh-view-note"><b>Scenes with several characters are fine.</b> This is what Beholder is made
+      for. In testing it put the right item on the right person about <b>95% of the time</b>.</p>
+      <p class="bh-view-note">It needs writing that <b>follows one person at a time</b>, so the reader can tell
+      whose view the scene is told from. Both of these work:</p>
       <ul class="bh-help-list">
-        <li><b>Outline</b> on a body part — the worst damage among what is worn there.</li>
-        <li><b>Fill</b> on a body part — a wound on the body itself, deepening with severity.</li>
-        <li><b>✦</b> beside a hand — something is held.</li>
-        <li>A struck-through slot with <b>MISSING</b> — an acquired loss; it also applies to everything below it.</li>
-        <li><b>BARE</b> — the slot is explicitly uncovered, which is not the same as simply having nothing recorded.</li>
+        <li>"I pulled off my coat."</li>
+        <li>"She pulled off her coat."</li>
+      </ul>
+      <p class="bh-view-note">It was tested on five kinds of roleplay writing and works with all of them: chat
+      roleplay, story fanfic, web serials, interactive fiction, and forum play-by-post.</p>
+
+      <div class="bh-editor-group-label">what it does not read well</div>
+      <ul class="bh-help-list">
+        <li>Writing that moves between many people's thoughts in one paragraph, with no single person to
+          follow.</li>
+        <li>Film or play scripts — for example <code>INT. ROOM - NIGHT</code>, or names in capitals above
+          their lines.</li>
+      </ul>
+      <p class="bh-view-note">This is not a bug. The model is very small on purpose, so it can run for free on
+      your own computer and your story never leaves it.</p>
+      <p class="bh-view-note">If that is how you write, a large model reads this kind of writing better. You
+      can connect this agent to one in the Prompt view. We do not support that, and your story would then be
+      sent to that model instead of staying on your computer.</p>
+      <p class="bh-view-note">Doctor tells you when it sees writing it may not read well, so you do not have to
+      guess from an empty panel.</p>
+
+      <div class="bh-editor-group-label">how to read the picture</div>
+      <ul class="bh-help-list">
+        <li>A coloured <b>outline</b> on a body part — the worst damage of anything worn there.</li>
+        <li>A <b>filled</b> body part — an injury to the body itself. The worse it is, the stronger the colour.</li>
+        <li><b>✦</b> next to a hand — the character is holding something.</li>
+        <li>A crossed-out part marked <b>MISSING</b> — the character has lost it. Everything below it counts as
+        lost too.</li>
+        <li><b>BARE</b> — the story said this part is uncovered. That is not the same as simply not knowing
+        yet.</li>
       </ul>
 
-      <div class="bh-editor-group-label">layers</div>
-      <p>The Color, Damage and Wounds toggles only change what is drawn. Turning one off hides that detail; it
-      does not forget it.</p>
+      <div class="bh-editor-group-label">the three switches</div>
+      <p>The Color, Damage and Wounds switches only change what you see. Turning one off hides that detail.
+      Nothing is forgotten.</p>
 
-      <div class="bh-editor-group-label">editing</div>
+      <div class="bh-editor-group-label">changing something</div>
       <ul class="bh-help-list">
-        <li>Click any slot card to correct it. Apply writes to the stored state, so the next turn is built on
-        your correction rather than the model's guess.</li>
-        <li><b>Lock</b> a slot when you have set it deliberately and want it left alone.</li>
-        <li><b>bare</b> clears what is worn on apply; <b>missing</b> overrides the whole slot.</li>
+        <li>Click any body part to correct it. <b>Apply</b> saves your change, so the next turn uses what you
+        wrote instead of what the model guessed.</li>
+        <li><b>Lock</b> a part when you have set it yourself and want Beholder to leave it alone.</li>
+        <li>Ticking <b>bare</b> removes what is worn there. Ticking <b>missing</b> replaces everything for that
+        part.</li>
       </ul>
 
-      <div class="bh-editor-group-label">writing for it</div>
+      <div class="bh-editor-group-label">telling it something directly</div>
+      <p class="bh-view-note">The box at the bottom of this panel sends a fact straight to Beholder, without
+      writing it into the story. Say what <b>happened</b>, and name the person:</p>
       <ul class="bh-help-list">
-        <li>Name the garment and the person: "she pulls off <i>her</i> gloves" is read; "they undress" is not.</li>
-        <li>Say what comes off as its own clause. One sentence that removes and adds at once is the case it
-        most often gets half right.</li>
-        <li>Scenery is ignored on purpose — a cloak on a hook belongs to nobody.</li>
-      </ul>`,
+        <li>"Maggie takes off her boots."</li>
+        <li>"Maggie is now wearing black gloves."</li>
+        <li>"Maggie has a deep cut on her left arm."</li>
+      </ul>
+      <p class="bh-view-note">For damage, say it as a thing the item has, not as a word in front of it.
+      "Maggie wears a belt with a tear in it" works; "Maggie is wearing a torn belt" is read as the belt coming
+      off. Slots you change this way are locked, so the next turn does not undo them.</p>
+
+      <div class="bh-editor-group-label">writing so it reads well</div>
+      <ul class="bh-tips">
+        <li>Name the clothing and the person. "She pulls off <i>her</i> gloves" works. "They undress" does
+        not.</li>
+        <li>Put taking something off in its own sentence. When one sentence removes and adds clothing at the
+        same time, Beholder often catches only half of it.</li>
+        <li>Clothing that belongs to nobody is ignored on purpose, such as a cloak hanging on a hook.</li>
+      </ul>
+
+      <div class="bh-orn" aria-hidden="true"><span></span>◉<span></span></div>
+      <p class="bh-help-sign">Out of sight, out of prompt. <span>Beholder doesn't blink.</span></p>`,
     );
   },
 };
