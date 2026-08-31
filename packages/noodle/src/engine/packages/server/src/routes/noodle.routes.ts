@@ -126,6 +126,10 @@ export async function noodleRoutes(app: FastifyInstance) {
     return account ?? reply.code(404).send({ error: "Noodle account not found" });
   });
   app.get("/posts", async (request) => noodle.listPosts(request.query as { limit?: number; since?: string }));
+  app.get("/feed", async (request) =>
+    noodle.listPostPage(request.query as { limit?: number; cursorAt?: string; cursorId?: string }),
+  );
+  app.get("/notifications", async () => noodle.listNotificationData());
   app.post("/posts", async (req, reply) => {
     if (req.body && typeof req.body === "object" && "title" in req.body) {
       return reply.code(400).send({ error: "Public Noodle posts do not support titles." });
