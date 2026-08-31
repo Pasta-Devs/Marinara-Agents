@@ -710,7 +710,14 @@ console.log("beholder client contract: prose check OK");
   // reaches 100% of users with no false alarms at all.
   const dollSource = readFileSync(join(srcDir, "30-paperdoll.js"), "utf8");
   assert.match(dollSource, /bh-placeholder-scope/u, "the empty panel must state what Beholder reads");
-  assert.match(dollSource, /one focal character per passage/u, "naming the actual boundary");
+  // Worded to match what the model actually does. An earlier draft said "one focal
+  // character per passage", which reads as "cannot do multiple characters" — the
+  // opposite of true: attribution measures 0.95 across the supported registers, and
+  // keeping characters apart is a trained, first-class capability. The boundary is the
+  // missing point of view, not the number of people in the scene.
+  assert.match(dollSource, /tracks <b>everyone in the scene<\/b>/u, "must not undersell multi-character tracking");
+  assert.match(dollSource, /point of view/u, "the boundary is the anchor, not the character count");
+  assert.ok(!/one focal character/u.test(dollSource), "the misleading phrasing must not come back");
   assert.match(dollSource, /script/u, "and the script case");
   assert.match(beholderChromeSource, /bh-scope-more/u, "with a route to the full explanation");
 }

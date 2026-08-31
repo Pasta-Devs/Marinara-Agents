@@ -856,15 +856,18 @@ BH.views = {
       what is worn per slot, what is held, wounds, bare and missing parts, and species.</p>
 
       <div class="bh-editor-group-label">what it reads well</div>
-      <p class="bh-view-note">Beholder anchors on <b>one focal character per passage</b>. Give it a clear point of
-      view — first person, or third-person limited — and it does its job. It was measured on five kinds of
-      roleplay writing and works across all of them: chat roleplay, prose fanfic, web serial, interactive
-      fiction, and forum play-by-post.</p>
+      <p class="bh-view-note"><b>Several characters at once is what it is for.</b> Keeping their clothes and
+      wounds on the right people is a trained capability, measured: across the five kinds of roleplay writing
+      it was evaluated on — chat roleplay, prose fanfic, web serial, interactive fiction, forum play-by-post —
+      it puts the right item on the right character about 95% of the time, and on some of them every time.</p>
+      <p class="bh-view-note">What it needs is a <b>point of view</b>: a passage told from someone's
+      perspective, first person or third. That is the thing it anchors to.</p>
 
       <div class="bh-editor-group-label">what it does not</div>
-      <p class="bh-view-note">Scenes that narrate <b>several characters at once</b> with no focal point, and
-      anything written as a <b>script</b>, are outside what it handles. Not a bug, and not a queue item — it is
-      what a model this small can do. It is deliberately tiny so it can run free, offline and private.</p>
+      <p class="bh-view-note">Narration with <b>no anchor at all</b> — the omniscient voice that hops between
+      heads inside one passage, describing four people's inner lives as an equal survey — and anything laid out
+      as a <b>script</b>. Not a bug and not a queue item: it is what a model this small can do, and it is
+      deliberately tiny so it can run free, offline and private.</p>
       <p class="bh-view-note">If that is how you write, a large general model reads this kind of prose better.
       You can point the agent at one from the Prompt view, though that pairing is not supported and you would
       be trading away the local, private part.</p>

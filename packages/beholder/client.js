@@ -1987,14 +1987,21 @@ function renderDollPanel(state, activeName, updatedNames, view) {
     const doll = renderCharacterDoll("—", {}, view, { placeholder: true });
     return {
       // The empty panel is the one screen every new user looks at, and the one where
-      // "this is broken" gets decided. So the boundary is stated here, once, to
-      // everyone — rather than left to a detector that cannot reliably recognise the
-      // prose it applies to. Beholder does not work for every kind of writing, by
-      // design, and that is cheaper to say than to diagnose.
+      // "this is broken" gets decided, so the boundary is stated here to everyone
+      // rather than left to a detector that cannot reliably recognise the prose it
+      // applies to.
+      //
+      // Worded carefully, because an earlier draft got it backwards. Beholder tracks
+      // many characters at once and is trained to keep them apart — attribution, the
+      // right item on the right character, measures 0.95 across the supported
+      // registers and 1.00 on several. What it needs is a point of view in the
+      // writing. The limit is narration with no anchor at all, which is not the same
+      // thing as a scene with several people in it.
       html: `${doll}<p class="bh-placeholder-note">Showing a <b>default human</b> — nothing's tracked yet. It fills in as the scene plays out.</p>
-      <p class="bh-placeholder-scope">Beholder follows <b>one focal character per passage</b> — a clear point of
-      view, first or third person. Scenes that narrate several people at once, and anything written as a script,
-      are outside what it reads. That is the trade for a model small enough to run free and offline.
+      <p class="bh-placeholder-scope">Beholder tracks <b>everyone in the scene</b> and keeps their things apart.
+      What it needs is a <b>point of view</b> — a passage told from someone's perspective. Writing with no
+      anchor at all, hopping between heads mid-scene, and anything laid out as a script are outside what it
+      reads. That is the trade for a model small enough to run free and offline.
       <button type="button" class="bh-scope-more">What it reads</button></p>`,
       activeName: null,
     };
@@ -4235,15 +4242,18 @@ BH.views = {
       what is worn per slot, what is held, wounds, bare and missing parts, and species.</p>
 
       <div class="bh-editor-group-label">what it reads well</div>
-      <p class="bh-view-note">Beholder anchors on <b>one focal character per passage</b>. Give it a clear point of
-      view — first person, or third-person limited — and it does its job. It was measured on five kinds of
-      roleplay writing and works across all of them: chat roleplay, prose fanfic, web serial, interactive
-      fiction, and forum play-by-post.</p>
+      <p class="bh-view-note"><b>Several characters at once is what it is for.</b> Keeping their clothes and
+      wounds on the right people is a trained capability, measured: across the five kinds of roleplay writing
+      it was evaluated on — chat roleplay, prose fanfic, web serial, interactive fiction, forum play-by-post —
+      it puts the right item on the right character about 95% of the time, and on some of them every time.</p>
+      <p class="bh-view-note">What it needs is a <b>point of view</b>: a passage told from someone's
+      perspective, first person or third. That is the thing it anchors to.</p>
 
       <div class="bh-editor-group-label">what it does not</div>
-      <p class="bh-view-note">Scenes that narrate <b>several characters at once</b> with no focal point, and
-      anything written as a <b>script</b>, are outside what it handles. Not a bug, and not a queue item — it is
-      what a model this small can do. It is deliberately tiny so it can run free, offline and private.</p>
+      <p class="bh-view-note">Narration with <b>no anchor at all</b> — the omniscient voice that hops between
+      heads inside one passage, describing four people's inner lives as an equal survey — and anything laid out
+      as a <b>script</b>. Not a bug and not a queue item: it is what a model this small can do, and it is
+      deliberately tiny so it can run free, offline and private.</p>
       <p class="bh-view-note">If that is how you write, a large general model reads this kind of prose better.
       You can point the agent at one from the Prompt view, though that pairing is not supported and you would
       be trading away the local, private part.</p>
@@ -4537,11 +4547,13 @@ BH.backfill = {
 // ===== 72-prose.js =====
 // ── Is this prose something Beholder can read? ──────────────────────────────
 //
-// Beholder is a small model that anchors on ONE focal character per passage. Give it a
-// clear point of view — even third-person-limited — and it works. Give it a scene that
-// narrates several co-equal characters at once, or a script, and it collapses. That is
-// a property of the model, not a bug waiting to be fixed, and someone whose scenes are
-// written that way deserves to be told rather than left concluding the thing is broken.
+// Beholder is a small model that anchors on a passage's POINT OF VIEW. Several
+// characters in a scene is what it is for — keeping their things apart is trained and
+// measured, at about 0.95 attribution across the supported registers. What costs it is
+// narration with no anchor: the omniscient voice surveying four people's inner lives as
+// equals, or a script. That is a property of the model, not a bug waiting to be fixed,
+// and someone whose scenes read that way deserves to be told rather than left
+// concluding the thing is broken.
 //
 // Two checks, and only two, because only two can be made honestly:
 //
@@ -4660,8 +4672,8 @@ BH.prose = {
         verdict: "script",
         copy:
           "These turns are written as a script — scene headings, camera directions or speaker cues. " +
-          "Beholder will not do well with that, sorry. It reads prose with one focal character, and that " +
-          "is a limit of the small local model rather than something waiting to be fixed.",
+          "Beholder will not do well with that, sorry. It reads narrative prose told from someone's point " +
+          "of view, and that is a limit of the small local model rather than something waiting to be fixed.",
       };
     }
 

@@ -1552,14 +1552,21 @@ function renderDollPanel(state, activeName, updatedNames, view) {
     const doll = renderCharacterDoll("—", {}, view, { placeholder: true });
     return {
       // The empty panel is the one screen every new user looks at, and the one where
-      // "this is broken" gets decided. So the boundary is stated here, once, to
-      // everyone — rather than left to a detector that cannot reliably recognise the
-      // prose it applies to. Beholder does not work for every kind of writing, by
-      // design, and that is cheaper to say than to diagnose.
+      // "this is broken" gets decided, so the boundary is stated here to everyone
+      // rather than left to a detector that cannot reliably recognise the prose it
+      // applies to.
+      //
+      // Worded carefully, because an earlier draft got it backwards. Beholder tracks
+      // many characters at once and is trained to keep them apart — attribution, the
+      // right item on the right character, measures 0.95 across the supported
+      // registers and 1.00 on several. What it needs is a point of view in the
+      // writing. The limit is narration with no anchor at all, which is not the same
+      // thing as a scene with several people in it.
       html: `${doll}<p class="bh-placeholder-note">Showing a <b>default human</b> — nothing's tracked yet. It fills in as the scene plays out.</p>
-      <p class="bh-placeholder-scope">Beholder follows <b>one focal character per passage</b> — a clear point of
-      view, first or third person. Scenes that narrate several people at once, and anything written as a script,
-      are outside what it reads. That is the trade for a model small enough to run free and offline.
+      <p class="bh-placeholder-scope">Beholder tracks <b>everyone in the scene</b> and keeps their things apart.
+      What it needs is a <b>point of view</b> — a passage told from someone's perspective. Writing with no
+      anchor at all, hopping between heads mid-scene, and anything laid out as a script are outside what it
+      reads. That is the trade for a model small enough to run free and offline.
       <button type="button" class="bh-scope-more">What it reads</button></p>`,
       activeName: null,
     };

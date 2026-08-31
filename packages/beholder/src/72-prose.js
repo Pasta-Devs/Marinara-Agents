@@ -1,10 +1,12 @@
 // ── Is this prose something Beholder can read? ──────────────────────────────
 //
-// Beholder is a small model that anchors on ONE focal character per passage. Give it a
-// clear point of view — even third-person-limited — and it works. Give it a scene that
-// narrates several co-equal characters at once, or a script, and it collapses. That is
-// a property of the model, not a bug waiting to be fixed, and someone whose scenes are
-// written that way deserves to be told rather than left concluding the thing is broken.
+// Beholder is a small model that anchors on a passage's POINT OF VIEW. Several
+// characters in a scene is what it is for — keeping their things apart is trained and
+// measured, at about 0.95 attribution across the supported registers. What costs it is
+// narration with no anchor: the omniscient voice surveying four people's inner lives as
+// equals, or a script. That is a property of the model, not a bug waiting to be fixed,
+// and someone whose scenes read that way deserves to be told rather than left
+// concluding the thing is broken.
 //
 // Two checks, and only two, because only two can be made honestly:
 //
@@ -123,8 +125,8 @@ BH.prose = {
         verdict: "script",
         copy:
           "These turns are written as a script — scene headings, camera directions or speaker cues. " +
-          "Beholder will not do well with that, sorry. It reads prose with one focal character, and that " +
-          "is a limit of the small local model rather than something waiting to be fixed.",
+          "Beholder will not do well with that, sorry. It reads narrative prose told from someone's point " +
+          "of view, and that is a limit of the small local model rather than something waiting to be fixed.",
       };
     }
 
