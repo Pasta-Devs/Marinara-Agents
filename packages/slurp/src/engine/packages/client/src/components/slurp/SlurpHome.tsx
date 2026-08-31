@@ -3036,60 +3036,70 @@ function StageProfileView({
   const cards = (
     <>
       {activeTab === "subscribers" ? (
-        subscribersQuery.isLoading ? (
-          <div
-            className="flex justify-center py-12"
-            role="status"
-            aria-label={localizeUi("ui.noodle.stageprofileview.loadingSubscribers")}
-          >
-            <Loader2 size={22} className="animate-spin text-[var(--noodle-accent)]" />
+        <div>
+          <div className="border-b border-[var(--noodle-divider)] bg-[var(--slurp-surface-raised,var(--background))] px-4 py-4 sm:px-5">
+            <p className="text-xs font-bold uppercase tracking-[0.12em] text-[var(--noodle-accent)]">
+              {localizeUi("ui.slurp.profile.managementData")}
+            </p>
+            <p className="mt-1 text-sm text-[var(--muted-foreground)]">
+              {localizeUi("ui.slurp.profile.managementDataDetail")}
+            </p>
           </div>
-        ) : subscribersQuery.isError ? (
-          <EmptyState
-            title={localizeUi("ui.noodle.stageprofileview.subscribersCouldNotBeLoaded")}
-            action={localizeUi("capabilities.actions.tryAgain")}
-            onAction={() => void subscribersQuery.refetch()}
-          />
-        ) : subscribers.length > 0 ? (
-          <div>
-            {subscribers.map((subscriber) => (
-              <div
-                key={subscriber.id}
-                className="flex min-h-16 items-center gap-3 border-b border-[var(--noodle-divider)] px-4 py-3"
-              >
-                <Avatar account={subscriber} />
-                <div className="min-w-0 flex-1">
-                  <p className="truncate text-sm font-bold">{subscriber.displayName}</p>
-                  <p className="truncate text-xs text-[var(--muted-foreground)]">@{subscriber.handle}</p>
-                </div>
-                <time dateTime={subscriber.subscribedAt} className="shrink-0 text-xs text-[var(--muted-foreground)]">
-                  {new Date(subscriber.subscribedAt).toLocaleDateString()}
-                </time>
-              </div>
-            ))}
-            {subscribersQuery.hasNextPage && (
-              <div className="flex justify-center p-4">
-                <button
-                  type="button"
-                  onClick={() => void subscribersQuery.fetchNextPage()}
-                  disabled={subscribersQuery.isFetchingNextPage}
-                  className="inline-flex min-h-10 items-center gap-2 rounded-md border border-[var(--noodle-divider)] px-4 text-sm font-bold hover:bg-[var(--accent)] disabled:opacity-50"
+          {subscribersQuery.isLoading ? (
+            <div
+              className="flex justify-center py-12"
+              role="status"
+              aria-label={localizeUi("ui.noodle.stageprofileview.loadingSubscribers")}
+            >
+              <Loader2 size={22} className="animate-spin text-[var(--noodle-accent)]" />
+            </div>
+          ) : subscribersQuery.isError ? (
+            <EmptyState
+              title={localizeUi("ui.noodle.stageprofileview.subscribersCouldNotBeLoaded")}
+              action={localizeUi("capabilities.actions.tryAgain")}
+              onAction={() => void subscribersQuery.refetch()}
+            />
+          ) : subscribers.length > 0 ? (
+            <div>
+              {subscribers.map((subscriber) => (
+                <div
+                  key={subscriber.id}
+                  className="flex min-h-16 items-center gap-3 border-b border-[var(--noodle-divider)] px-4 py-3"
                 >
-                  {subscribersQuery.isFetchingNextPage && <Loader2 size={14} className="animate-spin" />}
-                  {localizeUi("ui.noodle.noodlehome.loadMore", {
-                    visible: subscribers.length,
-                    total: subscriberTotal,
-                  })}
-                </button>
-              </div>
-            )}
-          </div>
-        ) : (
-          <EmptyState
-            title={localizeUi("ui.noodle.stageprofileview.noSubscribersYet")}
-            detail={localizeUi("ui.noodle.stageprofileview.subscribersEmptyDetail")}
-          />
-        )
+                  <Avatar account={subscriber} />
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-sm font-bold">{subscriber.displayName}</p>
+                    <p className="truncate text-xs text-[var(--muted-foreground)]">@{subscriber.handle}</p>
+                  </div>
+                  <time dateTime={subscriber.subscribedAt} className="shrink-0 text-xs text-[var(--muted-foreground)]">
+                    {new Date(subscriber.subscribedAt).toLocaleDateString()}
+                  </time>
+                </div>
+              ))}
+              {subscribersQuery.hasNextPage && (
+                <div className="flex justify-center p-4">
+                  <button
+                    type="button"
+                    onClick={() => void subscribersQuery.fetchNextPage()}
+                    disabled={subscribersQuery.isFetchingNextPage}
+                    className="inline-flex min-h-10 items-center gap-2 rounded-md border border-[var(--noodle-divider)] px-4 text-sm font-bold hover:bg-[var(--accent)] disabled:opacity-50"
+                  >
+                    {subscribersQuery.isFetchingNextPage && <Loader2 size={14} className="animate-spin" />}
+                    {localizeUi("ui.noodle.noodlehome.loadMore", {
+                      visible: subscribers.length,
+                      total: subscriberTotal,
+                    })}
+                  </button>
+                </div>
+              )}
+            </div>
+          ) : (
+            <EmptyState
+              title={localizeUi("ui.noodle.stageprofileview.noSubscribersYet")}
+              detail={localizeUi("ui.noodle.stageprofileview.subscribersEmptyDetail")}
+            />
+          )}
+        </div>
       ) : viewerIsLoading || isLoading ? (
         <div className="flex justify-center py-12">
           <Loader2 size={22} className="animate-spin text-[var(--noodle-accent)]" />
@@ -3195,9 +3205,9 @@ function StageProfileView({
           <button
             type="button"
             onClick={onBack}
-            className="absolute left-2 top-2 z-20 flex h-9 w-9 items-center justify-center rounded-full bg-black/30 text-white backdrop-blur-sm transition-colors hover:bg-black/45 @min-[1024px]:hidden"
-            title={localizeUi("ui.noodle.mobiletimelinebackbutton.backToTimeline")}
-            aria-label={localizeUi("ui.noodle.mobiletimelinebackbutton.backToNoodleTimeline")}
+            className="absolute left-2 top-2 z-20 flex h-11 w-11 items-center justify-center rounded-lg bg-black/50 text-white backdrop-blur-sm hover:bg-black/65 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white @min-[1024px]:hidden"
+            title={localizeUi("ui.slurp.profile.back")}
+            aria-label={localizeUi("ui.slurp.profile.back")}
           >
             <ChevronLeft size={22} />
           </button>
@@ -3281,40 +3291,43 @@ function StageProfileView({
           },
         }}
         decorativeBanner={false}
-        leadingActions={null}
-        bioContent={
-          <>
-            {profile.bio && <p className="mt-3 whitespace-pre-wrap text-sm leading-6">{profile.bio}</p>}
-            {!viewingOwnCreator && viewerCreator && !viewerCreator.followed ? (
+        leadingActions={
+          !viewingOwnCreator && viewerCreator ? (
+            <>
               <button
                 type="button"
                 disabled={followPending}
-                onClick={() => onToggleFollow(profile.id, false)}
-                className="mt-4 inline-flex min-h-9 items-center rounded-md border border-[var(--noodle-divider)] px-4 text-xs font-bold hover:bg-[var(--accent)] disabled:opacity-50"
+                onClick={() => onToggleFollow(profile.id, viewerCreator.followed)}
+                className={cn(
+                  "inline-flex min-h-11 items-center rounded-lg px-5 text-sm font-bold disabled:cursor-not-allowed disabled:opacity-50",
+                  viewerCreator.followed
+                    ? "border border-[var(--noodle-divider)] bg-transparent text-[var(--foreground)] hover:bg-[var(--accent)]"
+                    : "bg-[var(--foreground)] text-[var(--background)] hover:opacity-90",
+                )}
               >
-                {localizeUi("ui.noodle.noodlehome.follow")}
+                {viewerCreator.followed
+                  ? localizeUi("ui.slurp.profile.following")
+                  : localizeUi("ui.slurp.profile.follow")}
               </button>
-            ) : !viewingOwnCreator && viewerCreator?.followed && !viewerCreator.subscribed ? (
               <button
                 type="button"
                 disabled={subscriptionPending}
                 onClick={() => onToggleSubscription(profile.id, viewerCreator.subscribed)}
-                className="mt-4 inline-flex min-h-9 items-center gap-1.5 rounded-md bg-[var(--foreground)] px-4 text-xs font-bold text-[var(--background)] hover:opacity-90 disabled:opacity-50"
+                className={cn(
+                  "inline-flex min-h-11 items-center rounded-lg px-5 text-sm font-bold disabled:cursor-not-allowed disabled:opacity-50",
+                  viewerCreator.subscribed
+                    ? "border border-[var(--noodle-accent)]/50 bg-[var(--noodle-accent)]/10 text-[var(--noodle-accent-foreground)] hover:bg-[var(--noodle-accent)]/15"
+                    : "bg-[var(--noodle-accent)] text-zinc-950 hover:opacity-90",
+                )}
               >
-                {localizeUi("ui.slurp.profile.subscribe")}
+                {viewerCreator.subscribed
+                  ? localizeUi("ui.slurp.profile.subscribed")
+                  : localizeUi("ui.slurp.profile.subscribe")}
               </button>
-            ) : !viewingOwnCreator && viewerCreator?.subscribed ? (
-              <button
-                type="button"
-                disabled={subscriptionPending}
-                onClick={() => onToggleSubscription(profile.id, true)}
-                className="mt-4 inline-flex min-h-9 items-center rounded-md border border-[var(--noodle-divider)] px-4 text-xs font-bold text-[var(--muted-foreground)] hover:bg-[var(--accent)] disabled:opacity-50"
-              >
-                {localizeUi("ui.noodle.stageprofileview.subscribed")}
-              </button>
-            ) : null}
-          </>
+            </>
+          ) : null
         }
+        bioContent={profile.bio ? <p className="mt-3 whitespace-pre-wrap text-sm leading-6">{profile.bio}</p> : null}
         contentActions={null}
         tabs={[
           { id: "posts", label: localizeUi("ui.noodle.profile.tabs.posts") },
@@ -3327,35 +3340,43 @@ function StageProfileView({
             ariaLabel: localizeUi("ui.noodle.stageProfile.tabs.subscribersAria", {
               count: subscribersQuery.data ? subscriberTotal : localizeUi("ui.noodle.stageProfile.tabs.loading"),
             }),
+            management: true,
           },
         ]}
         activeTab={activeTab}
         onTabChange={setActiveTab}
         preTabsContent={
           managedCreator ? (
-            <details className="group border-b border-[var(--noodle-divider)] bg-[var(--accent)]/10">
-              <summary className="flex min-h-11 cursor-pointer list-none items-center gap-2 px-4 text-xs font-semibold text-[var(--muted-foreground)] hover:bg-[var(--accent)]/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--noodle-accent)] [&::-webkit-details-marker]:hidden">
+            <details className="group border-b border-[var(--noodle-divider)] bg-[var(--slurp-surface-raised,var(--background))]">
+              <summary className="flex min-h-14 cursor-pointer list-none items-center gap-3 px-4 text-left hover:bg-[var(--accent)]/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--noodle-accent)] [&::-webkit-details-marker]:hidden sm:px-5">
                 <ChevronDown size={15} className="transition-transform group-open:rotate-180" />
-                <span>{localizeUi("ui.slurp.profile.additionalControls")}</span>
+                <span className="min-w-0 flex-1">
+                  <span className="block text-sm font-bold text-[var(--foreground)]">
+                    {localizeUi("ui.slurp.profile.creatorTools")}
+                  </span>
+                  <span className="mt-0.5 block text-xs text-[var(--muted-foreground)]">
+                    {localizeUi("ui.slurp.profile.creatorToolsDetail")}
+                  </span>
+                </span>
                 {viewingOwnCreator && (
-                  <span className="ml-auto text-[0.68rem] text-[var(--noodle-accent)]">
+                  <span className="shrink-0 text-[0.68rem] font-semibold text-[var(--noodle-accent)]">
                     {localizeUi("ui.noodle.stageprofileview.yourProfile")}
                   </span>
                 )}
               </summary>
               <div className="border-t border-[var(--noodle-divider)]">
-                <div className="flex flex-wrap items-center justify-end gap-2 p-3">
+                <div className="flex flex-wrap items-center gap-2 p-3 sm:p-4">
                   <button
                     type="button"
                     onClick={onEdit}
-                    className="h-9 rounded-md bg-[var(--noodle-accent)] px-4 text-xs font-bold text-zinc-950"
+                    className="min-h-11 rounded-lg bg-[var(--noodle-accent)] px-4 text-xs font-bold text-zinc-950"
                   >
                     {localizeUi("ui.noodle.stageprofileview.editProfile")}
                   </button>
                   <button
                     type="button"
                     onClick={() => setAccessSettingsOpen(true)}
-                    className="h-9 rounded-md border border-[var(--noodle-divider)] px-4 text-xs font-bold hover:bg-[var(--accent)]"
+                    className="min-h-11 rounded-lg border border-[var(--noodle-divider)] px-4 text-xs font-bold hover:bg-[var(--accent)]"
                   >
                     {localizeUi("ui.noodle.stageprofileview.access")}
                   </button>
@@ -3363,7 +3384,7 @@ function StageProfileView({
                     <button
                       type="button"
                       onClick={() => setAutomationOpen(true)}
-                      className="h-9 rounded-md border border-[var(--noodle-divider)] px-4 text-xs font-bold hover:bg-[var(--accent)]"
+                      className="min-h-11 rounded-lg border border-[var(--noodle-divider)] px-4 text-xs font-bold hover:bg-[var(--accent)]"
                     >
                       {autoPosting.enabled
                         ? localizeUi("ui.noodle.stageprofileview.automationOn")

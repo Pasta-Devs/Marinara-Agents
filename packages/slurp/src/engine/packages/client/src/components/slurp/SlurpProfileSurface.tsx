@@ -60,7 +60,7 @@ interface SlurpProfileSurfaceProps<TTab extends string = SlurpProfileTab> {
     onOpenFollowing: () => void;
     onOpenFollowers: () => void;
   };
-  tabs?: Array<{ id: TTab; label: ReactNode; ariaLabel?: string }>;
+  tabs?: Array<{ id: TTab; label: ReactNode; ariaLabel?: string; management?: boolean }>;
   activeTab: TTab;
   onTabChange: (tab: TTab) => void;
   preTabsContent?: ReactNode;
@@ -103,7 +103,7 @@ export function SlurpProfileSurface<TTab extends string = SlurpProfileTab>({
       { id: "posts", label: localizeUi("ui.noodle.profile.tabs.posts") },
       { id: "likes", label: localizeUi("ui.noodle.profile.tabs.likes") },
       { id: "media", label: localizeUi("ui.noodle.profile.tabs.media") },
-    ] as Array<{ id: TTab; label: ReactNode; ariaLabel?: string }>);
+    ] as Array<{ id: TTab; label: ReactNode; ariaLabel?: string; management?: boolean }>);
   const focusTabAt = (index: number) => {
     const next = resolvedTabs[(index + resolvedTabs.length) % resolvedTabs.length];
     if (!next) return;
@@ -114,12 +114,12 @@ export function SlurpProfileSurface<TTab extends string = SlurpProfileTab>({
   };
   return (
     <div
-      className="relative border-b border-[var(--noodle-divider)]"
+      className="relative min-h-full bg-[var(--slurp-canvas,var(--background))] pb-5"
       style={accent ? ({ "--noodle-accent": accent } as CSSProperties) : undefined}
     >
       {mobileHeader}
       {banner && (
-        <div className="group relative">
+        <div className="group relative overflow-hidden rounded-b-xl border-b border-[var(--noodle-divider)]">
           <button
             type="button"
             onClick={() => {
@@ -127,7 +127,7 @@ export function SlurpProfileSurface<TTab extends string = SlurpProfileTab>({
             }}
             disabled={!banner.canEdit || banner.uploadTarget === "banner"}
             className={cn(
-              "relative block h-48 w-full overflow-hidden bg-[var(--noodle-accent)]/15 text-left disabled:cursor-default sm:h-56",
+              "relative block h-48 w-full overflow-hidden bg-[var(--noodle-accent)]/15 text-left outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--noodle-accent)] disabled:cursor-default sm:h-60",
               banner.uploadTarget === "banner" && "cursor-wait opacity-80",
             )}
             title={banner.canEdit ? localizeUi("ui.noodle.noodleprofilesurface.uploadBanner") : undefined}
@@ -146,7 +146,7 @@ export function SlurpProfileSurface<TTab extends string = SlurpProfileTab>({
             )}
             {banner.canEdit && banner.uploadTarget !== "banner" && (
               <span
-                className="absolute bottom-2 right-2 flex h-7 w-7 items-center justify-center rounded-full bg-black/65 text-white opacity-0 shadow-md transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100"
+                className="absolute bottom-2 right-2 flex h-11 w-11 items-center justify-center rounded-lg bg-black/70 text-white shadow-md"
                 aria-hidden="true"
               >
                 <Upload size={13} className="!text-white" />
@@ -157,7 +157,7 @@ export function SlurpProfileSurface<TTab extends string = SlurpProfileTab>({
             <button
               type="button"
               onClick={banner.onGenerate}
-              className="absolute bottom-2 right-11 flex h-7 w-7 items-center justify-center rounded-full bg-black/65 text-white opacity-100 shadow-md transition-opacity hover:bg-black/80 sm:opacity-0 group-hover:opacity-100 focus-visible:opacity-100"
+              className="absolute bottom-2 right-14 flex h-11 w-11 items-center justify-center rounded-lg bg-black/70 text-white shadow-md hover:bg-black/85 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white"
               title={localizeUi("ui.slurp.artwork.generateBanner")}
               aria-label={localizeUi("ui.slurp.artwork.generateBanner")}
             >
@@ -177,8 +177,13 @@ export function SlurpProfileSurface<TTab extends string = SlurpProfileTab>({
       )}
       {!banner && decorativeBanner && <div className="h-40 w-full bg-[var(--noodle-accent)]/10" aria-hidden="true" />}
 
-      <div className={decorativeBanner ? "px-4 pb-4 sm:px-6" : "px-4 pb-5"}>
-        <div className={cn("flex flex-col items-center gap-1", hasBanner ? "-mt-14" : "pt-6")}>
+      <div
+        className={cn(
+          "relative mx-3 rounded-xl border border-[var(--noodle-divider)] bg-[var(--slurp-surface-raised,var(--background))] px-4 pb-5 shadow-sm sm:mx-5 sm:px-6",
+          hasBanner ? "-mt-10" : "mt-5",
+        )}
+      >
+        <div className={cn("flex flex-col items-start gap-1", hasBanner ? "-mt-10" : "pt-5")}>
           {avatarUpload ? (
             <div className="group relative">
               <button
@@ -201,7 +206,7 @@ export function SlurpProfileSurface<TTab extends string = SlurpProfileTab>({
                 )}
                 {avatarUpload.canEdit && avatarUpload.uploadTarget !== "avatar" && (
                   <span
-                    className="absolute bottom-1 right-1 flex h-6 w-6 items-center justify-center rounded-full bg-black/70 text-white opacity-0 shadow-md transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100"
+                    className="absolute bottom-0 right-0 flex h-9 w-9 items-center justify-center rounded-full bg-black/75 text-white shadow-md"
                     aria-hidden="true"
                   >
                     <Upload size={12} className="!text-white" />
@@ -212,7 +217,7 @@ export function SlurpProfileSurface<TTab extends string = SlurpProfileTab>({
                 <button
                   type="button"
                   onClick={avatarUpload.onGenerate}
-                  className="absolute bottom-1 right-8 flex h-6 w-6 items-center justify-center rounded-full bg-black/70 text-white opacity-100 shadow-md transition-opacity hover:bg-black/85 sm:opacity-0 group-hover:opacity-100 focus-visible:opacity-100"
+                  className="absolute bottom-0 left-full ml-2 flex h-11 w-11 items-center justify-center rounded-lg border border-white/15 bg-black/75 text-white shadow-md hover:bg-black/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white"
                   title={localizeUi("ui.slurp.artwork.generateAvatar")}
                   aria-label={localizeUi("ui.slurp.artwork.generateAvatar")}
                 >
@@ -236,7 +241,7 @@ export function SlurpProfileSurface<TTab extends string = SlurpProfileTab>({
               onChange={avatarUpload.onFileChange}
             />
           )}
-          <div className="order-3 flex min-h-9 flex-wrap items-center justify-center gap-2">
+          <div className="order-3 mt-4 flex min-h-11 w-full flex-wrap items-center gap-2">
             {leadingActions}
             {editor ? (
               <button
@@ -315,15 +320,15 @@ export function SlurpProfileSurface<TTab extends string = SlurpProfileTab>({
             </label>
           </div>
         ) : (
-          <div className="order-2 flex w-full flex-col items-center text-center">
-            <h1 className="text-2xl font-bold leading-tight sm:text-3xl">{account.displayName}</h1>
-            <div className="mt-1 flex flex-wrap items-center justify-center gap-2 text-sm text-[var(--muted-foreground)]">
+          <div className="order-2 mt-3 flex w-full flex-col items-start text-left">
+            <h1 className="text-2xl font-bold leading-tight text-balance sm:text-3xl">{account.displayName}</h1>
+            <div className="mt-1 flex flex-wrap items-center gap-2 text-sm text-[var(--muted-foreground)]">
               <span data-noodle-profile-handle className="font-medium !text-[var(--noodle-accent-foreground)]">
                 @{displayHandle || "noodle"}
               </span>
               {handleMeta}
             </div>
-            <div className="max-w-xl text-sm leading-relaxed text-[var(--muted-foreground)]">{bioContent}</div>
+            <div className="max-w-2xl text-sm leading-relaxed text-[var(--muted-foreground)]">{bioContent}</div>
             {contentActions}
             {location && (
               <p className="mt-2 flex items-center gap-1.5 text-sm text-[var(--muted-foreground)]">
@@ -332,7 +337,7 @@ export function SlurpProfileSurface<TTab extends string = SlurpProfileTab>({
               </p>
             )}
             {connections && (
-              <div className="mt-3 flex flex-wrap justify-center gap-x-6 gap-y-1 border-t border-[var(--noodle-divider)] pt-3 text-sm text-[var(--muted-foreground)]">
+              <div className="mt-3 flex flex-wrap gap-x-6 gap-y-1 border-t border-[var(--noodle-divider)] pt-3 text-sm text-[var(--muted-foreground)]">
                 <button
                   type="button"
                   onClick={connections.onOpenFollowing}
@@ -354,7 +359,7 @@ export function SlurpProfileSurface<TTab extends string = SlurpProfileTab>({
           </div>
         )}
       </div>
-      <div className="border-t border-[var(--noodle-divider)]">
+      <div className="mx-3 mt-4 overflow-hidden rounded-xl border border-[var(--noodle-divider)] bg-[var(--slurp-surface,var(--background))] sm:mx-5">
         {preTabsContent}
         {featuredContent}
         <div
@@ -384,6 +389,8 @@ export function SlurpProfileSurface<TTab extends string = SlurpProfileTab>({
               aria-selected={activeTab === tab.id}
               className={cn(
                 "relative flex h-12 min-w-0 flex-1 items-center justify-center px-2 text-sm font-semibold text-[var(--muted-foreground)] transition-colors hover:bg-[var(--accent)] hover:text-[var(--foreground)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--noodle-accent)]",
+                tab.management &&
+                  "border-l border-[var(--noodle-divider)] bg-[var(--slurp-surface-raised,var(--background))]",
                 activeTab === tab.id && "text-[var(--foreground)]",
               )}
             >

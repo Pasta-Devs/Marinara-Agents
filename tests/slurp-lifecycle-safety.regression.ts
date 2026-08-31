@@ -127,7 +127,15 @@ assert.match(profileSurface, /<Upload size=\{13\}/u);
 assert.match(profileSurface, /<Upload size=\{12\}/u);
 assert.match(profileSurface, /ui\.slurp\.artwork\.generateBanner/u);
 assert.match(profileSurface, /ui\.slurp\.artwork\.generateAvatar/u);
-assert.match(profileSurface, /group-hover:opacity-100/u);
+assert.match(profileSurface, /bottom-2 right-14 flex h-11 w-11/u);
+assert.doesNotMatch(
+  profileSurface,
+  /sm:opacity-0 group-hover:opacity-100/u,
+  "profile artwork controls must stay visible on touch and keyboard surfaces",
+);
+assert.match(home, /ui\.slurp\.profile\.follow[\s\S]*?ui\.slurp\.profile\.subscribe/u);
+assert.match(home, /management: true/u, "subscriber data must be marked as creator management");
+assert.match(home, /ui\.slurp\.profile\.creatorToolsDetail/u);
 assert.match(profileSurface, /<Avatar account=\{account\} size="xl"/u);
 assert.match(home, /function SourceAccountAvatar[\s\S]*?useSlurpMediaSrc\(account\.avatarUrl\)/u);
 assert.match(home, /function SourceAccountAvatar[\s\S]*?<img src=\{source\}/u);
