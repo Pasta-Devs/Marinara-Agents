@@ -30,7 +30,8 @@
       "status": "rendered"
     },
     "beholder-close": {
-      "status": "rendered"
+      "status": "not-ported",
+      "reason": "The reference injects its own panel into its host and draws its own close control. Here the host mounts the panel and owns that chrome; the package hides this element and renders bh-dock-close in the header it does control."
     },
     "beholder-layer-bar": {
       "status": "rendered"
@@ -39,6 +40,9 @@
       "status": "rendered"
     },
     "beholder-msg-noop": {
+      "status": "rendered"
+    },
+    "beholder-notebox": {
       "status": "rendered"
     },
     "beholder-notebox-btn": {
@@ -149,6 +153,9 @@
     "bh-ch-aliases": {
       "status": "rendered"
     },
+    "bh-ch-dragging": {
+      "status": "rendered"
+    },
     "bh-ch-empty": {
       "status": "rendered"
     },
@@ -200,6 +207,9 @@
     "bh-ch-unhide": {
       "status": "rendered"
     },
+    "bh-ch-you": {
+      "status": "rendered"
+    },
     "bh-char-doll": {
       "status": "rendered"
     },
@@ -216,6 +226,9 @@
       "status": "rendered"
     },
     "bh-chip": {
+      "status": "rendered"
+    },
+    "bh-chip-bleeding": {
       "status": "rendered"
     },
     "bh-chip-dot": {
@@ -282,7 +295,8 @@
       "status": "rendered"
     },
     "bh-con": {
-      "status": "rendered"
+      "status": "not-ported",
+      "reason": "The drawbacks half of the same browser-model-versus-endpoint comparison, and not ported for the same reason: neither option exists in this package, so there is nothing for the list to warn about."
     },
     "bh-conn-active": {
       "status": "not-ported",
@@ -467,7 +481,8 @@
       "status": "rendered"
     },
     "bh-help": {
-      "status": "rendered"
+      "status": "not-ported",
+      "reason": "Used in five places in the reference, all of them model management: choosing how to run the extractor, the endpoint form, and the explanations under 'clean impossible state' and 'wipe model cache'. None of those surfaces is ported. The equivalent explanatory paragraphs here are rendered with bh-view-note."
     },
     "bh-hold-icon": {
       "status": "rendered"
@@ -515,6 +530,10 @@
     "bh-lm-hint": {
       "status": "not-ported",
       "reason": "WebLLM in-browser model card \u2014 the engine runs the model server-side, so this has no counterpart"
+    },
+    "bh-lm-indeterminate": {
+      "status": "not-ported",
+      "reason": "The indeterminate state of the reference's local-model download bar. Every other bh-lm-* class is already excluded for the same reason: downloading and running the model is the engine's own model slot here, not a surface this package draws. Progress during an install is shown on the update strip instead."
     },
     "bh-lm-modelid": {
       "status": "not-ported",
@@ -569,6 +588,12 @@
       "reason": "WebLLM in-browser model card \u2014 the engine runs the model server-side, so this has no counterpart"
     },
     "bh-lock-toggle": {
+      "status": "rendered"
+    },
+    "bh-locked-on": {
+      "status": "rendered"
+    },
+    "bh-ls-active": {
       "status": "rendered"
     },
     "bh-ls-opt": {
@@ -659,7 +684,8 @@
       "status": "rendered"
     },
     "bh-pro": {
-      "status": "rendered"
+      "status": "not-ported",
+      "reason": "Marks the advantages in the reference's browser-model-versus-custom-endpoint comparison. That choice does not exist here: extraction runs server-side through the agent connection or the engine's model slot, and WebLLM is deliberately not ported, so there are no two options to weigh against each other."
     },
     "bh-proscons": {
       "status": "not-ported",
@@ -761,6 +787,12 @@
     "bh-tips": {
       "status": "rendered"
     },
+    "bh-toast": {
+      "status": "rendered"
+    },
+    "bh-toast-in": {
+      "status": "rendered"
+    },
     "bh-turns": {
       "status": "rendered"
     },
@@ -783,6 +815,9 @@
       "status": "rendered"
     },
     "bh-view": {
+      "status": "rendered"
+    },
+    "bh-view-active": {
       "status": "rendered"
     },
     "bh-view-back": {

@@ -2092,9 +2092,14 @@ BH.toast = function toast(message, ms = 2600) {
     document.body.appendChild(el);
   }
   el.textContent = String(message);
-  el.classList.add("bh-toast-show");
+  // bh-toast-in, which is the class the ported stylesheet actually styles. This used to
+  // add "bh-toast-show", a name of our own that no rule matches — and since .bh-toast
+  // rests at opacity 0 and only .bh-toast-in raises it, every toast this package has
+  // ever raised was invisible. Nothing failed and nothing was logged; the messages
+  // simply never appeared.
+  el.classList.add("bh-toast-in");
   clearTimeout(bhToastTimer);
-  bhToastTimer = setTimeout(() => el.classList.remove("bh-toast-show"), ms);
+  bhToastTimer = setTimeout(() => el.classList.remove("bh-toast-in"), ms);
 };
 
 BH.selectHtml = function selectHtml(cls, values, current) {
@@ -5570,7 +5575,13 @@ BH.badges = {
   /** Put a row under every message that has a run, and leave everything else alone. */
   async refresh(chatId = BH.dock.chatId) {
     const byMessage = await this.load(chatId);
-    if (!byMessage.size) return 0;
+    if (!byMessage.size) {
+      // Cleared, not merely skipped. Host message nodes survive a chat switch, so
+      // returning early left the previous chat's badges sitting under this chat's
+      // messages, describing changes that happened somewhere else entirely.
+      for (const row of document.querySelectorAll(".beholder-msg-badges")) row.remove();
+      return 0;
+    }
     let placed = 0;
     for (const message of document.querySelectorAll("[data-message-id]")) {
       const run = byMessage.get(message.dataset.messageId);
@@ -5999,6 +6010,16 @@ BH.dock = {
     if (this.panel) this.panel.classList.add("bh-collapsed");
     BH.notebox.unmount();
     BH.badges.stop();
+    // Everything the dock opened outside its own box goes with it. The build menu in
+    // particular lived on `document.body`, so its "Re-extract this turn" action could
+    // still start an agent run after Beholder had been closed — a closed panel doing
+    // work is the last thing anyone would look for.
+    BH.backfill.closeMenu?.();
+    this.closeToolsMenu?.();
+    BH.views.close();
+    BH.editor.close();
+    BH.sheet.close?.();
+    document.querySelector(".beholder-onboard")?.remove();
     this.syncHostLayer();
     BH.syncToggles();
   },

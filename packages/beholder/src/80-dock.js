@@ -381,6 +381,16 @@ BH.dock = {
     if (this.panel) this.panel.classList.add("bh-collapsed");
     BH.notebox.unmount();
     BH.badges.stop();
+    // Everything the dock opened outside its own box goes with it. The build menu in
+    // particular lived on `document.body`, so its "Re-extract this turn" action could
+    // still start an agent run after Beholder had been closed — a closed panel doing
+    // work is the last thing anyone would look for.
+    BH.backfill.closeMenu?.();
+    this.closeToolsMenu?.();
+    BH.views.close();
+    BH.editor.close();
+    BH.sheet.close?.();
+    document.querySelector(".beholder-onboard")?.remove();
     this.syncHostLayer();
     BH.syncToggles();
   },

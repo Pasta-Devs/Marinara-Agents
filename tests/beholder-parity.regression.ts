@@ -12,30 +12,31 @@
 // only at what the package's JavaScript builds. A feature that has never been written
 // fails here, which is the property every other test in this directory lacks.
 import assert from "node:assert/strict";
-import { readFileSync, readdirSync } from "node:fs";
+import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
+import { classTokens, readSource } from "../scripts/beholder-class-tokens.mjs";
 
-const repoRoot = dirname(dirname(new URL(import.meta.url).pathname));
+// fileURLToPath rather than URL.pathname, which keeps percent-encoding and mangles
+// Windows drive letters — a repository path containing a space was enough to break it.
+const repoRoot = dirname(dirname(fileURLToPath(import.meta.url)));
 const srcDir = join(repoRoot, "packages/beholder/src");
 const surface = JSON.parse(readFileSync(join(repoRoot, "tests/beholder-reference-surface.json"), "utf8")) as {
   classes: Record<string, { status: "rendered" | "missing" | "not-ported"; reason?: string }>;
 };
 
 // Only the JavaScript. Reading the stylesheet here would reintroduce the exact bug
-// this file exists to catch.
-const packageJs = readdirSync(srcDir)
-  .filter((file) => file.endsWith(".js"))
-  .sort()
-  .map((file) => readFileSync(join(srcDir, file), "utf8"))
-  .join("\n");
+// this file exists to catch. Tokenised through the same helper the generator uses, so
+// the two can never disagree about what counts as rendered.
+const rendered = classTokens(readSource(srcDir));
 
 const entries = Object.entries(surface.classes);
-const rendered = entries.filter(([, v]) => v.status === "rendered");
+const renderedEntries = entries.filter(([, v]) => v.status === "rendered");
 const missing = entries.filter(([, v]) => v.status === "missing");
 const notPorted = entries.filter(([, v]) => v.status === "not-ported");
 
 // A class recorded as rendered must still be rendered — this is the regression half.
-const regressed = rendered.filter(([name]) => !packageJs.includes(name));
+const regressed = renderedEntries.filter(([name]) => !rendered.has(name));
 assert.deepEqual(
   regressed.map(([name]) => name),
   [],
@@ -44,7 +45,7 @@ assert.deepEqual(
 
 // A class recorded as missing must still be missing, or the manifest is stale. Being
 // wrong in this direction is good news, but it should be recorded rather than drift.
-const quietlyFixed = missing.filter(([name]) => packageJs.includes(name));
+const quietlyFixed = missing.filter(([name]) => rendered.has(name));
 assert.deepEqual(
   quietlyFixed.map(([name]) => name),
   [],
@@ -55,14 +56,15 @@ assert.deepEqual(
 // place to quietly park work.
 for (const [name, value] of notPorted) {
   assert.ok(
-    value.reason && value.reason.length > 20,
+    // Trimmed: twenty-one spaces satisfied a length check and said nothing.
+    value.reason && value.reason.trim().length > 20,
     `${name} is marked not-ported without a real reason — say why, or mark it missing`,
   );
 }
 
 // The headline number, printed every run so it cannot be claimed without being seen.
 const total = entries.length;
-const done = rendered.length;
+const done = renderedEntries.length;
 const pct = Math.round((done / (total - notPorted.length)) * 100);
 console.log(
   `beholder parity: ${done}/${total - notPorted.length} of portable surface rendered (${pct}%), ` +

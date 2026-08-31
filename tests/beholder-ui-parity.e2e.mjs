@@ -272,6 +272,32 @@ try {
 
   // ── the slot editor ───────────────────────────────────────────────────────
   const card = page.locator(".bh-slot-card[data-slot]").first();
+  // Toasts are how every confirmation in this package speaks. They were styled to rest
+  // at opacity 0 and raised by a class nothing added, so all of them were invisible —
+  // silently, since a message that never appears throws nothing.
+  const toastVisible = await page.evaluate(async () => {
+    const before = document.querySelector(".bh-toast");
+    before?.remove();
+    document.querySelector(".bh-slot-card[data-slot]")?.click();
+    await new Promise((r) => setTimeout(r, 600));
+    document.querySelector(".bh-lock-toggle")?.click();
+    await new Promise((r) => setTimeout(r, 700));
+    const toast = document.querySelector(".bh-toast");
+    if (!toast) return null;
+    const style = getComputedStyle(toast);
+    return { text: toast.textContent.trim().slice(0, 40), opacity: style.opacity };
+  });
+  check(
+    "a confirmation message is actually visible",
+    toastVisible !== null && Number(toastVisible.opacity) > 0.5,
+    JSON.stringify(toastVisible),
+  );
+  // Put the lock back so later checks start from a clean slate.
+  await page.evaluate(() => document.querySelector(".bh-lock-toggle")?.click());
+  await page.waitForTimeout(400);
+  await page.keyboard.press("Escape");
+  await page.waitForTimeout(400);
+
   check("a slot card is present", (await card.count()) > 0);
   if (await card.count()) {
     await card.click();
@@ -530,6 +556,17 @@ try {
   await page.evaluate(() => document.querySelector(".bh-hud-toggle")?.click());
   await page.waitForTimeout(1500);
   check("closing Beholder takes them away", (await page.locator(".beholder-msg-badges").count()) === 0);
+  // Everything the dock opened outside its own box goes with it. The build menu lived on
+  // document.body, so its "Re-extract this turn" could still start an agent run after
+  // Beholder was closed.
+  check(
+    "and nothing it opened is left behind",
+    (await page.evaluate(
+      () =>
+        document.querySelectorAll(".beholder-bf-menu, .beholder-tools-menu, .bh-view, .bh-editor, .beholder-onboard")
+          .length,
+    )) === 0,
+  );
   await page.evaluate(() => document.querySelector(".bh-hud-toggle")?.click());
   await page.waitForTimeout(4000);
   check("reopening brings them back", (await page.locator(".beholder-msg-badges").count()) >= 1);

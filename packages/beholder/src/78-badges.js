@@ -104,7 +104,13 @@ BH.badges = {
   /** Put a row under every message that has a run, and leave everything else alone. */
   async refresh(chatId = BH.dock.chatId) {
     const byMessage = await this.load(chatId);
-    if (!byMessage.size) return 0;
+    if (!byMessage.size) {
+      // Cleared, not merely skipped. Host message nodes survive a chat switch, so
+      // returning early left the previous chat's badges sitting under this chat's
+      // messages, describing changes that happened somewhere else entirely.
+      for (const row of document.querySelectorAll(".beholder-msg-badges")) row.remove();
+      return 0;
+    }
     let placed = 0;
     for (const message of document.querySelectorAll("[data-message-id]")) {
       const run = byMessage.get(message.dataset.messageId);
