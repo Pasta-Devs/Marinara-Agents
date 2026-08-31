@@ -633,6 +633,10 @@ export function createNoodleStorage(db: DB) {
         nextCursor: rows.length > limit && last ? { createdAt: last.createdAt, id: last.id } : null,
       };
     },
+    async listNotificationData() {
+      const posts = await this.listPosts({ limit: 300 });
+      return { posts, interactions: await this.listInteractions(posts.map((post: any) => post.id)) };
+    },
     async listPostsBefore(before: string) {
       const ids = await publicIds();
       if (!ids.length) return [];

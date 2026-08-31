@@ -129,6 +129,7 @@ export async function noodleRoutes(app: FastifyInstance) {
   app.get("/feed", async (request) =>
     noodle.listPostPage(request.query as { limit?: number; cursorAt?: string; cursorId?: string }),
   );
+  app.get("/notifications", async () => noodle.listNotificationData());
   app.post("/posts", async (req, reply) => {
     if (req.body && typeof req.body === "object" && "title" in req.body) {
       return reply.code(400).send({ error: "Public Noodle posts do not support titles." });

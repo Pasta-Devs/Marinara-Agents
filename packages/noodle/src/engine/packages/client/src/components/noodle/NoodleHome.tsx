@@ -119,6 +119,7 @@ import {
   useInviteNoodleCharacters,
   useNoodle,
   useNoodleFeed,
+  useNoodleNotificationData,
   useNoodleUnseenCount,
   usePatchNoodleAccountSettings,
   useRefreshNoodle,
@@ -616,8 +617,10 @@ export function NoodleHome({ navigation, onNavigate }: NoodleHomeProps) {
   const { t: localizeUi, i18n } = useUiTranslation();
   const selectedPersonaId = useUIStore((state) => state.noodleSelectedPersonaId);
   const setSelectedPersonaId = useUIStore((state) => state.setNoodleSelectedPersonaId);
+  const notificationViewActive = navigation.mode === "public" && navigation.view === "notifications";
   const { data, isLoading: isBootstrapLoading, isError: isBootstrapError } = useNoodle();
   const feedQuery = useNoodleFeed();
+  const notificationDataQuery = useNoodleNotificationData(notificationViewActive);
   const isLoading = isBootstrapLoading || feedQuery.isLoading;
   const isError = isBootstrapError || feedQuery.isError;
   const feedPosts = useMemo(() => feedQuery.data?.pages.flatMap((page) => page.items) ?? [], [feedQuery.data]);
@@ -875,13 +878,19 @@ export function NoodleHome({ navigation, onNavigate }: NoodleHomeProps) {
     () => sortedPersonaAccounts.slice(0, personaAccountLimit),
     [personaAccountLimit, sortedPersonaAccounts],
   );
-  const posts = useMemo(() => feedPosts, [feedPosts]);
+  const posts = useMemo(
+    () => (notificationViewActive ? (notificationDataQuery.data?.posts ?? feedPosts) : feedPosts),
+    [feedPosts, notificationDataQuery.data?.posts, notificationViewActive],
+  );
   const interactions = useMemo(
     () => [
       ...(data?.interactions ?? []),
       ...feedInteractions.filter((item) => !(data?.interactions ?? []).some((current) => current.id === item.id)),
+      ...(notificationDataQuery.data?.interactions ?? []).filter(
+        (item) => !(data?.interactions ?? []).some((current) => current.id === item.id),
+      ),
     ],
-    [data?.interactions, feedInteractions],
+    [data?.interactions, feedInteractions, notificationDataQuery.data?.interactions],
   );
   const interactionsByPostId = useMemo(() => {
     const grouped = new Map<string, NoodleInteraction[]>();
@@ -5233,7 +5242,7 @@ export function NoodleHome({ navigation, onNavigate }: NoodleHomeProps) {
                     {feedQuery.isFetchingNextPage ? (
                       <Loader2 size={16} className="mx-auto animate-spin" />
                     ) : (
-                      "Load more"
+                      localizeUi("ui.noodle.noodlehome.loadMore")
                     )}
                   </button>
                 </div>

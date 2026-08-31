@@ -54,6 +54,8 @@ export type NoodlePostPage = {
   nextCursor: { createdAt: string; id: string } | null;
 };
 
+export type NoodleNotificationData = Pick<NoodleBootstrap, "posts" | "interactions">;
+
 function preservePollVotes(current: NoodleBootstrap | undefined, next: NoodleBootstrap): NoodleBootstrap {
   if (!current) return next;
   const interactions = mergeNoodlePollVoteInteractions(current.interactions, next.posts, next.interactions);
@@ -92,11 +94,21 @@ export function useNoodleFeed(enabled = true) {
     },
     initialPageParam: null as NoodlePostPage["nextCursor"],
     getNextPageParam: (page) => page.nextCursor ?? undefined,
+    maxPages: 20,
     enabled,
     staleTime: 10_000,
     refetchOnMount: "always",
     refetchInterval: enabled ? 30_000 : false,
     refetchIntervalInBackground: false,
+  });
+}
+
+export function useNoodleNotificationData(enabled = true) {
+  return useQuery({
+    queryKey: [...noodleKeys.all, "notifications"],
+    queryFn: () => api.get<NoodleNotificationData>("/noodle/notifications"),
+    enabled,
+    staleTime: 10_000,
   });
 }
 
