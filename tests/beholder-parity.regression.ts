@@ -1,0 +1,76 @@
+// Does the package actually render ST-Beholder's interface?
+//
+// Every other test here asserts that something written is present, which means it can
+// only fail if that work is deleted. None of them can see a feature that was never
+// built. Three times running, "do we have X?" was answered by grepping the package,
+// finding a hit, and saying yes — and three times the hit was in style.css, which
+// carries ST's entire stylesheet and therefore matches whether or not anything renders
+// it. The backfill bar, the slot sheet and the note box were all "present" by that test
+// and absent from the product.
+//
+// So this one is inverted. It starts from ST's surface, not from ours, and it looks
+// only at what the package's JavaScript builds. A feature that has never been written
+// fails here, which is the property every other test in this directory lacks.
+import assert from "node:assert/strict";
+import { readFileSync, readdirSync } from "node:fs";
+import { dirname, join } from "node:path";
+
+const repoRoot = dirname(dirname(new URL(import.meta.url).pathname));
+const srcDir = join(repoRoot, "packages/beholder/src");
+const surface = JSON.parse(readFileSync(join(repoRoot, "tests/beholder-reference-surface.json"), "utf8")) as {
+  classes: Record<string, { status: "rendered" | "missing" | "not-ported"; reason?: string }>;
+};
+
+// Only the JavaScript. Reading the stylesheet here would reintroduce the exact bug
+// this file exists to catch.
+const packageJs = readdirSync(srcDir)
+  .filter((file) => file.endsWith(".js"))
+  .sort()
+  .map((file) => readFileSync(join(srcDir, file), "utf8"))
+  .join("\n");
+
+const entries = Object.entries(surface.classes);
+const rendered = entries.filter(([, v]) => v.status === "rendered");
+const missing = entries.filter(([, v]) => v.status === "missing");
+const notPorted = entries.filter(([, v]) => v.status === "not-ported");
+
+// A class recorded as rendered must still be rendered — this is the regression half.
+const regressed = rendered.filter(([name]) => !packageJs.includes(name));
+assert.deepEqual(
+  regressed.map(([name]) => name),
+  [],
+  "these were rendered and no longer are — the manifest says the package builds them",
+);
+
+// A class recorded as missing must still be missing, or the manifest is stale. Being
+// wrong in this direction is good news, but it should be recorded rather than drift.
+const quietlyFixed = missing.filter(([name]) => packageJs.includes(name));
+assert.deepEqual(
+  quietlyFixed.map(([name]) => name),
+  [],
+  "these are now rendered — move them to status 'rendered' in beholder-reference-surface.json",
+);
+
+// Every deliberate omission carries its reason, so "not ported" can never become a
+// place to quietly park work.
+for (const [name, value] of notPorted) {
+  assert.ok(
+    value.reason && value.reason.length > 20,
+    `${name} is marked not-ported without a real reason — say why, or mark it missing`,
+  );
+}
+
+// The headline number, printed every run so it cannot be claimed without being seen.
+const total = entries.length;
+const done = rendered.length;
+const pct = Math.round((done / (total - notPorted.length)) * 100);
+console.log(
+  `beholder parity: ${done}/${total - notPorted.length} of portable surface rendered (${pct}%), ` +
+    `${missing.length} missing, ${notPorted.length} deliberately not ported`,
+);
+
+// Not an assertion that we are finished — a statement of where we are. The number goes
+// up as features land, and this line is the only honest place to read it from.
+if (missing.length > 0) {
+  console.log(`  still missing: ${missing.map(([n]) => n).join(", ")}`);
+}

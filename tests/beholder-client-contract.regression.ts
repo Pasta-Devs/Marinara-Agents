@@ -521,7 +521,10 @@ const INSTALLED = { repo: "GetBeholder/Beholder-GGUF", file: "Beholder-Q8_0.gguf
 
 console.log("beholder client contract: local model slot OK");
 
-// ── Parity with the reference extension's chrome ─────────────────────────────
+// ── The chrome ported so far ─────────────────────────────────────────────────
+// Not "parity" — that word was used here while three whole features were missing.
+// beholder-parity.regression.ts is the file that measures how much is actually
+// ported; this one only checks that what was ported still works.
 // The panel shipped with a paper doll and almost none of the controls around it: no
 // way to build state from a chat that was already underway, and no way to reach a slot
 // the doll does not draw. Both were reported from real use, not from reading the code.
@@ -597,7 +600,7 @@ const beholderChromeSource = ["50-editor.js", "52-sheet.js", "56-banner.js", "70
   );
 }
 
-console.log("beholder client contract: reference-parity chrome OK");
+console.log("beholder client contract: ported chrome OK");
 
 {
   // Below the narrow breakpoint the stylesheet hides every .beholder-tool-btn and
