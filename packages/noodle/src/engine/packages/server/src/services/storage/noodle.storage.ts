@@ -606,6 +606,37 @@ export function createNoodleStorage(db: DB) {
         .limit(Math.max(1, Math.min(300, Math.floor(options.limit ?? 120))));
       return rows.map(mapPost);
     },
+    async listPostPage(options: { limit?: number; cursorAt?: string; cursorId?: string } = {}) {
+      const ids = await publicIds();
+      if (!ids.length) return { items: [], interactions: [], nextCursor: null };
+      const limit = Math.max(1, Math.min(100, Math.floor(options.limit ?? 20)));
+      const cursor =
+        options.cursorAt && options.cursorId
+          ? or(
+              lt(noodlePosts.createdAt, options.cursorAt),
+              and(eq(noodlePosts.createdAt, options.cursorAt), lt(noodlePosts.id, options.cursorId)),
+            )
+          : null;
+      const rows = await db
+        .select()
+        .from(noodlePosts)
+        .where(
+          cursor ? and(inArray(noodlePosts.authorAccountId, ids), cursor) : inArray(noodlePosts.authorAccountId, ids),
+        )
+        .orderBy(desc(noodlePosts.createdAt), desc(noodlePosts.id))
+        .limit(limit + 1);
+      const items = rows.slice(0, limit).map(mapPost);
+      const last = items.at(-1);
+      return {
+        items,
+        interactions: await this.listInteractions(items.map((post) => post.id)),
+        nextCursor: rows.length > limit && last ? { createdAt: last.createdAt, id: last.id } : null,
+      };
+    },
+    async listNotificationData() {
+      const posts = await this.listPosts({ limit: 300 });
+      return { posts, interactions: await this.listInteractions(posts.map((post: any) => post.id)) };
+    },
     async listPostsBefore(before: string) {
       const ids = await publicIds();
       if (!ids.length) return [];
@@ -1337,10 +1368,10 @@ export function createNoodleStorage(db: DB) {
       });
       return counts;
     },
-    async bootstrap() {
+    async bootstrap(options: { postLimit?: number } = {}) {
       const settings = await this.getSettings();
       const schedule = await this.ensureRefreshSchedule(new Date(), settings);
-      const posts = await this.listPosts({ limit: 160 });
+      const posts = await this.listPosts({ limit: options.postLimit ?? 160 });
       return {
         settings,
         scheduler: noodleRefreshSchedulerStatus(schedule, new Date()),

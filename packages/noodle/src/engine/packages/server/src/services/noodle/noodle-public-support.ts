@@ -199,7 +199,10 @@ export async function bootstrapVisibleNoodle(
       syncIdentity: true,
     });
   }
-  return filterExcludedNoodleAccounts(filterStalePersonaAccounts(await noodle.bootstrap(), livePersonaIds), settings);
+  return filterExcludedNoodleAccounts(
+    filterStalePersonaAccounts(await noodle.bootstrap({ postLimit: 20 }), livePersonaIds),
+    settings,
+  );
 }
 
 export async function resolvePersonaAccount(
