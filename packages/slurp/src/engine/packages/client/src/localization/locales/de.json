@@ -82,5 +82,7 @@
   "ui.slurp.settings.audience.archetypes.crossFandom": "Gemeinsame Interessen",
   "ui.slurp.settings.audience.archetypes.raider": "Schnäppchenjäger",
   "ui.slurp.settings.audience.archetypes.organicDiscovery": "Neue Entdeckungen",
-  "ui.slurp.settings.audience.archetypes.freeResource": "Hilfsbereite Leser"
+  "ui.slurp.settings.audience.archetypes.freeResource": "Hilfsbereite Leser",
+  "ui.slurp.discover.title": "Finde deinen nächsten Lieblings-Creator",
+  "ui.slurp.discover.detail": "Entdecke Creator-Räume, folge öffentlichen Beiträgen oder abonniere gesperrte Inhalte."
 }

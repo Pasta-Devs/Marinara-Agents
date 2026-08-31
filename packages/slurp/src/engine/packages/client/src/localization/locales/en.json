@@ -1499,5 +1499,7 @@
   "ui.slurp.settings.audience.archetypes.crossFandom": "Shared interests",
   "ui.slurp.settings.audience.archetypes.raider": "Deal hunters",
   "ui.slurp.settings.audience.archetypes.organicDiscovery": "New discoveries",
-  "ui.slurp.settings.audience.archetypes.freeResource": "Helpful readers"
+  "ui.slurp.settings.audience.archetypes.freeResource": "Helpful readers",
+  "ui.slurp.discover.title": "Find your next favorite creator",
+  "ui.slurp.discover.detail": "Browse creator rooms, follow their public posts, or subscribe for locked content."
 }

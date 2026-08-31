@@ -1003,5 +1003,7 @@
   "ui.slurp.settings.audience.archetypes.crossFandom": "공통 관심사",
   "ui.slurp.settings.audience.archetypes.raider": "혜택 탐색자",
   "ui.slurp.settings.audience.archetypes.organicDiscovery": "새로운 발견",
-  "ui.slurp.settings.audience.archetypes.freeResource": "도움이 되는 독자"
+  "ui.slurp.settings.audience.archetypes.freeResource": "도움이 되는 독자",
+  "ui.slurp.discover.title": "새로운 최애 크리에이터 찾기",
+  "ui.slurp.discover.detail": "크리에이터 공간을 둘러보고 공개 게시물을 팔로우하거나 잠긴 콘텐츠를 구독하세요."
 }

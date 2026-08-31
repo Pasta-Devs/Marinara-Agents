@@ -82,5 +82,7 @@
   "ui.slurp.settings.audience.archetypes.crossFandom": "Wspólne zainteresowania",
   "ui.slurp.settings.audience.archetypes.raider": "Łowcy okazji",
   "ui.slurp.settings.audience.archetypes.organicDiscovery": "Nowe odkrycia",
-  "ui.slurp.settings.audience.archetypes.freeResource": "Pomocni czytelnicy"
+  "ui.slurp.settings.audience.archetypes.freeResource": "Pomocni czytelnicy",
+  "ui.slurp.discover.title": "Znajdź nowego ulubionego twórcę",
+  "ui.slurp.discover.detail": "Odkrywaj pokoje twórców, obserwuj publiczne posty lub subskrybuj zablokowane treści."
 }

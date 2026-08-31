@@ -85,6 +85,8 @@ assert.match(home, /ref=\{setStickyHeader\}[\s\S]*?HIDE_ON_SCROLL_CLASS/u);
 assert.match(shell, /--slurp-canvas/u, "Slurp must own a theme-safe canvas token");
 assert.match(home, /ui\.slurp\.home\.feedDetail/u, "the Home feed must explain its creator-network purpose");
 assert.match(home, /ui\.slurp\.home\.tonight/u, "the desktop discovery rail must have a Slurp identity");
+assert.match(home, /ui\.slurp\.discover\.title/u);
+assert.match(home, /sm:grid-cols-2/u, "Discover must present creators as adaptive cards");
 assert.match(home, /tabs=\{\[\{ id: "emoji"/u, "the main composer must expose only its functional emoji media tab");
 assert.doesNotMatch(home, /tabs=\{\[[^\]]*id: "gif"/u, "the main composer must not expose its no-op GIF action");
 assert.match(home, /motion-reduce:transition-none/u);

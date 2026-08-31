@@ -4015,15 +4015,25 @@ function ViewerHub({
           </label>
         </div>
 
+        {!searchTerm && (
+          <header className="px-4 pb-2 pt-6 sm:px-5">
+            <p className="text-xs font-bold uppercase tracking-[0.14em] text-[var(--noodle-accent)]">Slurp</p>
+            <h1 className="mt-1 text-2xl font-bold text-balance">{localizeUi("ui.slurp.discover.title")}</h1>
+            <p className="mt-2 max-w-xl text-sm leading-6 text-[var(--muted-foreground)]">
+              {localizeUi("ui.slurp.discover.detail")}
+            </p>
+          </header>
+        )}
+
         {searchTerm && (
-          <section className="border-b border-[var(--noodle-divider)]" aria-labelledby="noodler-search-results">
+          <section className="px-3 pb-4 sm:px-4" aria-labelledby="noodler-search-results">
             <div className="border-b border-[var(--noodle-divider)] px-4 py-3">
               <h2 id="noodler-search-results" className="text-lg font-bold">
                 {localizeUi("ui.noodle.noodlehome.searchResults")}
               </h2>
             </div>
             {searchResults.length > 0 ? (
-              <div>
+              <div className="space-y-3 pt-3">
                 {visibleSearchResults.map(renderFeedPost)}
                 {visibleSearchResults.length < searchResults.length && (
                   <LoadMoreFeedButton
@@ -4043,20 +4053,23 @@ function ViewerHub({
           </section>
         )}
 
-        <section aria-labelledby="noodler-discover-creators">
-          <div className="border-b border-[var(--noodle-divider)] px-4 py-3">
+        <section className="px-3 pb-6 sm:px-4" aria-labelledby="noodler-discover-creators">
+          <div className="px-1 py-3">
             <h2 id="noodler-discover-creators" className="text-lg font-bold">
               {localizeUi("ui.noodle.subscriptionsections.discoverCreators")}
             </h2>
           </div>
           {discoveredCreators.length > 0 ? (
-            <div className="divide-y divide-[var(--noodle-divider)]">
+            <div className="grid gap-3 sm:grid-cols-2">
               {discoveredCreators.map((creator) => (
-                <div key={creator.profile.id} className="flex items-center gap-3 px-4 py-3">
+                <article
+                  key={creator.profile.id}
+                  className="flex min-w-0 flex-col rounded-xl border border-[var(--noodle-divider)] bg-[var(--slurp-surface)] p-4 shadow-sm shadow-black/10 transition-[border-color,background-color,box-shadow] hover:border-[var(--noodle-accent)]/25 hover:bg-[var(--slurp-surface-raised)] hover:shadow-md motion-reduce:transition-none"
+                >
                   <button
                     type="button"
                     onClick={() => postCardCtx.openAuthorProfile?.(creator.profile.id)}
-                    className="flex min-w-0 flex-1 items-center gap-3 rounded-md text-left transition-colors hover:text-[var(--noodle-accent)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--noodle-accent)]"
+                    className="flex min-w-0 items-center gap-3 rounded-lg text-left transition-colors hover:text-[var(--noodle-accent)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--noodle-accent)]"
                   >
                     <ProfileInitial profile={creator.profile} />
                     <span className="min-w-0 flex-1">
@@ -4066,32 +4079,39 @@ function ViewerHub({
                       </span>
                     </span>
                   </button>
-                  <button
-                    type="button"
-                    disabled={togglePending}
-                    onClick={() => onToggleFollow(creator.profile.id, creator.followed)}
-                    className="h-8 rounded-full border border-[var(--noodle-divider)] px-4 text-xs font-bold hover:bg-[var(--accent)] disabled:opacity-50"
-                  >
-                    {creator.followed
-                      ? localizeUi("ui.noodle.subscriptionsections.unfollow")
-                      : localizeUi("ui.noodle.noodlehome.follow")}
-                  </button>
-                  <button
-                    type="button"
-                    disabled={togglePending}
-                    onClick={() => onToggleSubscription(creator.profile.id, creator.subscribed)}
-                    className={cn(
-                      "h-8 rounded-full px-4 text-xs font-bold transition-opacity hover:opacity-90 disabled:opacity-50",
-                      creator.subscribed
-                        ? "border border-[var(--noodle-divider)] text-[var(--foreground)]"
-                        : "bg-[var(--foreground)] text-[var(--background)]",
-                    )}
-                  >
-                    {creator.subscribed
-                      ? localizeUi("ui.noodle.subscriptionsections.unsubscribe")
-                      : localizeUi("ui.noodle.lockednoodlerpostcard.subscribe")}
-                  </button>
-                </div>
+                  {creator.profile.bio && (
+                    <p className="mt-3 line-clamp-3 min-h-10 text-xs leading-5 text-[var(--muted-foreground)]">
+                      {creator.profile.bio}
+                    </p>
+                  )}
+                  <div className="mt-auto flex gap-2 pt-4">
+                    <button
+                      type="button"
+                      disabled={togglePending}
+                      onClick={() => onToggleFollow(creator.profile.id, creator.followed)}
+                      className="min-h-11 flex-1 rounded-lg border border-[var(--noodle-divider)] px-3 text-xs font-bold hover:bg-[var(--accent)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--noodle-accent)] disabled:opacity-50"
+                    >
+                      {creator.followed
+                        ? localizeUi("ui.slurp.profile.following")
+                        : localizeUi("ui.slurp.profile.follow")}
+                    </button>
+                    <button
+                      type="button"
+                      disabled={togglePending}
+                      onClick={() => onToggleSubscription(creator.profile.id, creator.subscribed)}
+                      className={cn(
+                        "min-h-11 flex-1 rounded-lg px-3 text-xs font-bold transition-opacity hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--noodle-accent)] disabled:opacity-50",
+                        creator.subscribed
+                          ? "border border-[var(--noodle-accent)]/40 bg-[var(--noodle-accent)]/10 text-[var(--noodle-accent-foreground)]"
+                          : "bg-[var(--noodle-accent)] text-zinc-950",
+                      )}
+                    >
+                      {creator.subscribed
+                        ? localizeUi("ui.slurp.profile.subscribed")
+                        : localizeUi("ui.slurp.profile.subscribe")}
+                    </button>
+                  </div>
+                </article>
               ))}
             </div>
           ) : (
