@@ -571,7 +571,7 @@ BH.views = {
    * one thing while the pasted report says another is worse than not having the grid.
    */
   async vitalsHtml() {
-    let rows = [];
+    let rows;
     try {
       rows = await BH.report.vitals();
     } catch {
@@ -600,7 +600,7 @@ BH.views = {
    */
   async recentRunsHtml(chatId) {
     if (!chatId) return "";
-    let runs = [];
+    let runs;
     try {
       const res = await fetch(`/api/agents/beholder-runs/${encodeURIComponent(chatId)}?limit=5`, {
         credentials: "same-origin",

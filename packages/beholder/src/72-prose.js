@@ -37,7 +37,7 @@ const BH_SCRIPT_SLUG = /^[ \t]*(INT|EXT|INT\.\/EXT|I\/E)[.\s]/im;
 const BH_SCRIPT_CAMERA =
   /\b(CLOSE ?UP|CUT TO|FADE (IN|OUT)|DISSOLVE TO|MONTAGE|ANGLE ON|PAN (TO|ACROSS)|V\.O\.|O\.S\.|SMASH CUT)\b/;
 /** A speaker cue is a whole line in caps, optionally with a parenthetical. */
-const BH_SCRIPT_CUE = /^[ \t]*[A-Z][A-Z0-9 .'\-]{2,28}(\([^)]{1,20}\))?[ \t]*$/gm;
+const BH_SCRIPT_CUE = /^[ \t]*[A-Z][A-Z0-9 .'-]{2,28}(\([^)]{1,20}\))?[ \t]*$/gm;
 
 /** Injury words, the other half of "this passage describes a body". */
 const BH_WOUND_RX =
@@ -99,7 +99,7 @@ BH.prose = {
 
   async assess(chatId, state) {
     if (!chatId) return null;
-    let messages = [];
+    let messages;
     try {
       // The chat record does not carry its messages; they have their own route. Reading
       // them off the chat looked fine and quietly returned nothing every time.

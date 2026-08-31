@@ -40,6 +40,36 @@ BH.notebox = {
    * The panel is a floating window beside the chat, so a box in its footer is as
    * reachable as one above the message field, and it cannot be broken by anybody else.
    */
+  /**
+   * Does this engine understand a typed directive?
+   *
+   * It matters because an engine that does not will accept the request and ignore the
+   * field, re-running the turn against the story instead — so the box would look like
+   * it worked and quietly do something else. There is no way to tell that apart from
+   * the response, so this asks after a route that shipped alongside the directive: if
+   * the engine has one it has the other, and if it 404s it predates both.
+   *
+   * Asked once per chat and remembered, because the answer is a property of the engine
+   * rather than of the moment.
+   */
+  async supported(chatId) {
+    if (typeof this.support === "boolean") return this.support;
+    if (!chatId) return true;
+    try {
+      const res = await fetch(`/api/agents/beholder-runs/${encodeURIComponent(chatId)}?limit=1`, {
+        credentials: "same-origin",
+        headers: { Accept: "application/json" },
+        cache: "no-store",
+      });
+      this.support = res.status !== 404;
+    } catch {
+      // A failed probe is not evidence of an old engine; assume support and let the
+      // send report a real error if there is one.
+      this.support = true;
+    }
+    return this.support;
+  },
+
   mount() {
     if (document.querySelector(".beholder-notebox")) return true;
     const panel = BH.dock.panel;
@@ -69,6 +99,18 @@ BH.notebox = {
       event.preventDefault();
       event.stopPropagation();
       send();
+    });
+
+    // Shown, then disabled if the engine turns out to be too old. Hiding it outright
+    // would leave someone reading about the box in Help and unable to find it.
+    void this.supported(BH.dock.chatId).then((ok) => {
+      if (ok) return;
+      input.disabled = true;
+      button.disabled = true;
+      input.value = "";
+      input.placeholder = "Needs a newer version of Marinara";
+      wrap.title =
+        "This box asks Beholder to read a sentence you type. The version of Marinara you are running does not support that yet.";
     });
     return true;
   },

@@ -3158,7 +3158,7 @@ BH.banner = {
   async refresh() {
     const strip = this.ensure();
     if (!strip) return;
-    let info = null;
+    let info;
     try {
       info = await this.describe();
     } catch {
@@ -3200,7 +3200,7 @@ BH.banner = {
    */
   async refreshUpdate() {
     if (!BH.dock.panel) return;
-    let info = null;
+    let info;
     try {
       info = await BH.sidecar.updateCheck();
     } catch {
@@ -4192,7 +4192,7 @@ BH.views = {
    * one thing while the pasted report says another is worse than not having the grid.
    */
   async vitalsHtml() {
-    let rows = [];
+    let rows;
     try {
       rows = await BH.report.vitals();
     } catch {
@@ -4221,7 +4221,7 @@ BH.views = {
    */
   async recentRunsHtml(chatId) {
     if (!chatId) return "";
-    let runs = [];
+    let runs;
     try {
       const res = await fetch(`/api/agents/beholder-runs/${encodeURIComponent(chatId)}?limit=5`, {
         credentials: "same-origin",
@@ -5005,7 +5005,7 @@ const BH_SCRIPT_SLUG = /^[ \t]*(INT|EXT|INT\.\/EXT|I\/E)[.\s]/im;
 const BH_SCRIPT_CAMERA =
   /\b(CLOSE ?UP|CUT TO|FADE (IN|OUT)|DISSOLVE TO|MONTAGE|ANGLE ON|PAN (TO|ACROSS)|V\.O\.|O\.S\.|SMASH CUT)\b/;
 /** A speaker cue is a whole line in caps, optionally with a parenthetical. */
-const BH_SCRIPT_CUE = /^[ \t]*[A-Z][A-Z0-9 .'\-]{2,28}(\([^)]{1,20}\))?[ \t]*$/gm;
+const BH_SCRIPT_CUE = /^[ \t]*[A-Z][A-Z0-9 .'-]{2,28}(\([^)]{1,20}\))?[ \t]*$/gm;
 
 /** Injury words, the other half of "this passage describes a body". */
 const BH_WOUND_RX =
@@ -5067,7 +5067,7 @@ BH.prose = {
 
   async assess(chatId, state) {
     if (!chatId) return null;
-    let messages = [];
+    let messages;
     try {
       // The chat record does not carry its messages; they have their own route. Reading
       // them off the chat looked fine and quietly returned nothing every time.
@@ -5166,6 +5166,36 @@ BH.notebox = {
    * The panel is a floating window beside the chat, so a box in its footer is as
    * reachable as one above the message field, and it cannot be broken by anybody else.
    */
+  /**
+   * Does this engine understand a typed directive?
+   *
+   * It matters because an engine that does not will accept the request and ignore the
+   * field, re-running the turn against the story instead — so the box would look like
+   * it worked and quietly do something else. There is no way to tell that apart from
+   * the response, so this asks after a route that shipped alongside the directive: if
+   * the engine has one it has the other, and if it 404s it predates both.
+   *
+   * Asked once per chat and remembered, because the answer is a property of the engine
+   * rather than of the moment.
+   */
+  async supported(chatId) {
+    if (typeof this.support === "boolean") return this.support;
+    if (!chatId) return true;
+    try {
+      const res = await fetch(`/api/agents/beholder-runs/${encodeURIComponent(chatId)}?limit=1`, {
+        credentials: "same-origin",
+        headers: { Accept: "application/json" },
+        cache: "no-store",
+      });
+      this.support = res.status !== 404;
+    } catch {
+      // A failed probe is not evidence of an old engine; assume support and let the
+      // send report a real error if there is one.
+      this.support = true;
+    }
+    return this.support;
+  },
+
   mount() {
     if (document.querySelector(".beholder-notebox")) return true;
     const panel = BH.dock.panel;
@@ -5195,6 +5225,18 @@ BH.notebox = {
       event.preventDefault();
       event.stopPropagation();
       send();
+    });
+
+    // Shown, then disabled if the engine turns out to be too old. Hiding it outright
+    // would leave someone reading about the box in Help and unable to find it.
+    void this.supported(BH.dock.chatId).then((ok) => {
+      if (ok) return;
+      input.disabled = true;
+      button.disabled = true;
+      input.value = "";
+      input.placeholder = "Needs a newer version of Marinara";
+      wrap.title =
+        "This box asks Beholder to read a sentence you type. The version of Marinara you are running does not support that yet.";
     });
     return true;
   },

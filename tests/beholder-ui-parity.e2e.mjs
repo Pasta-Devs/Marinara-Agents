@@ -389,8 +389,6 @@ try {
 
   // ── the slot sheet ────────────────────────────────────────────────────────
   const sheetOpened = await page.evaluate(() => {
-    BH_TEST_HOOK: {
-    }
     const button = document.querySelector(".bh-digest-edit");
     if (button) {
       button.click();
@@ -447,6 +445,13 @@ try {
   // the first working version wiped every other character, because a directive was
   // routed through the retry path that excludes the message being redone.
   check("note box is present", (await page.locator(".beholder-notebox-input").count()) === 1);
+  // On an engine without the directive support the request is accepted and the field
+  // ignored, so the box would appear to work and quietly re-run the turn instead. It
+  // has to be usable here and refuse there.
+  check(
+    "and usable on an engine that supports it",
+    (await page.locator(".beholder-notebox-input").isDisabled()) === false,
+  );
   // Read through the server's own state route and localStorage, never through the
   // package's internals: `BH` lives inside the bundle's IIFE, so `window.BH?.dock` is
   // undefined from here and every assertion built on it would pass while seeing nothing.

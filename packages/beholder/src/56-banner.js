@@ -72,7 +72,7 @@ BH.banner = {
   async refresh() {
     const strip = this.ensure();
     if (!strip) return;
-    let info = null;
+    let info;
     try {
       info = await this.describe();
     } catch {
@@ -114,7 +114,7 @@ BH.banner = {
    */
   async refreshUpdate() {
     if (!BH.dock.panel) return;
-    let info = null;
+    let info;
     try {
       info = await BH.sidecar.updateCheck();
     } catch {
