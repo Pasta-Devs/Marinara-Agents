@@ -42,5 +42,21 @@
   "ui.slurp.settings.creators.prepared": "Przygotowany",
   "ui.slurp.settings.creators.scheduled": "Zaplanowany",
   "ui.slurp.settings.creators.publicationTime": "Godzina publikacji",
-  "ui.slurp.settings.creators.saveTime": "Zapisz godzinę"
+  "ui.slurp.settings.creators.saveTime": "Zapisz godzinę",
+  "ui.slurp.settings.refresh.title": "Generuj posty",
+  "ui.slurp.settings.saveState.saving": "Zapisywanie…",
+  "ui.slurp.settings.saveState.saved": "Zapisano",
+  "ui.slurp.settings.saveState.error": "Nie udało się zapisać",
+  "ui.slurp.settings.creators.listLabel": "Zarządzani twórcy",
+  "ui.slurp.settings.creators.nextPost": "Następny post: {{date}}",
+  "ui.slurp.settings.creators.viewProfile": "Zobacz profil",
+  "ui.slurp.settings.creators.edit": "Edytuj profil",
+  "ui.slurp.settings.creators.postingGroup": "Publikowanie",
+  "ui.slurp.settings.creators.personaAutomationDetail": "Twórcy należący do person publikują ręcznie. Automatyczne publikowanie jest dla nich niedostępne.",
+  "ui.slurp.settings.creators.schedule": "Harmonogram",
+  "ui.slurp.settings.creators.imagesGroup": "Obrazy",
+  "ui.slurp.settings.creators.imageConnection": "Połączenie obrazów",
+  "ui.slurp.settings.creators.imageConnectionDetail": "Zastąp globalne połączenie obrazów dla tego twórcy albo zachowaj odziedziczone ustawienie.",
+  "ui.slurp.settings.creators.moreActions": "Więcej działań twórcy",
+  "ui.slurp.settings.creators.delete": "Usuń twórcę"
 }

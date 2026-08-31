@@ -963,5 +963,21 @@
   "ui.slurp.settings.creators.prepared": "준비됨",
   "ui.slurp.settings.creators.scheduled": "예약됨",
   "ui.slurp.settings.creators.publicationTime": "게시 시간",
-  "ui.slurp.settings.creators.saveTime": "시간 저장"
+  "ui.slurp.settings.creators.saveTime": "시간 저장",
+  "ui.slurp.settings.refresh.title": "게시물 생성",
+  "ui.slurp.settings.saveState.saving": "저장 중…",
+  "ui.slurp.settings.saveState.saved": "저장됨",
+  "ui.slurp.settings.saveState.error": "저장할 수 없음",
+  "ui.slurp.settings.creators.listLabel": "관리 중인 크리에이터",
+  "ui.slurp.settings.creators.nextPost": "다음 게시물: {{date}}",
+  "ui.slurp.settings.creators.viewProfile": "프로필 보기",
+  "ui.slurp.settings.creators.edit": "프로필 편집",
+  "ui.slurp.settings.creators.postingGroup": "게시",
+  "ui.slurp.settings.creators.personaAutomationDetail": "페르소나 소유 크리에이터는 수동으로 게시합니다. 자동 게시는 사용할 수 없습니다.",
+  "ui.slurp.settings.creators.schedule": "일정",
+  "ui.slurp.settings.creators.imagesGroup": "이미지",
+  "ui.slurp.settings.creators.imageConnection": "이미지 연결",
+  "ui.slurp.settings.creators.imageConnectionDetail": "이 크리에이터의 전역 이미지 연결을 재정의하거나 상속된 설정을 유지합니다.",
+  "ui.slurp.settings.creators.moreActions": "기타 크리에이터 작업",
+  "ui.slurp.settings.creators.delete": "크리에이터 삭제"
 }

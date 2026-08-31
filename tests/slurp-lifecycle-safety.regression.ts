@@ -98,6 +98,12 @@ assert.match(
   /cleanupRetiredViewer[\s\S]*?noodleAccountSubscriptions[\s\S]*?noodlePostUnlocks[\s\S]*?slurpViewerSettingsKey/u,
 );
 assert.match(settings, /ui\.slurp\.settings\.creators\.sourceChanged/u);
+assert.match(settings, /md:grid-cols-\[13rem_minmax\(0,1fr\)\]/u, "settings must keep a desktop section rail");
+assert.match(settings, /<select[\s\S]*?settingsSections\.map/u, "narrow settings must expose one section selector");
+assert.match(settings, /aria-live="polite"/u, "settings saves must announce their state");
+assert.match(settings, /selectedCreatorId/u, "creator settings must keep an explicit master-detail selection");
+assert.match(settings, /ui\.slurp\.settings\.creators\.personaAutomationDetail/u);
+assert.match(settings, /ui\.slurp\.settings\.creators\.moreActions/u);
 const profileList = storage.slice(
   storage.indexOf("async listNoodlerStageProfiles"),
   storage.indexOf("async migrateLegacyNoodlerSourceSnapshots"),

@@ -42,5 +42,21 @@
   "ui.slurp.settings.creators.prepared": "Vorbereitet",
   "ui.slurp.settings.creators.scheduled": "Geplant",
   "ui.slurp.settings.creators.publicationTime": "Veröffentlichungszeit",
-  "ui.slurp.settings.creators.saveTime": "Zeit speichern"
+  "ui.slurp.settings.creators.saveTime": "Zeit speichern",
+  "ui.slurp.settings.refresh.title": "Beiträge generieren",
+  "ui.slurp.settings.saveState.saving": "Wird gespeichert…",
+  "ui.slurp.settings.saveState.saved": "Gespeichert",
+  "ui.slurp.settings.saveState.error": "Speichern fehlgeschlagen",
+  "ui.slurp.settings.creators.listLabel": "Verwaltete Creator",
+  "ui.slurp.settings.creators.nextPost": "Nächster Beitrag: {{date}}",
+  "ui.slurp.settings.creators.viewProfile": "Profil ansehen",
+  "ui.slurp.settings.creators.edit": "Profil bearbeiten",
+  "ui.slurp.settings.creators.postingGroup": "Veröffentlichen",
+  "ui.slurp.settings.creators.personaAutomationDetail": "Persona-eigene Creator veröffentlichen manuell. Automatisches Veröffentlichen ist hier nicht verfügbar.",
+  "ui.slurp.settings.creators.schedule": "Zeitplan",
+  "ui.slurp.settings.creators.imagesGroup": "Bilder",
+  "ui.slurp.settings.creators.imageConnection": "Bildverbindung",
+  "ui.slurp.settings.creators.imageConnectionDetail": "Überschreibe die globale Bildverbindung oder behalte die vererbte Einstellung.",
+  "ui.slurp.settings.creators.moreActions": "Weitere Creator-Aktionen",
+  "ui.slurp.settings.creators.delete": "Creator löschen"
 }
