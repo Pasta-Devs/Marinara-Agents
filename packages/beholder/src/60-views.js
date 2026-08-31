@@ -1084,7 +1084,10 @@ BH.views = {
         <li>Put taking something off in its own sentence. When one sentence removes and adds clothing at the
         same time, Beholder often catches only half of it.</li>
         <li>Clothing that belongs to nobody is ignored on purpose, such as a cloak hanging on a hook.</li>
-      </ul>`,
+      </ul>
+
+      <div class="bh-orn" aria-hidden="true"><span></span>◉<span></span></div>
+      <p class="bh-help-sign">Out of sight, out of prompt. <span>Beholder doesn't blink.</span></p>`,
     );
   },
 };

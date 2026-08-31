@@ -1484,6 +1484,54 @@
     letter-spacing: 0.1em;
     font-size: 1.05em;
 }
+/* The reference set placement, padding and stacking inline from its own JavaScript, so
+   the ported rules describe a box that never positioned itself. Only the coordinates
+   come from script here; everything that is not per-instance belongs in the sheet.
+   Above the panel's own layer, including the 80 it takes on a phone. */
+.beholder-onboard {
+    position: fixed;
+    z-index: 200;
+    padding: var(--bh-space-3, 10px) var(--bh-space-3, 10px) var(--bh-space-2, 6px);
+}
+.beholder-onboard .bh-onboard-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--bh-space-2, 6px);
+}
+.beholder-onboard .bh-onboard-close {
+    border: 0;
+    background: none;
+    color: inherit;
+    opacity: 0.6;
+    cursor: pointer;
+    font-size: 0.95em;
+}
+.beholder-onboard .bh-onboard-close:hover { opacity: 1; }
+.beholder-onboard .bh-onboard-tips {
+    margin: var(--bh-space-2, 6px) 0 0;
+    padding-left: 18px;
+}
+.beholder-onboard .bh-onboard-tips li { margin-bottom: 4px; }
+.beholder-onboard .bh-onboard-foot {
+    display: flex;
+    justify-content: flex-end;
+    margin-top: var(--bh-space-2, 6px);
+}
+/* Sitting on top of the panel because there was no room beside it: the arrow would be
+   pointing at the thing it is covering. */
+.beholder-onboard[data-side="over"] .bh-onboard-arrow { display: none; }
+/* The help view's closing line, which the reference styled inline. */
+.bh-help-sign {
+    margin: 0 0 6px;
+    text-align: center;
+    font-family: var(--bh-font-display);
+    font-size: 1.08em;
+    opacity: 0.8;
+}
+/* The token only. The reference hard-codes a fallback gold that this package has
+   deliberately retired in favour of the themed one. */
+.bh-help-sign span { color: var(--bh-gold); }
 @keyframes bh-onboard-in {
     from { opacity: 0; transform: scale(0.95); }
     to   { opacity: 1; transform: scale(1); }

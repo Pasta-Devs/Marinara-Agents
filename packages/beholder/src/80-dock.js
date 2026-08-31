@@ -361,6 +361,9 @@ BH.dock = {
     // The note box lives beside the chat input, not in the panel, so it comes and goes
     // with the panel rather than sitting there when Beholder is closed.
     BH.notebox.mount();
+    // Once per browser, and only with the panel actually on screen, so the note has
+    // something to point at.
+    BH.onboard.maybeShow();
     void this.refresh();
   },
 

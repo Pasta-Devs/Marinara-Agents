@@ -48,7 +48,7 @@
       "status": "rendered"
     },
     "beholder-onboard": {
-      "status": "missing"
+      "status": "rendered"
     },
     "beholder-panel": {
       "status": "rendered"
@@ -589,31 +589,31 @@
       "status": "rendered"
     },
     "bh-onboard-arrow": {
-      "status": "missing"
+      "status": "rendered"
     },
     "bh-onboard-body": {
-      "status": "missing"
+      "status": "rendered"
     },
     "bh-onboard-close": {
-      "status": "missing"
+      "status": "rendered"
     },
     "bh-onboard-dismiss": {
-      "status": "missing"
+      "status": "rendered"
     },
     "bh-onboard-foot": {
-      "status": "missing"
+      "status": "rendered"
     },
     "bh-onboard-head": {
-      "status": "missing"
+      "status": "rendered"
     },
     "bh-onboard-tips": {
-      "status": "missing"
+      "status": "rendered"
     },
     "bh-onboard-title": {
-      "status": "missing"
+      "status": "rendered"
     },
     "bh-orn": {
-      "status": "missing"
+      "status": "rendered"
     },
     "bh-pane-meta": {
       "status": "rendered"

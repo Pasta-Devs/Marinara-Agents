@@ -119,6 +119,33 @@ try {
   const panel = page.locator(".beholder-panel").first();
   check("panel opens", await panel.isVisible().catch(() => false));
 
+  // ── the first-run note ────────────────────────────────────────────────────
+  // Checked here because it is shown once per browser: anything that dismisses it
+  // earlier would leave the rest of the run unable to see it at all.
+  const onboard = page.locator(".beholder-onboard");
+  check("a first-run note explains the panel", (await onboard.count()) === 1);
+  check(
+    "it is positioned rather than left at the top of the page",
+    await page.evaluate(() => {
+      const tip = document.querySelector(".beholder-onboard");
+      if (!tip) return false;
+      const style = getComputedStyle(tip);
+      const box = tip.getBoundingClientRect();
+      return style.position === "fixed" && box.width > 200 && box.top >= 0 && box.left >= 0;
+    }),
+  );
+  check("and points at the panel", ["left", "right", "over"].includes(await onboard.getAttribute("data-side")));
+  check("it lists what you can do", (await page.locator(".bh-onboard-tips li").count()) >= 3);
+  await page.locator(".bh-onboard-dismiss").click();
+  await page.waitForTimeout(500);
+  check("dismissing it closes it", (await page.locator(".beholder-onboard").count()) === 0);
+  // Reopening the panel must not bring it back; a note that returns is a nag.
+  await page.evaluate(() => document.querySelector(".bh-hud-toggle")?.click());
+  await page.waitForTimeout(700);
+  await page.evaluate(() => document.querySelector(".bh-hud-toggle")?.click());
+  await page.waitForTimeout(1200);
+  check("and it does not come back", (await page.locator(".beholder-onboard").count()) === 0);
+
   // ── header controls ───────────────────────────────────────────────────────
   for (const [label, selector] of [
     ["build-from-history button", ".beholder-backfill-btn"],
