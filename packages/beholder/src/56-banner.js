@@ -100,6 +100,100 @@ BH.banner = {
     }
   },
 
+  /**
+   * A newer build of the local model exists — offered once, dismissible.
+   *
+   * Only shown when the engine can actually tell. The update check compares the
+   * installed file's object id against the published one and reports `indeterminate`
+   * when it could not reach the repository; a banner that says "new model" because a
+   * request failed would train people to ignore it.
+   *
+   * Dismissal is remembered per published version, not per session, so declining one
+   * update does not silence the next one and accepting a nag every launch is not the
+   * price of staying on an older build.
+   */
+  async refreshUpdate() {
+    if (!BH.dock.panel) return;
+    let info = null;
+    try {
+      info = await BH.sidecar.updateCheck();
+    } catch {
+      return;
+    }
+    // Re-read the panel AFTER the round trip rather than holding a reference across it.
+    // If the dock replaces its panel while the check is in flight, a held reference
+    // points at a detached element and the strip is inserted somewhere nobody can see,
+    // with no error to show for it.
+    const panel = BH.dock.panel;
+    if (!panel || !panel.isConnected) return;
+    const existing = panel.querySelector(".bh-update-banner");
+    if (!info || info.indeterminate || !info.updateAvailable) {
+      existing?.remove();
+      return;
+    }
+    const target = String(info.availableOid ?? "");
+    let dismissed = null;
+    try {
+      dismissed = localStorage.getItem("marinara.beholder.updateDismissed");
+    } catch {
+      // A blocked storage just means the banner is offered again; not worth failing.
+    }
+    if (dismissed === target) {
+      existing?.remove();
+      return;
+    }
+    if (existing) return;
+
+    const short = (oid) => (oid ? String(oid).slice(0, 12) : "?");
+    const strip = document.createElement("div");
+    strip.className = "bh-update-banner";
+    strip.setAttribute("role", "status");
+    strip.setAttribute("aria-live", "polite");
+    strip.innerHTML = `
+      <span class="bh-update-banner-copy"><i class="fa-solid fa-wand-magic-sparkles" aria-hidden="true"></i>
+        A newer Beholder model is available — <b>${BH.escapeHtml(short(info.installedOid))}</b> →
+        <b>${BH.escapeHtml(short(info.availableOid))}</b>.</span>
+      <span class="bh-update-banner-actions">
+        <button type="button" class="bh-btn bh-btn-primary bh-update-now"><i class="fa-solid fa-download"></i>
+          Update</button>
+        <!-- Written out in full rather than built from the repository the engine reports.
+             An interpolated host is a link the server can point anywhere, and this
+             package is meant to reach exactly one place. -->
+        <a class="bh-btn bh-update-gguf" href="https://huggingface.co/GetBeholder/Beholder-GGUF"
+          target="_blank" rel="noopener noreferrer" title="Download the file yourself">
+          <i class="fa-solid fa-arrow-up-right-from-square"></i> File</a>
+        <button type="button" class="bh-btn bh-update-later" title="Not now" aria-label="Not now">
+          <i class="fa-solid fa-xmark"></i></button>
+      </span>`;
+    const after = panel.querySelector(".beholder-backfill-status") ?? panel.querySelector(".bh-no-model-banner");
+    if (after) after.after(strip);
+    else panel.querySelector(".beholder-panel-header")?.after(strip);
+
+    strip.querySelector(".bh-update-later").addEventListener("click", () => {
+      try {
+        localStorage.setItem("marinara.beholder.updateDismissed", target);
+      } catch {
+        // Dismissal that cannot be remembered still closes the strip for now.
+      }
+      strip.remove();
+    });
+    strip.querySelector(".bh-update-now").addEventListener("click", async (event) => {
+      const button = event.currentTarget;
+      button.disabled = true;
+      button.innerHTML = `<i class="fa-solid fa-spinner bh-banner-spin"></i> Downloading…`;
+      try {
+        await BH.sidecar.install();
+        BH.toast("Updated — the new model is in use");
+        strip.remove();
+        await this.refresh();
+      } catch (error) {
+        BH.toast(`Update failed: ${error.message}`);
+        button.disabled = false;
+        button.innerHTML = `<i class="fa-solid fa-download"></i> Update`;
+      }
+    });
+  },
+
   async act(action, button) {
     // "Details" and "Manage" both land in the Prompt view, which is where the model
     // and the prompt are chosen together — they are one decision.

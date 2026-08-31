@@ -614,6 +614,9 @@ BH.dock = {
     // Before the chat guard: which model answers does not depend on there being a
     // chat, and an empty panel is exactly when someone needs to be told why.
     void BH.banner.refresh();
+    // Separate call: the update check reaches the model repository, so it must not be
+    // able to delay or fail the strip that says which model is answering right now.
+    void BH.banner.refreshUpdate();
     const chatId = this.chatId;
     if (!chatId) return;
     try {

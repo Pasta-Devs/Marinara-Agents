@@ -24,6 +24,10 @@ BH.sidecar = {
       const res = await fetch(`/api/utility-sidecar${path}`, {
         credentials: "same-origin",
         headers: { Accept: "application/json", ...(init?.body ? { "Content-Type": "application/json" } : {}) },
+        // Every one of these answers is about right now: is the model loaded, which
+        // connection is answering, is there a newer build. A cached copy of any of them
+        // is a wrong answer, so never take one.
+        cache: "no-store",
         ...init,
       });
       // A 404 on status means this engine has no utility slot at all. Stop asking.

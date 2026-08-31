@@ -12,6 +12,27 @@ import { chromium } from "@playwright/test";
 
 const BASE = process.env.BEHOLDER_UI_BASE ?? "http://127.0.0.1:8791";
 const CHAT_NAME = process.env.BEHOLDER_UI_CHAT ?? "Beholder rig";
+const CHAT_ID = process.env.BEHOLDER_UI_CHAT_ID ?? "RJNfohKDYuPQ1-PwbUoFT";
+
+// The run seeds its own starting state instead of assuming one. The note-box check
+// asserts that a directive CHANGES something, so a second run against the state the
+// first run left behind found the gloves already on and correctly reported that nothing
+// changed — a real pass turning into a false failure purely from run order.
+const SEED_STATE = {
+  characters: [
+    { name: "Maggie", body: { waist: { worn: [{ item: "belt", damage: "pristine" }] } } },
+    { name: "Kheza", body: { right_hand: { holding: { item: "lantern" } } } },
+  ],
+};
+const seeded = await fetch(`${BASE}/api/agents/beholder-state/${CHAT_ID}`, {
+  method: "PUT",
+  headers: { "Content-Type": "application/json" },
+  body: JSON.stringify({ state: SEED_STATE }),
+});
+if (!seeded.ok) {
+  console.error(`could not seed the rig chat (${seeded.status}) — set BEHOLDER_UI_CHAT_ID`);
+  process.exit(1);
+}
 
 const results = [];
 const check = (name, pass, detail = "") => {
@@ -20,11 +41,45 @@ const check = (name, pass, detail = "") => {
 };
 
 const browser = await chromium.launch();
-const page = await browser.newPage({ viewport: { width: 1400, height: 950 } });
+// Service workers are blocked for this run. The engine registers one that handles
+// every /api/ request as NetworkOnly — correct for the product, but it re-issues the
+// request from the worker, and requests made there do not pass through page.route. On
+// the first load the worker is not yet controlling the page and interception worked; on
+// any reload it silently did not, so a stubbed response was quietly replaced by the
+// real one and the checks measured the wrong thing.
+const context = await browser.newContext({ viewport: { width: 1400, height: 950 }, serviceWorkers: "block" });
+const page = await context.newPage();
 const pageErrors = [];
 page.on("pageerror", (error) => pageErrors.push(String(error)));
 page.on("console", (message) => {
   if (message.type() === "error") pageErrors.push(message.text());
+});
+
+// Registered here, before the first navigation, because a route added part-way through
+// a session never took effect — the page went on reaching the real endpoint and the
+// checks below measured an absent banner instead of an absent interception. Defaults to
+// "nothing pending", so it is inert until the update section sets a state.
+const updateStates = {
+  none: { modelId: "beholder", updateAvailable: false, indeterminate: false },
+  available: {
+    modelId: "beholder",
+    repo: "GetBeholder/Beholder-GGUF",
+    installedOid: "aaaaaaaaaaaa1111",
+    availableOid: "bbbbbbbbbbbb2222",
+    updateAvailable: true,
+    indeterminate: false,
+  },
+  indeterminate: { modelId: "beholder", updateAvailable: true, indeterminate: true },
+};
+let updateState = "none";
+let updateChecks = 0;
+await page.route("**/api/utility-sidecar/models/beholder/update-check", (route) => {
+  updateChecks += 1;
+  return route.fulfill({
+    status: 200,
+    contentType: "application/json",
+    body: JSON.stringify(updateStates[updateState]),
+  });
 });
 
 try {
@@ -414,6 +469,91 @@ try {
   }
   await page.setViewportSize({ width: 1400, height: 950 });
   await page.waitForTimeout(800);
+
+  // ── the model-update strip ────────────────────────────────────────────────
+  // Last, because it reloads: the strip only appears when the engine can actually
+  // tell that a newer build exists, so the check has to supply that answer. All three
+  // answers are exercised — one available, one that could not be determined, and one
+  // already dismissed — because the failure that matters is a banner that cries
+  // "new model" when a request merely failed.
+  const reopenPanel = async () => {
+    await page.goto(BASE, { waitUntil: "domcontentloaded" });
+    await page.waitForTimeout(5000);
+    await page.evaluate(() => {
+      const tab = [...document.querySelectorAll("button,[role=tab],a")].find((el) => el.textContent.trim() === "RP");
+      tab?.click();
+    });
+    await page.waitForTimeout(2000);
+    await page.evaluate((name) => {
+      const row = [...document.querySelectorAll("*")].find(
+        (el) => el.children.length === 0 && el.textContent.trim() === name,
+      );
+      (row?.closest("button,[role=button],li,a") ?? row)?.click();
+    }, CHAT_NAME);
+    await page.waitForTimeout(6000);
+    // The dock remembers that it was open, so after a reload it comes back by itself.
+    // Clicking the toggle unconditionally CLOSED it, and the checks below then measured
+    // an absent panel rather than an absent banner.
+    if (
+      !(await page
+        .locator(".beholder-panel")
+        .isVisible()
+        .catch(() => false))
+    ) {
+      await page.evaluate(() => document.querySelector(".bh-hud-toggle")?.click());
+    }
+    await page.locator(".beholder-panel").waitFor({ state: "visible", timeout: 15000 });
+    // The update check is a network round trip made after the panel mounts.
+    await page.waitForTimeout(4000);
+  };
+
+  updateState = "available";
+  await reopenPanel();
+  const updateDebug = await page.evaluate(() => ({
+    children: [...(document.querySelector(".beholder-panel")?.children ?? [])].map((c) => c.className).join(","),
+    dismissed: localStorage.getItem("marinara.beholder.updateDismissed"),
+  }));
+  check(
+    "an available update is announced",
+    (await page.locator(".bh-update-banner").count()) === 1,
+    `checks=${updateChecks} dismissed=${updateDebug.dismissed} children=${updateDebug.children}`,
+  );
+  check(
+    "the strip names both versions",
+    /aaaaaaaaaaaa.*bbbbbbbbbbbb/s.test(
+      (await page
+        .locator(".bh-update-banner-copy")
+        .textContent()
+        .catch(() => "")) ?? "",
+    ),
+  );
+  check(
+    "and offers update, the file itself, and not now",
+    (await page.locator(".bh-update-banner-actions .bh-btn").count()) === 3 &&
+      (await page.locator(".bh-update-gguf").getAttribute("href"))?.startsWith("https://huggingface.co/"),
+  );
+  // The reference relies on FontAwesome's fa-spin, which this package does not ship;
+  // a motionless spinner reads as a hang.
+  const spinAnimation = await page.evaluate(() => {
+    const probe = document.createElement("i");
+    probe.className = "bh-banner-spin";
+    document.querySelector(".bh-update-banner")?.appendChild(probe);
+    const name = getComputedStyle(probe).animationName;
+    probe.remove();
+    return name;
+  });
+  check("the progress spinner actually spins", spinAnimation === "bh-banner-spin", spinAnimation);
+
+  await page.locator(".bh-update-later").click();
+  await page.waitForTimeout(600);
+  check("dismissing hides it", (await page.locator(".bh-update-banner").count()) === 0);
+  await reopenPanel();
+  check("and it stays dismissed for that version", (await page.locator(".bh-update-banner").count()) === 0);
+
+  await page.evaluate(() => localStorage.removeItem("marinara.beholder.updateDismissed"));
+  updateState = "indeterminate";
+  await reopenPanel();
+  check("an update it could not confirm is not announced", (await page.locator(".bh-update-banner").count()) === 0);
 
   check("no uncaught page errors", pageErrors.length === 0, pageErrors.slice(0, 3).join(" | "));
 } finally {

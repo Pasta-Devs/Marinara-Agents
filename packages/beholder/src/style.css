@@ -3410,6 +3410,14 @@
     );
 }
 .bh-no-model-banner .bh-banner-spin { color: var(--bh-gold-deep); }
+/* The reference relies on FontAwesome's own fa-spin. This package ships an icon shim
+   rather than the whole library, and fa-spin is not part of it — so the spinner sat
+   perfectly still, which reads as a hang rather than as work in progress. */
+@keyframes bh-banner-spin { to { transform: rotate(360deg); } }
+.bh-banner-spin { display: inline-block; animation: bh-banner-spin 0.9s linear infinite; }
+@media (prefers-reduced-motion: reduce) {
+    .bh-banner-spin { animation: none; }
+}
 .bh-no-model-banner.bh-banner-warn .bh-banner-icon {
     color: var(--bh-gold-deep);
     text-shadow: color-mix(in srgb, var(--bh-accent) 45%, transparent) 0 0 8px;

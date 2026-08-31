@@ -90,7 +90,7 @@
       "status": "rendered"
     },
     "bh-banner-spin": {
-      "status": "missing"
+      "status": "rendered"
     },
     "bh-bf-bar": {
       "status": "rendered"
@@ -764,22 +764,22 @@
       "status": "rendered"
     },
     "bh-update-banner": {
-      "status": "missing"
+      "status": "rendered"
     },
     "bh-update-banner-actions": {
-      "status": "missing"
+      "status": "rendered"
     },
     "bh-update-banner-copy": {
-      "status": "missing"
+      "status": "rendered"
     },
     "bh-update-gguf": {
-      "status": "missing"
+      "status": "rendered"
     },
     "bh-update-later": {
-      "status": "missing"
+      "status": "rendered"
     },
     "bh-update-now": {
-      "status": "missing"
+      "status": "rendered"
     },
     "bh-view": {
       "status": "rendered"
