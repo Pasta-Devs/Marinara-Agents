@@ -1,5 +1,14 @@
 // AUTO-GENERATED from datagen shared/worn_coverage_map.json — DO NOT EDIT BY HAND.
 //
+// Regenerating: the source map is the extraction contract and lists every garment,
+// including words that are ordinary English outside a wardrobe. This list is used for
+// one thing only — deciding whether a passage even mentions clothing — so those words
+// have to be left out of it, or the check fires on prose about nothing of the sort.
+// Excluded on that ground: set ("she set the cup down"), shift ("he shifted his
+// weight"), slip ("the glass slipped from her grip" — the phrasing our own Help offers
+// as an example), top ("on top of the wall") and plate ("a plate of bread"). Each is a
+// real garment and stays in the map; none of them belongs in this gate.
+//
 // Single-word garment names, used to tell whether a passage even describes something
 // Beholder could extract. Measured on the register corpus the model was evaluated on:
 // a passage carrying one of these words has physical state to find 49% of the time,
@@ -97,7 +106,6 @@ const BH_GARMENT_WORDS = [
   "pantyhose",
   "pauldron",
   "pauldrons",
-  "plate",
   "plugsuit",
   "raincoat",
   "robe",
@@ -105,9 +113,7 @@ const BH_GARMENT_WORDS = [
   "sandal",
   "sandals",
   "scrubs",
-  "set",
   "shawl",
-  "shift",
   "shinguard",
   "shirt",
   "shoe",
@@ -117,7 +123,6 @@ const BH_GARMENT_WORDS = [
   "skirt",
   "skirt-suit",
   "slacks",
-  "slip",
   "slipper",
   "slippers",
   "smock",
@@ -146,7 +151,6 @@ const BH_GARMENT_WORDS = [
   "thermal",
   "tights",
   "toga",
-  "top",
   "tracksuit",
   "trenchcoat",
   "trouser",

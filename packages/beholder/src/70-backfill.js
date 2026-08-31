@@ -66,12 +66,17 @@ BH.backfill = {
 
   /** Wipe the tracked state so a rebuild starts from nothing. */
   async clearState(chatId) {
-    await fetch(`/api/agents/beholder-state/${encodeURIComponent(chatId)}`, {
+    const res = await fetch(`/api/agents/beholder-state/${encodeURIComponent(chatId)}`, {
       method: "PUT",
       credentials: "same-origin",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ state: { characters: [] } }),
     });
+    // fetch resolves for 4xx and 5xx, so this used to report success for a wipe that
+    // never happened — and the rebuild then read every message on top of the state it
+    // was supposed to have replaced, keeping exactly the characters the operator asked
+    // to be rid of.
+    if (!res.ok) throw new Error(`could not clear the existing state (${res.status})`);
   },
 
   // ── progress strip ────────────────────────────────────────────────────────

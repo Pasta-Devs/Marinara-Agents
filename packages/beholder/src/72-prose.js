@@ -99,24 +99,11 @@ BH.prose = {
 
   async assess(chatId, state) {
     if (!chatId) return null;
-    let messages;
-    try {
-      // The chat record does not carry its messages; they have their own route. Reading
-      // them off the chat looked fine and quietly returned nothing every time.
-      const res = await fetch(`/api/chats/${encodeURIComponent(chatId)}/messages?limit=12`, {
-        credentials: "same-origin",
-        headers: { Accept: "application/json" },
-      });
-      if (!res.ok) return null;
-      const payload = await res.json();
-      const rows = Array.isArray(payload) ? payload : (payload?.messages ?? []);
-      messages = rows.filter((row) => row && !row.isUser && row.role !== "user").slice(-8);
-    } catch {
-      return null;
-    }
-    if (!messages.length) return null;
-
-    const bodies = messages.map((row) => row.content ?? row.text ?? "").filter(Boolean);
+    // Through sample(), which already reads exactly these turns. This used to repeat
+    // the same request with its own copy of the filtering, so opening Doctor fetched
+    // the chat's messages twice and the two copies could drift apart.
+    const bodies = await this.sample(chatId);
+    if (!bodies.length) return null;
     const scripted = bodies.filter((body) => this.isScript(body)).length;
     const describing = bodies.filter((body) => this.describesState(body)).length;
 

@@ -543,19 +543,32 @@ try {
   await page.waitForTimeout(800);
   check("merging offers the names on screen", (await page.locator(".bh-ch-pill").count()) >= 1);
   check("and a field for one that is not", (await page.locator(".bh-ch-pick-input").count()) === 1);
+  // Escape belongs to the field while a name is being typed. The view registers its own
+  // Escape handler on `document` with capture, which runs before anything bubbling from
+  // the input — so the first version closed the entire view and lost the row.
+  await page.locator(".bh-ch-pick-input").press("Escape");
+  await page.waitForTimeout(500);
+  check("Escape closes the name field, not the view", (await page.locator(".bh-ch-pick-input").count()) === 0);
+  check("and the characters view is still open", (await page.locator(".bh-view").count()) === 1);
+  await page.locator(".bh-ch-merge").first().click();
+  await page.waitForTimeout(600);
+
   const beforeRows = await page.locator(".bh-ch").count();
   // Typed rather than picked, but into a name that IS on screen, so the row has
   // something to fold into and the panel stops showing one person twice. Merging into a
   // name nobody uses yet is also allowed — it just records the alias for later, and the
   // toast says so — but it cannot be observed as a row disappearing.
   const otherName = await page.locator(".bh-ch-pill").first().getAttribute("data-target");
-  await page.fill(".bh-ch-pick-input", otherName ?? "");
+  // Lower-cased on purpose: the target is typed by hand, so "rhys" has to find "Rhys".
+  // A case-sensitive match recorded the alias and left the row on screen, which reads
+  // as the merge having failed.
+  await page.fill(".bh-ch-pick-input", (otherName ?? "").toLowerCase());
   await page.locator(".bh-ch-pick-input").press("Enter");
   await page.waitForTimeout(1200);
   check(
     "typing a name merges the row away",
     (await page.locator(".bh-ch").count()) < beforeRows,
-    `${beforeRows} rows -> ${await page.locator(".bh-ch").count()} (merged into ${otherName})`,
+    `${beforeRows} rows -> ${await page.locator(".bh-ch").count()} (typed "${(otherName ?? "").toLowerCase()}" for "${otherName}")`,
   );
   await page.keyboard.press("Escape");
   await page.waitForTimeout(500);

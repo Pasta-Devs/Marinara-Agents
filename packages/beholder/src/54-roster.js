@@ -72,10 +72,18 @@ BH.roster = {
     this.save(data);
   },
 
-  /** Names merged into this one. */
+  /**
+   * Names merged into this one.
+   *
+   * Compared without case, because the target can be typed by hand: someone merging a
+   * stray "the guard" into "Rhys" may well type "rhys", and a case-sensitive match left
+   * the alias recorded but invisible — the row stayed on screen and the merge looked
+   * like it had failed.
+   */
   variantsOf(name, data = this.all()) {
+    const wanted = String(name).toLowerCase();
     return Object.entries(data.aliases)
-      .filter(([, canonical]) => canonical === name)
+      .filter(([, canonical]) => String(canonical).toLowerCase() === wanted)
       .map(([variant]) => variant);
   },
 
@@ -89,7 +97,12 @@ BH.roster = {
     const data = this.all();
     const hidden = new Set(data.hidden);
     // A merged variant is not its own row; it belongs to the name it was merged into.
-    const merged = new Set(Object.keys(data.aliases).filter((variant) => names.includes(data.aliases[variant])));
+    // Matched without case for the same reason variantsOf is: the canonical name may
+    // have been typed rather than picked from the list.
+    const tracked = new Map(names.map((name) => [name.toLowerCase(), name]));
+    const merged = new Set(
+      Object.keys(data.aliases).filter((variant) => tracked.has(String(data.aliases[variant]).toLowerCase())),
+    );
     const remaining = names.filter((name) => !merged.has(name));
     const ordered = [
       ...data.order.filter((name) => remaining.includes(name)),

@@ -114,12 +114,17 @@ BH.banner = {
    */
   async refreshUpdate() {
     if (!BH.dock.panel) return;
+    // Started without being awaited on every dock refresh, so two can be in flight at
+    // once. Without this the older answer could land last and re-insert a strip the
+    // newer one had just removed.
+    const ticket = (this.updateTicket = (this.updateTicket ?? 0) + 1);
     let info;
     try {
       info = await BH.sidecar.updateCheck();
     } catch {
       return;
     }
+    if (ticket !== this.updateTicket) return;
     // Re-read the panel AFTER the round trip rather than holding a reference across it.
     // If the dock replaces its panel while the check is in flight, a held reference
     // points at a detached element and the strip is inserted somewhere nobody can see,
@@ -183,9 +188,18 @@ BH.banner = {
       button.innerHTML = `<i class="fa-solid fa-spinner bh-banner-spin"></i> Downloading…`;
       try {
         await BH.sidecar.install();
-        BH.toast("Updated — the new model is in use");
         strip.remove();
+        // install() downloads the file; it does not decide which connection answers.
+        // Routing is read back before saying anything about what is in use, because
+        // "the new model is in use" was being claimed without checking.
         await this.refresh();
+        let serving = false;
+        try {
+          serving = (await BH.sidecar.routing())?.source === "utility-sidecar";
+        } catch {
+          // Left as false: report the part that is certain rather than guess.
+        }
+        BH.toast(serving ? "Updated — the new model is answering" : "Updated — the new model is downloaded");
       } catch (error) {
         BH.toast(`Update failed: ${error.message}`);
         button.disabled = false;

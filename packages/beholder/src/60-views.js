@@ -57,6 +57,12 @@ BH.views = {
     });
     this.onKeydown = (event) => {
       if (event.key !== "Escape") return;
+      // A field can claim Escape for itself. This handler is on `document` with capture,
+      // which means it runs before ANY listener on a descendant — capture travels from
+      // the root down to the target — so a field cannot win this by listening harder.
+      // It has to be decided here. Without it, pressing Escape to abandon a half-typed
+      // name closed the whole view and lost the row being worked on.
+      if (event.target?.closest?.("[data-bh-escape='self']")) return;
       event.stopPropagation();
       this.close();
     };
@@ -882,6 +888,7 @@ BH.views = {
             // often not one of them: the extractor wrote "the guard" once and has since
             // settled on "Rhys", so the row to merge away has no partner to point at.
             `<input class="bh-ch-pick-input" type="text" placeholder="or type a name…"
+               data-bh-escape="self"
                aria-label="Merge ${BH.escapeHtml(name)} into a name you type">`;
           rowElement.appendChild(pick);
           const mergeInto = (target) => {
@@ -903,12 +910,13 @@ BH.views = {
             pill.addEventListener("click", () => mergeInto(pill.dataset.target));
           }
           const typed = pick.querySelector(".bh-ch-pick-input");
+          // The field carries data-bh-escape="self", so the view leaves Escape alone
+          // here and an ordinary listener is enough.
           typed.addEventListener("keydown", (keyEvent) => {
-            // Scoped to this field: Escape closing the whole view while someone is
-            // halfway through typing a name would lose the row they were working on.
-            keyEvent.stopPropagation();
+            if (keyEvent.key !== "Enter" && keyEvent.key !== "Escape") return;
+            keyEvent.preventDefault();
             if (keyEvent.key === "Enter") mergeInto(typed.value);
-            else if (keyEvent.key === "Escape") pick.remove();
+            else pick.remove();
           });
           typed.focus();
         });

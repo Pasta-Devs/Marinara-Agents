@@ -121,6 +121,15 @@ const GARMENT_CANON = {
 // ===== 11-garment-vocab.js =====
 // AUTO-GENERATED from datagen shared/worn_coverage_map.json — DO NOT EDIT BY HAND.
 //
+// Regenerating: the source map is the extraction contract and lists every garment,
+// including words that are ordinary English outside a wardrobe. This list is used for
+// one thing only — deciding whether a passage even mentions clothing — so those words
+// have to be left out of it, or the check fires on prose about nothing of the sort.
+// Excluded on that ground: set ("she set the cup down"), shift ("he shifted his
+// weight"), slip ("the glass slipped from her grip" — the phrasing our own Help offers
+// as an example), top ("on top of the wall") and plate ("a plate of bread"). Each is a
+// real garment and stays in the map; none of them belongs in this gate.
+//
 // Single-word garment names, used to tell whether a passage even describes something
 // Beholder could extract. Measured on the register corpus the model was evaluated on:
 // a passage carrying one of these words has physical state to find 49% of the time,
@@ -218,7 +227,6 @@ const BH_GARMENT_WORDS = [
   "pantyhose",
   "pauldron",
   "pauldrons",
-  "plate",
   "plugsuit",
   "raincoat",
   "robe",
@@ -226,9 +234,7 @@ const BH_GARMENT_WORDS = [
   "sandal",
   "sandals",
   "scrubs",
-  "set",
   "shawl",
-  "shift",
   "shinguard",
   "shirt",
   "shoe",
@@ -238,7 +244,6 @@ const BH_GARMENT_WORDS = [
   "skirt",
   "skirt-suit",
   "slacks",
-  "slip",
   "slipper",
   "slippers",
   "smock",
@@ -267,7 +272,6 @@ const BH_GARMENT_WORDS = [
   "thermal",
   "tights",
   "toga",
-  "top",
   "tracksuit",
   "trenchcoat",
   "trouser",
@@ -2963,10 +2967,18 @@ BH.roster = {
     this.save(data);
   },
 
-  /** Names merged into this one. */
+  /**
+   * Names merged into this one.
+   *
+   * Compared without case, because the target can be typed by hand: someone merging a
+   * stray "the guard" into "Rhys" may well type "rhys", and a case-sensitive match left
+   * the alias recorded but invisible — the row stayed on screen and the merge looked
+   * like it had failed.
+   */
   variantsOf(name, data = this.all()) {
+    const wanted = String(name).toLowerCase();
     return Object.entries(data.aliases)
-      .filter(([, canonical]) => canonical === name)
+      .filter(([, canonical]) => String(canonical).toLowerCase() === wanted)
       .map(([variant]) => variant);
   },
 
@@ -2980,7 +2992,12 @@ BH.roster = {
     const data = this.all();
     const hidden = new Set(data.hidden);
     // A merged variant is not its own row; it belongs to the name it was merged into.
-    const merged = new Set(Object.keys(data.aliases).filter((variant) => names.includes(data.aliases[variant])));
+    // Matched without case for the same reason variantsOf is: the canonical name may
+    // have been typed rather than picked from the list.
+    const tracked = new Map(names.map((name) => [name.toLowerCase(), name]));
+    const merged = new Set(
+      Object.keys(data.aliases).filter((variant) => tracked.has(String(data.aliases[variant]).toLowerCase())),
+    );
     const remaining = names.filter((name) => !merged.has(name));
     const ordered = [
       ...data.order.filter((name) => remaining.includes(name)),
@@ -3020,11 +3037,11 @@ BH.sidecar = {
       const res = await fetch(`/api/utility-sidecar${path}`, {
         credentials: "same-origin",
         headers: { Accept: "application/json", ...(init?.body ? { "Content-Type": "application/json" } : {}) },
-        // Every one of these answers is about right now: is the model loaded, which
-        // connection is answering, is there a newer build. A cached copy of any of them
-        // is a wrong answer, so never take one.
-        cache: "no-store",
         ...init,
+        // After the spread, not before it: every one of these answers is about right
+        // now — is the model loaded, which connection is answering, is there a newer
+        // build — so a cached copy is a wrong answer and no caller may opt back in.
+        cache: "no-store",
       });
       // A 404 on status means this engine has no utility slot at all. Stop asking.
       if (res.status === 404 && path === "/status") {
@@ -3200,12 +3217,17 @@ BH.banner = {
    */
   async refreshUpdate() {
     if (!BH.dock.panel) return;
+    // Started without being awaited on every dock refresh, so two can be in flight at
+    // once. Without this the older answer could land last and re-insert a strip the
+    // newer one had just removed.
+    const ticket = (this.updateTicket = (this.updateTicket ?? 0) + 1);
     let info;
     try {
       info = await BH.sidecar.updateCheck();
     } catch {
       return;
     }
+    if (ticket !== this.updateTicket) return;
     // Re-read the panel AFTER the round trip rather than holding a reference across it.
     // If the dock replaces its panel while the check is in flight, a held reference
     // points at a detached element and the strip is inserted somewhere nobody can see,
@@ -3269,9 +3291,18 @@ BH.banner = {
       button.innerHTML = `<i class="fa-solid fa-spinner bh-banner-spin"></i> Downloading…`;
       try {
         await BH.sidecar.install();
-        BH.toast("Updated — the new model is in use");
         strip.remove();
+        // install() downloads the file; it does not decide which connection answers.
+        // Routing is read back before saying anything about what is in use, because
+        // "the new model is in use" was being claimed without checking.
         await this.refresh();
+        let serving = false;
+        try {
+          serving = (await BH.sidecar.routing())?.source === "utility-sidecar";
+        } catch {
+          // Left as false: report the part that is certain rather than guess.
+        }
+        BH.toast(serving ? "Updated — the new model is answering" : "Updated — the new model is downloaded");
       } catch (error) {
         BH.toast(`Update failed: ${error.message}`);
         button.disabled = false;
@@ -3372,8 +3403,12 @@ BH.inspector = {
       } else if (data.stage === "response") {
         // Responses can arrive out of order against requests when lanes overlap, so
         // fill the first pass still waiting rather than assuming the last one.
-        const target = passes.find((pass) => !pass.raw) ?? current;
+        // Tracked explicitly rather than inferred from `raw`: a lane that legitimately
+        // answered with nothing left `raw` empty, so the next response overwrote it and
+        // the lane that response belonged to was left blank instead.
+        const target = passes.find((pass) => !pass.filled) ?? current;
         if (target) {
+          target.filled = true;
           target.raw = data.response ?? data.responsePreview ?? "";
           target.durationMs = data.durationMs ?? null;
           target.finishReason = data.finishReason ?? null;
@@ -3678,6 +3713,12 @@ BH.views = {
     });
     this.onKeydown = (event) => {
       if (event.key !== "Escape") return;
+      // A field can claim Escape for itself. This handler is on `document` with capture,
+      // which means it runs before ANY listener on a descendant — capture travels from
+      // the root down to the target — so a field cannot win this by listening harder.
+      // It has to be decided here. Without it, pressing Escape to abandon a half-typed
+      // name closed the whole view and lost the row being worked on.
+      if (event.target?.closest?.("[data-bh-escape='self']")) return;
       event.stopPropagation();
       this.close();
     };
@@ -4503,6 +4544,7 @@ BH.views = {
             // often not one of them: the extractor wrote "the guard" once and has since
             // settled on "Rhys", so the row to merge away has no partner to point at.
             `<input class="bh-ch-pick-input" type="text" placeholder="or type a name…"
+               data-bh-escape="self"
                aria-label="Merge ${BH.escapeHtml(name)} into a name you type">`;
           rowElement.appendChild(pick);
           const mergeInto = (target) => {
@@ -4524,12 +4566,13 @@ BH.views = {
             pill.addEventListener("click", () => mergeInto(pill.dataset.target));
           }
           const typed = pick.querySelector(".bh-ch-pick-input");
+          // The field carries data-bh-escape="self", so the view leaves Escape alone
+          // here and an ordinary listener is enough.
           typed.addEventListener("keydown", (keyEvent) => {
-            // Scoped to this field: Escape closing the whole view while someone is
-            // halfway through typing a name would lose the row they were working on.
-            keyEvent.stopPropagation();
+            if (keyEvent.key !== "Enter" && keyEvent.key !== "Escape") return;
+            keyEvent.preventDefault();
             if (keyEvent.key === "Enter") mergeInto(typed.value);
-            else if (keyEvent.key === "Escape") pick.remove();
+            else pick.remove();
           });
           typed.focus();
         });
@@ -4782,12 +4825,17 @@ BH.backfill = {
 
   /** Wipe the tracked state so a rebuild starts from nothing. */
   async clearState(chatId) {
-    await fetch(`/api/agents/beholder-state/${encodeURIComponent(chatId)}`, {
+    const res = await fetch(`/api/agents/beholder-state/${encodeURIComponent(chatId)}`, {
       method: "PUT",
       credentials: "same-origin",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ state: { characters: [] } }),
     });
+    // fetch resolves for 4xx and 5xx, so this used to report success for a wipe that
+    // never happened — and the rebuild then read every message on top of the state it
+    // was supposed to have replaced, keeping exactly the characters the operator asked
+    // to be rid of.
+    if (!res.ok) throw new Error(`could not clear the existing state (${res.status})`);
   },
 
   // ── progress strip ────────────────────────────────────────────────────────
@@ -5067,24 +5115,11 @@ BH.prose = {
 
   async assess(chatId, state) {
     if (!chatId) return null;
-    let messages;
-    try {
-      // The chat record does not carry its messages; they have their own route. Reading
-      // them off the chat looked fine and quietly returned nothing every time.
-      const res = await fetch(`/api/chats/${encodeURIComponent(chatId)}/messages?limit=12`, {
-        credentials: "same-origin",
-        headers: { Accept: "application/json" },
-      });
-      if (!res.ok) return null;
-      const payload = await res.json();
-      const rows = Array.isArray(payload) ? payload : (payload?.messages ?? []);
-      messages = rows.filter((row) => row && !row.isUser && row.role !== "user").slice(-8);
-    } catch {
-      return null;
-    }
-    if (!messages.length) return null;
-
-    const bodies = messages.map((row) => row.content ?? row.text ?? "").filter(Boolean);
+    // Through sample(), which already reads exactly these turns. This used to repeat
+    // the same request with its own copy of the filtering, so opening Doctor fetched
+    // the chat's messages twice and the two copies could drift apart.
+    const bodies = await this.sample(chatId);
+    if (!bodies.length) return null;
     const scripted = bodies.filter((body) => this.isScript(body)).length;
     const describing = bodies.filter((body) => this.describesState(body)).length;
 

@@ -60,8 +60,12 @@ BH.inspector = {
       } else if (data.stage === "response") {
         // Responses can arrive out of order against requests when lanes overlap, so
         // fill the first pass still waiting rather than assuming the last one.
-        const target = passes.find((pass) => !pass.raw) ?? current;
+        // Tracked explicitly rather than inferred from `raw`: a lane that legitimately
+        // answered with nothing left `raw` empty, so the next response overwrote it and
+        // the lane that response belonged to was left blank instead.
+        const target = passes.find((pass) => !pass.filled) ?? current;
         if (target) {
+          target.filled = true;
           target.raw = data.response ?? data.responsePreview ?? "";
           target.durationMs = data.durationMs ?? null;
           target.finishReason = data.finishReason ?? null;
