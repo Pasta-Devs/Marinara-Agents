@@ -118,6 +118,7 @@ import {
   useInviteNoodleCharacter,
   useInviteNoodleCharacters,
   useNoodle,
+  useNoodleFeed,
   useNoodleUnseenCount,
   usePatchNoodleAccountSettings,
   useRefreshNoodle,
@@ -615,7 +616,15 @@ export function NoodleHome({ navigation, onNavigate }: NoodleHomeProps) {
   const { t: localizeUi, i18n } = useUiTranslation();
   const selectedPersonaId = useUIStore((state) => state.noodleSelectedPersonaId);
   const setSelectedPersonaId = useUIStore((state) => state.setNoodleSelectedPersonaId);
-  const { data, isLoading, isError } = useNoodle();
+  const { data, isLoading: isBootstrapLoading, isError: isBootstrapError } = useNoodle();
+  const feedQuery = useNoodleFeed();
+  const isLoading = isBootstrapLoading || feedQuery.isLoading;
+  const isError = isBootstrapError || feedQuery.isError;
+  const feedPosts = useMemo(() => feedQuery.data?.pages.flatMap((page) => page.items) ?? [], [feedQuery.data]);
+  const feedInteractions = useMemo(
+    () => feedQuery.data?.pages.flatMap((page) => page.interactions) ?? [],
+    [feedQuery.data],
+  );
   // Freeze the seen marker while the current timeline remains visible:
   // the stored value advances as soon as the timeline is shown, which would otherwise erase
   // the divider while the reader is still on it.
@@ -866,8 +875,14 @@ export function NoodleHome({ navigation, onNavigate }: NoodleHomeProps) {
     () => sortedPersonaAccounts.slice(0, personaAccountLimit),
     [personaAccountLimit, sortedPersonaAccounts],
   );
-  const posts = useMemo(() => data?.posts ?? [], [data?.posts]);
-  const interactions = useMemo(() => data?.interactions ?? [], [data?.interactions]);
+  const posts = useMemo(() => feedPosts, [feedPosts]);
+  const interactions = useMemo(
+    () => [
+      ...(data?.interactions ?? []),
+      ...feedInteractions.filter((item) => !(data?.interactions ?? []).some((current) => current.id === item.id)),
+    ],
+    [data?.interactions, feedInteractions],
+  );
   const interactionsByPostId = useMemo(() => {
     const grouped = new Map<string, NoodleInteraction[]>();
     for (const interaction of interactions) {
@@ -5200,12 +5215,30 @@ export function NoodleHome({ navigation, onNavigate }: NoodleHomeProps) {
               </p>
             </div>
           ) : (
-            timelinePosts.map((post, index) => (
-              <Fragment key={post.id}>
-                {index === timelineDividerIndex && <NewSinceLastVisitDivider />}
-                {renderPostArticle(post)}
-              </Fragment>
-            ))
+            <>
+              {timelinePosts.map((post, index) => (
+                <Fragment key={post.id}>
+                  {index === timelineDividerIndex && <NewSinceLastVisitDivider />}
+                  {renderPostArticle(post)}
+                </Fragment>
+              ))}
+              {timelineTab === "main" && !normalizedPostSearch && feedQuery.hasNextPage && (
+                <div className="border-t border-[var(--noodle-divider)] px-4 py-4 text-center">
+                  <button
+                    type="button"
+                    onClick={() => void feedQuery.fetchNextPage()}
+                    disabled={feedQuery.isFetchingNextPage}
+                    className="rounded-full bg-[var(--noodle-accent)] px-5 py-2 text-sm font-bold text-zinc-950 disabled:opacity-50"
+                  >
+                    {feedQuery.isFetchingNextPage ? (
+                      <Loader2 size={16} className="mx-auto animate-spin" />
+                    ) : (
+                      "Load more"
+                    )}
+                  </button>
+                </div>
+              )}
+            </>
           )}
         </div>
       </div>

@@ -1,5 +1,5 @@
 // React Query: Noodle hooks
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "../lib/api-client";
 import { useUIStore } from "../stores/noodle-package.store";
 import type {
@@ -44,6 +44,13 @@ export type NoodleDataDeletionCounts = {
 export const noodleKeys = {
   all: ["noodle"] as const,
   bootstrap: () => [...noodleKeys.all, "bootstrap"] as const,
+  feed: () => [...noodleKeys.all, "feed"] as const,
+};
+
+export type NoodlePostPage = {
+  items: NoodlePost[];
+  interactions: NoodleInteraction[];
+  nextCursor: { createdAt: string; id: string } | null;
 };
 
 function preservePollVotes(current: NoodleBootstrap | undefined, next: NoodleBootstrap): NoodleBootstrap {
@@ -62,6 +69,25 @@ export function useNoodle(enabled = true) {
     refetchIntervalInBackground: false,
     structuralSharing: (current, next) =>
       preservePollVotes(current as NoodleBootstrap | undefined, next as NoodleBootstrap),
+  });
+}
+
+export function useNoodleFeed(enabled = true) {
+  return useInfiniteQuery({
+    queryKey: noodleKeys.feed(),
+    queryFn: ({ pageParam }) => {
+      const cursor = pageParam
+        ? `&cursorAt=${encodeURIComponent(pageParam.createdAt)}&cursorId=${encodeURIComponent(pageParam.id)}`
+        : "";
+      return api.get<NoodlePostPage>(`/noodle/feed?limit=20${cursor}`);
+    },
+    initialPageParam: null as NoodlePostPage["nextCursor"],
+    getNextPageParam: (page) => page.nextCursor ?? undefined,
+    enabled,
+    staleTime: 10_000,
+    refetchOnMount: "always",
+    refetchInterval: enabled ? 30_000 : false,
+    refetchIntervalInBackground: false,
   });
 }
 
@@ -236,7 +262,10 @@ export function useCreateNoodlePost() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (input: NoodleCreatePostInput) => api.post<NoodlePost>("/noodle/posts", input),
-    onSuccess: () => qc.invalidateQueries({ queryKey: noodleKeys.bootstrap() }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: noodleKeys.bootstrap() });
+      qc.invalidateQueries({ queryKey: noodleKeys.feed() });
+    },
   });
 }
 
@@ -250,6 +279,7 @@ export function useUpdateNoodlePost() {
         current ? { ...current, posts: current.posts.map((item) => (item.id === post.id ? post : item)) } : current,
       );
       qc.invalidateQueries({ queryKey: noodleKeys.bootstrap() });
+      qc.invalidateQueries({ queryKey: noodleKeys.feed() });
     },
   });
 }
@@ -270,6 +300,7 @@ export function useDeleteNoodlePost() {
           : current,
       );
       qc.invalidateQueries({ queryKey: noodleKeys.bootstrap() });
+      qc.invalidateQueries({ queryKey: noodleKeys.feed() });
     },
   });
 }
