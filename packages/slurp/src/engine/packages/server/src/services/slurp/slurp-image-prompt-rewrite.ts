@@ -33,6 +33,7 @@ function parseRecord(value: unknown): Record<string, unknown> {
 export async function rewriteNoodleImagePrompt(input: {
   db: DB;
   prompt: string;
+  interpretationInstruction?: string;
   instructions?: string;
   characterContext?: string;
   styleGuidance?: string;
@@ -46,11 +47,9 @@ export async function rewriteNoodleImagePrompt(input: {
 
   try {
     const connections = createConnectionsStorage(input.db);
-    const interpretationInstruction = await loadPrompt(
-      createPromptOverridesStorage(input.db),
-      NOODLE_IMAGE_INTERPRET,
-      {},
-    );
+    const interpretationInstruction =
+      input.interpretationInstruction?.trim() ||
+      (await loadPrompt(createPromptOverridesStorage(input.db), NOODLE_IMAGE_INTERPRET, {}));
     const textConnection = (await connections.getDefaultForAgents()) ?? (await connections.getFallbackForAgents());
     if (!textConnection) return null;
 

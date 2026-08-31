@@ -59,6 +59,8 @@ const DEFAULT_SLURP_GENERATION_GUIDANCE =
   "All Slurp creators and viewers are adults (18+). This is an adult creator page: flirty, suggestive, teasing, and sensual posts are common, and explicit posts appear regularly when they suit the creator — but they are not required and need not be the majority. Tease the locked posts and answer flirty comments in kind. Keep each creator's personality intact: a shy creator flirts shyly, a blunt one bluntly, a funny one filthily. Ordinary posts — updates, humor, behind the scenes, project news — matter just as much and keep both the page and the character human. Keep low mood or conflict uncommon and character-specific, and do not let recent posts set the default mood.";
 const DEFAULT_SLURP_IMAGE_GENERATION_PROMPT =
   "Create a polished social-media image for an adult Creator post. Match the creator's identity, personality, body, clothing, and established visual details. Follow the post's mood and subject. Describe the pose, expression, setting, lighting, camera angle, composition, and visible details clearly. Flirty, suggestive, sensual, or explicit imagery is allowed when it fits the post and creator, but do not force sexual content into ordinary updates. Keep the image coherent, intentional, and suitable for a public or locked Creator feed.";
+const DEFAULT_SLURP_IMAGE_PROMPT_INTERPRETATION =
+  "Edit this image prompt into a provider-ready image prompt. Preserve the original subject, action, setting, composition, and visual style. Preserve any explicit style in the original prompt, character context, image instructions, or style guidance. Do not add realistic, photorealistic, photographic, camera, lens, or natural-lighting language unless the supplied context clearly requests that style. Do not convert an anime, cartoon, game, manga, comic, illustration, painterly, fantasy, or stylized character into a realistic image. When no style is specified, keep the prompt style-neutral. Do not invent an art style. Treat image instructions as guidance, not text to copy into the result. Return only the provider-ready image prompt.";
 
 function errorMessage(error: unknown) {
   return error instanceof Error ? error.message : "Could not update settings.";
@@ -136,6 +138,8 @@ export function SlurpSettings({
   const [generationGuidanceEditorOpen, setGenerationGuidanceEditorOpen] = useState(false);
   const [imagePromptDraft, setImagePromptDraft] = useState("");
   const [imagePromptEditorOpen, setImagePromptEditorOpen] = useState(false);
+  const [imagePromptInterpretationDraft, setImagePromptInterpretationDraft] = useState("");
+  const [imagePromptInterpretationEditorOpen, setImagePromptInterpretationEditorOpen] = useState(false);
   const [refreshModalOpen, setRefreshModalOpen] = useState(false);
   const [refreshAccountIds, setRefreshAccountIds] = useState<Set<string>>(new Set());
   const [refreshAccess, setRefreshAccess] = useState<"public" | "locked">("locked");
@@ -144,8 +148,9 @@ export function SlurpSettings({
     if (settings) {
       if (!generationGuidanceEditorOpen) setGenerationGuidanceDraft(settings.generationGuidance);
       if (!imagePromptEditorOpen) setImagePromptDraft(settings.imageGenerationPrompt);
+      if (!imagePromptInterpretationEditorOpen) setImagePromptInterpretationDraft(settings.imagePromptInterpretation);
     }
-  }, [generationGuidanceEditorOpen, imagePromptEditorOpen, settings]);
+  }, [generationGuidanceEditorOpen, imagePromptEditorOpen, imagePromptInterpretationEditorOpen, settings]);
   const section = navigation.section ?? "general";
   const save = async (patch: Partial<SlurpSettings>) => {
     try {
@@ -453,6 +458,18 @@ export function SlurpSettings({
                   onChange={(value) => update("autoPostingImagesEnabled", value)}
                 />
               </div>
+              {settings.enableImageInterpretation && (
+                <PromptCard
+                  title={t("ui.slurp.settings.images.interpretationInstructions")}
+                  value={settings.imagePromptInterpretation}
+                  isDefault={settings.imagePromptInterpretation === DEFAULT_SLURP_IMAGE_PROMPT_INTERPRETATION}
+                  onEdit={() => {
+                    setImagePromptInterpretationDraft(settings.imagePromptInterpretation);
+                    setImagePromptInterpretationEditorOpen(true);
+                  }}
+                  onRestore={() => void save({ imagePromptInterpretation: DEFAULT_SLURP_IMAGE_PROMPT_INTERPRETATION })}
+                />
+              )}
               <PromptCard
                 title={t("ui.slurp.settings.images.instructions")}
                 value={settings.imageGenerationPrompt}
@@ -1075,6 +1092,23 @@ export function SlurpSettings({
           if (await saveGenerationGuidance()) setGenerationGuidanceEditorOpen(false);
         }}
         onRestore={() => setGenerationGuidanceDraft(DEFAULT_SLURP_GENERATION_GUIDANCE)}
+        pending={updateSettings.isPending}
+      />
+      <PromptEditor
+        open={imagePromptInterpretationEditorOpen}
+        title={t("ui.slurp.settings.images.interpretationInstructions")}
+        value={imagePromptInterpretationDraft}
+        onChange={setImagePromptInterpretationDraft}
+        onClose={() => {
+          setImagePromptInterpretationDraft(settings.imagePromptInterpretation);
+          setImagePromptInterpretationEditorOpen(false);
+        }}
+        onSave={async () => {
+          if (await save({ imagePromptInterpretation: imagePromptInterpretationDraft })) {
+            setImagePromptInterpretationEditorOpen(false);
+          }
+        }}
+        onRestore={() => setImagePromptInterpretationDraft(DEFAULT_SLURP_IMAGE_PROMPT_INTERPRETATION)}
         pending={updateSettings.isPending}
       />
       <PromptEditor
