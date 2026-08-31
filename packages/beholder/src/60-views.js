@@ -536,6 +536,21 @@ BH.views = {
       );
     }
 
+    // Prose last: it is the check that explains the others when they all look fine and
+    // the doll is still empty.
+    const prose = await BH.prose.assess(chatId, BH.dock.state);
+    if (prose) {
+      rows.push(
+        this.checkRow(
+          "warn",
+          "Prose",
+          `${BH.escapeHtml(prose.copy)}${prose.aside ? ` <small style="opacity:.75">${BH.escapeHtml(prose.aside)}</small>` : ""}`,
+        ),
+      );
+    } else {
+      rows.push(this.checkRow("ok", "Prose", "Nothing about these turns looks outside what Beholder reads."));
+    }
+
     const characters = snapshot?.state?.characters ?? [];
     rows.push(
       characters.length
@@ -796,6 +811,22 @@ BH.views = {
       `
       <p class="bh-view-lead">Beholder reads each turn and keeps what the prose actually says about bodies:
       what is worn per slot, what is held, wounds, bare and missing parts, and species.</p>
+
+      <div class="bh-editor-group-label">what it reads well</div>
+      <p class="bh-view-note">Beholder anchors on <b>one focal character per passage</b>. Give it a clear point of
+      view — first person, or third-person limited — and it does its job. It was measured on five kinds of
+      roleplay writing and works across all of them: chat roleplay, prose fanfic, web serial, interactive
+      fiction, and forum play-by-post.</p>
+
+      <div class="bh-editor-group-label">what it does not</div>
+      <p class="bh-view-note">Scenes that narrate <b>several characters at once</b> with no focal point, and
+      anything written as a <b>script</b>, are outside what it handles. Not a bug, and not a queue item — it is
+      what a model this small can do. It is deliberately tiny so it can run free, offline and private.</p>
+      <p class="bh-view-note">If that is how you write, a large general model reads this kind of prose better.
+      You can point the agent at one from the Prompt view, though that pairing is not supported and you would
+      be trading away the local, private part.</p>
+      <p class="bh-view-note">Doctor will tell you when it sees prose it is likely to struggle with, rather
+      than leaving you to guess from an empty panel.</p>
 
       <div class="bh-editor-group-label">reading the doll</div>
       <ul class="bh-help-list">

@@ -19,13 +19,16 @@ BH.backfill = {
 
   /** The assistant messages in this chat, oldest first. */
   async messages(chatId) {
-    const res = await fetch(`/api/chats/${encodeURIComponent(chatId)}`, {
+    // Messages have their own route; the chat record does not include them. Reading
+    // them off the chat returned an empty list every time, so a build always reported
+    // "nothing to build from" no matter how long the chat was.
+    const res = await fetch(`/api/chats/${encodeURIComponent(chatId)}/messages`, {
       credentials: "same-origin",
       headers: { Accept: "application/json" },
     });
-    if (!res.ok) throw new Error(`chat ${res.status}`);
-    const chat = await res.json();
-    const rows = Array.isArray(chat?.messages) ? chat.messages : [];
+    if (!res.ok) throw new Error(`messages ${res.status}`);
+    const payload = await res.json();
+    const rows = Array.isArray(payload) ? payload : (payload?.messages ?? []);
     return rows.filter((row) => row && row.id && !row.isUser && row.role !== "user");
   },
 

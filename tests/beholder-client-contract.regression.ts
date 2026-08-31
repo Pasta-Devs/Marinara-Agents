@@ -626,3 +626,62 @@ console.log("beholder client contract: reference-parity chrome OK");
 }
 
 console.log("beholder client contract: mobile reachability + roster OK");
+
+// ── The prose check ──────────────────────────────────────────────────────────
+// Beholder anchors on one focal character per passage; scripts and scenes that narrate
+// several people at once are outside what it does. Telling someone that is better than
+// leaving them with an empty panel — but only if the detector is right, so this pins
+// the two claims the code makes.
+//
+// Fixtures are written here rather than lifted from the evaluation corpus: that corpus
+// is private, and a public test is exactly the wrong place for it.
+const proseSource = readFileSync(join(srcDir, "72-prose.js"), "utf8");
+const loadProse = new Function(`const BH = {}; ${proseSource}; return BH.prose;`) as () => {
+  isScript(text: string): boolean;
+  isSubstantial(text: string): boolean;
+};
+const prose = loadProse();
+
+{
+  const scripts = [
+    "INT. BEDROOM - NIGHT\nA radio plays. She crosses to the window and pulls the curtain back.",
+    "The camera holds on the doorway.\nCUT TO: the hallway, empty, the coat still on its hook.",
+    "MARGOT\nYou said you'd be here at six.\n\nDANIEL\n(quietly)\nI said I'd try.",
+  ];
+  for (const [index, text] of scripts.entries()) {
+    assert.ok(prose.isScript(text), `script fixture ${index} must be recognised as a script`);
+  }
+
+  // Ordinary roleplay, including the shapes that could trip a naive detector: a single
+  // shouted line, in-character caps, and asterisked action.
+  const notScripts = [
+    "Maggie shrugged the cloak off her shoulders and hung it by the door. The cut on her forearm had stopped bleeding, though the sleeve was ruined.",
+    'She rounded on him. "STOP!"\nThe word cracked across the yard and he froze with the lantern still raised.',
+    "*breathes calmly* I'm fine. Really.",
+    "Caelvir sat at one end of the long table. The distance between them was deliberate, and he let it sit there while the servants poured.",
+    "OOC: sorry for the delay!\nShe steps through the gate, boots loud on the wet stone.",
+  ];
+  for (const [index, text] of notScripts.entries()) {
+    assert.ok(!prose.isScript(text), `roleplay fixture ${index} must not be flagged as a script`);
+  }
+
+  // Substantiality gates the low-yield warning: a one-line turn producing nothing is
+  // not evidence of anything.
+  assert.equal(prose.isSubstantial("She nods."), false, "a short turn is not substantial");
+  assert.equal(prose.isSubstantial(notScripts[0].repeat(3)), true, "a full paragraph is");
+}
+
+{
+  // The code must not claim to detect omniscient narration. Every shape-based attempt
+  // measured at chance against the register corpus — about one ordinary roleplay
+  // passage in five false-flagged for the same catch rate — so the honest signal is
+  // low yield, which reports what happened instead of guessing why.
+  assert.ok(
+    !/omniscient/i.test(proseSource.replace(/\/\/[^\n]*|\/\*[\s\S]*?\*\//g, "")),
+    "the prose check must not classify narration as omniscient outside its comments",
+  );
+  assert.match(proseSource, /low-yield/u, "it reports low yield instead");
+  assert.match(proseSource, /not supported/u, "and names the SOTA option as unsupported");
+}
+
+console.log("beholder client contract: prose check OK");
