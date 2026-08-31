@@ -107,7 +107,9 @@ BH.notebox = {
       if (ok) return;
       input.disabled = true;
       button.disabled = true;
-      input.value = "";
+      // Whatever was typed while the probe was in flight stays. Clearing it threw away
+      // someone's sentence to tell them the feature is unavailable, which is a poor
+      // trade for a message.
       input.placeholder = "Needs a newer version of Marinara";
       wrap.title =
         "This box asks Beholder to read a sentence you type. The version of Marinara you are running does not support that yet.";

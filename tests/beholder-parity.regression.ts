@@ -52,6 +52,16 @@ assert.deepEqual(
   "these are now rendered — move them to status 'rendered' in beholder-reference-surface.json",
 );
 
+// An exclusion that is no longer true is worse than a missing one: it reads as a
+// considered decision while hiding real coverage, and its reason goes on satisfying the
+// length check because nobody rechecks a sentence that already passed.
+const staleExclusions = notPorted.filter(([name]) => rendered.has(name));
+assert.deepEqual(
+  staleExclusions.map(([name]) => name),
+  [],
+  "these are marked not-ported but the package renders them — re-run scripts/sync-reference-surface.mjs",
+);
+
 // Every deliberate omission carries its reason, so "not ported" can never become a
 // place to quietly park work.
 for (const [name, value] of notPorted) {

@@ -28,7 +28,10 @@ const existing = JSON.parse(readFileSync(path, "utf8"));
 const next = {};
 for (const name of classes) {
   const prior = existing.classes[name];
-  if (prior?.status === "not-ported") next[name] = prior;
+  // An exclusion only survives while it is still true. Once the package renders the
+  // class, keeping the old status would hide real coverage behind a reason nobody
+  // rechecked — and the reason, being long enough, would go on satisfying the test.
+  if (prior?.status === "not-ported" && !rendered.has(name)) next[name] = prior;
   // Whole tokens, not substrings: `bh-pick` is inside `bh-pick-slot`, so asking whether
   // the source merely contains the name reported classes nobody renders as rendered.
   else next[name] = rendered.has(name) ? { status: "rendered" } : { status: "missing" };

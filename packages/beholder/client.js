@@ -3000,10 +3000,15 @@ BH.roster = {
     // Matched without case for the same reason variantsOf is: the canonical name may
     // have been typed rather than picked from the list.
     const tracked = new Map(names.map((name) => [name.toLowerCase(), name]));
+    // Both ends folded. The canonical name was compared without case but the variant key
+    // was not, so an alias recorded as "The Guard" never matched a tracked "the guard"
+    // and the row it should have removed stayed on screen.
     const merged = new Set(
-      Object.keys(data.aliases).filter((variant) => tracked.has(String(data.aliases[variant]).toLowerCase())),
+      Object.keys(data.aliases)
+        .filter((variant) => tracked.has(String(data.aliases[variant]).toLowerCase()))
+        .map((variant) => variant.toLowerCase()),
     );
-    const remaining = names.filter((name) => !merged.has(name));
+    const remaining = names.filter((name) => !merged.has(name.toLowerCase()));
     const ordered = [
       ...data.order.filter((name) => remaining.includes(name)),
       ...remaining.filter((name) => !data.order.includes(name)),
@@ -5273,7 +5278,9 @@ BH.notebox = {
       if (ok) return;
       input.disabled = true;
       button.disabled = true;
-      input.value = "";
+      // Whatever was typed while the probe was in flight stays. Clearing it threw away
+      // someone's sentence to tell them the feature is unavailable, which is a poor
+      // trade for a message.
       input.placeholder = "Needs a newer version of Marinara";
       wrap.title =
         "This box asks Beholder to read a sentence you type. The version of Marinara you are running does not support that yet.";
@@ -5509,7 +5516,9 @@ BH.badges = {
         headers: { Accept: "application/json" },
         cache: "no-store",
       });
-      if (!res.ok) return new Map();
+      // Distinguished from "no runs": a transient failure must not be read as confirmed
+      // absence, or a blip wipes every badge on screen.
+      if (!res.ok) return null;
       const runs = await res.json();
       const byMessage = new Map();
       // Newest first, so the first one seen for a message is the one that counts.
@@ -5519,7 +5528,7 @@ BH.badges = {
       }
       return byMessage;
     } catch {
-      return new Map();
+      return null;
     }
   },
 
@@ -5575,6 +5584,9 @@ BH.badges = {
   /** Put a row under every message that has a run, and leave everything else alone. */
   async refresh(chatId = BH.dock.chatId) {
     const byMessage = await this.load(chatId);
+    // null means the read failed; leave whatever is on screen alone rather than treating
+    // a blip as proof this chat has nothing.
+    if (!byMessage) return 0;
     if (!byMessage.size) {
       // Cleared, not merely skipped. Host message nodes survive a chat switch, so
       // returning early left the previous chat's badges sitting under this chat's

@@ -100,10 +100,15 @@ BH.roster = {
     // Matched without case for the same reason variantsOf is: the canonical name may
     // have been typed rather than picked from the list.
     const tracked = new Map(names.map((name) => [name.toLowerCase(), name]));
+    // Both ends folded. The canonical name was compared without case but the variant key
+    // was not, so an alias recorded as "The Guard" never matched a tracked "the guard"
+    // and the row it should have removed stayed on screen.
     const merged = new Set(
-      Object.keys(data.aliases).filter((variant) => tracked.has(String(data.aliases[variant]).toLowerCase())),
+      Object.keys(data.aliases)
+        .filter((variant) => tracked.has(String(data.aliases[variant]).toLowerCase()))
+        .map((variant) => variant.toLowerCase()),
     );
-    const remaining = names.filter((name) => !merged.has(name));
+    const remaining = names.filter((name) => !merged.has(name.toLowerCase()));
     const ordered = [
       ...data.order.filter((name) => remaining.includes(name)),
       ...remaining.filter((name) => !data.order.includes(name)),

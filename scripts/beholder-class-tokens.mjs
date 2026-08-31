@@ -51,11 +51,16 @@ export function readSource(dir, extensions = [".js"]) {
  * ordinary code as missing. Anything outside these contexts — a CSS custom property, a
  * comment, a stray string — is not a class and is not collected.
  */
+// Only contexts that PUT a class on an element. `classList.remove`, `classList.contains`
+// and every selector are lookups: they name a class without rendering it, and counting
+// them meant a class the package only ever removes or searches for — `bh-detached` and
+// `bh-dock-open` among them — was reported as rendered. That is the same false comfort
+// as substring matching, arriving by a different route.
 const CLASS_CONTEXTS = [
   /\bclassName\s*(?:=|\+=|:)\s*["'`]([^"'`]*)["'`]/g,
-  /\bclassList\s*\.\s*(?:add|remove|toggle|contains|replace)\s*\(([^)]*)\)/g,
-  // Selectors, which name the same classes the package renders.
-  /\b(?:querySelector|querySelectorAll|closest|matches)\s*\(\s*["'`]([^"'`]*)["'`]/g,
+  /\bclassList\s*\.\s*(?:add|toggle)\s*\(([^)]*)\)/g,
+  // replace(old, new) renders only its second argument.
+  /\bclassList\s*\.\s*replace\s*\([^,]*,\s*["'`]([^"'`]*)["'`]/g,
 ];
 
 /** Finds `class=` and returns each attribute's raw value. */

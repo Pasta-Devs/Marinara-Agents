@@ -38,7 +38,9 @@ BH.badges = {
         headers: { Accept: "application/json" },
         cache: "no-store",
       });
-      if (!res.ok) return new Map();
+      // Distinguished from "no runs": a transient failure must not be read as confirmed
+      // absence, or a blip wipes every badge on screen.
+      if (!res.ok) return null;
       const runs = await res.json();
       const byMessage = new Map();
       // Newest first, so the first one seen for a message is the one that counts.
@@ -48,7 +50,7 @@ BH.badges = {
       }
       return byMessage;
     } catch {
-      return new Map();
+      return null;
     }
   },
 
@@ -104,6 +106,9 @@ BH.badges = {
   /** Put a row under every message that has a run, and leave everything else alone. */
   async refresh(chatId = BH.dock.chatId) {
     const byMessage = await this.load(chatId);
+    // null means the read failed; leave whatever is on screen alone rather than treating
+    // a blip as proof this chat has nothing.
+    if (!byMessage) return 0;
     if (!byMessage.size) {
       // Cleared, not merely skipped. Host message nodes survive a chat switch, so
       // returning early left the previous chat's badges sitting under this chat's
