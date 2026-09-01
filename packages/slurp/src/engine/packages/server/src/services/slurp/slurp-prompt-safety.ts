@@ -1,5 +1,3 @@
-import type { NoodlerSourceSnapshot } from "@marinara-engine/shared";
-
 function promptRecord(value: unknown): Record<string, unknown> {
   if (!value) return {};
   if (typeof value === "string") {
@@ -41,29 +39,6 @@ export function characterContextFromRow(row: { id: string; data: unknown; avatar
   return lines.join("\n");
 }
 
-const REVIEWED_HINTED_THEME_TOKENS = [
-  "adventurous",
-  "artistic",
-  "bookish",
-  "calm",
-  "cheerful",
-  "creative",
-  "curious",
-  "friendly",
-  "gentle",
-  "inventive",
-  "kind",
-  "musical",
-  "outgoing",
-  "playful",
-  "reserved",
-  "scientific",
-  "sporty",
-  "technical",
-  "thoughtful",
-  "witty",
-] as const;
-
 const REVIEWED_PHYSICAL_FACT_TOKENS = [
   "adult",
   "androgynous",
@@ -86,22 +61,21 @@ const REVIEWED_PHYSICAL_FACT_TOKENS = [
   "wings",
 ] as const;
 
-/** A hinted identity receives only reviewed, non-identifying theme tokens. */
-export function reviewedNoodlerTemperamentThemes(value: string) {
-  const personalityWords = new Set(value.toLocaleLowerCase().match(/[a-z]+/gu) ?? []);
-  return REVIEWED_HINTED_THEME_TOKENS.filter((token) => personalityWords.has(token));
-}
-
-export function hintedNoodlerSourceBrief(snapshot: NoodlerSourceSnapshot | null) {
-  if (!snapshot) return "General temperament and creative interests from the source profile.";
-  const themes = reviewedNoodlerTemperamentThemes(snapshot.personality);
-  return themes.length > 0
-    ? `Approved source themes: ${themes.join(", ")}.`
-    : "General temperament and creative interests from the source profile.";
-}
-
-/** Hidden identities receive only reviewed physical tokens, never raw profile prose. */
+/**
+ * Hidden identities receive only reviewed physical tokens, never raw profile prose.
+ *
+ * A multi-word token matches across intervening adjectives, so "long silver hair" still reports
+ * "long hair" rather than nothing.
+ * ponytail: word-window matching only, no synonyms — "lean" still misses "slender". Add a synonym
+ * table here if reviewers find the vocabulary too literal in practice.
+ */
 export function reviewedNoodlerPhysicalFacts(value: string) {
   const normalized = value.toLocaleLowerCase();
-  return REVIEWED_PHYSICAL_FACT_TOKENS.filter((token) => normalized.includes(token));
+  return REVIEWED_PHYSICAL_FACT_TOKENS.filter((token) => {
+    const words = token.split(" ");
+    if (words.length === 1) return normalized.includes(token);
+    // The token list is fixed lowercase prose, so no escaping is needed.
+    const pattern = words.join("(?:\\s+[\\p{L}-]+){0,2}\\s+");
+    return new RegExp(`\\b${pattern}\\b`, "u").test(normalized);
+  });
 }

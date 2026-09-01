@@ -2,7 +2,6 @@ import {
   noodleStageProfileDraftResponseSchema,
   type APIProvider,
   type NoodleIdentityDisclosure,
-  type NoodlerSourceSnapshot,
   type NoodleStageProfileDraftRequest,
   type NoodleStageProfileInput,
 } from "@marinara-engine/shared";
@@ -28,10 +27,12 @@ import {
   stageProfileContainsPublicIdentity,
 } from "./slurp-generation.service.js";
 import { resolveNoodlerSourceSnapshot } from "./slurp-source-resolve.js";
-import { hintedNoodlerSourceBrief, reviewedNoodlerTemperamentThemes } from "./slurp-prompt-safety.js";
 import { normalizeNoodlerStageProfileDraft } from "./slurp-stage-profile-normalize.js";
 import { parseRecord } from "./slurp-public-support.js";
 import { createNoodlerSourceRevisionToken } from "./slurp-source-revision.js";
+
+/** Used only when a source card carries no usable prose, so the model still gets a starting point. */
+const DERIVED_PERSONA_FALLBACK_BRIEF = "General temperament and creative interests from the source profile.";
 
 type GenerationConnection = NonNullable<Awaited<ReturnType<ReturnType<typeof createConnectionsStorage>["getWithKey"]>>>;
 
@@ -48,16 +49,19 @@ export function noodlerHintedSourceText(data: unknown): string {
     .join("\n");
 }
 
-/** Secret drafts keep broad temperament and interests, but no identifying physical or public-life details. */
+/**
+ * Secret drafts derive a new person rather than concealing the source, so they inherit the
+ * voice-bearing prose that makes the persona specific. Name and appearance are omitted because the
+ * derived persona invents its own, and the canonical story beats are left out because this mode
+ * must not carry them over. This mirrors the hinted seed minus appearance.
+ */
 export function noodlerSecretSourceText(data: unknown): string {
   const source = parseRecord(data);
-  const themes = reviewedNoodlerTemperamentThemes(typeof source.personality === "string" ? source.personality : "");
   return [
-    themes.length > 0
-      ? `Approved source themes: ${themes.join(", ")}.`
-      : "General temperament and creative interests from the source profile.",
+    `Description: ${typeof source.description === "string" ? source.description : ""}`,
+    `Personality: ${typeof source.personality === "string" ? source.personality : ""}`,
   ]
-    .filter(Boolean)
+    .filter((line) => line.split(": ").slice(1).join(": ").trim())
     .join("\n");
 }
 
@@ -81,7 +85,7 @@ function disclosureRules(mode: NoodleIdentityDisclosure, publicIdentity: { displ
     return `This is the same public creator. Use exactly ${publicIdentity.displayName} as displayName and ${publicIdentity.handle} as handle. Write a concise social profile bio that summarizes the linked source. Preserve a direct bio edit from the current draft. Do not invent a stage identity.`;
   if (mode === "hinted")
     return "Create the same person behind a different stage name and handle, as an open secret. Preserve species, body, age range, unusual anatomy, scars, missing or unusual features, clothing preferences, voice, interests, and recurring visual traits. Preserve indirect clues that regular followers may recognize. Never use the exact public name or handle, and never copy canonical biography sentences.";
-  return "Create a careful hidden identity with a different display name and handle. Preserve only broad temperament, interests, voice, and creative style. Do not reveal or preserve the face, exact body details, species markers, scars, unusual anatomy, clothing markers, public name, handle, biography, occupation, relationships, locations, audience, signature phrases, or distinctive public-life clues.";
+  return "Derive a separate person with their own display name and handle. Inherit temperament, voice, humour, and creative style in full so the persona is distinctive. Invent their appearance, body, occupation, history, relationships, and daily life. Do not reveal or preserve the face, exact body details, species markers, scars, unusual anatomy, clothing markers, public name, handle, biography, occupation, relationships, locations, audience, signature phrases, or distinctive public-life clues.";
 }
 
 export function buildNoodlerStageProfileDraftMessages(input: {
@@ -90,7 +94,6 @@ export function buildNoodlerStageProfileDraftMessages(input: {
   source: {
     data: string | ({ name?: unknown } & Record<string, unknown>);
   } | null;
-  sourceSnapshot: NoodlerSourceSnapshot | null;
 }): ChatMessage[] {
   const identity = buildNoodlerPublicIdentity(input.publicAccount, input.source);
   const protectedDraft = input.request.currentDraft
@@ -110,17 +113,19 @@ export function buildNoodlerStageProfileDraftMessages(input: {
   const rawSourceContext =
     input.request.disclosureMode === "secret"
       ? [
-          "# Confidential appearance and temperament brief",
-          "Preserve only broad temperament, interests, voice, and creative style.",
-          "Do not reveal or infer face, exact body details, species markers, scars, unusual anatomy, clothing markers, canonical biography, occupation, relationships, locations, audience, signature phrases, or public-life details.",
-          noodlerSecretSourceText(input.source?.data) || hintedNoodlerSourceBrief(input.sourceSnapshot),
+          "# Source character for a derived persona",
+          "Author a NEW person inspired by the character below. They are not the same person and share no public identity.",
+          "Inherit temperament, emotional register, humour, and conversational reflexes in full. This is what makes the derived persona a specific someone rather than a generic creator.",
+          "Invent a fresh name, handle, appearance, body, occupation, history, relationships, location, and daily life. Do not carry over the character's own.",
+          "Never reveal or infer the source: no canonical biography or events, species markers, unusual anatomy, clothing markers, signature phrases, relationships, locations, audience, or public-life details.",
+          noodlerSecretSourceText(input.source?.data) || DERIVED_PERSONA_FALLBACK_BRIEF,
         ].join("\n")
       : hintedBrief
         ? [
             "# Open-secret inspiration brief",
             "The stage identity is the same person as the source. Carry over look, vibe, interests, and daily life so a regular follower can recognize them.",
             "Never use the source name or handle, and never copy four or more consecutive words from the text below. Rewrite everything in the stage voice.",
-            noodlerHintedSourceText(input.source?.data) || hintedNoodlerSourceBrief(input.sourceSnapshot),
+            noodlerHintedSourceText(input.source?.data) || DERIVED_PERSONA_FALLBACK_BRIEF,
           ].join("\n")
         : [
             "# Source character or persona",
@@ -216,7 +221,6 @@ export async function generateNoodlerStageProfileDraft(
     request: input.request,
     publicAccount,
     source,
-    sourceSnapshot,
   });
   const debugMode = isDebugAgentsEnabled();
   logDebugOverride(

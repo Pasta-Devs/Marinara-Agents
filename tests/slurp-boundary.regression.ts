@@ -118,13 +118,15 @@ assert.match(
 );
 assert.match(
   stageProfileDraft,
-  /Create a careful hidden identity[\s\S]*Preserve only broad temperament[\s\S]*Do not reveal or preserve the face/u,
-  "secret Slurp profile creation must preserve broad traits without identifying appearance",
+  /Derive a separate person[\s\S]*Inherit temperament, voice, humour, and creative style in full[\s\S]*Do not reveal or preserve the face/u,
+  "secret Slurp profile creation must derive a new person while withholding identifying appearance",
 );
+// Derivation seeds from the voice-bearing prose. Reducing it to a fixed vocabulary made every
+// secret creator converge on one generic persona.
 assert.match(
   stageProfileDraft,
-  /function noodlerSecretSourceText[\s\S]*reviewedNoodlerTemperamentThemes/u,
-  "secret Slurp profile prompts must use reviewed temperament themes",
+  /function noodlerSecretSourceText[\s\S]*Description: \$\{[\s\S]*Personality: \$\{/u,
+  "secret Slurp profile prompts must seed derivation from the source description and personality",
 );
 assert.doesNotMatch(
   stageProfileDraft.slice(

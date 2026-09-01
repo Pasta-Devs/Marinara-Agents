@@ -4,6 +4,14 @@ function stripCodeFence(value: string): string {
   return match?.[1]?.trim() || trimmed;
 }
 
+// Private context leaks as a copied prose block, never as a stray phrase. A short entry — an
+// "Image generation instructions" field reading `anime style` — appears verbatim in any prompt that
+// honours it, so matching those rejected every correctly rewritten prompt and sent the styleless
+// draft instead.
+// ponytail: length floor, not a structural check. If a leak ever arrives as a short private value,
+// give the callers a labelled block and extend `hasInternalMarker` rather than lowering this.
+const MIN_PRIVATE_CONTEXT_BLOCK_LENGTH = 40;
+
 /** Select only the visual prompt that can be sent to an image provider. */
 export function selectNoodleImageProviderPrompt(input: {
   rewrittenPrompt: string | null | undefined;
@@ -20,7 +28,11 @@ export function selectNoodleImageProviderPrompt(input: {
     );
   const copiesPrivateContext = input.privateContext?.some((value) => {
     const normalizedValue = value?.trim().toLocaleLowerCase().replace(/\s+/gu, " ");
-    return normalizedValue && normalizedValue.length > 1 && normalizedPrompt.includes(normalizedValue);
+    return (
+      normalizedValue &&
+      normalizedValue.length >= MIN_PRIVATE_CONTEXT_BLOCK_LENGTH &&
+      normalizedPrompt.includes(normalizedValue)
+    );
   });
 
   return hasInternalMarker || copiesPrivateContext ? input.rawPrompt : rewrittenPrompt;

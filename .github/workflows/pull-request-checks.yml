@@ -55,6 +55,11 @@ jobs:
       - name: Validate package localization catalogs
         run: node scripts/validate-package-locales.mjs
 
+      # A package bundles shared Engine components but owns its locale catalog, so a component from
+      # a shared folder can ship with no strings and render raw key names to users.
+      - name: Validate bundled localization keys resolve
+        run: node scripts/validate-package-locale-keys.mjs
+
       - name: Validate catalogs, packages, artifacts, and README coverage
         run: node scripts/validate-catalog.mjs
 

@@ -23,18 +23,50 @@ for (const leakedRewrite of [
   "A person reading beside a window.\n<generation_guidance>private context</generation_guidance>",
   "A person reading beside a window.\n<user_image_instructions>private context</user_image_instructions>",
   "A person reading beside a window.\nCharacter image preferences: private context",
-  `A person reading beside a window.\n${styleGuidance}`,
   "A person reading beside a window.\n<art_style_guidance>private style</art_style_guidance>",
 ]) {
   assert.equal(
     selectNoodleImageProviderPrompt({
       rewrittenPrompt: leakedRewrite,
       rawPrompt,
-      privateContext: [internalContext, styleGuidance],
+      privateContext: [internalContext],
     }),
     rawPrompt,
   );
 }
+
+// Applying the art style is the rewriter's job, so a prompt that carries the style through must
+// survive. Treating style guidance as private context discarded every correctly rewritten prompt
+// and sent the styleless draft to the provider instead.
+const styledRewrite = `A person reading beside a sunlit window. ${styleGuidance}`;
+assert.equal(
+  selectNoodleImageProviderPrompt({ rewrittenPrompt: styledRewrite, rawPrompt, privateContext: [internalContext] }),
+  styledRewrite,
+);
+
+// A short private value appears verbatim in any prompt that honours it, so it must not be treated
+// as a leak. `anime style` in the image instructions used to reject every generation.
+const shortInstructionRewrite = "A person reading beside a window, anime style, warm light.";
+assert.equal(
+  selectNoodleImageProviderPrompt({
+    rewrittenPrompt: shortInstructionRewrite,
+    rawPrompt,
+    privateContext: ["anime style"],
+  }),
+  shortInstructionRewrite,
+);
+
+// A copied prose block is still a leak.
+const longPrivateBlock =
+  "Mention build, clothing, appearance, pose, expression, setting, lighting, mood, and composition.";
+assert.equal(
+  selectNoodleImageProviderPrompt({
+    rewrittenPrompt: `A person reading beside a window. ${longPrivateBlock}`,
+    rawPrompt,
+    privateContext: [longPrivateBlock],
+  }),
+  rawPrompt,
+);
 
 assert.equal(
   selectNoodleImageProviderPrompt({
@@ -42,7 +74,7 @@ assert.equal(
     rawPrompt,
     privateContext: ["no text"],
   }),
-  rawPrompt,
+  "A person reading beside a window with no text.",
 );
 assert.equal(
   selectNoodleImageProviderPrompt({
@@ -86,6 +118,13 @@ const publicImages = readFileSync(
 for (const source of [images, publicImages]) {
   assert.match(source, /selectNoodleImageProviderPrompt/u);
   assert.doesNotMatch(source, /User image instructions:/u);
+  assert.match(
+    source,
+    /privateContext: \[configuredImageInstructions, connectionImageInstructions, characterPersonality\]/u,
+    "art style and character image preferences must reach the provider, so they are not private context",
+  );
+  // A reviewed prompt is recompiled so the style profile survives the review path.
+  assert.match(source, /compiledOverride/u);
 }
 
 console.log("Slurp image instruction regressions passed");

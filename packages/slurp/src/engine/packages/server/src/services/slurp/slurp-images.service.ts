@@ -184,8 +184,20 @@ export async function generateNoodlerPostImage(input: {
     imageDefaults,
   });
   const styleGuidance = resolveImageStyleGuidanceText(imageSettings.styleProfiles, compiledPrompt.profile.id);
-  const rawFinalPrompt = redactIdentity(input.promptOverride?.prompt.trim() || compiledPrompt.prompt);
-  const rawProviderPrompt = redactIdentity(input.promptOverride?.prompt.trim() || input.draftPrompt.trim());
+  // A reviewed prompt replaces the generated wording, but the style profile is composition rather
+  // than wording, so recompile the approved text instead of sending it bare. The compiler omits
+  // style values the prompt already carries, so an approved prompt is never double-styled.
+  const overridePrompt = input.promptOverride?.prompt.trim();
+  const compiledOverride = overridePrompt
+    ? compileImagePrompt({
+        kind: "illustration",
+        prompt: overridePrompt,
+        styleProfiles: imageSettings.styleProfiles,
+        imageDefaults,
+      })
+    : null;
+  const rawFinalPrompt = redactIdentity(compiledOverride?.prompt || compiledPrompt.prompt);
+  const rawProviderPrompt = redactIdentity(compiledOverride?.prompt || input.draftPrompt.trim());
   // Custom prompt templates may omit `userInstructions`, so restore configured instructions only
   // when the rendered prompt does not already contain them.
   const configuredImageInstructions = input.settings.imageGenerationPrompt.trim();
@@ -220,18 +232,16 @@ export async function generateNoodlerPostImage(input: {
     selectNoodleImageProviderPrompt({
       rewrittenPrompt,
       rawPrompt: rawProviderPrompt,
-      privateContext: [
-        configuredImageInstructions,
-        connectionImageInstructions,
-        characterPersonality,
-        characterImageInstructions,
-        styleGuidance,
-      ],
+      // Art style and the character's image habits are meant to reach the provider, so a rewrite
+      // that applies them is doing its job. Only non-visual context stays private.
+      privateContext: [configuredImageInstructions, connectionImageInstructions, characterPersonality],
     }),
   );
   const finalPrompt = input.compositionGuard ? `${finalPromptBase}\n\n${input.compositionGuard}` : finalPromptBase;
+  // A reviewer who cleared the negative prompt still gets the style profile's own negatives back,
+  // for the same reason the positive prompt is recompiled above.
   const baseNegativePrompt = input.promptOverride
-    ? redactIdentity(input.promptOverride.negativePrompt?.trim() || "") || undefined
+    ? redactIdentity(input.promptOverride.negativePrompt?.trim() || "") || compiledOverride?.negativePrompt || undefined
     : compiledPrompt.negativePrompt || undefined;
   const finalNegativePrompt =
     [baseNegativePrompt, input.negativePromptAdditions].filter(Boolean).join(", ") || undefined;
