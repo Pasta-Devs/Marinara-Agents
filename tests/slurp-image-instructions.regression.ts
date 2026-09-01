@@ -44,16 +44,27 @@ assert.equal(
   styledRewrite,
 );
 
-// A short private value appears verbatim in any prompt that honours it, so it must not be treated
-// as a leak. `anime style` in the image instructions used to reject every generation.
+// Short user guidance appears verbatim in any prompt that honours it, so it must not be treated as
+// a leak. `anime style` in the image instructions used to reject every generation.
 const shortInstructionRewrite = "A person reading beside a window, anime style, warm light.";
 assert.equal(
   selectNoodleImageProviderPrompt({
     rewrittenPrompt: shortInstructionRewrite,
     rawPrompt,
-    privateContext: ["anime style"],
+    guidanceContext: ["anime style"],
   }),
   shortInstructionRewrite,
+);
+
+// Personality never belongs in a visual prompt, so it stays matched at any length. The block-length
+// floor applies only to guidance the user wrote to steer the image.
+assert.equal(
+  selectNoodleImageProviderPrompt({
+    rewrittenPrompt: "A person reading beside a window, sardonic and guarded.",
+    rawPrompt,
+    privateContext: ["sardonic and guarded"],
+  }),
+  rawPrompt,
 );
 
 // A copied prose block is still a leak.
@@ -63,7 +74,7 @@ assert.equal(
   selectNoodleImageProviderPrompt({
     rewrittenPrompt: `A person reading beside a window. ${longPrivateBlock}`,
     rawPrompt,
-    privateContext: [longPrivateBlock],
+    guidanceContext: [longPrivateBlock],
   }),
   rawPrompt,
 );
@@ -74,7 +85,7 @@ assert.equal(
     rawPrompt,
     privateContext: ["no text"],
   }),
-  "A person reading beside a window with no text.",
+  rawPrompt,
 );
 assert.equal(
   selectNoodleImageProviderPrompt({
@@ -120,9 +131,11 @@ for (const source of [images, publicImages]) {
   assert.doesNotMatch(source, /User image instructions:/u);
   assert.match(
     source,
-    /privateContext: \[configuredImageInstructions, connectionImageInstructions, characterPersonality\]/u,
-    "art style and character image preferences must reach the provider, so they are not private context",
+    /privateContext: \[characterPersonality\],\s*guidanceContext: \[configuredImageInstructions, connectionImageInstructions\],/u,
+    "art style and image preferences must reach the provider; personality is checked at any length",
   );
+  // Both fallback paths — interpretation disabled, and a rejected rewrite — must still carry style.
+  assert.match(source, /compiledDraft/u);
   // A reviewed prompt is recompiled so the style profile survives the review path.
   assert.match(source, /compiledOverride/u);
 }

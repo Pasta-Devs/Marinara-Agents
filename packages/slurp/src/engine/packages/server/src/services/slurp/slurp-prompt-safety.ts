@@ -45,13 +45,19 @@ export function characterContextFromRow(row: { id: string; data: unknown; avatar
  * they stay out of both; body, voice, and everyday texture are inseparable from the person and stay
  * in.
  */
+/** A blank primary field must fall through to its extension rather than dropping the line. */
+function promptField(primary: unknown, fallback?: unknown): string {
+  if (typeof primary === "string" && primary.trim()) return primary;
+  return typeof fallback === "string" && fallback.trim() ? fallback : "";
+}
+
 export function noodlerConcealedSourceText(data: unknown): string {
   const source = promptRecord(data);
   const extensions = promptRecord(source.extensions);
   return [
-    `Description: ${typeof source.description === "string" ? source.description : ""}`,
-    `Personality: ${typeof source.personality === "string" ? source.personality : ""}`,
-    `Appearance: ${typeof source.appearance === "string" ? source.appearance : typeof extensions.appearance === "string" ? extensions.appearance : ""}`,
+    `Description: ${promptField(source.description)}`,
+    `Personality: ${promptField(source.personality)}`,
+    `Appearance: ${promptField(source.appearance, extensions.appearance)}`,
   ]
     .filter((line) => line.split(": ").slice(1).join(": ").trim())
     .join("\n");
@@ -62,12 +68,12 @@ export function noodlerSourceText(data: unknown): string {
   const source = promptRecord(data);
   const extensions = promptRecord(source.extensions);
   return [
-    `Name: ${typeof source.name === "string" ? source.name : ""}`,
-    `Description: ${typeof source.description === "string" ? source.description : ""}`,
-    `Personality: ${typeof source.personality === "string" ? source.personality : ""}`,
-    `Scenario: ${typeof source.scenario === "string" ? source.scenario : ""}`,
-    `Appearance: ${typeof source.appearance === "string" ? source.appearance : typeof extensions.appearance === "string" ? extensions.appearance : ""}`,
-    `Backstory: ${typeof source.backstory === "string" ? source.backstory : typeof extensions.backstory === "string" ? extensions.backstory : ""}`,
+    `Name: ${promptField(source.name)}`,
+    `Description: ${promptField(source.description)}`,
+    `Personality: ${promptField(source.personality)}`,
+    `Scenario: ${promptField(source.scenario)}`,
+    `Appearance: ${promptField(source.appearance, extensions.appearance)}`,
+    `Backstory: ${promptField(source.backstory, extensions.backstory)}`,
   ]
     .filter((line) => line.trim().split(": ").slice(1).join(": ").trim())
     .join("\n");

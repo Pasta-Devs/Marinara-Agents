@@ -2313,7 +2313,7 @@ function StageProfileForm({
                 rows={2}
                 disabled={isGenerating || isPending}
                 value={draft.stagePersonality}
-                maxLength={1000}
+                maxLength={STAGE_PERSONALITY_MAX_LENGTH}
                 onChange={(event) => onChange({ stagePersonality: event.target.value })}
                 placeholder={localizeUi("ui.noodle.stageprofileform.voiceAttitudeBoundariesAndCreatorPersona")}
                 className={`${textareaClass} !min-h-0`}
@@ -2322,9 +2322,7 @@ function StageProfileForm({
                 disabled={isGenerating || isPending}
                 onApply={(sentence) =>
                   onChange({
-                    stagePersonality: draft.stagePersonality.trim()
-                      ? `${draft.stagePersonality.trim()}\n${sentence}`
-                      : sentence,
+                    stagePersonality: appendAudienceStance(draft.stagePersonality, sentence),
                   })
                 }
               />
@@ -4278,6 +4276,8 @@ function ViewerHub({
 // Creator lands in the same middle register. These seed the stage voice, which is free text, rather
 // than adding a field: `privacy.stagePersonality` is defined in the Engine's shared schema and
 // cannot gain a sibling from this repo.
+const STAGE_PERSONALITY_MAX_LENGTH = 1000;
+
 const AUDIENCE_STANCE_PRESETS = [
   {
     labelKey: "ui.noodle.stageprofileform.stance.girlfriend",
@@ -4292,6 +4292,13 @@ const AUDIENCE_STANCE_PRESETS = [
   { labelKey: "ui.noodle.stageprofileform.stance.eager", textKey: "ui.noodle.stageprofileform.stance.eagerText" },
   { labelKey: "ui.noodle.stageprofileform.stance.shy", textKey: "ui.noodle.stageprofileform.stance.shyText" },
 ] as const;
+
+/** The stored field caps at 1000 characters, so a preset must never push the draft past it. */
+export function appendAudienceStance(current: string, sentence: string): string {
+  const trimmed = current.trim();
+  const next = trimmed ? `${trimmed}\n${sentence}` : sentence;
+  return next.length <= STAGE_PERSONALITY_MAX_LENGTH ? next : trimmed;
+}
 
 function AudienceStancePresets({ disabled, onApply }: { disabled: boolean; onApply: (sentence: string) => void }) {
   const { t: localizeUi } = useUiTranslation();

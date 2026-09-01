@@ -189,8 +189,20 @@ export async function generateNoodlerPostImage(input: {
         imageDefaults,
       })
     : null;
+  // The rewrite is skipped when interpretation is off and discarded when it leaks, and both land on
+  // this fallback. Sending the bare draft there dropped the style profile exactly like the review
+  // path did, so the draft is compiled too.
+  const draftPrompt = input.draftPrompt.trim();
+  const compiledDraft = draftPrompt
+    ? compileImagePrompt({
+        kind: "illustration",
+        prompt: draftPrompt,
+        styleProfiles: imageSettings.styleProfiles,
+        imageDefaults,
+      })
+    : null;
   const rawFinalPrompt = redactIdentity(compiledOverride?.prompt || compiledPrompt.prompt);
-  const rawProviderPrompt = redactIdentity(compiledOverride?.prompt || input.draftPrompt.trim());
+  const rawProviderPrompt = redactIdentity(compiledOverride?.prompt || compiledDraft?.prompt || draftPrompt);
   // Custom prompt templates may omit `userInstructions`, so restore configured instructions only
   // when the rendered prompt does not already contain them.
   const configuredImageInstructions = input.settings.imageGenerationPrompt.trim();
@@ -226,8 +238,10 @@ export async function generateNoodlerPostImage(input: {
       rewrittenPrompt,
       rawPrompt: rawProviderPrompt,
       // Art style and the character's image habits are meant to reach the provider, so a rewrite
-      // that applies them is doing its job. Only non-visual context stays private.
-      privateContext: [configuredImageInstructions, connectionImageInstructions, characterPersonality],
+      // that applies them is doing its job. Personality never belongs in a visual prompt at any
+      // length; the instruction fields are guidance and only leak as a copied block.
+      privateContext: [characterPersonality],
+      guidanceContext: [configuredImageInstructions, connectionImageInstructions],
     }),
   );
   // A creator hiding their identity still posts their body — that is the page. What they actually
