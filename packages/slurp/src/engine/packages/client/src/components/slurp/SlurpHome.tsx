@@ -1754,14 +1754,44 @@ export function SlurpHome({ navigation, onNavigate }: SlurpHomeProps) {
   // Creator discovery stays in the wide-screen rail. Narrow layouts omit it so the
   // timeline remains the primary surface instead of stacking sidebar content above it.
   const feedRightRail = (
-    <aside className="hidden w-[20rem] shrink-0 px-4 py-4 @min-[1280px]:block" aria-labelledby="slurp-tonight-heading">
-      <div className="sticky top-3 overflow-hidden rounded-2xl bg-[var(--slurp-surface)] shadow-[0_18px_38px_-30px_rgba(0,0,0,0.9)] ring-1 ring-inset ring-[var(--noodle-divider)]">
-        <div className="relative isolate overflow-hidden bg-[linear-gradient(145deg,var(--slurp-surface-raised),color-mix(in_srgb,var(--noodle-accent)_10%,var(--slurp-surface)))] px-4 pb-3 pt-4">
+    <aside className="hidden w-[20rem] shrink-0 px-4 py-5 @min-[1280px]:block" aria-labelledby="slurp-tonight-heading">
+      <div className="sticky top-4 space-y-6">
+        <label className="flex min-h-11 items-center gap-2 rounded-xl bg-[var(--slurp-surface)] px-3 text-sm shadow-[0_16px_34px_-28px_rgba(0,0,0,0.9)] ring-1 ring-inset ring-[var(--noodle-divider)] transition-[background-color,box-shadow] focus-within:bg-[var(--slurp-surface-raised)] focus-within:ring-2 focus-within:ring-[var(--noodle-accent)]">
+          <Search size={17} className="shrink-0 !text-[var(--noodle-accent)]" />
+          <input
+            value={feedSearch}
+            onChange={(event) => setFeedSearch(event.target.value)}
+            placeholder={localizeUi("ui.noodle.noodlerhome.searchPostsOrCreators")}
+            className="min-w-0 flex-1 border-0 bg-transparent text-sm text-[var(--foreground)] outline-none placeholder:text-[var(--muted-foreground)]"
+          />
+          {feedSearch.trim() && (
+            <button
+              type="button"
+              onClick={() => setFeedSearch("")}
+              className="flex h-8 w-8 items-center justify-center rounded-md text-[var(--noodle-accent)] hover:bg-[var(--noodle-accent)]/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--noodle-accent)]"
+              title={localizeUi("ui.noodle.noodlehome.clearSearch")}
+            >
+              <X size={13} />
+            </button>
+          )}
+        </label>
+        <div className="hidden border-t border-[var(--noodle-divider)] pt-2 @min-[1024px]:block">
+          <SubscriptionSections
+            creators={(viewerQuery.data?.creators ?? []).filter(
+              (creator) => creator.profile.id !== mainAuthorProfile?.id && !creator.subscribed,
+            )}
+            onToggleSubscription={toggleCreatorSubscription}
+            togglePending={toggleSubscription.isPending}
+            onOpenProfile={(accountId) => onNavigate({ mode: "creator", view: "profile", accountId })}
+            embedded
+          />
+        </div>
+        <section className="relative isolate overflow-hidden border-t border-[var(--noodle-divider)] px-1 pb-1 pt-5">
           <span
-            className="pointer-events-none absolute -end-8 -top-12 -z-10 h-32 w-32 rounded-full bg-[var(--noodle-accent)]/12 blur-2xl"
+            className="pointer-events-none absolute -end-8 -top-12 -z-10 h-28 w-28 rounded-full bg-[var(--noodle-accent)]/15 blur-2xl"
             aria-hidden="true"
           />
-          <div className="flex items-center gap-2 border-t border-[var(--noodle-divider)] pt-3">
+          <div className="flex items-center gap-2">
             <span
               className="h-2 w-2 rounded-full bg-[var(--slurp-warm)] shadow-[0_0_14px_var(--slurp-warm)]"
               aria-hidden="true"
@@ -1773,39 +1803,7 @@ export function SlurpHome({ navigation, onNavigate }: SlurpHomeProps) {
           <p className="mt-1 text-xs leading-5 text-[var(--muted-foreground)] text-pretty">
             {localizeUi("ui.slurp.home.tonightDetail")}
           </p>
-        </div>
-        <div className="px-3 pb-2 pt-3">
-          <label className="flex min-h-11 items-center gap-2 rounded-xl bg-[var(--slurp-canvas)] px-3 text-sm ring-1 ring-inset ring-[var(--noodle-divider)] transition-[background-color,box-shadow] focus-within:bg-[var(--slurp-surface-raised)] focus-within:ring-2 focus-within:ring-[var(--noodle-accent)]">
-            <Search size={17} className="shrink-0 !text-[var(--noodle-accent)]" />
-            <input
-              value={feedSearch}
-              onChange={(event) => setFeedSearch(event.target.value)}
-              placeholder={localizeUi("ui.noodle.noodlerhome.searchPostsOrCreators")}
-              className="min-w-0 flex-1 border-0 bg-transparent text-sm text-[var(--foreground)] outline-none placeholder:text-[var(--muted-foreground)]"
-            />
-            {feedSearch.trim() && (
-              <button
-                type="button"
-                onClick={() => setFeedSearch("")}
-                className="flex h-8 w-8 items-center justify-center rounded-md text-[var(--noodle-accent)] hover:bg-[var(--noodle-accent)]/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--noodle-accent)]"
-                title={localizeUi("ui.noodle.noodlehome.clearSearch")}
-              >
-                <X size={13} />
-              </button>
-            )}
-          </label>
-        </div>
-        <div className="hidden @min-[1024px]:block">
-          <SubscriptionSections
-            creators={(viewerQuery.data?.creators ?? []).filter(
-              (creator) => creator.profile.id !== mainAuthorProfile?.id && !creator.subscribed,
-            )}
-            onToggleSubscription={toggleCreatorSubscription}
-            togglePending={toggleSubscription.isPending}
-            onOpenProfile={(accountId) => onNavigate({ mode: "creator", view: "profile", accountId })}
-            embedded
-          />
-        </div>
+        </section>
       </div>
     </aside>
   );
@@ -3453,9 +3451,9 @@ function StageProfileView({
           managedCreator ? (
             <details
               data-slurp-creator-tools
-              className="group border-b border-[var(--noodle-divider)] bg-[linear-gradient(135deg,var(--slurp-surface-raised,var(--background)),color-mix(in_srgb,var(--noodle-accent)_12%,var(--slurp-surface-raised)))]"
+              className="group bg-[linear-gradient(110deg,var(--slurp-surface-raised,var(--background)),color-mix(in_srgb,var(--noodle-accent)_10%,var(--slurp-surface-raised)),var(--slurp-surface-raised,var(--background)))]"
             >
-              <summary className="flex min-h-16 cursor-pointer list-none items-center gap-3 px-4 text-left hover:bg-[var(--accent)]/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--noodle-accent)] [&::-webkit-details-marker]:hidden sm:px-5">
+              <summary className="flex min-h-14 cursor-pointer list-none items-center gap-3 px-4 text-left hover:bg-[var(--accent)]/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--noodle-accent)] [&::-webkit-details-marker]:hidden sm:px-5">
                 <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[var(--noodle-accent)]/12 text-[var(--noodle-accent)] ring-1 ring-inset ring-[var(--noodle-accent)]/20">
                   <Sparkles size={15} aria-hidden="true" />
                 </span>
@@ -3539,6 +3537,7 @@ function StageProfileView({
         }
         postList={cards}
         accent={profileAccent(profile.id)}
+        spotlight
       />
       <Modal
         open={artworkKind !== null}
@@ -4184,7 +4183,10 @@ function ViewerHub({
           both surfaces now carry the same phone header, and it travels with the tabs. */}
       <div
         ref={setStickyHeader}
-        className={cn("sticky top-0 z-30", HIDE_ON_SCROLL_CLASS)}
+        className={cn(
+          "sticky top-0 z-30 border-b border-[var(--noodle-divider)] bg-[color-mix(in_srgb,var(--slurp-surface,var(--background))_93%,transparent)] shadow-[0_18px_40px_-36px_rgba(0,0,0,0.95)] backdrop-blur-xl",
+          HIDE_ON_SCROLL_CLASS,
+        )}
         data-component="SlurpHome.StickyHeader"
       >
         <SlurpMobileHeader
@@ -4192,29 +4194,13 @@ function ViewerHub({
           onOpenDrawer={onOpenMobileDrawer}
           triggerRef={mobileDrawerTriggerRef}
         />
-        <div
-          className="border-b border-[var(--noodle-divider)] bg-[color-mix(in_srgb,var(--slurp-surface,var(--background))_94%,transparent)] px-3 pb-3 pt-2 shadow-[0_16px_36px_-34px_rgba(0,0,0,0.9)] backdrop-blur-xl @min-[1024px]:px-5 @min-[1024px]:pb-4 @min-[1024px]:pt-5"
-          data-slurp-home-masthead
-        >
-          <div className="hidden items-end justify-between gap-5 pb-4 @min-[1024px]:flex">
-            <p className="max-w-xl text-sm leading-5 text-[var(--muted-foreground)] text-pretty">
-              {localizeUi("ui.slurp.home.feedDetail")}
-            </p>
-            {personaAccount && (
-              <div className="flex min-w-0 shrink-0 items-center gap-2 rounded-xl bg-[var(--slurp-canvas,var(--background))] py-1.5 pe-3 ps-1.5 shadow-sm ring-1 ring-inset ring-[var(--noodle-divider)]">
-                <Avatar account={personaAccount} size="sm" />
-                <span className="max-w-36 min-w-0">
-                  <span className="block truncate text-xs font-bold">{personaAccount.displayName}</span>
-                  <span className="block truncate text-[0.68rem] text-[var(--muted-foreground)]">
-                    @{personaAccount.handle}
-                  </span>
-                </span>
-              </div>
-            )}
-          </div>
-          <div className="flex items-center gap-2">
+        <div className="px-3 pb-2 pt-2 @min-[1024px]:px-5 @min-[1024px]:pt-4" data-slurp-home-masthead>
+          <div className="flex items-center gap-3">
+            <h1 className="hidden min-w-0 flex-1 text-2xl font-black tracking-tight @min-[1024px]:block">
+              {localizeUi("ui.slurp.home.forYou")}
+            </h1>
             <div
-              className="grid min-w-0 flex-1 grid-cols-2 rounded-xl bg-[var(--slurp-canvas,var(--background))] p-1 ring-1 ring-inset ring-[var(--noodle-divider)] @min-[1024px]:max-w-sm"
+              className="grid min-w-0 flex-1 grid-cols-2 rounded-xl bg-[var(--slurp-canvas,var(--background))] p-1 ring-1 ring-inset ring-[var(--noodle-divider)] @min-[1024px]:max-w-xs"
               role="tablist"
               aria-label={localizeUi("ui.noodle.viewerhub.feedTabs")}
             >
@@ -4256,6 +4242,7 @@ function ViewerHub({
             </button>
           </div>
         </div>
+        <SlurpMomentsShelf moments={moments} newSinceAt={newSinceAt} onOpenMoment={setActiveMomentId} embedded />
       </div>
       <div className="hidden border-b border-[var(--noodle-divider)] py-3 @min-[1024px]:block @min-[1024px]:px-4 @min-[1280px]:hidden">
         <SubscriptionSections
@@ -4285,9 +4272,6 @@ function ViewerHub({
             {localizeUi("ui.slurp.home.postCount", { count: feed.length })}
           </span>
         </div>
-      )}
-      {moments.length > 0 && (
-        <SlurpMomentsShelf moments={moments} newSinceAt={newSinceAt} onOpenMoment={setActiveMomentId} embedded />
       )}
       {isLoading ? (
         <div className="flex justify-center py-16">
@@ -4493,62 +4477,78 @@ function SlurpMomentsShelf({
       className={cn(
         "overflow-hidden",
         embedded
-          ? "-mx-3 pb-3 @min-[1024px]:-mx-5"
+          ? "pb-2"
           : "mx-3 mt-3 rounded-2xl bg-[linear-gradient(145deg,var(--slurp-surface-raised),color-mix(in_srgb,var(--noodle-accent)_7%,var(--slurp-canvas)))] py-4 shadow-[0_18px_40px_-34px_rgba(0,0,0,0.9)] ring-1 ring-inset ring-[var(--noodle-divider)] sm:mx-4",
       )}
     >
-      <div className="flex items-end justify-between gap-3 px-4">
+      <div className={cn("flex items-end justify-between gap-3 px-4", embedded && "@min-[1024px]:px-5")}>
         <div>
           <h2 id="slurp-moments-heading" className="text-base font-bold tracking-tight">
             {localizeUi("ui.slurp.moments.title")}
           </h2>
-          <p className="mt-0.5 text-xs text-[var(--muted-foreground)]">{localizeUi("ui.slurp.moments.detail")}</p>
+          {!embedded && (
+            <p className="mt-0.5 text-xs text-[var(--muted-foreground)]">{localizeUi("ui.slurp.moments.detail")}</p>
+          )}
         </div>
         <span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-[var(--noodle-accent)]/10 px-2 py-1 text-[0.65rem] font-bold text-[var(--noodle-accent)] ring-1 ring-inset ring-[var(--noodle-accent)]/20">
           <Clock3 size={11} aria-hidden="true" /> 24h
         </span>
       </div>
-      <div className="mt-3 flex snap-x gap-3 overflow-x-auto px-4 pb-1 pe-12 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden @min-[1024px]:px-5">
-        {creatorMoments.map((moment) => {
-          const isNew = !Number.isNaN(seenAt) && new Date(moment.post.createdAt).getTime() > seenAt;
-          return (
-            <button
-              key={moment.creator.profile.id}
-              type="button"
-              onClick={() => onOpenMoment(moment.post.id)}
-              className="group flex min-h-24 w-[4.75rem] shrink-0 snap-start flex-col items-center rounded-xl px-1 py-1.5 text-center transition-transform active:scale-[0.96] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--noodle-accent)] motion-reduce:transition-none motion-reduce:active:scale-100"
-              aria-label={localizeUi("ui.slurp.moments.open", { name: moment.creator.profile.displayName })}
-            >
-              <span
-                className={cn(
-                  "relative rounded-full p-[3px] transition-transform group-hover:scale-105 motion-reduce:transition-none motion-reduce:group-hover:scale-100",
-                  isNew
-                    ? "bg-[linear-gradient(145deg,var(--noodle-accent),var(--slurp-warm))] shadow-[0_0_0_1px_color-mix(in_srgb,var(--noodle-accent)_25%,transparent),0_8px_24px_-12px_var(--noodle-accent)]"
-                    : "bg-[var(--noodle-divider)] opacity-80",
-                )}
+      <div
+        className={cn(
+          "flex snap-x gap-3 overflow-x-auto px-4 pb-1 pe-12 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden @min-[1024px]:px-5",
+          embedded ? "mt-1.5" : "mt-3",
+        )}
+      >
+        {creatorMoments.length === 0 ? (
+          <div className="flex min-h-20 items-center gap-3 text-[var(--muted-foreground)]" role="status">
+            <span className="flex h-14 w-14 shrink-0 items-center justify-center rounded-full border border-dashed border-[var(--noodle-accent)]/35 bg-[var(--noodle-accent)]/[0.04]">
+              <Clock3 size={18} aria-hidden="true" />
+            </span>
+            <span className="text-xs leading-5 text-pretty">{localizeUi("ui.slurp.moments.empty")}</span>
+          </div>
+        ) : (
+          creatorMoments.map((moment) => {
+            const isNew = !Number.isNaN(seenAt) && new Date(moment.post.createdAt).getTime() > seenAt;
+            return (
+              <button
+                key={moment.creator.profile.id}
+                type="button"
+                onClick={() => onOpenMoment(moment.post.id)}
+                className="group flex min-h-24 w-[4.75rem] shrink-0 snap-start flex-col items-center rounded-xl px-1 py-1.5 text-center transition-transform active:scale-[0.96] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--noodle-accent)] motion-reduce:transition-none motion-reduce:active:scale-100"
+                aria-label={localizeUi("ui.slurp.moments.open", { name: moment.creator.profile.displayName })}
               >
-                <span className="block rounded-full bg-[var(--slurp-canvas)] p-0.5">
-                  <ProfileInitial profile={moment.creator.profile} />
-                </span>
-                {moment.post.locked && (
-                  <span className="absolute -bottom-0.5 -right-0.5 flex h-5 w-5 items-center justify-center rounded-full bg-[var(--noodle-accent)] text-zinc-950 ring-2 ring-[var(--slurp-canvas)]">
-                    <Lock size={10} aria-hidden="true" />
+                <span
+                  className={cn(
+                    "relative rounded-full p-[3px] transition-transform group-hover:scale-105 motion-reduce:transition-none motion-reduce:group-hover:scale-100",
+                    isNew
+                      ? "bg-[linear-gradient(145deg,var(--noodle-accent),var(--slurp-warm))] shadow-[0_0_0_1px_color-mix(in_srgb,var(--noodle-accent)_25%,transparent),0_8px_24px_-12px_var(--noodle-accent)]"
+                      : "bg-[var(--noodle-divider)] opacity-80",
+                  )}
+                >
+                  <span className="block rounded-full bg-[var(--slurp-canvas)] p-0.5">
+                    <ProfileInitial profile={moment.creator.profile} />
                   </span>
-                )}
-              </span>
-              <span className="mt-1.5 w-full truncate text-[0.7rem] font-semibold">
-                {moment.creator.profile.displayName}
-              </span>
-              <span className="text-[0.62rem] text-[var(--muted-foreground)]">
-                {moment.creator.subscribed
-                  ? localizeUi("ui.slurp.profile.subscribed")
-                  : isNew
-                    ? localizeUi("ui.slurp.moments.new")
-                    : `@${moment.creator.profile.handle}`}
-              </span>
-            </button>
-          );
-        })}
+                  {moment.post.locked && (
+                    <span className="absolute -bottom-0.5 -right-0.5 flex h-5 w-5 items-center justify-center rounded-full bg-[var(--noodle-accent)] text-zinc-950 ring-2 ring-[var(--slurp-canvas)]">
+                      <Lock size={10} aria-hidden="true" />
+                    </span>
+                  )}
+                </span>
+                <span className="mt-1.5 w-full truncate text-[0.7rem] font-semibold">
+                  {moment.creator.profile.displayName}
+                </span>
+                <span className="text-[0.62rem] text-[var(--muted-foreground)]">
+                  {moment.creator.subscribed
+                    ? localizeUi("ui.slurp.profile.subscribed")
+                    : isNew
+                      ? localizeUi("ui.slurp.moments.new")
+                      : `@${moment.creator.profile.handle}`}
+                </span>
+              </button>
+            );
+          })
+        )}
       </div>
     </section>
   );

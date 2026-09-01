@@ -85,10 +85,12 @@ assert.match(shell, /style=\{\{ paddingBottom: BOTTOM_SAFE_INSET \}\}/u);
 assert.match(home, /<SlurpMobileHeader[\s\S]*?triggerRef=\{mobileDrawerTriggerRef\}/u);
 assert.match(home, /ref=\{setStickyHeader\}[\s\S]*?HIDE_ON_SCROLL_CLASS/u);
 assert.match(shell, /--slurp-canvas/u, "Slurp must own a theme-safe canvas token");
-assert.match(home, /ui\.slurp\.home\.feedDetail/u, "the Home feed must explain its creator-network purpose");
+assert.match(home, /ui\.slurp\.home\.forYou/u, "the Home feed must use the compact feed-first masthead");
 assert.match(home, /ui\.slurp\.home\.tonight/u, "the desktop discovery rail must have a Slurp identity");
 assert.match(home, /SLURP_MOMENT_WINDOW_MS = 24 \* 60 \* 60 \* 1000/u);
 assert.match(home, /data-component="SlurpHome\.Moments"/u, "Home must expose the real 24-hour Moments shelf");
+assert.match(home, /ui\.slurp\.moments\.empty/u, "Home must keep Stories discoverable when the shelf is empty");
+assert.doesNotMatch(home, /\{moments\.length > 0 && \(/u, "the Stories shelf must not disappear when it is empty");
 assert.match(home, /isSlurpStory\(post\)[\s\S]*?momentCutoff/u, "Home must show only fresh Story posts in its shelf");
 assert.match(home, /id: "stories"[\s\S]*?ui\.slurp\.stories\.archive/u, "Creator Rooms must retain a Story archive");
 assert.match(home, /activeTab === "stories"[\s\S]*?return story/u, "the Story archive must not apply the Home cutoff");
@@ -169,7 +171,11 @@ assert.match(
   /slurpSettingsActive[\s\S]*?@min-\[1024px\]:max-w-\[1096px\]/u,
   "settings must not inherit the narrow creator-feed measure",
 );
-assert.match(shell, /\{!slurpSettingsActive && rightRail\}/u, "settings must not reserve an empty discovery rail");
+assert.match(
+  shell,
+  /\{!slurpSettingsActive && !slurpProfileActive && rightRail\}/u,
+  "settings and wide Creator profiles must not reserve an empty discovery rail",
+);
 assert.match(settings, /data-slurp-setting-toggle/u);
 assert.match(settings, /role="switch"/u, "polished settings toggles must retain native checkbox semantics");
 assert.match(settings, /snap-x grid-flow-col/u, "creator settings must stay browsable before master-detail fits");
@@ -235,8 +241,15 @@ assert.doesNotMatch(
   "Creator Room copy must not reserve a fixed action width",
 );
 assert.match(profileSurface, /data-slurp-creator-hero/u, "Creator Rooms must expose their unified identity hero");
+assert.match(profileSurface, /spotlight/u, "Slurp Creator Rooms must support the media-led spotlight treatment");
+assert.match(profileSurface, /linear-gradient\(to_top/u, "Creator banners must fade into the profile canvas");
 assert.match(profileSurface, /preTabsContent && \(/u, "Creator Tools must remain separate from public profile content");
 assert.match(home, /data-slurp-home-masthead/u, "Home must expose one unified lobby masthead");
+assert.doesNotMatch(
+  home,
+  /data-slurp-home-masthead[\s\S]*?personaAccount\.displayName/u,
+  "the Home masthead must not repeat the active persona",
+);
 assert.match(shell, /slurpActive && <span className="text-lg font-black">\{SLURP_NAME\}<\/span>/u);
 assert.match(shell, /ui\.slurp\.navigation\.hub/u, "Slurp desktop navigation must name the home destination Hub");
 assert.doesNotMatch(

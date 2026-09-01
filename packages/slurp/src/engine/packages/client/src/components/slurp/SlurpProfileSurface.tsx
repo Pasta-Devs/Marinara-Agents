@@ -69,6 +69,7 @@ interface SlurpProfileSurfaceProps<TTab extends string = SlurpProfileTab> {
   postPanelId?: string;
   accent?: string;
   featuredContent?: ReactNode;
+  spotlight?: boolean;
 }
 
 export function SlurpProfileSurface<TTab extends string = SlurpProfileTab>({
@@ -96,6 +97,7 @@ export function SlurpProfileSurface<TTab extends string = SlurpProfileTab>({
   postPanelId = "slurp-profile-panel",
   accent,
   featuredContent,
+  spotlight = false,
 }: SlurpProfileSurfaceProps<TTab>) {
   const { t: localizeUi } = useUiTranslation();
   const hasBanner = Boolean(banner) || decorativeBanner;
@@ -161,7 +163,14 @@ export function SlurpProfileSurface<TTab extends string = SlurpProfileTab>({
     >
       {mobileHeader}
       {banner && (
-        <div className="group relative overflow-hidden rounded-b-2xl bg-[var(--slurp-canvas,var(--background))] shadow-[0_24px_54px_-40px_rgba(0,0,0,0.95)]">
+        <div
+          className={cn(
+            "group relative overflow-hidden bg-[var(--slurp-canvas,var(--background))]",
+            spotlight
+              ? "shadow-[0_28px_70px_-54px_var(--noodle-accent)]"
+              : "rounded-b-2xl shadow-[0_24px_54px_-40px_rgba(0,0,0,0.95)]",
+          )}
+        >
           <button
             type="button"
             onClick={() => {
@@ -182,7 +191,12 @@ export function SlurpProfileSurface<TTab extends string = SlurpProfileTab>({
               </div>
             )}
             <span
-              className="pointer-events-none absolute inset-0 bg-[linear-gradient(to_top,var(--slurp-canvas,var(--background))_0%,transparent_46%),linear-gradient(to_right,rgba(8,4,10,0.28),transparent_55%)]"
+              className={cn(
+                "pointer-events-none absolute inset-0",
+                spotlight
+                  ? "bg-[linear-gradient(to_top,var(--slurp-canvas,var(--background))_0%,color-mix(in_srgb,var(--slurp-canvas,var(--background))_88%,transparent)_16%,color-mix(in_srgb,var(--slurp-canvas,var(--background))_42%,transparent)_38%,transparent_68%),linear-gradient(to_right,rgba(8,4,10,0.42),transparent_58%)]"
+                  : "bg-[linear-gradient(to_top,var(--slurp-canvas,var(--background))_0%,transparent_46%),linear-gradient(to_right,rgba(8,4,10,0.28),transparent_55%)]",
+              )}
               aria-hidden="true"
             />
             {banner.uploadTarget === "banner" && (
@@ -225,12 +239,15 @@ export function SlurpProfileSurface<TTab extends string = SlurpProfileTab>({
 
       <div
         className={cn(
-          "relative mx-3 rounded-[1.5rem] bg-[color-mix(in_srgb,var(--slurp-surface-raised,var(--background))_96%,transparent)] px-4 pb-5 shadow-[0_28px_62px_-38px_rgba(0,0,0,0.95)] ring-1 ring-inset ring-[var(--noodle-divider)] backdrop-blur-md sm:mx-5 sm:px-6 sm:pb-6",
+          "relative mx-3 px-4 pb-5 sm:mx-5 sm:px-6 sm:pb-6",
+          spotlight
+            ? "sm:grid sm:grid-cols-[auto_minmax(0,1fr)] sm:items-end sm:gap-x-6"
+            : "rounded-[1.5rem] bg-[color-mix(in_srgb,var(--slurp-surface-raised,var(--background))_96%,transparent)] shadow-[0_28px_62px_-38px_rgba(0,0,0,0.95)] ring-1 ring-inset ring-[var(--noodle-divider)] backdrop-blur-md",
           hasBanner ? "-mt-12" : "mt-5",
         )}
         data-slurp-creator-hero
       >
-        <div className={cn("flex w-full items-end", hasBanner ? "-mt-14" : "pt-5")}>
+        <div className={cn("flex items-end", spotlight ? "w-auto" : "w-full", hasBanner ? "-mt-14" : "pt-5")}>
           {avatarUpload ? (
             <div className="group relative">
               <button
@@ -333,6 +350,7 @@ export function SlurpProfileSurface<TTab extends string = SlurpProfileTab>({
           <div
             className={cn(
               "mt-4 grid w-full min-w-0 items-start gap-4 text-left",
+              spotlight && "sm:mt-0",
               hasProfileActions && "sm:grid-cols-[minmax(0,1fr)_auto] sm:gap-6",
             )}
           >
@@ -388,14 +406,30 @@ export function SlurpProfileSurface<TTab extends string = SlurpProfileTab>({
             {hasProfileActions && <div className="min-w-0 sm:max-w-[22rem]">{profileActions}</div>}
           </div>
         )}
-        {editor?.isEditing && hasProfileActions && <div className="mt-4">{profileActions}</div>}
+        {editor?.isEditing && hasProfileActions && (
+          <div className={cn("mt-4", spotlight && "sm:col-start-2")}>{profileActions}</div>
+        )}
       </div>
       {preTabsContent && (
-        <div className="mx-3 mt-4 overflow-hidden rounded-2xl bg-[var(--slurp-surface,var(--background))] shadow-[0_18px_42px_-34px_rgba(0,0,0,0.95)] ring-1 ring-inset ring-[var(--noodle-divider)] sm:mx-5">
+        <div
+          className={cn(
+            "mx-3 overflow-hidden bg-[var(--slurp-surface,var(--background))] sm:mx-5",
+            spotlight
+              ? "mt-2 rounded-xl shadow-[0_18px_48px_-38px_var(--noodle-accent)] ring-1 ring-inset ring-[var(--noodle-accent)]/15"
+              : "mt-4 rounded-2xl shadow-[0_18px_42px_-34px_rgba(0,0,0,0.95)] ring-1 ring-inset ring-[var(--noodle-divider)]",
+          )}
+        >
           {preTabsContent}
         </div>
       )}
-      <div className="mt-4 overflow-hidden border-y border-[var(--noodle-divider)] bg-[var(--slurp-surface,var(--background))] shadow-[0_20px_46px_-38px_rgba(0,0,0,0.95)] sm:mx-5 sm:rounded-2xl sm:border-0 sm:ring-1 sm:ring-inset sm:ring-[var(--noodle-divider)]">
+      <div
+        className={cn(
+          "overflow-hidden border-y border-[var(--noodle-divider)] bg-[var(--slurp-surface,var(--background))] sm:mx-5 sm:border-0",
+          spotlight
+            ? "mt-3 sm:rounded-xl sm:ring-1 sm:ring-inset sm:ring-[var(--noodle-divider)]"
+            : "mt-4 shadow-[0_20px_46px_-38px_rgba(0,0,0,0.95)] sm:rounded-2xl sm:ring-1 sm:ring-inset sm:ring-[var(--noodle-divider)]",
+        )}
+      >
         {featuredContent}
         <div
           className="m-2 flex rounded-xl bg-[var(--slurp-canvas,var(--background))] p-1 ring-1 ring-inset ring-[var(--noodle-divider)]"

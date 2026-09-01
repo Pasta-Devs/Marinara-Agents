@@ -68,7 +68,7 @@ export function getNoodleAccentStyle(accent: string, style: CSSProperties = {}):
     "--slurp-warm": "light-dark(#9b5a35, #f2b56f)",
     "--slurp-success": "light-dark(#25745b, #72d6ad)",
     "--slurp-canvas-art":
-      "radial-gradient(circle at 16% -8%, color-mix(in srgb, var(--noodle-accent) 10%, transparent), transparent 31rem), radial-gradient(circle at 88% 18%, color-mix(in srgb, #8e4d73 7%, transparent), transparent 27rem)",
+      "radial-gradient(circle at 14% -10%, color-mix(in srgb, var(--noodle-accent) 13%, transparent), transparent 32rem), radial-gradient(circle at 92% 12%, color-mix(in srgb, #b45c8d 10%, transparent), transparent 29rem), linear-gradient(180deg, color-mix(in srgb, var(--noodle-accent) 3%, transparent), transparent 24rem)",
     ...style,
   } as CSSProperties;
 }
@@ -403,6 +403,7 @@ export function NoodleShell({
   const noodlerActive = resolvedAppMode === "noodler";
   const slurpActive = resolvedAppMode === "slurp";
   const slurpSettingsActive = slurpActive && activeView === "settings";
+  const slurpProfileActive = slurpActive && activeView === "profile";
   const homeLabel = noodlerActive
     ? localizeUi("ui.noodle.noodleshell.hub")
     : slurpActive
@@ -652,7 +653,7 @@ export function NoodleShell({
           )}
         </AnimatePresence>
         <div className="flex min-h-0 flex-1 justify-center overflow-hidden">
-          <div className="flex min-h-0 w-full max-w-[1320px] justify-center">
+          <div className="flex min-h-0 w-full max-w-[1360px] justify-center">
             <aside className="hidden w-[14rem] shrink-0 border-r border-[var(--noodle-divider)] bg-[linear-gradient(180deg,var(--slurp-surface-raised,var(--background)),var(--background)_38%)] @min-[1024px]:flex @min-[1024px]:flex-col">
               <div className="flex min-h-0 flex-1 flex-col px-4 py-4">
                 <div className="mb-5 flex h-12 items-center gap-3 px-2">
@@ -849,14 +850,14 @@ export function NoodleShell({
             <main
               className={cn(
                 "flex min-h-0 w-full flex-1 flex-col @min-[1024px]:pb-0",
-                slurpSettingsActive
+                slurpSettingsActive || slurpProfileActive
                   ? "pb-0 @min-[1024px]:max-w-[1096px]"
                   : "pb-[calc(56px+var(--slurp-bottom-safe-inset))] @min-[1024px]:max-w-[680px] @min-[1024px]:border-r @min-[1024px]:border-[var(--noodle-divider)]",
               )}
             >
               {children}
             </main>
-            {!slurpSettingsActive && rightRail}
+            {!slurpSettingsActive && !slurpProfileActive && rightRail}
           </div>
         </div>
 
