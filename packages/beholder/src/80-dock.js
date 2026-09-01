@@ -17,12 +17,13 @@ const BH_HOST_CSS = `
   --bh-font-display: var(--font-sans, inherit);
   box-sizing:border-box; display:flex !important; position:absolute !important;
   top:var(--bh-window-top,1rem) !important; left:var(--bh-window-left,1rem) !important; right:auto !important; bottom:auto !important;
-  width:var(--bh-window-width,min(500px,calc(100% - 2rem))) !important; height:var(--bh-window-height,min(620px,calc(100% - 2rem))) !important;
+  width:var(--bh-window-width,min(500px,calc(100% - 2rem))) !important; height:var(--bh-window-height,min(1040px,calc(100% - 2rem))) !important;
   min-width:0 !important; min-height:0 !important; max-width:none !important; max-height:none !important;
   border-color:var(--bh-window-accent) !important; border-radius:.75rem !important; transform:none !important; z-index:50; }
 .beholder-panel.bh-detached{ position:fixed !important; inset:0 !important; width:100vw !important; height:100dvh !important; border-radius:0 !important; }
 .beholder-panel.bh-collapsed{ display:none !important; }
 .beholder-panel-body{ min-height:0; overflow:hidden; }
+.beholder-panel.bh-content-scrolls .beholder-panel-body{ overflow-y:auto; }
 .beholder-panel .beholder-close{ display:none !important; }
 .beholder-panel .beholder-resize-handle{ display:block !important; left:auto; right:.25rem; bottom:.25rem; transform:none;
   width:1.5rem; height:1.5rem; border:0; border-radius:.25rem; background:transparent; color:var(--bh-window-accent);
@@ -74,8 +75,23 @@ const BH_WINDOW_MARGIN = 12;
 const BH_WINDOW_MIN_WIDTH = 280;
 const BH_WINDOW_MIN_HEIGHT = 260;
 const BH_WINDOW_DEFAULT_WIDTH = 500;
-const BH_WINDOW_DEFAULT_HEIGHT = 620;
+// How tall a panel OPENS. The body holds about 844px of doll plus 178px of chrome, so
+// anything much under a thousand guarantees the shrink-to-fit path on first open — the
+// old 620 opened every panel at roughly half size. Clamped to the chat area, so a short
+// screen still gets a panel that fits; it just falls back to scrolling.
+const BH_WINDOW_DEFAULT_HEIGHT = 1040;
+// What counts as 100%, which is a separate question from how tall the panel opens. One
+// constant answered both, so opening the panel taller would have redefined full size and
+// scaled everything back down again.
+const BH_SCALE_REFERENCE_WIDTH = 500;
+const BH_SCALE_REFERENCE_HEIGHT = 620;
 const BH_WINDOW_MIN_SCALE = 0.24;
+// The floor for shrinking-to-fit, which is a different question from how small the
+// WINDOW may get. Fitting the whole body into a short panel drove the interface to 52%
+// at the default size — slot labels rendered at 6.4px against a designed 12.2px, which
+// is not a smaller interface but an unreadable one. Below this the body scrolls instead,
+// because a scrollbar costs less than text nobody can read.
+const BH_CONTENT_MIN_SCALE = 0.85;
 const BH_WINDOW_MAX_SCALE = 1.35;
 const BH_THEME_VARIABLES = [
   "--background",
@@ -417,7 +433,7 @@ BH.dock = {
   applyScale(width, height) {
     if (!this.panel) return 1;
     const scale = clampWindowValue(
-      Math.min(width / BH_WINDOW_DEFAULT_WIDTH, height / BH_WINDOW_DEFAULT_HEIGHT),
+      Math.min(width / BH_SCALE_REFERENCE_WIDTH, height / BH_SCALE_REFERENCE_HEIGHT),
       BH_WINDOW_MIN_SCALE,
       BH_WINDOW_MAX_SCALE,
     );
@@ -431,15 +447,21 @@ BH.dock = {
     const body = panel.querySelector(".beholder-panel-body");
     if (!body) return;
     const rect = panel.getBoundingClientRect();
-    let scale = this.applyScale(rect.width, rect.height);
+    const geometryScale = this.applyScale(rect.width, rect.height);
+    let scale = geometryScale;
     for (let pass = 0; pass < 2; pass += 1) {
       const widthRatio = body.clientWidth / Math.max(body.scrollWidth, 1);
       const heightRatio = body.clientHeight / Math.max(body.scrollHeight, 1);
       const fit = Math.min(1, widthRatio, heightRatio);
       if (fit >= 0.995) break;
-      scale = clampWindowValue(scale * fit, BH_WINDOW_MIN_SCALE, BH_WINDOW_MAX_SCALE);
+      // Never below the readability floor, and never above what the geometry allows.
+      scale = clampWindowValue(scale * fit, Math.min(geometryScale, BH_CONTENT_MIN_SCALE), BH_WINDOW_MAX_SCALE);
       panel.style.setProperty("--bh-ui-scale", scale.toFixed(3));
     }
+    // Whatever still does not fit is scrolled to. The body is overflow:hidden on the
+    // desktop, so without this the floor above would clip the doll rather than shrink
+    // it — trading unreadable for invisible.
+    panel.classList.toggle("bh-content-scrolls", body.scrollHeight - body.clientHeight > 1);
   },
 
   applyGeometry(geometry) {
