@@ -85,6 +85,7 @@ export type SlurpSettings = {
   generationConnectionId: string | null;
   imageGenerationConnectionId: string | null;
   imageGenerationPrompt: string;
+  imagePromptInterpretation: string;
   enableImageInterpretation: boolean;
   imageGenerationUseAvatarReferences: boolean;
   imageGenerationIncludeDescriptions: boolean;

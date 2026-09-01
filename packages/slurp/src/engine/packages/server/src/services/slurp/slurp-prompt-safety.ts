@@ -1,5 +1,3 @@
-import type { NoodlerSourceSnapshot } from "@marinara-engine/shared";
-
 function promptRecord(value: unknown): Record<string, unknown> {
   if (!value) return {};
   if (typeof value === "string") {
@@ -41,67 +39,42 @@ export function characterContextFromRow(row: { id: string; data: unknown; avatar
   return lines.join("\n");
 }
 
-const REVIEWED_HINTED_THEME_TOKENS = [
-  "adventurous",
-  "artistic",
-  "bookish",
-  "calm",
-  "cheerful",
-  "creative",
-  "curious",
-  "friendly",
-  "gentle",
-  "inventive",
-  "kind",
-  "musical",
-  "outgoing",
-  "playful",
-  "reserved",
-  "scientific",
-  "sporty",
-  "technical",
-  "thoughtful",
-  "witty",
-] as const;
-
-const REVIEWED_PHYSICAL_FACT_TOKENS = [
-  "adult",
-  "androgynous",
-  "athletic",
-  "beard",
-  "blind",
-  "curly hair",
-  "dark hair",
-  "freckles",
-  "glasses",
-  "horns",
-  "light hair",
-  "long hair",
-  "muscular",
-  "prosthetic",
-  "scar",
-  "short hair",
-  "slender",
-  "tattoo",
-  "wings",
-] as const;
-
-/** A hinted identity receives only reviewed, non-identifying theme tokens. */
-export function reviewedNoodlerTemperamentThemes(value: string) {
-  const personalityWords = new Set(value.toLocaleLowerCase().match(/[a-z]+/gu) ?? []);
-  return REVIEWED_HINTED_THEME_TOKENS.filter((token) => personalityWords.has(token));
+/**
+ * Both concealed modes describe the same person, so they receive the same seed and differ only in
+ * what the instructions forbid saying. Name, scenario, and backstory are the googleable canon, so
+ * they stay out of both; body, voice, and everyday texture are inseparable from the person and stay
+ * in.
+ */
+/** A blank primary field must fall through to its extension rather than dropping the line. */
+function promptField(primary: unknown, fallback?: unknown): string {
+  if (typeof primary === "string" && primary.trim()) return primary;
+  return typeof fallback === "string" && fallback.trim() ? fallback : "";
 }
 
-export function hintedNoodlerSourceBrief(snapshot: NoodlerSourceSnapshot | null) {
-  if (!snapshot) return "General temperament and creative interests from the source profile.";
-  const themes = reviewedNoodlerTemperamentThemes(snapshot.personality);
-  return themes.length > 0
-    ? `Approved source themes: ${themes.join(", ")}.`
-    : "General temperament and creative interests from the source profile.";
+export function noodlerConcealedSourceText(data: unknown): string {
+  const source = promptRecord(data);
+  const extensions = promptRecord(source.extensions);
+  return [
+    `Description: ${promptField(source.description)}`,
+    `Personality: ${promptField(source.personality)}`,
+    `Appearance: ${promptField(source.appearance, extensions.appearance)}`,
+  ]
+    .filter((line) => line.split(": ").slice(1).join(": ").trim())
+    .join("\n");
 }
 
-/** Hidden identities receive only reviewed physical tokens, never raw profile prose. */
-export function reviewedNoodlerPhysicalFacts(value: string) {
-  const normalized = value.toLocaleLowerCase();
-  return REVIEWED_PHYSICAL_FACT_TOKENS.filter((token) => normalized.includes(token));
+/** The full card, used only where the source identity is public. */
+export function noodlerSourceText(data: unknown): string {
+  const source = promptRecord(data);
+  const extensions = promptRecord(source.extensions);
+  return [
+    `Name: ${promptField(source.name)}`,
+    `Description: ${promptField(source.description)}`,
+    `Personality: ${promptField(source.personality)}`,
+    `Scenario: ${promptField(source.scenario)}`,
+    `Appearance: ${promptField(source.appearance, extensions.appearance)}`,
+    `Backstory: ${promptField(source.backstory, extensions.backstory)}`,
+  ]
+    .filter((line) => line.trim().split(": ").slice(1).join(": ").trim())
+    .join("\n");
 }

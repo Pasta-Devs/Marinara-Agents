@@ -34,8 +34,8 @@
   "files": [
     {
       "path": "agents.json",
-      "sha256": "4cd31bd6023c1c56b04e1bc1384c79a56725cfcecd22b99161a47c7a366470e3",
-      "bytes": 602
+      "sha256": "436f55f0bc7c191080d3cf73e6142f320259c83a564a537326d80ce1f867bbfd",
+      "bytes": 463
     },
     {
       "path": "server.mjs",
@@ -44,8 +44,8 @@
     },
     {
       "path": "client.js",
-      "sha256": "797c2cf2eab58a45bb43953cb4444f2acf42d8a5f35f65e3863e92528557b946",
-      "bytes": 618250
+      "sha256": "f93ef08e700f706d4d4e5de6c9d6af42ae2b2b0d6a1939666e3f27665668b136",
+      "bytes": 565489
     }
   ],
   "permissions": [

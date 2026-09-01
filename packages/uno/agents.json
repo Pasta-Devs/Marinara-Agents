@@ -2,7 +2,7 @@
   {
     "id": "uno",
     "name": "UNO",
-    "description": "Play UNO with Conversation characters. Install to use /uno manually in any Conversation chat. Add under Chat Settings → Agents → Commands only to let characters initiate it.",
+    "description": "Play UNO with Conversation characters.",
     "author": "Pasta Devs",
     "phase": "pre_generation",
     "enabledByDefault": false,

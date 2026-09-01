@@ -25,7 +25,7 @@ const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const packageRoot = join(repoRoot, "packages/beholder");
 const artifactsDir = join(repoRoot, "artifacts");
 
-const VERSION = "1.3.7";
+const VERSION = "1.3.9";
 const ENGINE_MIN = "2.4.4";
 const MAX_ENGINE_EXCLUSIVE = "4.0.0";
 const BASE_DESCRIPTION =
@@ -55,7 +55,9 @@ for (const name of (await readdir(localeDir)).filter((file) => file.endsWith(".j
 const constants =
   `const BH_STYLE_CSS = ${JSON.stringify(styleCss)};\n` +
   `const BH_FA_CSS = ${JSON.stringify(faCss)};\n` +
-  `const BH_LOCALES = ${JSON.stringify(locales)};\n`;
+  `const BH_LOCALES = ${JSON.stringify(locales)};\n` +
+  // Stamped in so a pasted diagnostic report says which build produced it.
+  `const BH_PACKAGE_VERSION = ${JSON.stringify(VERSION)};\n`;
 
 const banner =
   `// Beholder ${VERSION} — Marinara Engine roleplay-toolbar capability (single-file client bundle)\n` +

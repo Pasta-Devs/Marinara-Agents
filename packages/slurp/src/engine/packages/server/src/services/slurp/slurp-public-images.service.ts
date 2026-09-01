@@ -204,8 +204,32 @@ export async function generateNoodlePostImage(input: {
     imageDefaults,
   });
   const styleGuidance = resolveImageStyleGuidanceText(imageSettings.styleProfiles, compiledPrompt.profile.id);
-  const rawFinalPrompt = input.promptOverride?.prompt.trim() || compiledPrompt.prompt;
-  const rawProviderPrompt = input.promptOverride?.prompt.trim() || input.draftPrompt.trim();
+  // A reviewed prompt replaces the generated wording, but the style profile is composition rather
+  // than wording, so recompile the approved text instead of sending it bare. The compiler omits
+  // style values the prompt already carries, so an approved prompt is never double-styled.
+  const overridePrompt = input.promptOverride?.prompt.trim();
+  const compiledOverride = overridePrompt
+    ? compileImagePrompt({
+        kind: "illustration",
+        prompt: overridePrompt,
+        styleProfiles: imageSettings.styleProfiles,
+        imageDefaults,
+      })
+    : null;
+  // The rewrite is skipped when interpretation is off and discarded when it leaks, and both land on
+  // this fallback. Sending the bare draft there dropped the style profile exactly like the review
+  // path did, so the draft is compiled too.
+  const draftPrompt = input.draftPrompt.trim();
+  const compiledDraft = draftPrompt
+    ? compileImagePrompt({
+        kind: "illustration",
+        prompt: draftPrompt,
+        styleProfiles: imageSettings.styleProfiles,
+        imageDefaults,
+      })
+    : null;
+  const rawFinalPrompt = compiledOverride?.prompt || compiledPrompt.prompt;
+  const rawProviderPrompt = compiledOverride?.prompt || compiledDraft?.prompt || draftPrompt;
   const configuredImageInstructions = input.settings.imageGenerationPrompt.trim();
   const connectionImageInstructions = input.imageConnection.imagePromptInstructions?.trim() ?? "";
   const imagePromptInstructions = [
@@ -228,6 +252,7 @@ export async function generateNoodlePostImage(input: {
       ? await rewriteNoodleImagePrompt({
           db: input.db,
           prompt: rawFinalPrompt,
+          interpretationInstruction: input.settings.imagePromptInterpretation,
           instructions: imagePromptInstructions,
           characterContext,
           styleGuidance,
@@ -236,16 +261,16 @@ export async function generateNoodlePostImage(input: {
   const finalPrompt = selectNoodleImageProviderPrompt({
     rewrittenPrompt,
     rawPrompt: rawProviderPrompt,
-    privateContext: [
-      configuredImageInstructions,
-      connectionImageInstructions,
-      characterPersonality,
-      characterImageInstructions,
-      styleGuidance,
-    ],
+    // Art style and the character's image habits are meant to reach the provider, so a rewrite
+    // that applies them is doing its job. Personality never belongs in a visual prompt at any
+    // length; the instruction fields are guidance and only leak as a copied block.
+    privateContext: [characterPersonality],
+    guidanceContext: [configuredImageInstructions, connectionImageInstructions],
   });
+  // A reviewer who cleared the negative prompt still gets the style profile's own negatives back,
+  // for the same reason the positive prompt is recompiled above.
   const finalNegativePrompt = input.promptOverride
-    ? input.promptOverride.negativePrompt?.trim() || undefined
+    ? input.promptOverride.negativePrompt?.trim() || compiledOverride?.negativePrompt || undefined
     : compiledPrompt.negativePrompt || undefined;
   logDebugOverride(
     input.debugMode,

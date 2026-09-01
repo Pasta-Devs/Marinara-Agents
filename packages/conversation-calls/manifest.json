@@ -37,8 +37,8 @@
     },
     {
       "path": "client.js",
-      "sha256": "34f8369debed4f6fcd8a9fb323c2062a44feda44980d6f624777c54aef6f3a27",
-      "bytes": 850335
+      "sha256": "881dbe491d8df57c9568f8dd10f28bbb9d960a23958a20cd3439eaddfd6371eb",
+      "bytes": 850302
     }
   ],
   "permissions": [
