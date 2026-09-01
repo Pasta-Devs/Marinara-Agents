@@ -3427,8 +3427,10 @@ export function NoodleHome({ navigation, onNavigate }: NoodleHomeProps) {
                   onClick={() => setInviteCharacterLimit((limit) => limit + NOODLE_INVITE_PAGE_SIZE)}
                   className="w-full px-3 py-2 text-xs font-semibold text-[var(--noodle-accent)] transition-colors hover:bg-[var(--noodle-accent)]/10"
                 >
-                  {localizeUi("ui.noodle.noodlehome.loadMore")}
-                  {visibleInviteCharacters.length} {localizeUi("ui.noodle.noodlehome.of")} {filteredCharacters.length})
+                  {localizeUi("ui.noodle.noodlehome.loadMore", {
+                    visible: visibleInviteCharacters.length,
+                    total: filteredCharacters.length,
+                  })}
                 </button>
               )}
             </div>
@@ -5242,7 +5244,8 @@ export function NoodleHome({ navigation, onNavigate }: NoodleHomeProps) {
                     {feedQuery.isFetchingNextPage ? (
                       <Loader2 size={16} className="mx-auto animate-spin" />
                     ) : (
-                      localizeUi("ui.noodle.noodlehome.loadMore")
+                      // The main feed is cursor-paged, so no total is known here.
+                      localizeUi("ui.noodle.noodlehome.loadMorePosts")
                     )}
                   </button>
                 </div>
