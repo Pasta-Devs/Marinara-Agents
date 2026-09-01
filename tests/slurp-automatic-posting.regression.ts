@@ -53,7 +53,11 @@ const viewerHook = hooks.slice(
 assert.match(viewerHook, /refetchInterval: enabled && personaId \? 30_000 : false/u);
 assert.match(hooks, /invalidateQueries\(\{ queryKey: noodleKeys\.viewer\(personaId\) \}\)/u);
 assert.match(storage, /autoPostGenerationMode: z\.enum\(\["pre_generate", "on_demand"\]\)/u);
-assert.match(storage, /autoPostGenerationMode: "pre_generate"/u);
+assert.match(
+  storage,
+  /autoPostGenerationMode: "on_demand"/u,
+  "new Slurp installs must generate automatic posts on demand",
+);
 assert.match(storage, /state: "scheduled"/u);
 assert.match(storage, /ELAPSED_PREPARED_SLOT_MS = 60 \* 60 \* 1000/u);
 assert.match(storage, /ROLLING_DAY_MS = 24 \* 60 \* 60 \* 1000/u);

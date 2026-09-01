@@ -15,6 +15,7 @@ import {
   MoreHorizontal,
   Pencil,
   Repeat2,
+  RefreshCw,
   Smile,
   Trash2,
   Lock,
@@ -72,11 +73,13 @@ export function LockedSlurpPostCard({
   onUnlock,
   onToggleSubscription,
   onManage,
+  onGenerateImage,
+  imageGenerationPending = false,
   onOpenProfile,
   demo,
 }: {
   post: Pick<NoodlerPostView, "id" | "access" | "createdAt" | "title" | "imageUrl"> &
-    Partial<Pick<NoodlerPostView, "likeCount" | "replyCount" | "hasImage">>; // controller-locked managed posts carry no counts
+    Partial<Pick<NoodlerPostView, "likeCount" | "replyCount" | "hasImage" | "imagePrompt">>; // controller-locked managed posts carry no counts
   profile: NoodlerStageProfile;
   controllerOnly?: boolean;
   subscribed: boolean;
@@ -85,6 +88,8 @@ export function LockedSlurpPostCard({
   onUnlock: (postId: string) => void;
   onToggleSubscription: (creatorAccountId: string, subscribed: boolean) => void;
   onManage?: () => void;
+  onGenerateImage?: () => void;
+  imageGenerationPending?: boolean;
   onOpenProfile?: (accountId: string) => void;
   /** Onboarding only: unlocking reveals this text locally instead of calling the server. */
   /** `unlockedImageUrl` lets the demo pay off with a different image than the locked teaser. */
@@ -162,7 +167,7 @@ export function LockedSlurpPostCard({
       {/* Full-width body */}
       <div>
         {/* Media frame with Locked badge — only when the post has an image */}
-        {(mediaSrc || post.hasImage) && (
+        {(mediaSrc || post.hasImage || (onGenerateImage && post.imagePrompt)) && (
           <div
             data-slurp-locked-preview
             className={cn(
@@ -196,11 +201,27 @@ export function LockedSlurpPostCard({
                 <span className="text-xs font-semibold text-[var(--muted-foreground)]">
                   {localizeUi("ui.slurp.locked.previewUnavailable")}
                 </span>
+                {onGenerateImage && (
+                  <button
+                    type="button"
+                    onClick={onGenerateImage}
+                    disabled={imageGenerationPending}
+                    className="pointer-events-auto absolute bottom-3 right-3 flex h-10 w-10 items-center justify-center rounded-full bg-black/65 text-white shadow-lg ring-1 ring-white/20 transition-[opacity,transform] hover:bg-black/80 active:scale-[0.96] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--noodle-accent)] disabled:opacity-60 motion-reduce:transition-none motion-reduce:active:scale-100"
+                    title={localizeUi("ui.slurp.image.generate")}
+                    aria-label={localizeUi("ui.slurp.image.generate")}
+                    aria-busy={imageGenerationPending}
+                  >
+                    <RefreshCw
+                      size={17}
+                      className={imageGenerationPending ? "animate-spin motion-reduce:animate-none" : ""}
+                    />
+                  </button>
+                )}
               </div>
             )}
             {!revealed && (
               <div
-                className="absolute inset-0 bg-[linear-gradient(to_top,rgba(8,4,10,0.62),transparent_52%,rgba(8,4,10,0.12))]"
+                className="pointer-events-none absolute inset-0 bg-[linear-gradient(to_top,rgba(8,4,10,0.62),transparent_52%,rgba(8,4,10,0.12))]"
                 aria-hidden="true"
               />
             )}
@@ -211,7 +232,10 @@ export function LockedSlurpPostCard({
             )}
             {/* The lock is a state cue; the accessible image text already describes the preview. */}
             {!revealed && (
-              <span className="absolute inset-0 flex items-center justify-center" aria-hidden="true">
+              <span
+                className="pointer-events-none absolute inset-0 flex items-center justify-center"
+                aria-hidden="true"
+              >
                 <span className="rounded-full bg-black/55 p-3 text-white shadow-xl backdrop-blur-sm ring-1 ring-white/20">
                   <Lock size={18} />
                 </span>
@@ -487,6 +511,7 @@ export function SlurpCreatorPostCard({
   const [failedImageUrl, setFailedImageUrl] = useState<string | null>(null);
   const postImageSrc = useSlurpMediaSrc(post.imageUrl);
   const displayedImageUrl = postImageSrc && postImageSrc !== failedImageUrl ? postImageSrc : null;
+  const imageGenerationPending = ctx.generatingPostImageId === post.id;
   // Distinct from displayedImageUrl: while postImageSrc is still resolving (the authenticated
   // fetch hasn't returned yet) there is no evidence the image is broken, so editing must not
   // drop it. Only a confirmed <img> render failure (postImageSrc resolved and then errored,
@@ -878,7 +903,7 @@ export function SlurpCreatorPostCard({
               setImageLightbox(createNoodleLightboxImage(post.id, displayedImageUrl, post.imagePrompt ?? ""))
             }
             className={cn(
-              "mt-4 block overflow-hidden bg-black/10 text-left ring-1 ring-inset ring-white/10 ring-offset-[var(--background)] transition-[opacity,transform] hover:opacity-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--noodle-accent)] focus-visible:ring-offset-2 motion-reduce:transition-none",
+              "mt-4 flex max-h-[32rem] justify-center overflow-hidden bg-black/20 text-left ring-1 ring-inset ring-white/10 ring-offset-[var(--background)] transition-[opacity,transform] hover:opacity-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--noodle-accent)] focus-visible:ring-offset-2 motion-reduce:transition-none",
               surface === "profile"
                 ? "w-full rounded-xl"
                 : "-mx-4 w-[calc(100%+2rem)] rounded-none sm:mx-0 sm:w-full sm:rounded-xl",
@@ -903,19 +928,35 @@ export function SlurpCreatorPostCard({
                   name: author?.displayName ?? localizeUi("ui.noodle.profile.fallbackUser"),
                 })}
                 className={cn(
-                  "max-h-[26rem] w-full bg-black/10",
-                  ctx.imageFit === "cover" ? "object-cover" : "object-contain",
+                  "max-h-[32rem] max-w-full bg-black/10",
+                  ctx.imageFit === "cover" && "w-full object-cover",
                 )}
               />
             )}
           </button>
         ) : post.imagePrompt ? (
-          <div className="mt-3 rounded-xl border border-[var(--noodle-accent)]/35 bg-[var(--noodle-accent)]/10 p-3 text-xs leading-5">
+          <div className="relative mt-3 rounded-xl border border-[var(--noodle-accent)]/35 bg-[var(--noodle-accent)]/10 p-3 pr-14 text-xs leading-5">
             <span className="mb-1 flex items-center gap-1.5 font-semibold text-[var(--noodle-accent)]">
-              <ImageIcon size={13} />
+              <ImageIcon size={13} aria-hidden="true" />
               {localizeUi("ui.noodle.noodlepostcard.imagePrompt")}
             </span>
             {post.imagePrompt}
+            {ctx.postManagement && ctx.generatePostImage && (
+              <button
+                type="button"
+                onClick={() => ctx.generatePostImage?.(post)}
+                disabled={imageGenerationPending}
+                className="absolute right-2 top-2 flex h-10 w-10 items-center justify-center rounded-full text-[var(--noodle-accent)] transition-[background-color,transform] hover:bg-[var(--noodle-accent)]/15 active:scale-[0.96] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--noodle-accent)] disabled:opacity-50 motion-reduce:transition-none motion-reduce:active:scale-100"
+                title={localizeUi("ui.slurp.image.generate")}
+                aria-label={localizeUi("ui.slurp.image.generate")}
+                aria-busy={imageGenerationPending}
+              >
+                <RefreshCw
+                  size={17}
+                  className={imageGenerationPending ? "animate-spin motion-reduce:animate-none" : ""}
+                />
+              </button>
+            )}
           </div>
         ) : null}
         {isEditingPost ? (

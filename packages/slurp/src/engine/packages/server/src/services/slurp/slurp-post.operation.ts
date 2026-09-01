@@ -226,6 +226,7 @@ export async function createNoodlerPost(
   db: DB,
   input: NoodlerPostCreateInput & {
     format?: NoodlerContentFormat;
+    postType?: "post" | "story";
     lockedFollowUpPostId?: string;
     lockedFollowUp?: { title: string; content: string };
   },
@@ -272,6 +273,7 @@ export async function createNoodlerPost(
             imageUrl: persistedMedia?.imageUrl ?? null,
             metadata: {
               noodlerContentFormat: input.format ?? "caption",
+              noodlerPostType: input.postType ?? "post",
               // Stored at creation so an unlock price stays put across refreshes and edits.
               ...(input.access === "locked" ? noodlerUnlockPriceMetadata() : {}),
               ...(lockedFollowUpPostId ? { noodlerLockedFollowUpPostId: lockedFollowUpPostId } : {}),

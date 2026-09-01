@@ -699,7 +699,7 @@ export const DEFAULT_SLURP_SETTINGS: SlurpSettings = {
   allowGalleryImageAttachments: false,
   postsPerDay: 4,
   autoPostingScheduleEnabled: false,
-  autoPostGenerationMode: "pre_generate",
+  autoPostGenerationMode: "on_demand",
   fanActivityEnabled: false,
   fanActivityRunsPerDay: 4,
   fanLikesPerRefresh: 2,
@@ -3563,6 +3563,11 @@ export function createSlurpStorage(db: DB) {
         // finalized (success or failed) row never keeps contradictory pending lifecycle state.
         const mergedMetadata = { ...parseRecord(row.metadata), ...input.metadata };
         delete mergedMetadata.imagePendingReview;
+        if (input.imageUrl) {
+          delete mergedMetadata.imageGenerationFailed;
+          delete mergedMetadata.imageGenerationError;
+          delete mergedMetadata.imageRetryPrompt;
+        }
         await tx
           .update(noodlePosts)
           .set({

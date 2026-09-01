@@ -87,6 +87,14 @@ assert.match(home, /ui\.slurp\.home\.feedDetail/u, "the Home feed must explain i
 assert.match(home, /ui\.slurp\.home\.tonight/u, "the desktop discovery rail must have a Slurp identity");
 assert.match(home, /SLURP_MOMENT_WINDOW_MS = 24 \* 60 \* 60 \* 1000/u);
 assert.match(home, /data-component="SlurpHome\.Moments"/u, "Home must expose the real 24-hour Moments shelf");
+assert.match(home, /isSlurpStory\(post\)[\s\S]*?momentCutoff/u, "Home must show only fresh Story posts in its shelf");
+assert.match(home, /id: "stories"[\s\S]*?ui\.slurp\.stories\.archive/u, "Creator Rooms must retain a Story archive");
+assert.match(home, /activeTab === "stories"[\s\S]*?return story/u, "the Story archive must not apply the Home cutoff");
+assert.match(
+  read("packages/slurp/src/engine/packages/client/src/hooks/use-slurp.ts"),
+  /export function useNoodlerPosts[\s\S]*?do \{[\s\S]*?cursor = page\.nextCursor;[\s\S]*?\} while \(cursor\)/u,
+  "Creator Room archives must follow every post cursor",
+);
 assert.match(home, /function SlurpMomentViewer/u);
 assert.match(home, /useSlurpMediaSrc\(moment\.post\.imageUrl\)/u, "Moments must use authenticated Slurp media");
 assert.match(
@@ -181,6 +189,14 @@ assert.match(settings, /ui\.slurp\.settings\.creators\.acceptChanges/u);
 assert.match(settings, /onRedraftCreator/u);
 assert.match(settings, /import \{ Avatar, getNoodleAccentStyle, NOODLE_PINK \} from "\.\/SlurpShell"/u);
 assert.match(routes, /app\.post\("\/noodler\/accounts\/:id\/banner"/u);
+assert.match(routes, /postType: slurpPostTypeSchema\.default\("post"\)/u);
+assert.match(routes, /decoded\.data\.postType === "story" && !decoded\.media/u, "Story creation must require media");
+assert.match(
+  routes,
+  /story: post\.metadata\.noodlerPostType === "story"/u,
+  "locked projections must expose a safe Story flag",
+);
+assert.match(home, /postType === "story" \? "ui\.slurp\.stories\.captionPlaceholder"/u);
 assert.match(routes, /app\.post\("\/noodler\/accounts\/:id\/artwork\/generate"/u);
 assert.match(home, /useUploadNoodlerBanner/u);
 assert.match(home, /useGenerateNoodlerArtwork/u);

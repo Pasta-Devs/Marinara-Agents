@@ -307,14 +307,25 @@ export type SlurpProfilePost =
 export function useNoodlerPosts(accountId: string | null, personaId: string | null) {
   return useQuery({
     queryKey: [...noodleKeys.noodlerPosts(accountId ?? "none"), personaId ?? "none"],
-    queryFn: () =>
-      api
-        .get<{
+    queryFn: async () => {
+      const items: SlurpProfilePost[] = [];
+      let cursor: SlurpPageCursor | null = null;
+      do {
+        const query = new URLSearchParams({ limit: "20" });
+        if (personaId) query.set("personaId", personaId);
+        if (cursor) {
+          query.set("cursorAt", cursor.createdAt);
+          query.set("cursorId", cursor.id);
+        }
+        const page: {
           items: SlurpProfilePost[];
-        }>(
-          `/slurp/noodler/accounts/${encodeURIComponent(accountId!)}/posts${personaId ? `?personaId=${encodeURIComponent(personaId)}` : ""}`,
-        )
-        .then((page) => page.items),
+          nextCursor: SlurpPageCursor | null;
+        } = await api.get(`/slurp/noodler/accounts/${encodeURIComponent(accountId!)}/posts?${query.toString()}`);
+        items.push(...page.items);
+        cursor = page.nextCursor;
+      } while (cursor);
+      return items;
+    },
     enabled: Boolean(accountId),
     staleTime: 10_000,
     // Automatic posts are written server-side without a client mutation; poll while visible.
@@ -589,6 +600,7 @@ type NoodlerFormatRequest = {
 
 type NoodlerCreatePostRequest = Omit<NoodlerPostCreateInput, "uploadedImageUrl" | "imageCrop"> & {
   image?: NoodlerPostDraftImage | null;
+  postType?: "post" | "story";
 } & NoodlerFormatRequest;
 
 type NoodlerGeneratePostRequest = Omit<NoodlerGenerationRequest, "uploadedImageUrl" | "imageCrop"> & {
@@ -702,10 +714,11 @@ export function useNoodlerViewer(personaId: string | null, enabled = true) {
     queryKey: noodleKeys.viewer(personaId ?? "none"),
     queryFn: async () => {
       const encodedPersonaId = encodeURIComponent(personaId!);
+      type ViewerPost = NoodlerViewerScope["creators"][number]["posts"][number] & { story?: boolean };
       type FeedPage = {
         items: Array<{
           creatorAccountId: string;
-          post: NoodlerViewerScope["creators"][number]["posts"][number];
+          post: ViewerPost;
         }>;
         total: number;
         nextCursor: SlurpPageCursor | null;
@@ -1023,6 +1036,22 @@ export function useReplaceNoodlerPostImage() {
         qc.invalidateQueries({
           queryKey: noodleKeys.noodlerPosts(input.accountId),
         }),
+        qc.invalidateQueries({ queryKey: noodleKeys.noodlerViewers() }),
+      ]),
+  });
+}
+
+export function useGenerateNoodlerPostImage() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, accountId }: { id: string; accountId: string }) =>
+      api.post<NoodlerManagedPost>(`/slurp/noodler/posts/${encodeURIComponent(id)}/image/generate`, {
+        accountId,
+        debugMode: useSlurpUIStore.getState().debugMode,
+      }),
+    onSuccess: (_post, input) =>
+      Promise.all([
+        qc.invalidateQueries({ queryKey: noodleKeys.noodlerPosts(input.accountId) }),
         qc.invalidateQueries({ queryKey: noodleKeys.noodlerViewers() }),
       ]),
   });

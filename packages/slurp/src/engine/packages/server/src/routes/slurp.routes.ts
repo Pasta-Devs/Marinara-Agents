@@ -9,7 +9,6 @@ import { z } from "zod";
 import {
   createNoodlePoll,
   noodleBulkNoodlerAccountCreateSchema,
-  noodlerPostCreateSchema,
   noodlerPostCreateWithMediaSchema,
   noodlerGenerationRequestSchema,
   noodlerPostUpdateSchema,
@@ -98,6 +97,20 @@ import { generateNoodlerCreatorArtwork } from "../services/slurp/slurp-artwork.o
 
 const slurpTargetedRefreshSchema = noodlerTargetedRefreshSchema.extend({
   access: z.enum(["public", "locked"]).optional(),
+});
+
+const slurpPostTypeSchema = z.enum(["post", "story"]);
+const slurpNoodlerPostCreateWithMediaSchema = noodlerPostCreateWithMediaSchema.extend({
+  postType: slurpPostTypeSchema.default("post"),
+});
+const slurpNoodlerPostCreateSchema = slurpNoodlerPostCreateWithMediaSchema.superRefine((input, ctx) => {
+  if (!input.content && !input.poll && !input.uploadedImageUrl) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ["content"],
+      message: "Posts need a body, image, or poll.",
+    });
+  }
 });
 
 function requestRecord(value: unknown): Record<string, unknown> | null {
@@ -608,7 +621,7 @@ export async function slurpRoutes(app: FastifyInstance) {
    * The shared Engine view type has no price field, and adding one there would force an
    * engine.min bump for a presentation detail. The package widens it locally instead.
    */
-  type NoodlerPricedPostView = NoodlerPostView & { unlockPrice: number | null };
+  type NoodlerPricedPostView = NoodlerPostView & { unlockPrice: number | null; story: boolean };
 
   async function projectViewerPosts(
     context: ViewerContext,
@@ -663,6 +676,7 @@ export async function slurpRoutes(app: FastifyInstance) {
             // A locked post withholds its metadata, so the price travels as its own field. It is
             // presentation only — nothing on the unlock route reads it back or checks funds.
             unlockPrice: locked ? noodlerUnlockPriceFromMetadata(post.metadata) : null,
+            story: post.metadata.noodlerPostType === "story",
             createdAt: post.createdAt,
             interactions: locked ? [] : visibleInteractions,
             likeCount: allInteractions.filter((item) => item.type === "like").length,
@@ -1038,17 +1052,23 @@ export async function slurpRoutes(app: FastifyInstance) {
 
   app.post("/noodler/posts", async (req, reply) => {
     let decoded: DecodedNoodlerMediaRequest<
-      z.output<typeof noodlerPostCreateWithMediaSchema> | z.output<typeof noodlerPostCreateSchema>
+      z.output<typeof slurpNoodlerPostCreateWithMediaSchema> | z.output<typeof slurpNoodlerPostCreateSchema>
     >;
     try {
       decoded = await decodeNoodlerMediaRequest(req, {
-        withMedia: noodlerPostCreateWithMediaSchema,
-        withoutMedia: noodlerPostCreateSchema,
+        withMedia: slurpNoodlerPostCreateWithMediaSchema,
+        withoutMedia: slurpNoodlerPostCreateSchema,
       });
     } catch (error) {
       return sendNoodlerMediaError(reply, error);
     }
     if (!decoded.success) return reply.code(400).send({ error: decoded.error.flatten() });
+    if (decoded.data.postType === "story" && !decoded.media) {
+      return reply.code(400).send({ error: "Stories need an image." });
+    }
+    if (decoded.data.postType === "story" && decoded.data.poll) {
+      return reply.code(400).send({ error: "Stories cannot contain polls." });
+    }
     const result = await createNoodlerPost(app.db, decoded.data, decoded.media);
     if (result.status === "created") return reply.code(201).send(result.post);
     if (result.status === "busy") {
@@ -1087,6 +1107,35 @@ export async function slurpRoutes(app: FastifyInstance) {
     if (result.status === "disabled") return reply.code(404).send({ error: "Not Found" });
     if (result.status === "forbidden") return reply.code(403).send({ error: "Forbidden" });
     return reply.code(404).send({ error: "NoodleR post not found" });
+  });
+
+  app.post("/noodler/posts/:id/image/generate", async (req, reply) => {
+    const { id } = req.params as { id: string };
+    const parsed = z
+      .object({
+        accountId: z.string().min(1),
+        debugMode: z.boolean().optional(),
+      })
+      .safeParse(req.body ?? {});
+    if (!parsed.success) return reply.code(400).send({ error: parsed.error.flatten() });
+    const post = await noodle.getNoodlerPostById(id);
+    if (!post) return reply.code(404).send({ error: "NoodleR post not found" });
+    if (post.authorAccountId !== parsed.data.accountId) return reply.code(403).send({ error: "Forbidden" });
+    if (post.imageUrl) return reply.code(409).send({ error: "This post already has an image." });
+    if (!post.imagePrompt) return reply.code(400).send({ error: "This post does not have an image prompt." });
+
+    const result = await noodlerImages.generateReviewedImages({
+      prompts: [{ id: post.id, prompt: post.imagePrompt }],
+      debugMode: parsed.data.debugMode === true,
+      retryStoredPrompt: true,
+    });
+    if (!result.ok) return reply.code(400).send({ error: result.message });
+    const updated = await noodle.getNoodlerPostById(id);
+    if (updated?.imageUrl) return updated;
+    if (updated?.metadata.imageGenerationFailed === true) {
+      return reply.code(502).send({ error: "Image generation failed. Try again later." });
+    }
+    return reply.code(409).send({ error: "This image is already being generated." });
   });
 
   app.delete("/noodler/posts/:id", async (req, reply) => {

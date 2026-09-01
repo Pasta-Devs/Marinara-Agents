@@ -318,6 +318,7 @@ export function createNoodlerNoodleImagesService(db: DB) {
     async generateReviewedImages(input: {
       prompts: ReviewedNoodleImagePrompt[];
       debugMode: boolean;
+      retryStoredPrompt?: boolean;
     }): Promise<{ ok: true; finalized: number } | { ok: false; error: "missing_connection"; message: string }> {
       const settings = await noodle.getSettings();
       let finalized = 0;
@@ -347,6 +348,10 @@ export function createNoodlerNoodleImagesService(db: DB) {
           await noodle.releasePostImageClaim(claimed.id, claimToken);
           continue;
         }
+        const retryPrompt =
+          input.retryStoredPrompt && typeof claimed.metadata.imageRetryPrompt === "string"
+            ? claimed.metadata.imageRetryPrompt
+            : null;
         const disclosureMode = account.settings.privacy.identityDisclosure ?? "secret";
         const linkedPublicAccount = await noodle.resolveAccountSource(account);
 
@@ -377,7 +382,11 @@ export function createNoodlerNoodleImagesService(db: DB) {
             imageConnection,
             db,
             debugMode: input.debugMode,
-            promptOverride,
+            promptOverride: retryPrompt
+              ? { prompt: retryPrompt }
+              : input.retryStoredPrompt
+                ? undefined
+                : promptOverride,
           });
         } catch (error) {
           logger.warn(error, "[noodler] Failed to generate reviewed image for %s", account.displayName);
@@ -386,10 +395,10 @@ export function createNoodlerNoodleImagesService(db: DB) {
           if (claimOwned) {
             await noodle.finalizePostImageClaim(claimed.id, claimToken, {
               imageUrl: null,
-              imagePrompt: null,
               metadata: {
                 imageGenerationFailed: true,
                 imageGenerationError: getErrorMessage(error).slice(0, 500),
+                ...(!input.retryStoredPrompt && { imageRetryPrompt: promptOverride.prompt }),
               },
             });
           }
@@ -417,10 +426,10 @@ export function createNoodlerNoodleImagesService(db: DB) {
           image.stagedMedia?.compensate();
           await noodle.finalizePostImageClaim(claimed.id, claimToken, {
             imageUrl: null,
-            imagePrompt: null,
             metadata: {
               imageGenerationFailed: true,
               imageGenerationError: "Stage profile identity changed during image generation.",
+              ...(!input.retryStoredPrompt && { imageRetryPrompt: promptOverride.prompt }),
             },
           });
           continue;
