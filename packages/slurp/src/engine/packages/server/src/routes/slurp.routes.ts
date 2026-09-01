@@ -62,6 +62,7 @@ import { clearNoodlerImageConnections } from "../services/slurp/slurp-image-conn
 import { generateAndApplyNoodlerCreatorReply } from "../services/slurp/slurp-creator-reply.operation.js";
 import { getNoodlerFanActivityStatus, runNoodlerFanActivity } from "../services/slurp/slurp-fan-activity.operation.js";
 import { admissionModeForRequest, isConnectionAdmissionFailure } from "../services/generation/connection-admission.js";
+import { createSlurpAds } from "../services/slurp/slurp-ads.js";
 import { generateNoodlerStageProfileDraft } from "../services/slurp/slurp-stage-profile-draft.service.js";
 import {
   getNoodlerImageConnections,
@@ -101,9 +102,23 @@ const slurpTargetedRefreshSchema = noodlerTargetedRefreshSchema.extend({
 });
 
 const slurpPostTypeSchema = z.enum(["post", "story"]);
-const slurpNoodlerPostCreateWithMediaSchema = noodlerPostCreateWithMediaSchema.extend({
-  postType: slurpPostTypeSchema.default("post"),
-});
+// The packaged shared bundle wraps this schema in a refinement, so `.extend` is not always
+// available. Extend the underlying object and re-run the full base schema in a refinement.
+const slurpNoodlerPostCreateBaseSchema = (
+  noodlerPostCreateWithMediaSchema instanceof z.ZodEffects
+    ? noodlerPostCreateWithMediaSchema.innerType()
+    : noodlerPostCreateWithMediaSchema
+) as typeof noodlerPostCreateWithMediaSchema;
+const slurpNoodlerPostCreateWithMediaSchema = slurpNoodlerPostCreateBaseSchema
+  .extend({
+    postType: slurpPostTypeSchema.default("post"),
+  })
+  .superRefine(({ postType: _postType, ...rest }, ctx) => {
+    const result = noodlerPostCreateWithMediaSchema.safeParse(rest);
+    if (!result.success) {
+      for (const issue of result.error.issues) ctx.addIssue(issue);
+    }
+  });
 const slurpNoodlerPostCreateSchema = slurpNoodlerPostCreateWithMediaSchema.superRefine((input, ctx) => {
   if (!input.content && !input.poll && !input.uploadedImageUrl) {
     ctx.addIssue({
@@ -357,6 +372,7 @@ export async function slurpRoutes(app: FastifyInstance) {
   const characterGallery = createCharacterGalleryStorage(app.db);
   const connections = createConnectionsStorage(app.db);
   const noodlerImages = createNoodlerNoodleImagesService(app.db);
+  const ads = createSlurpAds(app.db);
   const noodlerViewerSignalCache = new Map<string, { generationKey: string; value: NoodlerViewerSignalResponse }>();
 
   async function resolveNoodlerPublicIdentity(publicAccount: NoodleAccount) {
@@ -815,6 +831,38 @@ export async function slurpRoutes(app: FastifyInstance) {
       total: page.total,
       nextCursor: page.nextCursor,
     };
+  });
+
+  app.get("/noodler/viewer/ads", async (req, reply) => {
+    const parsed = z
+      .object({
+        personaId: z.string().trim().min(1),
+        creatorId: z.string().trim().min(1).optional(),
+        contextTags: z.string().optional(),
+      })
+      .safeParse(req.query);
+    if (!parsed.success) return reply.code(400).send({ error: parsed.error.flatten() });
+    const viewer = await resolveViewerPersona(parsed.data.personaId);
+    if (!viewer) return reply.code(404).send({ error: "Slurp persona not found" });
+    const creator = parsed.data.creatorId ? await noodle.getNoodlerAccountById(parsed.data.creatorId) : null;
+    const items = await ads.listInlineAds(parsed.data.personaId, {
+      currentCreatorId: creator?.id,
+      currentCreatorHandle: creator?.handle,
+      contextTags: parsed.data.contextTags?.split(",") ?? [],
+    });
+    await ads.markRecent(
+      parsed.data.personaId,
+      items.map((item) => item.id),
+    );
+    return { items };
+  });
+
+  app.post("/noodler/viewer/ads/:id/hide", async (req, reply) => {
+    const parsed = z.object({ personaId: z.string().trim().min(1) }).safeParse(req.body);
+    if (!parsed.success) return reply.code(400).send({ error: parsed.error.flatten() });
+    const viewer = await resolveViewerPersona(parsed.data.personaId);
+    if (!viewer) return reply.code(404).send({ error: "Slurp persona not found" });
+    return ads.hide(parsed.data.personaId, (req.params as { id: string }).id);
   });
 
   async function resolveReadableNoodlerPost(personaId: string, postId: string) {

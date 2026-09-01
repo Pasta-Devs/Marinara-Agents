@@ -73,7 +73,48 @@ export const noodleKeys = {
   noodlerReserveStatus: () => [...noodleKeys.noodlerRoot(), "reserve-status"] as const,
   noodlerImageConnections: () => [...noodleKeys.noodlerRoot(), "image-connections"] as const,
   noodlerFanStatus: () => [...noodleKeys.noodlerRoot(), "fan-status"] as const,
+  ads: (personaId: string, creatorId?: string | null) =>
+    [...noodleKeys.noodlerViewers(), "ads", personaId, creatorId ?? "none"] as const,
 };
+
+export type SlurpPromotion = {
+  id: string;
+  kind: "creator" | "inline";
+  brand: string;
+  product: string;
+  copy: string;
+  categories: string[];
+  contextTags: string[];
+  creatorAccountId?: string;
+  creatorHandle?: string;
+  imageUrl?: string | null;
+  actionLabel?: string;
+};
+
+export function useSlurpInlineAds(personaId: string | null, creatorId?: string | null, contextTags: string[] = []) {
+  return useQuery({
+    queryKey: noodleKeys.ads(personaId ?? "none", creatorId),
+    queryFn: () =>
+      api.get<{ items: SlurpPromotion[] }>(
+        `/slurp/noodler/viewer/ads?personaId=${encodeURIComponent(personaId!)}${creatorId ? `&creatorId=${encodeURIComponent(creatorId)}` : ""}${contextTags.length ? `&contextTags=${encodeURIComponent(contextTags.join(","))}` : ""}`,
+      ),
+    enabled: Boolean(personaId),
+    staleTime: 60_000,
+  });
+}
+
+export function useHideSlurpAd() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ personaId, promotionId }: { personaId: string; promotionId: string }) =>
+      api.post(`/slurp/noodler/viewer/ads/${encodeURIComponent(promotionId)}/hide`, { personaId }),
+    onSuccess: (_state, input) =>
+      qc.invalidateQueries({
+        queryKey: noodleKeys.noodlerViewers(),
+        predicate: (query) => query.queryKey.includes(input.personaId),
+      }),
+  });
+}
 
 export type SlurpSettings = {
   refreshesPerDay: number;

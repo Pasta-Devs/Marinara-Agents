@@ -64,6 +64,8 @@ import {
   useNoodlerPosts,
   useNoodlerSubscribers,
   useNoodlerUnseenCount,
+  useHideSlurpAd,
+  useSlurpInlineAds,
   useMarkNoodlerFeedSeen,
   useNoodlerViewer,
   useRemoveNoodlerInteraction,
@@ -125,7 +127,6 @@ import {
   useHideOnScroll,
   NOODLE_PERSONA_SWITCHER_PAGE_SIZE,
   NOODLE_PINK,
-  useNoodleAccent,
 } from "./SlurpShell";
 import { SlurpProfileSurface } from "./SlurpProfileSurface";
 import { SlurpSettings } from "./SlurpSettings";
@@ -137,6 +138,7 @@ import { HelpTooltip } from "../ui/HelpTooltip";
 import { Modal } from "../ui/Modal";
 import type { SlurpNavigationState } from "./slurp-navigation.types";
 import { useTranslation as useUiTranslation } from "react-i18next";
+import { SlurpInlineAd } from "./SlurpInlineAd";
 
 interface SlurpHomeProps {
   navigation: Extract<SlurpNavigationState, { mode: "creator" }>;
@@ -863,14 +865,13 @@ export function SlurpHome({ navigation, onNavigate }: SlurpHomeProps) {
       },
       {
         onSuccess: cancelEditingReply,
-        onError: (error) =>
-          toast.error(errorMessage(error, localizeUi("ui.noodle.noodlehome.couldNotEditNoodleComment"))),
+        onError: (error) => toast.error(errorMessage(error, localizeUi("ui.slurp.comment.editError"))),
       },
     );
   };
   const deleteNoodleReply = async (post: NoodlePostCardModel, reply: NoodleInteraction) => {
     const confirmed = await showConfirmDialog({
-      title: localizeUi("ui.noodle.noodlehome.deleteNoodleComment"),
+      title: localizeUi("ui.slurp.comment.deleteTitle"),
       message: localizeUi("ui.noodle.noodlehome.thisRemovesTheCommentAndAnyRepliesOrLikes"),
       confirmLabel: localizeUi("ui.noodle.noodlepostcard.deleteComment"),
       tone: "destructive",
@@ -879,8 +880,7 @@ export function SlurpHome({ navigation, onNavigate }: SlurpHomeProps) {
     deleteInteraction.mutate(
       { postId: post.id, interactionId: reply.id, personaId: viewerPersonaId },
       {
-        onError: (error) =>
-          toast.error(errorMessage(error, localizeUi("ui.noodle.noodlehome.couldNotDeleteNoodleComment"))),
+        onError: (error) => toast.error(errorMessage(error, localizeUi("ui.slurp.comment.deleteError"))),
       },
     );
   };
@@ -913,7 +913,6 @@ export function SlurpHome({ navigation, onNavigate }: SlurpHomeProps) {
       deleteInteraction,
     },
     deduplicatePollBody: false,
-    imageFit: "contain",
     imageEditing: {
       loadPostImage: async (post) => {
         if (!post.imageUrl) throw new Error("This post does not have an image.");
@@ -1338,8 +1337,6 @@ export function SlurpHome({ navigation, onNavigate }: SlurpHomeProps) {
             : ("noodler" as const),
     homeActive: navigation.mode === "creator" && navigation.view === "hub",
     noodlerUnseenCount,
-    // The Noodle count matters most from here: this is where the user is while the public
-    // timeline is the one filling up unwatched.
     accent: NOODLE_PINK,
     personaAccount: shellPersonaAccount,
     sortedPersonaAccounts: viewerAccounts,
@@ -1695,8 +1692,6 @@ export function SlurpHome({ navigation, onNavigate }: SlurpHomeProps) {
             onRetry={() => void postsQuery.refetch()}
             onOpenImage={(url, id) => postCardController.setImageLightbox(createNoodleLightboxImage(id, url))}
             onEdit={() => beginEdit(selectedProfile)}
-            onRedraft={() => redraftFromSource(selectedProfile)}
-            redraftPending={generateProfileDraft.isPending}
             onBack={() =>
               navigation.mode === "creator" && navigation.view === "profile" && navigation.returnToSettings
                 ? onNavigate(navigation.returnToSettings)
@@ -1974,7 +1969,7 @@ export function SlurpHome({ navigation, onNavigate }: SlurpHomeProps) {
               toast.error(errorMessage(error, localizeUi("ui.noodle.noodlerhome.couldNotRefreshNoodlerCreators")));
               return;
             }
-            toast.success(localizeUi("ui.noodle.noodlehome.noodleTimelineRefreshed"));
+            toast.success(localizeUi("ui.slurp.feed.refreshed"));
           })
         }
         isRefreshing={viewerQuery.isRefetching}
@@ -2986,8 +2981,6 @@ function StageProfileView({
   isError,
   onRetry,
   onEdit,
-  onRedraft,
-  redraftPending,
   onBack,
   onManualPost,
   onGuidedPost,
@@ -3024,8 +3017,6 @@ function StageProfileView({
   isError: boolean;
   onRetry: () => void;
   onEdit: () => void;
-  onRedraft: () => void;
-  redraftPending: boolean;
   onBack: () => void;
   onManualPost: (input: NoodlerPostSubmission) => Promise<void>;
   onGuidedPost: (input: NoodlerPostSubmission) => Promise<void>;
@@ -3043,7 +3034,7 @@ function StageProfileView({
   onAccessChange: (access: NoodlerManagedStageProfile["access"]) => void;
   onOpenImage: (url: string, id: string) => void;
 }) {
-  const { t: localizeUi } = useUiTranslation();
+  const { t: localizeUi, i18n } = useUiTranslation();
   const bannerSrc = useSlurpMediaSrc(profile.bannerUrl, { width: 1280 });
   const [accessSettingsOpen, setAccessSettingsOpen] = useState(false);
   const [automationOpen, setAutomationOpen] = useState(false);
@@ -3112,8 +3103,6 @@ function StageProfileView({
     const story = isSlurpStory(post);
     if (activeTab === "stories") return story;
     if (activeTab === "posts") return !story;
-    if (item.kind === "locked" || item.kind === "controller-locked") return false;
-    if (activeTab === "media") return !story && Boolean(item.model.imageUrl);
     return false;
   });
   const imagePosts = projectedPosts.flatMap<SlurpProfileImagePost>((item) => {
@@ -3123,6 +3112,12 @@ function StageProfileView({
       : [];
   });
   const featuredPost = imagePosts[0] ?? null;
+  const emptyTabTitle =
+    activeTab === "media"
+      ? localizeUi("ui.slurp.profile.emptyMedia")
+      : activeTab === "stories"
+        ? localizeUi("ui.slurp.profile.emptyStories")
+        : localizeUi("ui.noodle.stageprofileview.noNoodlerPostsYet");
   const cards = (
     <>
       {activeTab === "subscribers" ? (
@@ -3162,7 +3157,7 @@ function StageProfileView({
                     <p className="truncate text-xs text-[var(--muted-foreground)]">@{subscriber.handle}</p>
                   </div>
                   <time dateTime={subscriber.subscribedAt} className="shrink-0 text-xs text-[var(--muted-foreground)]">
-                    {new Date(subscriber.subscribedAt).toLocaleDateString()}
+                    {new Date(subscriber.subscribedAt).toLocaleDateString(i18n.language)}
                   </time>
                 </div>
               ))}
@@ -3214,7 +3209,7 @@ function StageProfileView({
             ))}
           </div>
         ) : (
-          <EmptyState title={localizeUi("ui.noodle.stageprofileview.noValue1PostsYet", { value1: activeTab })} />
+          <EmptyState title={emptyTabTitle} />
         )
       ) : visiblePosts.length > 0 ? (
         visiblePosts.map((item) =>
@@ -3288,13 +3283,7 @@ function StageProfileView({
           ),
         )
       ) : (
-        <EmptyState
-          title={
-            activeTab === "posts"
-              ? localizeUi("ui.noodle.stageprofileview.noNoodlerPostsYet")
-              : localizeUi("ui.noodle.stageprofileview.noValue1PostsYet", { value1: activeTab })
-          }
-        />
+        <EmptyState title={emptyTabTitle} />
       )}
     </>
   );
@@ -3833,9 +3822,7 @@ function StageProfileView({
                               },
                               {
                                 onError: (error) => {
-                                  toast.error(
-                                    errorMessage(error, localizeUi("ui.noodle.noodlehome.couldNotUpdateNoodleProfile")),
-                                  );
+                                  toast.error(errorMessage(error, localizeUi("ui.slurp.creator.updateError")));
                                   event.target.value = String(current);
                                 },
                               },
@@ -3944,6 +3931,11 @@ function ViewerHub({
   const [visibleFeedCount, setVisibleFeedCount] = useState(NOODLER_FEED_WINDOW_SIZE);
   const [activeMomentId, setActiveMomentId] = useState<string | null>(null);
   const [momentCutoff] = useState(() => Date.now() - SLURP_MOMENT_WINDOW_MS);
+  const inlineAdsQuery = useSlurpInlineAds(scope?.viewer.entityId ?? null, null, [
+    tab === "all" ? "discover" : "following",
+    new Date().getHours() >= 18 ? "night" : "day",
+  ]);
+  const hideSlurpAd = useHideSlurpAd();
   const profileKey = (scope?.creators ?? []).map((creator) => creator.profile.id).join("\u0000");
   useEffect(() => {
     setVisibleFeedCount(NOODLER_FEED_WINDOW_SIZE);
@@ -4024,6 +4016,9 @@ function ViewerHub({
         searchable(creator.profile.handle).includes(searchTerm) ||
         searchable(creator.profile.displayName).includes(searchTerm)),
   );
+  const suggestedCreators = creators
+    .filter((creator) => creator.profile.id !== authorProfile?.id && !creator.followed)
+    .slice(0, 3);
   // The feed is newest-first, so the divider goes after the *last* new post — the viewer's own
   // posts sitting in that run are not news themselves but must not cut it short. Shown only
   // when there is something on both sides: with no older posts it would sit at the bottom
@@ -4299,6 +4294,30 @@ function ViewerHub({
                 <Fragment key={item.post.id}>
                   {index === dividerIndex && <NewSinceLastVisitDivider />}
                   {renderFeedPost(item)}
+                  {!searchTerm &&
+                    tab === "all" &&
+                    index > 0 &&
+                    index % 4 === 3 &&
+                    inlineAdsQuery.data?.items[index / 4 - 1] && (
+                      <SlurpInlineAd
+                        promotion={inlineAdsQuery.data.items[index / 4 - 1]!}
+                        onHide={() =>
+                          hideSlurpAd.mutate({
+                            personaId: scope!.viewer.entityId,
+                            promotionId: inlineAdsQuery.data!.items[index / 4 - 1]!.id,
+                          })
+                        }
+                      />
+                    )}
+                  {tab === "all" && !searchTerm && index === Math.min(2, visibleFeed.length - 1) && (
+                    <SlurpInlineSuggestedCreators
+                      creators={suggestedCreators}
+                      pending={togglePending}
+                      onOpenProfile={postCardCtx.openAuthorProfile}
+                      onToggleFollow={onToggleFollow}
+                      onToggleSubscription={onToggleSubscription}
+                    />
+                  )}
                 </Fragment>
               ))}
               {visibleFeed.length < feed.length && (
@@ -4351,6 +4370,86 @@ function ViewerHub({
         />
       )}
     </div>
+  );
+}
+
+function SlurpInlineSuggestedCreators({
+  creators,
+  pending,
+  onOpenProfile,
+  onToggleFollow,
+  onToggleSubscription,
+}: {
+  creators: SlurpViewerCreator[];
+  pending: boolean;
+  onOpenProfile?: (accountId: string) => void;
+  onToggleFollow: (creatorAccountId: string, followed: boolean) => void;
+  onToggleSubscription: (creatorAccountId: string, subscribed: boolean) => void;
+}) {
+  const { t: localizeUi } = useUiTranslation();
+  if (creators.length === 0) return null;
+  return (
+    <aside
+      data-component="SlurpHome.InlineSuggestedCreators"
+      aria-labelledby="slurp-inline-suggested-creators"
+      className="overflow-hidden rounded-xl bg-[var(--slurp-surface)] px-3 py-3 ring-1 ring-inset ring-[var(--noodle-divider)]"
+    >
+      <div className="flex items-center justify-between gap-3 px-1">
+        <h2 id="slurp-inline-suggested-creators" className="text-sm font-bold">
+          {localizeUi("ui.slurp.suggestedCreators")}
+        </h2>
+        <Sparkles size={15} className="shrink-0 text-[var(--noodle-accent)]" aria-hidden="true" />
+      </div>
+      <div className="mt-2 flex snap-x gap-2 overflow-x-auto pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+        {creators.map((creator) => (
+          <div
+            key={creator.profile.id}
+            className="flex min-w-64 snap-start items-center gap-2 rounded-lg bg-[var(--slurp-canvas)] p-2"
+          >
+            <button
+              type="button"
+              onClick={() => onOpenProfile?.(creator.profile.id)}
+              disabled={!onOpenProfile}
+              className="shrink-0 rounded-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--noodle-accent)] disabled:cursor-default"
+              aria-label={localizeUi("ui.noodle.noodlehome.viewValue1", { value1: creator.profile.displayName })}
+            >
+              <ProfileInitial profile={creator.profile} />
+            </button>
+            <div className="min-w-0 flex-1">
+              <button
+                type="button"
+                onClick={() => onOpenProfile?.(creator.profile.id)}
+                disabled={!onOpenProfile}
+                className="block max-w-full truncate text-left text-xs font-bold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--noodle-accent)] disabled:cursor-default"
+              >
+                {creator.profile.displayName}
+              </button>
+              <p className="truncate text-[0.65rem] text-[var(--muted-foreground)]">@{creator.profile.handle}</p>
+            </div>
+            <div className="flex shrink-0 gap-1">
+              <button
+                type="button"
+                disabled={pending}
+                onClick={() => onToggleFollow(creator.profile.id, creator.followed)}
+                className="min-h-9 rounded-md border border-[var(--noodle-divider)] px-2 text-[0.65rem] font-bold hover:bg-[var(--accent)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--noodle-accent)] disabled:opacity-50"
+              >
+                {creator.followed ? localizeUi("ui.slurp.profile.following") : localizeUi("ui.slurp.profile.follow")}
+              </button>
+              <button
+                type="button"
+                disabled={pending}
+                onClick={() => onToggleSubscription(creator.profile.id, creator.subscribed)}
+                className="min-h-9 rounded-md bg-[var(--noodle-accent)] px-2 text-[0.65rem] font-bold text-zinc-950 hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--noodle-accent)] disabled:opacity-50"
+              >
+                {creator.subscribed
+                  ? localizeUi("ui.slurp.profile.subscribed")
+                  : localizeUi("ui.slurp.profile.subscribe")}
+              </button>
+            </div>
+          </div>
+        ))}
+      </div>
+    </aside>
   );
 }
 
@@ -4994,9 +5093,7 @@ function NoodlerPostComposer({
       return;
     }
     if (guide.length > NOODLER_POST_GUIDE_MAX_LENGTH) {
-      setGuideError(
-        `The combined title and body guide must be ${NOODLER_POST_GUIDE_MAX_LENGTH.toLocaleString()} characters or fewer.`,
-      );
+      setGuideError(localizeUi("ui.slurp.composer.guideTooLong", { count: NOODLER_POST_GUIDE_MAX_LENGTH }));
       return;
     }
     try {
@@ -5485,7 +5582,7 @@ function SubscriptionSections({
             return (
               <div
                 key={creator.profile.id}
-                className="flex items-center gap-3 rounded-xl px-2 py-2.5 transition-colors hover:bg-[var(--accent)]/45"
+                className="flex flex-wrap items-center gap-x-3 gap-y-2 rounded-xl px-2 py-2.5 transition-colors hover:bg-[var(--accent)]/45"
               >
                 <button
                   type="button"
@@ -5518,7 +5615,7 @@ function SubscriptionSections({
                   disabled={togglePending}
                   onClick={() => onToggleSubscription(creator.profile.id, creator.subscribed)}
                   className={cn(
-                    "inline-flex min-h-9 items-center gap-1.5 rounded-lg px-3 text-xs font-bold transition-[opacity,transform] hover:opacity-90 active:scale-[0.96] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--noodle-accent)] motion-reduce:transition-none motion-reduce:active:scale-100 disabled:cursor-not-allowed disabled:opacity-50",
+                    "inline-flex min-h-9 w-full items-center justify-center gap-1.5 rounded-lg px-3 text-xs font-bold transition-[opacity,transform] hover:opacity-90 active:scale-[0.96] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--noodle-accent)] motion-reduce:transition-none motion-reduce:active:scale-100 disabled:cursor-not-allowed disabled:opacity-50",
                     creator.subscribed
                       ? "border border-[var(--noodle-divider)] text-[var(--foreground)]"
                       : "bg-[var(--foreground)] text-[var(--background)] [&_svg]:!text-[var(--background)]",
