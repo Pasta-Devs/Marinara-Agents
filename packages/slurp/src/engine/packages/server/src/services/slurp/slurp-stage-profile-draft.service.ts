@@ -28,46 +28,13 @@ import {
 } from "./slurp-generation.service.js";
 import { resolveNoodlerSourceSnapshot } from "./slurp-source-resolve.js";
 import { normalizeNoodlerStageProfileDraft } from "./slurp-stage-profile-normalize.js";
-import { parseRecord } from "./slurp-public-support.js";
+import { noodlerConcealedSourceText, noodlerSourceText } from "./slurp-prompt-safety.js";
 import { createNoodlerSourceRevisionToken } from "./slurp-source-revision.js";
 
 /** Used only when a source card carries no usable prose, so the model still gets a starting point. */
 const CONCEALED_SOURCE_FALLBACK_BRIEF = "General temperament and creative interests from the source profile.";
 
 type GenerationConnection = NonNullable<Awaited<ReturnType<ReturnType<typeof createConnectionsStorage>["getWithKey"]>>>;
-
-/**
- * Both concealed modes describe the same person, so they receive the same seed and differ only in
- * what the instructions forbid saying. Name, scenario, and backstory are the googleable canon, so
- * they stay out of both; body, voice, and everyday texture are inseparable from the person and stay
- * in.
- */
-export function noodlerConcealedSourceText(data: unknown): string {
-  const source = parseRecord(data);
-  const extensions = parseRecord(source.extensions);
-  return [
-    `Description: ${typeof source.description === "string" ? source.description : ""}`,
-    `Personality: ${typeof source.personality === "string" ? source.personality : ""}`,
-    `Appearance: ${typeof source.appearance === "string" ? source.appearance : typeof extensions.appearance === "string" ? extensions.appearance : ""}`,
-  ]
-    .filter((line) => line.split(": ").slice(1).join(": ").trim())
-    .join("\n");
-}
-
-export function noodlerSourceText(data: unknown): string {
-  const source = parseRecord(data);
-  const extensions = parseRecord(source.extensions);
-  return [
-    `Name: ${typeof source.name === "string" ? source.name : ""}`,
-    `Description: ${typeof source.description === "string" ? source.description : ""}`,
-    `Personality: ${typeof source.personality === "string" ? source.personality : ""}`,
-    `Scenario: ${typeof source.scenario === "string" ? source.scenario : ""}`,
-    `Appearance: ${typeof source.appearance === "string" ? source.appearance : typeof extensions.appearance === "string" ? extensions.appearance : ""}`,
-    `Backstory: ${typeof source.backstory === "string" ? source.backstory : typeof extensions.backstory === "string" ? extensions.backstory : ""}`,
-  ]
-    .filter((line) => line.trim().split(": ").slice(1).join(": ").trim())
-    .join("\n");
-}
 
 function disclosureRules(mode: NoodleIdentityDisclosure, publicIdentity: { displayName: string; handle: string }) {
   if (mode === "open")

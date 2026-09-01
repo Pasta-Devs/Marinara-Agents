@@ -27,6 +27,7 @@ import type { ChatMessage } from "../llm/base-provider.js";
 import { createLLMProvider } from "../llm/provider-registry.js";
 import { resolveNoodlerImageConnectionId } from "./slurp-image-connections.js";
 import { createCharactersStorage } from "../storage/characters.storage.js";
+import { noodlerConcealedSourceText, noodlerSourceText } from "./slurp-prompt-safety.js";
 import { createConnectionsStorage } from "../storage/connections.storage.js";
 import { createSlurpStorage, type SlurpAccount } from "../storage/slurp.storage.js";
 import { createPromptOverridesStorage } from "../storage/prompt-overrides.storage.js";
@@ -289,9 +290,43 @@ function formatNoodlerPostHistory(posts: NoodlerManagedPost[], protect: (value: 
     .join("\n");
 }
 
+/**
+ * The card behind a Creator, reduced for concealed modes. Name, scenario, and backstory are the
+ * lookupable canon, so `noodlerConcealedSourceText` withholds them; an OPEN Creator uses the source
+ * identity publicly and gets the whole card.
+ */
+async function resolveSlurpSourceCardContext(
+  db: DB,
+  linkedPublicAccount: NoodleAccount | null,
+  disclosureMode: NoodleIdentityDisclosure,
+): Promise<string> {
+  if (!linkedPublicAccount) return "";
+  const characters = createCharactersStorage(db);
+  const data =
+    linkedPublicAccount.kind === "character"
+      ? ((await characters.getById(linkedPublicAccount.entityId))?.data ?? null)
+      : linkedPublicAccount.kind === "persona"
+        ? await characters.getPersona(linkedPublicAccount.entityId).then((persona) =>
+            persona
+              ? {
+                  name: persona.name,
+                  description: persona.description,
+                  personality: persona.personality,
+                  scenario: persona.scenario,
+                  appearance: persona.appearance,
+                  backstory: persona.backstory,
+                }
+              : null,
+          )
+        : null;
+  if (!data) return "";
+  return disclosureMode === "open" ? noodlerSourceText(data) : noodlerConcealedSourceText(data);
+}
+
 export function buildNoodlerPostMessages(input: {
   account: Pick<NoodleAccount, "displayName" | "handle" | "bio">;
   stagePersonality: string;
+  sourceCharacterContext: string;
   disclosureMode: NoodleIdentityDisclosure;
   publicIdentity: PublicIdentity | null;
   recentPosts: NoodlerManagedPost[];
@@ -311,6 +346,10 @@ export function buildNoodlerPostMessages(input: {
     "Write only as the supplied Slurp account. Do not create other accounts, interactions, follows, or public timeline activity.",
     NOODLER_UNTRUSTED_CONTENT_INSTRUCTION,
     "Use the Slurp stage profile as supplied.",
+    // Bio and stage voice are written once when the Creator is set up. On their own they flatten
+    // every Creator into the same register, so the source card is supplied as the person and the
+    // stage voice sits on top of it as the performance.
+    "The source character is who this Creator actually is: take their temperament, register, humour, and interests from it. The stage voice describes how they perform on Slurp, layered over that person, not a replacement for them.",
     ...(guidance ? [guidance] : []),
     noodlerIdentityInstruction(input.disclosureMode, input.publicIdentity),
     NOODLER_FORMAT_PROMPTS[format],
@@ -329,6 +368,9 @@ export function buildNoodlerPostMessages(input: {
     `Handle: @${protect(input.account.handle)}`,
     `Bio: ${protect(input.account.bio) || "No bio provided."}`,
     `Stage voice: ${protect(input.stagePersonality) || "No additional stage voice provided."}`,
+    "",
+    "# Source character",
+    protect(input.sourceCharacterContext) || "No source character is linked to this Creator.",
     input.scheduleContext ?? "No active Conversation Schedule is available for this Creator today.",
     `Content format: ${format}`,
     "",
@@ -424,8 +466,14 @@ export async function generateNoodlerPost(
     : undefined;
   // Derive the identity from the row already in hand; resolving it again would re-read it.
   const publicIdentity = await noodlerPublicIdentityFor(db, linkedPublicAccount);
+  // Read the card at post time rather than relying on the bio and stage voice frozen at setup, so
+  // sharpening a character sharpens its Creator and existing Creators improve without a migration.
+  // Concealed modes get the same seed the stage profile draft uses; disclosure limits what may be
+  // said, not who this is.
+  const sourceCharacterContext = await resolveSlurpSourceCardContext(db, linkedPublicAccount, disclosureMode);
   const messages = buildNoodlerPostMessages({
     account,
+    sourceCharacterContext,
     stagePersonality: account.settings.privacy.stagePersonality ?? "",
     disclosureMode,
     publicIdentity,

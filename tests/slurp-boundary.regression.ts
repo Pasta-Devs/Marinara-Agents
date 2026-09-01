@@ -87,6 +87,10 @@ assert.doesNotMatch(
   /slurpViewers|slurp_viewers/u,
   "Slurp must not access an Engine-unregistered viewer table",
 );
+const promptSafety = readFileSync(
+  "packages/slurp/src/engine/packages/server/src/services/slurp/slurp-prompt-safety.ts",
+  "utf8",
+);
 const stageProfileDraft = readFileSync(
   join(root, "packages/slurp/src/engine/packages/server/src/services/slurp/slurp-stage-profile-draft.service.ts"),
   "utf8",
@@ -124,19 +128,44 @@ assert.match(
 // Both concealed modes describe the same person and share one seed; only the instructions differ.
 // Reducing the seed to a fixed vocabulary made every concealed creator converge on one voice.
 assert.match(
-  stageProfileDraft,
+  promptSafety,
   /function noodlerConcealedSourceText[\s\S]*Description: \$\{[\s\S]*Personality: \$\{[\s\S]*Appearance: \$\{/u,
   "concealed Slurp profile prompts must seed from the source description, personality, and appearance",
 );
 // Name, scenario, and backstory are the googleable canon, so they stay out of the concealed seed.
 assert.doesNotMatch(
-  stageProfileDraft.slice(
-    stageProfileDraft.indexOf("export function noodlerConcealedSourceText"),
-    stageProfileDraft.indexOf("export function noodlerSourceText"),
+  promptSafety.slice(
+    promptSafety.indexOf("export function noodlerConcealedSourceText"),
+    promptSafety.indexOf("export function noodlerSourceText"),
   ),
   /scenario|backstory|source\.name/u,
   "concealed Slurp profile prompts must withhold the lookupable canon",
 );
+const slurpGeneration = readFileSync(
+  "packages/slurp/src/engine/packages/server/src/services/slurp/slurp-generation.service.ts",
+  "utf8",
+);
+// Bio and stage voice are written once at Creator setup, so on their own they freeze every Creator
+// into whatever a model invented that day. The card is read at post time so the person is present
+// and existing Creators improve without a migration.
+assert.match(
+  slurpGeneration,
+  /const sourceCharacterContext = await resolveSlurpSourceCardContext\(db, linkedPublicAccount, disclosureMode\)/u,
+  "Slurp posts must read the source card at post time, not only the stage profile frozen at setup",
+);
+assert.match(
+  slurpGeneration,
+  /"# Source character",\s*protect\(input\.sourceCharacterContext\)/u,
+  "the source card must reach the post prompt through the identity scrubber",
+);
+// Disclosure limits what may be said, not who this is, so a concealed Creator still gets the card
+// with only the lookupable canon withheld.
+assert.match(
+  slurpGeneration,
+  /disclosureMode === "open" \? noodlerSourceText\(data\) : noodlerConcealedSourceText\(data\)/u,
+  "concealed Slurp Creators must still receive the source card, minus the lookupable canon",
+);
+
 // A concealed creator still posts their body — it is the page. Concealment is framing, not a
 // vaguer description, so every mode sends the same appearance and secret adds a face-avoiding guard.
 assert.match(
