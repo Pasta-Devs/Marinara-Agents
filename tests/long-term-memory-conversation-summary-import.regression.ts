@@ -50,12 +50,14 @@ const gameChat = {
 async function main() {
   const [
     { configurePackageRuntime },
-    { previewPackageInterop, previewPackageLorebooks, importPackageInterop },
+    { previewPackageInterop, previewPackageLorebooks, sourcePackageDetails, importPackageInterop },
     { LongTermMemoryStorage },
+    { ltmInteropPreviewRequestSchema, ltmSourceDetailsRequestSchema },
   ] = await Promise.all([
     import("../packages/long-term-memory/src/engine/packages/server/src/services/long-term-memory/package-runtime.ts"),
     import("../packages/long-term-memory/src/engine/packages/server/src/services/long-term-memory/interop.ts"),
     import("../packages/long-term-memory/src/engine/packages/server/src/services/long-term-memory/storage.ts"),
+    import("../packages/long-term-memory/src/engine/packages/shared/src/features/agents/long-term-memory/schema.ts"),
   ]);
   const dataDir = await mkdtemp(join(tmpdir(), "marinara-ltm-conversation-summary-"));
   const agents = JSON.parse(
@@ -118,7 +120,10 @@ async function main() {
               {
                 id: "lorebook-import",
                 data: { name: "Imported Lorebook", category: "World" },
-                entries: [{ id: "lore-entry", name: "Moon Vault", content: "The Moon Vault is sealed." }],
+                entries: [
+                  { id: "lore-entry", name: "Moon Vault", content: "The Moon Vault is sealed." },
+                  { id: "lore-entry-two", name: "Sun Vault", content: "The Sun Vault is open." },
+                ],
               },
             ];
           },
@@ -130,9 +135,39 @@ async function main() {
         mode: "conversation" as const,
         limit: 100,
       };
+      assert.equal(
+        ltmInteropPreviewRequestSchema.parse({ source: "chats", query: "  nikujaga  " }).query,
+        "nikujaga",
+        "preview search must trim bounded input",
+      );
+      assert.equal(
+        ltmInteropPreviewRequestSchema.parse({ source: "chats", query: "   " }).query,
+        undefined,
+        "blank preview search must behave as omitted",
+      );
+      assert.throws(
+        () => ltmInteropPreviewRequestSchema.parse({ source: "chats", query: "x".repeat(201) }),
+        /String must contain at most 200 character/u,
+      );
+      assert.deepEqual(
+        ltmSourceDetailsRequestSchema.parse({
+          source: "chats",
+          sourceIds: ["chat-conversation:day:27.07.2026"],
+          sourceScope: { chatId: conversationChat.id },
+          mode: "conversation",
+        }),
+        {
+          source: "chats",
+          sourceIds: ["chat-conversation:day:27.07.2026"],
+          sourceScope: { chatId: conversationChat.id },
+          mode: "conversation",
+        },
+      );
       const candidates = await previewPackageInterop(request, join(dataDir, "long-term-memory"));
       assert.equal(candidates.scanned, 3, "each day and week entry yields one candidate");
       assert.equal(candidates.draftable, 3);
+      assert.deepEqual(candidates.totals, { matches: 3, ready: 3, imported: 0 });
+      assert.equal(candidates.truncated, false);
       assert.deepEqual(
         candidates.samples.map((candidate) => candidate.sourceId),
         ["chat-conversation:day:27.07.2026", "chat-conversation:week:27.07.2026", "chat-conversation:day:02.08.2026"],
@@ -143,6 +178,8 @@ async function main() {
         { ...request, limit: 2 },
         join(dataDir, "long-term-memory"),
       );
+      assert.deepEqual(limitedCandidates.totals, { matches: 3, ready: 3, imported: 0 });
+      assert.equal(limitedCandidates.truncated, true);
       assert.deepEqual(
         limitedCandidates.samples.map((candidate) => candidate.sourceId),
         ["chat-conversation:day:27.07.2026", "chat-conversation:week:27.07.2026"],
@@ -158,6 +195,26 @@ async function main() {
         candidates.samples.some((candidate) => candidate.snippet.includes("Bare string form")),
         "legacy bare-string day entries must coerce, not vanish",
       );
+      const searchedCandidates = await previewPackageInterop(
+        { ...request, query: "mild" },
+        join(dataDir, "long-term-memory"),
+      );
+      assert.deepEqual(
+        searchedCandidates.samples.map((candidate) => candidate.sourceId),
+        ["chat-conversation:day:27.07.2026"],
+      );
+      assert.deepEqual(searchedCandidates.totals, { matches: 1, ready: 1, imported: 0 });
+      const sourceDetails = await sourcePackageDetails(
+        {
+          source: "chats",
+          sourceIds: ["chat-conversation:day:27.07.2026", "missing-summary"],
+          sourceScope: { chatId: conversationChat.id },
+          mode: "conversation",
+        },
+        join(dataDir, "long-term-memory"),
+      );
+      assert.equal(sourceDetails.details[0]?.content, "Discussed nikujaga.\n\nmild\n\nno chili");
+      assert.deepEqual(sourceDetails.missingSourceIds, ["missing-summary"]);
 
       const importedCharacter = await importPackageInterop(
         {
@@ -191,6 +248,7 @@ async function main() {
       assert.equal(explicitCharacter.imported[0]?.note.modes[0], "game");
 
       const lorebookPreview = await previewPackageLorebooks({ limit: 100 }, join(dataDir, "long-term-memory"));
+      const limitedLorebookPreview = await previewPackageLorebooks({ limit: 1 }, join(dataDir, "long-term-memory"));
       assert.equal(lorebookPreview.books[0]?.entries[0]?.candidates[0]?.importMode, "roleplay");
       const lorebookGamePreview = await previewPackageLorebooks(
         { limit: 100, mode: "game" },
@@ -199,8 +257,14 @@ async function main() {
       assert.equal(lorebookGamePreview.books[0]?.entries[0]?.candidates[0]?.importMode, "game");
       const lorebookSourceId = lorebookPreview.books[0]?.entries[0]?.candidates[0]?.sourceId;
       assert.ok(lorebookSourceId, "lorebook preview must expose an importable candidate");
-      assert.equal(lorebookPreview.books[0]?.counts.candidates, 1);
-      assert.equal(lorebookGamePreview.books[0]?.counts.candidates, 1);
+      assert.equal(lorebookPreview.books[0]?.counts.candidates, 2);
+      assert.equal(lorebookGamePreview.books[0]?.counts.candidates, 2);
+      assert.equal(lorebookPreview.totals.books, 1);
+      assert.equal(lorebookPreview.totals.candidates, 2);
+      assert.equal(lorebookPreview.truncated, false);
+      assert.equal(limitedLorebookPreview.counts.candidates, 1);
+      assert.equal(limitedLorebookPreview.totals.candidates, 2);
+      assert.equal(limitedLorebookPreview.truncated, true);
       const importedLorebook = await importPackageInterop(
         { source: "lorebooks", sourceIds: [lorebookSourceId], extract: true, limit: 100 },
         join(dataDir, "long-term-memory"),

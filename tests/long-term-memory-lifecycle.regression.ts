@@ -149,6 +149,11 @@ async function main() {
   let browser: { close: () => Promise<void> } | null = null;
   let browserServer: ReturnType<typeof createServer> | null = null;
   let releaseReextraction: (() => void) | null = null;
+  const reextractionRequests: Array<{ path: string; body: Record<string, unknown> }> = [];
+  let markReextractionStarted: () => void = () => undefined;
+  const reextractionStarted = new Promise<void>((resolve) => {
+    markReextractionStarted = resolve;
+  });
   await runWithSafeCleanup(
     "LTM lifecycle",
     async () => {
@@ -997,6 +1002,8 @@ async function main() {
                 freshness: "new",
               },
             ],
+            totals: { matches: 2, ready: 1, imported: 1 },
+            truncated: false,
           });
         if (request.method === "POST" && url.pathname.endsWith("/import/lorebooks/preview")) {
           const books = [
@@ -1066,6 +1073,14 @@ async function main() {
               imported: books.reduce((count, book) => count + book.counts.imported, 0),
             },
             books,
+            totals: {
+              books: books.length,
+              entries: books.reduce((count, book) => count + book.counts.entries, 0),
+              candidates: books.reduce((count, book) => count + book.counts.candidates, 0),
+              pending: books.reduce((count, book) => count + book.counts.pending, 0),
+              imported: books.reduce((count, book) => count + book.counts.imported, 0),
+            },
+            truncated: false,
           });
         }
         if (request.method === "GET" && url.pathname.endsWith("/rejected-suggestions")) {
@@ -1137,14 +1152,46 @@ async function main() {
             },
           });
         }
-        if (request.method === "POST" && url.pathname.endsWith("/notes/source_desktop_reextract/extract"))
-          return await new Promise<void>((resolve) => {
-            releaseReextraction = () => {
-              releaseReextraction = null;
-              send(200, {});
-              resolve();
-            };
+        if (request.method === "POST" && url.pathname.endsWith("/notes/source_desktop_reextract/extract")) {
+          const chunks: Buffer[] = [];
+          for await (const chunk of request) chunks.push(Buffer.from(chunk));
+          reextractionRequests.push({
+            path: url.pathname,
+            body: JSON.parse(Buffer.concat(chunks).toString("utf8") || "{}") as Record<string, unknown>,
           });
+          if (reextractionRequests.length === 1)
+            return await new Promise<void>((resolve) => {
+              releaseReextraction = () => {
+                releaseReextraction = null;
+                send(500, { error: "Re-extraction fixture failed once" });
+                resolve();
+              };
+              markReextractionStarted();
+            });
+          return send(200, {
+            operationId: "00000000-0000-4000-8000-000000000002",
+            draft: null,
+            diagnostics: [],
+            outcome: {
+              state: "no_suggestions_created",
+              totalCandidates: 0,
+              keptUnits: 0,
+              droppedUnits: 0,
+              droppedCandidates: [],
+            },
+            accounting: {
+              providerCandidates: 0,
+              normalizedAdditions: 0,
+              parserRejections: 0,
+              validationRejections: 0,
+              deduplications: 0,
+              keptUnits: 0,
+            },
+            response: { summary: "No durable suggestions found.", mutations: [] },
+            appliedMutationIds: [],
+            skippedMutationIds: [],
+          });
+        }
         if (request.method === "POST" && url.pathname.endsWith("/preflight")) {
           const chunks: Buffer[] = [];
           for await (const chunk of request) chunks.push(Buffer.from(chunk));
@@ -2694,14 +2741,7 @@ async function main() {
       };
       await page.locator('[data-ltm-control="navigation"][data-ltm-destination="sources"]').first().click();
       await page.locator('[data-ltm-source-tab="chats"]').click();
-      const scopedChatPreviewRequestPromise = page.waitForRequest((request) => {
-        if (request.method() !== "POST" || !request.url().includes("/api/long-term-memory/import/preview"))
-          return false;
-        const body = request.postDataJSON() as { source?: string; sourceScope?: unknown };
-        return (
-          body.source === "chats" && JSON.stringify(body.sourceScope) === JSON.stringify(expectedInitialChatSourceScope)
-        );
-      });
+      await page.locator('[data-ltm-source-preview-status="success"]').waitFor();
       const sourceScopePicker = page.locator('[data-ltm-scope-picker="source"]');
       const sourceScopeTrigger = sourceScopePicker.getByRole("combobox");
       assert.match((await sourceScopeTrigger.innerText()).trim(), /All Available/u);
@@ -2725,6 +2765,14 @@ async function main() {
           .evaluate((listbox) => getComputedStyle(listbox).backgroundColor),
         "rgba(0, 0, 0, 0)",
       );
+      const scopedChatPreviewRequestPromise = page.waitForRequest((request) => {
+        if (request.method() !== "POST" || !request.url().includes("/api/long-term-memory/import/preview"))
+          return false;
+        const body = request.postDataJSON() as { source?: string; sourceScope?: unknown };
+        return (
+          body.source === "chats" && JSON.stringify(body.sourceScope) === JSON.stringify(expectedInitialChatSourceScope)
+        );
+      });
       await sourceScopePicker.locator('[role="option"][data-ltm-scope-option="chat:desktop-chat"]').click();
       const scopedChatPreviewRequest = (await scopedChatPreviewRequestPromise).postDataJSON() as {
         sourceScope?: unknown;
@@ -2873,15 +2921,24 @@ async function main() {
         return {
           width: rect.width,
           height: rect.height,
+          viewportWidth: document.documentElement.clientWidth,
           pageFits: document.documentElement.scrollWidth <= document.documentElement.clientWidth,
         };
       });
-      assert.deepEqual(mobileBulkGeometry, { width: 390, height: 844, pageFits: true });
+      assert.equal(await page.locator('[data-ltm-workspace-pane="workbench"][data-active="true"]').count(), 1);
+      assert.ok(mobileBulkGeometry.width <= mobileBulkGeometry.viewportWidth);
+      assert.ok(mobileBulkGeometry.height > 0);
+      assert.equal(mobileBulkGeometry.pageFits, true);
       const removeLocationBox = await mobileBulkDestination.locator('button[aria-label^="Remove "]').boundingBox();
       assert.ok(removeLocationBox);
       assert.ok(removeLocationBox.width >= 44 && removeLocationBox.height >= 44);
       await mobileBulkDestination.locator("[data-ltm-bulk-cancel]").click();
       await page.setViewportSize({ width: 1280, height: 900 });
+      await page
+        .locator('[data-ltm-source-preview="chats"]')
+        .getByRole("button", { name: "Select", exact: true })
+        .click();
+      await page.locator('[data-ltm-source-status-filter="ready"]').click();
       await page.locator('[data-ltm-source-select="character-outside-current-chat"]').check();
       const mergedDestinationRequestPromise = page.waitForRequest(
         (request) => request.method() === "POST" && request.url().includes("/api/long-term-memory/import/source-notes"),
@@ -2919,6 +2976,22 @@ async function main() {
       });
       await page.locator("[data-ltm-import-scope-result]").waitFor();
       await page.locator('[data-ltm-source-tab="characters"]').click();
+      await page.locator('[data-ltm-source-preview="characters"]').waitFor();
+      await page.locator('[data-ltm-source-preview-status="success"]').waitFor();
+      const allStatusFilter = page.locator('[data-ltm-source-status-filter="all"]');
+      await allStatusFilter.click();
+      await page.locator('[data-ltm-source-status-filter="all"][aria-selected="true"]').waitFor();
+      await allStatusFilter.focus();
+      await allStatusFilter.press("ArrowRight");
+      await page.locator('[data-ltm-source-status-filter="ready"][aria-selected="true"]').waitFor();
+      await page.waitForFunction(
+        () => document.activeElement?.getAttribute("data-ltm-source-status-filter") === "ready",
+      );
+      assert.equal(await page.locator('[data-ltm-source-status-filter="ready"]').getAttribute("aria-selected"), "true");
+      assert.equal(
+        await page.evaluate(() => document.activeElement?.getAttribute("data-ltm-source-status-filter")),
+        "ready",
+      );
       await page.locator('[data-ltm-source-row-status][data-ltm-source-id="character-outside-current-chat"]').waitFor();
       const characterPreviewRequest = sourcePreviewRequests.filter((request) => request.source === "characters").at(-1);
       assert.ok(characterPreviewRequest);
@@ -2927,52 +3000,75 @@ async function main() {
         await page.locator('[data-ltm-surface="sources"]').innerText(),
         /character card|Summary Prompt|lorebook entries as source notes/iu,
       );
-      await page.locator('[data-ltm-source-section="imported"]').click();
+      await page.locator('[data-ltm-source-tab="chats"]').click();
+      const sourceDetailsRequestPromise = page.waitForRequest(
+        (request) =>
+          request.method() === "POST" && request.url().includes("/api/long-term-memory/import/source-details"),
+      );
+      await page.locator('[data-ltm-source-status-filter="imported"]').click();
+      assert.match(await page.locator('[data-ltm-source-status-filter="imported"]').innerText(), /\([1-9]\d*\)/u);
       const desktopReextractRow = page.locator('[data-ltm-source-id="chat-a:summary-desktop-reextract"]');
-      await desktopReextractRow.hover();
-      const desktopReextract = desktopReextractRow.locator('[data-ltm-source-action="re-extract"]');
-      // ponytail: this lifecycle assertion covers re-extraction state; pointer geometry belongs in focused UI tests.
-      await desktopReextract.focus();
-      await desktopReextract.press("Enter");
+      await desktopReextractRow.click();
+      const sourceDetailsRequest = (await sourceDetailsRequestPromise).postDataJSON() as Record<string, unknown>;
+      assert.equal(Object.hasOwn(sourceDetailsRequest, "chatId"), false);
+      await page.locator("[data-ltm-source-management] > summary").click();
+      await page.locator('[data-ltm-source-management-action="copy"]').click();
+      const sourceOperationWorkbench = page.locator("[data-ltm-source-operation-workbench]");
+      await sourceOperationWorkbench.waitFor();
+      assert.equal(
+        await sourceOperationWorkbench.evaluate((element) => Boolean(element.closest("[data-ltm-source-workbench]"))),
+        true,
+      );
+      await page.locator('[data-ltm-source-tab="characters"]').click();
+      await page.locator('[data-ltm-source-preview="characters"]').waitFor();
+      await page.locator('[data-ltm-source-tab="chats"]').click();
+      await desktopReextractRow.click();
+      const desktopReextract = page.locator('[data-ltm-source-inspector-action="re-extract"]');
+      await desktopReextract.click();
       await page.waitForFunction(
         () =>
           document.querySelector('[data-ltm-surface="sources"]')?.getAttribute("data-ltm-extraction-status") ===
           "pending",
       );
       assert.equal(await desktopReextract.isDisabled(), true);
-      assert.match(
-        (await desktopReextract.getAttribute("class")) ?? "",
-        /\[&>svg\]:animate-spin/u,
-        "Desktop re-extraction must animate its pending loader",
-      );
+      await page.locator("[data-ltm-source-task-progress]").waitFor();
+      const desktopSourcesNavigation = page.locator('[data-ltm-navigation="desktop"] [data-ltm-destination="sources"]');
+      assert.match(await desktopSourcesNavigation.innerText(), /Re-extracting 1/u);
+      await page.locator('[data-ltm-navigation="desktop"] [data-ltm-destination="vault"]').click();
+      await reextractionStarted;
       releaseReextraction?.();
-      await page.waitForFunction(
-        () =>
-          document.querySelector('[data-ltm-surface="sources"]')?.getAttribute("data-ltm-extraction-status") === "idle",
+      await page.waitForFunction(() =>
+        document
+          .querySelector('[data-ltm-navigation="desktop"] [data-ltm-destination="sources"]')
+          ?.textContent?.includes("1 source failed"),
       );
-      assert.equal(await desktopReextract.isDisabled(), false);
+      assert.match(await desktopSourcesNavigation.innerText(), /1 source failed/u);
+      await desktopSourcesNavigation.click();
+      await page.locator('[data-ltm-surface="sources"]').waitFor();
+      await page.locator("[data-ltm-source-mode]").first().selectOption("game");
+      const retryReextract = page.locator('[data-ltm-source-action="retry-re-extract"]');
+      await retryReextract.waitFor();
+      await retryReextract.click();
+      await page.locator("[data-ltm-reextract-result]").waitFor();
+      assert.match(await desktopSourcesNavigation.innerText(), /Completed 1/u);
+      assert.deepEqual(reextractionRequests, [
+        { path: "/api/long-term-memory/notes/source_desktop_reextract/extract", body: {} },
+        { path: "/api/long-term-memory/notes/source_desktop_reextract/extract", body: {} },
+      ]);
       await page.locator('[data-ltm-source-tab="lorebooks"]').click();
-      const scopedLorebookPreviewRequestPromise = page.waitForRequest((request) => {
-        if (request.method() !== "POST" || !request.url().includes("/api/long-term-memory/import/lorebooks/preview"))
-          return false;
-        const body = request.postDataJSON() as { sourceScope?: unknown };
-        return JSON.stringify(body.sourceScope) === JSON.stringify(expectedInitialChatSourceScope);
-      });
-      await page.locator('[data-ltm-source-action="refresh-preview"]').click();
+      await page.locator('[data-ltm-source-preview="lorebooks"]').waitFor();
       await page.locator('[data-ltm-lorebook-id="lorebook_outside_current_chat"]').waitFor();
-      const lorebookPreviewRequest = (await scopedLorebookPreviewRequestPromise).postDataJSON() as {
-        sourceScope?: unknown;
-      };
-      assert.ok(lorebookPreviewRequest);
-      assert.deepEqual(lorebookPreviewRequest.sourceScope, expectedInitialChatSourceScope);
       const sourcesWorkspace = page.locator('[data-ltm-surface="sources"] [data-ltm-workspace]');
       await sourcesWorkspace.waitFor();
       assert.equal(
         await sourcesWorkspace.evaluate(
           (element) => getComputedStyle(element).gridTemplateColumns.split(/\s+/u).length,
         ),
-        2,
+        3,
       );
+      await destinationScopeTrigger.click();
+      await destinationScopeSearch.fill("Memory chat");
+      await destinationScopePicker.locator('[role="option"][data-ltm-scope-option="chat:memory-chat"]').click();
       await page.locator('[data-ltm-lorebook-id="lorebook_mobile_fixture"]').click();
       assert.equal(await page.locator('[data-ltm-lorebook-workbench="lorebook_mobile_fixture"]').isVisible(), true);
       await page.locator('[data-ltm-lorebook-entry="entry_mobile_harbor"]').waitFor();
@@ -2980,6 +3076,56 @@ async function main() {
         await page.locator('[data-ltm-lorebook-entry="entry_mobile_harbor"]').innerText(),
         /blue lantern marks the safe channel/u,
       );
+      await page.locator("[data-ltm-lorebook-browser]").getByRole("button", { name: "Select", exact: true }).click();
+      await page.locator('[data-ltm-lorebook-entry-select="entry_mobile_harbor"]').check();
+      await page.locator('[data-ltm-lorebook-id="lorebook_outside_current_chat"]').click();
+      await page.locator('[data-ltm-lorebook-entry-select="entry_outside_current_chat"]').check();
+      const selectionDialog = new Promise<void>((resolveDialog) => {
+        page.once("dialog", async (dialog) => {
+          assert.match(dialog.message(), /2/u);
+          await dialog.dismiss();
+          resolveDialog();
+        });
+      });
+      await page.locator('[data-ltm-source-tab="chats"]').click();
+      await selectionDialog;
+      assert.equal(await page.locator('[data-ltm-source-tab="lorebooks"]').getAttribute("aria-selected"), "true");
+      const persistedImportRequest = page.waitForRequest(
+        (request) => request.method() === "POST" && request.url().includes("/api/long-term-memory/import/source-notes"),
+      );
+      await page.locator('[data-ltm-lorebook-action="import-selected"]').click();
+      await persistedImportRequest;
+      const liveImportResult = page.locator("[data-ltm-source-import-result]");
+      await liveImportResult.waitFor();
+      assert.equal(
+        await liveImportResult.evaluate((element) => Boolean(element.closest("[data-ltm-lorebook-workbench]"))),
+        true,
+      );
+
+      await page.reload();
+      await page.evaluate((version) => {
+        const element = document.createElement("marinara-capability-long-term-memory") as HTMLElement & {
+          capabilityProps?: unknown;
+        };
+        element.setAttribute("view", "detail");
+        element.capabilityProps = { agent: { name: "Long-Term Memory" }, package: { version } };
+        document.body.append(element);
+      }, packageManifest.version);
+      await page.locator('[data-ltm-surface="detail"]').waitFor();
+      await page.locator('[data-ltm-control="navigation"][data-ltm-destination="sources"]').first().click();
+      await page.locator("[data-ltm-latest-source-task]").click();
+      const restoredSourceResult = page.locator('[data-ltm-safe-source-task-result="completed"]');
+      await restoredSourceResult.waitFor();
+      assert.match(
+        await restoredSourceResult.innerText(),
+        /lorebook_outside_current_chat:entry_outside_current_chat:0/u,
+      );
+      assert.equal(
+        await restoredSourceResult.evaluate((element) => Boolean(element.closest("[data-ltm-lorebook-workbench]"))),
+        true,
+      );
+      await restoredSourceResult.getByRole("button", { name: "Back to preview" }).click();
+      assert.equal(await restoredSourceResult.count(), 0);
 
       const mobileContext = await browser.newContext({
         ...devices["Pixel 7"],

@@ -1,5 +1,15 @@
-import { type KeyboardEvent, useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
+import {
+  type KeyboardEvent,
+  useCallback,
+  useEffect,
+  useId,
+  useMemo,
+  useRef,
+  useState,
+  useSyncExternalStore,
+} from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { createPortal } from "react-dom";
 import {
   BookOpen,
   Check,
@@ -28,7 +38,9 @@ import type {
   LtmNoteTransferApplyResponse,
   LtmNoteTransferPreviewResponse,
   LtmSourceDerivedMemoriesResponse,
+  LtmSourceDetailsResponse,
   LtmScope,
+  LtmExtractSourceNoteResponse,
 } from "../../../../shared/src/features/agents/long-term-memory/schema.js";
 import { invalidateLtmQueries, queryKeys, request } from "./api";
 import { Button, ClickSurface, IconButton, InfoPopover, StatusSurface, inputClass } from "./shared-controls";
@@ -37,6 +49,14 @@ import type { LongTermMemoryDestinationProps, SourceTab } from "./types";
 import { useLtmTranslation, type LtmTranslationFunction } from "./localization";
 import { LtmWorkspace } from "./LtmWorkspace";
 import type { LtmWorkspacePane } from "./LtmWorkspace";
+import {
+  cancelLtmSourceTask,
+  getLtmSourceTaskSnapshot,
+  markLtmSourceTaskViewed,
+  startLtmSourceTask,
+  subscribeLtmSourceTask,
+  type LtmSourceTaskContract,
+} from "./source-task";
 import { buildScopeIndexes, type ScopeTargetChat, type ScopeTargets } from "./scope-targets";
 import {
   normalizeLtmScope,
@@ -44,7 +64,7 @@ import {
 } from "../../../../shared/src/features/agents/long-term-memory/scope.js";
 
 type Source = SourceTab;
-type FlatPanel = "available" | "imported";
+type SourceStatusFilter = "all" | "ready" | "imported";
 type PreviewRow = LtmInteropPreviewResponse["samples"][number];
 type LorebookCandidate = LtmInteropPreviewSample;
 type SourceOperation = "copy" | "move" | "archive" | "delete";
@@ -85,6 +105,7 @@ function ScopeTargetPicker({
   destination = false,
   required = false,
   invalid = false,
+  disabled = false,
 }: {
   targets: ScopeTarget[];
   value: string;
@@ -94,6 +115,7 @@ function ScopeTargetPicker({
   destination?: boolean;
   required?: boolean;
   invalid?: boolean;
+  disabled?: boolean;
 }) {
   const { t: localizeUi } = useLtmTranslation();
   const [open, setOpen] = useState(false);
@@ -198,6 +220,7 @@ function ScopeTargetPicker({
         aria-haspopup="listbox"
         aria-required={required}
         aria-invalid={invalid}
+        disabled={disabled}
         data-ltm-scope-picker-trigger={testId}
         className={`${inputClass} flex items-center gap-2 text-left`}
         onClick={() => setOpen((current) => !current)}
@@ -338,18 +361,35 @@ function BulkDestinationPicker({
   targets,
   selectedIds,
   onChange,
+  disabled = false,
+  renderTrigger = true,
+  renderEditor = true,
+  controlledOpen,
+  onOpenChange,
+  inline = false,
 }: {
   primaryTarget?: ScopeTarget;
   targets: ScopeTarget[];
   selectedIds: string[];
   onChange: (ids: string[]) => void;
+  disabled?: boolean;
+  renderTrigger?: boolean;
+  renderEditor?: boolean;
+  controlledOpen?: boolean;
+  onOpenChange?: (open: boolean) => void;
+  inline?: boolean;
 }) {
   const { t: localizeUi } = useLtmTranslation();
-  const [open, setOpen] = useState(false);
+  const [internalOpen, setInternalOpen] = useState(false);
+  const open = controlledOpen ?? internalOpen;
+  const setPickerOpen = (next: boolean) => {
+    setInternalOpen(next);
+    onOpenChange?.(next);
+  };
   const [draftIds, setDraftIds] = useState(selectedIds);
   const [activeKind, setActiveKind] = useState<"all" | Exclude<ScopeTargetKind, "all">>("all");
   const [query, setQuery] = useState("");
-  const dialogRef = useRef<HTMLDialogElement>(null);
+  const editorRef = useRef<HTMLDivElement>(null);
   const triggerRef = useRef<HTMLButtonElement>(null);
   const wasOpenRef = useRef(false);
   const availableTargets = useMemo(
@@ -414,60 +454,66 @@ function BulkDestinationPicker({
     );
   };
 
-  const restoreTriggerFocus = () => requestAnimationFrame(() => triggerRef.current?.focus({ preventScroll: true }));
+  const restoreTriggerFocus = () =>
+    requestAnimationFrame(() =>
+      (triggerRef.current ?? document.querySelector<HTMLButtonElement>("[data-ltm-add-destination]"))?.focus({
+        preventScroll: true,
+      }),
+    );
   const closePicker = () => {
-    setOpen(false);
+    setPickerOpen(false);
     restoreTriggerFocus();
   };
 
   useEffect(() => {
     const transitionedOpen = open && !wasOpenRef.current;
     wasOpenRef.current = open;
-    const dialog = dialogRef.current;
-    if (!dialog) return;
-    if (open && !dialog.open) dialog.showModal();
-    if (!open && dialog.open) dialog.close();
     if (transitionedOpen) {
       setDraftIds(selectedIds);
       setActiveKind("all");
       setQuery("");
-      requestAnimationFrame(() => dialog.querySelector<HTMLElement>("input")?.focus());
+      requestAnimationFrame(() => editorRef.current?.querySelector<HTMLElement>("input")?.focus());
     }
   }, [open, selectedIds]);
 
   return (
     <>
-      <Button
-        ref={triggerRef}
-        disabled={!primaryTarget}
-        onClick={() => setOpen(true)}
-        data-ltm-add-destination
-        className="w-full justify-center sm:w-auto"
-      >
-        <Plus aria-hidden="true" size="0.875rem" />
-        {localizeUi("ui.longTermMemory.sourcesworkspace.addMoreLocations")}
-        {selectedIds.length ? ` (${selectedIds.length})` : ""}
-      </Button>
-      {open ? (
-        <dialog
-          ref={dialogRef}
-          data-ltm-bulk-destination
-          aria-modal="true"
-          aria-labelledby="ltm-bulk-destination-title"
-          onCancel={(event) => {
-            event.preventDefault();
-            closePicker();
-          }}
-          onClose={() => {
-            setOpen(false);
-            restoreTriggerFocus();
-          }}
-          onClick={(event) => {
-            if (event.target === event.currentTarget) closePicker();
-          }}
-          className="fixed inset-0 z-50 m-0 h-full max-h-none w-full max-w-none bg-black/50 p-0 backdrop:bg-black/50 sm:grid sm:place-items-center sm:p-4"
+      {renderTrigger ? (
+        <Button
+          ref={triggerRef}
+          disabled={disabled || !primaryTarget}
+          onClick={() => setPickerOpen(true)}
+          data-ltm-add-destination
+          className="w-full justify-center sm:w-auto"
         >
-          <section className="flex h-full w-full flex-col bg-[var(--background)] text-[var(--foreground)] sm:h-auto sm:max-h-[min(42rem,calc(100vh-2rem))] sm:max-w-2xl sm:rounded-md sm:border sm:border-[var(--border)] sm:shadow-xl">
+          <Plus aria-hidden="true" size="0.875rem" />
+          {localizeUi("ui.longTermMemory.sourcesworkspace.addMoreLocations")}
+          {selectedIds.length ? ` (${selectedIds.length})` : ""}
+        </Button>
+      ) : null}
+      {renderEditor && open ? (
+        <div
+          ref={editorRef}
+          role="dialog"
+          aria-modal={!inline}
+          data-ltm-bulk-destination
+          aria-labelledby="ltm-bulk-destination-title"
+          onClick={(event) => {
+            if (!inline && event.target === event.currentTarget) closePicker();
+          }}
+          className={
+            inline
+              ? "mari-editor-panel overflow-hidden"
+              : "fixed inset-0 z-50 m-0 h-full max-h-none w-full max-w-none bg-black/50 p-0 sm:grid sm:place-items-center sm:p-4"
+          }
+        >
+          <section
+            className={
+              inline
+                ? "flex w-full flex-col bg-[var(--background)] text-[var(--foreground)]"
+                : "flex h-full w-full flex-col bg-[var(--background)] text-[var(--foreground)] sm:h-auto sm:max-h-[min(42rem,calc(100vh-2rem))] sm:max-w-2xl sm:rounded-md sm:border sm:border-[var(--border)] sm:shadow-xl"
+            }
+          >
             <header className="flex items-start justify-between gap-3 border-b border-[var(--border)] p-4">
               <div className="min-w-0">
                 <h2 id="ltm-bulk-destination-title" className="text-base font-semibold">
@@ -641,9 +687,97 @@ function BulkDestinationPicker({
               </Button>
             </footer>
           </section>
-        </dialog>
+        </div>
       ) : null}
     </>
+  );
+}
+
+function DestinationScopePanel({
+  targets,
+  value,
+  selectedIds,
+  selectedTarget,
+  additionalTargets,
+  onChange,
+  onAdditionalChange,
+  onOpenEditor,
+  mode,
+  source,
+  disabled = false,
+}: {
+  targets: ScopeTarget[];
+  value: string;
+  selectedIds: string[];
+  selectedTarget?: ScopeTarget;
+  additionalTargets: ScopeTarget[];
+  onChange: (value: string) => void;
+  onAdditionalChange: (ids: string[]) => void;
+  onOpenEditor: () => void;
+  mode: LtmMode | "all";
+  source: Source;
+  disabled?: boolean;
+}) {
+  const { t: localizeUi } = useLtmTranslation();
+  const labelId = useId();
+  return (
+    <div
+      id="ltm-destination-scope-control"
+      role="group"
+      aria-labelledby={labelId}
+      className="mari-editor-panel space-y-3 p-3"
+    >
+      <div className="flex items-center gap-2 text-xs font-semibold">
+        <span id={labelId}>{localizeUi("ui.longTermMemory.sourcesworkspace.makeMemoriesAvailableIn")}</span>
+        <InfoPopover
+          label={localizeUi("ui.longTermMemory.sourcesworkspace.makeMemoriesAvailableIn")}
+          content={localizeUi("ui.longTermMemory.sourcesworkspace.bulkDestinationHelp")}
+        />
+      </div>
+      <ScopeTargetPicker
+        targets={targets}
+        value={value}
+        onChange={onChange}
+        ariaLabel={localizeUi("ui.longTermMemory.sourcesworkspace.makeMemoriesAvailableIn")}
+        testId="destination"
+        destination
+        required
+        invalid={!selectedTarget}
+        disabled={disabled}
+      />
+      <div className="flex flex-wrap items-center gap-2">
+        <BulkDestinationPicker
+          primaryTarget={selectedTarget}
+          targets={targets}
+          selectedIds={selectedIds}
+          onChange={onAdditionalChange}
+          disabled={disabled}
+          renderEditor={false}
+          onOpenChange={(open) => {
+            if (open) onOpenEditor();
+          }}
+        />
+        {additionalTargets.length ? (
+          <span className="text-xs text-[var(--muted-foreground)]" data-ltm-additional-destination-summary>
+            {localizeUi("ui.longTermMemory.sourcesworkspace.additionalLocationsCount", {
+              count: additionalTargets.length,
+            })}
+          </span>
+        ) : null}
+      </div>
+      {!selectedTarget ? (
+        <span role="alert" className="block text-xs text-[var(--marinara-editor-warning)]">
+          {localizeUi("ui.longTermMemory.sourcesworkspace.chooseDestinationBeforeImport")}
+        </span>
+      ) : null}
+      <p className="text-xs text-[var(--muted-foreground)]" data-ltm-import-mode-summary>
+        {mode === "all"
+          ? source === "chats"
+            ? localizeUi("ui.longTermMemory.sourcesworkspace.automatic")
+            : localizeUi("ui.longTermMemory.sourcesworkspace.importsDefaultToRoleplay")
+          : sourceModeLabel(mode, localizeUi)}
+      </p>
+    </div>
   );
 }
 
@@ -662,16 +796,6 @@ const sourceTabs: Array<{ id: Source; labelKey: string }> = [
   },
 ];
 
-const flatPanelTabs: Array<{ id: FlatPanel; labelKey: string }> = [
-  {
-    id: "available",
-    labelKey: "ui.longTermMemory.sourcesworkspace.readyToImport",
-  },
-  {
-    id: "imported",
-    labelKey: "ui.longTermMemory.sourcesworkspace.alreadyImported",
-  },
-];
 const importStatusLabelKeys: Record<string, string> = {
   created: "ui.longTermMemory.sourcesworkspace.statusCreated",
   refreshed: "ui.longTermMemory.sourcesworkspace.statusRefreshed",
@@ -684,6 +808,8 @@ const importStatusLabelKeys: Record<string, string> = {
   no_suggestions_created: "ui.longTermMemory.sourcesworkspace.statusNoSuggestionsCreated",
 };
 const sourceCheckboxClass = "size-6 shrink-0 accent-[var(--marinara-editor-accent)]";
+const mobilePrimaryActionsClass =
+  "sticky bottom-0 z-10 flex flex-wrap gap-2 border-t border-[var(--border)] bg-[var(--card)] p-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))] md:static md:border-0 md:bg-transparent md:p-0";
 
 function resultTone(status: string): "neutral" | "success" | "warning" | "danger" {
   return status === "success" || status === "succeeded" || status === "created" || status === "refreshed"
@@ -773,7 +899,7 @@ function handleTabKey<T extends string>(
   event: KeyboardEvent<HTMLButtonElement>,
   ids: readonly T[],
   current: T,
-  onChange: (id: T) => void,
+  onChange: (id: T) => boolean | void | Promise<boolean | void>,
   selector: string,
 ) {
   const index = ids.indexOf(current);
@@ -786,8 +912,12 @@ function handleTabKey<T extends string>(
         ? ids.length - 1
         : (index + (event.key === "ArrowRight" ? 1 : -1) + ids.length) % ids.length;
   const next = ids[nextIndex];
-  onChange(next);
-  requestAnimationFrame(() => document.querySelector<HTMLElement>(`[${selector}="${next}"]`)?.focus());
+  void Promise.resolve(onChange(next)).then((changed) => {
+    if (changed !== false)
+      requestAnimationFrame(() =>
+        requestAnimationFrame(() => document.querySelector<HTMLElement>(`[${selector}="${next}"]`)?.focus()),
+      );
+  });
 }
 
 function EntrySelect({
@@ -824,18 +954,22 @@ function EntrySelect({
 function SourceOperationWorkbench({
   sourceNoteId,
   sourceTitle,
+  initialOperation,
   destinations,
+  disabled,
   confirmAction,
   onComplete,
 }: {
   sourceNoteId: string;
   sourceTitle: string;
+  initialOperation?: SourceOperation;
   destinations: ScopeTargetChat[];
+  disabled: boolean;
   confirmAction?: LongTermMemoryDestinationProps["props"]["confirmAction"];
   onComplete: () => Promise<void>;
 }) {
   const { t: localizeUi } = useLtmTranslation();
-  const [operation, setOperation] = useState<SourceOperation>("copy");
+  const [operation, setOperation] = useState<SourceOperation>(initialOperation ?? "copy");
   const [destinationChatId, setDestinationChatId] = useState("");
   const [selectedLinkedIds, setSelectedLinkedIds] = useState<string[]>([]);
   const [initializedFor, setInitializedFor] = useState("");
@@ -878,7 +1012,12 @@ function SourceOperationWorkbench({
     setError("");
   };
   const previewOperation = async () => {
-    if (!linked.data || linked.isError || ((operation === "copy" || operation === "move") && !destinationChatId))
+    if (
+      disabled ||
+      !linked.data ||
+      linked.isError ||
+      ((operation === "copy" || operation === "move") && !destinationChatId)
+    )
       return;
     setBusy("preview");
     setError("");
@@ -905,7 +1044,7 @@ function SourceOperationWorkbench({
     }
   };
   const apply = async () => {
-    if (!linked.data || linked.isError || !previewed || busy || result) return;
+    if (disabled || !linked.data || linked.isError || !previewed || busy || result) return;
     if (operation === "archive" || operation === "delete") {
       const options = {
         title: localizeUi(`ui.longTermMemory.sourceoperation.apply${operation[0].toUpperCase()}${operation.slice(1)}`),
@@ -997,6 +1136,7 @@ function SourceOperationWorkbench({
       role="region"
       aria-labelledby="ltm-source-operation-heading"
       data-ltm-source-operation={operation}
+      data-ltm-source-operation-workbench
       className="space-y-3 border-b border-[var(--border)] bg-[var(--secondary)]/20 p-3"
     >
       <div className="flex items-center gap-1">
@@ -1122,6 +1262,7 @@ function SourceOperationWorkbench({
       <Button
         primary
         disabled={
+          disabled ||
           busy !== null ||
           !linked.data ||
           linked.isError ||
@@ -1198,6 +1339,7 @@ function SourceOperationWorkbench({
             primary={operation !== "delete"}
             destructive={operation === "delete"}
             disabled={
+              disabled ||
               Boolean(result) ||
               busy !== null ||
               !linked.data ||
@@ -1263,6 +1405,65 @@ function SourceOperationWorkbench({
   );
 }
 
+function ImportedSourceInspector({
+  source,
+  disabled,
+  bulkActive,
+  onOpenMemory,
+  onOpenReview,
+  onReextract,
+  onManage,
+}: {
+  source: { id: string; title: string };
+  disabled: boolean;
+  bulkActive: boolean;
+  onOpenMemory?: (id: string) => void;
+  onOpenReview?: (id: string) => void;
+  onReextract: (id: string) => void;
+  onManage: (id: string, title: string, operation: SourceOperation) => void;
+}) {
+  const { t: localizeUi } = useLtmTranslation();
+  if (bulkActive) return null;
+  return (
+    <div className="space-y-3" data-ltm-source-inspector>
+      <div className="space-y-2">
+        <Button onClick={() => onOpenMemory?.(source.id)} data-ltm-source-inspector-action="open-memory">
+          {localizeUi("ui.longTermMemory.sourcesworkspace.openSourceMemory")}
+        </Button>
+        <Button onClick={() => onOpenReview?.(source.id)} data-ltm-source-inspector-action="review-drafts">
+          {localizeUi("ui.longTermMemory.memoryvault.reviewRelatedDrafts")}
+        </Button>
+        <Button
+          disabled={disabled}
+          onClick={() => onReextract(source.id)}
+          data-ltm-source-inspector-action="re-extract"
+        >
+          <Sparkles aria-hidden="true" size="0.75rem" />
+          {localizeUi("ui.longTermMemory.sourcesworkspace.reExtract")}
+        </Button>
+      </div>
+      <details data-ltm-source-management>
+        <summary className="cursor-pointer text-xs font-semibold">
+          {localizeUi("ui.longTermMemory.sourceoperation.manageSource")}
+        </summary>
+        <div className="mt-2 grid grid-cols-2 gap-2">
+          {(["copy", "move", "archive", "delete"] as const).map((operation) => (
+            <Button
+              key={operation}
+              disabled={disabled}
+              destructive={operation === "delete"}
+              onClick={() => onManage(source.id, source.title, operation)}
+              data-ltm-source-management-action={operation}
+            >
+              {localizeUi(`ui.longTermMemory.sourceoperation.${operation}`)}
+            </Button>
+          ))}
+        </div>
+      </details>
+    </div>
+  );
+}
+
 export default function SourcesWorkspace({
   props,
   onOpenMemory,
@@ -1273,34 +1474,105 @@ export default function SourcesWorkspace({
   onSourceChange,
 }: LongTermMemoryDestinationProps) {
   const { t: localizeUi } = useLtmTranslation();
+  const confirmAction = props.confirmAction;
   const sourceScopeLabelId = useId();
-  const destinationScopeLabelId = useId();
   const importResultLabelId = useId();
   const client = useQueryClient();
   const selectAllRef = useRef<HTMLInputElement>(null);
-  const selectAllImportedRef = useRef<HTMLInputElement>(null);
-  const importControllerRef = useRef<AbortController | null>(null);
+  const importResultRef = useRef<HTMLElement>(null);
+  const sourceTask = useSyncExternalStore(subscribeLtmSourceTask, getLtmSourceTaskSnapshot, getLtmSourceTaskSnapshot);
   const [source, setSource] = useState<Source>(selectedSource ?? "chats");
   const [selectedLorebookId, setSelectedLorebookId] = useState<string | null>(null);
-  const [lorebookMobilePane, setLorebookMobilePane] = useState<Exclude<LtmWorkspacePane, "inspector">>("navigator");
+  const [requestedSourceNoteId, setRequestedSourceNoteId] = useState<string | null>(null);
+  const [workspacePane, setWorkspacePane] = useState<LtmWorkspacePane>("navigator");
+  const [locationEditorOpen, setLocationEditorOpen] = useState(false);
   const [sourceTargetId, setSourceTargetId] = useState(props.chatId ? `chat:${props.chatId}` : "all");
   const [destinationTargetId, setDestinationTargetId] = useState(props.chatId ? `chat:${props.chatId}` : "");
   const [additionalDestinationTargetIds, setAdditionalDestinationTargetIds] = useState<string[]>([]);
   const [modeFilter, setModeFilter] = useState<LtmMode | "all">("all");
+  const [sourceQuery, setSourceQuery] = useState("");
+  const [sourceStatusFilter, setSourceStatusFilter] = useState<SourceStatusFilter>("all");
+  const [selectionMode, setSelectionMode] = useState(false);
+  const [sourceGroupsOpen, setSourceGroupsOpen] = useState<Record<Source, { ready: boolean; imported: boolean }>>({
+    chats: { ready: false, imported: false },
+    characters: { ready: false, imported: false },
+    lorebooks: { ready: false, imported: false },
+  });
+  const sourceGroupsBeforeSearch = useRef<Record<Source, { ready: boolean; imported: boolean }> | null>(null);
+  const sourceSearchContext = useRef<Source | null>(null);
+  const sourceQueryByType = useRef<Record<Source, string>>({ chats: "", characters: "", lorebooks: "" });
+  const sourceStatusByType = useRef<Record<Source, SourceStatusFilter>>({
+    chats: "all",
+    characters: "all",
+    lorebooks: "all",
+  });
+  const focusedSourceByType = useRef<Record<Source, string | null>>({ chats: null, characters: null, lorebooks: null });
+  const focusedLorebookByType = useRef<Record<Source, string | null>>({
+    chats: null,
+    characters: null,
+    lorebooks: null,
+  });
+  const openLorebookEntryByType = useRef<Record<Source, string | null>>({
+    chats: null,
+    characters: null,
+    lorebooks: null,
+  });
   const [selections, setSelections] = useState<Record<string, string[]>>({});
-  const [flatPanel, setFlatPanel] = useState<FlatPanel>("available");
-  const [importing, setImporting] = useState(false);
+  const [focusedFlatSourceId, setFocusedFlatSourceId] = useState<string | null>(null);
+  const [openLorebookEntryId, setOpenLorebookEntryId] = useState<string | null>(null);
   const [importError, setImportError] = useState("");
-  const [importResult, setImportResult] = useState<LtmImportSourceNotesResponse | null>(null);
-  const [importResultContract, setImportResultContract] = useState<ImportContract | null>(null);
-  const [cancelledImport, setCancelledImport] = useState<ImportContract | null>(null);
-  const [extractingId, setExtractingId] = useState<string | null>(null);
   const [reviewMessage, setReviewMessage] = useState("");
+  const [latestTaskResultOpen, setLatestTaskResultOpen] = useState(false);
+  const [dismissedTaskResultId, setDismissedTaskResultId] = useState<string | null>(null);
+  const [resultWorkbenchHost, setResultWorkbenchHost] = useState<HTMLDivElement | null>(null);
   const [sourceOperation, setSourceOperation] = useState<{
     id: string;
     title: string;
+    operation?: SourceOperation;
   } | null>(null);
   const [openSourceActionId, setOpenSourceActionId] = useState<string | null>(null);
+  const importing =
+    sourceTask.active?.status === "running" &&
+    (sourceTask.active.kind === "import" || sourceTask.active.kind === "refresh");
+  const extractingId =
+    sourceTask.active?.status === "running" && sourceTask.active.kind === "re-extract"
+      ? (sourceTask.active.contract.sourceIds[0] ?? null)
+      : null;
+  const importTask =
+    sourceTask.active?.kind === "import" || sourceTask.active?.kind === "refresh"
+      ? sourceTask.active
+      : sourceTask.latest?.kind === "import" || sourceTask.latest?.kind === "refresh"
+        ? sourceTask.latest
+        : null;
+  const importResult = importTask?.status === "completed" ? (importTask.result as LtmImportSourceNotesResponse) : null;
+  const visibleImportResult = importTask?.id === dismissedTaskResultId ? null : importResult;
+  const importResultContract = importTask?.contract as ImportContract | null;
+  const cancelledImport = importTask?.status === "cancelled" ? importResultContract : null;
+  const reextractTask =
+    sourceTask.active?.kind === "re-extract"
+      ? sourceTask.active
+      : sourceTask.latest?.kind === "re-extract"
+        ? sourceTask.latest
+        : null;
+  const reextractResult =
+    reextractTask?.status === "completed" ? (reextractTask.result as LtmExtractSourceNoteResponse | undefined) : null;
+  const retryableReextract =
+    reextractTask?.status === "failed" || reextractTask?.status === "cancelled" ? reextractTask : null;
+  const failedSourceTask =
+    importTask && (importTask.status === "failed" || importTask.status === "cancelled")
+      ? importTask
+      : reextractTask && (reextractTask.status === "failed" || reextractTask.status === "cancelled")
+        ? reextractTask
+        : null;
+  const sourceTaskError = failedSourceTask?.error?.message
+    ? failedSourceTask.error.message
+    : failedSourceTask?.error?.code === "interrupted"
+      ? localizeUi("ui.longTermMemory.sourcesworkspace.sourceTaskInterrupted")
+      : failedSourceTask?.error?.code === "cancelled"
+        ? localizeUi("ui.longTermMemory.sourcesworkspace.sourceTaskCancelled")
+        : failedSourceTask
+          ? localizeUi("ui.longTermMemory.sourcesworkspace.sourceTaskFailed")
+          : "";
 
   const scopeTargets = useQuery({
     queryKey: [...queryKeys.scopeTargetsRoot, "all-chats", props.chatId],
@@ -1417,33 +1689,48 @@ export default function SourcesWorkspace({
     .sort()
     .join(",")}`;
   const preview = useQuery({
-    queryKey: [...queryKeys.preview, source, previewScope, modeFilter],
+    queryKey: [...queryKeys.preview, source, previewScope, modeFilter, sourceQuery],
     queryFn: () =>
-      request<LtmInteropPreviewResponse, { source: Source; limit: number; sourceScope?: LtmScope; mode?: LtmMode }>(
-        "/import/preview",
-        "POST",
-        {
-          source,
-          limit: 100,
-          ...(previewScope ? { sourceScope: previewScope } : {}),
-          ...(modeFilter !== "all" ? { mode: modeFilter } : {}),
-        },
-      ),
+      request<
+        LtmInteropPreviewResponse,
+        { source: Source; limit: number; sourceScope?: LtmScope; mode?: LtmMode; query?: string }
+      >("/import/preview", "POST", {
+        source,
+        limit: 100,
+        ...(previewScope ? { sourceScope: previewScope } : {}),
+        ...(modeFilter !== "all" ? { mode: modeFilter } : {}),
+        ...(sourceQuery.trim() ? { query: sourceQuery } : {}),
+      }),
     enabled: source !== "lorebooks",
   });
   const lorebookPreview = useQuery({
-    queryKey: [...queryKeys.lorebookPreview, previewScope, modeFilter],
+    queryKey: [...queryKeys.lorebookPreview, previewScope, modeFilter, sourceQuery],
     queryFn: () =>
-      request<LtmLorebookPreviewResponse, { limit: number; sourceScope?: LtmScope; mode?: LtmMode }>(
+      request<LtmLorebookPreviewResponse, { limit: number; sourceScope?: LtmScope; mode?: LtmMode; query?: string }>(
         "/import/lorebooks/preview",
         "POST",
         {
           limit: 100,
           ...(previewScope ? { sourceScope: previewScope } : {}),
           ...(modeFilter !== "all" ? { mode: modeFilter } : {}),
+          ...(sourceQuery.trim() ? { query: sourceQuery } : {}),
         },
       ),
     enabled: source === "lorebooks",
+  });
+  const sourceDetails = useQuery({
+    queryKey: [...queryKeys.preview, "details", source, previewScope, modeFilter, focusedFlatSourceId],
+    queryFn: () =>
+      request<
+        LtmSourceDetailsResponse,
+        { source: Source; sourceIds: string[]; sourceScope?: LtmScope; mode?: LtmMode }
+      >("/import/source-details", "POST", {
+        source,
+        sourceIds: [focusedFlatSourceId!],
+        ...(previewScope ? { sourceScope: previewScope } : {}),
+        ...(modeFilter !== "all" ? { mode: modeFilter } : {}),
+      }),
+    enabled: source !== "lorebooks" && focusedFlatSourceId !== null,
   });
   const rows = [...(preview.data?.samples ?? [])].sort((left, right) => {
     if (source !== "chats" || !props.chatId) return 0;
@@ -1464,12 +1751,6 @@ export default function SourcesWorkspace({
     : [];
   const retryableIdSet = new Set(retryableIds);
   const selectableRows = rows.filter((row) => row.status === "pending" || retryableIdSet.has(row.sourceId));
-  const selectedSelectableIds = selectableRows
-    .filter((row) => selectedIds.has(row.sourceId))
-    .map((row) => row.sourceId);
-  const allSelectableSelected = selectableRows.length > 0 && selectedSelectableIds.length === selectableRows.length;
-  const selectedImportedRows = importedRows.filter((row) => selectedImportedIds.has(row.sourceId));
-  const allImportedSelected = importedRows.length > 0 && selectedImportedRows.length === importedRows.length;
   const lorebookImportSelectionKey = `${selectionKey}:lorebook-import`;
   const lorebookRefreshSelectionKey = `${selectionKey}:lorebook-refresh`;
   const selectedLorebookImportIds = new Set(selections[lorebookImportSelectionKey] ?? []);
@@ -1486,11 +1767,50 @@ export default function SourcesWorkspace({
       .filter((candidate) => candidate.status === "imported" && selectedLorebookRefreshIds.has(candidate.sourceId))
       .map((candidate) => candidate.sourceId) ?? [];
   const selectedLorebookCandidateIds = new Set([...selectedLorebookImportIds, ...selectedLorebookRefreshIds]);
-  const activeFlatRows = flatPanel === "available" ? selectableRows : importedRows;
-  const activeFlatSelection = flatPanel === "available" ? selectedIds : selectedImportedIds;
-  const activeFlatSelectedIds =
-    flatPanel === "available" ? selectedSelectableIds : selectedImportedRows.map((row) => row.sourceId);
-  const activeFlatAllSelected = flatPanel === "available" ? allSelectableSelected : allImportedSelected;
+  const activeFlatRows =
+    sourceStatusFilter === "ready" ? selectableRows : sourceStatusFilter === "imported" ? importedRows : rows;
+  const activeFlatSelection = new Set([...selectedIds, ...selectedImportedIds]);
+  const selectedFlatSourceIds = [...new Set([...selectedIds, ...selectedImportedIds])];
+  const activeFlatSelectedIds = activeFlatRows
+    .filter((row) => activeFlatSelection.has(row.sourceId))
+    .map((row) => row.sourceId);
+  const activeFlatAllSelected = activeFlatRows.length > 0 && activeFlatSelectedIds.length === activeFlatRows.length;
+  const focusedFlatRow = rows.find((row) => row.sourceId === focusedFlatSourceId) ?? null;
+  const focusedFlatDetail =
+    sourceDetails.data?.details.find((detail) => detail.sourceId === focusedFlatSourceId) ?? null;
+  const openLorebookEntry = selectedLorebook?.entries.find((entry) => entry.id === openLorebookEntryId);
+  const openLorebookSourceIds = openLorebookEntry?.candidates.map((candidate) => candidate.sourceId) ?? [];
+  const lorebookDetails = useQuery({
+    queryKey: [...queryKeys.lorebookPreview, "details", previewScope, modeFilter, openLorebookSourceIds],
+    queryFn: () =>
+      request<
+        LtmSourceDetailsResponse,
+        { source: Source; sourceIds: string[]; sourceScope?: LtmScope; mode?: LtmMode }
+      >("/import/source-details", "POST", {
+        source: "lorebooks",
+        sourceIds: openLorebookSourceIds,
+        ...(previewScope ? { sourceScope: previewScope } : {}),
+        ...(modeFilter !== "all" ? { mode: modeFilter } : {}),
+      }),
+    enabled: source === "lorebooks" && openLorebookSourceIds.length > 0,
+  });
+  const allLorebooks = lorebookPreview.data?.books ?? [];
+  const activeLorebooks = allLorebooks.filter((book) =>
+    sourceStatusFilter === "all"
+      ? true
+      : sourceStatusFilter === "ready"
+        ? book.counts.pending > 0
+        : book.counts.pending === 0 && book.counts.imported > 0,
+  );
+  const focusedLorebookCandidate = openLorebookEntry?.candidates.find((candidate) => candidate.status === "imported");
+  const focusedImportedSource =
+    focusedFlatRow?.status === "imported"
+      ? { id: focusedFlatRow.existingNoteId, title: focusedFlatRow.existingNoteTitle }
+      : focusedLorebookCandidate?.status === "imported"
+        ? { id: focusedLorebookCandidate.existingNoteId, title: focusedLorebookCandidate.existingNoteTitle }
+        : null;
+  const bulkSelectionActive = selectedFlatSourceIds.length > 0 || selectedLorebookCandidateIds.size > 0;
+  const selectionCount = source === "lorebooks" ? selectedLorebookCandidateIds.size : selectedFlatSourceIds.length;
   const pendingDraftsProduced = Boolean(
     importResult?.imported.some((item) => item.extractionStatus === "succeeded" && item.draft?.status === "pending"),
   );
@@ -1521,35 +1841,140 @@ export default function SourcesWorkspace({
         destination: importResultContract.destinationTargetLabel,
       })
     : "";
+  const activeSourceTask = sourceTask.active?.status === "running" ? sourceTask.active : null;
+  const sourceTaskProgressMessage = activeSourceTask
+    ? activeSourceTask.kind === "import"
+      ? localizeUi("ui.longTermMemory.sourcesworkspace.importingSources", { count: activeSourceTask.sourceCount })
+      : activeSourceTask.kind === "refresh"
+        ? localizeUi("ui.longTermMemory.sourcesworkspace.refreshingSources", { count: activeSourceTask.sourceCount })
+        : localizeUi("ui.longTermMemory.sourcesworkspace.reExtractingSources", {
+            count: activeSourceTask.sourceCount,
+          })
+    : "";
+  const latestSourceTask = sourceTask.latest;
+  const latestSourceTaskId = latestSourceTask?.id;
+  const latestSourceTaskLabel = latestSourceTask
+    ? latestSourceTask.kind === "import"
+      ? localizeUi("ui.longTermMemory.sourcesworkspace.lastImport")
+      : latestSourceTask.kind === "refresh"
+        ? localizeUi("ui.longTermMemory.sourcesworkspace.lastRefresh")
+        : localizeUi("ui.longTermMemory.sourcesworkspace.lastReExtract")
+    : "";
+  const closeTaskResult = () => {
+    if (latestSourceTask) setDismissedTaskResultId(latestSourceTask.id);
+    setLatestTaskResultOpen(false);
+  };
+  const reextractResultPanel =
+    reextractTask?.status === "completed" &&
+    reextractTask.id !== dismissedTaskResultId &&
+    (reextractResult || latestTaskResultOpen) ? (
+      <section
+        ref={importResultRef}
+        className="space-y-2 border-t border-[var(--border)] p-4"
+        data-ltm-reextract-result
+        data-ltm-source-task-result-workbench
+      >
+        <StatusSurface tone="success">
+          {reextractResult?.outcome.totalCandidates
+            ? localizeUi("ui.longTermMemory.sourcesworkspace.extractionCompletedReviewReady")
+            : localizeUi("ui.longTermMemory.sourcesworkspace.extractionCompleted")}
+        </StatusSurface>
+        <p className="text-xs text-[var(--muted-foreground)]" data-ltm-extraction-accounting>
+          {localizeUi("ui.longTermMemory.sourcesworkspace.suggestionsKeptOfTotal", {
+            kept: reextractResult?.outcome.keptUnits ?? reextractTask.safeResult?.counts?.keptUnits ?? 0,
+            total: reextractResult?.outcome.totalCandidates ?? reextractTask.safeResult?.counts?.totalCandidates ?? 0,
+          })}
+        </p>
+        {reextractTask.contract.sourceIds[0] && onOpenReview ? (
+          <Button onClick={() => onOpenReview(reextractTask.contract.sourceIds[0]!)}>
+            {localizeUi("ui.longTermMemory.memoryvault.reviewRelatedDrafts")}
+          </Button>
+        ) : null}
+        <Button onClick={closeTaskResult}>{localizeUi("ui.longTermMemory.sourcesworkspace.backToPreview")}</Button>
+      </section>
+    ) : null;
 
   const clearImportResult = useCallback(() => {
-    setImportResult(null);
-    setImportResultContract(null);
-    setCancelledImport(null);
     setImportError("");
     setReviewMessage("");
     setSourceOperation(null);
-  }, []);
+    setDismissedTaskResultId(latestSourceTaskId ?? null);
+    setLatestTaskResultOpen(false);
+  }, [latestSourceTaskId]);
+
+  const confirmSelectionChange = useCallback(async () => {
+    if (selectionCount > 1) {
+      const confirmed = confirmAction
+        ? await confirmAction({
+            title: localizeUi("ui.longTermMemory.sourcesworkspace.clearSelection"),
+            message: localizeUi("ui.longTermMemory.sourcesworkspace.clearSelectionMessage", {
+              count: selectionCount,
+            }),
+            confirmLabel: localizeUi("ui.longTermMemory.sourcesworkspace.clearSelection"),
+            tone: "default",
+          })
+        : window.confirm(
+            localizeUi("ui.longTermMemory.sourcesworkspace.clearSelectionMessage", { count: selectionCount }),
+          );
+      if (!confirmed) return false;
+    }
+    if (selectionCount)
+      setSelections((current) =>
+        Object.fromEntries(Object.entries(current).filter(([key]) => !key.startsWith(`${source}:`))),
+      );
+    return true;
+  }, [confirmAction, localizeUi, selectionCount, source]);
 
   const changeSource = useCallback(
-    (next: Source) => {
+    async (next: Source) => {
+      if (next === source) return true;
+      if (!(await confirmSelectionChange())) return false;
       setSource(next);
       onSourceChange?.(next);
-      if (next === "lorebooks") setLorebookMobilePane("navigator");
+      sourceQueryByType.current[source] = sourceQuery;
+      sourceStatusByType.current[source] = sourceStatusFilter;
+      focusedSourceByType.current[source] = focusedFlatSourceId;
+      focusedLorebookByType.current[source] = selectedLorebookId;
+      openLorebookEntryByType.current[source] = openLorebookEntryId;
+      setSourceQuery(sourceQueryByType.current[next]);
+      setSourceStatusFilter(sourceStatusByType.current[next]);
+      setFocusedFlatSourceId(focusedSourceByType.current[next]);
+      setSelectedLorebookId(focusedLorebookByType.current[next]);
+      setOpenLorebookEntryId(openLorebookEntryByType.current[next]);
+      setLocationEditorOpen(false);
+      setWorkspacePane("navigator");
       clearImportResult();
+      return true;
     },
-    [clearImportResult, onSourceChange],
+    [
+      clearImportResult,
+      confirmSelectionChange,
+      focusedFlatSourceId,
+      onSourceChange,
+      openLorebookEntryId,
+      selectedLorebookId,
+      source,
+      sourceQuery,
+      sourceStatusFilter,
+    ],
   );
 
+  const openLatestTaskResult = async () => {
+    if (!latestSourceTask || !(await changeSource(latestSourceTask.contract.source))) return;
+    markLtmSourceTaskViewed(latestSourceTask.id);
+    setDismissedTaskResultId(null);
+    setLatestTaskResultOpen(true);
+    setWorkspacePane("workbench");
+    requestAnimationFrame(() => importResultRef.current?.scrollIntoView({ block: "nearest" }));
+  };
+
   useEffect(() => {
-    if (!scopeTargetOptions.some((target) => target.id === sourceTargetId))
-      setSourceTargetId(props.chatId ? `chat:${props.chatId}` : "all");
     if (!destinationTargets.some((target) => target.id === destinationTargetId))
       setDestinationTargetId(props.chatId ? `chat:${props.chatId}` : "");
     setAdditionalDestinationTargetIds((current) =>
       current.filter((id) => destinationTargets.some((target) => target.id === id)),
     );
-  }, [destinationTargetId, destinationTargets, props.chatId, scopeTargetOptions, sourceTargetId]);
+  }, [destinationTargetId, destinationTargets, props.chatId]);
 
   useEffect(() => {
     setSourceTargetId(props.chatId ? `chat:${props.chatId}` : "all");
@@ -1559,31 +1984,81 @@ export default function SourcesWorkspace({
 
   useEffect(() => {
     if (!requestedSource) return;
-    changeSource(requestedSource.source);
-    onRequestedSourceHandled?.();
+    setRequestedSourceNoteId(requestedSource.sourceNoteId ?? null);
+    setSourceGroupsOpen((current) => ({
+      ...current,
+      [requestedSource.source]: { ...current[requestedSource.source], imported: true },
+    }));
+    void changeSource(requestedSource.source).then((changed) => {
+      if (!changed) return;
+      setSourceStatusFilter("imported");
+      onRequestedSourceHandled?.();
+    });
   }, [changeSource, onRequestedSourceHandled, requestedSource]);
 
   useEffect(() => {
-    if (selectedSource) setSource(selectedSource);
-  }, [selectedSource]);
-
-  useEffect(() => () => importControllerRef.current?.abort(), []);
+    if (selectedSource && selectedSource !== source) void changeSource(selectedSource);
+  }, [changeSource, selectedSource, source]);
 
   useEffect(() => {
-    if (source !== "lorebooks" || !lorebookPreview.data) return;
-    if (selectedLorebookId && lorebookPreview.data.books.some((book) => book.id === selectedLorebookId)) return;
-    setSelectedLorebookId(lorebookPreview.data.books[0]?.id ?? null);
-  }, [lorebookPreview.data, selectedLorebookId, source]);
+    if (!requestedSourceNoteId) return;
+    if (source === "lorebooks") {
+      const match = allLorebooks.find((book) =>
+        book.entries.some((entry) =>
+          entry.candidates.some((candidate) => candidate.existingNoteId === requestedSourceNoteId),
+        ),
+      );
+      if (!match) return;
+      const entry = match.entries.find((candidate) =>
+        candidate.candidates.some((candidate) => candidate.existingNoteId === requestedSourceNoteId),
+      );
+      setSelectedLorebookId(match.id);
+      setOpenLorebookEntryId(entry?.id ?? null);
+    } else {
+      const match = rows.find((row) => row.existingNoteId === requestedSourceNoteId);
+      if (!match) return;
+      setFocusedFlatSourceId(match.sourceId);
+    }
+    setWorkspacePane("workbench");
+    setRequestedSourceNoteId(null);
+  }, [allLorebooks, requestedSourceNoteId, rows, source]);
 
   useEffect(() => {
     if (selectAllRef.current)
-      selectAllRef.current.indeterminate = selectedSelectableIds.length > 0 && !allSelectableSelected;
-  }, [allSelectableSelected, selectedSelectableIds.length]);
+      selectAllRef.current.indeterminate = activeFlatSelectedIds.length > 0 && !activeFlatAllSelected;
+  }, [activeFlatAllSelected, activeFlatSelectedIds.length]);
 
   useEffect(() => {
-    if (selectAllImportedRef.current)
-      selectAllImportedRef.current.indeterminate = selectedImportedRows.length > 0 && !allImportedSelected;
-  }, [allImportedSelected, selectedImportedRows.length]);
+    sourceQueryByType.current[source] = sourceQuery;
+    sourceStatusByType.current[source] = sourceStatusFilter;
+    focusedSourceByType.current[source] = focusedFlatSourceId;
+    focusedLorebookByType.current[source] = selectedLorebookId;
+    openLorebookEntryByType.current[source] = openLorebookEntryId;
+  }, [focusedFlatSourceId, openLorebookEntryId, selectedLorebookId, source, sourceQuery, sourceStatusFilter]);
+
+  useEffect(() => {
+    const searching = Boolean(sourceQuery.trim());
+    if (!searching) {
+      if (sourceSearchContext.current !== null) {
+        const previous = sourceGroupsBeforeSearch.current;
+        if (previous) setSourceGroupsOpen(previous);
+        sourceGroupsBeforeSearch.current = null;
+        sourceSearchContext.current = null;
+      }
+      return;
+    }
+    if (sourceSearchContext.current === source) return;
+    sourceGroupsBeforeSearch.current ??= sourceGroupsOpen;
+    sourceSearchContext.current = source;
+    setSourceGroupsOpen((current) => ({
+      ...current,
+      [source]: { ready: selectableRows.length > 0, imported: importedRows.length > 0 },
+    }));
+  }, [importedRows.length, selectableRows.length, source, sourceGroupsOpen, sourceQuery]);
+
+  useEffect(() => {
+    if (sourceTask.active?.status === "running") setWorkspacePane("workbench");
+  }, [sourceTask.active?.id, sourceTask.active?.status]);
 
   const invalidateAfterMutation = async () => {
     await invalidateLtmQueries(client, [
@@ -1599,7 +2074,8 @@ export default function SourcesWorkspace({
     ]);
   };
 
-  const changeSourceScope = (next: string) => {
+  const changeSourceScope = async (next: string) => {
+    if (next === sourceTargetId || !(await confirmSelectionChange())) return;
     setSourceTargetId(next);
     clearImportResult();
   };
@@ -1622,26 +2098,47 @@ export default function SourcesWorkspace({
     clearImportResult();
   };
 
-  const changeModeFilter = (next: LtmMode | "all") => {
+  const changeModeFilter = async (next: LtmMode | "all") => {
+    if (next === modeFilter || !(await confirmSelectionChange())) return;
     setModeFilter(next);
     clearImportResult();
   };
 
-  const toggleSelected = (sourceId: string, checked: boolean) => {
+  const changeSourceStatusFilter = async (next: SourceStatusFilter) => {
+    if (next === sourceStatusFilter) return true;
+    if (!(await confirmSelectionChange())) return false;
+    setSourceStatusFilter(next);
+    return true;
+  };
+
+  const toggleSelectionMode = async () => {
+    if (selectionMode) {
+      if (!(await confirmSelectionChange())) return;
+    }
+    setSelectionMode((current) => !current);
+  };
+
+  const toggleSelected = async (sourceId: string, checked: boolean) => {
+    if (checked && selectedImportedIds.size && !(await confirmSelectionChange())) return;
     setSelections((current) => {
       const next = new Set(current[selectionKey] ?? []);
       if (checked) next.add(sourceId);
       else next.delete(sourceId);
-      return { ...current, [selectionKey]: [...next] };
+      return {
+        ...current,
+        [selectionKey]: [...next],
+        [importedSelectionKey]: checked ? [] : current[importedSelectionKey],
+      };
     });
   };
 
-  const toggleImportedSelected = (sourceId: string, checked: boolean) => {
+  const toggleImportedSelected = async (sourceId: string, checked: boolean) => {
+    if (checked && selectedIds.size && !(await confirmSelectionChange())) return;
     setSelections((current) => {
       const next = new Set(current[importedSelectionKey] ?? []);
       if (checked) next.add(sourceId);
       else next.delete(sourceId);
-      return { ...current, [importedSelectionKey]: [...next] };
+      return { ...current, [importedSelectionKey]: [...next], [selectionKey]: checked ? [] : current[selectionKey] };
     });
   };
 
@@ -1669,7 +2166,7 @@ export default function SourcesWorkspace({
     selectionKeyOverride?: string,
   ) => {
     const ids = Array.from(new Set(sourceIds));
-    if (ids.length === 0 || importing) return;
+    if (ids.length === 0 || importing || sourceTask.active?.status === "running") return;
     if (ids.length > 100) {
       setImportError(localizeUi("ui.longTermMemory.sourcesworkspace.selectUpTo100SourceParts"));
       return;
@@ -1728,94 +2225,115 @@ export default function SourcesWorkspace({
           ...(props.chatId ? { chatId: props.chatId } : {}),
           selectionKey: selectionKeyOverride ?? selectionKey,
         };
-    setImporting(true);
-    setImportResultContract(contract);
     setImportError("");
     setReviewMessage("");
-    setCancelledImport(null);
-    const controller = new AbortController();
-    importControllerRef.current = controller;
+    const sourceTitleById = new Map(
+      [...rows, ...(selectedLorebook?.entries.flatMap((entry) => entry.candidates) ?? [])].map((row) => [
+        row.sourceId,
+        row.title,
+      ]),
+    );
     try {
-      const result = await request<
-        LtmImportSourceNotesResponse,
-        {
-          source: Source;
-          sourceIds: string[];
-          limit: number;
-          extract: boolean;
-          sourceScope?: LtmScope;
-          destinationScope?: LtmScope;
-          mode?: LtmMode;
-          chatId?: string;
-        }
-      >(
-        "/import/source-notes",
-        "POST",
-        {
-          source: contract.source,
-          sourceIds: contract.sourceIds,
-          limit: 100,
-          extract: contract.action !== "refresh",
-          ...(contract.sourceScope ? { sourceScope: contract.sourceScope } : {}),
-          ...(contract.destinationScope ? { destinationScope: contract.destinationScope } : {}),
-          ...(contract.mode ? { mode: contract.mode } : {}),
-          ...(contract.chatId ? { chatId: contract.chatId } : {}),
-        },
-        controller.signal,
-      );
-      setImportResult(result);
-      setImportResultContract(contract);
-      const failedIds = [
-        ...result.imported.filter((item) => item.retryable).map((item) => item.sourceId),
-        ...result.writeFailures.filter((item) => item.retryable).map((item) => item.sourceId),
-      ];
-      setSelections((current) => ({
-        ...current,
-        [contract.selectionKey]: failedIds,
-      }));
-      setImporting(false);
-      void invalidateAfterMutation().catch(() => undefined);
-      void (contract.source === "lorebooks" ? lorebookPreview.refetch() : preview.refetch()).catch(() => undefined);
-      if (
-        contract.action === "refresh" &&
-        !result.counts.failed &&
-        !result.counts.cancelled &&
-        !result.counts.missing &&
-        !result.counts.sourceWriteFailed
-      )
-        setReviewMessage(localizeUi("ui.longTermMemory.sourcesworkspace.sourceRefreshedRerunExtraction"));
+      const task = await startLtmSourceTask<LtmImportSourceNotesResponse>({
+        kind: contract.action,
+        contract,
+        sourceTitles: ids.map((id) => sourceTitleById.get(id) ?? id),
+        run: (signal) =>
+          request(
+            "/import/source-notes",
+            "POST",
+            {
+              source: contract.source,
+              sourceIds: contract.sourceIds,
+              limit: 100,
+              extract: contract.action !== "refresh",
+              ...(contract.sourceScope ? { sourceScope: contract.sourceScope } : {}),
+              ...(contract.destinationScope ? { destinationScope: contract.destinationScope } : {}),
+              ...(contract.mode ? { mode: contract.mode } : {}),
+              ...(contract.chatId ? { chatId: contract.chatId } : {}),
+            },
+            signal,
+          ),
+      });
+      if (task.status === "completed") {
+        const result = task.result as LtmImportSourceNotesResponse;
+        const failedIds = [
+          ...result.imported.filter((item) => item.retryable).map((item) => item.sourceId),
+          ...result.writeFailures.filter((item) => item.retryable).map((item) => item.sourceId),
+        ];
+        setSelections((current) => ({
+          ...current,
+          [contract.selectionKey]: failedIds,
+        }));
+        void invalidateAfterMutation().catch(() => undefined);
+        void (contract.source === "lorebooks" ? lorebookPreview.refetch() : preview.refetch()).catch(() => undefined);
+        if (
+          contract.action === "refresh" &&
+          !result.counts.failed &&
+          !result.counts.cancelled &&
+          !result.counts.missing &&
+          !result.counts.sourceWriteFailed
+        )
+          setReviewMessage(localizeUi("ui.longTermMemory.sourcesworkspace.sourceRefreshedRerunExtraction"));
+      } else if (task.status === "cancelled" || task.status === "failed") {
+        setImportError(
+          task.status === "cancelled"
+            ? localizeUi("ui.longTermMemory.sourcesworkspace.importCancelledSelectionRetained")
+            : (task.error?.message ?? localizeUi("ui.longTermMemory.sourcesworkspace.sourcesCouldNotBeImported")),
+        );
+      }
     } catch (error) {
-      const cancelled = controller.signal.aborted;
-      if (cancelled) setCancelledImport(contract);
       setImportError(
-        cancelled
-          ? localizeUi("ui.longTermMemory.sourcesworkspace.importCancelledSelectionRetained")
-          : error instanceof Error
-            ? error.message
-            : localizeUi("ui.longTermMemory.sourcesworkspace.sourcesCouldNotBeImported"),
+        error instanceof Error
+          ? error.message
+          : localizeUi("ui.longTermMemory.sourcesworkspace.sourcesCouldNotBeImported"),
       );
-    } finally {
-      if (importControllerRef.current === controller) importControllerRef.current = null;
-      setImporting(false);
     }
   };
 
-  const reextract = async (noteId: string) => {
-    if (extractingId) return;
-    setExtractingId(noteId);
+  const reextract = async (noteId: string, retryContract?: LtmSourceTaskContract) => {
+    if (sourceTask.active?.status === "running") return;
     setImportError("");
+    const contract: LtmSourceTaskContract = retryContract ?? {
+      source,
+      sourceIds: [noteId],
+      action: "re-extract",
+      ...(previewScope ? { sourceScope: previewScope } : {}),
+      ...(currentDestinationScope ? { destinationScope: currentDestinationScope } : {}),
+      ...(modeFilter !== "all" ? { mode: modeFilter } : {}),
+      ...(props.chatId ? { chatId: props.chatId } : {}),
+    };
+    const sourceNoteId = contract.sourceIds[0] ?? noteId;
     try {
-      await request(`/notes/${encodeURIComponent(noteId)}/extract`, "POST", {});
-      setReviewMessage(localizeUi("ui.longTermMemory.sourcesworkspace.extractionCompletedReviewReady"));
-      await invalidateAfterMutation();
+      const task = await startLtmSourceTask({
+        kind: "re-extract",
+        contract,
+        sourceTitles: [sourceNoteId],
+        run: (signal) =>
+          request(
+            `/notes/${encodeURIComponent(sourceNoteId)}/extract`,
+            "POST",
+            {
+              ...(contract.chatId ? { chatId: contract.chatId } : {}),
+              ...(contract.mode ? { mode: contract.mode } : {}),
+            },
+            signal,
+          ),
+      });
+      if (task.status === "completed") {
+        setReviewMessage(localizeUi("ui.longTermMemory.sourcesworkspace.extractionCompletedReviewReady"));
+        await invalidateAfterMutation();
+      } else if (task.status === "failed" || task.status === "cancelled") {
+        setImportError(
+          task.error?.message ?? localizeUi("ui.longTermMemory.sourcesworkspace.sourceCouldNotBeReextracted"),
+        );
+      }
     } catch (error) {
       setImportError(
         error instanceof Error
           ? error.message
           : localizeUi("ui.longTermMemory.sourcesworkspace.sourceCouldNotBeReextracted"),
       );
-    } finally {
-      setExtractingId(null);
     }
   };
 
@@ -1862,7 +2380,7 @@ export default function SourcesWorkspace({
           })}
           onClick={(event) => {
             stopRowAction(event);
-            setSourceOperation({ id: noteId, title });
+            setSourceOperation({ id: noteId, title, operation: "copy" });
           }}
           data-ltm-source-action="manage"
           data-ltm-source-note-id={noteId}
@@ -1897,7 +2415,7 @@ export default function SourcesWorkspace({
               onClick={(event) => {
                 stopRowAction(event);
                 setOpenSourceActionId(null);
-                setSourceOperation({ id: noteId, title });
+                setSourceOperation({ id: noteId, title, operation: "copy" });
               }}
               data-ltm-source-action="manage"
             />
@@ -1913,6 +2431,175 @@ export default function SourcesWorkspace({
     </>
   );
 
+  const renderFlatSourceRow = (row: PreviewRow) => {
+    const ready = row.status === "pending" || retryableIdSet.has(row.sourceId);
+    const selected = ready ? selectedIds.has(row.sourceId) : selectedImportedIds.has(row.sourceId);
+    return (
+      <ClickSurface
+        key={row.sourceId}
+        role="listitem"
+        data-ltm-source-row-status={row.status}
+        data-ltm-source-id={row.sourceId}
+        data-ltm-source-focused={focusedFlatSourceId === row.sourceId || undefined}
+        className={`group flex items-start gap-2 p-3 ${focusedFlatSourceId === row.sourceId ? "bg-[var(--primary)]/10" : ""}`}
+        onClick={() => {
+          setFocusedFlatSourceId(row.sourceId);
+          setWorkspacePane("workbench");
+        }}
+      >
+        {selectionMode ? (
+          <input
+            type="checkbox"
+            className={sourceCheckboxClass}
+            aria-label={localizeUi("ui.longTermMemory.memoryvault.selectValue1", { value1: row.title })}
+            checked={selected}
+            onClick={(event) => event.stopPropagation()}
+            onChange={(event) =>
+              ready
+                ? void toggleSelected(row.sourceId, event.target.checked)
+                : void toggleImportedSelected(row.sourceId, event.target.checked)
+            }
+            data-ltm-source-select={row.sourceId}
+          />
+        ) : null}
+        <span className="min-w-0 flex-1">
+          <span className="flex flex-wrap items-center gap-2">
+            <strong className="truncate text-sm">{row.title}</strong>
+            <span
+              data-ltm-source-status={row.status}
+              className="rounded-full border border-[var(--border)] bg-[var(--secondary)] px-2 py-0.5 text-[0.625rem] font-semibold uppercase"
+            >
+              {sourceStatusLabel(row, localizeUi)}
+            </span>
+          </span>
+          <span className="mt-1 block truncate text-xs text-[var(--muted-foreground)]">{row.summary}</span>
+        </span>
+        {ready ? (
+          <IconButton
+            icon={importing ? Loader2 : FileInput}
+            label={localizeUi("ui.longTermMemory.sourcesworkspace.importValue1", { value1: row.title })}
+            disabled={importing}
+            onClick={(event) => {
+              stopRowAction(event);
+              void runImport([row.sourceId]);
+            }}
+            className={importing ? "[&>svg]:animate-spin" : ""}
+            data-ltm-source-action="import"
+            data-ltm-source-id={row.sourceId}
+          />
+        ) : null}
+      </ClickSurface>
+    );
+  };
+
+  const sourceOperationWorkbench = sourceOperation ? (
+    <SourceOperationWorkbench
+      key={`${sourceOperation.id}:${sourceOperation.operation ?? "copy"}`}
+      sourceNoteId={sourceOperation.id}
+      sourceTitle={sourceOperation.title}
+      initialOperation={sourceOperation.operation}
+      destinations={scopeTargets.data?.chats ?? []}
+      disabled={activeSourceTask !== null}
+      confirmAction={props.confirmAction}
+      onComplete={async () => {
+        await invalidateAfterMutation();
+        await (source === "lorebooks" ? lorebookPreview.refetch() : preview.refetch());
+      }}
+    />
+  ) : null;
+  const restoredImportResult =
+    latestTaskResultOpen &&
+    latestSourceTask?.id !== dismissedTaskResultId &&
+    !importResult &&
+    latestSourceTask?.status === "completed" &&
+    latestSourceTask.kind !== "re-extract" &&
+    latestSourceTask.safeResult
+      ? latestSourceTask.safeResult
+      : null;
+  const restoredRetryIds = restoredImportResult
+    ? Array.from(
+        new Set([
+          ...(restoredImportResult.items?.filter((item) => item.retryable).map((item) => item.sourceId) ?? []),
+          ...(restoredImportResult.writeFailures?.filter((item) => item.retryable).map((item) => item.sourceId) ?? []),
+          ...(restoredImportResult.missingSourceIds ?? []),
+        ]),
+      )
+    : [];
+  const restoredImportResultPanel = restoredImportResult ? (
+    <section
+      ref={importResultRef}
+      role="region"
+      aria-labelledby={importResultLabelId}
+      data-ltm-safe-source-task-result={latestSourceTask?.status}
+      data-ltm-source-task-result-workbench
+      className="space-y-3 p-4"
+    >
+      <h2 id={importResultLabelId} className="text-sm font-semibold">
+        {latestSourceTaskLabel}
+      </h2>
+      <p className="text-xs text-[var(--muted-foreground)]">
+        {localizeUi("ui.longTermMemory.sourcesworkspace.importResultSummary", {
+          requested: restoredImportResult.counts?.requested ?? latestSourceTask?.sourceCount ?? 0,
+          wrote: restoredImportResult.counts?.sourceNotesWritten ?? 0,
+          succeeded: restoredImportResult.counts?.succeeded ?? 0,
+          failed: restoredImportResult.counts?.failed ?? 0,
+          cancelled: restoredImportResult.counts?.cancelled ?? 0,
+          missing: restoredImportResult.counts?.missing ?? restoredImportResult.missingSourceIds?.length ?? 0,
+          writeFailures: restoredImportResult.counts?.sourceWriteFailed ?? 0,
+        })}
+      </p>
+      {restoredRetryIds.length ? (
+        <Button
+          primary
+          onClick={() =>
+            void runImport(
+              restoredRetryIds,
+              latestSourceTask?.kind === "refresh" ? "refresh" : "import",
+              latestSourceTask?.contract as ImportContract,
+            )
+          }
+          data-ltm-source-action="retry-restored"
+        >
+          <RefreshCw aria-hidden="true" size="0.75rem" />
+          {localizeUi("ui.longTermMemory.sourcesworkspace.retryFailedCount", { count: restoredRetryIds.length })}
+        </Button>
+      ) : null}
+      {restoredImportResult.items?.map((item) => (
+        <article key={item.sourceId} className="space-y-1 border-t border-[var(--border)] pt-3 text-xs">
+          <strong>{item.title}</strong>
+          {item.status ? <p className="text-[var(--muted-foreground)]">{humanizeLabel(item.status)}</p> : null}
+          {item.error?.message ? <StatusSurface tone="danger">{item.error.message}</StatusSurface> : null}
+          {item.diagnostics?.length ? (
+            <ul className="space-y-1 text-[var(--muted-foreground)]">
+              {item.diagnostics.map((diagnostic, index) => (
+                <li key={`${diagnostic.code ?? "diagnostic"}-${index}`}>{diagnostic.message ?? diagnostic.code}</li>
+              ))}
+            </ul>
+          ) : null}
+        </article>
+      ))}
+      {restoredImportResult.writeFailures?.map((failure) => (
+        <StatusSurface key={failure.sourceId} tone="danger" data-ltm-source-write-failure={failure.sourceId}>
+          <CircleAlert aria-hidden="true" size="0.875rem" /> {failure.title}: {failure.error.message} (
+          {importStatusLabel(failure.sourceWriteStatus, localizeUi)},{" "}
+          {importStatusLabel(failure.extractionStatus, localizeUi)})
+        </StatusSurface>
+      ))}
+      {restoredImportResult.missingSourceIds?.map((id) => (
+        <StatusSurface key={id} tone="danger">
+          <CircleAlert aria-hidden="true" size="0.875rem" /> {id}
+        </StatusSurface>
+      ))}
+      <Button onClick={closeTaskResult}>{localizeUi("ui.longTermMemory.sourcesworkspace.backToPreview")}</Button>
+    </section>
+  ) : null;
+  const taskResultWorkbenchOpen = Boolean(visibleImportResult || restoredImportResult || reextractResultPanel);
+  const workbenchModeClass = sourceOperation
+    ? "[&>:not([data-ltm-source-operation-workbench])]:hidden"
+    : taskResultWorkbenchOpen
+      ? "[&>:not([data-ltm-source-task-result-workbench])]:hidden"
+      : "";
+
   return (
     <section
       data-ltm-surface="sources"
@@ -1921,19 +2608,6 @@ export default function SourcesWorkspace({
       data-ltm-extraction-note-id={extractingId ?? undefined}
       className="space-y-4"
     >
-      {sourceOperation ? (
-        <SourceOperationWorkbench
-          key={sourceOperation.id}
-          sourceNoteId={sourceOperation.id}
-          sourceTitle={sourceOperation.title}
-          destinations={scopeTargets.data?.chats ?? []}
-          confirmAction={props.confirmAction}
-          onComplete={async () => {
-            await invalidateAfterMutation();
-            await (source === "lorebooks" ? lorebookPreview.refetch() : preview.refetch());
-          }}
-        />
-      ) : null}
       <div
         className="mari-editor-tab-rail flex flex-wrap gap-1 rounded-lg border p-1"
         role="tablist"
@@ -1949,7 +2623,7 @@ export default function SourcesWorkspace({
             aria-selected={source === tab.id}
             aria-controls={source === tab.id ? `ltm-source-preview-${tab.id}` : undefined}
             data-ltm-source-tab={tab.id}
-            onClick={() => changeSource(tab.id)}
+            onClick={() => void changeSource(tab.id)}
             onKeyDown={(event) =>
               handleTabKey(
                 event,
@@ -1989,116 +2663,33 @@ export default function SourcesWorkspace({
             onChange={changeSourceScope}
             ariaLabel={localizeUi("ui.longTermMemory.sourcesworkspace.findSourcesIn")}
             testId="source"
+            disabled={activeSourceTask !== null}
           />
-        </div>
-        <div
-          id="ltm-destination-scope-control"
-          role="group"
-          aria-labelledby={destinationScopeLabelId}
-          className="flex min-h-11 w-full flex-col gap-2 text-xs font-medium"
-        >
-          <div className="flex min-h-11 w-full flex-col gap-2 sm:flex-row sm:items-center">
-            <span id={destinationScopeLabelId} className="sm:shrink-0">
-              {localizeUi("ui.longTermMemory.sourcesworkspace.makeMemoriesAvailableIn")}
-            </span>
-            <ScopeTargetPicker
-              targets={destinationTargets}
-              value={destinationTargetId}
-              onChange={changeDestinationScope}
-              ariaLabel={localizeUi("ui.longTermMemory.sourcesworkspace.makeMemoriesAvailableIn")}
-              testId="destination"
-              destination
-              required
-              invalid={!primaryDestinationTarget}
-            />
-          </div>
-          <div className="flex flex-wrap items-center gap-2 sm:pl-[8.5rem]">
-            <BulkDestinationPicker
-              primaryTarget={primaryDestinationTarget}
-              targets={destinationTargets}
-              selectedIds={additionalDestinationTargetIds}
-              onChange={(ids) => {
-                setAdditionalDestinationTargetIds(ids);
-                clearImportResult();
-              }}
-            />
-            {additionalDestinationTargets.length ? (
-              <span className="text-xs text-[var(--muted-foreground)]" data-ltm-additional-destination-summary>
-                {localizeUi("ui.longTermMemory.sourcesworkspace.additionalLocationsCount", {
-                  count: additionalDestinationTargets.length,
-                })}
-              </span>
-            ) : null}
-          </div>
-          {!primaryDestinationTarget ? (
-            <span role="alert" className="text-[var(--marinara-editor-warning)]">
-              {localizeUi("ui.longTermMemory.sourcesworkspace.chooseDestinationBeforeImport")}
-            </span>
-          ) : null}
         </div>
       </div>
 
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <p
-          className="text-xs text-[var(--muted-foreground)]"
-          data-ltm-source-preview-status={source === "lorebooks" ? lorebookPreview.status : preview.status}
-          role="status"
-          aria-live="polite"
-        >
-          {source === "lorebooks"
-            ? lorebookPreview.data
-              ? localizeUi("ui.longTermMemory.sourcesworkspace.value1LorebooksValue2EntriesValue3Imported", {
-                  value1: lorebookPreview.data.counts.books,
-                  value2: lorebookPreview.data.counts.entries,
-                  value3: lorebookPreview.data.counts.imported,
-                })
-              : localizeUi("ui.longTermMemory.sourcesworkspace.loadingLorebooks")
-            : preview.data
-              ? localizeUi("ui.longTermMemory.sourcesworkspace.value1ScannedValue2PendingValue3Imported", {
-                  value1: preview.data.scanned,
-                  value2: preview.data.draftable,
-                  value3: preview.data.importedCount,
-                })
-              : localizeUi("ui.longTermMemory.sourcesworkspace.loadingSourcePreview")}
-        </p>
-        <div className="flex flex-wrap items-center gap-2">
-          <label className="flex min-h-11 items-center gap-2 text-xs font-medium">
-            {localizeUi("ui.longTermMemory.transferworkbench.mode")}
-            <select
-              className={`${inputClass} w-36`}
-              value={modeFilter}
-              onChange={(event) => changeModeFilter(event.target.value as LtmMode | "all")}
-              aria-label={localizeUi("ui.longTermMemory.sourcesworkspace.filterSourcesByMode")}
-            >
-              <option value="all">{localizeUi("ui.longTermMemory.sourcesworkspace.all")}</option>
-              <option value="game">{localizeUi("ui.longTermMemory.sourcesworkspace.game")}</option>
-              <option value="conversation">{localizeUi("ui.longTermMemory.sourcesworkspace.conversation")}</option>
-              <option value="roleplay">{localizeUi("ui.longTermMemory.sourcesworkspace.roleplay")}</option>
-            </select>
-          </label>
-          {source !== "chats" && modeFilter === "all" ? (
-            <p
-              role="note"
-              data-ltm-import-mode-policy
-              className="max-w-[42rem] text-xs text-[var(--marinara-editor-warning)]"
-            >
-              {localizeUi("ui.longTermMemory.sourcesworkspace.importsDefaultToRoleplay")}
-            </p>
-          ) : null}
-          <Button
-            disabled={source === "lorebooks" ? lorebookPreview.isFetching : preview.isFetching}
-            onClick={() => void (source === "lorebooks" ? lorebookPreview.refetch() : preview.refetch())}
-            data-ltm-source-action="refresh-preview"
-          >
-            {(source === "lorebooks" ? lorebookPreview.isFetching : preview.isFetching) ? (
-              <Loader2 aria-hidden="true" size="0.75rem" className="animate-spin" />
-            ) : (
-              <RefreshCw aria-hidden="true" size="0.75rem" />
-            )}
-            {localizeUi("ui.longTermMemory.sourcesworkspace.refreshPreview")}
-          </Button>
-        </div>
-      </div>
+      <p
+        className="text-xs text-[var(--muted-foreground)]"
+        data-ltm-source-preview-status={source === "lorebooks" ? lorebookPreview.status : preview.status}
+        role="status"
+        aria-live="polite"
+      >
+        {source === "lorebooks"
+          ? lorebookPreview.data
+            ? localizeUi("ui.longTermMemory.sourcesworkspace.value1LorebooksValue2EntriesValue3Imported", {
+                value1: lorebookPreview.data.counts.books,
+                value2: lorebookPreview.data.counts.entries,
+                value3: lorebookPreview.data.counts.imported,
+              })
+            : localizeUi("ui.longTermMemory.sourcesworkspace.loadingLorebooks")
+          : preview.data
+            ? localizeUi("ui.longTermMemory.sourcesworkspace.value1ScannedValue2PendingValue3Imported", {
+                value1: preview.data.scanned,
+                value2: preview.data.draftable,
+                value3: preview.data.importedCount,
+              })
+            : localizeUi("ui.longTermMemory.sourcesworkspace.loadingSourcePreview")}
+      </p>
 
       {(source === "lorebooks" ? lorebookPreview.isError : preview.isError) ? (
         <StatusSurface tone="danger">
@@ -2109,9 +2700,9 @@ export default function SourcesWorkspace({
               : localizeUi("ui.longTermMemory.sourcesworkspace.sourcePreviewCouldNotLoad")}
         </StatusSurface>
       ) : null}
-      {importError ? (
+      {importError || sourceTaskError ? (
         <StatusSurface tone="danger">
-          {importError}
+          {importError || sourceTaskError}
           {cancelledImport ? (
             <Button
               onClick={() => void runImport(cancelledImport.sourceIds, "import", cancelledImport)}
@@ -2124,10 +2715,20 @@ export default function SourcesWorkspace({
               })}
             </Button>
           ) : null}
+          {retryableReextract?.contract.sourceIds[0] ? (
+            <Button
+              onClick={() => void reextract(retryableReextract.contract.sourceIds[0]!, retryableReextract.contract)}
+              disabled={activeSourceTask !== null}
+              data-ltm-source-action="retry-re-extract"
+            >
+              <RefreshCw aria-hidden="true" size="0.75rem" />
+              {localizeUi("ui.longTermMemory.sourcesworkspace.retryOriginalSelection", { count: 1 })}
+            </Button>
+          ) : null}
         </StatusSurface>
       ) : null}
       {reviewMessage ? <StatusSurface tone="success">{reviewMessage}</StatusSurface> : null}
-      {!reviewMessage && !importResult && !importError ? (
+      {!reviewMessage && !importResult && !importError && !sourceTaskError ? (
         <p className="text-xs text-[var(--muted-foreground)]">
           {localizeUi("ui.longTermMemory.sourcesworkspace.importExplanation")}{" "}
           {localizeUi("ui.longTermMemory.sourcesworkspace.refreshExplanation")}
@@ -2151,25 +2752,133 @@ export default function SourcesWorkspace({
           className="space-y-3"
         >
           <LtmWorkspace
-            activeMobilePane={lorebookMobilePane}
-            onMobilePaneChange={(pane) => {
-              if (pane !== "inspector") setLorebookMobilePane(pane);
-            }}
+            activeMobilePane={workspacePane}
+            onMobilePaneChange={setWorkspacePane}
             switcherLabel={localizeUi("ui.longTermMemory.longtermmemorynavigation.workspacePanes")}
             navigator={{
               label: localizeUi("ui.longTermMemory.sourcesworkspace.lorebooks"),
               content: (
                 <section data-ltm-lorebook-list className="mari-editor-panel overflow-hidden">
-                  <div className="flex min-h-11 items-center justify-between gap-3 bg-[var(--secondary)]/45 px-3 py-2">
-                    <h2 className="text-sm font-semibold">
-                      {localizeUi("ui.longTermMemory.sourcesworkspace.lorebooks")}
-                    </h2>
-                    <span className="text-xs text-[var(--muted-foreground)]">
-                      {lorebookPreview.data?.books.length ?? 0}
-                    </span>
+                  <div className="space-y-3 bg-[var(--secondary)]/25 p-3">
+                    <div className="flex items-center justify-between gap-3">
+                      <h2 className="text-sm font-semibold">
+                        {localizeUi("ui.longTermMemory.sourcesworkspace.lorebooks")}
+                      </h2>
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs text-[var(--muted-foreground)]">{activeLorebooks.length}</span>
+                        <Button className="mari-editor-action--compact" onClick={() => void toggleSelectionMode()}>
+                          {localizeUi(
+                            selectionMode
+                              ? "ui.longTermMemory.sourcesworkspace.doneSelecting"
+                              : "ui.longTermMemory.sourcesworkspace.selectSources",
+                          )}
+                        </Button>
+                      </div>
+                    </div>
+                    {lorebookPreview.data?.truncated ? (
+                      <p role="note" className="text-xs text-[var(--marinara-editor-warning)]">
+                        {localizeUi("ui.longTermMemory.sourcesworkspace.moreThan100Matches")}
+                      </p>
+                    ) : null}
+                    <label className="relative block">
+                      <Search
+                        aria-hidden="true"
+                        size="0.875rem"
+                        className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-[var(--muted-foreground)]"
+                      />
+                      <input
+                        className={`${inputClass} pl-9`}
+                        value={sourceQuery}
+                        placeholder={localizeUi("ui.longTermMemory.sourcesworkspace.searchSources")}
+                        aria-label={localizeUi("ui.longTermMemory.sourcesworkspace.searchSources")}
+                        data-ltm-source-search
+                        onChange={(event) => setSourceQuery(event.target.value)}
+                      />
+                    </label>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <label className="flex min-h-11 items-center gap-2 text-xs font-medium">
+                        {localizeUi("ui.longTermMemory.transferworkbench.mode")}
+                        <select
+                          className={`${inputClass} w-36`}
+                          value={modeFilter}
+                          disabled={activeSourceTask !== null}
+                          onChange={(event) => void changeModeFilter(event.target.value as LtmMode | "all")}
+                          aria-label={localizeUi("ui.longTermMemory.sourcesworkspace.filterSourcesByMode")}
+                          data-ltm-source-mode
+                        >
+                          <option value="all">{localizeUi("ui.longTermMemory.sourcesworkspace.all")}</option>
+                          <option value="game">{localizeUi("ui.longTermMemory.sourcesworkspace.game")}</option>
+                          <option value="conversation">
+                            {localizeUi("ui.longTermMemory.sourcesworkspace.conversation")}
+                          </option>
+                          <option value="roleplay">{localizeUi("ui.longTermMemory.sourcesworkspace.roleplay")}</option>
+                        </select>
+                      </label>
+                      <Button
+                        disabled={lorebookPreview.isFetching}
+                        onClick={() => void lorebookPreview.refetch()}
+                        data-ltm-source-action="refresh-preview"
+                      >
+                        {lorebookPreview.isFetching ? (
+                          <Loader2 aria-hidden="true" size="0.75rem" className="animate-spin" />
+                        ) : (
+                          <RefreshCw aria-hidden="true" size="0.75rem" />
+                        )}
+                        {localizeUi("ui.longTermMemory.sourcesworkspace.refreshPreview")}
+                      </Button>
+                    </div>
+                    <div
+                      role="tablist"
+                      aria-label={localizeUi("ui.longTermMemory.sourcesworkspace.sourceStatus")}
+                      className="grid grid-cols-3 gap-1"
+                    >
+                      {(["all", "ready", "imported"] as const).map((filter) => {
+                        const count =
+                          filter === "all"
+                            ? (lorebookPreview.data?.books.length ?? 0)
+                            : allLorebooks.filter((book) =>
+                                filter === "ready"
+                                  ? book.counts.pending > 0
+                                  : book.counts.pending === 0 && book.counts.imported > 0,
+                              ).length;
+                        return (
+                          <button
+                            key={filter}
+                            type="button"
+                            role="tab"
+                            id={`ltm-source-status-${source}-${filter}`}
+                            tabIndex={sourceStatusFilter === filter ? 0 : -1}
+                            aria-selected={sourceStatusFilter === filter}
+                            aria-controls={`ltm-source-results-${source}`}
+                            data-ltm-source-status-filter={filter}
+                            data-active={sourceStatusFilter === filter}
+                            className="mari-editor-tab min-h-11 rounded-md border px-2 text-xs font-semibold"
+                            onClick={() => void changeSourceStatusFilter(filter)}
+                            onKeyDown={(event) =>
+                              handleTabKey(
+                                event,
+                                ["all", "ready", "imported"],
+                                sourceStatusFilter,
+                                changeSourceStatusFilter,
+                                "data-ltm-source-status-filter",
+                              )
+                            }
+                          >
+                            {localizeUi(
+                              filter === "all"
+                                ? "ui.longTermMemory.sourcesworkspace.all"
+                                : filter === "ready"
+                                  ? "ui.longTermMemory.sourcesworkspace.readyToImport"
+                                  : "ui.longTermMemory.sourcesworkspace.alreadyImported",
+                            )}{" "}
+                            ({count})
+                          </button>
+                        );
+                      })}
+                    </div>
                   </div>
-                  <div role="list" className="divide-y divide-[var(--border)]">
-                    {(lorebookPreview.data?.books ?? []).map((book) => (
+                  <div id={`ltm-source-results-${source}`} role="list" className="divide-y divide-[var(--border)]">
+                    {activeLorebooks.map((book) => (
                       <div key={book.id} role="listitem">
                         <button
                           type="button"
@@ -2177,7 +2886,8 @@ export default function SourcesWorkspace({
                           data-ltm-lorebook-id={book.id}
                           onClick={() => {
                             setSelectedLorebookId(book.id);
-                            setLorebookMobilePane("workbench");
+                            setOpenLorebookEntryId(null);
+                            setWorkspacePane("workbench");
                           }}
                           className={`flex min-h-16 w-full items-center gap-3 px-3 py-2 text-left hover:bg-[var(--secondary)]/35 ${selectedLorebookId === book.id ? "bg-[var(--primary)]/10" : ""}`}
                         >
@@ -2202,7 +2912,7 @@ export default function SourcesWorkspace({
                         </button>
                       </div>
                     ))}
-                    {!lorebookPreview.isLoading && lorebookPreview.data?.books.length === 0 ? (
+                    {!lorebookPreview.isLoading && activeLorebooks.length === 0 ? (
                       <p className="p-4 text-xs text-[var(--muted-foreground)]">
                         {localizeUi("ui.longTermMemory.sourcesworkspace.noLorebooksAreAvailableInThisScope")}
                       </p>
@@ -2212,13 +2922,47 @@ export default function SourcesWorkspace({
               ),
             }}
             workbench={{
-              label: localizeUi("ui.longTermMemory.sourcesworkspace.entries"),
-              disabled: !selectedLorebook,
+              label: localizeUi(
+                locationEditorOpen
+                  ? "ui.longTermMemory.sourcesworkspace.chooseAdditionalLocations"
+                  : "ui.longTermMemory.sourcesworkspace.entries",
+              ),
               content: (
                 <section
                   data-ltm-lorebook-workbench={selectedLorebook?.id ?? "empty"}
-                  className="mari-editor-panel overflow-hidden"
+                  className={`mari-editor-panel overflow-hidden ${workbenchModeClass}`}
                 >
+                  {sourceOperationWorkbench}
+                  <div ref={setResultWorkbenchHost} className="contents" data-ltm-source-task-result-workbench />
+                  {restoredImportResultPanel}
+                  <BulkDestinationPicker
+                    primaryTarget={primaryDestinationTarget}
+                    targets={destinationTargets}
+                    selectedIds={additionalDestinationTargetIds}
+                    onChange={(ids) => {
+                      setAdditionalDestinationTargetIds(ids);
+                      clearImportResult();
+                    }}
+                    disabled={sourceTask.active?.status === "running"}
+                    renderTrigger={false}
+                    controlledOpen={locationEditorOpen}
+                    onOpenChange={(open) => {
+                      setLocationEditorOpen(open);
+                      if (!open) setWorkspacePane("inspector");
+                    }}
+                    inline
+                  />
+                  {activeSourceTask ? (
+                    <div className="space-y-3 border-b border-[var(--border)] p-4" data-ltm-source-task-progress>
+                      <StatusSurface busy>
+                        <Loader2 aria-hidden="true" size="0.875rem" className="animate-spin" />
+                        {sourceTaskProgressMessage}
+                      </StatusSurface>
+                      <Button destructive onClick={cancelLtmSourceTask} data-ltm-source-action="cancel-import">
+                        {localizeUi("ui.longTermMemory.memoryvault.cancel")}
+                      </Button>
+                    </div>
+                  ) : null}
                   {selectedLorebook ? (
                     <>
                       <header className="space-y-2 border-b border-[var(--border)] bg-[var(--secondary)]/25 p-3">
@@ -2232,47 +2976,6 @@ export default function SourcesWorkspace({
                               {localizeUi("ui.longTermMemory.sourcesworkspace.sourceParts")}
                             </p>
                           </div>
-                          <div className="flex flex-wrap gap-2">
-                            <Button
-                              primary
-                              disabled={importing || selectedBookImportIds.length === 0}
-                              onClick={() =>
-                                void runImport(selectedBookImportIds, "import", undefined, lorebookImportSelectionKey)
-                              }
-                              data-ltm-lorebook-action="import-selected"
-                            >
-                              <Check aria-hidden="true" size="0.75rem" />{" "}
-                              {localizeUi("ui.longTermMemory.sourcesworkspace.importSelectedCount", {
-                                count: selectedBookImportIds.length,
-                              })}
-                            </Button>
-                            <Button
-                              disabled={importing || selectedBookRefreshIds.length === 0}
-                              onClick={() =>
-                                void runImport(
-                                  selectedBookRefreshIds,
-                                  "refresh",
-                                  undefined,
-                                  lorebookRefreshSelectionKey,
-                                )
-                              }
-                              data-ltm-lorebook-action="refresh-selected"
-                            >
-                              <RefreshCw aria-hidden="true" size="0.75rem" />{" "}
-                              {localizeUi("ui.longTermMemory.sourcesworkspace.refreshSelectedSourcesCount", {
-                                count: selectedBookRefreshIds.length,
-                              })}
-                            </Button>
-                            {importing ? (
-                              <Button
-                                destructive
-                                onClick={() => importControllerRef.current?.abort()}
-                                data-ltm-lorebook-action="cancel-import"
-                              >
-                                {localizeUi("ui.longTermMemory.memoryvault.cancel")}
-                              </Button>
-                            ) : null}
-                          </div>
                         </div>
                         {selectedLorebook.description ? (
                           <p className="max-w-[75ch] text-xs text-[var(--muted-foreground)]">
@@ -2283,6 +2986,38 @@ export default function SourcesWorkspace({
                           <p className="text-xs text-[var(--muted-foreground)]">{selectedLorebook.tags.join(", ")}</p>
                         ) : null}
                       </header>
+                      <div className={mobilePrimaryActionsClass} data-ltm-source-primary-actions>
+                        <Button
+                          primary
+                          disabled={!currentDestinationScope || importing || selectedBookImportIds.length === 0}
+                          onClick={() =>
+                            void runImport(selectedBookImportIds, "import", undefined, lorebookImportSelectionKey)
+                          }
+                          data-ltm-lorebook-action="import-selected"
+                        >
+                          <Check aria-hidden="true" size="0.75rem" />{" "}
+                          {localizeUi("ui.longTermMemory.sourcesworkspace.importSelectedCount", {
+                            count: selectedBookImportIds.length,
+                          })}
+                        </Button>
+                        <Button
+                          disabled={!currentDestinationScope || importing || selectedBookRefreshIds.length === 0}
+                          onClick={() =>
+                            void runImport(selectedBookRefreshIds, "refresh", undefined, lorebookRefreshSelectionKey)
+                          }
+                          data-ltm-lorebook-action="refresh-selected"
+                        >
+                          <RefreshCw aria-hidden="true" size="0.75rem" />{" "}
+                          {localizeUi("ui.longTermMemory.sourcesworkspace.refreshSelectedSourcesCount", {
+                            count: selectedBookRefreshIds.length,
+                          })}
+                        </Button>
+                        {importing ? (
+                          <Button destructive onClick={cancelLtmSourceTask} data-ltm-lorebook-action="cancel-import">
+                            {localizeUi("ui.longTermMemory.memoryvault.cancel")}
+                          </Button>
+                        ) : null}
+                      </div>
 
                       <div role="list" className="divide-y divide-[var(--border)]">
                         {selectedLorebook.entries.map((entry) => {
@@ -2296,15 +3031,32 @@ export default function SourcesWorkspace({
                               className="space-y-3 p-3"
                             >
                               <div className="flex items-start gap-3">
-                                <EntrySelect
-                                  entry={entry}
-                                  checked={candidateIds.length > 0 && selectedCount === candidateIds.length}
-                                  indeterminate={selectedCount > 0 && selectedCount < candidateIds.length}
-                                  onChange={(checked) => toggleLorebookCandidates(entry.candidates, checked)}
-                                />
+                                {selectionMode ? (
+                                  <EntrySelect
+                                    entry={entry}
+                                    checked={candidateIds.length > 0 && selectedCount === candidateIds.length}
+                                    indeterminate={selectedCount > 0 && selectedCount < candidateIds.length}
+                                    onChange={(checked) => toggleLorebookCandidates(entry.candidates, checked)}
+                                  />
+                                ) : null}
                                 <div className="min-w-0 flex-1">
                                   <div className="flex flex-wrap items-center gap-2">
-                                    <h3 className="text-sm font-semibold">{entry.name}</h3>
+                                    <button
+                                      type="button"
+                                      aria-expanded={openLorebookEntryId === entry.id}
+                                      data-ltm-lorebook-entry-toggle={entry.id}
+                                      className="inline-flex min-h-11 items-center gap-1 text-left text-sm font-semibold"
+                                      onClick={() =>
+                                        setOpenLorebookEntryId((current) => (current === entry.id ? null : entry.id))
+                                      }
+                                    >
+                                      {openLorebookEntryId === entry.id ? (
+                                        <ChevronDown aria-hidden="true" size="0.875rem" />
+                                      ) : (
+                                        <ChevronRight aria-hidden="true" size="0.875rem" />
+                                      )}
+                                      {entry.name}
+                                    </button>
                                     <span
                                       className={`rounded-full px-2 py-0.5 text-[0.625rem] font-semibold uppercase ${entryStatusToneClass(entry)}`}
                                     >
@@ -2324,58 +3076,80 @@ export default function SourcesWorkspace({
                                   </p>
                                 </div>
                               </div>
-                              <div role="list" className="space-y-2">
-                                {entry.candidates.map((candidate) => (
-                                  <ClickSurface
-                                    key={candidate.sourceId}
-                                    role="listitem"
-                                    className="group ml-7 space-y-2"
-                                    data-ltm-source-existing-note={candidate.existingNoteId}
-                                    data-ltm-source-actions-open={
-                                      openSourceActionId === candidate.existingNoteId || undefined
-                                    }
-                                  >
-                                    <div className="flex items-start gap-2">
-                                      {candidate.status === "pending" ? (
-                                        <IconButton
-                                          icon={importing ? Loader2 : FileInput}
-                                          label={localizeUi("ui.longTermMemory.sourcesworkspace.importValue1", {
-                                            value1: candidate.title,
-                                          })}
-                                          disabled={importing}
-                                          onClick={(event) => {
-                                            stopRowAction(event);
-                                            void runImport([candidate.sourceId]);
-                                          }}
-                                          className={importing ? "[&>svg]:animate-spin" : ""}
-                                          data-ltm-source-action="import"
-                                          data-ltm-source-id={candidate.sourceId}
-                                        />
-                                      ) : null}
-                                      {candidate.status !== "imported" ? null : (
-                                        <>
-                                          <button
-                                            type="button"
-                                            data-ltm-source-memory-id={candidate.existingNoteId}
-                                            aria-label={localizeUi(
-                                              "ui.longTermMemory.sourcesworkspace.openSourceMemoryValue1",
-                                              {
-                                                value1: candidate.existingNoteTitle,
-                                              },
-                                            )}
-                                            className="inline-flex min-h-11 flex-1 items-center text-left text-xs font-semibold text-[var(--primary)] underline underline-offset-2"
-                                            onClick={() => onOpenMemory?.(candidate.existingNoteId)}
-                                          >
-                                            {localizeUi("ui.longTermMemory.sourcesworkspace.sourceMemory")}{" "}
-                                            {candidate.existingNoteTitle}
-                                          </button>
-                                          {sourceInlineActions(candidate.existingNoteId, candidate.existingNoteTitle)}
-                                        </>
-                                      )}
-                                    </div>
-                                  </ClickSurface>
-                                ))}
-                              </div>
+                              {openLorebookEntryId === entry.id ? (
+                                <div role="list" className="space-y-2">
+                                  {lorebookDetails.isLoading ? (
+                                    <div
+                                      className="h-20 animate-pulse rounded bg-[var(--secondary)]"
+                                      aria-label={localizeUi("ui.longTermMemory.sourcesworkspace.loadingSourceContent")}
+                                    />
+                                  ) : lorebookDetails.isError ? (
+                                    <StatusSurface tone="danger">
+                                      {lorebookDetails.error instanceof Error
+                                        ? lorebookDetails.error.message
+                                        : localizeUi("ui.longTermMemory.sourcesworkspace.sourcePreviewCouldNotLoad")}
+                                      <Button onClick={() => void lorebookDetails.refetch()}>
+                                        {localizeUi("ui.longTermMemory.sourcesworkspace.refreshPreview")}
+                                      </Button>
+                                    </StatusSurface>
+                                  ) : null}
+                                  {entry.candidates.map((candidate) => (
+                                    <ClickSurface
+                                      key={candidate.sourceId}
+                                      role="listitem"
+                                      className="group ml-7 space-y-2"
+                                      data-ltm-source-existing-note={candidate.existingNoteId}
+                                      data-ltm-source-actions-open={
+                                        openSourceActionId === candidate.existingNoteId || undefined
+                                      }
+                                    >
+                                      <p className="whitespace-pre-wrap break-words text-xs text-[var(--muted-foreground)]">
+                                        {lorebookDetails.data?.details.find(
+                                          (detail) => detail.sourceId === candidate.sourceId,
+                                        )?.content ?? candidate.snippet}
+                                      </p>
+                                      <div className="flex items-start gap-2">
+                                        {candidate.status === "pending" ? (
+                                          <IconButton
+                                            icon={importing ? Loader2 : FileInput}
+                                            label={localizeUi("ui.longTermMemory.sourcesworkspace.importValue1", {
+                                              value1: candidate.title,
+                                            })}
+                                            disabled={importing}
+                                            onClick={(event) => {
+                                              stopRowAction(event);
+                                              void runImport([candidate.sourceId]);
+                                            }}
+                                            className={importing ? "[&>svg]:animate-spin" : ""}
+                                            data-ltm-source-action="import"
+                                            data-ltm-source-id={candidate.sourceId}
+                                          />
+                                        ) : null}
+                                        {candidate.status !== "imported" ? null : (
+                                          <>
+                                            <button
+                                              type="button"
+                                              data-ltm-source-memory-id={candidate.existingNoteId}
+                                              aria-label={localizeUi(
+                                                "ui.longTermMemory.sourcesworkspace.openSourceMemoryValue1",
+                                                {
+                                                  value1: candidate.existingNoteTitle,
+                                                },
+                                              )}
+                                              className="inline-flex min-h-11 flex-1 items-center text-left text-xs font-semibold text-[var(--primary)] underline underline-offset-2"
+                                              onClick={() => onOpenMemory?.(candidate.existingNoteId)}
+                                            >
+                                              {localizeUi("ui.longTermMemory.sourcesworkspace.sourceMemory")}{" "}
+                                              {candidate.existingNoteTitle}
+                                            </button>
+                                            {sourceInlineActions(candidate.existingNoteId, candidate.existingNoteTitle)}
+                                          </>
+                                        )}
+                                      </div>
+                                    </ClickSurface>
+                                  ))}
+                                </div>
+                              ) : null}
                             </article>
                           );
                         })}
@@ -2387,11 +3161,71 @@ export default function SourcesWorkspace({
                       </div>
                     </>
                   ) : (
-                    <p className="p-4 text-xs text-[var(--muted-foreground)]">
-                      {localizeUi("ui.longTermMemory.sourcesworkspace.selectALorebookToInspectItsEntries")}
-                    </p>
+                    <div className="space-y-2 p-4 text-xs text-[var(--muted-foreground)]">
+                      <p>{localizeUi("ui.longTermMemory.sourcesworkspace.selectALorebookToInspectItsEntries")}</p>
+                      <p>
+                        {localizeUi("ui.longTermMemory.sourcesworkspace.readyToImport")} (
+                        {lorebookPreview.data?.counts.pending ?? 0}) ·{" "}
+                        {localizeUi("ui.longTermMemory.sourcesworkspace.alreadyImported")} (
+                        {lorebookPreview.data?.counts.imported ?? 0})
+                      </p>
+                    </div>
                   )}
+                  {reextractResultPanel}
                 </section>
+              ),
+            }}
+            inspector={{
+              label: localizeUi("ui.longTermMemory.sourcesworkspace.chooseDestination"),
+              content: (
+                <div className="space-y-3">
+                  <DestinationScopePanel
+                    targets={destinationTargets}
+                    value={destinationTargetId}
+                    selectedIds={additionalDestinationTargetIds}
+                    selectedTarget={primaryDestinationTarget}
+                    additionalTargets={additionalDestinationTargets}
+                    onChange={changeDestinationScope}
+                    onAdditionalChange={(ids) => {
+                      setAdditionalDestinationTargetIds(ids);
+                      clearImportResult();
+                    }}
+                    onOpenEditor={() => {
+                      setLocationEditorOpen(true);
+                      setWorkspacePane("workbench");
+                    }}
+                    mode={modeFilter}
+                    source={source}
+                    disabled={sourceTask.active?.status === "running"}
+                  />
+                  {focusedImportedSource ? (
+                    <ImportedSourceInspector
+                      source={focusedImportedSource}
+                      disabled={sourceTask.active?.status === "running"}
+                      bulkActive={bulkSelectionActive}
+                      onOpenMemory={onOpenMemory}
+                      onOpenReview={onOpenReview}
+                      onReextract={(id) => void reextract(id)}
+                      onManage={(id, title, operation) => {
+                        setSourceOperation({ id, title, operation });
+                        setWorkspacePane("workbench");
+                      }}
+                    />
+                  ) : null}
+                  {latestSourceTask ? (
+                    <button
+                      type="button"
+                      className="mari-editor-panel flex min-h-11 w-full items-center justify-between gap-2 p-3 text-left text-xs"
+                      data-ltm-latest-source-task
+                      onClick={() => void openLatestTaskResult()}
+                    >
+                      <span className="font-semibold">{latestSourceTaskLabel}</span>
+                      <span className="text-[var(--muted-foreground)]">
+                        {latestSourceTask.sourceCount} · {latestSourceTask.status}
+                      </span>
+                    </button>
+                  ) : null}
+                </div>
               ),
             }}
           />
@@ -2402,352 +3236,651 @@ export default function SourcesWorkspace({
           role="tabpanel"
           aria-labelledby={`ltm-source-tab-${source}`}
           data-ltm-source-preview={source}
-          className="mari-editor-panel overflow-hidden"
+          className="min-w-0"
         >
-          <div
-            role="tablist"
-            aria-label={localizeUi("ui.longTermMemory.sourcesworkspace.sourceStatus")}
-            className="mari-editor-tab-rail flex border-b p-1"
-          >
-            {flatPanelTabs.map((tab) => {
-              const count = tab.id === "available" ? selectableRows.length : importedRows.length;
-              return (
-                <button
-                  key={tab.id}
-                  id={`ltm-source-panel-tab-${tab.id}`}
-                  type="button"
-                  role="tab"
-                  tabIndex={flatPanel === tab.id ? 0 : -1}
-                  aria-selected={flatPanel === tab.id}
-                  aria-controls={flatPanel === tab.id ? `ltm-source-panel-${tab.id}` : undefined}
-                  data-ltm-source-section={tab.id}
-                  onClick={() => setFlatPanel(tab.id)}
-                  onKeyDown={(event) =>
-                    handleTabKey(
-                      event,
-                      flatPanelTabs.map((item) => item.id),
-                      flatPanel,
-                      setFlatPanel,
-                      "data-ltm-source-section",
-                    )
-                  }
-                  data-active={flatPanel === tab.id}
-                  className="mari-editor-tab min-h-11 flex-1 rounded-md px-3 text-xs font-semibold"
-                >
-                  {localizeUi(tab.labelKey)} ({count})
-                </button>
-              );
-            })}
-          </div>
-          <div
-            id={`ltm-source-panel-${flatPanel}`}
-            role="tabpanel"
-            aria-labelledby={`ltm-source-panel-tab-${flatPanel}`}
-          >
-            <div className="flex flex-wrap items-center gap-3 border-b border-[var(--border)] px-3 py-2 text-xs font-semibold">
-              <input
-                ref={flatPanel === "available" ? selectAllRef : selectAllImportedRef}
-                type="checkbox"
-                className={sourceCheckboxClass}
-                aria-label={localizeUi("ui.longTermMemory.sourcesworkspace.selectAllValue1", {
-                  value1:
-                    flatPanel === "available"
-                      ? localizeUi("ui.longTermMemory.sourcesworkspace.readyToImport")
-                      : localizeUi("ui.longTermMemory.sourcesworkspace.alreadyImported"),
-                })}
-                checked={activeFlatAllSelected}
-                disabled={activeFlatRows.length === 0}
-                onChange={(event) =>
-                  setSelections((current) => ({
-                    ...current,
-                    [flatPanel === "available" ? selectionKey : importedSelectionKey]: event.target.checked
-                      ? activeFlatRows.map((row) => row.sourceId)
-                      : [],
-                  }))
-                }
-                data-ltm-source-select-all={flatPanel}
-              />
-              <span>
-                {activeFlatSelectedIds.length} {localizeUi("ui.longTermMemory.memoryvault.selected")}
-              </span>
-              {flatPanel === "available" ? (
-                <Button
-                  primary
-                  disabled={importing || activeFlatSelectedIds.length === 0}
-                  onClick={() => void runImport(activeFlatSelectedIds)}
-                  data-ltm-source-action="import-selected"
-                  data-ltm-source-selected-count={activeFlatSelectedIds.length}
-                >
-                  {importing ? (
-                    <Loader2 aria-hidden="true" size="0.75rem" className="animate-spin" />
-                  ) : (
-                    <Check aria-hidden="true" size="0.75rem" />
-                  )}
-                  {localizeUi("ui.longTermMemory.sourcesworkspace.importSelected_7fb57e8")}
-                </Button>
-              ) : (
-                <>
-                  <Button
-                    disabled={importing || activeFlatSelectedIds.length === 0}
-                    onClick={() => void runImport(activeFlatSelectedIds, "refresh")}
-                    data-ltm-source-action="refresh-selected"
-                    data-ltm-source-selected-count={activeFlatSelectedIds.length}
-                  >
-                    <RefreshCw aria-hidden="true" size="0.75rem" />{" "}
-                    {localizeUi("ui.longTermMemory.sourcesworkspace.refreshSelectedSources")}
-                  </Button>
-                </>
-              )}
-              {importing && flatPanel === "available" ? (
-                <Button
-                  destructive
-                  onClick={() => importControllerRef.current?.abort()}
-                  data-ltm-source-action="cancel-import"
-                >
-                  {localizeUi("ui.longTermMemory.memoryvault.cancel")}
-                </Button>
-              ) : null}
-            </div>
-            <div role="list" className="divide-y divide-[var(--border)]">
-              {activeFlatRows.map((row) => (
-                <ClickSurface
-                  key={row.sourceId}
-                  role="listitem"
-                  data-ltm-source-row-status={row.status}
-                  data-ltm-source-id={row.sourceId}
-                  data-ltm-source-actions-open={
-                    flatPanel === "imported" && openSourceActionId === row.existingNoteId ? true : undefined
-                  }
-                  className="group space-y-2 p-3"
-                >
-                  <div className="flex items-start gap-3">
-                    <input
-                      type="checkbox"
-                      className={sourceCheckboxClass}
-                      aria-label={localizeUi("ui.longTermMemory.memoryvault.selectValue1", { value1: row.title })}
-                      checked={activeFlatSelection.has(row.sourceId)}
-                      onChange={(event) =>
-                        flatPanel === "available"
-                          ? toggleSelected(row.sourceId, event.target.checked)
-                          : toggleImportedSelected(row.sourceId, event.target.checked)
-                      }
-                      data-ltm-source-select={row.sourceId}
-                    />
-                    <div className="min-w-0 flex-1">
-                      <div className="flex flex-wrap items-center gap-2">
-                        <h3 className="text-sm font-semibold">{row.title}</h3>
-                        <span
-                          data-ltm-source-status={row.status}
-                          className="rounded-full border border-[var(--border)] bg-[var(--secondary)] px-2 py-0.5 text-[0.625rem] font-semibold uppercase"
-                        >
-                          {sourceStatusLabel(row, localizeUi)}
+          <LtmWorkspace
+            activeMobilePane={workspacePane}
+            onMobilePaneChange={setWorkspacePane}
+            switcherLabel={localizeUi("ui.longTermMemory.longtermmemorynavigation.workspacePanes")}
+            navigator={{
+              label: localizeUi("ui.longTermMemory.sourcesworkspace.sourceTypes"),
+              content: (
+                <section className="mari-editor-panel overflow-hidden" data-ltm-source-navigator>
+                  <header className="space-y-3 border-b border-[var(--border)] bg-[var(--secondary)]/25 p-3">
+                    <div className="flex items-center justify-between gap-3">
+                      <h2 className="text-sm font-semibold">
+                        {localizeUi(sourceTabs.find((tab) => tab.id === source)?.labelKey ?? "")}
+                      </h2>
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs text-[var(--muted-foreground)]">
+                          {preview.data?.totals.matches ?? activeFlatRows.length}
                         </span>
-                        <span
-                          data-ltm-source-import-mode={row.importMode}
-                          className="text-xs text-[var(--muted-foreground)]"
-                        >
-                          {sourceModeLabel(row.importMode, localizeUi)}
-                        </span>
+                        <Button className="mari-editor-action--compact" onClick={() => void toggleSelectionMode()}>
+                          {localizeUi(
+                            selectionMode
+                              ? "ui.longTermMemory.sourcesworkspace.doneSelecting"
+                              : "ui.longTermMemory.sourcesworkspace.selectSources",
+                          )}
+                        </Button>
                       </div>
-                      <p className="mt-1 text-xs text-[var(--muted-foreground)]">{row.summary}</p>
-                      <p className="mt-1 line-clamp-2 text-xs text-[var(--muted-foreground)]">{row.snippet}</p>
                     </div>
-                    {flatPanel === "imported" ? (
-                      sourceInlineActions(row.existingNoteId, row.existingNoteTitle)
-                    ) : (
-                      <IconButton
-                        icon={importing ? Loader2 : FileInput}
-                        label={localizeUi("ui.longTermMemory.sourcesworkspace.importValue1", { value1: row.title })}
-                        disabled={importing}
-                        onClick={(event) => {
-                          stopRowAction(event);
-                          void runImport([row.sourceId]);
-                        }}
-                        className={importing ? "[&>svg]:animate-spin" : ""}
-                        data-ltm-source-action="import"
-                        data-ltm-source-id={row.sourceId}
+                    {preview.data?.truncated ? (
+                      <p role="note" className="text-xs text-[var(--marinara-editor-warning)]">
+                        {localizeUi("ui.longTermMemory.sourcesworkspace.moreThan100Matches")}
+                      </p>
+                    ) : null}
+                    <label className="relative block">
+                      <Search
+                        aria-hidden="true"
+                        size="0.875rem"
+                        className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-[var(--muted-foreground)]"
                       />
-                    )}
-                  </div>
-                  {flatPanel === "imported" ? (
-                    <div className="ml-7 space-y-2" data-ltm-source-existing-note={row.existingNoteId}>
-                      <button
-                        type="button"
-                        data-ltm-source-memory-id={row.existingNoteId}
-                        aria-label={localizeUi("ui.longTermMemory.sourcesworkspace.openSourceMemoryValue1", {
-                          value1: row.existingNoteTitle,
-                        })}
-                        className="inline-flex min-h-11 items-center text-left text-xs font-semibold text-[var(--primary)] underline underline-offset-2"
-                        onClick={() => onOpenMemory?.(row.existingNoteId)}
+                      <input
+                        className={`${inputClass} pl-9`}
+                        value={sourceQuery}
+                        placeholder={localizeUi("ui.longTermMemory.sourcesworkspace.searchSources")}
+                        aria-label={localizeUi("ui.longTermMemory.sourcesworkspace.searchSources")}
+                        data-ltm-source-search
+                        onChange={(event) => setSourceQuery(event.target.value)}
+                      />
+                    </label>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <label className="flex min-h-11 items-center gap-2 text-xs font-medium">
+                        {localizeUi("ui.longTermMemory.transferworkbench.mode")}
+                        <select
+                          className={`${inputClass} w-36`}
+                          value={modeFilter}
+                          disabled={activeSourceTask !== null}
+                          onChange={(event) => void changeModeFilter(event.target.value as LtmMode | "all")}
+                          aria-label={localizeUi("ui.longTermMemory.sourcesworkspace.filterSourcesByMode")}
+                          data-ltm-source-mode
+                        >
+                          <option value="all">{localizeUi("ui.longTermMemory.sourcesworkspace.all")}</option>
+                          <option value="game">{localizeUi("ui.longTermMemory.sourcesworkspace.game")}</option>
+                          <option value="conversation">
+                            {localizeUi("ui.longTermMemory.sourcesworkspace.conversation")}
+                          </option>
+                          <option value="roleplay">{localizeUi("ui.longTermMemory.sourcesworkspace.roleplay")}</option>
+                        </select>
+                      </label>
+                      <Button
+                        disabled={preview.isFetching}
+                        onClick={() => void preview.refetch()}
+                        data-ltm-source-action="refresh-preview"
                       >
-                        {localizeUi("ui.longTermMemory.sourcesworkspace.sourceMemory")} {row.existingNoteTitle}
-                      </button>
+                        {preview.isFetching ? (
+                          <Loader2 aria-hidden="true" size="0.75rem" className="animate-spin" />
+                        ) : (
+                          <RefreshCw aria-hidden="true" size="0.75rem" />
+                        )}
+                        {localizeUi("ui.longTermMemory.sourcesworkspace.refreshPreview")}
+                      </Button>
                     </div>
+                    <div
+                      role="tablist"
+                      aria-label={localizeUi("ui.longTermMemory.sourcesworkspace.sourceStatus")}
+                      className="grid grid-cols-3 gap-1"
+                    >
+                      {(["all", "ready", "imported"] as const).map((filter) => {
+                        const count =
+                          filter === "all"
+                            ? (preview.data?.totals.matches ?? rows.length)
+                            : filter === "ready"
+                              ? (preview.data?.totals.ready ?? selectableRows.length)
+                              : (preview.data?.totals.imported ?? importedRows.length);
+                        const labelKey =
+                          filter === "all"
+                            ? "ui.longTermMemory.sourcesworkspace.all"
+                            : filter === "ready"
+                              ? "ui.longTermMemory.sourcesworkspace.readyToImport"
+                              : "ui.longTermMemory.sourcesworkspace.alreadyImported";
+                        return (
+                          <button
+                            key={filter}
+                            type="button"
+                            role="tab"
+                            id={`ltm-source-status-${source}-${filter}`}
+                            tabIndex={sourceStatusFilter === filter ? 0 : -1}
+                            aria-selected={sourceStatusFilter === filter}
+                            aria-controls={`ltm-source-results-${source}`}
+                            data-ltm-source-status-filter={filter}
+                            className="mari-editor-tab min-h-11 rounded-md border px-2 text-xs font-semibold"
+                            data-active={sourceStatusFilter === filter}
+                            onClick={() => void changeSourceStatusFilter(filter)}
+                            onKeyDown={(event) =>
+                              handleTabKey(
+                                event,
+                                ["all", "ready", "imported"],
+                                sourceStatusFilter,
+                                changeSourceStatusFilter,
+                                "data-ltm-source-status-filter",
+                              )
+                            }
+                          >
+                            {localizeUi(labelKey)} ({count})
+                          </button>
+                        );
+                      })}
+                    </div>
+                    {selectionMode ? (
+                      <div className="flex flex-wrap items-center gap-2 text-xs font-semibold">
+                        <input
+                          ref={selectAllRef}
+                          type="checkbox"
+                          className={sourceCheckboxClass}
+                          aria-label={localizeUi("ui.longTermMemory.sourcesworkspace.selectAllValue1", {
+                            value1: localizeUi("ui.longTermMemory.sourcesworkspace.sourceParts"),
+                          })}
+                          checked={activeFlatAllSelected}
+                          disabled={sourceStatusFilter === "all" || activeFlatRows.length === 0}
+                          onChange={(event) =>
+                            setSelections((current) => ({
+                              ...current,
+                              [selectionKey]: event.target.checked
+                                ? activeFlatRows
+                                    .filter((row) => row.status === "pending" || retryableIdSet.has(row.sourceId))
+                                    .map((row) => row.sourceId)
+                                : [],
+                              [importedSelectionKey]: event.target.checked
+                                ? activeFlatRows.filter((row) => row.status === "imported").map((row) => row.sourceId)
+                                : [],
+                            }))
+                          }
+                          data-ltm-source-select-all={sourceStatusFilter}
+                        />
+                        <span>
+                          {selectedFlatSourceIds.length} {localizeUi("ui.longTermMemory.memoryvault.selected")}
+                        </span>
+                        {selectedIds.size ? (
+                          <Button
+                            primary
+                            disabled={!currentDestinationScope || importing}
+                            onClick={() => void runImport([...selectedIds])}
+                            data-ltm-source-action="import-selected"
+                          >
+                            <Check aria-hidden="true" size="0.75rem" />
+                            {localizeUi("ui.longTermMemory.sourcesworkspace.importSelected_7fb57e8")}
+                          </Button>
+                        ) : null}
+                        {selectedImportedIds.size ? (
+                          <Button
+                            disabled={!currentDestinationScope || importing}
+                            onClick={() => void runImport([...selectedImportedIds], "refresh")}
+                            data-ltm-source-action="refresh-selected"
+                          >
+                            <RefreshCw aria-hidden="true" size="0.75rem" />
+                            {localizeUi("ui.longTermMemory.sourcesworkspace.refreshSelectedSources")}
+                          </Button>
+                        ) : null}
+                        {importing ? (
+                          <Button destructive onClick={cancelLtmSourceTask} data-ltm-source-action="cancel-import">
+                            {localizeUi("ui.longTermMemory.memoryvault.cancel")}
+                          </Button>
+                        ) : null}
+                      </div>
+                    ) : null}
+                  </header>
+                  <div id={`ltm-source-results-${source}`} role="list" className="divide-y divide-[var(--border)]">
+                    {sourceStatusFilter === "all" ? (
+                      <>
+                        <details
+                          open={sourceGroupsOpen[source].ready}
+                          data-ltm-source-group="ready"
+                          onToggle={(event) => {
+                            const open = event.currentTarget.open;
+                            setSourceGroupsOpen((current) => ({
+                              ...current,
+                              [source]: { ...current[source], ready: open },
+                            }));
+                          }}
+                        >
+                          <summary className="cursor-pointer list-none border-b border-[var(--border)] bg-[var(--secondary)]/25 px-3 py-3 text-xs font-semibold">
+                            {localizeUi("ui.longTermMemory.sourcesworkspace.readyToImport")} (
+                            {preview.data?.totals.ready ?? selectableRows.length})
+                          </summary>
+                          <div className="divide-y divide-[var(--border)]">
+                            {selectableRows.map(renderFlatSourceRow)}
+                          </div>
+                        </details>
+                        <details
+                          open={sourceGroupsOpen[source].imported}
+                          data-ltm-source-group="imported"
+                          onToggle={(event) => {
+                            const open = event.currentTarget.open;
+                            setSourceGroupsOpen((current) => ({
+                              ...current,
+                              [source]: { ...current[source], imported: open },
+                            }));
+                          }}
+                        >
+                          <summary className="cursor-pointer list-none bg-[var(--secondary)]/25 px-3 py-3 text-xs font-semibold">
+                            {localizeUi("ui.longTermMemory.sourcesworkspace.alreadyImported")} (
+                            {preview.data?.totals.imported ?? importedRows.length})
+                          </summary>
+                          <div className="divide-y divide-[var(--border)]">{importedRows.map(renderFlatSourceRow)}</div>
+                        </details>
+                      </>
+                    ) : (
+                      activeFlatRows.map(renderFlatSourceRow)
+                    )}
+                    {!preview.isLoading && activeFlatRows.length === 0 ? (
+                      <p className="p-4 text-xs text-[var(--muted-foreground)]">
+                        {sourceStatusFilter === "imported"
+                          ? localizeUi("ui.longTermMemory.sourcesworkspace.noSourcesHaveBeenImportedInThisScope")
+                          : localizeUi("ui.longTermMemory.sourcesworkspace.noNewOrRetryableSourcesAreReadyToImport")}
+                      </p>
+                    ) : null}
+                  </div>
+                </section>
+              ),
+            }}
+            workbench={{
+              label: localizeUi(
+                locationEditorOpen
+                  ? "ui.longTermMemory.sourcesworkspace.chooseAdditionalLocations"
+                  : "ui.longTermMemory.sourcesworkspace.sourcePreview",
+              ),
+              content: (
+                <section
+                  className={`mari-editor-panel overflow-hidden ${workbenchModeClass}`}
+                  data-ltm-source-workbench
+                >
+                  {sourceOperationWorkbench}
+                  <div ref={setResultWorkbenchHost} className="contents" data-ltm-source-task-result-workbench />
+                  {restoredImportResultPanel}
+                  {selectedFlatSourceIds.length > 1 ? (
+                    <section className="space-y-2 border-b border-[var(--border)] p-3" data-ltm-source-bulk-queue>
+                      <h2 className="text-sm font-semibold">
+                        {localizeUi("ui.longTermMemory.sourcesworkspace.selectedSourceParts")} (
+                        {selectedFlatSourceIds.length})
+                      </h2>
+                      {selectedFlatSourceIds.map((id) => {
+                        const row = rows.find((item) => item.sourceId === id);
+                        return (
+                          <details key={id} className="rounded border border-[var(--border)]">
+                            <summary
+                              className="cursor-pointer list-none px-3 py-2 text-xs font-semibold"
+                              onClick={() => {
+                                if (row) setFocusedFlatSourceId(row.sourceId);
+                              }}
+                            >
+                              {row?.title ?? id} ·{" "}
+                              {row
+                                ? sourceStatusLabel(row, localizeUi)
+                                : localizeUi("ui.longTermMemory.sourcesworkspace.selected")}
+                            </summary>
+                            {row ? (
+                              <p className="whitespace-pre-wrap px-3 pb-3 text-xs text-[var(--muted-foreground)]">
+                                {sourceDetails.data?.details.find((detail) => detail.sourceId === row.sourceId)
+                                  ?.content ?? row.snippet}
+                              </p>
+                            ) : null}
+                          </details>
+                        );
+                      })}
+                    </section>
                   ) : null}
-                </ClickSurface>
-              ))}
-              {!preview.isLoading && activeFlatRows.length === 0 ? (
-                <p className="p-4 text-xs text-[var(--muted-foreground)]">
-                  {flatPanel === "available"
-                    ? localizeUi("ui.longTermMemory.sourcesworkspace.noNewOrRetryableSourcesAreReadyToImport")
-                    : localizeUi("ui.longTermMemory.sourcesworkspace.noSourcesHaveBeenImportedInThisScope")}
-                </p>
-              ) : null}
-            </div>
-          </div>
+                  <BulkDestinationPicker
+                    primaryTarget={primaryDestinationTarget}
+                    targets={destinationTargets}
+                    selectedIds={additionalDestinationTargetIds}
+                    onChange={(ids) => {
+                      setAdditionalDestinationTargetIds(ids);
+                      clearImportResult();
+                    }}
+                    disabled={sourceTask.active?.status === "running"}
+                    renderTrigger={false}
+                    controlledOpen={locationEditorOpen}
+                    onOpenChange={(open) => {
+                      setLocationEditorOpen(open);
+                      if (!open) setWorkspacePane("inspector");
+                    }}
+                    inline
+                  />
+                  {activeSourceTask ? (
+                    <div className="space-y-3 p-4" data-ltm-source-task-progress>
+                      <StatusSurface busy>
+                        <Loader2 aria-hidden="true" size="0.875rem" className="animate-spin" />
+                        {sourceTaskProgressMessage}
+                      </StatusSurface>
+                      <p className="text-xs text-[var(--muted-foreground)]">
+                        {localizeUi("ui.longTermMemory.sourcesworkspace.savingAndExtracting", {
+                          count: activeSourceTask.sourceCount,
+                        })}
+                      </p>
+                      <Button destructive onClick={cancelLtmSourceTask} data-ltm-source-action="cancel-import">
+                        {localizeUi("ui.longTermMemory.memoryvault.cancel")}
+                      </Button>
+                    </div>
+                  ) : focusedFlatRow ? (
+                    <article className="space-y-3 p-4">
+                      <header className="space-y-2 border-b border-[var(--border)] pb-3">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <h2 className="text-base font-semibold">{focusedFlatRow.title}</h2>
+                          <span className="rounded-full border border-[var(--border)] bg-[var(--secondary)] px-2 py-0.5 text-[0.625rem] font-semibold uppercase">
+                            {sourceStatusLabel(focusedFlatRow, localizeUi)}
+                          </span>
+                          <span className="text-xs text-[var(--muted-foreground)]">
+                            {sourceModeLabel(focusedFlatRow.importMode, localizeUi)}
+                          </span>
+                        </div>
+                        <p className="text-xs text-[var(--muted-foreground)]">{focusedFlatRow.summary}</p>
+                        {sourceDetails.isLoading ? (
+                          <div
+                            className="h-32 animate-pulse rounded bg-[var(--secondary)]"
+                            aria-label={localizeUi("ui.longTermMemory.sourcesworkspace.loadingSourceContent")}
+                          />
+                        ) : sourceDetails.isError ? (
+                          <StatusSurface tone="danger">
+                            {sourceDetails.error instanceof Error
+                              ? sourceDetails.error.message
+                              : localizeUi("ui.longTermMemory.sourcesworkspace.sourcePreviewCouldNotLoad")}
+                            <Button onClick={() => void sourceDetails.refetch()}>
+                              {localizeUi("ui.longTermMemory.sourcesworkspace.refreshPreview")}
+                            </Button>
+                          </StatusSurface>
+                        ) : focusedFlatDetail ? (
+                          <pre className="max-h-[min(60vh,48rem)] overflow-auto whitespace-pre-wrap break-words rounded-md border border-[var(--border)] bg-[var(--secondary)]/25 p-3 text-sm">
+                            {focusedFlatDetail.content}
+                          </pre>
+                        ) : (
+                          <p className="text-sm text-[var(--muted-foreground)]">{focusedFlatRow.snippet}</p>
+                        )}
+                      </header>
+                      <div className={mobilePrimaryActionsClass} data-ltm-source-primary-actions>
+                        {selectedIds.size ? (
+                          <Button
+                            primary
+                            disabled={!currentDestinationScope || importing}
+                            onClick={() => void runImport([...selectedIds])}
+                            data-ltm-source-action="import-selected"
+                          >
+                            <FileInput aria-hidden="true" size="0.75rem" />
+                            {localizeUi("ui.longTermMemory.sourcesworkspace.importSelectedCount", {
+                              count: selectedIds.size,
+                            })}
+                          </Button>
+                        ) : selectedImportedIds.size ? (
+                          <Button
+                            disabled={!currentDestinationScope || importing}
+                            onClick={() => void runImport([...selectedImportedIds], "refresh")}
+                            data-ltm-source-action="refresh-selected"
+                          >
+                            <RefreshCw aria-hidden="true" size="0.75rem" />
+                            {localizeUi("ui.longTermMemory.sourcesworkspace.refreshSelectedSourcesCount", {
+                              count: selectedImportedIds.size,
+                            })}
+                          </Button>
+                        ) : focusedFlatRow.status === "pending" || retryableIdSet.has(focusedFlatRow.sourceId) ? (
+                          <Button
+                            primary
+                            disabled={!currentDestinationScope || importing}
+                            onClick={() => void runImport([focusedFlatRow.sourceId])}
+                            data-ltm-source-action="import"
+                          >
+                            <FileInput aria-hidden="true" size="0.75rem" />
+                            {localizeUi("ui.longTermMemory.sourcesworkspace.importValue1", {
+                              value1: focusedFlatRow.title,
+                            })}
+                          </Button>
+                        ) : (
+                          <>
+                            <Button
+                              disabled={!currentDestinationScope || importing}
+                              onClick={() => void runImport([focusedFlatRow.sourceId], "refresh")}
+                              data-ltm-source-action="refresh"
+                            >
+                              <RefreshCw aria-hidden="true" size="0.75rem" />
+                              {localizeUi("ui.longTermMemory.sourcesworkspace.refreshPreview")}
+                            </Button>
+                            {bulkSelectionActive
+                              ? null
+                              : sourceInlineActions(focusedFlatRow.existingNoteId, focusedFlatRow.existingNoteTitle)}
+                          </>
+                        )}
+                      </div>
+                      {focusedFlatRow.status === "imported" ? (
+                        <button
+                          type="button"
+                          data-ltm-source-memory-id={focusedFlatRow.existingNoteId}
+                          className="text-left text-xs font-semibold text-[var(--primary)] underline underline-offset-2"
+                          onClick={() => onOpenMemory?.(focusedFlatRow.existingNoteId)}
+                        >
+                          {localizeUi("ui.longTermMemory.sourcesworkspace.sourceMemory")}{" "}
+                          {focusedFlatRow.existingNoteTitle}
+                        </button>
+                      ) : null}
+                    </article>
+                  ) : (
+                    <div className="space-y-2 p-4 text-xs text-[var(--muted-foreground)]">
+                      <p>{localizeUi("ui.longTermMemory.sourcesworkspace.selectASourceToInspect")}</p>
+                      <p>
+                        {localizeUi("ui.longTermMemory.sourcesworkspace.readyToImport")} (
+                        {preview.data?.totals.ready ?? 0}) ·{" "}
+                        {localizeUi("ui.longTermMemory.sourcesworkspace.alreadyImported")} (
+                        {preview.data?.totals.imported ?? 0})
+                      </p>
+                    </div>
+                  )}
+                  {reextractResultPanel}
+                </section>
+              ),
+            }}
+            inspector={{
+              label: localizeUi("ui.longTermMemory.sourcesworkspace.chooseDestination"),
+              content: (
+                <div className="space-y-3">
+                  <DestinationScopePanel
+                    targets={destinationTargets}
+                    value={destinationTargetId}
+                    selectedIds={additionalDestinationTargetIds}
+                    selectedTarget={primaryDestinationTarget}
+                    additionalTargets={additionalDestinationTargets}
+                    onChange={changeDestinationScope}
+                    onAdditionalChange={(ids) => {
+                      setAdditionalDestinationTargetIds(ids);
+                      clearImportResult();
+                    }}
+                    onOpenEditor={() => {
+                      setLocationEditorOpen(true);
+                      setWorkspacePane("workbench");
+                    }}
+                    mode={modeFilter}
+                    source={source}
+                    disabled={sourceTask.active?.status === "running"}
+                  />
+                  {focusedImportedSource ? (
+                    <ImportedSourceInspector
+                      source={focusedImportedSource}
+                      disabled={sourceTask.active?.status === "running"}
+                      bulkActive={bulkSelectionActive}
+                      onOpenMemory={onOpenMemory}
+                      onOpenReview={onOpenReview}
+                      onReextract={(id) => void reextract(id)}
+                      onManage={(id, title, operation) => {
+                        setSourceOperation({ id, title, operation });
+                        setWorkspacePane("workbench");
+                      }}
+                    />
+                  ) : null}
+                  {latestSourceTask ? (
+                    <button
+                      type="button"
+                      className="mari-editor-panel flex min-h-11 w-full items-center justify-between gap-2 p-3 text-left text-xs"
+                      data-ltm-latest-source-task
+                      onClick={() => void openLatestTaskResult()}
+                    >
+                      <span className="font-semibold">{latestSourceTaskLabel}</span>
+                      <span className="text-[var(--muted-foreground)]">
+                        {latestSourceTask.sourceCount} · {latestSourceTask.status}
+                      </span>
+                    </button>
+                  ) : null}
+                </div>
+              ),
+            }}
+          />
         </section>
       )}
 
-      {importResult ? (
-        <section
-          role="region"
-          aria-labelledby={importResultLabelId}
-          data-ltm-source-import-result={importResult.batchStatus}
-          className="mari-editor-panel space-y-3 p-3"
-        >
-          <h2 id={importResultLabelId} className="text-sm font-semibold">
-            {localizeUi("ui.longTermMemory.sourcesworkspace.sourceImportComplete")}
-          </h2>
-          {importScopeResultMessage ? (
-            <p className="text-xs font-medium" data-ltm-import-scope-result>
-              {importScopeResultMessage}
-            </p>
-          ) : null}
-          <p className="text-xs text-[var(--muted-foreground)]">{importResultMessage}</p>
-          <div className="flex flex-wrap gap-2">
-            {retryableIds.length ? (
-              <Button
-                primary
-                disabled={importing}
-                onClick={() => void runImport(retryableIds, "import", importResultContract ?? undefined)}
-                data-ltm-source-action="retry-failed"
-              >
-                <RefreshCw aria-hidden="true" size="0.75rem" />
-                {localizeUi("ui.longTermMemory.sourcesworkspace.retryFailedCount", { count: retryableIds.length })}
-              </Button>
-            ) : null}
-            {pendingDraftsProduced ? (
-              <Button onClick={() => onOpenReview?.()} data-ltm-source-action="review-imported-drafts">
-                {localizeUi("ui.longTermMemory.sourcesworkspace.reviewProposedMemories")}
-              </Button>
-            ) : null}
-          </div>
-          <p className="text-xs text-[var(--muted-foreground)]">
-            {localizeUi("ui.longTermMemory.sourcesworkspace.importResultSummary", {
-              requested: importResult.counts.requested,
-              wrote: importResult.counts.sourceNotesWritten,
-              succeeded: importResult.counts.succeeded,
-              failed: importResult.counts.failed,
-              cancelled: importResult.counts.cancelled,
-              missing: importResult.counts.missing,
-              writeFailures: importResult.counts.sourceWriteFailed,
-            })}
-          </p>
-          {importResult.imported.map((item) => (
-            <article
-              key={item.sourceId}
-              data-ltm-import-outcome={item.extractionStatus}
-              className="space-y-2 border-t border-[var(--border)] py-3 first:border-t-0"
+      {importResult && visibleImportResult && resultWorkbenchHost
+        ? createPortal(
+            <section
+              ref={importResultRef}
+              role="region"
+              aria-labelledby={importResultLabelId}
+              data-ltm-source-import-result={importResult.batchStatus}
+              data-ltm-source-task-result-workbench
+              className="mari-editor-panel space-y-3 p-3"
             >
-              <div className="flex flex-wrap items-center gap-2 text-xs">
-                <strong>{item.title}</strong>
-                <span data-ltm-import-result-mode={item.note.modes[0]} className="text-[var(--muted-foreground)]">
-                  {sourceModeLabel(item.note.modes[0] ?? "roleplay", localizeUi)}
-                </span>
-                <span
-                  data-ltm-source-write-status={item.sourceWriteStatus}
-                  className={`rounded-full px-2 py-0.5 ${resultToneClass(item.sourceWriteStatus)}`}
-                >
-                  {importStatusLabel(item.sourceWriteStatus, localizeUi)}
-                </span>
-                <span
-                  data-ltm-extraction-status={item.extractionStatus}
-                  data-ltm-extraction-outcome={item.outcome.state}
-                  className={`rounded-full px-2 py-0.5 ${resultToneClass(item.extractionStatus === "succeeded" ? item.outcome.state : item.extractionStatus)}`}
-                >
-                  {extractionResultLabel(item, localizeUi)}
-                </span>
-                <span data-ltm-extraction-accounting className="text-[0.6875rem] text-[var(--muted-foreground)]">
-                  {localizeUi("ui.longTermMemory.sourcesworkspace.suggestionsKeptOfTotal", {
-                    kept: item.outcome.keptUnits,
-                    total: item.outcome.totalCandidates,
-                  })}
-                </span>
-              </div>
-              {item.extractionStatus === "failed" || item.extractionStatus === "cancelled" ? (
-                <StatusSurface tone={resultTone(item.extractionStatus)}>{item.error.message}</StatusSurface>
+              <h2 id={importResultLabelId} className="text-sm font-semibold">
+                {localizeUi("ui.longTermMemory.sourcesworkspace.sourceImportComplete")}
+              </h2>
+              {importScopeResultMessage ? (
+                <p className="text-xs font-medium" data-ltm-import-scope-result>
+                  {importScopeResultMessage}
+                </p>
               ) : null}
-              {item.extractionStatus === "succeeded" && item.outcome.droppedUnits > 0 ? (
-                <div className="space-y-2">
-                  <p
-                    className="text-xs text-[var(--muted-foreground)]"
-                    data-ltm-rejected-count={item.outcome.droppedUnits}
-                  >
-                    {localizeUi("ui.longTermMemory.sourcesworkspace.rejectedSuggestionCount", {
-                      count: item.outcome.droppedUnits,
-                    })}
-                  </p>
-                  <Button
-                    onClick={() => onOpenReview?.(item.note.id)}
-                    data-ltm-source-action="review-rejected-suggestions"
-                  >
-                    {localizeUi("ui.longTermMemory.sourcesworkspace.reviewRejectedSuggestions")}
-                  </Button>
-                </div>
-              ) : null}
-              {item.diagnostics.length ? (
-                <ul className="space-y-1 text-xs text-[var(--muted-foreground)]" data-ltm-extraction-diagnostics>
-                  {item.diagnostics.map((diagnostic, index) => (
-                    <li key={`${diagnostic.code}-${index}`}>{diagnostic.message}</li>
-                  ))}
-                </ul>
-              ) : null}
+              <p className="text-xs text-[var(--muted-foreground)]">{importResultMessage}</p>
               <div className="flex flex-wrap gap-2">
-                <button
-                  type="button"
-                  data-ltm-source-memory-id={item.note.id}
-                  aria-label={localizeUi("ui.longTermMemory.sourcesworkspace.openSourceMemoryValue1", {
-                    value1: item.title,
-                  })}
-                  className="inline-flex min-h-11 items-center text-xs font-semibold text-[var(--primary)] underline underline-offset-2"
-                  onClick={() => onOpenMemory?.(item.note.id)}
-                >
-                  {localizeUi("ui.longTermMemory.sourcesworkspace.openSourceMemory")}
-                </button>
-                <Button
-                  disabled={extractingId !== null}
-                  onClick={() => void reextract(item.note.id)}
-                  data-ltm-source-action="re-extract"
-                  data-ltm-source-note-id={item.note.id}
-                >
-                  {extractingId === item.note.id ? (
-                    <Loader2 aria-hidden="true" size="0.75rem" className="animate-spin" />
-                  ) : (
-                    <Sparkles aria-hidden="true" size="0.75rem" />
-                  )}
-                  {localizeUi("ui.longTermMemory.sourcesworkspace.reExtract")}
-                </Button>
-                <Button onClick={() => onOpenReview?.(item.note.id)} data-ltm-review-query={item.note.id}>
-                  {localizeUi("ui.longTermMemory.memoryvault.reviewRelatedDrafts")}
-                </Button>
+                {retryableIds.length ? (
+                  <Button
+                    primary
+                    disabled={importing}
+                    onClick={() => void runImport(retryableIds, "import", importResultContract ?? undefined)}
+                    data-ltm-source-action="retry-failed"
+                  >
+                    <RefreshCw aria-hidden="true" size="0.75rem" />
+                    {localizeUi("ui.longTermMemory.sourcesworkspace.retryFailedCount", { count: retryableIds.length })}
+                  </Button>
+                ) : null}
+                {pendingDraftsProduced ? (
+                  <Button onClick={() => onOpenReview?.()} data-ltm-source-action="review-imported-drafts">
+                    {localizeUi("ui.longTermMemory.sourcesworkspace.reviewProposedMemories")}
+                  </Button>
+                ) : null}
               </div>
-            </article>
-          ))}
-          {importResult.writeFailures.map((failure) => (
-            <StatusSurface key={failure.sourceId} tone="danger" data-ltm-source-write-failure={failure.sourceId}>
-              <CircleAlert aria-hidden="true" size="0.875rem" /> {failure.title}: {failure.error.message} (
-              {importStatusLabel(failure.sourceWriteStatus, localizeUi)},{" "}
-              {importStatusLabel(failure.extractionStatus, localizeUi)})
-            </StatusSurface>
-          ))}
-          {importResult.missingSourceIds.map((id) => (
-            <StatusSurface key={id} tone="danger" data-ltm-source-missing={id}>
-              <CircleAlert aria-hidden="true" size="0.875rem" />{" "}
-              {localizeUi("ui.longTermMemory.sourcesworkspace.missingSourceMemory")}
-            </StatusSurface>
-          ))}
-        </section>
-      ) : null}
+              <p className="text-xs text-[var(--muted-foreground)]">
+                {localizeUi("ui.longTermMemory.sourcesworkspace.importResultSummary", {
+                  requested: importResult.counts.requested,
+                  wrote: importResult.counts.sourceNotesWritten,
+                  succeeded: importResult.counts.succeeded,
+                  failed: importResult.counts.failed,
+                  cancelled: importResult.counts.cancelled,
+                  missing: importResult.counts.missing,
+                  writeFailures: importResult.counts.sourceWriteFailed,
+                })}
+              </p>
+              {importResult.imported.map((item) => (
+                <article
+                  key={item.sourceId}
+                  data-ltm-import-outcome={item.extractionStatus}
+                  className="space-y-2 border-t border-[var(--border)] py-3 first:border-t-0"
+                >
+                  <div className="flex flex-wrap items-center gap-2 text-xs">
+                    <strong>{item.title}</strong>
+                    <span data-ltm-import-result-mode={item.note.modes[0]} className="text-[var(--muted-foreground)]">
+                      {sourceModeLabel(item.note.modes[0] ?? "roleplay", localizeUi)}
+                    </span>
+                    <span
+                      data-ltm-source-write-status={item.sourceWriteStatus}
+                      className={`rounded-full px-2 py-0.5 ${resultToneClass(item.sourceWriteStatus)}`}
+                    >
+                      {importStatusLabel(item.sourceWriteStatus, localizeUi)}
+                    </span>
+                    <span
+                      data-ltm-extraction-status={item.extractionStatus}
+                      data-ltm-extraction-outcome={item.outcome.state}
+                      className={`rounded-full px-2 py-0.5 ${resultToneClass(item.extractionStatus === "succeeded" ? item.outcome.state : item.extractionStatus)}`}
+                    >
+                      {extractionResultLabel(item, localizeUi)}
+                    </span>
+                    <span data-ltm-extraction-accounting className="text-[0.6875rem] text-[var(--muted-foreground)]">
+                      {localizeUi("ui.longTermMemory.sourcesworkspace.suggestionsKeptOfTotal", {
+                        kept: item.outcome.keptUnits,
+                        total: item.outcome.totalCandidates,
+                      })}
+                    </span>
+                  </div>
+                  {item.extractionStatus === "failed" || item.extractionStatus === "cancelled" ? (
+                    <StatusSurface tone={resultTone(item.extractionStatus)}>{item.error.message}</StatusSurface>
+                  ) : null}
+                  {item.extractionStatus === "succeeded" && item.outcome.droppedUnits > 0 ? (
+                    <div className="space-y-2">
+                      <p
+                        className="text-xs text-[var(--muted-foreground)]"
+                        data-ltm-rejected-count={item.outcome.droppedUnits}
+                      >
+                        {localizeUi("ui.longTermMemory.sourcesworkspace.rejectedSuggestionCount", {
+                          count: item.outcome.droppedUnits,
+                        })}
+                      </p>
+                      <Button
+                        onClick={() => onOpenReview?.(item.note.id)}
+                        data-ltm-source-action="review-rejected-suggestions"
+                      >
+                        {localizeUi("ui.longTermMemory.sourcesworkspace.reviewRejectedSuggestions")}
+                      </Button>
+                    </div>
+                  ) : null}
+                  {item.diagnostics.length ? (
+                    <ul className="space-y-1 text-xs text-[var(--muted-foreground)]" data-ltm-extraction-diagnostics>
+                      {item.diagnostics.map((diagnostic, index) => (
+                        <li key={`${diagnostic.code}-${index}`}>{diagnostic.message}</li>
+                      ))}
+                    </ul>
+                  ) : null}
+                  <div className="flex flex-wrap gap-2">
+                    <button
+                      type="button"
+                      data-ltm-source-memory-id={item.note.id}
+                      aria-label={localizeUi("ui.longTermMemory.sourcesworkspace.openSourceMemoryValue1", {
+                        value1: item.title,
+                      })}
+                      className="inline-flex min-h-11 items-center text-xs font-semibold text-[var(--primary)] underline underline-offset-2"
+                      onClick={() => onOpenMemory?.(item.note.id)}
+                    >
+                      {localizeUi("ui.longTermMemory.sourcesworkspace.openSourceMemory")}
+                    </button>
+                    <Button
+                      disabled={extractingId !== null}
+                      onClick={() => void reextract(item.note.id)}
+                      data-ltm-source-action="re-extract"
+                      data-ltm-source-note-id={item.note.id}
+                    >
+                      {extractingId === item.note.id ? (
+                        <Loader2 aria-hidden="true" size="0.75rem" className="animate-spin" />
+                      ) : (
+                        <Sparkles aria-hidden="true" size="0.75rem" />
+                      )}
+                      {localizeUi("ui.longTermMemory.sourcesworkspace.reExtract")}
+                    </Button>
+                    <Button onClick={() => onOpenReview?.(item.note.id)} data-ltm-review-query={item.note.id}>
+                      {localizeUi("ui.longTermMemory.memoryvault.reviewRelatedDrafts")}
+                    </Button>
+                  </div>
+                </article>
+              ))}
+              {importResult.writeFailures.map((failure) => (
+                <StatusSurface key={failure.sourceId} tone="danger" data-ltm-source-write-failure={failure.sourceId}>
+                  <CircleAlert aria-hidden="true" size="0.875rem" /> {failure.title}: {failure.error.message} (
+                  {importStatusLabel(failure.sourceWriteStatus, localizeUi)},{" "}
+                  {importStatusLabel(failure.extractionStatus, localizeUi)})
+                </StatusSurface>
+              ))}
+              {importResult.missingSourceIds.map((id) => (
+                <StatusSurface key={id} tone="danger" data-ltm-source-missing={id}>
+                  <CircleAlert aria-hidden="true" size="0.875rem" />{" "}
+                  {localizeUi("ui.longTermMemory.sourcesworkspace.missingSourceMemory")}
+                </StatusSurface>
+              ))}
+              <Button onClick={closeTaskResult}>
+                {localizeUi("ui.longTermMemory.sourcesworkspace.backToPreview")}
+              </Button>
+            </section>,
+            resultWorkbenchHost,
+          )
+        : null}
     </section>
   );
 }

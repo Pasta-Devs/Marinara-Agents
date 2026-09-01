@@ -117,7 +117,7 @@ const groupedNoteTypes: ReadonlyArray<{
 ];
 
 function detailScrollBehavior(): ScrollBehavior {
-  return window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth";
+  return window.matchMedia?.("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth";
 }
 const statuses: readonly LtmStatus[] = ["active", "resolved", "archived"];
 const modes: readonly LtmMode[] = ["conversation", "roleplay", "game"];
@@ -3326,7 +3326,18 @@ export default function MemoryVault({
                         <h3 className="text-sm font-semibold">{memoryLabel(draft)}</h3>
                         <p className="mt-1 text-xs text-[var(--muted-foreground)]">{provenanceSourceLabel()}</p>
                       </div>
-                      <Button onClick={() => void onOpenSources?.()}>
+                      <Button
+                        onClick={() =>
+                          void onOpenSources?.(
+                            draft.provenance?.kind === "character" || draft.tags.includes("imported_character")
+                              ? "characters"
+                              : draft.provenance?.kind === "lorebook" || draft.tags.includes("imported_lorebook")
+                                ? "lorebooks"
+                                : "chats",
+                            draft.id,
+                          )
+                        }
+                      >
                         <FileText aria-hidden="true" size="1rem" className="shrink-0" />
                         {localizeUi("ui.longTermMemory.memoryvault.openInSources")}
                       </Button>

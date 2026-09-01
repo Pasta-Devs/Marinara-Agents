@@ -377,7 +377,7 @@ const features = [
   {
     id: "long-term-memory",
     version: "1.2.18",
-    minEngineVersion: "2.4.5",
+    minEngineVersion: "2.4.1",
     maxEngineExclusive: MAX_ENGINE_EXCLUSIVE,
     name: "Long-Term Memory",
     description:
@@ -393,7 +393,7 @@ const features = [
     ownedSourcePaths: longTermMemoryOwnedSourcePaths,
     engineBoundaryPath: join(packagesDir, "long-term-memory/engine-boundary.json"),
     boundaryDisplayName: "Long-Term Memory",
-    capabilityApi: { major: 1, minor: 15 },
+    capabilityApi: { major: 1, minor: 6 },
     contributions: {
       agentDetail: { agentIds: ["long-term-memory"] },
       slots: ["chat-settings"],
@@ -564,7 +564,7 @@ const longTermMemoryBoundary = selectedFeatures.some((feature) => feature.id ===
       sourceRoot: longTermMemorySourceRoot,
       boundaryPath: join(packagesDir, "long-term-memory/engine-boundary.json"),
       displayName: "Long-Term Memory",
-      capabilityApi: { major: 1, minor: 15 },
+      capabilityApi: { major: 1, minor: 6 },
     })
   : null;
 const memoryNagBoundary = selectedFeatures.some((feature) => feature.id === "memory-nag")
