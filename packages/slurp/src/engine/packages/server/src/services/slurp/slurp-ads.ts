@@ -27,6 +27,26 @@ export type SlurpAdContext = {
 };
 
 const stateKey = (personaId: string) => `slurp.viewer.${personaId}.ads`;
+const KNOWN_AD_TAGS = new Set([
+  "coffee",
+  "late-night",
+  "work",
+  "beauty",
+  "luxury",
+  "night",
+  "nightlife",
+  "private",
+  "fashion",
+]);
+
+export function adTagsFromPersona(persona: {
+  name?: string | null;
+  description?: string | null;
+  personality?: string | null;
+}) {
+  const text = [persona.name, persona.description, persona.personality].filter(Boolean).join(" ").toLowerCase();
+  return [...KNOWN_AD_TAGS].filter((tag) => text.includes(tag));
+}
 
 export const SLURP_PROMOTIONS: readonly SlurpPromotion[] = [
   {
@@ -70,6 +90,15 @@ export const SLURP_PROMOTIONS: readonly SlurpPromotion[] = [
     actionLabel: "View product",
   },
 ];
+
+export function creatorPromotionForAccount(account: { id: string; handle: string; bio?: string | null }) {
+  const text = `${account.handle} ${account.bio ?? ""}`.toLowerCase();
+  return (
+    SLURP_PROMOTIONS.find(
+      (promotion) => promotion.kind === "creator" && promotion.categories.some((category) => text.includes(category)),
+    ) ?? null
+  );
+}
 
 function cleanTags(tags: readonly string[] | undefined): string[] {
   return [...new Set((tags ?? []).map((tag) => tag.trim().toLowerCase()).filter(Boolean))];

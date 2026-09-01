@@ -117,6 +117,7 @@ export function useHideSlurpAd() {
 }
 
 export type SlurpSettings = {
+  inlineAdsEnabled: boolean;
   refreshesPerDay: number;
   generationGuidance: string;
   postsPerDay: number;

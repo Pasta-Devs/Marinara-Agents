@@ -134,7 +134,7 @@ export function SlurpSettings({
   onRedraftCreator,
   onRestartOnboarding,
 }: SlurpSettingsProps) {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const settingsQuery = useSlurpSettings();
   const updateSettings = useUpdateSlurpSettings();
   const settings = settingsQuery.data;
@@ -417,6 +417,12 @@ export function SlurpSettings({
                       onChange={(value) => update("autoPostingScheduleEnabled", value)}
                     />
                     <Toggle
+                      label="Inline promotions"
+                      detail="Show small fictional ads between Creator posts."
+                      value={settings.inlineAdsEnabled}
+                      onChange={(value) => update("inlineAdsEnabled", value)}
+                    />
+                    <Toggle
                       label={t("ui.slurp.settings.quietHours")}
                       detail={t("ui.slurp.settings.quietHoursDetail")}
                       value={settings.nightQuiet}
@@ -645,7 +651,7 @@ export function SlurpSettings({
                                 <span className="mt-1 block truncate text-[0.68rem] text-[var(--muted-foreground)]">
                                   {status?.nextPreparedAt
                                     ? t("ui.slurp.settings.creators.nextPost", {
-                                        date: new Date(status.nextPreparedAt).toLocaleString(),
+                                        date: new Date(status.nextPreparedAt).toLocaleString(i18n.language),
                                       })
                                     : t(`ui.slurp.settings.creators.sourceStatus.${creator.sourceStatus.state}`)}
                                 </span>
@@ -1273,7 +1279,7 @@ function ScheduleSlotEditor({
   pending: boolean;
   onSave: (publishAt: string) => Promise<void>;
 }) {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const [draft, setDraft] = useState(() => localDateTimeValue(slot.publishAt));
   const parsed = Date.parse(draft);
   const unchanged = !Number.isNaN(parsed) && new Date(parsed).toISOString() === slot.publishAt;
@@ -1286,7 +1292,7 @@ function ScheduleSlotEditor({
             ? t("ui.slurp.settings.creators.prepared")
             : t("ui.slurp.settings.creators.scheduled")}
         </span>
-        <span>{new Date(slot.publishAt).toLocaleString()}</span>
+        <span>{new Date(slot.publishAt).toLocaleString(i18n.language)}</span>
       </div>
       <div className="flex flex-col gap-2 sm:flex-row">
         <input

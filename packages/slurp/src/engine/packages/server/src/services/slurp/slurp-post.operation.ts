@@ -26,6 +26,7 @@ import {
 import { tryNoodlerAccountOperation } from "./slurp-account-operation-lock.js";
 import { resolveNoodlerSourceSnapshot } from "./slurp-source-resolve.js";
 import { settleAgentJobsWithConcurrencyLimit } from "../agents/agent-concurrency.js";
+import { creatorPromotionForAccount } from "./slurp-ads.js";
 
 export type GenerateAndApplyNoodlerPostResult =
   | {
@@ -235,6 +236,8 @@ export async function createNoodlerPost(
   const noodle = createSlurpStorage(db);
   const locked = await tryNoodlerAccountOperation(input.targetAccountId, async () => {
     const postId = media ? newId() : undefined;
+    const account = await noodle.getNoodlerAccountById(input.targetAccountId);
+    const creatorPromotion = account ? creatorPromotionForAccount(account) : null;
     let lockedFollowUpPostId = input.lockedFollowUpPostId;
     const pendingLockedFollowUp = input.lockedFollowUp;
     if (lockedFollowUpPostId) {
@@ -274,6 +277,15 @@ export async function createNoodlerPost(
             metadata: {
               noodlerContentFormat: input.format ?? "caption",
               noodlerPostType: input.postType ?? "post",
+              ...(creatorPromotion
+                ? {
+                    slurpSponsoredPromotion: {
+                      id: creatorPromotion.id,
+                      brand: creatorPromotion.brand,
+                      product: creatorPromotion.product,
+                    },
+                  }
+                : {}),
               // Stored at creation so an unlock price stays put across refreshes and edits.
               ...(input.access === "locked" ? noodlerUnlockPriceMetadata() : {}),
               ...(lockedFollowUpPostId ? { noodlerLockedFollowUpPostId: lockedFollowUpPostId } : {}),

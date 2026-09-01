@@ -154,6 +154,7 @@ const noodlerFanArchetypeWeightsSchema = z
  * must not become an implicit dependency of Creator scheduling or generation.
  */
 export const slurpSettingsSchema = z.object({
+  inlineAdsEnabled: z.boolean(),
   refreshesPerDay: z.number().int().min(0).max(24),
   generationGuidance: z.string().max(20_000),
   generationConnectionId: z.string().nullable(),
@@ -674,6 +675,7 @@ export const NOODLER_DEFAULT_IMAGE_PROMPT_INTERPRETATION =
  */
 
 export const DEFAULT_SLURP_SETTINGS: SlurpSettings = {
+  inlineAdsEnabled: true,
   refreshesPerDay: 0,
   generationGuidance: NOODLER_DEFAULT_GENERATION_GUIDANCE,
   generationConnectionId: null,

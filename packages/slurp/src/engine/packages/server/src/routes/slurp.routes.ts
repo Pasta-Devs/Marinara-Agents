@@ -62,7 +62,7 @@ import { clearNoodlerImageConnections } from "../services/slurp/slurp-image-conn
 import { generateAndApplyNoodlerCreatorReply } from "../services/slurp/slurp-creator-reply.operation.js";
 import { getNoodlerFanActivityStatus, runNoodlerFanActivity } from "../services/slurp/slurp-fan-activity.operation.js";
 import { admissionModeForRequest, isConnectionAdmissionFailure } from "../services/generation/connection-admission.js";
-import { createSlurpAds } from "../services/slurp/slurp-ads.js";
+import { adTagsFromPersona, createSlurpAds } from "../services/slurp/slurp-ads.js";
 import { generateNoodlerStageProfileDraft } from "../services/slurp/slurp-stage-profile-draft.service.js";
 import {
   getNoodlerImageConnections,
@@ -844,16 +844,16 @@ export async function slurpRoutes(app: FastifyInstance) {
     if (!parsed.success) return reply.code(400).send({ error: parsed.error.flatten() });
     const viewer = await resolveViewerPersona(parsed.data.personaId);
     if (!viewer) return reply.code(404).send({ error: "Slurp persona not found" });
+    const settings = await noodle.getSettings();
+    if (!settings.inlineAdsEnabled) return { items: [] };
+    const persona = await characters.getPersona(parsed.data.personaId);
     const creator = parsed.data.creatorId ? await noodle.getNoodlerAccountById(parsed.data.creatorId) : null;
     const items = await ads.listInlineAds(parsed.data.personaId, {
+      personaTags: persona ? adTagsFromPersona(persona) : [],
       currentCreatorId: creator?.id,
       currentCreatorHandle: creator?.handle,
       contextTags: parsed.data.contextTags?.split(",") ?? [],
     });
-    await ads.markRecent(
-      parsed.data.personaId,
-      items.map((item) => item.id),
-    );
     return { items };
   });
 

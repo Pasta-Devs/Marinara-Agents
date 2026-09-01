@@ -460,6 +460,10 @@ export function SlurpCreatorPostCard({
   const accountByHandle = ctx.accountByHandle ?? new Map<string, NoodleAccount>();
   const authorAccount = accountById.get(post.authorAccountId) ?? null;
   const author = authorAccount ?? post.authorSnapshot;
+  const sponsored =
+    post.metadata && typeof post.metadata.slurpSponsoredPromotion === "object"
+      ? (post.metadata.slurpSponsoredPromotion as { brand?: unknown; product?: unknown })
+      : null;
 
   // Card-owned defaults for absent capability groups. Hosts pass only the capabilities they
   // support (NoodleR omits media/replyManagement/mentions/poll/profile); the card fills the
@@ -841,7 +845,7 @@ export function SlurpCreatorPostCard({
                 disabled={!canOpenAuthorProfile}
                 className="rounded-sm font-semibold transition-colors enabled:hover:text-[var(--noodle-accent)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--noodle-accent)] disabled:cursor-default"
               >
-                {author?.displayName ?? localizeUi("ui.noodle.noodlepostcard.noodleUser")}
+                {author?.displayName ?? localizeUi("ui.slurp.profile.fallbackUser")}
               </button>
               {/* Locked cards reach this component only after access is granted; pre-unlock teasers use LockedSlurpPostCard. */}
               <span
@@ -859,10 +863,16 @@ export function SlurpCreatorPostCard({
               </span>
             </div>
             <p className="text-xs font-medium !text-[var(--noodle-accent-foreground)]">
-              @{author?.handle ?? localizeUi("ui.noodle.noodleshell.noodleHandle")} ·{" "}
+              @{author?.handle ?? localizeUi("ui.slurp.profile.fallbackHandle")} ·{" "}
               {formatTime(post.createdAt, i18n.language)}
             </p>
           </div>
+          {sponsored && typeof sponsored.brand === "string" && (
+            <p className="mt-1 text-[0.65rem] font-bold uppercase tracking-[0.12em] text-[var(--noodle-accent)]">
+              Paid partnership with {sponsored.brand}
+              {typeof sponsored.product === "string" ? ` · ${sponsored.product}` : ""}
+            </p>
+          )}
           {ctx.postManagement && (
             <div className="relative shrink-0">
               <button
@@ -936,7 +946,7 @@ export function SlurpCreatorPostCard({
                 onError={() => setFailedImageUrl(displayedImageUrl)}
                 crop={imageCrop}
                 alt={localizeUi("ui.noodle.post.imageBy", {
-                  name: author?.displayName ?? localizeUi("ui.noodle.profile.fallbackUser"),
+                  name: author?.displayName ?? localizeUi("ui.slurp.profile.fallbackUser"),
                 })}
               />
             ) : (
@@ -945,7 +955,7 @@ export function SlurpCreatorPostCard({
                 onError={() => setFailedImageUrl(displayedImageUrl)}
                 crop={null}
                 alt={localizeUi("ui.noodle.post.imageBy", {
-                  name: author?.displayName ?? localizeUi("ui.noodle.profile.fallbackUser"),
+                  name: author?.displayName ?? localizeUi("ui.slurp.profile.fallbackUser"),
                 })}
               />
             )}
@@ -1155,7 +1165,7 @@ export function SlurpCreatorPostCard({
                       <Avatar
                         account={
                           actor ?? {
-                            displayName: localizeUi("ui.noodle.noodlepostcard.noodleUser"),
+                            displayName: localizeUi("ui.slurp.profile.fallbackUser"),
                             avatarUrl: null,
                           }
                         }
@@ -1173,7 +1183,7 @@ export function SlurpCreatorPostCard({
                           disabled={!actorAccount}
                           className="max-w-full truncate font-semibold !text-[var(--foreground)] transition-colors enabled:hover:!text-[var(--noodle-accent)] disabled:cursor-default"
                         >
-                          {actor?.displayName ?? localizeUi("ui.noodle.noodlepostcard.noodleUser")}
+                          {actor?.displayName ?? localizeUi("ui.slurp.profile.fallbackUser")}
                         </button>
                         <span className="truncate !text-[var(--noodle-accent-foreground)]">
                           @{actor?.handle ?? "noodle"}
@@ -1252,7 +1262,7 @@ export function SlurpCreatorPostCard({
                           <img
                             src={reply.imageUrl}
                             alt={localizeUi("ui.noodle.noodlepostcard.commentImageAlt", {
-                              name: actor?.displayName ?? localizeUi("ui.noodle.noodlepostcard.noodleUser"),
+                              name: actor?.displayName ?? localizeUi("ui.slurp.profile.fallbackUser"),
                             })}
                             className="max-h-72 w-full object-cover"
                           />

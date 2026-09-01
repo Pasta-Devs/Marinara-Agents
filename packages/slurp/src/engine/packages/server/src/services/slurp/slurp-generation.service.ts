@@ -43,6 +43,7 @@ import { noodleResponseFormat } from "./slurp-response-format.js";
 import { buildSlurpPostTimingContext } from "./slurp-post-timing.js";
 import { resolveSlurpCreatorScheduleContext } from "./slurp-creator-schedule.js";
 import { createChatsStorage } from "../storage/chats.storage.js";
+import { creatorPromotionForAccount } from "./slurp-ads.js";
 
 export type GeneratedNoodlerPostResult = {
   post: NoodlerManagedPost;
@@ -575,6 +576,7 @@ export async function generateNoodlerPost(
     : null;
 
   let lockedFollowUpPostId = input.request.lockedFollowUpPostId;
+  const creatorPromotion = creatorPromotionForAccount(account);
   const pendingLockedFollowUp = input.request.lockedFollowUp;
   if (lockedFollowUpPostId && pendingLockedFollowUp) {
     throw new Error("A Slurp post links either an existing follow-up or a new one, not both.");
@@ -598,6 +600,15 @@ export async function generateNoodlerPost(
       ...(input.request.executionId ? { noodlerWizardExecutionId: input.request.executionId } : {}),
       ...(input.request.poll ? { poll: createNoodlePoll(input.request.poll) } : {}),
       ...(input.request.imageCrop ? { imageCrop: input.request.imageCrop } : {}),
+      ...(creatorPromotion
+        ? {
+            slurpSponsoredPromotion: {
+              id: creatorPromotion.id,
+              brand: creatorPromotion.brand,
+              product: creatorPromotion.product,
+            },
+          }
+        : {}),
     },
   };
 
