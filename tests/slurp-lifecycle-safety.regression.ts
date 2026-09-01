@@ -201,9 +201,13 @@ assert.match(home, /ui\.slurp\.profile\.creatorRoom/u);
 assert.match(profileSurface, /sm:h-72/u, "Creator Rooms must keep an immersive desktop banner");
 assert.match(
   profileSurface,
-  /flex-col items-start gap-3 sm:flex-row sm:items-end/u,
-  "Creator Room identity and actions must stack before they run out of width",
+  /sm:grid-cols-\[minmax\(0,1fr\)_auto\]/u,
+  "Creator Room identity and actions must use a responsive non-overlapping grid",
 );
+assert.doesNotMatch(profileSurface, /max-w-\[calc\(100%-13rem\)\]/u, "Creator Room copy must not reserve a fixed action width");
+assert.match(profileSurface, /data-slurp-creator-hero/u, "Creator Rooms must expose their unified identity hero");
+assert.match(profileSurface, /preTabsContent && \(/u, "Creator Tools must remain separate from public profile content");
+assert.match(home, /data-slurp-home-masthead/u, "Home must expose one unified lobby masthead");
 assert.match(profileSurface, /<Avatar account=\{account\} size="xl"/u);
 assert.match(home, /function SourceAccountAvatar[\s\S]*?useSlurpMediaSrc\(account\.avatarUrl\)/u);
 assert.match(home, /function SourceAccountAvatar[\s\S]*?<img src=\{source\}/u);

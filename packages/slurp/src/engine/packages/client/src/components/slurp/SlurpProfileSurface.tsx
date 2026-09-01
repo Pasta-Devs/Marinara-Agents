@@ -114,6 +114,46 @@ export function SlurpProfileSurface<TTab extends string = SlurpProfileTab>({
       document.getElementById(`${postPanelId}-tab-${String(next.id)}`)?.focus();
     });
   };
+  const hasProfileActions = Boolean(leadingActions || editor || followAction || secondaryActions);
+  const profileActions = (
+    <div className="grid min-h-11 w-full min-w-0 grid-cols-2 gap-2 [&>button]:min-w-0 [&>button:only-child]:col-span-2 sm:flex sm:w-auto sm:flex-wrap sm:justify-end sm:[&>button:only-child]:col-span-1">
+      {leadingActions}
+      {editor ? (
+        <button
+          type="button"
+          onClick={() => {
+            if (editor.isEditing) editor.onSave();
+            else editor.onStartEditing();
+          }}
+          disabled={editor.isEditing ? !editor.canSave || editor.isSaving : false}
+          className="min-h-11 rounded-xl bg-[var(--noodle-accent)] px-5 text-xs font-bold text-zinc-950 shadow-sm transition-[opacity,transform] hover:opacity-90 active:scale-[0.96] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--noodle-accent)] motion-reduce:transition-none motion-reduce:active:scale-100 disabled:cursor-not-allowed disabled:opacity-50"
+        >
+          {editor.isEditing
+            ? editor.isSaving
+              ? localizeUi("ui.noodle.noodlehome.saving")
+              : localizeUi("ui.noodle.noodlehome.save")
+            : localizeUi("ui.noodle.stageprofileview.editProfile")}
+        </button>
+      ) : followAction ? (
+        <button
+          type="button"
+          onClick={followAction.onToggle}
+          disabled={followAction.pending}
+          className={cn(
+            "min-h-11 rounded-xl px-5 text-xs font-bold transition-[opacity,transform] hover:opacity-90 active:scale-[0.96] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--noodle-accent)] motion-reduce:transition-none motion-reduce:active:scale-100 disabled:cursor-not-allowed disabled:opacity-50",
+            followAction.followed
+              ? "border border-[var(--noodle-divider)] text-[var(--foreground)]"
+              : "bg-[var(--foreground)] text-[var(--background)]",
+          )}
+        >
+          {followAction.followed
+            ? localizeUi("ui.noodle.connections.tabs.following")
+            : localizeUi("ui.noodle.noodlehome.follow")}
+        </button>
+      ) : null}
+      {secondaryActions}
+    </div>
+  );
   return (
     <div
       className="relative min-h-full bg-[var(--slurp-canvas,var(--background))] pb-6 [background-image:radial-gradient(circle_at_50%_8%,color-mix(in_srgb,var(--noodle-accent)_8%,transparent),transparent_28rem)]"
@@ -185,14 +225,15 @@ export function SlurpProfileSurface<TTab extends string = SlurpProfileTab>({
 
       <div
         className={cn(
-          "relative mx-3 rounded-2xl bg-[color-mix(in_srgb,var(--slurp-surface-raised,var(--background))_94%,transparent)] px-4 pb-5 shadow-[0_24px_58px_-36px_rgba(0,0,0,0.95)] ring-1 ring-inset ring-[var(--noodle-divider)] backdrop-blur-md sm:mx-5 sm:px-6",
-          hasBanner ? "-mt-14" : "mt-5",
+          "relative mx-3 rounded-[1.5rem] bg-[color-mix(in_srgb,var(--slurp-surface-raised,var(--background))_96%,transparent)] px-4 pb-5 shadow-[0_28px_62px_-38px_rgba(0,0,0,0.95)] ring-1 ring-inset ring-[var(--noodle-divider)] backdrop-blur-md sm:mx-5 sm:px-6 sm:pb-6",
+          hasBanner ? "-mt-12" : "mt-5",
         )}
+        data-slurp-creator-hero
       >
         <div
           className={cn(
-            "flex w-full flex-col items-start gap-3 sm:flex-row sm:items-end sm:justify-between",
-            hasBanner ? "-mt-10" : "pt-5",
+            "flex w-full items-end",
+            hasBanner ? "-mt-14" : "pt-5",
           )}
         >
           {avatarUpload ? (
@@ -252,43 +293,6 @@ export function SlurpProfileSurface<TTab extends string = SlurpProfileTab>({
               onChange={avatarUpload.onFileChange}
             />
           )}
-          <div className="flex min-h-11 w-full min-w-0 flex-wrap items-center gap-2 [&>button]:flex-1 sm:w-auto sm:justify-end sm:[&>button]:flex-none">
-            {leadingActions}
-            {editor ? (
-              <button
-                type="button"
-                onClick={() => {
-                  if (editor.isEditing) editor.onSave();
-                  else editor.onStartEditing();
-                }}
-                disabled={editor.isEditing ? !editor.canSave || editor.isSaving : false}
-                className="min-h-11 rounded-lg bg-[var(--noodle-accent)] px-5 text-xs font-bold text-zinc-950 transition-[opacity,transform] hover:opacity-90 active:scale-[0.96] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--noodle-accent)] motion-reduce:transition-none motion-reduce:active:scale-100 disabled:cursor-not-allowed disabled:opacity-50"
-              >
-                {editor.isEditing
-                  ? editor.isSaving
-                    ? localizeUi("ui.noodle.noodlehome.saving")
-                    : localizeUi("ui.noodle.noodlehome.save")
-                  : localizeUi("ui.noodle.stageprofileview.editProfile")}
-              </button>
-            ) : followAction ? (
-              <button
-                type="button"
-                onClick={followAction.onToggle}
-                disabled={followAction.pending}
-                className={cn(
-                  "min-h-11 rounded-lg px-5 text-xs font-bold transition-[opacity,transform] hover:opacity-90 active:scale-[0.96] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--noodle-accent)] motion-reduce:transition-none motion-reduce:active:scale-100 disabled:cursor-not-allowed disabled:opacity-50",
-                  followAction.followed
-                    ? "border border-[var(--noodle-divider)] text-[var(--foreground)]"
-                    : "bg-[var(--foreground)] text-[var(--background)]",
-                )}
-              >
-                {followAction.followed
-                  ? localizeUi("ui.noodle.connections.tabs.following")
-                  : localizeUi("ui.noodle.noodlehome.follow")}
-              </button>
-            ) : null}
-            {secondaryActions}
-          </div>
         </div>
 
         {editor?.isEditing ? (
@@ -331,59 +335,72 @@ export function SlurpProfileSurface<TTab extends string = SlurpProfileTab>({
             </label>
           </div>
         ) : (
-          <div className="mt-4 flex w-full flex-col items-start text-left">
-            {identityEyebrow && (
-              <div className="mb-1.5 text-[0.68rem] font-bold uppercase tracking-[0.14em] text-[var(--noodle-accent)]">
-                {identityEyebrow}
+          <div
+            className={cn(
+              "mt-4 grid w-full min-w-0 items-start gap-4 text-left",
+              hasProfileActions && "sm:grid-cols-[minmax(0,1fr)_auto] sm:gap-6",
+            )}
+          >
+            <div className="flex min-w-0 flex-col items-start">
+              {identityEyebrow && (
+                <div className="mb-1.5 text-[0.68rem] font-bold uppercase tracking-[0.14em] text-[var(--noodle-accent)]">
+                  {identityEyebrow}
+                </div>
+              )}
+              <h1 className="max-w-full text-2xl font-black leading-tight tracking-tight text-balance sm:text-3xl">
+                {account.displayName}
+              </h1>
+              <div className="mt-1 flex max-w-full flex-wrap items-center gap-2 text-sm text-[var(--muted-foreground)]">
+                <span data-noodle-profile-handle className="min-w-0 break-all font-medium !text-[var(--noodle-accent-foreground)]">
+                  @{displayHandle || "noodle"}
+                </span>
+                {handleMeta}
               </div>
-            )}
-            <h1 className="text-2xl font-black leading-tight tracking-tight text-balance sm:text-3xl">
-              {account.displayName}
-            </h1>
-            <div className="mt-1 flex flex-wrap items-center gap-2 text-sm text-[var(--muted-foreground)]">
-              <span data-noodle-profile-handle className="font-medium !text-[var(--noodle-accent-foreground)]">
-                @{displayHandle || "noodle"}
-              </span>
-              {handleMeta}
-            </div>
-            <div className="max-w-2xl text-sm leading-relaxed text-[var(--muted-foreground)] text-pretty">
-              {bioContent}
-            </div>
-            {contentActions}
-            {location && (
-              <p className="mt-2 flex items-center gap-1.5 text-sm text-[var(--muted-foreground)]">
-                <MapPin size={15} className="text-[var(--noodle-accent)]" />
-                {location}
-              </p>
-            )}
-            {connections && (
-              <div className="mt-3 flex flex-wrap gap-x-6 gap-y-1 border-t border-[var(--noodle-divider)] pt-3 text-sm text-[var(--muted-foreground)]">
-                <button
-                  type="button"
-                  onClick={connections.onOpenFollowing}
-                  className="min-h-11 px-1 transition-colors hover:text-[var(--noodle-accent)]"
-                >
-                  <span className="font-bold text-[var(--foreground)]">{connections.followingCount}</span>{" "}
-                  {localizeUi("ui.noodle.noodleprofilesurface.following")}
-                </button>
-                <button
-                  type="button"
-                  onClick={connections.onOpenFollowers}
-                  className="min-h-11 px-1 transition-colors hover:text-[var(--noodle-accent)]"
-                >
-                  <span className="font-bold text-[var(--foreground)]">{connections.followerCount}</span>{" "}
-                  {localizeUi("ui.noodle.noodleprofilesurface.followers")}
-                </button>
+              <div className="max-w-2xl text-sm leading-relaxed text-[var(--muted-foreground)] text-pretty">
+                {bioContent}
               </div>
-            )}
+              {contentActions}
+              {location && (
+                <p className="mt-2 flex items-center gap-1.5 text-sm text-[var(--muted-foreground)]">
+                  <MapPin size={15} className="text-[var(--noodle-accent)]" />
+                  {location}
+                </p>
+              )}
+              {connections && (
+                <div className="mt-3 flex flex-wrap gap-x-6 gap-y-1 border-t border-[var(--noodle-divider)] pt-3 text-sm text-[var(--muted-foreground)]">
+                  <button
+                    type="button"
+                    onClick={connections.onOpenFollowing}
+                    className="min-h-11 px-1 transition-colors hover:text-[var(--noodle-accent)]"
+                  >
+                    <span className="font-bold text-[var(--foreground)]">{connections.followingCount}</span>{" "}
+                    {localizeUi("ui.noodle.noodleprofilesurface.following")}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={connections.onOpenFollowers}
+                    className="min-h-11 px-1 transition-colors hover:text-[var(--noodle-accent)]"
+                  >
+                    <span className="font-bold text-[var(--foreground)]">{connections.followerCount}</span>{" "}
+                    {localizeUi("ui.noodle.noodleprofilesurface.followers")}
+                  </button>
+                </div>
+              )}
+            </div>
+            {hasProfileActions && <div className="min-w-0 sm:max-w-[22rem]">{profileActions}</div>}
           </div>
         )}
+        {editor?.isEditing && hasProfileActions && <div className="mt-4">{profileActions}</div>}
       </div>
-      <div className="mt-5 overflow-hidden border-y border-[var(--noodle-divider)] bg-[var(--slurp-surface,var(--background))] shadow-[0_20px_46px_-38px_rgba(0,0,0,0.95)] sm:mx-5 sm:rounded-2xl sm:border-0 sm:ring-1 sm:ring-inset sm:ring-[var(--noodle-divider)]">
-        {preTabsContent}
+      {preTabsContent && (
+        <div className="mx-3 mt-4 overflow-hidden rounded-2xl bg-[var(--slurp-surface,var(--background))] shadow-[0_18px_42px_-34px_rgba(0,0,0,0.95)] ring-1 ring-inset ring-[var(--noodle-divider)] sm:mx-5">
+          {preTabsContent}
+        </div>
+      )}
+      <div className="mt-4 overflow-hidden border-y border-[var(--noodle-divider)] bg-[var(--slurp-surface,var(--background))] shadow-[0_20px_46px_-38px_rgba(0,0,0,0.95)] sm:mx-5 sm:rounded-2xl sm:border-0 sm:ring-1 sm:ring-inset sm:ring-[var(--noodle-divider)]">
         {featuredContent}
         <div
-          className="flex border-b border-[var(--noodle-divider)]"
+          className="m-2 flex rounded-xl bg-[var(--slurp-canvas,var(--background))] p-1 ring-1 ring-inset ring-[var(--noodle-divider)]"
           role="tablist"
           aria-label={localizeUi("ui.noodle.noodleprofilesurface.profileSections")}
         >
@@ -408,16 +425,13 @@ export function SlurpProfileSurface<TTab extends string = SlurpProfileTab>({
               aria-label={tab.ariaLabel}
               aria-selected={activeTab === tab.id}
               className={cn(
-                "relative flex h-12 min-w-0 flex-1 items-center justify-center px-2 text-sm font-semibold text-[var(--muted-foreground)] transition-colors hover:bg-[var(--accent)] hover:text-[var(--foreground)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--noodle-accent)]",
+                "relative flex min-h-11 min-w-0 flex-1 items-center justify-center rounded-lg px-2 text-sm font-semibold text-[var(--muted-foreground)] transition-[background-color,color,box-shadow,transform] hover:bg-[var(--accent)] hover:text-[var(--foreground)] active:scale-[0.96] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--noodle-accent)] motion-reduce:transition-none motion-reduce:active:scale-100",
                 tab.management &&
-                  "border-s border-[var(--noodle-divider)] bg-[var(--slurp-surface-raised,var(--background))]",
-                activeTab === tab.id && "text-[var(--foreground)]",
+                  "ms-1 border-s border-[var(--noodle-divider)] bg-[var(--slurp-surface-raised,var(--background))]",
+                activeTab === tab.id && "bg-[var(--slurp-surface-raised,var(--background))] text-[var(--foreground)] shadow-sm",
               )}
             >
               <span className="truncate">{tab.label}</span>
-              {activeTab === tab.id && (
-                <span className="absolute bottom-0 left-1/2 h-1 w-12 -translate-x-1/2 rounded-full bg-[var(--noodle-accent)]" />
-              )}
             </button>
           ))}
         </div>

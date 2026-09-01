@@ -4071,16 +4071,37 @@ function ViewerHub({
           onOpenDrawer={onOpenMobileDrawer}
           triggerRef={mobileDrawerTriggerRef}
         />
-        <div className="border-b border-[var(--noodle-divider)] bg-[var(--background)]/95 backdrop-blur">
-          <div className="hidden px-5 pb-2 pt-5 @min-[1024px]:block">
-            <h1 className="text-xl font-bold tracking-tight text-balance">{localizeUi("ui.slurp.navigation.home")}</h1>
-            <p className="mt-1 max-w-xl text-xs leading-5 text-[var(--muted-foreground)] text-pretty">
-              {localizeUi("ui.slurp.home.feedDetail")}
-            </p>
+        <div
+          className="border-b border-[var(--noodle-divider)] bg-[color-mix(in_srgb,var(--slurp-surface,var(--background))_94%,transparent)] px-3 pb-3 pt-2 shadow-[0_16px_36px_-34px_rgba(0,0,0,0.9)] backdrop-blur-xl @min-[1024px]:px-5 @min-[1024px]:pb-4 @min-[1024px]:pt-5"
+          data-slurp-home-masthead
+        >
+          <div className="hidden items-end justify-between gap-5 pb-4 @min-[1024px]:flex">
+            <div className="min-w-0">
+              <p className="text-[0.68rem] font-bold uppercase tracking-[0.16em] text-[var(--noodle-accent)]">
+                {localizeUi("ui.slurp.home.lobby")}
+              </p>
+              <h1 className="mt-1 text-2xl font-black tracking-tight text-balance">
+                {localizeUi("ui.slurp.navigation.home")}
+              </h1>
+              <p className="mt-1 max-w-xl text-sm leading-5 text-[var(--muted-foreground)] text-pretty">
+                {localizeUi("ui.slurp.home.feedDetail")}
+              </p>
+            </div>
+            {personaAccount && (
+              <div className="flex min-w-0 shrink-0 items-center gap-2 rounded-xl bg-[var(--slurp-canvas,var(--background))] py-1.5 pe-3 ps-1.5 shadow-sm ring-1 ring-inset ring-[var(--noodle-divider)]">
+                <Avatar account={personaAccount} size="sm" />
+                <span className="max-w-36 min-w-0">
+                  <span className="block truncate text-xs font-bold">{personaAccount.displayName}</span>
+                  <span className="block truncate text-[0.68rem] text-[var(--muted-foreground)]">
+                    @{personaAccount.handle}
+                  </span>
+                </span>
+              </div>
+            )}
           </div>
-          <div className="flex items-center px-2">
+          <div className="flex items-center gap-2">
             <div
-              className="grid min-w-0 flex-1 grid-cols-2"
+              className="grid min-w-0 flex-1 grid-cols-2 rounded-xl bg-[var(--slurp-canvas,var(--background))] p-1 ring-1 ring-inset ring-[var(--noodle-divider)] @min-[1024px]:max-w-sm"
               role="tablist"
               aria-label={localizeUi("ui.noodle.viewerhub.feedTabs")}
             >
@@ -4097,14 +4118,12 @@ function ViewerHub({
                   role="tab"
                   aria-selected={tab === option.id}
                   className={cn(
-                    "relative flex min-h-11 items-center justify-center rounded-md text-sm font-bold text-[var(--muted-foreground)] transition-colors hover:bg-[var(--accent)] hover:text-[var(--foreground)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--noodle-accent)]",
-                    tab === option.id && "text-[var(--foreground)]",
+                    "relative flex min-h-10 items-center justify-center rounded-lg px-3 text-sm font-bold text-[var(--muted-foreground)] transition-[background-color,color,box-shadow,transform] hover:bg-[var(--accent)] hover:text-[var(--foreground)] active:scale-[0.96] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--noodle-accent)] motion-reduce:transition-none motion-reduce:active:scale-100",
+                    tab === option.id &&
+                      "bg-[var(--slurp-surface-raised,var(--background))] text-[var(--foreground)] shadow-sm",
                   )}
                 >
                   {option.label}
-                  {tab === option.id && (
-                    <span className="absolute bottom-0 left-1/2 h-0.5 w-12 -translate-x-1/2 rounded-full bg-[var(--noodle-accent)]" />
-                  )}
                 </button>
               ))}
             </div>
@@ -4112,7 +4131,7 @@ function ViewerHub({
               type="button"
               onClick={onRefresh}
               disabled={isRefreshing}
-              className="ml-1 flex h-11 w-11 shrink-0 items-center justify-center rounded-lg text-[var(--noodle-accent)] transition-colors hover:bg-[var(--noodle-accent)]/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--noodle-accent)] disabled:cursor-not-allowed disabled:opacity-50"
+              className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-[var(--slurp-canvas,var(--background))] text-[var(--noodle-accent)] shadow-sm ring-1 ring-inset ring-[var(--noodle-divider)] transition-[background-color,transform] hover:bg-[var(--noodle-accent)]/10 active:scale-[0.96] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--noodle-accent)] motion-reduce:transition-none motion-reduce:active:scale-100 disabled:cursor-not-allowed disabled:opacity-50"
               title={localizeUi("ui.noodle.noodlehome.refreshTimeline")}
               aria-label={localizeUi("ui.noodle.noodlehome.refreshTimeline")}
             >
