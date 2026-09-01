@@ -4,11 +4,22 @@ function stripCodeFence(value: string): string {
   return match?.[1]?.trim() || trimmed;
 }
 
+// User-authored image guidance is meant to shape the picture, so a short entry — an "Image
+// generation instructions" field reading `anime style` — appears verbatim in any prompt that honours
+// it. Matching those rejected every correctly rewritten prompt and sent the styleless draft instead,
+// so guidance only counts as leaked once it arrives as a copied prose block.
+// ponytail: length floor, not a structural check. If guidance ever leaks as a short value, give the
+// callers a labelled block and extend `hasInternalMarker` rather than lowering this.
+const MIN_GUIDANCE_BLOCK_LENGTH = 40;
+
 /** Select only the visual prompt that can be sent to an image provider. */
 export function selectNoodleImageProviderPrompt(input: {
   rewrittenPrompt: string | null | undefined;
   rawPrompt: string;
+  /** Never belongs in a visual prompt at any length, so it is matched whole. */
   privateContext?: ReadonlyArray<string | null | undefined>;
+  /** Authored to steer the image, so only a copied block counts as a leak. */
+  guidanceContext?: ReadonlyArray<string | null | undefined>;
 }): string {
   const rewrittenPrompt = input.rewrittenPrompt?.trim();
   if (!rewrittenPrompt) return input.rawPrompt;
@@ -18,12 +29,16 @@ export function selectNoodleImageProviderPrompt(input: {
     /(?:^|[\n<])\s*(?:user[ _]image[ _]instructions|image[ _]prompting[ _]instructions|generation[ _]guidance|personality|character[ _]image[ _]preferences|character[ _]context|art[ _]style[ _]guidance|post[ _]text)\s*[:>]/iu.test(
       rewrittenPrompt,
     );
-  const copiesPrivateContext = input.privateContext?.some((value) => {
-    const normalizedValue = value?.trim().toLocaleLowerCase().replace(/\s+/gu, " ");
-    return normalizedValue && normalizedValue.length > 1 && normalizedPrompt.includes(normalizedValue);
-  });
+  const copies = (values: ReadonlyArray<string | null | undefined> | undefined, minLength: number) =>
+    values?.some((value) => {
+      const normalizedValue = value?.trim().toLocaleLowerCase().replace(/\s+/gu, " ");
+      return normalizedValue && normalizedValue.length >= minLength && normalizedPrompt.includes(normalizedValue);
+    });
 
-  return hasInternalMarker || copiesPrivateContext ? input.rawPrompt : rewrittenPrompt;
+  const copiesPrivateContext = copies(input.privateContext, 2);
+  const copiesGuidance = copies(input.guidanceContext, MIN_GUIDANCE_BLOCK_LENGTH);
+
+  return hasInternalMarker || copiesPrivateContext || copiesGuidance ? input.rawPrompt : rewrittenPrompt;
 }
 
 /**

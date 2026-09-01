@@ -2313,10 +2313,18 @@ function StageProfileForm({
                 rows={2}
                 disabled={isGenerating || isPending}
                 value={draft.stagePersonality}
-                maxLength={1000}
+                maxLength={STAGE_PERSONALITY_MAX_LENGTH}
                 onChange={(event) => onChange({ stagePersonality: event.target.value })}
                 placeholder={localizeUi("ui.noodle.stageprofileform.voiceAttitudeBoundariesAndCreatorPersona")}
                 className={`${textareaClass} !min-h-0`}
+              />
+              <AudienceStancePresets
+                disabled={isGenerating || isPending}
+                onApply={(sentence) =>
+                  onChange({
+                    stagePersonality: appendAudienceStance(draft.stagePersonality, sentence),
+                  })
+                }
               />
             </label>
           </div>
@@ -4260,6 +4268,61 @@ function ViewerHub({
           onAction={authorProfile ? onOpenAuthorProfile : undefined}
         />
       )}
+    </div>
+  );
+}
+
+// Nothing in a character card says how its Creator treats an audience, so without a nudge every
+// Creator lands in the same middle register. These seed the stage voice, which is free text, rather
+// than adding a field: `privacy.stagePersonality` is defined in the Engine's shared schema and
+// cannot gain a sibling from this repo.
+const STAGE_PERSONALITY_MAX_LENGTH = 1000;
+
+const AUDIENCE_STANCE_PRESETS = [
+  {
+    labelKey: "ui.noodle.stageprofileform.stance.girlfriend",
+    textKey: "ui.noodle.stageprofileform.stance.girlfriendText",
+  },
+  {
+    labelKey: "ui.noodle.stageprofileform.stance.brattyTease",
+    textKey: "ui.noodle.stageprofileform.stance.brattyTeaseText",
+  },
+  { labelKey: "ui.noodle.stageprofileform.stance.aloof", textKey: "ui.noodle.stageprofileform.stance.aloofText" },
+  { labelKey: "ui.noodle.stageprofileform.stance.inCharge", textKey: "ui.noodle.stageprofileform.stance.inChargeText" },
+  { labelKey: "ui.noodle.stageprofileform.stance.eager", textKey: "ui.noodle.stageprofileform.stance.eagerText" },
+  { labelKey: "ui.noodle.stageprofileform.stance.shy", textKey: "ui.noodle.stageprofileform.stance.shyText" },
+] as const;
+
+/** The stored field caps at 1000 characters, so a preset must never push the draft past it. */
+export function appendAudienceStance(current: string, sentence: string): string {
+  const trimmed = current.trim();
+  const next = trimmed ? `${trimmed}\n${sentence}` : sentence;
+  return next.length <= STAGE_PERSONALITY_MAX_LENGTH ? next : trimmed;
+}
+
+function AudienceStancePresets({ disabled, onApply }: { disabled: boolean; onApply: (sentence: string) => void }) {
+  const { t: localizeUi } = useUiTranslation();
+  return (
+    <div data-component="SlurpHome.AudienceStancePresets" className="space-y-1 pt-1">
+      <span className="block text-[11px] font-semibold text-[var(--muted-foreground)]">
+        {localizeUi("ui.noodle.stageprofileform.audienceStance")}
+      </span>
+      <div className="flex flex-wrap gap-1.5">
+        {AUDIENCE_STANCE_PRESETS.map((preset) => (
+          <button
+            key={preset.labelKey}
+            type="button"
+            disabled={disabled}
+            onClick={() => onApply(localizeUi(preset.textKey))}
+            className="min-h-8 rounded-full border border-[var(--noodle-divider)] px-3 text-xs font-semibold transition-colors hover:bg-[var(--noodle-accent)]/10 disabled:opacity-50"
+          >
+            {localizeUi(preset.labelKey)}
+          </button>
+        ))}
+      </div>
+      <span className="block text-[11px] text-[var(--muted-foreground)]">
+        {localizeUi("ui.noodle.stageprofileform.audienceStanceHint")}
+      </span>
     </div>
   );
 }
