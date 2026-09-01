@@ -35,7 +35,7 @@ import {
 import { cn } from "../../lib/utils";
 import { ConversationMediaPickerPanel } from "../chat/ConversationMediaPickerPanel";
 import type { ChatImage } from "../../hooks/use-gallery";
-import { useSlurpMediaSrc } from "../../hooks/use-slurp-media-src";
+import { useNearViewportSlurpMediaSrc } from "../../hooks/use-slurp-media-src";
 import { Modal } from "../ui/Modal";
 import { Avatar, ProfileInitial } from "./SlurpShell";
 import { formatTime } from "./SlurpDateTime";
@@ -110,7 +110,8 @@ export function LockedSlurpPostCard({
   const revealed = Boolean(demo && demoUnlocked);
   // A locked post's URL resolves to a server-blurred teaser, not the original bytes. Where no
   // teaser can be built the server sends nothing and only the frame renders.
-  const mediaSrc = useSlurpMediaSrc((revealed && demo?.unlockedImageUrl) || post.imageUrl || null);
+  const requestedMediaUrl = (revealed && demo?.unlockedImageUrl) || post.imageUrl || null;
+  const { src: mediaSrc, observe: observeMedia } = useNearViewportSlurpMediaSrc(requestedMediaUrl, { width: 960 });
   // No teaser could be built (the route 404s), so drop the broken <img> and keep the frame.
   const [failedMediaSrc, setFailedMediaSrc] = useState<string | null>(null);
   const shownMediaSrc = mediaSrc && mediaSrc !== failedMediaSrc ? mediaSrc : null;
@@ -169,6 +170,7 @@ export function LockedSlurpPostCard({
         {/* Media frame with Locked badge — only when the post has an image */}
         {(mediaSrc || post.hasImage || (onGenerateImage && post.imagePrompt)) && (
           <div
+            ref={observeMedia}
             data-slurp-locked-preview
             className={cn(
               "relative -mx-4 mt-4 aspect-[4/3] w-[calc(100%+2rem)] overflow-hidden bg-[var(--muted)] ring-1 ring-inset ring-white/10 sm:mx-0 sm:aspect-[16/10] sm:w-full sm:rounded-xl",
@@ -192,6 +194,11 @@ export function LockedSlurpPostCard({
                   // made a working preview look like an empty card.
                   revealed ? "scale-100" : "scale-105 saturate-[0.82]",
                 )}
+              />
+            ) : requestedMediaUrl ? (
+              <div
+                className="absolute inset-0 animate-pulse bg-[var(--muted)] motion-reduce:animate-none"
+                aria-hidden="true"
               />
             ) : (
               <div className="flex h-full flex-col items-center justify-center gap-3 bg-[radial-gradient(circle_at_50%_35%,var(--noodle-accent)_0%,transparent_65%)] px-6 text-center">
@@ -509,7 +516,11 @@ export function SlurpCreatorPostCard({
   const isEditingPost = Boolean(ctx.postManagement) && editingPostId === post.id;
   const imageCrop = readNoodlePostImageCrop(post.metadata);
   const [failedImageUrl, setFailedImageUrl] = useState<string | null>(null);
-  const postImageSrc = useSlurpMediaSrc(post.imageUrl);
+  const {
+    src: postImageSrc,
+    observe: observePostImage,
+    loading: postImageLoading,
+  } = useNearViewportSlurpMediaSrc(post.imageUrl, { width: 960 });
   const displayedImageUrl = postImageSrc && postImageSrc !== failedImageUrl ? postImageSrc : null;
   const imageGenerationPending = ctx.generatingPostImageId === post.id;
   // Distinct from displayedImageUrl: while postImageSrc is still resolving (the authenticated
@@ -896,12 +907,15 @@ export function SlurpCreatorPostCard({
       </div>
       <div>
         {/* The image editor renders its own preview while editing, so hide the read-only one. */}
-        {isEditingPost && imageEditing ? null : displayedImageUrl ? (
+        {isEditingPost && imageEditing ? null : displayedImageUrl || postImageLoading ? (
           <button
+            ref={observePostImage}
             type="button"
             onClick={() =>
+              displayedImageUrl &&
               setImageLightbox(createNoodleLightboxImage(post.id, displayedImageUrl, post.imagePrompt ?? ""))
             }
+            disabled={!displayedImageUrl}
             className={cn(
               "mt-4 flex max-h-[32rem] justify-center overflow-hidden bg-black/20 text-left ring-1 ring-inset ring-white/10 ring-offset-[var(--background)] transition-[opacity,transform] hover:opacity-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--noodle-accent)] focus-visible:ring-offset-2 motion-reduce:transition-none",
               surface === "profile"
@@ -911,7 +925,12 @@ export function SlurpCreatorPostCard({
             title={localizeUi("ui.noodle.noodlepostcard.openImage")}
             aria-label={localizeUi("ui.noodle.noodlepostcard.openPostImage")}
           >
-            {imageCrop ? (
+            {!displayedImageUrl ? (
+              <span
+                className="block aspect-[4/3] w-full animate-pulse bg-[var(--muted)] motion-reduce:animate-none sm:aspect-[16/10]"
+                aria-hidden="true"
+              />
+            ) : imageCrop ? (
               <PostImageFrame
                 src={displayedImageUrl}
                 onError={() => setFailedImageUrl(displayedImageUrl)}
@@ -924,6 +943,8 @@ export function SlurpCreatorPostCard({
               <img
                 src={displayedImageUrl}
                 onError={() => setFailedImageUrl(displayedImageUrl)}
+                loading="lazy"
+                decoding="async"
                 alt={localizeUi("ui.noodle.post.imageBy", {
                   name: author?.displayName ?? localizeUi("ui.noodle.profile.fallbackUser"),
                 })}

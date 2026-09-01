@@ -50,6 +50,7 @@ export const NOODLER_MARK = "R";
 export const NOODLER_ADD_MARK = "+R";
 export const NOODLE_LOGO_SRC = "/api/capability-packages/slurp/assets/slurp-logo.png";
 const NOODLER_LOGO_SRC = "/api/capability-packages/slurp/assets/slurp-logo.png";
+const SLURP_NAME = "Slurp";
 export const NOODLE_PERSONA_SWITCHER_PAGE_SIZE = 5;
 
 export function getNoodleAccentStyle(accent: string, style: CSSProperties = {}): CSSProperties {
@@ -240,7 +241,7 @@ export function Avatar({
     size === "sm" ? "h-8 w-8" : size === "xl" ? "h-32 w-32 sm:h-36 sm:w-36" : size === "lg" ? "h-24 w-24" : "h-11 w-11";
   // NoodleR avatars are served by the package's own route, which a bare <img> cannot
   // authenticate against; the hook swaps those for a fetched object URL and passes the rest through.
-  const avatarSrc = useSlurpMediaSrc(account.avatarUrl);
+  const avatarSrc = useSlurpMediaSrc(account.avatarUrl, { width: size === "xl" || size === "lg" ? 320 : 96 });
   if (avatarSrc) {
     return (
       <div
@@ -253,6 +254,7 @@ export function Avatar({
           <img
             src={avatarSrc}
             alt=""
+            decoding="async"
             className="h-full w-full object-cover"
             style={getAvatarCropStyle(account.avatarCrop)}
           />
@@ -406,6 +408,7 @@ export function NoodleShell({
     : slurpActive
       ? localizeUi("ui.slurp.navigation.home", { defaultValue: "Slurp" })
       : localizeUi("ui.noodle.noodleshell.home");
+  const desktopHomeLabel = slurpActive ? localizeUi("ui.slurp.navigation.hub", { defaultValue: "Hub" }) : homeLabel;
   const homeActive = homeActiveOverride ?? (activeView === "home" || activeView === "noodler");
   const onOpenHomeDestination = noodlerActive ? onOpenNoodler : onOpenHome;
   const onOpenMobileHomeDestination = noodlerActive ? onOpenNoodler : onOpenMobileHome;
@@ -652,11 +655,12 @@ export function NoodleShell({
           <div className="flex min-h-0 w-full max-w-[1320px] justify-center">
             <aside className="hidden w-[14rem] shrink-0 border-r border-[var(--noodle-divider)] bg-[linear-gradient(180deg,var(--slurp-surface-raised,var(--background)),var(--background)_38%)] @min-[1024px]:flex @min-[1024px]:flex-col">
               <div className="flex min-h-0 flex-1 flex-col px-4 py-4">
-                <div className="mb-5 flex h-12 items-center">
+                <div className="mb-5 flex h-12 items-center gap-3 px-2">
                   <NoodleLogo
                     src={noodlerActive || slurpActive ? NOODLER_LOGO_SRC : NOODLE_LOGO_SRC}
                     className="h-10 w-16"
                   />
+                  {slurpActive && <span className="text-lg font-black">{SLURP_NAME}</span>}
                 </div>
                 <nav
                   className="space-y-1"
@@ -678,7 +682,7 @@ export function NoodleShell({
                       />
                     )}
                     <Home size={22} className="!text-[var(--noodle-accent)]" />
-                    {homeLabel}
+                    {desktopHomeLabel}
                   </button>
                   {onOpenSearch && (
                     <button

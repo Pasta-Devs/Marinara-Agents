@@ -1,5 +1,5 @@
-import { existsSync, readFileSync, renameSync, rmSync, unlinkSync, writeFileSync } from "fs";
-import { join } from "path";
+import { existsSync, readFileSync, readdirSync, renameSync, rmSync, unlinkSync, writeFileSync } from "fs";
+import { basename, dirname, join } from "path";
 import type { NoodlerManagedPost } from "@marinara-engine/shared";
 import { logger } from "../../lib/logger.js";
 import { DATA_DIR } from "../../utils/data-dir.js";
@@ -79,6 +79,34 @@ export async function persistNoodlerPostWithUploadedMedia<T>(
 // rather than merely hidden.
 const TEASER_WIDTH = 24;
 const TEASER_SUFFIX = ".teaser.jpg";
+export const NOODLER_MEDIA_WIDTHS = [96, 320, 480, 640, 960, 1280, 1600] as const;
+
+export async function resolveNoodlerMediaVariant(absolutePath: string, width: number | undefined): Promise<string> {
+  if (!width || !NOODLER_MEDIA_WIDTHS.includes(width as (typeof NOODLER_MEDIA_WIDTHS)[number])) return absolutePath;
+  const variantPath = `${absolutePath}.w${width}.webp`;
+  if (existsSync(variantPath)) return variantPath;
+  const sharp = await getSharp();
+  if (!sharp) return absolutePath;
+  const stagingPath = `${variantPath}.${process.pid}.${Date.now()}.tmp`;
+  try {
+    await sharp(absolutePath)
+      .rotate()
+      .resize({ width, withoutEnlargement: true })
+      .webp({ quality: width <= 320 ? 78 : 84 })
+      .toFile(stagingPath);
+    try {
+      renameSync(stagingPath, variantPath);
+    } catch (error) {
+      if (!existsSync(variantPath)) throw error;
+    }
+    return variantPath;
+  } catch (error) {
+    logger.warn(error, "[slurp] Failed to build %spx media variant for %s", width, absolutePath);
+    return absolutePath;
+  } finally {
+    if (existsSync(stagingPath)) unlinkSync(stagingPath);
+  }
+}
 
 /**
  * Blurred, unrecoverable teaser bytes for a locked post's media, cached next to the
@@ -144,6 +172,10 @@ export function unlinkNoodlerMedia(relativePath: string | null): void {
     if (existsSync(absolute)) unlinkSync(absolute);
     // The cached teaser is a derivative of the same bytes and must not outlive them.
     if (existsSync(`${absolute}${TEASER_SUFFIX}`)) unlinkSync(`${absolute}${TEASER_SUFFIX}`);
+    const fileName = basename(absolute);
+    for (const entry of readdirSync(dirname(absolute))) {
+      if (entry.startsWith(`${fileName}.w`) && entry.endsWith(".webp")) unlinkSync(join(dirname(absolute), entry));
+    }
   } catch (error) {
     logger.warn(error, "[noodler] Failed to remove NoodleR media file %s", relativePath);
   }

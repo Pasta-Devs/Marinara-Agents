@@ -78,6 +78,7 @@ import {
   NOODLER_MEDIA_URL_PREFIX,
   noodlerPostMediaUrlForPersona,
   readNoodlerLockedTeaser,
+  resolveNoodlerMediaVariant,
   readNoodlerMediaPath,
   removeNoodlerAccountMedia,
   resolveNoodlerMediaAbsolutePath,
@@ -416,9 +417,15 @@ export async function slurpRoutes(app: FastifyInstance) {
     if (!absolute) {
       return reply.code(404).send({ error: "Not Found" });
     }
+    const width = z.coerce
+      .number()
+      .int()
+      .optional()
+      .safeParse((req.query as { width?: string }).width);
+    const served = await resolveNoodlerMediaVariant(absolute, width.success ? width.data : undefined);
     return reply
       .header("Cache-Control", "private, max-age=31536000, immutable")
-      .sendFile(basename(absolute), dirname(absolute));
+      .sendFile(basename(served), dirname(served));
   });
 
   app.get("/noodler/accounts/:id/banner/:fileName", async (req, reply) => {
@@ -428,9 +435,15 @@ export async function slurpRoutes(app: FastifyInstance) {
     if (!absolute || basename(absolute) !== fileName || !existsSync(absolute)) {
       return reply.code(404).send({ error: "Not Found" });
     }
+    const width = z.coerce
+      .number()
+      .int()
+      .optional()
+      .safeParse((req.query as { width?: string }).width);
+    const served = await resolveNoodlerMediaVariant(absolute, width.success ? width.data : undefined);
     return reply
       .header("Cache-Control", "private, max-age=31536000, immutable")
-      .sendFile(basename(absolute), dirname(absolute));
+      .sendFile(basename(served), dirname(served));
   });
 
   app.post("/noodler/accounts/:id/avatar", async (req, reply) => {
@@ -856,13 +869,19 @@ export async function slurpRoutes(app: FastifyInstance) {
       if (!teaser) return reply.code(404).send({ error: "Not Found" });
       return reply.header("Cache-Control", "private, max-age=300").type("image/jpeg").send(teaser);
     }
+    const width = z.coerce
+      .number()
+      .int()
+      .optional()
+      .safeParse((req.query as { width?: string }).width);
+    const served = await resolveNoodlerMediaVariant(absolute, width.success ? width.data : undefined);
     return (
       reply
         // The post-owned URL is stable across ordinary feed refreshes, but an owner can replace
         // its bytes in place. Audience URLs include distinct locked/original variants, so an
         // unlock changes the browser cache key instead of retaining a cached teaser.
         .header("Cache-Control", "private, max-age=300")
-        .sendFile(basename(absolute), dirname(absolute))
+        .sendFile(basename(served), dirname(served))
     );
   });
 
@@ -1132,7 +1151,7 @@ export async function slurpRoutes(app: FastifyInstance) {
     if (!result.ok) return reply.code(400).send({ error: result.message });
     const updated = await noodle.getNoodlerPostById(id);
     if (updated?.imageUrl) return updated;
-    if (updated?.metadata.imageGenerationFailed === true) {
+    if (updated?.updatedAt !== post.updatedAt && updated?.metadata.imageGenerationFailed === true) {
       return reply.code(502).send({ error: "Image generation failed. Try again later." });
     }
     return reply.code(409).send({ error: "This image is already being generated." });

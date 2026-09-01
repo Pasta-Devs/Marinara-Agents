@@ -3567,6 +3567,7 @@ export function createSlurpStorage(db: DB) {
           delete mergedMetadata.imageGenerationFailed;
           delete mergedMetadata.imageGenerationError;
           delete mergedMetadata.imageRetryPrompt;
+          delete mergedMetadata.imageRetryNegativePrompt;
         }
         await tx
           .update(noodlePosts)

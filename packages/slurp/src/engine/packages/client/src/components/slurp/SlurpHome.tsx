@@ -7,7 +7,6 @@ import {
   ChevronRight,
   Clock3,
   Eye,
-  Image as ImageIcon,
   Link,
   Loader2,
   Lock,
@@ -112,7 +111,7 @@ import {
 } from "./SlurpPostCard";
 import { LockedSlurpPostCard, SlurpCreatorPostCard } from "./SlurpCreatorPostCard";
 import { ChatImageLightbox } from "../chat/ChatImageLightbox";
-import { useSlurpMediaSrc } from "../../hooks/use-slurp-media-src";
+import { useNearViewportSlurpMediaSrc, useSlurpMediaSrc } from "../../hooks/use-slurp-media-src";
 import { SlurpOnboardingWizard } from "./SlurpOnboardingPanel";
 import { SlurpAgeGate } from "./SlurpAgeGate";
 import {
@@ -2839,9 +2838,9 @@ function SourceAccountAvatar({
     avatarUrl: string | null;
   };
 }) {
-  const source = useSlurpMediaSrc(account.avatarUrl);
+  const source = useSlurpMediaSrc(account.avatarUrl, { width: 96 });
   return source ? (
-    <img src={source} alt="" className="h-11 w-11 shrink-0 rounded-full object-cover" />
+    <img src={source} alt="" decoding="async" className="h-11 w-11 shrink-0 rounded-full object-cover" />
   ) : (
     <ProfileInitial profile={{ ...account, avatarUrl: null }} />
   );
@@ -2859,17 +2858,29 @@ function SlurpProfileFeaturedImage({
   onOpenImage: (url: string, id: string) => void;
 }) {
   const { t: localizeUi } = useUiTranslation();
-  const source = useSlurpMediaSrc(post.imageUrl);
-  return source ? (
+  const { src: source, observe } = useNearViewportSlurpMediaSrc(post.imageUrl, { width: 960 });
+  return (
     <button
+      ref={observe}
       type="button"
-      onClick={() => onOpenImage(source, post.id)}
+      onClick={() => source && onOpenImage(source, post.id)}
+      disabled={!source}
       className="block w-full overflow-hidden rounded-md text-left ring-1 ring-inset ring-white/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--noodle-accent)]"
       aria-label={post.title || localizeUi("ui.slurp.post.openFeaturedImage")}
     >
-      <img src={source} alt={post.title || ""} className="block aspect-[16/8] w-full object-cover" />
+      {source ? (
+        <img
+          src={source}
+          alt={post.title || ""}
+          loading="lazy"
+          decoding="async"
+          className="block aspect-[16/8] w-full object-cover"
+        />
+      ) : (
+        <span className="block aspect-[16/8] w-full animate-pulse bg-[var(--muted)] motion-reduce:animate-none" />
+      )}
     </button>
-  ) : null;
+  );
 }
 
 function SlurpProfileMediaTile({
@@ -2880,9 +2891,10 @@ function SlurpProfileMediaTile({
   onOpenImage: (url: string, id: string) => void;
 }) {
   const { t: localizeUi } = useUiTranslation();
-  const source = useSlurpMediaSrc(post.imageUrl);
+  const { src: source, observe } = useNearViewportSlurpMediaSrc(post.imageUrl, { width: 480 });
   return (
     <button
+      ref={observe}
       type="button"
       onClick={() => source && onOpenImage(source, post.id)}
       disabled={!source}
@@ -2893,6 +2905,8 @@ function SlurpProfileMediaTile({
         <img
           src={source}
           alt={post.title || ""}
+          loading="lazy"
+          decoding="async"
           className="h-full w-full object-cover transition-transform duration-300 hover:scale-[1.03] motion-reduce:transition-none motion-reduce:hover:scale-100"
         />
       ) : (
@@ -2980,7 +2994,7 @@ function StageProfileView({
   onOpenImage: (url: string, id: string) => void;
 }) {
   const { t: localizeUi } = useUiTranslation();
-  const bannerSrc = useSlurpMediaSrc(profile.bannerUrl);
+  const bannerSrc = useSlurpMediaSrc(profile.bannerUrl, { width: 1280 });
   const [accessSettingsOpen, setAccessSettingsOpen] = useState(false);
   const [automationOpen, setAutomationOpen] = useState(false);
   const updateAutoPosting = useUpdateNoodlerAutoPosting();
@@ -3174,7 +3188,11 @@ function StageProfileView({
               }}
               onGenerateImage={
                 item.post.imagePrompt
-                  ? () => postCardCtx.generatePostImage?.(toManagedPostCardModel(item.post, profile))
+                  ? () =>
+                      postCardCtx.generatePostImage?.({
+                        id: item.post.id,
+                        authorAccountId: item.post.authorAccountId,
+                      })
                   : undefined
               }
               imageGenerationPending={postCardCtx.generatingPostImageId === item.post.id}
@@ -4127,17 +4145,9 @@ function ViewerHub({
           data-slurp-home-masthead
         >
           <div className="hidden items-end justify-between gap-5 pb-4 @min-[1024px]:flex">
-            <div className="min-w-0">
-              <p className="text-[0.68rem] font-bold uppercase tracking-[0.16em] text-[var(--noodle-accent)]">
-                {localizeUi("ui.slurp.home.lobby")}
-              </p>
-              <h1 className="mt-1 text-2xl font-black tracking-tight text-balance">
-                {localizeUi("ui.slurp.navigation.home")}
-              </h1>
-              <p className="mt-1 max-w-xl text-sm leading-5 text-[var(--muted-foreground)] text-pretty">
-                {localizeUi("ui.slurp.home.feedDetail")}
-              </p>
-            </div>
+            <p className="max-w-xl text-sm leading-5 text-[var(--muted-foreground)] text-pretty">
+              {localizeUi("ui.slurp.home.feedDetail")}
+            </p>
             {personaAccount && (
               <div className="flex min-w-0 shrink-0 items-center gap-2 rounded-xl bg-[var(--slurp-canvas,var(--background))] py-1.5 pe-3 ps-1.5 shadow-sm ring-1 ring-inset ring-[var(--noodle-divider)]">
                 <Avatar account={personaAccount} size="sm" />
@@ -4319,25 +4329,32 @@ function SlurpDiscoverCreatorCard({
   onToggleSubscription: (creatorAccountId: string, subscribed: boolean) => void;
 }) {
   const { t: localizeUi } = useUiTranslation();
-  const bannerSrc = useSlurpMediaSrc(creator.profile.bannerUrl);
+  const { src: bannerSrc, observe: observeBanner } = useNearViewportSlurpMediaSrc(creator.profile.bannerUrl, {
+    width: 640,
+  });
   const openProfile = () => onOpenProfile?.(creator.profile.id);
 
   return (
     <article className="group flex min-w-0 flex-col overflow-hidden rounded-xl bg-[var(--slurp-surface)] shadow-[0_1px_0_var(--noodle-divider),0_14px_30px_-24px_rgba(0,0,0,0.75)] ring-1 ring-inset ring-[var(--noodle-divider)] transition-[background-color,box-shadow,transform] hover:-translate-y-0.5 hover:bg-[var(--slurp-surface-raised)] hover:shadow-[0_1px_0_var(--noodle-accent),0_18px_36px_-22px_rgba(0,0,0,0.8)] motion-reduce:transition-none motion-reduce:hover:translate-y-0">
       <button
+        ref={observeBanner}
         type="button"
         onClick={openProfile}
         disabled={!onOpenProfile}
         className="relative block h-28 w-full overflow-hidden bg-[linear-gradient(135deg,var(--noodle-accent)_0%,var(--slurp-surface-raised)_70%)] text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--noodle-accent)] disabled:cursor-default"
         aria-label={localizeUi("ui.noodle.noodlehome.viewValue1", { value1: creator.profile.displayName })}
       >
-        {bannerSrc && (
+        {bannerSrc ? (
           <img
             src={bannerSrc}
             alt=""
+            loading="lazy"
+            decoding="async"
             className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-[1.03] motion-reduce:transition-none motion-reduce:group-hover:scale-100"
           />
-        )}
+        ) : creator.profile.bannerUrl ? (
+          <span className="absolute inset-0 animate-pulse bg-[var(--muted)] motion-reduce:animate-none" />
+        ) : null}
         <span
           className="pointer-events-none absolute inset-0 bg-[linear-gradient(to_top,rgba(8,4,10,0.82),transparent_72%)]"
           aria-hidden="true"
@@ -4508,7 +4525,7 @@ function SlurpMomentViewer({
   onOpenProfile?: (accountId: string) => void;
 }) {
   const { t: localizeUi } = useUiTranslation();
-  const mediaSrc = useSlurpMediaSrc(moment.post.imageUrl);
+  const mediaSrc = useSlurpMediaSrc(moment.post.imageUrl, { width: 1600 });
   const openProfile = () => {
     onClose();
     onOpenProfile?.(moment.creator.profile.id);
@@ -4589,6 +4606,8 @@ function SlurpMomentViewer({
           {mediaSrc ? (
             <img
               src={mediaSrc}
+              decoding="async"
+              fetchPriority="high"
               alt={
                 moment.post.locked
                   ? localizeUi("ui.noodle.lockednoodlerpostcard.lockedImageFrom", {
@@ -4602,10 +4621,7 @@ function SlurpMomentViewer({
               )}
             />
           ) : (
-            <div className="flex flex-col items-center gap-3 text-[var(--muted-foreground)]">
-              <ImageIcon size={30} aria-hidden="true" />
-              <span className="text-xs font-semibold">{localizeUi("ui.slurp.locked.previewUnavailable")}</span>
-            </div>
+            <div className="absolute inset-0 animate-pulse bg-zinc-900 motion-reduce:animate-none" aria-hidden="true" />
           )}
           <div
             className={cn(

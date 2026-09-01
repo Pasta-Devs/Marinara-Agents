@@ -17,6 +17,8 @@ const storage = read("packages/slurp/src/engine/packages/server/src/services/sto
 const settings = read("packages/slurp/src/engine/packages/client/src/components/slurp/SlurpSettings.tsx");
 const profileSurface = read("packages/slurp/src/engine/packages/client/src/components/slurp/SlurpProfileSurface.tsx");
 const creatorPostCard = read("packages/slurp/src/engine/packages/client/src/components/slurp/SlurpCreatorPostCard.tsx");
+const mediaHook = read("packages/slurp/src/engine/packages/client/src/hooks/use-slurp-media-src.ts");
+const slurpMedia = read("packages/slurp/src/engine/packages/server/src/services/slurp/slurp-media.ts");
 const artwork = read("packages/slurp/src/engine/packages/server/src/services/slurp/slurp-artwork.operation.ts");
 const shell = read("packages/slurp/src/engine/packages/client/src/components/slurp/SlurpShell.tsx");
 const serverEntry = read("packages/slurp/src/engine/packages/server/src/services/slurp/server-entry.ts");
@@ -96,7 +98,11 @@ assert.match(
   "Creator Room archives must follow every post cursor",
 );
 assert.match(home, /function SlurpMomentViewer/u);
-assert.match(home, /useSlurpMediaSrc\(moment\.post\.imageUrl\)/u, "Moments must use authenticated Slurp media");
+assert.match(
+  home,
+  /useSlurpMediaSrc\(moment\.post\.imageUrl, \{ width: 1600 \}\)/u,
+  "Moments must use full-size authenticated Slurp media",
+);
 assert.match(
   home,
   /moment\.post\.locked[\s\S]*?onUnlock\(moment\.post\.id\)[\s\S]*?onToggleSubscription/u,
@@ -114,7 +120,10 @@ assert.match(
 );
 assert.match(home, /ui\.slurp\.discover\.title/u);
 assert.match(home, /sm:grid-cols-2/u, "Discover must present creators as adaptive cards");
-assert.match(home, /function SlurpDiscoverCreatorCard[\s\S]*?useSlurpMediaSrc\(creator\.profile\.bannerUrl\)/u);
+assert.match(
+  home,
+  /function SlurpDiscoverCreatorCard[\s\S]*?useNearViewportSlurpMediaSrc\(creator\.profile\.bannerUrl/u,
+);
 assert.match(home, /tabs=\{\[\{ id: "emoji"/u, "the main composer must expose only its functional emoji media tab");
 assert.doesNotMatch(home, /tabs=\{\[[^\]]*id: "gif"/u, "the main composer must not expose its no-op GIF action");
 assert.match(home, /motion-reduce:transition-none/u);
@@ -228,8 +237,15 @@ assert.doesNotMatch(
 assert.match(profileSurface, /data-slurp-creator-hero/u, "Creator Rooms must expose their unified identity hero");
 assert.match(profileSurface, /preTabsContent && \(/u, "Creator Tools must remain separate from public profile content");
 assert.match(home, /data-slurp-home-masthead/u, "Home must expose one unified lobby masthead");
+assert.match(shell, /slurpActive && <span className="text-lg font-black">\{SLURP_NAME\}<\/span>/u);
+assert.match(shell, /ui\.slurp\.navigation\.hub/u, "Slurp desktop navigation must name the home destination Hub");
+assert.doesNotMatch(
+  home,
+  /data-slurp-home-masthead[\s\S]*?ui\.slurp\.navigation\.home/u,
+  "The desktop masthead must not repeat the Slurp name",
+);
 assert.match(profileSurface, /<Avatar account=\{account\} size="xl"/u);
-assert.match(home, /function SourceAccountAvatar[\s\S]*?useSlurpMediaSrc\(account\.avatarUrl\)/u);
+assert.match(home, /function SourceAccountAvatar[\s\S]*?useSlurpMediaSrc\(account\.avatarUrl, \{ width: 96 \}\)/u);
 assert.match(home, /function SourceAccountAvatar[\s\S]*?<img src=\{source\}/u);
 assert.match(
   home,
@@ -252,6 +268,19 @@ assert.match(
   settings,
   /refreshCreators\.mutate\(\s*\{ accountIds: \[\.\.\.refreshAccountIds\], access: refreshAccess \}/u,
 );
+assert.match(mediaHook, /const mediaCache = new Map<string, CachedMedia>/u, "managed media requests must be shared");
+assert.match(mediaHook, /cache: "force-cache"/u, "managed media must use the HTTP cache");
+assert.match(
+  mediaHook,
+  /new IntersectionObserver[\s\S]*?rootMargin/u,
+  "off-screen media fetches must wait for proximity",
+);
+assert.match(home, /useNearViewportSlurpMediaSrc\(post\.imageUrl, \{ width: 480 \}\)/u);
+assert.match(home, /animate-pulse bg-\[var\(--muted\)\] motion-reduce:animate-none/u);
+assert.match(creatorPostCard, /postImageLoading[\s\S]*?aspect-\[4\/3\][\s\S]*?animate-pulse/u);
+assert.match(slurpMedia, /NOODLER_MEDIA_WIDTHS = \[96, 320, 480, 640, 960, 1280, 1600\]/u);
+assert.match(slurpMedia, /\.resize\(\{ width, withoutEnlargement: true \}\)[\s\S]*?\.webp/u);
+assert.match(slurpMedia, /entry\.startsWith\(`\$\{fileName\}\.w`\)/u, "media deletion must remove every derivative");
 assert.doesNotMatch(home, /refreshAllNow/u, "bulk refresh belongs in Creator settings");
 assert.match(
   shell,

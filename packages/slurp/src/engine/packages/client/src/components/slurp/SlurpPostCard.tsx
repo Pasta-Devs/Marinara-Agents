@@ -1176,7 +1176,7 @@ export interface NoodlePostCardCtx {
   /** Post image crop, replacement, and removal capability. */
   imageEditing?: NoodlePostCardImageEditingCap;
   /** Generate a missing post image from its saved prompt. */
-  generatePostImage?: (post: NoodlePostCardModel) => void;
+  generatePostImage?: (post: Pick<NoodlePostCardModel, "id" | "authorAccountId">) => void;
   generatingPostImageId?: string | null;
   /** Reply image/upload capability. Absent → the card hides all reply-image affordances. */
   media?: NoodlePostCardMediaCap;

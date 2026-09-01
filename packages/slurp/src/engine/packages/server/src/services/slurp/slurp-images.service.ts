@@ -342,6 +342,13 @@ export function createNoodlerNoodleImagesService(db: DB) {
           (await connections.getDefaultForImageGeneration());
         if (!imageConnection) {
           await noodle.releasePostImageClaim(claimed.id, claimToken);
+          if (input.retryStoredPrompt) {
+            return {
+              ok: false,
+              error: "missing_connection",
+              message: "Select a Slurp image generation connection first.",
+            };
+          }
           continue;
         }
         if (!claimed.imagePrompt) {
@@ -352,6 +359,10 @@ export function createNoodlerNoodleImagesService(db: DB) {
           input.retryStoredPrompt && typeof claimed.metadata.imageRetryPrompt === "string"
             ? claimed.metadata.imageRetryPrompt
             : null;
+        const retryNegativePrompt =
+          input.retryStoredPrompt && typeof claimed.metadata.imageRetryNegativePrompt === "string"
+            ? claimed.metadata.imageRetryNegativePrompt
+            : undefined;
         const disclosureMode = account.settings.privacy.identityDisclosure ?? "secret";
         const linkedPublicAccount = await noodle.resolveAccountSource(account);
 
@@ -383,7 +394,7 @@ export function createNoodlerNoodleImagesService(db: DB) {
             db,
             debugMode: input.debugMode,
             promptOverride: retryPrompt
-              ? { prompt: retryPrompt }
+              ? { prompt: retryPrompt, negativePrompt: retryNegativePrompt }
               : input.retryStoredPrompt
                 ? undefined
                 : promptOverride,
@@ -399,6 +410,8 @@ export function createNoodlerNoodleImagesService(db: DB) {
                 imageGenerationFailed: true,
                 imageGenerationError: getErrorMessage(error).slice(0, 500),
                 ...(!input.retryStoredPrompt && { imageRetryPrompt: promptOverride.prompt }),
+                ...(!input.retryStoredPrompt &&
+                  promptOverride.negativePrompt && { imageRetryNegativePrompt: promptOverride.negativePrompt }),
               },
             });
           }
@@ -430,6 +443,8 @@ export function createNoodlerNoodleImagesService(db: DB) {
               imageGenerationFailed: true,
               imageGenerationError: "Stage profile identity changed during image generation.",
               ...(!input.retryStoredPrompt && { imageRetryPrompt: promptOverride.prompt }),
+              ...(!input.retryStoredPrompt &&
+                promptOverride.negativePrompt && { imageRetryNegativePrompt: promptOverride.negativePrompt }),
             },
           });
           continue;

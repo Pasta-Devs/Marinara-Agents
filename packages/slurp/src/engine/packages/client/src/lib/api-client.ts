@@ -202,7 +202,7 @@ async function apiFetch(path: string, init?: RequestInit): Promise<Response> {
   return fetch(`${BASE}${path}`, {
     ...init,
     headers,
-    cache: "no-store",
+    cache: init?.cache ?? "no-store",
   });
 }
 

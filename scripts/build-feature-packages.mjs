@@ -145,7 +145,9 @@ const noodleOwnedSourcePaths = [
 const slurpSourceRoot = join(packagesDir, "slurp/src/engine");
 const slurpOwnedSourcePaths = [
   "packages/client/src/components/slurp",
+  "packages/client/src/hooks/use-slurp-media-src.ts",
   "packages/client/src/hooks/use-slurp.ts",
+  "packages/client/src/lib/api-client.ts",
   "packages/client/src/localization/locales",
   "packages/client/src/slurp-package-entry.tsx",
   "packages/client/src/stores/slurp-package.store.ts",
@@ -319,7 +321,7 @@ const features = [
   },
   {
     id: "slurp",
-    version: "1.0.30",
+    version: "1.0.32",
     minEngineVersion: "2.4.3",
     maxEngineExclusive: MAX_ENGINE_EXCLUSIVE,
     name: "Slurp",
