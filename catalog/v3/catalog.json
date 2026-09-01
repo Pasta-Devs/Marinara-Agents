@@ -1162,7 +1162,7 @@
         "schemaVersion": 1,
         "id": "noodle",
         "name": "Noodle",
-        "version": "1.2.16",
+        "version": "1.2.17",
         "description": "Explore the Noodle public timeline as an optional local social world. Install it, restart Marinara Engine when prompted, then open Home → Noodle.",
         "localizations": {
           "de": {
@@ -1227,8 +1227,8 @@
           },
           {
             "path": "client.js",
-            "sha256": "623bd8757dd3134bcaf9c1b1cb3d7c10cdadbce1eb0b1c0b700b5bd71df2adb6",
-            "bytes": 2266871
+            "sha256": "23a743c4cc7d3db7047af3d1ab56fa4da303005c424ff76640152ed077bc8b2b",
+            "bytes": 2269999
           },
           {
             "path": "noodle-klusek.png",
@@ -1249,9 +1249,9 @@
       "category": "misc",
       "iconUrl": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artwork/agent-covers/noodle.png",
       "artifact": {
-        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/noodle-1.2.16.zip",
-        "sha256": "db3fa61f464b195ba584ebbd64c36c4abddde653214caf14865d8182f5c32865",
-        "bytes": 4592218
+        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/noodle-1.2.17.zip",
+        "sha256": "58441b2900817383b51d8779694a04679c7721c80ff32d993ee035937b9d8fae",
+        "bytes": 4595346
       },
       "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Agents/blob/main/packages/noodle/README.md"
     },
