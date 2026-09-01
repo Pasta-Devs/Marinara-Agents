@@ -245,8 +245,30 @@ assert.match(
 );
 assert.match(
   beholderInterfaceSource,
-  /Math\.min\(width \/ BH_WINDOW_DEFAULT_WIDTH, height \/ BH_WINDOW_DEFAULT_HEIGHT\)/u,
+  /Math\.min\(width \/ BH_SCALE_REFERENCE_WIDTH, height \/ BH_SCALE_REFERENCE_HEIGHT\)/u,
   "the floating window must scale its content from the available size",
+);
+// The reference size and the opening size have to stay separate constants. One constant
+// answered both questions, so opening the panel taller — which is what stops it shrinking
+// its own text to 6px — silently redefined what 100% meant and scaled everything back
+// down again.
+assert.ok(
+  /BH_SCALE_REFERENCE_HEIGHT = \d+/u.test(beholderInterfaceSource) &&
+    /BH_WINDOW_DEFAULT_HEIGHT = \d+/u.test(beholderInterfaceSource) &&
+    !/height \/ BH_WINDOW_DEFAULT_HEIGHT/u.test(beholderInterfaceSource),
+  "the scale reference must not be the same constant as the opening height",
+);
+// Shrink-to-fit has a floor, and what does not fit scrolls. Without the floor the panel
+// answered a short window by rendering slot labels at 6.4px against a designed 12.2px.
+assert.match(
+  beholderInterfaceSource,
+  /BH_CONTENT_MIN_SCALE = 0\.\d+/u,
+  "shrinking to fit must stop at a readable floor",
+);
+assert.match(
+  beholderInterfaceSource,
+  /bh-content-scrolls/u,
+  "and the body must scroll for whatever still does not fit",
 );
 assert.match(
   beholderInterfaceSource,

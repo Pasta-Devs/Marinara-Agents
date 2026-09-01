@@ -120,7 +120,7 @@
         "schemaVersion": 1,
         "id": "beholder",
         "name": "Beholder",
-        "version": "1.3.8",
+        "version": "1.3.9",
         "description": "Tracks each roleplay character's clothing by body slot, held items, wounds, missing parts, bare slots, and species, then keeps that physical state available to the next response, and shows it on a paper doll you can open from the roleplay toolbar. Pick the prompt template for your model: one prompt for a SOTA model (GPT-5.5+, Opus 4.8+, Kimi K3+), or five passes for the local Beholder model (GetBeholder/Beholder-GGUF) — free, offline, and private. Add the Agent in Chat Settings → Agents → Tracker Agents for Roleplay mode.",
         "engine": {
           "min": "2.4.4",
@@ -147,8 +147,8 @@
           },
           {
             "path": "client.js",
-            "sha256": "c40ddc1537104ae0314380babb54205fb83d9c848df23ae2a19d34730bc56a22",
-            "bytes": 448136
+            "sha256": "dd517078c7fe81ae3ec51e214916f5dc598e5a5fcc5fb4f38f96f5e92ed594a1",
+            "bytes": 449763
           }
         ],
         "permissions": [
@@ -163,9 +163,9 @@
       "category": "tracker",
       "iconUrl": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artwork/agent-covers/beholder.png",
       "artifact": {
-        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/beholder-1.3.8.zip",
-        "sha256": "d2222ef0ac03996c1348160b2499df4ccf9f1f69f3aa174eb8d2f3df413986a3",
-        "bytes": 460082
+        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/beholder-1.3.9.zip",
+        "sha256": "70bb1a2ed93549e6eb3de3bd0326be97b85cb6ea12318a0a72fd1fbc0e930fcb",
+        "bytes": 461709
       },
       "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Engine/blob/staging/docs/agents/built-in-agents.md#beholder"
     },
