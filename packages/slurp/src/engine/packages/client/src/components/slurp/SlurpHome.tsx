@@ -155,6 +155,8 @@ interface NoodlerPostSubmission {
   format: NoodlerContentFormat;
 }
 
+type SlurpViewerCreator = NonNullable<ReturnType<typeof useNoodlerViewer>["data"]>["creators"][number];
+
 interface NoodlerPostDraft {
   title: string;
   body: string;
@@ -1930,42 +1932,6 @@ export function SlurpHome({ navigation, onNavigate }: SlurpHomeProps) {
         onTabChange={setFeedTab}
         onToggleFollow={toggleCreatorFollow}
         authorProfile={accountsQuery.isSuccess ? mainAuthorProfile : null}
-        authorDraft={
-          mainAuthorProfile
-            ? (noodlerPostDrafts[mainAuthorProfile.id] ?? EMPTY_NOODLER_POST_DRAFT)
-            : EMPTY_NOODLER_POST_DRAFT
-        }
-        onAuthorDraftChange={(patch) => {
-          if (mainAuthorProfile) updateNoodlerPostDraft(mainAuthorProfile.id, patch);
-        }}
-        onClearAuthorDraft={() => {
-          if (mainAuthorProfile) clearNoodlerPostDraft(mainAuthorProfile.id);
-        }}
-        onDiscardAuthorDraft={() => {
-          if (mainAuthorProfile) clearNoodlerPostDraft(mainAuthorProfile.id);
-        }}
-        authorLoading={accountsQuery.isLoading}
-        authorError={accountsQuery.isError && !accountsQuery.data}
-        onRetryAuthor={() => void accountsQuery.refetch()}
-        onCreateAuthorProfile={
-          shellPersonaAccount
-            ? () =>
-                onNavigate({
-                  mode: "creator",
-                  view: "create-profile",
-                  sourceAccountId: shellPersonaAccount.id,
-                })
-            : undefined
-        }
-        onOpenAuthorProfile={
-          mainAuthorProfile
-            ? () => onNavigate({ mode: "creator", view: "profile", accountId: mainAuthorProfile.id })
-            : undefined
-        }
-        onManualPost={submitManualPost}
-        onGuidedPost={submitGuidedPost}
-        manualPending={createPost.isPending}
-        guidePending={generatePost.isPending}
         onToggleSubscription={toggleCreatorSubscription}
         togglePending={toggleSubscription.isPending || toggleFollow.isPending}
       />
@@ -3304,7 +3270,7 @@ function StageProfileView({
                 disabled={followPending}
                 onClick={() => onToggleFollow(profile.id, viewerCreator.followed)}
                 className={cn(
-                  "inline-flex min-h-11 items-center rounded-lg px-5 text-sm font-bold disabled:cursor-not-allowed disabled:opacity-50",
+                  "inline-flex min-h-11 items-center justify-center rounded-lg px-5 text-sm font-bold transition-[background-color,opacity,transform] active:scale-[0.96] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--noodle-accent)] motion-reduce:transition-none motion-reduce:active:scale-100 disabled:cursor-not-allowed disabled:opacity-50",
                   viewerCreator.followed
                     ? "border border-[var(--noodle-divider)] bg-transparent text-[var(--foreground)] hover:bg-[var(--accent)]"
                     : "bg-[var(--foreground)] text-[var(--background)] hover:opacity-90",
@@ -3319,7 +3285,7 @@ function StageProfileView({
                 disabled={subscriptionPending}
                 onClick={() => onToggleSubscription(profile.id, viewerCreator.subscribed)}
                 className={cn(
-                  "inline-flex min-h-11 items-center rounded-lg px-5 text-sm font-bold disabled:cursor-not-allowed disabled:opacity-50",
+                  "inline-flex min-h-11 items-center justify-center rounded-lg px-5 text-sm font-bold transition-[background-color,opacity,transform] active:scale-[0.96] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--noodle-accent)] motion-reduce:transition-none motion-reduce:active:scale-100 disabled:cursor-not-allowed disabled:opacity-50",
                   viewerCreator.subscribed
                     ? "border border-[var(--noodle-accent)]/50 bg-[var(--noodle-accent)]/10 text-[var(--noodle-accent-foreground)] hover:bg-[var(--noodle-accent)]/15"
                     : "bg-[var(--noodle-accent)] text-zinc-950 hover:opacity-90",
@@ -3352,7 +3318,10 @@ function StageProfileView({
         onTabChange={setActiveTab}
         preTabsContent={
           managedCreator ? (
-            <details className="group border-b border-[var(--noodle-divider)] bg-[var(--slurp-surface-raised,var(--background))]">
+            <details
+              data-slurp-creator-tools
+              className="group border-b border-[var(--noodle-divider)] bg-[linear-gradient(135deg,var(--slurp-surface-raised,var(--background)),var(--noodle-accent)_220%)]"
+            >
               <summary className="flex min-h-14 cursor-pointer list-none items-center gap-3 px-4 text-left hover:bg-[var(--accent)]/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--noodle-accent)] [&::-webkit-details-marker]:hidden sm:px-5">
                 <ChevronDown
                   size={15}
@@ -3792,19 +3761,6 @@ function ViewerHub({
   onTabChange,
   onToggleFollow,
   authorProfile,
-  authorDraft,
-  onAuthorDraftChange,
-  onClearAuthorDraft,
-  onDiscardAuthorDraft,
-  authorLoading,
-  authorError,
-  onRetryAuthor,
-  onCreateAuthorProfile,
-  onOpenAuthorProfile,
-  onManualPost,
-  onGuidedPost,
-  manualPending,
-  guidePending,
   onToggleSubscription,
   togglePending,
   newSinceAt,
@@ -3842,19 +3798,6 @@ function ViewerHub({
   onTabChange: (tab: "following" | "all") => void;
   onToggleFollow: (creatorAccountId: string, followed: boolean) => void;
   authorProfile: NoodlerManagedStageProfile | null;
-  authorDraft: NoodlerPostDraft;
-  onAuthorDraftChange: (patch: Partial<NoodlerPostDraft>) => void;
-  onClearAuthorDraft: () => void;
-  onDiscardAuthorDraft: () => void;
-  authorLoading: boolean;
-  authorError: boolean;
-  onRetryAuthor: () => void;
-  onCreateAuthorProfile?: () => void;
-  onOpenAuthorProfile?: () => void;
-  onManualPost: (input: NoodlerPostSubmission) => Promise<void>;
-  onGuidedPost: (input: NoodlerPostSubmission) => Promise<void>;
-  manualPending: boolean;
-  guidePending: boolean;
   onToggleSubscription: (creatorAccountId: string, subscribed: boolean) => void;
   togglePending: boolean;
 }) {
@@ -4080,56 +4023,14 @@ function ViewerHub({
           {discoveredCreators.length > 0 ? (
             <div className="grid gap-3 sm:grid-cols-2">
               {discoveredCreators.map((creator) => (
-                <article
+                <SlurpDiscoverCreatorCard
                   key={creator.profile.id}
-                  className="flex min-w-0 flex-col rounded-xl border border-[var(--noodle-divider)] bg-[var(--slurp-surface)] p-4 shadow-sm shadow-black/10 transition-[border-color,background-color,box-shadow] hover:border-[var(--noodle-accent)]/25 hover:bg-[var(--slurp-surface-raised)] hover:shadow-md motion-reduce:transition-none"
-                >
-                  <button
-                    type="button"
-                    onClick={() => postCardCtx.openAuthorProfile?.(creator.profile.id)}
-                    className="flex min-w-0 items-center gap-3 rounded-lg text-left transition-colors hover:text-[var(--noodle-accent)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--noodle-accent)]"
-                  >
-                    <ProfileInitial profile={creator.profile} />
-                    <span className="min-w-0 flex-1">
-                      <span className="block truncate text-sm font-semibold">{creator.profile.displayName}</span>
-                      <span className="block truncate text-xs text-[var(--muted-foreground)]">
-                        @{creator.profile.handle}
-                      </span>
-                    </span>
-                  </button>
-                  {creator.profile.bio && (
-                    <p className="mt-3 line-clamp-3 min-h-10 text-xs leading-5 text-[var(--muted-foreground)]">
-                      {creator.profile.bio}
-                    </p>
-                  )}
-                  <div className="mt-auto flex gap-2 pt-4">
-                    <button
-                      type="button"
-                      disabled={togglePending}
-                      onClick={() => onToggleFollow(creator.profile.id, creator.followed)}
-                      className="min-h-11 flex-1 rounded-lg border border-[var(--noodle-divider)] px-3 text-xs font-bold hover:bg-[var(--accent)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--noodle-accent)] disabled:opacity-50"
-                    >
-                      {creator.followed
-                        ? localizeUi("ui.slurp.profile.following")
-                        : localizeUi("ui.slurp.profile.follow")}
-                    </button>
-                    <button
-                      type="button"
-                      disabled={togglePending}
-                      onClick={() => onToggleSubscription(creator.profile.id, creator.subscribed)}
-                      className={cn(
-                        "min-h-11 flex-1 rounded-lg px-3 text-xs font-bold transition-opacity hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--noodle-accent)] disabled:opacity-50",
-                        creator.subscribed
-                          ? "border border-[var(--noodle-accent)]/40 bg-[var(--noodle-accent)]/10 text-[var(--noodle-accent-foreground)]"
-                          : "bg-[var(--noodle-accent)] text-zinc-950",
-                      )}
-                    >
-                      {creator.subscribed
-                        ? localizeUi("ui.slurp.profile.subscribed")
-                        : localizeUi("ui.slurp.profile.subscribe")}
-                    </button>
-                  </div>
-                </article>
+                  creator={creator}
+                  pending={togglePending}
+                  onOpenProfile={postCardCtx.openAuthorProfile}
+                  onToggleFollow={onToggleFollow}
+                  onToggleSubscription={onToggleSubscription}
+                />
               ))}
             </div>
           ) : (
@@ -4226,75 +4127,6 @@ function ViewerHub({
           onToggleCollapsed={() => setDiscoverCollapsed((value) => !value)}
         />
       </div>
-      {authorProfile ? (
-        <div className="bg-[var(--slurp-canvas)] px-3 py-3">
-          <section
-            aria-labelledby="slurp-creator-studio-heading"
-            className="overflow-hidden rounded-xl border border-[var(--noodle-divider)] bg-[var(--slurp-surface)] shadow-sm shadow-black/10"
-          >
-            <div className="px-4 pt-3">
-              <h2
-                id="slurp-creator-studio-heading"
-                className="text-xs font-bold uppercase tracking-[0.12em] text-[var(--noodle-accent)]"
-              >
-                {localizeUi("ui.slurp.home.creatorStudio")}
-              </h2>
-              <p className="mt-1 text-xs leading-5 text-[var(--muted-foreground)]">
-                {localizeUi("ui.slurp.home.creatorStudioDetail")}
-              </p>
-            </div>
-            <NoodlerPostComposer
-              key={authorProfile.id}
-              profile={authorProfile}
-              draft={authorDraft}
-              onDraftChange={onAuthorDraftChange}
-              onClearDraft={onClearAuthorDraft}
-              onDiscardDraft={onDiscardAuthorDraft}
-              onManualPost={onManualPost}
-              onGuidedPost={onGuidedPost}
-              manualPending={manualPending}
-              guidePending={guidePending}
-            />
-          </section>
-        </div>
-      ) : authorLoading ? (
-        <div className="border-b border-[var(--noodle-divider)] px-4 py-4 text-xs text-[var(--muted-foreground)]">
-          {localizeUi("ui.noodle.viewerhub.resolvingYourLinkedNoodlerProfile")}
-        </div>
-      ) : authorError ? (
-        <div className="border-b border-[var(--noodle-divider)] px-4 py-4">
-          <p className="text-sm font-semibold">
-            {localizeUi("ui.noodle.viewerhub.yourLinkedNoodlerProfileCouldNotBeLoaded")}
-          </p>
-          <button
-            type="button"
-            onClick={onRetryAuthor}
-            className="mt-3 min-h-10 rounded-md border border-[var(--noodle-divider)] px-3 text-xs font-bold hover:bg-[var(--accent)]"
-          >
-            {localizeUi("capabilities.actions.tryAgain")}
-          </button>
-        </div>
-      ) : (
-        <div className="border-b border-[var(--noodle-divider)] px-4 py-8">
-          <div className="mx-auto flex max-w-sm flex-col items-center gap-2 rounded-xl border border-[var(--noodle-divider)] bg-[var(--accent)]/20 px-6 py-8 text-center">
-            <p className="text-sm font-semibold">
-              {localizeUi("ui.noodle.viewerhub.thisPersonaHasNoLinkedNoodlerProfile")}
-            </p>
-            <p className="text-xs text-[var(--muted-foreground)]">
-              {localizeUi("ui.noodle.viewerhub.createOneToAuthorFromThisTimeline")}
-            </p>
-            {onCreateAuthorProfile && (
-              <button
-                type="button"
-                onClick={onCreateAuthorProfile}
-                className="mt-2 min-h-10 rounded-md bg-[var(--noodle-accent)] px-4 text-xs font-bold text-zinc-950 transition-opacity hover:opacity-90"
-              >
-                {localizeUi("ui.noodle.noodlehome.createStageProfile")}
-              </button>
-            )}
-          </div>
-        </div>
-      )}
       {!isLoading && !isError && scope && (
         <div className="flex items-end justify-between gap-4 bg-[var(--slurp-canvas)] px-4 pb-3 pt-5">
           <div>
@@ -4389,8 +4221,92 @@ function ViewerHub({
   );
 }
 
+function SlurpDiscoverCreatorCard({
+  creator,
+  pending,
+  onOpenProfile,
+  onToggleFollow,
+  onToggleSubscription,
+}: {
+  creator: SlurpViewerCreator;
+  pending: boolean;
+  onOpenProfile?: (accountId: string) => void;
+  onToggleFollow: (creatorAccountId: string, followed: boolean) => void;
+  onToggleSubscription: (creatorAccountId: string, subscribed: boolean) => void;
+}) {
+  const { t: localizeUi } = useUiTranslation();
+  const bannerSrc = useSlurpMediaSrc(creator.profile.bannerUrl);
+  const openProfile = () => onOpenProfile?.(creator.profile.id);
+
+  return (
+    <article className="group flex min-w-0 flex-col overflow-hidden rounded-xl bg-[var(--slurp-surface)] shadow-[0_1px_0_var(--noodle-divider),0_14px_30px_-24px_rgba(0,0,0,0.75)] ring-1 ring-inset ring-[var(--noodle-divider)] transition-[background-color,box-shadow,transform] hover:-translate-y-0.5 hover:bg-[var(--slurp-surface-raised)] hover:shadow-[0_1px_0_var(--noodle-accent),0_18px_36px_-22px_rgba(0,0,0,0.8)] motion-reduce:transition-none motion-reduce:hover:translate-y-0">
+      <button
+        type="button"
+        onClick={openProfile}
+        disabled={!onOpenProfile}
+        className="relative block h-28 w-full overflow-hidden bg-[linear-gradient(135deg,var(--noodle-accent)_0%,var(--slurp-surface-raised)_70%)] text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--noodle-accent)] disabled:cursor-default"
+        aria-label={localizeUi("ui.noodle.noodlehome.viewValue1", { value1: creator.profile.displayName })}
+      >
+        {bannerSrc && (
+          <img
+            src={bannerSrc}
+            alt=""
+            className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-[1.03] motion-reduce:transition-none motion-reduce:group-hover:scale-100"
+          />
+        )}
+        <span
+          className="pointer-events-none absolute inset-0 bg-[linear-gradient(to_top,rgba(8,4,10,0.82),transparent_72%)]"
+          aria-hidden="true"
+        />
+        <span className="absolute bottom-3 start-3 rounded-full bg-[var(--slurp-canvas)] p-0.5 shadow-lg ring-1 ring-white/10">
+          <ProfileInitial profile={creator.profile} />
+        </span>
+      </button>
+      <div className="flex flex-1 flex-col px-4 pb-4 pt-3">
+        <button
+          type="button"
+          onClick={openProfile}
+          disabled={!onOpenProfile}
+          className="min-w-0 rounded-md text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--noodle-accent)] disabled:cursor-default"
+        >
+          <span className="block truncate text-base font-bold">{creator.profile.displayName}</span>
+          <span className="block truncate text-xs text-[var(--muted-foreground)]">@{creator.profile.handle}</span>
+        </button>
+        {creator.profile.bio && (
+          <p className="mt-2 line-clamp-3 min-h-10 text-xs leading-5 text-[var(--muted-foreground)]">
+            {creator.profile.bio}
+          </p>
+        )}
+        <div className="mt-auto grid grid-cols-2 gap-2 pt-4">
+          <button
+            type="button"
+            disabled={pending}
+            onClick={() => onToggleFollow(creator.profile.id, creator.followed)}
+            className="min-h-11 rounded-lg border border-[var(--noodle-divider)] px-3 text-xs font-bold transition-[background-color,transform] hover:bg-[var(--accent)] active:scale-[0.96] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--noodle-accent)] motion-reduce:transition-none motion-reduce:active:scale-100 disabled:opacity-50"
+          >
+            {creator.followed ? localizeUi("ui.slurp.profile.following") : localizeUi("ui.slurp.profile.follow")}
+          </button>
+          <button
+            type="button"
+            disabled={pending}
+            onClick={() => onToggleSubscription(creator.profile.id, creator.subscribed)}
+            className={cn(
+              "min-h-11 rounded-lg px-3 text-xs font-bold transition-[background-color,opacity,transform] hover:opacity-90 active:scale-[0.96] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--noodle-accent)] motion-reduce:transition-none motion-reduce:active:scale-100 disabled:opacity-50",
+              creator.subscribed
+                ? "border border-[var(--noodle-accent)]/40 bg-[var(--noodle-accent)]/10 text-[var(--noodle-accent-foreground)]"
+                : "bg-[var(--noodle-accent)] text-zinc-950",
+            )}
+          >
+            {creator.subscribed ? localizeUi("ui.slurp.profile.subscribed") : localizeUi("ui.slurp.profile.subscribe")}
+          </button>
+        </div>
+      </div>
+    </article>
+  );
+}
+
 type SlurpMoment = {
-  creator: NonNullable<ReturnType<typeof useNoodlerViewer>["data"]>["creators"][number];
+  creator: SlurpViewerCreator;
   post: NoodlerPostView;
 };
 
@@ -4506,6 +4422,20 @@ function SlurpMomentViewer({
     onClose();
     onOpenProfile?.(moment.creator.profile.id);
   };
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.target instanceof HTMLInputElement || event.target instanceof HTMLTextAreaElement) return;
+      if (event.key === "ArrowLeft" && onPrevious) {
+        event.preventDefault();
+        onPrevious();
+      } else if (event.key === "ArrowRight" && onNext) {
+        event.preventDefault();
+        onNext();
+      }
+    };
+    document.addEventListener("keydown", handleKeyDown);
+    return () => document.removeEventListener("keydown", handleKeyDown);
+  }, [onNext, onPrevious]);
 
   return (
     <Modal
@@ -4513,6 +4443,9 @@ function SlurpMomentViewer({
       onClose={onClose}
       title={localizeUi("ui.slurp.moments.fromCreator", { name: moment.creator.profile.displayName })}
       width="max-w-lg"
+      mobileFullscreen
+      contentClassName="max-sm:p-0 sm:px-3 sm:py-3"
+      panelClassName="max-sm:bg-black"
       panelStyle={{
         "--background": "#120f14",
         "--foreground": "#fff8fc",
@@ -4520,7 +4453,10 @@ function SlurpMomentViewer({
         "--border": "rgba(255, 126, 193, 0.24)",
       }}
     >
-      <article data-component="SlurpHome.MomentViewer" className="overflow-hidden rounded-xl bg-black/25">
+      <article
+        data-component="SlurpHome.MomentViewer"
+        className="flex h-full min-h-0 flex-col overflow-hidden bg-black/25 sm:rounded-xl"
+      >
         <div className="flex items-center gap-3 px-3 py-3">
           <button
             type="button"
@@ -4558,7 +4494,7 @@ function SlurpMomentViewer({
             style={{ width: `${((index + 1) / total) * 100}%` }}
           />
         </div>
-        <div className="relative flex min-h-[26rem] items-center justify-center overflow-hidden bg-black sm:min-h-[34rem]">
+        <div className="relative flex min-h-[26rem] flex-1 items-center justify-center overflow-hidden bg-black sm:min-h-[34rem]">
           {mediaSrc ? (
             <img
               src={mediaSrc}

@@ -16,8 +16,6 @@
   "ui.slurp.home.feedDetail": "Publiczne wpisy, zablokowane publikacje i rozmowy z Twojej sieci twórców.",
   "ui.slurp.home.tonight": "Dziś wieczorem",
   "ui.slurp.home.tonightDetail": "Odkrywaj twórców i sprawdzaj, co dzieje się w Slurp.",
-  "ui.slurp.home.creatorStudio": "Studio twórcy",
-  "ui.slurp.home.creatorStudioDetail": "Publikuj bezpośrednio albo poprowadź Slurp za pomocą profilu twórcy.",
   "ui.slurp.home.latestDrops": "Najnowsze publikacje",
   "ui.slurp.home.latestDropsDetail": "Nowe posty z Twojej sieci twórców.",
   "ui.slurp.home.postCount": "Posty: {{count}}",

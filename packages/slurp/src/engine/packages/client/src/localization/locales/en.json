@@ -1260,8 +1260,6 @@
   "ui.slurp.home.feedDetail": "Public posts, locked releases, and conversations from your creator network.",
   "ui.slurp.home.tonight": "Tonight",
   "ui.slurp.home.tonightDetail": "Find creators and catch up on what is happening across Slurp.",
-  "ui.slurp.home.creatorStudio": "Creator studio",
-  "ui.slurp.home.creatorStudioDetail": "Publish directly or guide Slurp from your creator profile.",
   "ui.slurp.home.latestDrops": "Latest drops",
   "ui.slurp.home.latestDropsDetail": "Fresh posts from across your creator network.",
   "ui.slurp.home.postCount": "{{count}} posts",

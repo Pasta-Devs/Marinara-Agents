@@ -645,7 +645,7 @@ export function NoodleShell({
         </AnimatePresence>
         <div className="flex min-h-0 flex-1 justify-center overflow-hidden">
           <div className="flex min-h-0 w-full max-w-[1320px] justify-center">
-            <aside className="hidden w-[14rem] shrink-0 border-r border-[var(--noodle-divider)] bg-[var(--background)] @min-[1024px]:flex @min-[1024px]:flex-col">
+            <aside className="hidden w-[14rem] shrink-0 border-r border-[var(--noodle-divider)] bg-[linear-gradient(180deg,var(--slurp-surface-raised,var(--background)),var(--background)_38%)] @min-[1024px]:flex @min-[1024px]:flex-col">
               <div className="flex min-h-0 flex-1 flex-col px-4 py-4">
                 <div className="mb-5 flex h-12 items-center">
                   <NoodleLogo
@@ -662,10 +662,16 @@ export function NoodleShell({
                     onClick={onOpenHomeDestination}
                     aria-current={homeActive ? "page" : undefined}
                     className={cn(
-                      "flex min-h-11 w-full items-center gap-3 rounded-lg px-3 text-left text-sm font-semibold transition-[background-color,color,transform] hover:bg-[var(--accent)] active:scale-[0.96] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--noodle-accent)] motion-reduce:transition-none motion-reduce:active:scale-100",
-                      homeActive && "bg-[var(--noodle-accent)]/12 text-[var(--foreground)]",
+                      "relative flex min-h-11 w-full items-center gap-3 overflow-hidden rounded-lg px-3 text-left text-sm font-semibold transition-[background-color,color,transform] hover:bg-[var(--accent)] active:scale-[0.96] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--noodle-accent)] motion-reduce:transition-none motion-reduce:active:scale-100",
+                      homeActive && "bg-[var(--noodle-accent)]/12 text-[var(--foreground)] shadow-sm shadow-black/10",
                     )}
                   >
+                    {homeActive && (
+                      <span
+                        className="absolute inset-y-2 start-0 w-0.5 rounded-full bg-[var(--noodle-accent)]"
+                        aria-hidden="true"
+                      />
+                    )}
                     <Home size={22} className="!text-[var(--noodle-accent)]" />
                     {homeLabel}
                   </button>
@@ -675,10 +681,16 @@ export function NoodleShell({
                       onClick={onOpenSearch}
                       aria-current={activeView === "search" ? "page" : undefined}
                       className={cn(
-                        "flex min-h-11 w-full items-center gap-3 rounded-lg px-3 text-left text-sm font-semibold transition-[background-color,color,transform] hover:bg-[var(--accent)] active:scale-[0.96] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--noodle-accent)] motion-reduce:transition-none motion-reduce:active:scale-100",
-                        activeView === "search" && "bg-[var(--noodle-accent)]/10",
+                        "relative flex min-h-11 w-full items-center gap-3 overflow-hidden rounded-lg px-3 text-left text-sm font-semibold transition-[background-color,color,transform] hover:bg-[var(--accent)] active:scale-[0.96] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--noodle-accent)] motion-reduce:transition-none motion-reduce:active:scale-100",
+                        activeView === "search" && "bg-[var(--noodle-accent)]/10 shadow-sm shadow-black/10",
                       )}
                     >
+                      {activeView === "search" && (
+                        <span
+                          className="absolute inset-y-2 start-0 w-0.5 rounded-full bg-[var(--noodle-accent)]"
+                          aria-hidden="true"
+                        />
+                      )}
                       <Search size={22} className="!text-[var(--noodle-accent)]" />
                       {noodlerActive
                         ? localizeUi("ui.noodle.noodleshell.discover")
@@ -693,10 +705,16 @@ export function NoodleShell({
                       onClick={onOpenProfile}
                       aria-current={activeView === "profile" ? "page" : undefined}
                       className={cn(
-                        "flex min-h-11 w-full items-center gap-3 rounded-lg px-3 text-left text-sm font-semibold transition-[background-color,color,transform] hover:bg-[var(--accent)] active:scale-[0.96] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--noodle-accent)] motion-reduce:transition-none motion-reduce:active:scale-100",
-                        activeView === "profile" && "bg-[var(--noodle-accent)]/10",
+                        "relative flex min-h-11 w-full items-center gap-3 overflow-hidden rounded-lg px-3 text-left text-sm font-semibold transition-[background-color,color,transform] hover:bg-[var(--accent)] active:scale-[0.96] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--noodle-accent)] motion-reduce:transition-none motion-reduce:active:scale-100",
+                        activeView === "profile" && "bg-[var(--noodle-accent)]/10 shadow-sm shadow-black/10",
                       )}
                     >
+                      {activeView === "profile" && (
+                        <span
+                          className="absolute inset-y-2 start-0 w-0.5 rounded-full bg-[var(--noodle-accent)]"
+                          aria-hidden="true"
+                        />
+                      )}
                       <User size={22} className="!text-[var(--noodle-accent)]" />
                       {slurpActive
                         ? localizeUi("ui.slurp.navigation.profile", { defaultValue: "Creator profile" })
@@ -708,10 +726,16 @@ export function NoodleShell({
                     onClick={onOpenSettings}
                     aria-current={activeView === "settings" ? "page" : undefined}
                     className={cn(
-                      "flex min-h-11 w-full items-center gap-3 rounded-lg px-3 text-left text-sm font-semibold transition-[background-color,color,transform] hover:bg-[var(--accent)] active:scale-[0.96] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--noodle-accent)] motion-reduce:transition-none motion-reduce:active:scale-100",
-                      activeView === "settings" && "bg-[var(--noodle-accent)]/10",
+                      "relative flex min-h-11 w-full items-center gap-3 overflow-hidden rounded-lg px-3 text-left text-sm font-semibold transition-[background-color,color,transform] hover:bg-[var(--accent)] active:scale-[0.96] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--noodle-accent)] motion-reduce:transition-none motion-reduce:active:scale-100",
+                      activeView === "settings" && "bg-[var(--noodle-accent)]/10 shadow-sm shadow-black/10",
                     )}
                   >
+                    {activeView === "settings" && (
+                      <span
+                        className="absolute inset-y-2 start-0 w-0.5 rounded-full bg-[var(--noodle-accent)]"
+                        aria-hidden="true"
+                      />
+                    )}
                     <Settings2 size={22} className="!text-[var(--noodle-accent)]" />
                     {localizeUi("navigation.topbar.settings")}
                   </button>
@@ -821,7 +845,7 @@ export function NoodleShell({
         </div>
 
         <nav
-          className="absolute inset-x-0 bottom-0 z-50 border-t border-[var(--noodle-divider)] bg-[var(--background)]/95 backdrop-blur @min-[1024px]:hidden"
+          className="absolute inset-x-0 bottom-0 z-50 border-t border-[var(--noodle-divider)] bg-[var(--background)]/92 shadow-[0_-12px_30px_-24px_rgba(0,0,0,0.9)] backdrop-blur-xl @min-[1024px]:hidden"
           style={{ paddingBottom: BOTTOM_SAFE_INSET }}
           aria-label={
             slurpActive
@@ -855,7 +879,10 @@ export function NoodleShell({
               onClick={onMobileHomeTap}
               aria-label={localizeUi("ui.noodle.noodleshell.noodleValue1", { value1: homeLabel })}
               aria-current={homeActive ? "page" : undefined}
-              className="relative flex items-center justify-center transition-colors hover:bg-[var(--noodle-accent)]/10 active:bg-[var(--noodle-accent)]/15 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--noodle-accent)]"
+              className={cn(
+                "relative flex items-center justify-center transition-colors hover:bg-[var(--noodle-accent)]/10 active:bg-[var(--noodle-accent)]/15 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--noodle-accent)]",
+                homeActive && "bg-[var(--noodle-accent)]/[0.07]",
+              )}
             >
               <span className="relative flex h-8 w-12 items-center justify-center">
                 <img
@@ -876,7 +903,10 @@ export function NoodleShell({
                     : localizeUi("ui.noodle.noodlehome.profile")
                 }
                 aria-current={activeView === "profile" ? "page" : undefined}
-                className="relative flex items-center justify-center transition-colors hover:bg-[var(--noodle-accent)]/10 active:bg-[var(--noodle-accent)]/15 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--noodle-accent)]"
+                className={cn(
+                  "relative flex items-center justify-center transition-colors hover:bg-[var(--noodle-accent)]/10 active:bg-[var(--noodle-accent)]/15 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--noodle-accent)]",
+                  activeView === "profile" && "bg-[var(--noodle-accent)]/[0.07]",
+                )}
               >
                 <User size={22} strokeWidth={activeView === "profile" ? 2.8 : 2} />
                 {activeView === "profile" && (
@@ -896,7 +926,10 @@ export function NoodleShell({
                       : localizeUi("ui.noodle.noodlehome.searchNoodle")
                 }
                 aria-current={activeView === "search" ? "page" : undefined}
-                className="relative flex items-center justify-center transition-colors hover:bg-[var(--noodle-accent)]/10 active:bg-[var(--noodle-accent)]/15 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--noodle-accent)]"
+                className={cn(
+                  "relative flex items-center justify-center transition-colors hover:bg-[var(--noodle-accent)]/10 active:bg-[var(--noodle-accent)]/15 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--noodle-accent)]",
+                  activeView === "search" && "bg-[var(--noodle-accent)]/[0.07]",
+                )}
               >
                 <Search size={22} strokeWidth={activeView === "search" ? 2.8 : 2} />
                 {activeView === "search" && (

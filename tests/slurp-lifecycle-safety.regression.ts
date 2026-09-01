@@ -94,11 +94,19 @@ assert.match(
   /moment\.post\.locked[\s\S]*?onUnlock\(moment\.post\.id\)[\s\S]*?onToggleSubscription/u,
   "locked Moments must retain both supported access paths",
 );
+assert.match(home, /mobileFullscreen/u, "Moments must fill the mobile viewport");
+assert.match(home, /event\.key === "ArrowLeft"[\s\S]*?event\.key === "ArrowRight"/u);
 assert.match(home, /ui\.slurp\.home\.latestDrops/u, "Home must separate lobby content from the post stream");
-assert.match(home, /ui\.slurp\.home\.creatorStudio/u, "the creator composer must read as a separate Studio surface");
-assert.doesNotMatch(home, /collapsible=\{false\}/u, "the Home Studio composer must stay progressively disclosed");
+const viewerHub = home.slice(home.indexOf("function ViewerHub"), home.indexOf("function SlurpDiscoverCreatorCard"));
+assert.doesNotMatch(viewerHub, /<NoodlerPostComposer/u, "the viewer-first Home lobby must not contain publishing");
+assert.match(
+  home,
+  /data-slurp-creator-tools[\s\S]*?<NoodlerPostComposer/u,
+  "managed Creator Rooms must retain publishing",
+);
 assert.match(home, /ui\.slurp\.discover\.title/u);
 assert.match(home, /sm:grid-cols-2/u, "Discover must present creators as adaptive cards");
+assert.match(home, /function SlurpDiscoverCreatorCard[\s\S]*?useSlurpMediaSrc\(creator\.profile\.bannerUrl\)/u);
 assert.match(home, /tabs=\{\[\{ id: "emoji"/u, "the main composer must expose only its functional emoji media tab");
 assert.doesNotMatch(home, /tabs=\{\[[^\]]*id: "gif"/u, "the main composer must not expose its no-op GIF action");
 assert.match(home, /motion-reduce:transition-none/u);
@@ -134,6 +142,9 @@ assert.match(settings, /md:grid-cols-\[13rem_minmax\(0,1fr\)\]/u, "settings must
 assert.match(settings, /<select[\s\S]*?settingsSections\.map/u, "narrow settings must expose one section selector");
 assert.match(settings, /aria-live="polite"/u, "settings saves must announce their state");
 assert.match(settings, /selectedCreatorId/u, "creator settings must keep an explicit master-detail selection");
+assert.match(settings, /data-slurp-setting-toggle/u);
+assert.match(settings, /role="switch"/u, "polished settings toggles must retain native checkbox semantics");
+assert.match(settings, /lg:sticky lg:top-4/u, "the desktop Creator list must remain visible beside its detail");
 assert.match(settings, /ui\.slurp\.settings\.creators\.personaAutomationDetail/u);
 assert.match(settings, /ui\.slurp\.settings\.creators\.moreActions/u);
 const profileList = storage.slice(
@@ -176,6 +187,11 @@ assert.match(home, /management: true/u, "subscriber data must be marked as creat
 assert.match(home, /ui\.slurp\.profile\.creatorToolsDetail/u);
 assert.match(home, /ui\.slurp\.profile\.creatorRoom/u);
 assert.match(profileSurface, /sm:h-72/u, "Creator Rooms must keep an immersive desktop banner");
+assert.match(
+  profileSurface,
+  /flex-col items-start gap-3 sm:flex-row sm:items-end/u,
+  "Creator Room identity and actions must stack before they run out of width",
+);
 assert.match(profileSurface, /<Avatar account=\{account\} size="xl"/u);
 assert.match(home, /function SourceAccountAvatar[\s\S]*?useSlurpMediaSrc\(account\.avatarUrl\)/u);
 assert.match(home, /function SourceAccountAvatar[\s\S]*?<img src=\{source\}/u);

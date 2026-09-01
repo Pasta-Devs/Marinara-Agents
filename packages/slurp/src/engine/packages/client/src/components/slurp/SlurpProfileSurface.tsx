@@ -189,7 +189,12 @@ export function SlurpProfileSurface<TTab extends string = SlurpProfileTab>({
           hasBanner ? "-mt-14" : "mt-5",
         )}
       >
-        <div className={cn("flex w-full items-end justify-between gap-3", hasBanner ? "-mt-10" : "pt-5")}>
+        <div
+          className={cn(
+            "flex w-full flex-col items-start gap-3 sm:flex-row sm:items-end sm:justify-between",
+            hasBanner ? "-mt-10" : "pt-5",
+          )}
+        >
           {avatarUpload ? (
             <div className="group relative">
               <button
@@ -199,7 +204,7 @@ export function SlurpProfileSurface<TTab extends string = SlurpProfileTab>({
                 }}
                 disabled={!avatarUpload.canEdit || avatarUpload.uploadTarget === "avatar"}
                 className={cn(
-                  "relative rounded-full bg-[var(--background)] p-1 text-left disabled:cursor-default",
+                  "relative rounded-full bg-[var(--background)] p-1 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--noodle-accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--slurp-surface-raised,var(--background))] disabled:cursor-default",
                   avatarUpload.uploadTarget === "avatar" && "cursor-wait opacity-80",
                 )}
                 title={avatarUpload.canEdit ? localizeUi("editor.avatar.upload") : undefined}
@@ -247,7 +252,7 @@ export function SlurpProfileSurface<TTab extends string = SlurpProfileTab>({
               onChange={avatarUpload.onFileChange}
             />
           )}
-          <div className="flex min-h-11 min-w-0 flex-wrap items-center justify-end gap-2">
+          <div className="flex min-h-11 w-full min-w-0 flex-wrap items-center gap-2 [&>button]:flex-1 sm:w-auto sm:justify-end sm:[&>button]:flex-none">
             {leadingActions}
             {editor ? (
               <button
@@ -257,7 +262,7 @@ export function SlurpProfileSurface<TTab extends string = SlurpProfileTab>({
                   else editor.onStartEditing();
                 }}
                 disabled={editor.isEditing ? !editor.canSave || editor.isSaving : false}
-                className="h-9 rounded-full bg-[var(--noodle-accent)] px-5 text-xs font-bold text-zinc-950 transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
+                className="min-h-11 rounded-lg bg-[var(--noodle-accent)] px-5 text-xs font-bold text-zinc-950 transition-[opacity,transform] hover:opacity-90 active:scale-[0.96] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--noodle-accent)] motion-reduce:transition-none motion-reduce:active:scale-100 disabled:cursor-not-allowed disabled:opacity-50"
               >
                 {editor.isEditing
                   ? editor.isSaving
@@ -271,7 +276,7 @@ export function SlurpProfileSurface<TTab extends string = SlurpProfileTab>({
                 onClick={followAction.onToggle}
                 disabled={followAction.pending}
                 className={cn(
-                  "h-9 rounded-full px-5 text-xs font-bold transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50",
+                  "min-h-11 rounded-lg px-5 text-xs font-bold transition-[opacity,transform] hover:opacity-90 active:scale-[0.96] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--noodle-accent)] motion-reduce:transition-none motion-reduce:active:scale-100 disabled:cursor-not-allowed disabled:opacity-50",
                   followAction.followed
                     ? "border border-[var(--noodle-divider)] text-[var(--foreground)]"
                     : "bg-[var(--foreground)] text-[var(--background)]",
@@ -370,7 +375,7 @@ export function SlurpProfileSurface<TTab extends string = SlurpProfileTab>({
           </div>
         )}
       </div>
-      <div className="mx-3 mt-4 overflow-hidden rounded-xl border border-[var(--noodle-divider)] bg-[var(--slurp-surface,var(--background))] sm:mx-5">
+      <div className="mt-4 overflow-hidden border-y border-[var(--noodle-divider)] bg-[var(--slurp-surface,var(--background))] sm:mx-5 sm:rounded-xl sm:border">
         {preTabsContent}
         {featuredContent}
         <div

@@ -271,7 +271,7 @@ export function SlurpSettings({
     <>
       <main className="h-full overflow-y-auto bg-[var(--slurp-canvas,var(--background))] pb-[calc(5rem+env(safe-area-inset-bottom))] sm:pb-8">
         <div className="mx-auto flex w-full max-w-6xl flex-col gap-6 p-4 sm:p-6 lg:p-8">
-          <header className="flex flex-wrap items-start justify-between gap-4 border-b border-[var(--border)] pb-5">
+          <header className="flex flex-wrap items-start justify-between gap-4 rounded-2xl bg-[linear-gradient(135deg,var(--slurp-surface-raised,var(--background)),var(--noodle-accent)_240%)] p-5 shadow-[0_16px_38px_-30px_rgba(0,0,0,0.85)] ring-1 ring-inset ring-[var(--border)] sm:p-6">
             <div className="min-w-0">
               <p className="text-xs font-semibold uppercase tracking-[0.16em] text-[var(--noodle-accent)]">Slurp</p>
               <h1 className="mt-1 text-2xl font-bold">{t("ui.slurp.settings.title")}</h1>
@@ -280,7 +280,7 @@ export function SlurpSettings({
               </p>
             </div>
             <p
-              className="min-h-6 rounded-full border border-[var(--border)] bg-[var(--slurp-surface,var(--background))] px-3 py-1 text-xs text-[var(--muted-foreground)]"
+              className="inline-flex min-h-8 items-center rounded-full bg-[var(--slurp-surface,var(--background))] px-3 py-1 text-xs font-medium text-[var(--muted-foreground)] shadow-sm ring-1 ring-inset ring-[var(--border)]"
               role="status"
               aria-live="polite"
             >
@@ -293,7 +293,7 @@ export function SlurpSettings({
                     : t("ui.slurp.settings.autoSave")}
             </p>
           </header>
-          <label className="block space-y-2 md:hidden">
+          <label className="sticky top-0 z-20 -mx-4 block space-y-2 border-b border-[var(--border)] bg-[var(--slurp-canvas,var(--background))]/95 px-4 pb-3 pt-2 backdrop-blur-xl sm:-mx-6 sm:px-6 md:hidden">
             <span className="text-xs font-semibold text-[var(--muted-foreground)]">
               {t("ui.slurp.settings.sectionsLabel")}
             </span>
@@ -317,7 +317,7 @@ export function SlurpSettings({
 
           <div className="md:grid md:grid-cols-[13rem_minmax(0,1fr)] md:items-start md:gap-6">
             <nav
-              className="sticky top-4 hidden rounded-xl border border-[var(--border)] bg-[var(--slurp-surface,var(--background))] p-2 md:flex md:flex-col"
+              className="sticky top-4 hidden rounded-xl bg-[var(--slurp-surface,var(--background))] p-2 shadow-[0_16px_36px_-28px_rgba(0,0,0,0.8)] ring-1 ring-inset ring-[var(--border)] md:flex md:flex-col"
               aria-label={t("ui.slurp.settings.sectionsLabel")}
             >
               {settingsSections.map((item) => (
@@ -326,14 +326,14 @@ export function SlurpSettings({
                   type="button"
                   aria-current={section === item ? "page" : undefined}
                   onClick={() => onNavigate({ ...navigation, section: item })}
-                  className={`min-h-11 rounded-lg px-3 text-left text-sm font-semibold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--noodle-accent)] ${section === item ? "bg-[var(--noodle-accent)]/12 text-[var(--noodle-accent-foreground)]" : "text-[var(--muted-foreground)] hover:bg-[var(--accent)] hover:text-[var(--foreground)]"}`}
+                  className={`relative min-h-11 overflow-hidden rounded-lg px-3 text-left text-sm font-semibold transition-[background-color,color,transform] active:scale-[0.96] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--noodle-accent)] motion-reduce:transition-none motion-reduce:active:scale-100 ${section === item ? "bg-[var(--noodle-accent)]/12 text-[var(--noodle-accent-foreground)] shadow-sm shadow-black/10 before:absolute before:inset-y-2 before:start-0 before:w-0.5 before:rounded-full before:bg-[var(--noodle-accent)]" : "text-[var(--muted-foreground)] hover:bg-[var(--accent)] hover:text-[var(--foreground)]"}`}
                 >
                   {t(`ui.slurp.settings.tabs.${item === "general" ? "publishing" : item}`)}
                 </button>
               ))}
             </nav>
 
-            <div className="mt-5 min-w-0 rounded-xl border border-[var(--border)] bg-[var(--slurp-surface,var(--background))] p-4 shadow-sm md:mt-0 md:p-6">
+            <div className="mt-5 min-w-0 rounded-xl bg-[var(--slurp-surface,var(--background))] p-4 shadow-[0_18px_44px_-34px_rgba(0,0,0,0.9)] ring-1 ring-inset ring-[var(--border)] md:mt-0 md:p-6">
               {section === "general" && (
                 <div className="space-y-6">
                   <SectionTitle
@@ -600,7 +600,7 @@ export function SlurpSettings({
                   ) : accountsQuery.data?.length && selectedCreator ? (
                     <div className="grid min-w-0 gap-4 lg:grid-cols-[minmax(12rem,0.8fr)_minmax(0,1.6fr)]">
                       <div
-                        className="overflow-hidden rounded-xl border border-[var(--border)] bg-[var(--slurp-surface-raised,var(--background))]"
+                        className="overflow-hidden rounded-xl bg-[var(--slurp-surface-raised,var(--background))] ring-1 ring-inset ring-[var(--border)] lg:sticky lg:top-4 lg:max-h-[calc(100dvh-8rem)] lg:overflow-y-auto"
                         aria-label={t("ui.slurp.settings.creators.listLabel")}
                       >
                         {accountsQuery.data.map((creator) => {
@@ -636,39 +636,45 @@ export function SlurpSettings({
                       </div>
 
                       <section
-                        className="min-w-0 overflow-hidden rounded-xl border border-[var(--border)]"
+                        className="min-w-0 overflow-hidden rounded-xl ring-1 ring-inset ring-[var(--border)]"
                         aria-labelledby="slurp-selected-creator-title"
                       >
-                        <div className="flex flex-wrap items-center gap-3 border-b border-[var(--border)] bg-[var(--slurp-surface-raised,var(--background))] p-4">
-                          <Avatar account={selectedCreator} />
-                          <div className="min-w-0 flex-1">
-                            <h2 id="slurp-selected-creator-title" className="truncate text-base font-bold">
-                              {selectedCreator.displayName}
-                            </h2>
-                            <p className="truncate text-xs text-[var(--muted-foreground)]">@{selectedCreator.handle}</p>
+                        <div className="flex flex-col gap-3 border-b border-[var(--border)] bg-[var(--slurp-surface-raised,var(--background))] p-4 sm:flex-row sm:items-center">
+                          <div className="flex min-w-0 items-center gap-3">
+                            <Avatar account={selectedCreator} />
+                            <div className="min-w-0 flex-1">
+                              <h2 id="slurp-selected-creator-title" className="truncate text-base font-bold">
+                                {selectedCreator.displayName}
+                              </h2>
+                              <p className="truncate text-xs text-[var(--muted-foreground)]">
+                                @{selectedCreator.handle}
+                              </p>
+                            </div>
                           </div>
-                          <button
-                            type="button"
-                            onClick={() =>
-                              onNavigate({
-                                mode: "creator",
-                                view: "profile",
-                                accountId: selectedCreator.id,
-                                returnToSettings: navigation,
-                              })
-                            }
-                            className="min-h-11 rounded-lg border border-[var(--border)] px-3 text-xs font-semibold hover:bg-[var(--accent)]"
-                          >
-                            {t("ui.slurp.settings.creators.viewProfile")}
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => onEditCreator(selectedCreator)}
-                            className="inline-flex min-h-11 items-center gap-2 rounded-lg bg-[var(--noodle-accent)] px-3 text-xs font-bold text-zinc-950"
-                          >
-                            <Pencil size={14} />
-                            {t("ui.slurp.settings.creators.edit")}
-                          </button>
+                          <div className="grid grid-cols-2 gap-2 sm:ml-auto sm:flex">
+                            <button
+                              type="button"
+                              onClick={() =>
+                                onNavigate({
+                                  mode: "creator",
+                                  view: "profile",
+                                  accountId: selectedCreator.id,
+                                  returnToSettings: navigation,
+                                })
+                              }
+                              className="min-h-11 rounded-lg border border-[var(--border)] px-3 text-xs font-semibold hover:bg-[var(--accent)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--noodle-accent)]"
+                            >
+                              {t("ui.slurp.settings.creators.viewProfile")}
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => onEditCreator(selectedCreator)}
+                              className="inline-flex min-h-11 items-center justify-center gap-2 rounded-lg bg-[var(--noodle-accent)] px-3 text-xs font-bold text-zinc-950 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--noodle-accent)]"
+                            >
+                              <Pencil size={14} />
+                              {t("ui.slurp.settings.creators.edit")}
+                            </button>
+                          </div>
                         </div>
 
                         <div className="space-y-5 p-4">
@@ -1292,7 +1298,10 @@ function SectionTitle({ title, detail }: { title: string; detail: string }) {
 }
 function CreatorDetailGroup({ title, children }: { title: string; children: ReactNode }) {
   return (
-    <section className="space-y-3" aria-label={title}>
+    <section
+      className="space-y-3 rounded-xl bg-[var(--slurp-surface-raised,var(--background))] p-4 ring-1 ring-inset ring-[var(--border)]"
+      aria-label={title}
+    >
       <h3 className="text-xs font-bold uppercase tracking-[0.12em] text-[var(--muted-foreground)]">{title}</h3>
       {children}
     </section>
@@ -1330,7 +1339,8 @@ function Toggle({
 }) {
   return (
     <label
-      className={`flex ${compact ? "min-h-10" : "min-h-16"} items-center justify-between gap-3 rounded-md border border-[var(--border)] px-3 py-2 text-sm`}
+      data-slurp-setting-toggle
+      className={`group flex ${compact ? "min-h-11" : "min-h-16"} cursor-pointer items-center justify-between gap-3 rounded-lg bg-[var(--slurp-surface-raised,var(--background))] px-3 py-2 text-sm ring-1 ring-inset ring-[var(--border)] transition-[background-color,box-shadow] hover:bg-[var(--accent)]/40 focus-within:ring-2 focus-within:ring-[var(--noodle-accent)] motion-reduce:transition-none`}
     >
       <span className="min-w-0">
         <span className="block font-semibold">{label}</span>
@@ -1340,9 +1350,14 @@ function Toggle({
       </span>
       <input
         type="checkbox"
+        role="switch"
         checked={value}
         onChange={(event) => onChange(event.target.checked)}
-        className="h-4 w-4 shrink-0 accent-[var(--noodle-accent)]"
+        className="peer sr-only"
+      />
+      <span
+        aria-hidden="true"
+        className="relative h-6 w-11 shrink-0 rounded-full bg-[var(--muted-foreground)]/25 shadow-inner transition-colors after:absolute after:left-0.5 after:top-0.5 after:h-5 after:w-5 after:rounded-full after:bg-white after:shadow-sm after:transition-transform peer-checked:bg-[var(--noodle-accent)] peer-checked:after:translate-x-5 peer-focus-visible:outline peer-focus-visible:outline-2 peer-focus-visible:outline-offset-2 peer-focus-visible:outline-[var(--noodle-accent)] motion-reduce:transition-none motion-reduce:after:transition-none"
       />
     </label>
   );

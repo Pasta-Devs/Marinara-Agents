@@ -16,8 +16,6 @@
   "ui.slurp.home.feedDetail": "Öffentliche Beiträge, gesperrte Veröffentlichungen und Gespräche aus deinem Creator-Netzwerk.",
   "ui.slurp.home.tonight": "Heute Abend",
   "ui.slurp.home.tonightDetail": "Entdecke Creator und erfahre, was gerade auf Slurp passiert.",
-  "ui.slurp.home.creatorStudio": "Creator-Studio",
-  "ui.slurp.home.creatorStudioDetail": "Veröffentliche direkt oder führe Slurp über dein Creator-Profil.",
   "ui.slurp.home.latestDrops": "Neueste Drops",
   "ui.slurp.home.latestDropsDetail": "Neue Beiträge aus deinem Creator-Netzwerk.",
   "ui.slurp.home.postCount": "{{count}} Beiträge",
