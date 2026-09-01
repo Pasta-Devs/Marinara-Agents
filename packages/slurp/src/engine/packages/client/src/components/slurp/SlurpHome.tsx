@@ -1333,7 +1333,7 @@ export function SlurpHome({ navigation, onNavigate }: SlurpHomeProps) {
 
   if (navigation.mode === "creator-settings") {
     return (
-      <NoodleShell {...shellProps} rightRail={emptyRightRail}>
+      <NoodleShell {...shellProps}>
         <SlurpSettings
           navigation={navigation}
           onNavigate={onNavigate}
@@ -1699,15 +1699,25 @@ export function SlurpHome({ navigation, onNavigate }: SlurpHomeProps) {
   const feedRightRail = (
     <aside className="hidden w-[20rem] shrink-0 px-4 py-4 @min-[1280px]:block" aria-labelledby="slurp-tonight-heading">
       <div className="sticky top-3 space-y-4">
-        <div className="space-y-1 px-1">
-          <h2 id="slurp-tonight-heading" className="text-base font-bold tracking-tight">
-            {localizeUi("ui.slurp.home.tonight")}
-          </h2>
-          <p className="text-xs leading-5 text-[var(--muted-foreground)]">
+        <div className="relative isolate overflow-hidden rounded-2xl bg-[linear-gradient(145deg,var(--slurp-surface-raised),color-mix(in_srgb,var(--noodle-accent)_10%,var(--slurp-surface)))] p-4 shadow-[0_18px_38px_-30px_rgba(0,0,0,0.9)] ring-1 ring-inset ring-[var(--noodle-divider)]">
+          <span
+            className="pointer-events-none absolute -end-8 -top-12 -z-10 h-32 w-32 rounded-full bg-[var(--noodle-accent)]/12 blur-2xl"
+            aria-hidden="true"
+          />
+          <div className="flex items-center gap-2">
+            <span
+              className="h-2 w-2 rounded-full bg-[var(--slurp-warm)] shadow-[0_0_14px_var(--slurp-warm)]"
+              aria-hidden="true"
+            />
+            <h2 id="slurp-tonight-heading" className="text-base font-black tracking-tight">
+              {localizeUi("ui.slurp.home.tonight")}
+            </h2>
+          </div>
+          <p className="mt-1 text-xs leading-5 text-[var(--muted-foreground)] text-pretty">
             {localizeUi("ui.slurp.home.tonightDetail")}
           </p>
         </div>
-        <label className="flex min-h-11 items-center gap-2 rounded-lg border border-[var(--noodle-divider)] bg-[var(--slurp-surface)] px-3 text-sm transition-colors focus-within:border-[var(--noodle-accent)]">
+        <label className="flex min-h-11 items-center gap-2 rounded-xl bg-[var(--slurp-surface)] px-3 text-sm shadow-sm ring-1 ring-inset ring-[var(--noodle-divider)] transition-[background-color,box-shadow] focus-within:bg-[var(--slurp-surface-raised)] focus-within:ring-2 focus-within:ring-[var(--noodle-accent)]">
           <Search size={17} className="shrink-0 !text-[var(--noodle-accent)]" />
           <input
             value={feedSearch}
@@ -3320,13 +3330,12 @@ function StageProfileView({
           managedCreator ? (
             <details
               data-slurp-creator-tools
-              className="group border-b border-[var(--noodle-divider)] bg-[linear-gradient(135deg,var(--slurp-surface-raised,var(--background)),var(--noodle-accent)_220%)]"
+              className="group border-b border-[var(--noodle-divider)] bg-[linear-gradient(135deg,var(--slurp-surface-raised,var(--background)),color-mix(in_srgb,var(--noodle-accent)_12%,var(--slurp-surface-raised)))]"
             >
-              <summary className="flex min-h-14 cursor-pointer list-none items-center gap-3 px-4 text-left hover:bg-[var(--accent)]/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--noodle-accent)] [&::-webkit-details-marker]:hidden sm:px-5">
-                <ChevronDown
-                  size={15}
-                  className="transition-transform group-open:rotate-180 motion-reduce:transition-none"
-                />
+              <summary className="flex min-h-16 cursor-pointer list-none items-center gap-3 px-4 text-left hover:bg-[var(--accent)]/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--noodle-accent)] [&::-webkit-details-marker]:hidden sm:px-5">
+                <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[var(--noodle-accent)]/12 text-[var(--noodle-accent)] ring-1 ring-inset ring-[var(--noodle-accent)]/20">
+                  <Sparkles size={15} aria-hidden="true" />
+                </span>
                 <span className="min-w-0 flex-1">
                   <span className="block text-sm font-bold text-[var(--foreground)]">
                     {localizeUi("ui.slurp.profile.creatorTools")}
@@ -3340,20 +3349,25 @@ function StageProfileView({
                     {localizeUi("ui.noodle.stageprofileview.yourProfile")}
                   </span>
                 )}
+                <ChevronDown
+                  size={16}
+                  className="shrink-0 transition-transform group-open:rotate-180 motion-reduce:transition-none"
+                  aria-hidden="true"
+                />
               </summary>
               <div className="border-t border-[var(--noodle-divider)]">
-                <div className="flex flex-wrap items-center gap-2 p-3 sm:p-4">
+                <div className="grid grid-cols-2 gap-2 p-3 [&>button:first-child]:col-span-2 sm:flex sm:flex-wrap sm:items-center sm:p-4 sm:[&>button:first-child]:col-span-1">
                   <button
                     type="button"
                     onClick={onEdit}
-                    className="min-h-11 rounded-lg bg-[var(--noodle-accent)] px-4 text-xs font-bold text-zinc-950"
+                    className="min-h-11 rounded-lg bg-[var(--noodle-accent)] px-4 text-xs font-bold text-zinc-950 shadow-sm transition-[opacity,transform] hover:opacity-90 active:scale-[0.96] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--noodle-accent)] motion-reduce:transition-none motion-reduce:active:scale-100"
                   >
                     {localizeUi("ui.noodle.stageprofileview.editProfile")}
                   </button>
                   <button
                     type="button"
                     onClick={() => setAccessSettingsOpen(true)}
-                    className="min-h-11 rounded-lg border border-[var(--noodle-divider)] px-4 text-xs font-bold hover:bg-[var(--accent)]"
+                    className="min-h-11 rounded-lg border border-[var(--noodle-divider)] px-3 text-xs font-bold hover:bg-[var(--accent)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--noodle-accent)]"
                   >
                     {localizeUi("ui.noodle.stageprofileview.access")}
                   </button>
@@ -3361,7 +3375,7 @@ function StageProfileView({
                     <button
                       type="button"
                       onClick={() => setAutomationOpen(true)}
-                      className="min-h-11 rounded-lg border border-[var(--noodle-divider)] px-4 text-xs font-bold hover:bg-[var(--accent)]"
+                      className="min-h-11 rounded-lg border border-[var(--noodle-divider)] px-3 text-xs font-bold hover:bg-[var(--accent)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--noodle-accent)]"
                     >
                       {autoPosting.enabled
                         ? localizeUi("ui.noodle.stageprofileview.automationOn")
@@ -4058,7 +4072,7 @@ function ViewerHub({
           triggerRef={mobileDrawerTriggerRef}
         />
         <div className="border-b border-[var(--noodle-divider)] bg-[var(--background)]/95 backdrop-blur">
-          <div className="hidden px-4 pb-1 pt-4 @min-[1024px]:block">
+          <div className="hidden px-5 pb-2 pt-5 @min-[1024px]:block">
             <h1 className="text-xl font-bold tracking-tight text-balance">{localizeUi("ui.slurp.navigation.home")}</h1>
             <p className="mt-1 max-w-xl text-xs leading-5 text-[var(--muted-foreground)] text-pretty">
               {localizeUi("ui.slurp.home.feedDetail")}
@@ -4128,9 +4142,12 @@ function ViewerHub({
         />
       </div>
       {!isLoading && !isError && scope && (
-        <div className="flex items-end justify-between gap-4 bg-[var(--slurp-canvas)] px-4 pb-3 pt-5">
+        <div className="flex items-end justify-between gap-4 bg-[var(--slurp-canvas)] px-4 pb-3 pt-7 sm:px-5">
           <div>
-            <h2 className="text-lg font-bold tracking-tight">{localizeUi("ui.slurp.home.latestDrops")}</h2>
+            <div className="flex items-center gap-2">
+              <span className="h-1.5 w-1.5 rounded-full bg-[var(--slurp-warm)]" aria-hidden="true" />
+              <h2 className="text-lg font-black tracking-tight">{localizeUi("ui.slurp.home.latestDrops")}</h2>
+            </div>
             <p className="mt-1 text-xs leading-5 text-[var(--muted-foreground)]">
               {localizeUi("ui.slurp.home.latestDropsDetail")}
             </p>
@@ -4161,7 +4178,7 @@ function ViewerHub({
                   : localizeUi("ui.noodle.viewerhub.noPostsYet")}
             </p>
           ) : (
-            <div className="space-y-3 bg-[var(--slurp-canvas)] px-3 pb-5">
+            <div className="space-y-4 bg-[var(--slurp-canvas)] px-3 pb-6 sm:px-4">
               {visibleFeed.map((item, index) => (
                 <Fragment key={item.post.id}>
                   {index === dividerIndex && <NewSinceLastVisitDivider />}
@@ -4332,7 +4349,7 @@ function SlurpMomentsShelf({
     <section
       data-component="SlurpHome.Moments"
       aria-labelledby="slurp-moments-heading"
-      className="border-b border-[var(--noodle-divider)] bg-[linear-gradient(180deg,var(--slurp-surface-raised),var(--slurp-canvas))] py-4"
+      className="mx-3 mt-3 overflow-hidden rounded-2xl bg-[linear-gradient(145deg,var(--slurp-surface-raised),color-mix(in_srgb,var(--noodle-accent)_7%,var(--slurp-canvas)))] py-4 shadow-[0_18px_40px_-34px_rgba(0,0,0,0.9)] ring-1 ring-inset ring-[var(--noodle-divider)] sm:mx-4"
     >
       <div className="flex items-end justify-between gap-3 px-4">
         <div>
@@ -4345,7 +4362,7 @@ function SlurpMomentsShelf({
           <Clock3 size={11} aria-hidden="true" /> 24h
         </span>
       </div>
-      <div className="mt-3 flex snap-x gap-3 overflow-x-auto px-4 pb-1 pe-8 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+      <div className="mt-3 flex snap-x gap-3 overflow-x-auto px-4 pb-1 pe-12 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
         {creatorMoments.map((moment) => {
           const isNew = !Number.isNaN(seenAt) && new Date(moment.post.createdAt).getTime() > seenAt;
           return (
@@ -4353,15 +4370,15 @@ function SlurpMomentsShelf({
               key={moment.creator.profile.id}
               type="button"
               onClick={() => onOpenMoment(moment.post.id)}
-              className="group flex min-h-24 w-[4.75rem] shrink-0 snap-start flex-col items-center rounded-xl px-1 py-1.5 text-center focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--noodle-accent)]"
+              className="group flex min-h-24 w-[4.75rem] shrink-0 snap-start flex-col items-center rounded-xl px-1 py-1.5 text-center transition-transform active:scale-[0.96] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--noodle-accent)] motion-reduce:transition-none motion-reduce:active:scale-100"
               aria-label={localizeUi("ui.slurp.moments.open", { name: moment.creator.profile.displayName })}
             >
               <span
                 className={cn(
                   "relative rounded-full p-[3px] transition-transform group-hover:scale-105 motion-reduce:transition-none motion-reduce:group-hover:scale-100",
                   isNew
-                    ? "bg-[linear-gradient(145deg,var(--noodle-accent),#f7b66a)] shadow-md shadow-[var(--noodle-accent)]/20"
-                    : "bg-[var(--noodle-divider)]",
+                    ? "bg-[linear-gradient(145deg,var(--noodle-accent),var(--slurp-warm))] shadow-[0_0_0_1px_color-mix(in_srgb,var(--noodle-accent)_25%,transparent),0_8px_24px_-12px_var(--noodle-accent)]"
+                    : "bg-[var(--noodle-divider)] opacity-80",
                 )}
               >
                 <span className="block rounded-full bg-[var(--slurp-canvas)] p-0.5">
@@ -5261,16 +5278,19 @@ function SubscriptionSections({
     );
   }
   return (
-    <section className="overflow-hidden rounded-lg border border-[var(--noodle-divider)] bg-[var(--background)]">
-      <div className="border-b border-[var(--noodle-divider)] px-4 py-3">
-        <h3 className="text-lg font-bold">{localizeUi("ui.noodle.subscriptionsections.creators")}</h3>
+    <section className="overflow-hidden rounded-2xl bg-[var(--slurp-surface)] shadow-[0_18px_38px_-30px_rgba(0,0,0,0.9)] ring-1 ring-inset ring-[var(--noodle-divider)]">
+      <div className="px-4 pb-2 pt-4">
+        <h3 className="text-base font-black tracking-tight">{localizeUi("ui.noodle.subscriptionsections.creators")}</h3>
       </div>
       {creators.length > 0 ? (
-        <div className="max-h-[28rem] divide-y divide-[var(--noodle-divider)] overflow-y-auto">
+        <div className="max-h-[28rem] space-y-1 overflow-y-auto p-2 pt-1">
           {creators.map((creator) => {
             const openProfile = onOpenProfile ? () => onOpenProfile(creator.profile.id) : undefined;
             return (
-              <div key={creator.profile.id} className="flex items-center gap-3 px-4 py-3">
+              <div
+                key={creator.profile.id}
+                className="flex items-center gap-3 rounded-xl px-2 py-2.5 transition-colors hover:bg-[var(--accent)]/45"
+              >
                 <button
                   type="button"
                   onClick={openProfile}
@@ -5302,7 +5322,7 @@ function SubscriptionSections({
                   disabled={togglePending}
                   onClick={() => onToggleSubscription(creator.profile.id, creator.subscribed)}
                   className={cn(
-                    "inline-flex h-8 items-center gap-1.5 rounded-full px-4 text-xs font-bold transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50",
+                    "inline-flex min-h-9 items-center gap-1.5 rounded-lg px-3 text-xs font-bold transition-[opacity,transform] hover:opacity-90 active:scale-[0.96] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--noodle-accent)] motion-reduce:transition-none motion-reduce:active:scale-100 disabled:cursor-not-allowed disabled:opacity-50",
                     creator.subscribed
                       ? "border border-[var(--noodle-divider)] text-[var(--foreground)]"
                       : "bg-[var(--foreground)] text-[var(--background)] [&_svg]:!text-[var(--background)]",

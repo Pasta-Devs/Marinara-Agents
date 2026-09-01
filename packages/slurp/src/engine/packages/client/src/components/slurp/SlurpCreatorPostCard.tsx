@@ -112,7 +112,7 @@ export function LockedSlurpPostCard({
   return (
     <article
       data-noodle-post-id={post.id}
-      className="relative overflow-hidden rounded-xl border border-[var(--noodle-accent)]/30 bg-[linear-gradient(145deg,var(--slurp-surface-raised),var(--slurp-surface))] px-4 py-5 shadow-lg shadow-black/15"
+      className="group/locked relative overflow-hidden rounded-2xl bg-[linear-gradient(145deg,var(--slurp-surface-raised),var(--slurp-surface))] px-4 py-5 shadow-[0_1px_0_color-mix(in_srgb,var(--noodle-accent)_32%,transparent),0_22px_48px_-34px_rgba(0,0,0,0.95)] ring-1 ring-inset ring-[var(--noodle-accent)]/25"
     >
       <div
         className="pointer-events-none absolute inset-x-10 top-0 h-px bg-gradient-to-r from-transparent via-[var(--noodle-accent)]/70 to-transparent"
@@ -166,7 +166,7 @@ export function LockedSlurpPostCard({
           <div
             data-slurp-locked-preview
             className={cn(
-              "relative mt-4 aspect-[4/3] w-full overflow-hidden rounded-xl bg-[var(--muted)] ring-1 ring-inset ring-white/10 sm:aspect-[16/10]",
+              "relative -mx-4 mt-4 aspect-[4/3] w-[calc(100%+2rem)] overflow-hidden bg-[var(--muted)] ring-1 ring-inset ring-white/10 sm:mx-0 sm:aspect-[16/10] sm:w-full sm:rounded-xl",
             )}
           >
             {shownMediaSrc ? (
@@ -181,7 +181,7 @@ export function LockedSlurpPostCard({
                     : localizeUi("ui.noodle.lockednoodlerpostcard.lockedImageFrom", { name: profile.displayName })
                 }
                 className={cn(
-                  "h-full w-full object-cover transition-[filter,transform] duration-500 motion-reduce:transition-none",
+                  "h-full w-full object-cover transition-[filter,transform] duration-500 group-hover/locked:scale-[1.02] motion-reduce:transition-none motion-reduce:group-hover/locked:scale-100",
                   // Real locked images are already reduced and blurred on the server. Never blur
                   // those bytes a second time: the extra client filter erased the silhouette and
                   // made a working preview look like an empty card.
@@ -250,7 +250,7 @@ export function LockedSlurpPostCard({
               type="button"
               disabled={unlockPending || subscriptionPending}
               onClick={() => setUnlockSheetOpen(true)}
-              className="mt-5 inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-lg bg-[var(--noodle-accent)] px-4 text-sm font-bold text-zinc-950 shadow-sm shadow-black/10 transition-[opacity,transform] hover:opacity-90 active:scale-[0.99] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--noodle-accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--slurp-surface)] motion-reduce:transition-none motion-reduce:active:scale-100 disabled:cursor-not-allowed disabled:opacity-50 [&_svg]:!text-zinc-950"
+              className="mt-5 inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-xl bg-[var(--noodle-accent)] px-4 text-sm font-bold text-zinc-950 shadow-[0_10px_28px_-18px_var(--noodle-accent)] transition-[opacity,transform] hover:opacity-90 active:scale-[0.96] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--noodle-accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--slurp-surface)] motion-reduce:transition-none motion-reduce:active:scale-100 disabled:cursor-not-allowed disabled:opacity-50 [&_svg]:!text-zinc-950"
             >
               <Eye size={14} /> {localizeUi("ui.noodle.lockednoodlerpostcard.unlock")}
             </button>
@@ -767,11 +767,14 @@ export function SlurpCreatorPostCard({
       data-noodle-post-id={post.id}
       data-slurp-post-kind={postKind}
       tabIndex={-1}
-      className={
+      className={cn(
         surface === "profile"
           ? "border-b border-[var(--noodle-divider)] px-4 py-5 transition-colors last:border-b-0 hover:bg-[var(--accent)]/20"
-          : "rounded-xl border border-[var(--noodle-divider)] bg-[var(--slurp-surface)] px-4 py-5 shadow-sm shadow-black/10 transition-[background-color,border-color,box-shadow] hover:border-[var(--noodle-accent)]/25 hover:bg-[var(--slurp-surface-raised)] hover:shadow-md motion-reduce:transition-none"
-      }
+          : "rounded-2xl bg-[var(--slurp-surface)] px-4 py-5 shadow-[0_1px_0_var(--noodle-divider),0_20px_42px_-36px_rgba(0,0,0,0.95)] ring-1 ring-inset ring-[var(--noodle-divider)] transition-[background-color,box-shadow,transform] hover:-translate-y-0.5 hover:bg-[var(--slurp-surface-raised)] hover:shadow-[0_1px_0_color-mix(in_srgb,var(--noodle-accent)_30%,transparent),0_24px_46px_-32px_rgba(0,0,0,0.95)] motion-reduce:transition-none motion-reduce:hover:translate-y-0",
+        surface !== "profile" &&
+          postKind === "poll" &&
+          "bg-[linear-gradient(145deg,var(--slurp-surface),color-mix(in_srgb,var(--noodle-accent)_5%,var(--slurp-surface)))]",
+      )}
     >
       <div className="flex gap-3">
         {author ? (
@@ -874,7 +877,12 @@ export function SlurpCreatorPostCard({
             onClick={() =>
               setImageLightbox(createNoodleLightboxImage(post.id, displayedImageUrl, post.imagePrompt ?? ""))
             }
-            className="mt-4 block w-full overflow-hidden rounded-xl bg-black/10 text-left ring-1 ring-inset ring-white/10 ring-offset-[var(--background)] transition-opacity hover:opacity-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--noodle-accent)] focus-visible:ring-offset-2 motion-reduce:transition-none"
+            className={cn(
+              "mt-4 block overflow-hidden bg-black/10 text-left ring-1 ring-inset ring-white/10 ring-offset-[var(--background)] transition-[opacity,transform] hover:opacity-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--noodle-accent)] focus-visible:ring-offset-2 motion-reduce:transition-none",
+              surface === "profile"
+                ? "w-full rounded-xl"
+                : "-mx-4 w-[calc(100%+2rem)] rounded-none sm:mx-0 sm:w-full sm:rounded-xl",
+            )}
             title={localizeUi("ui.noodle.noodlepostcard.openImage")}
             aria-label={localizeUi("ui.noodle.noodlepostcard.openPostImage")}
           >

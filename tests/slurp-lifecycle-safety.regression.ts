@@ -138,13 +138,25 @@ assert.match(
   /cleanupRetiredViewer[\s\S]*?noodleAccountSubscriptions[\s\S]*?noodlePostUnlocks[\s\S]*?slurpViewerSettingsKey/u,
 );
 assert.match(settings, /ui\.slurp\.settings\.creators\.sourceChanged/u);
-assert.match(settings, /md:grid-cols-\[13rem_minmax\(0,1fr\)\]/u, "settings must keep a desktop section rail");
+assert.match(
+  settings,
+  /md:grid-cols-\[12rem_minmax\(0,1fr\)\][\s\S]*?lg:grid-cols-\[13rem_minmax\(0,1fr\)\]/u,
+  "settings must keep a responsive desktop section rail",
+);
 assert.match(settings, /<select[\s\S]*?settingsSections\.map/u, "narrow settings must expose one section selector");
 assert.match(settings, /aria-live="polite"/u, "settings saves must announce their state");
 assert.match(settings, /selectedCreatorId/u, "creator settings must keep an explicit master-detail selection");
+assert.match(settings, /data-slurp-settings-layout/u, "settings must expose its responsive layout boundary");
+assert.match(
+  shell,
+  /slurpSettingsActive[\s\S]*?@min-\[1024px\]:max-w-\[1096px\]/u,
+  "settings must not inherit the narrow creator-feed measure",
+);
+assert.match(shell, /\{!slurpSettingsActive && rightRail\}/u, "settings must not reserve an empty discovery rail");
 assert.match(settings, /data-slurp-setting-toggle/u);
 assert.match(settings, /role="switch"/u, "polished settings toggles must retain native checkbox semantics");
-assert.match(settings, /lg:sticky lg:top-4/u, "the desktop Creator list must remain visible beside its detail");
+assert.match(settings, /snap-x grid-flow-col/u, "creator settings must stay browsable before master-detail fits");
+assert.match(settings, /xl:sticky xl:top-4/u, "the wide-screen Creator list must remain visible beside its detail");
 assert.match(settings, /ui\.slurp\.settings\.creators\.personaAutomationDetail/u);
 assert.match(settings, /ui\.slurp\.settings\.creators\.moreActions/u);
 const profileList = storage.slice(

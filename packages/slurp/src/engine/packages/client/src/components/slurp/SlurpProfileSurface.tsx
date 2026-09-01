@@ -116,12 +116,12 @@ export function SlurpProfileSurface<TTab extends string = SlurpProfileTab>({
   };
   return (
     <div
-      className="relative min-h-full bg-[var(--slurp-canvas,var(--background))] pb-5"
+      className="relative min-h-full bg-[var(--slurp-canvas,var(--background))] pb-6 [background-image:radial-gradient(circle_at_50%_8%,color-mix(in_srgb,var(--noodle-accent)_8%,transparent),transparent_28rem)]"
       style={accent ? ({ "--noodle-accent": accent } as CSSProperties) : undefined}
     >
       {mobileHeader}
       {banner && (
-        <div className="group relative overflow-hidden rounded-b-xl border-b border-[var(--noodle-divider)] bg-[var(--slurp-canvas,var(--background))]">
+        <div className="group relative overflow-hidden rounded-b-2xl bg-[var(--slurp-canvas,var(--background))] shadow-[0_24px_54px_-40px_rgba(0,0,0,0.95)]">
           <button
             type="button"
             onClick={() => {
@@ -129,7 +129,7 @@ export function SlurpProfileSurface<TTab extends string = SlurpProfileTab>({
             }}
             disabled={!banner.canEdit || banner.uploadTarget === "banner"}
             className={cn(
-              "relative block h-52 w-full overflow-hidden bg-[var(--noodle-accent)]/15 text-left outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--noodle-accent)] disabled:cursor-default sm:h-72",
+              "relative block h-60 w-full overflow-hidden bg-[var(--noodle-accent)]/15 text-left outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--noodle-accent)] disabled:cursor-default sm:h-72",
               banner.uploadTarget === "banner" && "cursor-wait opacity-80",
             )}
             title={banner.canEdit ? localizeUi("ui.noodle.noodleprofilesurface.uploadBanner") : undefined}
@@ -185,7 +185,7 @@ export function SlurpProfileSurface<TTab extends string = SlurpProfileTab>({
 
       <div
         className={cn(
-          "relative mx-3 rounded-xl border border-[var(--noodle-divider)] bg-[color-mix(in_srgb,var(--slurp-surface-raised,var(--background))_94%,transparent)] px-4 pb-5 shadow-xl shadow-black/15 backdrop-blur-md sm:mx-5 sm:px-6",
+          "relative mx-3 rounded-2xl bg-[color-mix(in_srgb,var(--slurp-surface-raised,var(--background))_94%,transparent)] px-4 pb-5 shadow-[0_24px_58px_-36px_rgba(0,0,0,0.95)] ring-1 ring-inset ring-[var(--noodle-divider)] backdrop-blur-md sm:mx-5 sm:px-6",
           hasBanner ? "-mt-14" : "mt-5",
         )}
       >
@@ -337,14 +337,18 @@ export function SlurpProfileSurface<TTab extends string = SlurpProfileTab>({
                 {identityEyebrow}
               </div>
             )}
-            <h1 className="text-2xl font-bold leading-tight text-balance sm:text-3xl">{account.displayName}</h1>
+            <h1 className="text-2xl font-black leading-tight tracking-tight text-balance sm:text-3xl">
+              {account.displayName}
+            </h1>
             <div className="mt-1 flex flex-wrap items-center gap-2 text-sm text-[var(--muted-foreground)]">
               <span data-noodle-profile-handle className="font-medium !text-[var(--noodle-accent-foreground)]">
                 @{displayHandle || "noodle"}
               </span>
               {handleMeta}
             </div>
-            <div className="max-w-2xl text-sm leading-relaxed text-[var(--muted-foreground)]">{bioContent}</div>
+            <div className="max-w-2xl text-sm leading-relaxed text-[var(--muted-foreground)] text-pretty">
+              {bioContent}
+            </div>
             {contentActions}
             {location && (
               <p className="mt-2 flex items-center gap-1.5 text-sm text-[var(--muted-foreground)]">
@@ -375,7 +379,7 @@ export function SlurpProfileSurface<TTab extends string = SlurpProfileTab>({
           </div>
         )}
       </div>
-      <div className="mt-4 overflow-hidden border-y border-[var(--noodle-divider)] bg-[var(--slurp-surface,var(--background))] sm:mx-5 sm:rounded-xl sm:border">
+      <div className="mt-5 overflow-hidden border-y border-[var(--noodle-divider)] bg-[var(--slurp-surface,var(--background))] shadow-[0_20px_46px_-38px_rgba(0,0,0,0.95)] sm:mx-5 sm:rounded-2xl sm:border-0 sm:ring-1 sm:ring-inset sm:ring-[var(--noodle-divider)]">
         {preTabsContent}
         {featuredContent}
         <div
@@ -406,7 +410,7 @@ export function SlurpProfileSurface<TTab extends string = SlurpProfileTab>({
               className={cn(
                 "relative flex h-12 min-w-0 flex-1 items-center justify-center px-2 text-sm font-semibold text-[var(--muted-foreground)] transition-colors hover:bg-[var(--accent)] hover:text-[var(--foreground)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--noodle-accent)]",
                 tab.management &&
-                  "border-l border-[var(--noodle-divider)] bg-[var(--slurp-surface-raised,var(--background))]",
+                  "border-s border-[var(--noodle-divider)] bg-[var(--slurp-surface-raised,var(--background))]",
                 activeTab === tab.id && "text-[var(--foreground)]",
               )}
             >

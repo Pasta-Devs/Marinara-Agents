@@ -64,6 +64,10 @@ export function getNoodleAccentStyle(accent: string, style: CSSProperties = {}):
       "light-dark(color-mix(in srgb, var(--background) 99%, var(--foreground)), color-mix(in srgb, var(--background) 96%, #3b1c2c))",
     "--slurp-surface-raised":
       "light-dark(color-mix(in srgb, var(--background) 96%, var(--foreground)), color-mix(in srgb, var(--background) 91%, #472036))",
+    "--slurp-warm": "light-dark(#9b5a35, #f2b56f)",
+    "--slurp-success": "light-dark(#25745b, #72d6ad)",
+    "--slurp-canvas-art":
+      "radial-gradient(circle at 16% -8%, color-mix(in srgb, var(--noodle-accent) 10%, transparent), transparent 31rem), radial-gradient(circle at 88% 18%, color-mix(in srgb, #8e4d73 7%, transparent), transparent 27rem)",
     ...style,
   } as CSSProperties;
 }
@@ -396,6 +400,7 @@ export function NoodleShell({
   const resolvedAppMode = appMode ?? (activeView === "noodler" ? "noodler" : "noodle");
   const noodlerActive = resolvedAppMode === "noodler";
   const slurpActive = resolvedAppMode === "slurp";
+  const slurpSettingsActive = slurpActive && activeView === "settings";
   const homeLabel = noodlerActive
     ? localizeUi("ui.noodle.noodleshell.hub")
     : slurpActive
@@ -414,7 +419,7 @@ export function NoodleShell({
       <div
         className={cn(
           "mari-chrome-token-scope relative flex h-full min-h-0 flex-col bg-[var(--background)] text-[var(--foreground)] antialiased",
-          slurpActive && "bg-[var(--slurp-canvas)]",
+          slurpActive && "bg-[var(--slurp-canvas)] [background-image:var(--slurp-canvas-art)]",
           NOODLE_ICON_SCOPE_CLASS,
         )}
         data-component="NoodleView"
@@ -837,10 +842,17 @@ export function NoodleShell({
               </div>
             </aside>
 
-            <main className="flex min-h-0 w-full flex-1 flex-col pb-[calc(56px+var(--slurp-bottom-safe-inset))] @min-[1024px]:max-w-[680px] @min-[1024px]:border-r @min-[1024px]:border-[var(--noodle-divider)] @min-[1024px]:pb-0">
+            <main
+              className={cn(
+                "flex min-h-0 w-full flex-1 flex-col @min-[1024px]:pb-0",
+                slurpSettingsActive
+                  ? "pb-0 @min-[1024px]:max-w-[1096px]"
+                  : "pb-[calc(56px+var(--slurp-bottom-safe-inset))] @min-[1024px]:max-w-[680px] @min-[1024px]:border-r @min-[1024px]:border-[var(--noodle-divider)]",
+              )}
+            >
               {children}
             </main>
-            {rightRail}
+            {!slurpSettingsActive && rightRail}
           </div>
         </div>
 

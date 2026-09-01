@@ -1,5 +1,7 @@
 import {
+  AlertTriangle,
   CalendarClock,
+  CheckCircle2,
   FileText,
   Loader2,
   Pencil,
@@ -118,7 +120,7 @@ function NumberSetting({
       }}
       onBlur={() => void commit()}
       onKeyDown={(event) => event.key === "Enter" && event.currentTarget.blur()}
-      className="h-10 w-full rounded-md border border-[var(--border)] bg-transparent px-3 text-sm"
+      className="h-11 w-full rounded-lg border border-[var(--border)] bg-[var(--slurp-canvas,var(--background))] px-3 text-base outline-none transition-colors focus:border-[var(--noodle-accent)] focus-visible:ring-2 focus-visible:ring-[var(--noodle-accent)]/30 sm:text-sm"
     />
   );
 }
@@ -270,20 +272,38 @@ export function SlurpSettings({
   return (
     <>
       <main className="h-full overflow-y-auto bg-[var(--slurp-canvas,var(--background))] pb-[calc(5rem+env(safe-area-inset-bottom))] sm:pb-8">
-        <div className="mx-auto flex w-full max-w-6xl flex-col gap-6 p-4 sm:p-6 lg:p-8">
-          <header className="flex flex-wrap items-start justify-between gap-4 rounded-2xl bg-[linear-gradient(135deg,var(--slurp-surface-raised,var(--background)),var(--noodle-accent)_240%)] p-5 shadow-[0_16px_38px_-30px_rgba(0,0,0,0.85)] ring-1 ring-inset ring-[var(--border)] sm:p-6">
+        <div
+          className="mx-auto flex w-full max-w-[1096px] flex-col gap-6 p-4 sm:p-6 lg:gap-8 lg:p-8"
+          data-slurp-settings-layout
+        >
+          <header className="relative isolate flex flex-wrap items-start justify-between gap-5 overflow-hidden rounded-2xl bg-[linear-gradient(135deg,var(--slurp-surface-raised,var(--background)),color-mix(in_srgb,var(--noodle-accent)_16%,var(--slurp-surface-raised)))] p-5 shadow-[0_20px_48px_-34px_rgba(0,0,0,0.9)] ring-1 ring-inset ring-[var(--border)] sm:p-7">
+            <span
+              className="pointer-events-none absolute -end-12 -top-20 -z-10 h-52 w-52 rounded-full bg-[var(--noodle-accent)]/10 blur-3xl"
+              aria-hidden="true"
+            />
             <div className="min-w-0">
-              <p className="text-xs font-semibold uppercase tracking-[0.16em] text-[var(--noodle-accent)]">Slurp</p>
-              <h1 className="mt-1 text-2xl font-bold">{t("ui.slurp.settings.title")}</h1>
-              <p className="mt-2 max-w-2xl text-sm leading-6 text-[var(--muted-foreground)]">
+              <p className="text-xs font-bold uppercase tracking-[0.18em] text-[var(--noodle-accent)]">
+                {t("ui.slurp.settings.backstage")}
+              </p>
+              <h1 className="mt-1 text-2xl font-black tracking-tight text-balance sm:text-3xl">
+                {t("ui.slurp.settings.title")}
+              </h1>
+              <p className="mt-2 max-w-2xl text-sm leading-6 text-[var(--muted-foreground)] text-pretty">
                 {t("ui.slurp.settings.detail")}
               </p>
             </div>
             <p
-              className="inline-flex min-h-8 items-center rounded-full bg-[var(--slurp-surface,var(--background))] px-3 py-1 text-xs font-medium text-[var(--muted-foreground)] shadow-sm ring-1 ring-inset ring-[var(--border)]"
+              className={`inline-flex min-h-9 items-center gap-1.5 rounded-full bg-[var(--slurp-surface,var(--background))] px-3 py-1 text-xs font-semibold shadow-sm ring-1 ring-inset ${saveState === "error" ? "text-red-300 ring-red-400/30" : saveState === "saved" ? "text-[var(--slurp-success)] ring-[var(--slurp-success)]/25" : "text-[var(--muted-foreground)] ring-[var(--border)]"}`}
               role="status"
               aria-live="polite"
             >
+              {saveState === "saving" ? (
+                <Loader2 size={13} className="animate-spin motion-reduce:animate-none" aria-hidden="true" />
+              ) : saveState === "error" ? (
+                <AlertTriangle size={13} aria-hidden="true" />
+              ) : saveState === "saved" ? (
+                <CheckCircle2 size={13} aria-hidden="true" />
+              ) : null}
               {saveState === "saving"
                 ? t("ui.slurp.settings.saveState.saving")
                 : saveState === "error"
@@ -305,7 +325,7 @@ export function SlurpSettings({
                   section: event.target.value as (typeof settingsSections)[number],
                 })
               }
-              className="min-h-11 w-full rounded-lg border border-[var(--border)] bg-[var(--slurp-surface,var(--background))] px-3 text-sm font-semibold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--noodle-accent)]"
+              className="min-h-11 w-full rounded-lg border border-[var(--border)] bg-[var(--slurp-surface,var(--background))] px-3 text-base font-semibold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--noodle-accent)] sm:text-sm"
             >
               {settingsSections.map((item) => (
                 <option key={item} value={item}>
@@ -315,7 +335,7 @@ export function SlurpSettings({
             </select>
           </label>
 
-          <div className="md:grid md:grid-cols-[13rem_minmax(0,1fr)] md:items-start md:gap-6">
+          <div className="md:grid md:grid-cols-[12rem_minmax(0,1fr)] md:items-start md:gap-6 lg:grid-cols-[13rem_minmax(0,1fr)] lg:gap-8">
             <nav
               className="sticky top-4 hidden rounded-xl bg-[var(--slurp-surface,var(--background))] p-2 shadow-[0_16px_36px_-28px_rgba(0,0,0,0.8)] ring-1 ring-inset ring-[var(--border)] md:flex md:flex-col"
               aria-label={t("ui.slurp.settings.sectionsLabel")}
@@ -333,14 +353,14 @@ export function SlurpSettings({
               ))}
             </nav>
 
-            <div className="mt-5 min-w-0 rounded-xl bg-[var(--slurp-surface,var(--background))] p-4 shadow-[0_18px_44px_-34px_rgba(0,0,0,0.9)] ring-1 ring-inset ring-[var(--border)] md:mt-0 md:p-6">
+            <div className="mt-5 min-w-0 rounded-2xl bg-[var(--slurp-surface,var(--background))] p-4 shadow-[0_20px_50px_-36px_rgba(0,0,0,0.95)] ring-1 ring-inset ring-[var(--border)] md:mt-0 md:p-6 lg:p-8">
               {section === "general" && (
                 <div className="space-y-6">
                   <SectionTitle
                     title={t("ui.slurp.settings.publishing.title")}
                     detail={t("ui.slurp.settings.publishing.detail")}
                   />
-                  <div className="flex flex-wrap items-center justify-between gap-3 rounded-md border border-[var(--border)] p-4">
+                  <div className="flex flex-wrap items-center justify-between gap-4 rounded-xl bg-[var(--slurp-surface-raised,var(--background))] p-4 shadow-sm ring-1 ring-inset ring-[var(--border)] sm:p-5">
                     <div>
                       <h2 className="text-sm font-semibold">{t("ui.slurp.settings.refresh.title")}</h2>
                       <p className="mt-1 text-xs text-[var(--muted-foreground)]">
@@ -358,7 +378,7 @@ export function SlurpSettings({
                         setRefreshAccess("locked");
                         setRefreshModalOpen(true);
                       }}
-                      className="inline-flex min-h-10 items-center gap-2 rounded-md bg-[var(--noodle-accent)] px-4 text-xs font-bold text-zinc-950 disabled:opacity-50"
+                      className="inline-flex min-h-11 items-center gap-2 rounded-lg bg-[var(--noodle-accent)] px-4 text-xs font-bold text-zinc-950 shadow-sm transition-[opacity,transform] hover:opacity-90 active:scale-[0.96] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--noodle-accent)] motion-reduce:transition-none motion-reduce:active:scale-100 disabled:opacity-50"
                     >
                       <Sparkles size={14} />
                       {t("ui.slurp.settings.refresh.title")}
@@ -416,7 +436,7 @@ export function SlurpSettings({
                           event.target.value as SlurpSettings["autoPostGenerationMode"],
                         )
                       }
-                      className="h-10 w-full rounded-md border border-[var(--border)] bg-transparent px-3 text-sm disabled:opacity-50"
+                      className="min-h-11 w-full rounded-lg border border-[var(--border)] bg-[var(--slurp-canvas,var(--background))] px-3 text-base focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--noodle-accent)] disabled:opacity-50 sm:text-sm"
                     >
                       <option value="pre_generate">{t("ui.slurp.settings.generationModePreGenerate")}</option>
                       <option value="on_demand">{t("ui.slurp.settings.generationModeOnDemand")}</option>
@@ -446,7 +466,7 @@ export function SlurpSettings({
                         value={settings.generationConnectionId ?? ""}
                         disabled={connectionsQuery.isLoading || connectionsQuery.isError || updateSettings.isPending}
                         onChange={(event) => void update("generationConnectionId", event.target.value || null)}
-                        className="h-10 w-full rounded-md border border-[var(--border)] bg-transparent px-3 text-sm disabled:opacity-50"
+                        className="min-h-11 w-full rounded-lg border border-[var(--border)] bg-[var(--slurp-canvas,var(--background))] px-3 text-base focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--noodle-accent)] disabled:opacity-50 sm:text-sm"
                       >
                         <option value="">{t("ui.slurp.settings.connections.engineDefault")}</option>
                         {(connectionsQuery.data ?? [])
@@ -509,7 +529,7 @@ export function SlurpSettings({
                           { onError: (error) => toast.error(errorMessage(error)) },
                         )
                       }
-                      className="h-10 w-full rounded-md border border-[var(--border)] bg-transparent px-3 text-sm disabled:opacity-50"
+                      className="min-h-11 w-full rounded-lg border border-[var(--border)] bg-[var(--slurp-canvas,var(--background))] px-3 text-base focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--noodle-accent)] disabled:opacity-50 sm:text-sm"
                     >
                       <option value="">{t("ui.slurp.settings.images.engineDefault")}</option>
                       {imageConnections.map((connection) => (
@@ -598,9 +618,9 @@ export function SlurpSettings({
                       </button>
                     </div>
                   ) : accountsQuery.data?.length && selectedCreator ? (
-                    <div className="grid min-w-0 gap-4 lg:grid-cols-[minmax(12rem,0.8fr)_minmax(0,1.6fr)]">
+                    <div className="grid min-w-0 gap-5 xl:grid-cols-[minmax(13rem,0.78fr)_minmax(0,1.7fr)]">
                       <div
-                        className="overflow-hidden rounded-xl bg-[var(--slurp-surface-raised,var(--background))] ring-1 ring-inset ring-[var(--border)] lg:sticky lg:top-4 lg:max-h-[calc(100dvh-8rem)] lg:overflow-y-auto"
+                        className="grid snap-x grid-flow-col auto-cols-[minmax(13rem,1fr)] gap-2 overflow-x-auto rounded-xl pb-2 pe-8 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden xl:sticky xl:top-4 xl:block xl:max-h-[calc(100dvh-8rem)] xl:overflow-y-auto xl:rounded-xl xl:bg-[var(--slurp-surface-raised,var(--background))] xl:pb-0 xl:pe-0 xl:ring-1 xl:ring-inset xl:ring-[var(--border)]"
                         aria-label={t("ui.slurp.settings.creators.listLabel")}
                       >
                         {accountsQuery.data.map((creator) => {
@@ -614,7 +634,7 @@ export function SlurpSettings({
                               type="button"
                               aria-pressed={selected}
                               onClick={() => setSelectedCreatorId(creator.id)}
-                              className={`flex min-h-20 w-full items-center gap-3 border-b border-[var(--border)] px-3 py-3 text-left last:border-b-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--noodle-accent)] ${selected ? "bg-[var(--noodle-accent)]/10" : "hover:bg-[var(--accent)]"}`}
+                              className={`flex min-h-20 w-full snap-start items-center gap-3 rounded-xl bg-[var(--slurp-surface-raised,var(--background))] px-3 py-3 text-left shadow-sm ring-1 ring-inset transition-[background-color,box-shadow,transform] active:scale-[0.96] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--noodle-accent)] motion-reduce:transition-none motion-reduce:active:scale-100 xl:rounded-none xl:border-b xl:border-[var(--border)] xl:shadow-none xl:last:border-b-0 ${selected ? "ring-[var(--noodle-accent)] bg-[var(--noodle-accent)]/10 xl:ring-0" : "ring-[var(--border)] hover:bg-[var(--accent)] xl:ring-0"}`}
                             >
                               <Avatar account={creator} size="sm" />
                               <span className="min-w-0 flex-1">
@@ -636,10 +656,14 @@ export function SlurpSettings({
                       </div>
 
                       <section
-                        className="min-w-0 overflow-hidden rounded-xl ring-1 ring-inset ring-[var(--border)]"
+                        className="min-w-0 overflow-hidden rounded-2xl bg-[var(--slurp-canvas,var(--background))] shadow-[0_18px_42px_-34px_rgba(0,0,0,0.9)] ring-1 ring-inset ring-[var(--border)]"
                         aria-labelledby="slurp-selected-creator-title"
                       >
-                        <div className="flex flex-col gap-3 border-b border-[var(--border)] bg-[var(--slurp-surface-raised,var(--background))] p-4 sm:flex-row sm:items-center">
+                        <div className="relative isolate flex flex-col gap-4 overflow-hidden border-b border-[var(--border)] bg-[linear-gradient(135deg,var(--slurp-surface-raised,var(--background)),color-mix(in_srgb,var(--noodle-accent)_9%,var(--slurp-surface-raised)))] p-4 sm:flex-row sm:items-center sm:p-5">
+                          <span
+                            className="pointer-events-none absolute -end-8 -top-14 -z-10 h-36 w-36 rounded-full bg-[var(--noodle-accent)]/10 blur-2xl"
+                            aria-hidden="true"
+                          />
                           <div className="flex min-w-0 items-center gap-3">
                             <Avatar account={selectedCreator} />
                             <div className="min-w-0 flex-1">
@@ -677,7 +701,7 @@ export function SlurpSettings({
                           </div>
                         </div>
 
-                        <div className="space-y-5 p-4">
+                        <div className="space-y-5 p-4 sm:p-5">
                           <CreatorDetailGroup title={t("ui.slurp.settings.creators.postingGroup")}>
                             {!personaCreator(selectedCreator) ? (
                               <Toggle
@@ -735,7 +759,7 @@ export function SlurpSettings({
                                     { onError: (error) => toast.error(errorMessage(error)) },
                                   )
                                 }
-                                className="min-h-11 w-full rounded-lg border border-[var(--border)] bg-transparent px-3 text-sm disabled:opacity-50"
+                                className="min-h-11 w-full rounded-lg border border-[var(--border)] bg-[var(--slurp-canvas,var(--background))] px-3 text-base focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--noodle-accent)] disabled:opacity-50 sm:text-sm"
                               >
                                 <option value="">{t("ui.slurp.settings.creators.inheritImageConnection")}</option>
                                 {imageConnections.map((connection) => (
@@ -1272,7 +1296,7 @@ function ScheduleSlotEditor({
           min={localDateTimeValue(new Date(Date.now() + 60_000).toISOString())}
           disabled={pending}
           onChange={(event) => setDraft(event.target.value)}
-          className="h-10 min-w-0 flex-1 rounded-md border border-[var(--border)] bg-transparent px-3 text-sm disabled:opacity-50"
+          className="min-h-11 min-w-0 flex-1 rounded-lg border border-[var(--border)] bg-[var(--slurp-canvas,var(--background))] px-3 text-base focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--noodle-accent)] disabled:opacity-50 sm:text-sm"
         />
         <button
           type="button"
@@ -1291,33 +1315,34 @@ function ScheduleSlotEditor({
 function SectionTitle({ title, detail }: { title: string; detail: string }) {
   return (
     <div>
-      <h2 className="text-base font-bold">{title}</h2>
-      <p className="mt-1 max-w-2xl text-sm leading-6 text-[var(--muted-foreground)]">{detail}</p>
+      <h2 className="text-lg font-black tracking-tight text-balance">{title}</h2>
+      <p className="mt-1 max-w-2xl text-sm leading-6 text-[var(--muted-foreground)] text-pretty">{detail}</p>
     </div>
   );
 }
 function CreatorDetailGroup({ title, children }: { title: string; children: ReactNode }) {
   return (
     <section
-      className="space-y-3 rounded-xl bg-[var(--slurp-surface-raised,var(--background))] p-4 ring-1 ring-inset ring-[var(--border)]"
+      className="space-y-4 rounded-xl bg-[var(--slurp-surface-raised,var(--background))] p-4 shadow-[0_12px_28px_-26px_rgba(0,0,0,0.9)] sm:p-5"
       aria-label={title}
     >
-      <h3 className="text-xs font-bold uppercase tracking-[0.12em] text-[var(--muted-foreground)]">{title}</h3>
+      <h3 className="text-xs font-bold uppercase tracking-[0.14em] text-[var(--noodle-accent-foreground)]">{title}</h3>
       {children}
     </section>
   );
 }
 function GuidanceBox({ title, detail }: { title: string; detail: string }) {
   return (
-    <div className="rounded-md border border-[var(--noodle-accent)]/30 bg-[var(--noodle-accent)]/[0.06] p-4">
-      <p className="text-sm font-semibold text-[var(--noodle-accent)]">{title}</p>
-      <p className="mt-1 text-sm leading-6 text-[var(--muted-foreground)]">{detail}</p>
+    <div className="relative overflow-hidden rounded-xl bg-[var(--noodle-accent)]/[0.065] p-4 ring-1 ring-inset ring-[var(--noodle-accent)]/20 sm:p-5">
+      <span className="absolute inset-y-3 start-0 w-0.5 rounded-full bg-[var(--noodle-accent)]" aria-hidden="true" />
+      <p className="text-sm font-bold text-[var(--noodle-accent)]">{title}</p>
+      <p className="mt-1 max-w-2xl text-sm leading-6 text-[var(--muted-foreground)] text-pretty">{detail}</p>
     </div>
   );
 }
 function Field({ label, detail, children }: { label: string; detail?: string; children: ReactNode }) {
   return (
-    <label className="block space-y-1.5 text-sm font-semibold">
+    <label className="block space-y-2 text-sm font-semibold">
       <span className="block">{label}</span>
       {detail && <span className="block text-xs font-normal leading-5 text-[var(--muted-foreground)]">{detail}</span>}
       {children}
@@ -1340,7 +1365,7 @@ function Toggle({
   return (
     <label
       data-slurp-setting-toggle
-      className={`group flex ${compact ? "min-h-11" : "min-h-16"} cursor-pointer items-center justify-between gap-3 rounded-lg bg-[var(--slurp-surface-raised,var(--background))] px-3 py-2 text-sm ring-1 ring-inset ring-[var(--border)] transition-[background-color,box-shadow] hover:bg-[var(--accent)]/40 focus-within:ring-2 focus-within:ring-[var(--noodle-accent)] motion-reduce:transition-none`}
+      className={`group flex ${compact ? "min-h-11" : "min-h-[4.5rem]"} cursor-pointer items-center justify-between gap-4 rounded-xl bg-[var(--slurp-surface-raised,var(--background))] px-4 py-3 text-sm shadow-[0_10px_24px_-24px_rgba(0,0,0,0.9)] ring-1 ring-inset ring-transparent transition-[background-color,box-shadow] hover:bg-[var(--accent)]/40 hover:ring-[var(--border)] focus-within:ring-2 focus-within:ring-[var(--noodle-accent)] motion-reduce:transition-none`}
     >
       <span className="min-w-0">
         <span className="block font-semibold">{label}</span>
@@ -1357,7 +1382,7 @@ function Toggle({
       />
       <span
         aria-hidden="true"
-        className="relative h-6 w-11 shrink-0 rounded-full bg-[var(--muted-foreground)]/25 shadow-inner transition-colors after:absolute after:left-0.5 after:top-0.5 after:h-5 after:w-5 after:rounded-full after:bg-white after:shadow-sm after:transition-transform peer-checked:bg-[var(--noodle-accent)] peer-checked:after:translate-x-5 peer-focus-visible:outline peer-focus-visible:outline-2 peer-focus-visible:outline-offset-2 peer-focus-visible:outline-[var(--noodle-accent)] motion-reduce:transition-none motion-reduce:after:transition-none"
+        className="relative h-7 w-12 shrink-0 rounded-full bg-[var(--muted-foreground)]/25 shadow-inner transition-colors after:absolute after:left-1 after:top-1 after:h-5 after:w-5 after:rounded-full after:bg-white after:shadow-sm after:transition-transform peer-checked:bg-[var(--noodle-accent)] peer-checked:after:translate-x-5 peer-focus-visible:outline peer-focus-visible:outline-2 peer-focus-visible:outline-offset-2 peer-focus-visible:outline-[var(--noodle-accent)] motion-reduce:transition-none motion-reduce:after:transition-none"
       />
     </label>
   );
