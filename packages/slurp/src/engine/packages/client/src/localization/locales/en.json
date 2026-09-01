@@ -1474,5 +1474,19 @@
   "ui.ui.imagepromptreviewmodal.reviewValue1Prompts": "Review {{value1}} Prompts",
   "ui.ui.imagepromptreviewmodal.toYourProvider": "to your provider.",
   "ui.ui.imagepromptreviewmodal.value1": "| {{value1}}",
-  "ui.ui.imagepromptreviewmodal.value1_1d0dfc9": "/ {{value1}}"
+  "ui.ui.imagepromptreviewmodal.value1_1d0dfc9": "/ {{value1}}",
+  "ui.noodle.stageprofileform.audienceStance": "Audience stance",
+  "ui.noodle.stageprofileform.audienceStanceHint": "How this Creator treats the people reading. Adds a line to the stage voice.",
+  "ui.noodle.stageprofileform.stance.girlfriend": "Girlfriend energy",
+  "ui.noodle.stageprofileform.stance.girlfriendText": "Warm and attentive with the audience, like they are talking to someone they are seeing.",
+  "ui.noodle.stageprofileform.stance.brattyTease": "Bratty tease",
+  "ui.noodle.stageprofileform.stance.brattyTeaseText": "Teases and withholds, and enjoys making the audience work for it.",
+  "ui.noodle.stageprofileform.stance.aloof": "Aloof",
+  "ui.noodle.stageprofileform.stance.aloofText": "Selective and a little distant, so attention from them feels earned rather than given.",
+  "ui.noodle.stageprofileform.stance.inCharge": "In charge",
+  "ui.noodle.stageprofileform.stance.inChargeText": "Takes control of the exchange and sets the terms.",
+  "ui.noodle.stageprofileform.stance.eager": "Eager to please",
+  "ui.noodle.stageprofileform.stance.eagerText": "Openly enthusiastic, and keen to give the audience what they ask for.",
+  "ui.noodle.stageprofileform.stance.shy": "Shy",
+  "ui.noodle.stageprofileform.stance.shyText": "Reserved and easily flustered, and opens up slowly."
 }

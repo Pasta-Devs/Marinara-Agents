@@ -141,6 +141,24 @@ assert.doesNotMatch(
   /scenario|backstory|source\.name/u,
   "concealed Slurp profile prompts must withhold the lookupable canon",
 );
+const slurpHomeSource = readFileSync(
+  "packages/slurp/src/engine/packages/client/src/components/slurp/SlurpHome.tsx",
+  "utf8",
+);
+// A character card says nothing about how its Creator treats an audience, so without a nudge every
+// Creator lands in the same register. The presets seed the existing free-text stage voice: the
+// privacy settings shape is defined in the Engine's shared schema and cannot gain a field here.
+assert.match(
+  slurpHomeSource,
+  /const AUDIENCE_STANCE_PRESETS = \[[\s\S]*stance\.brattyTease[\s\S]*stance\.inCharge[\s\S]*\] as const;/u,
+  "Slurp creator setup must offer audience-stance presets",
+);
+assert.match(
+  slurpHomeSource,
+  /onApply=\{\(sentence\) =>\s*onChange\(\{\s*stagePersonality:/u,
+  "audience-stance presets must write into the existing stage voice field",
+);
+
 const slurpGeneration = readFileSync(
   "packages/slurp/src/engine/packages/server/src/services/slurp/slurp-generation.service.ts",
   "utf8",

@@ -349,7 +349,7 @@ export function buildNoodlerPostMessages(input: {
     // Bio and stage voice are written once when the Creator is set up. On their own they flatten
     // every Creator into the same register, so the source card is supplied as the person and the
     // stage voice sits on top of it as the performance.
-    "The source character is who this Creator actually is: take their temperament, register, humour, and interests from it. The stage voice describes how they perform on Slurp, layered over that person, not a replacement for them.",
+    "The source character is who this Creator actually is: take their temperament, register, humour, and interests from it. The stage voice describes how they perform on Slurp and how they treat the people reading, layered over that person, not a replacement for them.",
     ...(guidance ? [guidance] : []),
     noodlerIdentityInstruction(input.disclosureMode, input.publicIdentity),
     NOODLER_FORMAT_PROMPTS[format],
