@@ -204,7 +204,11 @@ assert.match(
   /sm:grid-cols-\[minmax\(0,1fr\)_auto\]/u,
   "Creator Room identity and actions must use a responsive non-overlapping grid",
 );
-assert.doesNotMatch(profileSurface, /max-w-\[calc\(100%-13rem\)\]/u, "Creator Room copy must not reserve a fixed action width");
+assert.doesNotMatch(
+  profileSurface,
+  /max-w-\[calc\(100%-13rem\)\]/u,
+  "Creator Room copy must not reserve a fixed action width",
+);
 assert.match(profileSurface, /data-slurp-creator-hero/u, "Creator Rooms must expose their unified identity hero");
 assert.match(profileSurface, /preTabsContent && \(/u, "Creator Tools must remain separate from public profile content");
 assert.match(home, /data-slurp-home-masthead/u, "Home must expose one unified lobby masthead");

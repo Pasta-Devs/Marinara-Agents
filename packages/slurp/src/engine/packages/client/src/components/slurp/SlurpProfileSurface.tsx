@@ -230,12 +230,7 @@ export function SlurpProfileSurface<TTab extends string = SlurpProfileTab>({
         )}
         data-slurp-creator-hero
       >
-        <div
-          className={cn(
-            "flex w-full items-end",
-            hasBanner ? "-mt-14" : "pt-5",
-          )}
-        >
+        <div className={cn("flex w-full items-end", hasBanner ? "-mt-14" : "pt-5")}>
           {avatarUpload ? (
             <div className="group relative">
               <button
@@ -351,7 +346,10 @@ export function SlurpProfileSurface<TTab extends string = SlurpProfileTab>({
                 {account.displayName}
               </h1>
               <div className="mt-1 flex max-w-full flex-wrap items-center gap-2 text-sm text-[var(--muted-foreground)]">
-                <span data-noodle-profile-handle className="min-w-0 break-all font-medium !text-[var(--noodle-accent-foreground)]">
+                <span
+                  data-noodle-profile-handle
+                  className="min-w-0 break-all font-medium !text-[var(--noodle-accent-foreground)]"
+                >
                   @{displayHandle || "noodle"}
                 </span>
                 {handleMeta}
@@ -428,7 +426,8 @@ export function SlurpProfileSurface<TTab extends string = SlurpProfileTab>({
                 "relative flex min-h-11 min-w-0 flex-1 items-center justify-center rounded-lg px-2 text-sm font-semibold text-[var(--muted-foreground)] transition-[background-color,color,box-shadow,transform] hover:bg-[var(--accent)] hover:text-[var(--foreground)] active:scale-[0.96] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--noodle-accent)] motion-reduce:transition-none motion-reduce:active:scale-100",
                 tab.management &&
                   "ms-1 border-s border-[var(--noodle-divider)] bg-[var(--slurp-surface-raised,var(--background))]",
-                activeTab === tab.id && "bg-[var(--slurp-surface-raised,var(--background))] text-[var(--foreground)] shadow-sm",
+                activeTab === tab.id &&
+                  "bg-[var(--slurp-surface-raised,var(--background))] text-[var(--foreground)] shadow-sm",
               )}
             >
               <span className="truncate">{tab.label}</span>
