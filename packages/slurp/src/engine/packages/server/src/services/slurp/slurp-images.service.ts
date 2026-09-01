@@ -23,7 +23,6 @@ import type { ConnectionAdmissionMode } from "../generation/connection-admission
 import { characterAppearanceFromRow, characterNoodleImageContextFromRow } from "./slurp-public-images.service.js";
 import type { NoodleImagePromptReviewItem, ReviewedNoodleImagePrompt } from "./slurp-public-images.service.js";
 import { characterNameFromRow } from "./slurp-public-support.js";
-import { reviewedNoodlerPhysicalFacts } from "./slurp-prompt-safety.js";
 import { selectNoodleImageProviderPrompt } from "./slurp-image-prompt.js";
 
 const REVIEWED_IMAGE_CLAIM_LEASE_MS = 2 * 60 * 1000;
@@ -122,13 +121,12 @@ export async function generateNoodlerPostImage(input: {
   const sourceAppearance = sourceCharacter
     ? characterAppearanceFromRow(sourceCharacter)
     : sourcePersona?.appearance?.trim() || "";
+  // Every mode shows the same body — it is the page. Reducing a concealed creator to a handful of
+  // approved tokens made them shapeless without hiding anything linkable, since a build and a hair
+  // colour identify nobody. Secret withholds the face and one-of-a-kind markers through the
+  // composition guard below instead.
   if (sourceAppearance && input.settings.imageGenerationIncludeDescriptions) {
-    characterDescription =
-      input.disclosureMode === "open"
-        ? sourceAppearance
-        : input.disclosureMode === "hinted"
-          ? reviewedNoodlerPhysicalFacts(sourceAppearance).join(", ")
-          : "";
+    characterDescription = sourceAppearance;
   }
   if (referenceCharacter) {
     const row = sourceCharacter;
@@ -154,12 +152,7 @@ export async function generateNoodlerPostImage(input: {
           maxReferences: 6,
         });
         if (input.settings.imageGenerationIncludeDescriptions && referenceResolution.appearanceBlock) {
-          characterDescription =
-            input.disclosureMode === "open"
-              ? referenceResolution.appearanceBlock
-              : input.disclosureMode === "hinted"
-                ? reviewedNoodlerPhysicalFacts(referenceResolution.appearanceBlock).join(", ")
-                : "";
+          characterDescription = referenceResolution.appearanceBlock;
         }
         if (input.settings.imageGenerationUseAvatarReferences && referenceResolution.referenceImages.length > 0) {
           referenceImages = Array.from(new Set(referenceResolution.referenceImages)).slice(0, 6);
@@ -237,7 +230,14 @@ export async function generateNoodlerPostImage(input: {
       privateContext: [configuredImageInstructions, connectionImageInstructions, characterPersonality],
     }),
   );
-  const finalPrompt = input.compositionGuard ? `${finalPromptBase}\n\n${input.compositionGuard}` : finalPromptBase;
+  // A creator hiding their identity still posts their body — that is the page. What they actually
+  // withhold is the face and any one-of-a-kind marker, and they withhold it through framing rather
+  // than by describing themselves vaguely.
+  const anonymityGuard =
+    input.disclosureMode === "secret"
+      ? "Compose so the face cannot be identified: crop above the chin, turn away from the camera, or obscure the face with hair, a hand, an object, or shadow. Do not depict one-of-a-kind identifying marks such as a signature scar, tattoo, species trait, or unusual anatomy."
+      : "";
+  const finalPrompt = [finalPromptBase, anonymityGuard, input.compositionGuard].filter(Boolean).join("\n\n");
   // A reviewer who cleared the negative prompt still gets the style profile's own negatives back,
   // for the same reason the positive prompt is recompiled above.
   const baseNegativePrompt = input.promptOverride

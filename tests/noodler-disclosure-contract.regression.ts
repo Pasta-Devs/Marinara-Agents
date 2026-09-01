@@ -153,11 +153,12 @@ const draftPrivacy = readFileSync(
   "utf8",
 );
 assert.match(draftPrivacy, /# Open-secret inspiration brief/u);
-assert.match(draftPrivacy, /noodlerHintedSourceText\(input\.source\?\.data\)/u);
-// The hinted brief still withholds the canonical story beats.
+assert.match(draftPrivacy, /noodlerConcealedSourceText\(input\.source\?\.data\)/u);
+// Both concealed modes describe the same person and share one seed; only the instructions differ.
+// The seed still withholds the canonical story beats, which are what someone could look up.
 assert.doesNotMatch(
   draftPrivacy.slice(
-    draftPrivacy.indexOf("export function noodlerHintedSourceText"),
+    draftPrivacy.indexOf("export function noodlerConcealedSourceText"),
     draftPrivacy.indexOf("export function noodlerSourceText"),
   ),
   /scenario|backstory|source\.name/u,

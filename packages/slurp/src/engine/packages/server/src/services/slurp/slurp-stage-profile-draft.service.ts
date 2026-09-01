@@ -32,34 +32,23 @@ import { parseRecord } from "./slurp-public-support.js";
 import { createNoodlerSourceRevisionToken } from "./slurp-source-revision.js";
 
 /** Used only when a source card carries no usable prose, so the model still gets a starting point. */
-const DERIVED_PERSONA_FALLBACK_BRIEF = "General temperament and creative interests from the source profile.";
+const CONCEALED_SOURCE_FALLBACK_BRIEF = "General temperament and creative interests from the source profile.";
 
 type GenerationConnection = NonNullable<Awaited<ReturnType<ReturnType<typeof createConnectionsStorage>["getWithKey"]>>>;
 
-/** Hinted drafts preserve appearance and recognizable everyday texture without copying identity text. */
-export function noodlerHintedSourceText(data: unknown): string {
+/**
+ * Both concealed modes describe the same person, so they receive the same seed and differ only in
+ * what the instructions forbid saying. Name, scenario, and backstory are the googleable canon, so
+ * they stay out of both; body, voice, and everyday texture are inseparable from the person and stay
+ * in.
+ */
+export function noodlerConcealedSourceText(data: unknown): string {
   const source = parseRecord(data);
   const extensions = parseRecord(source.extensions);
   return [
     `Description: ${typeof source.description === "string" ? source.description : ""}`,
     `Personality: ${typeof source.personality === "string" ? source.personality : ""}`,
     `Appearance: ${typeof source.appearance === "string" ? source.appearance : typeof extensions.appearance === "string" ? extensions.appearance : ""}`,
-  ]
-    .filter((line) => line.split(": ").slice(1).join(": ").trim())
-    .join("\n");
-}
-
-/**
- * Secret drafts derive a new person rather than concealing the source, so they inherit the
- * voice-bearing prose that makes the persona specific. Name and appearance are omitted because the
- * derived persona invents its own, and the canonical story beats are left out because this mode
- * must not carry them over. This mirrors the hinted seed minus appearance.
- */
-export function noodlerSecretSourceText(data: unknown): string {
-  const source = parseRecord(data);
-  return [
-    `Description: ${typeof source.description === "string" ? source.description : ""}`,
-    `Personality: ${typeof source.personality === "string" ? source.personality : ""}`,
   ]
     .filter((line) => line.split(": ").slice(1).join(": ").trim())
     .join("\n");
@@ -85,7 +74,7 @@ function disclosureRules(mode: NoodleIdentityDisclosure, publicIdentity: { displ
     return `This is the same public creator. Use exactly ${publicIdentity.displayName} as displayName and ${publicIdentity.handle} as handle. Write a concise social profile bio that summarizes the linked source. Preserve a direct bio edit from the current draft. Do not invent a stage identity.`;
   if (mode === "hinted")
     return "Create the same person behind a different stage name and handle, as an open secret. Preserve species, body, age range, unusual anatomy, scars, missing or unusual features, clothing preferences, voice, interests, and recurring visual traits. Preserve indirect clues that regular followers may recognize. Never use the exact public name or handle, and never copy canonical biography sentences.";
-  return "Derive a separate person with their own display name and handle. Inherit temperament, voice, humour, and creative style in full so the persona is distinctive. Invent their appearance, body, occupation, history, relationships, and daily life. Do not reveal or preserve the face, exact body details, species markers, scars, unusual anatomy, clothing markers, public name, handle, biography, occupation, relationships, locations, audience, signature phrases, or distinctive public-life clues.";
+  return "The same person behind an anonymous alias, taking real care not to be traced. Use a different display name and handle. Keep their body, voice, humour, interests, and everyday life fully intact — this person is specific, not vague. Withhold only the linkable details: the public name and handle, the face and any one-of-a-kind marker such as species traits, unusual anatomy, or a signature scar or outfit, plus named people, employer, city, and any canonical event that could be looked up.";
 }
 
 export function buildNoodlerStageProfileDraftMessages(input: {
@@ -113,19 +102,18 @@ export function buildNoodlerStageProfileDraftMessages(input: {
   const rawSourceContext =
     input.request.disclosureMode === "secret"
       ? [
-          "# Source character for a derived persona",
-          "Author a NEW person inspired by the character below. They are not the same person and share no public identity.",
-          "Inherit temperament, emotional register, humour, and conversational reflexes in full. This is what makes the derived persona a specific someone rather than a generic creator.",
-          "Invent a fresh name, handle, appearance, body, occupation, history, relationships, location, and daily life. Do not carry over the character's own.",
-          "Never reveal or infer the source: no canonical biography or events, species markers, unusual anatomy, clothing markers, signature phrases, relationships, locations, audience, or public-life details.",
-          noodlerSecretSourceText(input.source?.data) || DERIVED_PERSONA_FALLBACK_BRIEF,
+          "# Anonymous alias brief",
+          "This is the same person as the source, running a page they do not want traced back to them. They are not a different person and not a vaguer one.",
+          "Keep them fully themselves: same body, same voice, same humour, same tastes, same everyday life. An anonymous creator is specific and vivid, because their body and personality are the page.",
+          "Withhold only what would link them: the source name and handle, the face and any one-of-a-kind marker, named people, employer, and city, and any canonical event someone could look up.",
+          noodlerConcealedSourceText(input.source?.data) || CONCEALED_SOURCE_FALLBACK_BRIEF,
         ].join("\n")
       : hintedBrief
         ? [
             "# Open-secret inspiration brief",
             "The stage identity is the same person as the source. Carry over look, vibe, interests, and daily life so a regular follower can recognize them.",
             "Never use the source name or handle, and never copy four or more consecutive words from the text below. Rewrite everything in the stage voice.",
-            noodlerHintedSourceText(input.source?.data) || DERIVED_PERSONA_FALLBACK_BRIEF,
+            noodlerConcealedSourceText(input.source?.data) || CONCEALED_SOURCE_FALLBACK_BRIEF,
           ].join("\n")
         : [
             "# Source character or persona",

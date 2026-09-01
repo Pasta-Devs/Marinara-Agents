@@ -118,28 +118,36 @@ assert.match(
 );
 assert.match(
   stageProfileDraft,
-  /Derive a separate person[\s\S]*Inherit temperament, voice, humour, and creative style in full[\s\S]*Do not reveal or preserve the face/u,
-  "secret Slurp profile creation must derive a new person while withholding identifying appearance",
+  /The same person behind an anonymous alias[\s\S]*Keep their body, voice, humour, interests, and everyday life fully intact[\s\S]*Withhold only the linkable details/u,
+  "secret Slurp creators must stay the same person while withholding what would link them",
 );
-// Derivation seeds from the voice-bearing prose. Reducing it to a fixed vocabulary made every
-// secret creator converge on one generic persona.
+// Both concealed modes describe the same person and share one seed; only the instructions differ.
+// Reducing the seed to a fixed vocabulary made every concealed creator converge on one voice.
 assert.match(
   stageProfileDraft,
-  /function noodlerSecretSourceText[\s\S]*Description: \$\{[\s\S]*Personality: \$\{/u,
-  "secret Slurp profile prompts must seed derivation from the source description and personality",
+  /function noodlerConcealedSourceText[\s\S]*Description: \$\{[\s\S]*Personality: \$\{[\s\S]*Appearance: \$\{/u,
+  "concealed Slurp profile prompts must seed from the source description, personality, and appearance",
 );
+// Name, scenario, and backstory are the googleable canon, so they stay out of the concealed seed.
 assert.doesNotMatch(
   stageProfileDraft.slice(
-    stageProfileDraft.indexOf("function noodlerSecretSourceText"),
+    stageProfileDraft.indexOf("export function noodlerConcealedSourceText"),
     stageProfileDraft.indexOf("export function noodlerSourceText"),
   ),
-  /reviewedNoodlerPhysicalFacts/u,
-  "secret Slurp profile prompts must not include identifying physical facts",
+  /scenario|backstory|source\.name/u,
+  "concealed Slurp profile prompts must withhold the lookupable canon",
+);
+// A concealed creator still posts their body — it is the page. Concealment is framing, not a
+// vaguer description, so every mode sends the same appearance and secret adds a face-avoiding guard.
+assert.match(
+  slurpImages,
+  /imageGenerationIncludeDescriptions\) \{\s*characterDescription = sourceAppearance;/u,
+  "Slurp image prompts must describe the same body in every disclosure mode",
 );
 assert.match(
   slurpImages,
-  /sourceAppearance[\s\S]*imageGenerationIncludeDescriptions[\s\S]*reviewedNoodlerPhysicalFacts\(sourceAppearance\)/u,
-  "hidden Slurp image prompts must use reviewed physical tokens",
+  /disclosureMode === "secret"\s*\?\s*"Compose so the face cannot be identified/u,
+  "secret Slurp images must hide the face through composition rather than a vaguer body",
 );
 assert.match(
   slurpImages,
