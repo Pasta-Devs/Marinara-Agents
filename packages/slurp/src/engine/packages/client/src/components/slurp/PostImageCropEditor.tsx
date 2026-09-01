@@ -356,13 +356,23 @@ export function PostImageFrame({
   const validCrop = crop && isValidCrop(crop) ? crop : null;
   if (!validCrop) {
     return (
-      <div className="flex justify-center overflow-hidden rounded-xl bg-black/30" style={{ maxHeight }}>
+      <div
+        className="relative flex aspect-[4/3] w-full items-center justify-center overflow-hidden rounded-xl bg-[var(--slurp-media-stage,#17131a)]"
+        style={{ maxHeight }}
+      >
+        <ImageWithSource
+          source={src}
+          alt=""
+          aria-hidden="true"
+          className="absolute inset-0 h-full w-full scale-110 object-cover opacity-25 blur-2xl"
+        />
         <ImageWithSource
           source={src}
           alt={alt}
           onError={onError}
-          className="max-w-full object-contain"
-          style={{ maxHeight }}
+          loading="lazy"
+          decoding="async"
+          className="relative z-10 h-full w-full object-contain"
         />
       </div>
     );
@@ -376,10 +386,24 @@ export function PostImageFrame({
   };
   return (
     <div
-      className="relative mx-auto w-full overflow-hidden rounded-xl bg-black/30"
+      className="relative mx-auto w-full overflow-hidden rounded-xl bg-[var(--slurp-media-stage,#17131a)]"
       style={{ aspectRatio, maxWidth: maxHeight * aspectRatio }}
     >
-      <ImageWithSource source={src} alt={alt} onError={onError} className="absolute max-w-none" style={imageStyle} />
+      <ImageWithSource
+        source={src}
+        alt=""
+        aria-hidden="true"
+        className="absolute inset-0 h-full w-full scale-110 object-cover opacity-25 blur-2xl"
+      />
+      <ImageWithSource
+        source={src}
+        alt={alt}
+        onError={onError}
+        loading="lazy"
+        decoding="async"
+        className="absolute z-10 max-w-none"
+        style={imageStyle}
+      />
     </div>
   );
 }

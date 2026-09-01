@@ -97,6 +97,7 @@ export function useNearViewportSlurpMediaSrc(
   options: { eager?: boolean; width?: number; rootMargin?: string } = {},
 ) {
   const [nearViewport, setNearViewport] = useState(options.eager ?? false);
+  const rootMargin = options.rootMargin ?? "600px 0px";
   const observe = useCallback(
     (node: HTMLElement | null) => {
       if (!node || nearViewport) return;
@@ -110,11 +111,11 @@ export function useNearViewportSlurpMediaSrc(
           setNearViewport(true);
           observer.disconnect();
         },
-        { rootMargin: options.rootMargin ?? "600px 0px" },
+        { rootMargin },
       );
       observer.observe(node);
     },
-    [nearViewport, options.rootMargin],
+    [nearViewport, rootMargin],
   );
   const src = useSlurpMediaSrc(imageUrl, { enabled: nearViewport, width: options.width });
   return { src, observe, loading: Boolean(imageUrl && !src) };

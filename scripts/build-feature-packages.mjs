@@ -73,6 +73,9 @@ if (process.env.MARINARA_ENGINE_SOURCE_ROOT && sourceRoot !== engineRoot && sour
   ].join(process.platform === "win32" ? ";" : ":");
 }
 const packageSharedEntry = join(repoRoot, "sources/package-shared.ts");
+const sharedBundleEntry = process.env.MARINARA_ENGINE_SHARED_ROOT
+  ? join(resolve(process.env.MARINARA_ENGINE_SHARED_ROOT), "packages/shared/dist/index.js")
+  : packageSharedEntry;
 const MIN_ENGINE_VERSION = "2.3.0";
 const MAX_ENGINE_EXCLUSIVE = "4.0.0";
 const hierarchicalMapsOwnedSourcePaths = [
@@ -321,7 +324,7 @@ const features = [
   },
   {
     id: "slurp",
-    version: "1.0.32",
+    version: "1.0.33",
     minEngineVersion: "2.4.3",
     maxEngineExclusive: MAX_ENGINE_EXCLUSIVE,
     name: "Slurp",
@@ -692,8 +695,8 @@ export async function selfCheck() {
         "--external:sharp",
         "--external:pino",
         "--external:pino-pretty",
-        ...(feature.id === "long-term-memory" ? ["--external:zod"] : []),
-        `--alias:@marinara-engine/shared=${packageSharedEntry}`,
+          ...(feature.id === "long-term-memory" || feature.id === "slurp" ? ["--external:zod"] : []),
+          `--alias:@marinara-engine/shared=${sharedBundleEntry}`,
         `--metafile=${metafile}`,
         `--outfile=${output}`,
       ],
@@ -786,7 +789,7 @@ if (!customElements.get(${JSON.stringify(tag)})) customElements.define(${JSON.st
         "--define:import.meta.env.DEV=false",
         "--define:import.meta.env.PROD=true",
         '--define:import.meta.env.MODE="production"',
-        `--alias:@marinara-engine/shared=${packageSharedEntry}`,
+          `--alias:@marinara-engine/shared=${sharedBundleEntry}`,
         `--metafile=${metafile}`,
         `--outfile=${output}`,
       ],
@@ -1555,7 +1558,7 @@ if (!customElements.get(${JSON.stringify(tag)})) customElements.define(${JSON.st
         "--define:import.meta.env.DEV=false",
         "--define:import.meta.env.PROD=true",
         '--define:import.meta.env.MODE="production"',
-        `--alias:@marinara-engine/shared=${packageSharedEntry}`,
+          `--alias:@marinara-engine/shared=${sharedBundleEntry}`,
         `--metafile=${metafile}`,
         `--outfile=${output}`,
       ],

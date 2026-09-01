@@ -10,6 +10,7 @@ import {
   MessageCircle,
   MoreHorizontal,
   Pencil,
+  RefreshCw,
   Repeat2,
   RotateCcw,
   Smile,
@@ -2040,12 +2041,28 @@ export function NoodlePostCard({ post, ctx }: { post: NoodlePostCardModel; ctx: 
               </div>
             )
           ) : post.imagePrompt ? (
-            <div className="mt-3 rounded-xl border border-[var(--noodle-accent)]/35 bg-[var(--noodle-accent)]/10 p-3 text-xs leading-5">
+            <div className="relative mt-3 rounded-xl border border-[var(--noodle-accent)]/35 bg-[var(--noodle-accent)]/10 p-3 pr-14 text-xs leading-5">
               <span className="mb-1 flex items-center gap-1.5 font-semibold text-[var(--noodle-accent)]">
                 <ImageIcon size={13} />
                 {localizeUi("ui.noodle.noodlepostcard.imagePrompt")}
               </span>
               {post.imagePrompt}
+              {ctx.postManagement && ctx.generatePostImage && (
+                <button
+                  type="button"
+                  onClick={() => ctx.generatePostImage?.(post)}
+                  disabled={ctx.generatingPostImageId === post.id}
+                  className="absolute right-2 top-2 flex h-10 w-10 items-center justify-center rounded-full text-[var(--noodle-accent)] transition-[background-color,transform] hover:bg-[var(--noodle-accent)]/15 active:scale-[0.96] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--noodle-accent)] disabled:opacity-50 motion-reduce:transition-none motion-reduce:active:scale-100"
+                  title={localizeUi("ui.slurp.image.generate")}
+                  aria-label={localizeUi("ui.slurp.image.generate")}
+                  aria-busy={ctx.generatingPostImageId === post.id}
+                >
+                  <RefreshCw
+                    size={17}
+                    className={ctx.generatingPostImageId === post.id ? "animate-spin motion-reduce:animate-none" : ""}
+                  />
+                </button>
+              )}
             </div>
           ) : null}
 

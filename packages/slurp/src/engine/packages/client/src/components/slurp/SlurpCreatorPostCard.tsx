@@ -940,18 +940,13 @@ export function SlurpCreatorPostCard({
                 })}
               />
             ) : (
-              <img
+              <PostImageFrame
                 src={displayedImageUrl}
                 onError={() => setFailedImageUrl(displayedImageUrl)}
-                loading="lazy"
-                decoding="async"
+                crop={null}
                 alt={localizeUi("ui.noodle.post.imageBy", {
                   name: author?.displayName ?? localizeUi("ui.noodle.profile.fallbackUser"),
                 })}
-                className={cn(
-                  "max-h-[32rem] max-w-full bg-black/10",
-                  ctx.imageFit === "cover" && "w-full object-cover",
-                )}
               />
             )}
           </button>

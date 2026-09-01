@@ -278,6 +278,16 @@ assert.match(
 assert.match(home, /useNearViewportSlurpMediaSrc\(post\.imageUrl, \{ width: 480 \}\)/u);
 assert.match(home, /animate-pulse bg-\[var\(--muted\)\] motion-reduce:animate-none/u);
 assert.match(creatorPostCard, /postImageLoading[\s\S]*?aspect-\[4\/3\][\s\S]*?animate-pulse/u);
+assert.match(
+  read("packages/slurp/src/engine/packages/client/src/components/slurp/PostImageCropEditor.tsx"),
+  /scale-110 object-cover opacity-25 blur-2xl/u,
+  "Slurp post media must use a subdued image-derived stage background",
+);
+assert.match(
+  creatorPostCard,
+  /<PostImageFrame[\s\S]*?crop=\{null\}/u,
+  "Slurp feed images must use the shared media stage",
+);
 assert.match(slurpMedia, /NOODLER_MEDIA_WIDTHS = \[96, 320, 480, 640, 960, 1280, 1600\]/u);
 assert.match(slurpMedia, /\.resize\(\{ width, withoutEnlargement: true \}\)[\s\S]*?\.webp/u);
 assert.match(slurpMedia, /entry\.startsWith\(`\$\{fileName\}\.w`\)/u, "media deletion must remove every derivative");

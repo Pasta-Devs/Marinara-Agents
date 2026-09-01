@@ -1761,9 +1761,6 @@ export function SlurpHome({ navigation, onNavigate }: SlurpHomeProps) {
             className="pointer-events-none absolute -end-8 -top-12 -z-10 h-32 w-32 rounded-full bg-[var(--noodle-accent)]/12 blur-2xl"
             aria-hidden="true"
           />
-          {moments.length > 0 && (
-            <SlurpMomentsShelf moments={moments} newSinceAt={newSinceAt} onOpenMoment={setActiveMomentId} embedded />
-          )}
           <div className="flex items-center gap-2 border-t border-[var(--noodle-divider)] pt-3">
             <span
               className="h-2 w-2 rounded-full bg-[var(--slurp-warm)] shadow-[0_0_14px_var(--slurp-warm)]"
@@ -4288,6 +4285,9 @@ function ViewerHub({
             {localizeUi("ui.slurp.home.postCount", { count: feed.length })}
           </span>
         </div>
+      )}
+      {moments.length > 0 && (
+        <SlurpMomentsShelf moments={moments} newSinceAt={newSinceAt} onOpenMoment={setActiveMomentId} embedded />
       )}
       {isLoading ? (
         <div className="flex justify-center py-16">
