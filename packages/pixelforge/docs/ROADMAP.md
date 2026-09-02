@@ -25,6 +25,52 @@ rulings and the sequencing shape are untouched. Post-review, maintainer-authoriz
 shipped-history table gains the 0.12 and 0.13 rows it was owed, and P4's remaining diverged
 planning lines take the strikethrough treatment the open questions already use.
 
+**Updated 2026-09-02.** One section added and nothing re-cut: **Inspirations — the games checked
+first**, the maintainer's own list (2026-08-28) of the systems worth reading before a requested
+feature is designed, with the register that governs how they may be used. L7 gains the
+traveling-groups half of its Kenshi reference, which the ruling names and the entry did not. No
+item, group, ruling or sequencing decision moved.
+
+**Inspirations — the games checked first (maintainer, 2026-08-28).** When the maintainer asks for a
+feature, these are the games whose systems get looked at before anything is designed. **THE
+REGISTER IS BINDING, and it is the one the Dwarf Fortress direction was already stated in:
+inspiration for BALANCE, never doctrine, and nothing copied one-to-one.** A named game is a place
+to look, not a spec to match — every one of these has scope Pixelforge does not want, and taking a
+system means taking the *shape* of it and leaving that behind.
+
+- **Dwarf Fortress — procedural worldgen, and it is the excellent reference.** Regions, biomes,
+  weather, resources: the more of a world's texture the package mints procedurally, the less
+  worldgen leans on the user's LLM connection, which is the whole balance argument in one sentence.
+  **History generation is worth studying too, with a caveat that is part of the reference and not a
+  footnote:** DF's scope is fantasy plus historical fiction, and Pixelforge's history generation has
+  to accommodate different settings and different time periods — a colony's founding is not a
+  dwarven age. **Never import DF-only content classes** — evil weather is the named example. The
+  direction in action: 0.14's two minted climate axes (latitude and precipitation, with the sky, the
+  seasons and the year derived from them) are exactly this — rolled words and one derivation give
+  every world a distinct climate identity that costs the connection nothing.
+- **Kenshi — factions, world evolution without the player, and traveling groups.** The first two are
+  already the whole premise of **L7**, which names this reference and Dwarf Fortress beside it; read
+  it there rather than here. Traveling groups — caravans, patrols, bands moving *between*
+  settlements rather than around one — are the third part of the same reference and are recorded on
+  that entry.
+- **Stardew Valley — the quintessential pixel-RPG experience.** The farming and crafting systems are
+  the parts to read, and their home is **P6**'s future. **The counterweight stays exactly where it
+  is:** reflex minigames are on the Will Not Build list and stay there (Ruling 2 — RNG tables with
+  skill and equipment inputs instead), because Stardew built reflex layers to fill the place a
+  narrator occupies here.
+- **Minecraft — chunk-style, region-lazy world generation.** Compile the region when somebody walks
+  into it, deterministically from the seed and the edge, rather than up front. Already recorded as
+  the mechanism in **W2**'s lazily-compiled sub-zones, and the same idea at settlement grain is
+  what **W3**'s districts want.
+- **Pokémon-style and turn-based 5e / V20 combat.** The maintainer's long-held combat plans, and
+  they are an **engine-side track** — see the Will Not Build entry, which records the substance:
+  the engine owns combat, the package hands off and freezes. 5e and V20 turn up on this roadmap in
+  a second place for a second reason: they are the rulesets **P8**'s pluggable character sheets are
+  meant to wear.
+
+The maintainer named other early inspirations that the records do not recover. This section grows as
+they resurface; an addition is a maintainer's word, not a contributor's inference.
+
 **How this document is organized, and why.** Items are grouped by **which layer of the package they extend**, not by when anyone thought of them. Discovery order tells you when an idea arrived; a contributor deciding what to build next needs to know what a thing touches, what it depends on, and what it unlocks. The five groups mirror the package's real seams: **S** — substrate (channels and data everything else hangs off), **L** — the living settlement (the world moving without the player), **P** — the player's stake (ownership, progression, and the things the player does), **W** — the wider world (exploration and settlement variety), **E** — the cast (people as content). After the groups: sequencing, the will-not-build list, and open questions.
 
 ---
@@ -244,7 +290,9 @@ The window matters at both ends. World-derived ids — a discovered sub-zone, a 
 
 ### L7. Autonomous world change — factions *(new — maintainer ruling, 2026-08-24)*
 
-**What:** the world should change **without the player being involved in it at all**. Dwarf Fortress and Kenshi are the named references, and the reference is the point: the interesting thing about those worlds is not that things happen, it is that things happen to *somebody else* and you find out afterwards. Factions are the shape the ruling gives it — bodies with interests that act on the settlement over days, so a town the player left is not the town they come back to.
+**What:** the world should change **without the player being involved in it at all**. Dwarf Fortress and Kenshi are the named references (see Inspirations), and the reference is the point: the interesting thing about those worlds is not that things happen, it is that things happen to *somebody else* and you find out afterwards. Factions are the shape the ruling gives it — bodies with interests that act on the settlement over days, so a town the player left is not the town they come back to.
+
+**And the visible half of the same reference: traveling groups.** Kenshi's world reads as alive largely because things are *moving through* it — caravans, patrols, bands with somewhere else to be. A faction that only exists in the notice band is a newspaper; a faction whose people walk the road past the player is a world. Recorded here as the second shape the ruling asks for, deliberately undesigned: it wants the same world-state decision everything in this entry wants, and it is the one part of it a player can see without reading anything.
 
 **No mechanism exists yet, and this entry is deliberately not designing one.** What it records is the ruling and the one seam already built for it. Every other item in this group moves people the compiler placed, on schedules the compiler wrote, inside a world that is a pure function of its seed — which is exactly the property a faction has to break, and that is S5's sibling world-state block all over again (see S5's three options; this item is the second consumer that decision was waiting for, after S1).
 
