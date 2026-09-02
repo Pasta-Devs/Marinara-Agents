@@ -12,6 +12,7 @@ import {
   createCatalogLanes,
   readCatalogFamily,
 } from "./catalog-lanes.mjs";
+import { buildReleaseNotesDocument, listPackagesWithChangelogs } from "./catalog-release-notes.mjs";
 import { assertHierarchicalMapsPrivateImportBoundary } from "./hierarchical-maps-boundary.mjs";
 import { INCOMPLETE_PACKAGE_IDS, STAGING_ONLY_PACKAGE_IDS } from "./catalog-incomplete.mjs";
 import { assertPackagePrivateImportBoundary } from "./package-engine-boundary.mjs";
@@ -118,6 +119,44 @@ for (const [major, expectedCatalog] of expectedCatalogsByMajor) {
 if (JSON.stringify(legacyCatalog) !== JSON.stringify(catalogsByMajor.get(LEGACY_CATALOG_MAJOR))) {
   throw new Error(`catalog/catalog.json must remain an exact alias of catalog/v${LEGACY_CATALOG_MAJOR}/catalog.json`);
 }
+
+// Release-notes sidecars get the same treatment as the lanes they sit beside: a
+// committed notes.json must be exactly what a rebuild produces, and a lane whose
+// packages publish no notes must carry no sidecar at all. Anything else means a
+// notes.json was hand-edited, or a changelog changed without a rebuild, and the
+// text users read in the update prompt would no longer match the repository.
+async function readCommittedNotes(path) {
+  try {
+    return JSON.parse(await readFile(join(repoRoot, path), "utf8"));
+  } catch {
+    return null;
+  }
+}
+
+async function assertNotesSidecar(path, entries) {
+  const expected = await buildReleaseNotesDocument(repoRoot, entries);
+  const committed = await readCommittedNotes(path);
+  const wanted = Object.keys(expected.packages).length > 0 ? expected : null;
+  if (JSON.stringify(committed) !== JSON.stringify(wanted)) {
+    throw new Error(`${path} does not match the committed package changelogs — rebuild the catalog`);
+  }
+}
+
+for (const [major, lane] of expectedCatalogsByMajor) {
+  await assertNotesSidecar(`catalog/v${major}/notes.json`, lane.packages);
+}
+await assertNotesSidecar("catalog/notes.json", expectedCatalogsByMajor.get(LEGACY_CATALOG_MAJOR).packages);
+if (previewCatalog.packages.length > 0) {
+  const expectedPreviewLanes = createCatalogLanes(previewCatalog);
+  for (const [major, lane] of expectedPreviewLanes) {
+    await assertNotesSidecar(`catalog/preview/v${major}/notes.json`, lane.packages);
+  }
+  await assertNotesSidecar("catalog/preview/notes.json", expectedPreviewLanes.get(LEGACY_CATALOG_MAJOR).packages);
+}
+const packagesWithChangelogs = await listPackagesWithChangelogs(repoRoot);
+console.log(
+  `Release notes: ${packagesWithChangelogs.length}/${publishedCatalog.packages.length} published packages ship a CHANGELOG.md.`,
+);
 const hierarchicalMapsBoundary = await assertHierarchicalMapsPrivateImportBoundary();
 
 const hierarchicalMapsOwnedSourcePaths = [
