@@ -26,6 +26,22 @@ export type GarnishPlatform = "slurp" | "noodle";
 
 export type GarnishAdKind = "creator" | "inline";
 
+/** Where an ad came from. Automatic retirement never touches `user` ads. */
+export type GarnishAdOrigin = "builtin" | "user" | "generated";
+
+/**
+ * A gate, never a score. Hosts differ in what they may show, so this filters
+ * before ranking and never competes with relevance.
+ */
+export type GarnishContentRating = "tame" | "suggestive" | "explicit";
+
+export const GARNISH_CONTENT_RATINGS: readonly GarnishContentRating[] = ["tame", "suggestive", "explicit"];
+
+/** True when `rating` is allowed under `ceiling`. */
+export function garnishRatingAllowed(rating: GarnishContentRating, ceiling: GarnishContentRating): boolean {
+  return GARNISH_CONTENT_RATINGS.indexOf(rating) <= GARNISH_CONTENT_RATINGS.indexOf(ceiling);
+}
+
 export type GarnishAd = {
   id: string;
   platform: GarnishPlatform;
@@ -39,9 +55,14 @@ export type GarnishAd = {
   creatorHandle?: string;
   imageUrl?: string | null;
   actionLabel?: string;
+  contentRating: GarnishContentRating;
+  origin: GarnishAdOrigin;
+  createdAt?: string;
+  /** Set when the ad is withdrawn from selection. The row stays so ids are never reused. */
+  retiredAt?: string | null;
 };
 
-export type GarnishAdState = { hiddenAdIds: string[]; recentAdIds: string[] };
+export type GarnishAdState = { hiddenAdIds: string[]; recentAdIds: string[]; hiddenBrands: string[] };
 
 /**
  * Everything garnish-ads needs to target. Host apps map their own domain onto
@@ -54,6 +75,8 @@ export type GarnishAdContext = {
   contextTags?: string[];
   preferredTags?: string[];
   steering?: "balanced" | "personalized" | "random";
+  /** Highest rating this subject may be shown. Applied before ranking. */
+  contentCeiling?: GarnishContentRating;
 };
 
 /** A creator, reduced to the fields garnish-ads may know about. */

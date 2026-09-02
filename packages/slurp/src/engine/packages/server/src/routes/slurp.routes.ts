@@ -62,7 +62,13 @@ import { clearNoodlerImageConnections } from "../services/slurp/slurp-image-conn
 import { generateAndApplyNoodlerCreatorReply } from "../services/slurp/slurp-creator-reply.operation.js";
 import { getNoodlerFanActivityStatus, runNoodlerFanActivity } from "../services/slurp/slurp-fan-activity.operation.js";
 import { admissionModeForRequest, isConnectionAdmissionFailure } from "../services/generation/connection-admission.js";
+import {
+  exportGarnishAds,
+  importGarnishAds,
+  GARNISH_EXPORT_VERSION,
+} from "../services/garnish-ads/garnish-ads.export.js";
 import { createGarnishAds } from "../services/garnish-ads/garnish-ads.service.js";
+import { newId } from "../utils/id-generator.js";
 import { SLURP_GARNISH_PLATFORM, garnishContextForViewer } from "../services/slurp/slurp-garnish-context.js";
 import { generateNoodlerStageProfileDraft } from "../services/slurp/slurp-stage-profile-draft.service.js";
 import {
@@ -375,6 +381,18 @@ export async function slurpRoutes(app: FastifyInstance) {
   const connections = createConnectionsStorage(app.db);
   const noodlerImages = createNoodlerNoodleImagesService(app.db);
   const ads = createGarnishAds(app.db);
+  const garnishAdInputSchema = z.object({
+    id: z.string().trim().min(1).max(120).optional(),
+    kind: z.enum(["creator", "inline"]).default("inline"),
+    brand: z.string().trim().min(1).max(80),
+    product: z.string().trim().min(1).max(120),
+    copy: z.string().trim().min(1).max(600),
+    categories: z.array(z.string().trim().min(1).max(32)).max(12).default([]),
+    contextTags: z.array(z.string().trim().min(1).max(32)).max(12).default([]),
+    imageUrl: z.string().trim().max(2048).nullable().optional(),
+    actionLabel: z.string().trim().min(1).max(40).optional(),
+    contentRating: z.enum(["tame", "suggestive", "explicit"]).default("tame"),
+  });
   const noodlerViewerSignalCache = new Map<string, { generationKey: string; value: NoodlerViewerSignalResponse }>();
 
   async function resolveNoodlerPublicIdentity(publicAccount: NoodleAccount) {
@@ -867,8 +885,15 @@ export async function slurpRoutes(app: FastifyInstance) {
         contextTags: parsed.data.contextTags?.split(",") ?? [],
         preferredTags: settings.inlineAdsPreferredTags,
         steering: settings.inlineAdsSteering,
+        contentCeiling: settings.inlineAdsContentCeiling,
       }),
     );
+    // Rotation is only real if what was served is written down.
+    await ads.markRecent(
+      parsed.data.personaId,
+      items.map((item) => item.id),
+    );
+    for (const item of items) await ads.record(parsed.data.personaId, item.id, "impression");
     return { items };
   });
 
@@ -886,6 +911,89 @@ export async function slurpRoutes(app: FastifyInstance) {
     const viewer = await resolveViewerPersona(parsed.data.personaId);
     if (!viewer) return reply.code(404).send({ error: "Slurp persona not found" });
     return ads.reset(parsed.data.personaId);
+  });
+
+  app.post("/noodler/viewer/ads/:id/action", async (req, reply) => {
+    const parsed = z.object({ personaId: z.string().trim().min(1) }).safeParse(req.body);
+    if (!parsed.success) return reply.code(400).send({ error: parsed.error.flatten() });
+    const viewer = await resolveViewerPersona(parsed.data.personaId);
+    if (!viewer) return reply.code(404).send({ error: "Slurp persona not found" });
+    await ads.record(parsed.data.personaId, (req.params as { id: string }).id, "action");
+    return { ok: true };
+  });
+
+  app.post("/noodler/viewer/ads/brand/hide", async (req, reply) => {
+    const parsed = z
+      .object({ personaId: z.string().trim().min(1), brand: z.string().trim().min(1).max(80) })
+      .safeParse(req.body);
+    if (!parsed.success) return reply.code(400).send({ error: parsed.error.flatten() });
+    const viewer = await resolveViewerPersona(parsed.data.personaId);
+    if (!viewer) return reply.code(404).send({ error: "Slurp persona not found" });
+    return ads.hideBrand(parsed.data.personaId, parsed.data.brand);
+  });
+
+  app.post("/noodler/viewer/ads/brand/unhide", async (req, reply) => {
+    const parsed = z
+      .object({ personaId: z.string().trim().min(1), brand: z.string().trim().min(1).max(80) })
+      .safeParse(req.body);
+    if (!parsed.success) return reply.code(400).send({ error: parsed.error.flatten() });
+    const viewer = await resolveViewerPersona(parsed.data.personaId);
+    if (!viewer) return reply.code(404).send({ error: "Slurp persona not found" });
+    return ads.unhideBrand(parsed.data.personaId, parsed.data.brand);
+  });
+
+  app.get("/noodler/viewer/ads/state", async (req, reply) => {
+    const parsed = z.object({ personaId: z.string().trim().min(1) }).safeParse(req.query);
+    if (!parsed.success) return reply.code(400).send({ error: parsed.error.flatten() });
+    const viewer = await resolveViewerPersona(parsed.data.personaId);
+    if (!viewer) return reply.code(404).send({ error: "Slurp persona not found" });
+    const [state, all] = await Promise.all([
+      ads.state(parsed.data.personaId),
+      ads.pool.listAll(SLURP_GARNISH_PLATFORM),
+    ]);
+    const byId = new Map(all.map((ad) => [ad.id, ad]));
+    return {
+      hiddenBrands: state.hiddenBrands,
+      hidden: state.hiddenAdIds.map((id) => byId.get(id) ?? null).filter(Boolean),
+      seen: state.recentAdIds.map((id) => byId.get(id) ?? null).filter(Boolean),
+    };
+  });
+
+  // ── Ad pool authoring ─────────────────────────────────────────────
+  app.get("/noodler/ads/pool", async () => ({ items: await ads.pool.listAll(SLURP_GARNISH_PLATFORM) }));
+
+  app.post("/noodler/ads/pool", async (req, reply) => {
+    const parsed = garnishAdInputSchema.safeParse(req.body);
+    if (!parsed.success) return reply.code(400).send({ error: parsed.error.flatten() });
+    const input = parsed.data;
+    return ads.pool.add({
+      ...input,
+      id: input.id ?? `user-${newId()}`,
+      platform: SLURP_GARNISH_PLATFORM,
+      origin: "user",
+      createdAt: new Date().toISOString(),
+    });
+  });
+
+  app.delete("/noodler/ads/pool/:id", async (req) => {
+    await ads.pool.remove((req.params as { id: string }).id);
+    return { ok: true };
+  });
+
+  app.get("/noodler/ads/export", async () => exportGarnishAds(ads.pool, SLURP_GARNISH_PLATFORM));
+
+  app.post("/noodler/ads/import", async (req, reply) => {
+    const parsed = z
+      .object({ mode: z.enum(["merge", "replace"]).default("merge"), payload: z.unknown() })
+      .safeParse(req.body);
+    if (!parsed.success) return reply.code(400).send({ error: parsed.error.flatten() });
+    try {
+      return await importGarnishAds(ads.pool, parsed.data.payload, parsed.data.mode);
+    } catch (error) {
+      return reply.code(400).send({
+        error: `Not a garnish-ads export (version ${GARNISH_EXPORT_VERSION}): ${(error as Error).message}`,
+      });
+    }
   });
 
   async function resolveReadableNoodlerPost(personaId: string, postId: string) {

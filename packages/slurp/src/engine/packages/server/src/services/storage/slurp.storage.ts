@@ -159,6 +159,10 @@ const noodlerFanArchetypeWeightsSchema = z
  */
 export const slurpSettingsSchema = z.object({
   inlineAdsEnabled: z.boolean(),
+  inlineAdsFrequency: z.enum(["light", "standard", "frequent"]),
+  inlineAdsSteering: z.enum(["balanced", "personalized", "random"]),
+  inlineAdsPreferredTags: z.array(z.string().trim().min(1).max(32)).max(8),
+  inlineAdsContentCeiling: z.enum(["tame", "suggestive", "explicit"]),
   refreshesPerDay: z.number().int().min(0).max(24),
   generationGuidance: z.string().max(20_000),
   generationConnectionId: z.string().nullable(),
@@ -682,6 +686,10 @@ export const NOODLER_DEFAULT_IMAGE_PROMPT_INTERPRETATION =
 
 export const DEFAULT_SLURP_SETTINGS: SlurpSettings = {
   inlineAdsEnabled: true,
+  inlineAdsFrequency: "standard",
+  inlineAdsSteering: "personalized",
+  inlineAdsPreferredTags: [],
+  inlineAdsContentCeiling: "explicit",
   refreshesPerDay: 0,
   generationGuidance: NOODLER_DEFAULT_GENERATION_GUIDANCE,
   generationConnectionId: null,

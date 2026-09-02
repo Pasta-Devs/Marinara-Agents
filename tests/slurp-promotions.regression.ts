@@ -1,11 +1,17 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
+const base = readFileSync(
+  "packages/slurp/src/engine/packages/server/src/services/garnish-ads/garnish-ads.base.ts",
+  "utf8",
+);
+assert.match(base, /kind: "inline"/u);
+assert.match(base, /kind: "creator"/u);
+assert.match(base, /contentRating: "/u, "every base ad needs a content rating for the host gate");
+
 const ads = readFileSync(
   "packages/slurp/src/engine/packages/server/src/services/garnish-ads/garnish-ads.service.ts",
   "utf8",
 );
-assert.match(ads, /kind: "inline"/u);
-assert.match(ads, /kind: "creator"/u);
 assert.match(ads, /function creatorAdForProfile/u);
 // The stored state key is deliberately unchanged by the garnish-ads rename, so
 // existing hidden-ad lists survive.
