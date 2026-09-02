@@ -9,6 +9,12 @@ import { readdirSync, readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
+// The Tier-1 generator's painter table. Imported rather than read as text so
+// the baked tiles can be RASTERIZED here — a name regex says a painter exists
+// and nothing about the shape it draws. Importing it runs no build: `buildArt()`
+// is the only thing that touches the disk, and nothing here calls it.
+import { TIER1 } from "./build/build-art.mjs";
+
 // ── THE HARNESS ALWAYS LEAVES (Agents #554) ──────────────────────────────────
 // A red run was once seen to print an error and then sit past a ten-minute
 // timeout; six later attempts could not reproduce it. What those attempts did
@@ -7611,6 +7617,24 @@ const shapeOf = (canvas) => {
   return out.join(".");
 };
 const pixelsOf = (canvas) => Array.from(canvas._data).join(",");
+/** How many DISTINCT opaque colours a tile is painted in. One is a flat square
+ *  — a lawn, whatever the id on it says. */
+const tonesOf = (canvas) => {
+  const seen = new Set();
+  const d = canvas._data;
+  for (let i = 0; i < d.length; i += 4) if (d[i + 3] !== 0) seen.add(`${d[i]},${d[i + 1]},${d[i + 2]}`);
+  return seen.size;
+};
+/** An rng stream that shares nothing with the stream beside it: a painter that
+ *  reads either one paints two different tiles, and a painter that reads
+ *  neither paints one. Both tiers' dither-free pins run off this. */
+const stream = (step) => {
+  let n = 0;
+  return () => ((n += step) % 97) / 97;
+};
+/** The four ids `SUBS` swaps in on a snow day, named once: three separate cases
+ *  below drive them and a list per case is a list that drifts. */
+const SNOW_IDS = ["grassSnow", "grassSnow2", "cropSnow", "canopySnow"];
 
 // ── THE SNOW GROUND, IN BOTH TIERS AND BOTH THEMES (0.14 slice 3) ───────────
 // Snow is the one weather that changes the GROUND rather than the light, and it
@@ -7681,6 +7705,44 @@ const pixelsOf = (canvas) => Array.from(canvas._data).join(",");
         `${id} is one shape both palettes recolour — the shape comparison divides the palette out`,
       );
 
+    // …and the invariant BOTH of those comparisons quietly rest on, which
+    // nothing was checking. `tile()` seeds each painter off `tile:<theme>:<id>`,
+    // so a snow painter that touched its rng would scatter differently under
+    // each theme — and the themed-shape line above would then read "differs" for
+    // a reason that has nothing to do with an override. That is a COMPOSED
+    // defeat, and it is cheap: dither the base `cropSnow`, delete the sci-fi
+    // override, and every assertion in this case stays green while a
+    // hydroponics tray grows cozy furrows every winter. Two different streams
+    // over the same theme (so the same palette) is the direct question: a
+    // painter that touches the stream at all paints two different tiles.
+    const underStream = (theme, id, step) => {
+      const realRng = loadedPF.rng;
+      loadedPF.rng = () => stream(step);
+      try {
+        // setTheme is the only cache eviction and it no-ops on the theme it
+        // already stands in, so bounce off the other one to force a repaint.
+        loadedPF.art.setTheme(theme === "cozy-village" ? "sci-fi-colony" : "cozy-village");
+        loadedPF.art.setTheme(theme);
+        return pixelsOf(loadedPF.art.tile(id));
+      } finally {
+        loadedPF.rng = realRng;
+      }
+    };
+    for (const theme of ["cozy-village", "sci-fi-colony"])
+      for (const id of SNOW_IDS)
+        assert.equal(
+          underStream(theme, id, 7),
+          underStream(theme, id, 31),
+          `${theme}: ${id} is dither-free — its shape does not move when the rng does`,
+        );
+    // The control that keeps THAT honest: a painter that does dither has to
+    // fail it, or the comparison is measuring nothing.
+    assert.notEqual(
+      underStream("cozy-village", "grass", 7),
+      underStream("cozy-village", "grass", 31),
+      "…and `grass`, which scatters flecks, does move — so the comparison can see a dither",
+    );
+
     // THE GROUND SHOWS UNDER A FENCE AND A TREE. Object painters used to fill
     // their own background with `grass1`, which on a snow day is a green square
     // under every fence and — on sci-fi, whose `grass1` is regolith brown — a
@@ -7716,13 +7778,123 @@ const pixelsOf = (canvas) => Array.from(canvas._data).join(",");
   );
 
   // ── AND THE SAME FOUR IDS IN TIER-1 (the shipped atlas) ───────────────────
-  // The generator writes PNGs to disk and cannot run inside this process, so
-  // its tables are read as SOURCE — the bridge case's precedent, and enough to
-  // catch the failure that matters: a tile added to one tier and forgotten in
-  // the other.
+  // Two halves, and they answer different questions. The SOURCE half below is
+  // about the FILE — the append-only key order that is the atlas index map, a
+  // fact no rasterizer can see. The RASTERIZED half here is about the PIXELS,
+  // and it exists because "the generator paints cropSnow" was the whole Tier-1
+  // story: a name regex is green over a painter flattened to a plain square,
+  // over a themed override that stopped being a different shape from the base
+  // one, and over an object painter that fills in the ground it stands on. Every
+  // one of those is a shipped tile that looks wrong, and Tier-1 is the tier
+  // players actually see.
+  //
+  // `buildArt()` writes PNGs and cannot run in this process; the PAINTERS can,
+  // because they only ever call `rect` and `px`.
+  const tier1Tile = () => {
+    const T1 = TIER1.T;
+    const data = new Uint8ClampedArray(T1 * T1 * 4);
+    // build/png.mjs's `Raster`, in the shape `shapeOf`/`pixelsOf` read: clipped
+    // to the tile, hex → opaque, null → cleared.
+    const px = (x, y, hex) => {
+      if (x < 0 || y < 0 || x >= T1 || y >= T1) return;
+      const i = (y * T1 + x) * 4;
+      if (hex === null) {
+        data[i] = data[i + 1] = data[i + 2] = data[i + 3] = 0;
+        return;
+      }
+      data[i] = parseInt(hex.slice(1, 3), 16);
+      data[i + 1] = parseInt(hex.slice(3, 5), 16);
+      data[i + 2] = parseInt(hex.slice(5, 7), 16);
+      data[i + 3] = 255;
+    };
+    return {
+      _data: data,
+      px,
+      rect(x, y, w, h, hex) {
+        for (let yy = y; yy < y + h; yy++) for (let xx = x; xx < x + w; xx++) px(xx, yy, hex);
+      },
+    };
+  };
+  const bake = (theme, id, rnd) => {
+    const tile = tier1Tile();
+    TIER1.paint(theme, id, tile, rnd);
+    return tile;
+  };
+  const baked = {};
+  for (const theme of TIER1.themes()) {
+    baked[theme] = {};
+    for (const id of [...SNOW_IDS, "grass", "grass2", "crop", "canopy", "fence", "well", "trunk"])
+      baked[theme][id] = bake(theme, id);
+    // THE SNOW TILE IS NOT THE SUMMER TILE — the Tier-0 case's first question,
+    // asked of the tiles that actually ship.
+    for (const [from, to] of Object.entries(W.SUBS.snow))
+      assert.notEqual(
+        pixelsOf(baked[theme][to]),
+        pixelsOf(baked[theme][from]),
+        `tier-1 ${theme}: ${to} bakes different pixels from ${from}`,
+      );
+  }
+  // THE THEME DIMENSION, at the tier where the swap is permanent: a colony snow
+  // day falling through to the base painters turns masts into leafy blobs and
+  // trays into cozy furrows, and the atlas keeps it that way until the next bake.
+  for (const id of ["cropSnow", "canopySnow"])
+    assert.notEqual(
+      shapeOf(baked["sci-fi-colony"][id]),
+      shapeOf(baked["cozy-village"][id]),
+      `tier-1 ${id} is a themed shape, not the base one recoloured`,
+    );
+  for (const id of ["grassSnow", "grassSnow2"])
+    assert.equal(
+      shapeOf(baked["sci-fi-colony"][id]),
+      shapeOf(baked["cozy-village"][id]),
+      `tier-1 ${id} is one shape both palettes recolour — the shape comparison divides the palette out`,
+    );
+  // …AND NONE OF THEM IS A FLAT FIELD. Snow reads flat, which is exactly why a
+  // painter can be reduced to one `rect` over the whole tile and still pass
+  // every comparison above — it differs from the summer tile, and it differs
+  // from the other theme's. All four carry the three snow tones on purpose:
+  // cropSnow's furrows are what keep a field a field in winter.
+  for (const theme of TIER1.themes())
+    for (const id of SNOW_IDS)
+      assert.ok(
+        tonesOf(baked[theme][id]) >= 3,
+        `tier-1 ${theme}: ${id} carries relief — a snow tile painted in one flat colour is a lawn with a winter name`,
+      );
+  // Dither-free at this tier too, for Tier-0's reason: the shape comparisons
+  // above only divide the palette out while the shape holds still.
+  for (const theme of TIER1.themes())
+    for (const id of SNOW_IDS)
+      assert.equal(
+        pixelsOf(bake(theme, id, stream(7))),
+        pixelsOf(bake(theme, id, stream(31))),
+        `tier-1 ${theme}: ${id} is dither-free — its shape does not move when the rng does`,
+      );
+  assert.notEqual(
+    pixelsOf(bake("cozy-village", "grass", stream(7))),
+    pixelsOf(bake("cozy-village", "grass", stream(31))),
+    "…and `grass`, which scatters flecks, does move — so the comparison can see a dither",
+  );
+  // THE GROUND SHOWS UNDER A FENCE, A WELL AND A TREE — HERE TOO, and measured
+  // rather than grepped. The source pin below counts one exact literal, which a
+  // painter can walk around with `rect(0, 0, 16, 16, …)`, a `T`-free spelling or
+  // a different palette key; the corners are the property that actually matters.
+  for (const theme of TIER1.themes())
+    for (const id of ["fence", "well", "trunk"])
+      for (const [x, y] of [
+        [0, 0],
+        [15, 15],
+      ])
+        assert.equal(
+          baked[theme][id]._data[(y * 16 + x) * 4 + 3],
+          0,
+          `tier-1 ${theme}: ${id} leaves the ground it stands on showing at (${x},${y})`,
+        );
+
+  // The SOURCE half: the key order that IS the atlas index map, and the palette
+  // keys a painter would otherwise bake as `undefined`.
   const generator = readFileSync(join(here, "build", "build-art.mjs"), "utf8");
   const themeArt = generator.slice(0, generator.indexOf("const PAINTERS = {"));
-  for (const id of ["grassSnow", "grassSnow2", "cropSnow", "canopySnow"]) {
+  for (const id of SNOW_IDS) {
     assert.ok(new RegExp(`\\n {2}${id}\\(g\\) \\{`).test(generator), `the Tier-1 generator paints ${id}`);
     // APPENDED, NEVER INSERTED: that table's key order IS the atlas index map,
     // so a snow tile slotted in beside `grass` where it reads nicely would
@@ -7734,6 +7906,9 @@ const pixelsOf = (canvas) => Array.from(canvas._data).join(",");
   }
   for (const id of ["cropSnow", "canopySnow"])
     assert.ok(themeArt.includes(`${id}(g) {`), `…and the colony overrides ${id}, as it overrides the summer tile`);
+  // A BELT over the measured corners above, not the guard itself: it counts one
+  // exact spelling, and the property is about pixels. Kept because it names the
+  // class at the site a new painter gets written.
   assert.equal(
     (generator.match(/g\.rect\(0, 0, T, T, PAL\.grass1\)/g) ?? []).length,
     1,
@@ -7956,6 +8131,63 @@ const pixelsOf = (canvas) => Array.from(canvas._data).join(",");
       "heavy rain and light rain are not the same picture at the same instant",
     );
 
+    // ── STORM RIDES THE HEAVY ROW, AND LEANS FURTHER ─────────────────────────
+    // A storm takes no intensity (`takesIntensity: false`), so `sky.intensity`
+    // is null and the row lookup reaches `heavy` by falling off the "light"
+    // test. The worst weather in the vocabulary therefore gets its downpour from
+    // a ternary's ELSE branch — the shape that flips to `light` under an
+    // innocent-looking edit and paints a thunderstorm as drizzle — and every
+    // comparison above runs on rain, so nothing was watching it. The other half
+    // of the same sentence, the steeper wind angle, was pure prose.
+    //
+    // Each streak's column, speed and phase come off `hashStr`, so pinning that
+    // to ONE value stacks all N of them on one spot and turns the pass into
+    // arithmetic: the mark COUNT is the row's `n` times the row's streak length,
+    // and the horizontal spread across one streak's stacked segments IS the wind
+    // angle. Recorded rather than painted, because N streaks on one spot are one
+    // mark on a canvas and the count is the whole question. Seed 2000 puts the
+    // streak at x ≈ 125 of 256 and y = 7 — clear of every edge, so nothing is
+    // clipped and the counts are exact.
+    const streaksOf = (sky) => {
+      const realHash = loadedPF.hashStr;
+      const rects = [];
+      loadedPF.hashStr = () => 2000;
+      try {
+        withClock(0, () =>
+          render._fall(
+            { fillStyle: "", fillRect: (x, y, w, h) => rects.push([x, y, w, h]) },
+            sky,
+            0,
+            0,
+            256,
+            256,
+          ),
+        );
+      } finally {
+        loadedPF.hashStr = realHash;
+      }
+      return rects;
+    };
+    const stormFall = streaksOf({ word: "storm", intensity: null });
+    const heavyFall = streaksOf({ word: "rain", intensity: "heavy" });
+    const lightFall = streaksOf({ word: "rain", intensity: "light" });
+    assert.equal(stormFall.length, heavyFall.length, "a storm runs the HEAVY row's streaks, mark for mark");
+    assert.ok(heavyFall.length > lightFall.length, "…which is more of them than light rain paints");
+    const rowsOf = (marks) => [...new Set(marks.map((r) => r[1]))].sort((a, b) => a - b);
+    assert.deepEqual(
+      rowsOf(stormFall),
+      rowsOf(heavyFall),
+      "…and the same streak down the same rows: one row means one fall speed and one length",
+    );
+    assert.notDeepEqual(rowsOf(lightFall), rowsOf(heavyFall), "…which the light row is not");
+    // The wind angle, measured where it shows: how far a streak's bottom segment
+    // sits to the west of its top one.
+    const lean = (marks) => Math.max(...marks.map((r) => r[0])) - Math.min(...marks.map((r) => r[0]));
+    assert.ok(
+      lean(stormFall) > lean(heavyFall),
+      `…and a storm leans harder than rain does (${lean(stormFall)}px across a streak against ${lean(heavyFall)}px)`,
+    );
+
     // ── AND NONE OF IT REACHES INDOORS ───────────────────────────────────────
     // One assertion covers all three: same interior, worst sky, two instants.
     // A tint would darken it, a substitution would whiten it, a particle would
@@ -8089,7 +8321,23 @@ const pixelsOf = (canvas) => Array.from(canvas._data).join(",");
     // Tier-0 painter answers. Procedural snow, not a see-through field. Pinned
     // because "it degrades gracefully" is exactly the kind of claim that stops
     // being true quietly.
-    assert.equal(A.tileCanvas("grassSnow"), null, "an id the atlas does not list gets no Tier-1 answer");
+    //
+    // Read off DISK, against the SHIPPED atlas.json. The synthetic map above
+    // lists t0..t32 and would answer null for a misspelling just as readily, so
+    // asking IT about a snow id says nothing about what this package ships —
+    // which is why the four ids could be added to the real file and this block
+    // stay green. This is a PRE-BAKE pin and it is MEANT to invert: §6b's
+    // rebuild lists all four, and the commit that runs the bake has to come back
+    // here and say so. Noticing that is the whole reason it exists.
+    const shippedAtlas = JSON.parse(readFileSync(join(here, "atlas.json"), "utf8"));
+    for (const id of SNOW_IDS)
+      assert.ok(
+        !Object.hasOwn(shippedAtlas.tiles, id),
+        `the shipped atlas.json does not list ${id} yet — the bake is still owed`,
+      );
+    // …and the degradation demonstrated against THAT map, not the fixture's.
+    A.atlas = shippedAtlas;
+    assert.equal(A.tileCanvas("grassSnow"), null, "an id the shipped atlas does not list gets no Tier-1 answer");
     loadedPF.art.setTheme("sci-fi-colony");
     loadedPF.art.setTheme("cozy-village");
     const drawnSnow = loadedPF.art.tile("grassSnow");

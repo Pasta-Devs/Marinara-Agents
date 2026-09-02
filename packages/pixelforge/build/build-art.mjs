@@ -419,6 +419,40 @@ const PAINTERS = {
   },
 };
 
+// ── The painters, addressable from outside ───────────────────────────────────
+// Tier-1 art was testable only as SOURCE TEXT — a regex for a painter's name —
+// which can say a painter EXISTS and nothing about what it draws. A tile added
+// to this table and left as a plain square, or a themed override that quietly
+// stopped being a different shape from the base one, both read as green under a
+// name check. The painters take a tiny {rect, px} context and touch nothing
+// else, so any shim that answers those two calls rasterizes them exactly as
+// `Raster` does, and the shape comparisons the runtime Tier-0 layer gets can be
+// run here too.
+//
+// Emission still goes through `buildArt()` and this changes no baked byte: the
+// palette swap below is the same in-place one the emission loop performs, and
+// it restores the base palette on the way out for the same reason the emission
+// loop does.
+export const TIER1 = {
+  T,
+  themes: () => Object.keys(THEME_ART),
+  ids: () => Object.keys(PAINTERS),
+  /** Paint one tile of one theme into `g` ({rect, px}). The rng is the same
+   *  per-(theme, id) stream an emission hands the painter unless one is passed,
+   *  which is how a caller asks whether a painter reads it at all. */
+  paint(themeId, id, g, rnd = rng(hash(`tier1:${themeId}:${id}`))) {
+    const themeArt = THEME_ART[themeId];
+    for (const key of Object.keys(PAL)) delete PAL[key];
+    Object.assign(PAL, BASE_PAL, themeArt.palette);
+    try {
+      (themeArt.painters[id] || PAINTERS[id])(g, rnd);
+    } finally {
+      for (const key of Object.keys(PAL)) delete PAL[key];
+      Object.assign(PAL, BASE_PAL);
+    }
+  },
+};
+
 // ── Actors: 4 rows (down, up, left, right) × 4 walk frames, 12×16 ────────────
 const hsl = (h, s, l) => {
   const S = s / 100;
