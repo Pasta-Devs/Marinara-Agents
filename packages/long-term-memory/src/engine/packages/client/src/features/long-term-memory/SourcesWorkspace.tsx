@@ -1799,8 +1799,8 @@ export default function SourcesWorkspace({
     sourceStatusFilter === "all"
       ? true
       : sourceStatusFilter === "ready"
-        ? book.counts.pending > 0
-        : book.counts.pending === 0 && book.counts.imported > 0,
+        ? book.totals.pending > 0
+        : book.totals.pending === 0 && book.totals.imported > 0,
   );
   const focusedLorebookCandidate = openLorebookEntry?.candidates.find((candidate) => candidate.status === "imported");
   const focusedImportedSource =
@@ -2838,8 +2838,8 @@ export default function SourcesWorkspace({
                             ? (lorebookPreview.data?.books.length ?? 0)
                             : allLorebooks.filter((book) =>
                                 filter === "ready"
-                                  ? book.counts.pending > 0
-                                  : book.counts.pending === 0 && book.counts.imported > 0,
+                                  ? book.totals.pending > 0
+                                  : book.totals.pending === 0 && book.totals.imported > 0,
                               ).length;
                         return (
                           <button
@@ -2899,8 +2899,8 @@ export default function SourcesWorkspace({
                           <span className="min-w-0 flex-1">
                             <span className="block truncate text-sm font-semibold">{book.name}</span>
                             <span className="block text-xs text-[var(--muted-foreground)]">
-                              {book.category} · {book.counts.entries}{" "}
-                              {localizeUi("ui.longTermMemory.sourcesworkspace.entries")} {book.counts.imported}{" "}
+                              {book.category} · {book.totals.entries}{" "}
+                              {localizeUi("ui.longTermMemory.sourcesworkspace.entries")} {book.totals.imported}{" "}
                               {localizeUi("ui.longTermMemory.sourcesworkspace.imported")}
                             </span>
                           </span>
@@ -2970,9 +2970,9 @@ export default function SourcesWorkspace({
                           <div className="min-w-0">
                             <h2 className="text-base font-semibold">{selectedLorebook.name}</h2>
                             <p className="text-xs text-[var(--muted-foreground)]">
-                              {selectedLorebook.category} · {selectedLorebook.counts.entries}{" "}
+                              {selectedLorebook.category} · {selectedLorebook.totals.entries}{" "}
                               {localizeUi("ui.longTermMemory.sourcesworkspace.entries")}{" "}
-                              {selectedLorebook.counts.candidates}{" "}
+                              {selectedLorebook.totals.candidates}{" "}
                               {localizeUi("ui.longTermMemory.sourcesworkspace.sourceParts")}
                             </p>
                           </div>

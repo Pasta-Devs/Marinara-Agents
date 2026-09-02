@@ -2511,6 +2511,7 @@ export const ltmLorebookPreviewBookSchema = z
     tags: z.array(z.string().min(1).max(120)).max(100),
     scope: ltmScopeSchema,
     counts: ltmLorebookPreviewCountsSchema,
+    totals: ltmLorebookPreviewCountsSchema,
     entries: z.array(ltmLorebookPreviewEntrySchema).max(10_000),
   })
   .strict()

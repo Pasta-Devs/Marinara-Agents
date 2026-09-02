@@ -1015,6 +1015,7 @@ async function main() {
               tags: ["mobile", "test"],
               scope: {},
               counts: { entries: 1, candidates: 1, pending: 1, imported: 0 },
+              totals: { entries: 1, candidates: 1, pending: 1, imported: 0 },
               entries: [
                 {
                   id: "entry_mobile_harbor",
@@ -1043,6 +1044,7 @@ async function main() {
               tags: ["scope", "test"],
               scope: {},
               counts: { entries: 1, candidates: 1, pending: 1, imported: 0 },
+              totals: { entries: 1, candidates: 1, pending: 1, imported: 0 },
               entries: [
                 {
                   id: "entry_outside_current_chat",

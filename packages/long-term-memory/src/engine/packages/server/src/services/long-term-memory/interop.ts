@@ -711,15 +711,25 @@ export async function previewPackageLorebooks(
     totalCandidates = matchingBooks.reduce((count, book) => count + book.counts.candidates, 0),
     totalImported = matchingBooks.reduce((count, book) => count + book.counts.imported, 0);
   let remaining = request.limit;
-  const books = matchingBooks.map((book) => {
+  const visibleBooks = matchingBooks.slice(0, 100);
+  let candidateBooksRemaining = visibleBooks.filter((book) => book.counts.candidates > 0).length;
+  const books = visibleBooks.map((book) => {
+      let allocation =
+        book.counts.candidates === 0 || remaining === 0
+          ? 0
+          : candidateBooksRemaining <= remaining
+            ? Math.min(book.counts.candidates, Math.max(1, remaining - candidateBooksRemaining + 1))
+            : 1;
+      if (book.counts.candidates > 0) candidateBooksRemaining -= 1;
       const entries = book.entries.flatMap((entry) => {
-          if (!remaining) return [];
-          const candidates = entry.candidates.slice(0, remaining);
-          remaining -= candidates.length;
+          if (!allocation) return [];
+          const candidates = entry.candidates.slice(0, allocation);
+          allocation -= candidates.length;
           return candidates.length ? [{ ...entry, candidateCount: candidates.length, candidates }] : [];
         }),
         candidates = entries.flatMap((entry) => entry.candidates),
         imported = candidates.filter((candidate) => candidate.status === "imported").length;
+      remaining -= candidates.length;
       return {
         ...book,
         counts: {
@@ -728,6 +738,7 @@ export async function previewPackageLorebooks(
           pending: candidates.length - imported,
           imported,
         },
+        totals: book.counts,
         entries,
       };
     }),
@@ -751,7 +762,7 @@ export async function previewPackageLorebooks(
       pending: totalCandidates - totalImported,
       imported: totalImported,
     },
-    truncated: totalCandidates > candidatesCount,
+    truncated: matchingBooks.length > books.length || totalCandidates > candidatesCount,
   };
 }
 

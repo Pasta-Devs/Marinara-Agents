@@ -131,9 +131,19 @@ async function main() {
                 entries: Array.from({ length: 101 }, (_, index) => ({
                   id: `large-lore-entry-${index}`,
                   name: `Large Entry ${index}`,
-                  content: `Large lore content ${index}.`,
+                  content: `Shared pagination large lore content ${index}.`,
                 })),
               },
+              {
+                id: "lorebook-later",
+                data: { name: "Later Lorebook", category: "World" },
+                entries: [{ id: "later-entry", name: "Later Entry", content: "Shared pagination later lore content." }],
+              },
+              ...Array.from({ length: 101 }, (_, index) => ({
+                id: `lorebook-many-${index}`,
+                data: { name: `Many Lorebook ${index}`, category: "World" },
+                entries: [{ id: "many-entry", name: "Many Entry", content: `Many books lore content ${index}.` }],
+              })),
             ];
           },
         },
@@ -266,7 +276,7 @@ async function main() {
       );
       assert.equal(lorebookPreview.books[0]?.entries[0]?.candidates[0]?.importMode, "roleplay");
       const lorebookGamePreview = await previewPackageLorebooks(
-        { limit: 100, mode: "game" },
+        { query: "Imported", limit: 100, mode: "game" },
         join(dataDir, "long-term-memory"),
       );
       assert.equal(lorebookGamePreview.books[0]?.entries[0]?.candidates[0]?.importMode, "game");
@@ -289,6 +299,22 @@ async function main() {
       assert.equal(largeLorebookPreview.totals.entries, 101);
       assert.equal(largeLorebookPreview.totals.candidates, 101);
       assert.equal(largeLorebookPreview.truncated, true);
+      const sharedPaginationPreview = ltmLorebookPreviewResponseSchema.parse(
+        await previewPackageLorebooks({ query: "pagination", limit: 100 }, join(dataDir, "long-term-memory")),
+      );
+      assert.equal(sharedPaginationPreview.books.length, 2);
+      assert.equal(sharedPaginationPreview.books[1]?.counts.candidates, 1);
+      assert.equal(sharedPaginationPreview.books[1]?.totals.candidates, 1);
+      assert.equal(sharedPaginationPreview.totals.candidates, 102);
+      assert.equal(sharedPaginationPreview.truncated, true);
+      const manyBooksPreview = ltmLorebookPreviewResponseSchema.parse(
+        await previewPackageLorebooks({ query: "Many books", limit: 100 }, join(dataDir, "long-term-memory")),
+      );
+      assert.equal(manyBooksPreview.books.length, 100);
+      assert.equal(manyBooksPreview.counts.candidates, 100);
+      assert.equal(manyBooksPreview.totals.books, 101);
+      assert.equal(manyBooksPreview.totals.candidates, 101);
+      assert.equal(manyBooksPreview.truncated, true);
       const importedLorebook = await importPackageInterop(
         { source: "lorebooks", sourceIds: [lorebookSourceId], extract: true, limit: 100 },
         join(dataDir, "long-term-memory"),
