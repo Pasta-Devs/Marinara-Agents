@@ -14,6 +14,7 @@ import { clampGenerationMaxOutputTokens } from "../generation/output-token-limit
 import { noodleSamplingOptions } from "./slurp-sampling-options.js";
 import { noodleTimelineRefreshMaxTokens } from "./slurp-post-target.js";
 import { withConnectionFallbackProvider } from "../llm/connection-fallback-provider.js";
+import { withConnectionAdmissionProvider } from "../generation/connection-admission.js";
 import type { ChatMessage } from "../llm/base-provider.js";
 import { createLLMProvider } from "../llm/provider-registry.js";
 import { createCharacterGalleryStorage } from "../storage/character-gallery.storage.js";
@@ -145,14 +146,24 @@ export function createPublicNoodleGenerationService(db: DB) {
           input.connection.defaultParameters,
         );
         const fallbackConnection = await connections.getFallbackForMain();
-        const provider = withConnectionFallbackProvider({
+        const fallbackProvider = withConnectionFallbackProvider({
           primary: primaryProvider,
           primaryConnectionId: input.connection.id,
           fallbackConnection,
           fallbackBaseUrl: fallbackConnection ? resolveBaseUrl(fallbackConnection) : "",
           category: "main",
-          admissionMode: input.admissionMode,
         });
+        // Admission wraps the composed provider: the fallback wrapper has no admission mode to
+        // hand it to, so passing one there dropped it silently.
+        const provider = withConnectionAdmissionProvider(
+          fallbackProvider,
+          input.connection.id,
+          input.admissionMode ?? { kind: "foreground" },
+        );
+        // The text-only retry and the correction pass are steps inside the refresh the first call
+        // already admitted, not attempts of their own: admitting them again would let a foreground
+        // request arriving mid-refusal abort work that is already half paid for.
+        const stepProvider = withConnectionAdmissionProvider(fallbackProvider, input.connection.id, { kind: "none" });
         await ensurePersonaAccounts(noodle, characters);
         if (settings.allowProfessorMari) await ensureProfessorMariAccount(noodle, characters);
         const personaAccount = await resolvePersonaAccount(noodle, characters, input.personaId);
@@ -313,7 +324,7 @@ export function createPublicNoodleGenerationService(db: DB) {
           );
           requestMessages = prompt.textOnlyMessages;
           firstAttemptKind = "text_only_fallback";
-          result = await provider.chatComplete(prompt.textOnlyMessages, completionOptions);
+          result = await stepProvider.chatComplete(prompt.textOnlyMessages, completionOptions);
         }
         let content = result.content ?? "";
         logDebugOverride(
@@ -359,7 +370,7 @@ export function createPublicNoodleGenerationService(db: DB) {
             "[debug/noodle] Correction prompt sent to model:\n%s",
             formatNoodleMessagesForLog(correctionMessages),
           );
-          result = await provider.chatComplete(correctionMessages, completionOptions);
+          result = await stepProvider.chatComplete(correctionMessages, completionOptions);
           content = result.content ?? "";
           logDebugOverride(
             debugMode,

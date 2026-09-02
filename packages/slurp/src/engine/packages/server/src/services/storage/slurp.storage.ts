@@ -104,6 +104,10 @@ import {
   type PersistedNoodleRefreshSchedule,
 } from "../slurp/slurp-refresh-schedule.js";
 import { pruneNoodleRefreshRuns } from "./slurp-refresh-run-retention.js";
+import { noodlerPostImageRetryAttempts, NOODLER_POST_IMAGE_RETRY_LIMIT } from "../slurp/slurp-image-retry.js";
+
+/** Newest candidates the image-retry poll inspects per pass. */
+const IMAGE_RETRY_SCAN_LIMIT = 200;
 import { normalizeNoodlerSeenAt } from "../slurp/slurp-viewer-unseen.js";
 import { createCharactersStorage } from "./characters.storage.js";
 import {
@@ -3205,6 +3209,35 @@ export function createSlurpStorage(db: DB) {
         .orderBy(desc(noodlePosts.createdAt))
         .limit(Math.max(1, Math.min(50, Math.floor(limit))));
       return rows.map(mapManagedPost);
+    },
+
+    /**
+     * Slurp creator posts that published without their picture and still have a prompt to draw
+     * from. The pending-review marker is excluded: those wait for the user, not for a retry.
+     */
+    async listNoodlerPostsAwaitingImageRetry(limit = 1, at = now()): Promise<NoodlerManagedPost[]> {
+      const accountIds = new Set((await this.listNoodlerAccounts()).map((account) => account.id));
+      if (accountIds.size === 0) return [];
+      // Bounded: the metadata filters below live in a JSON column, so they cannot be pushed into
+      // the query, and posts awaiting the user's prompt review keep a null imageUrl indefinitely —
+      // an unbounded scan would grow without limit on a once-a-minute poll.
+      // ponytail: newest page only; page through older rows if a long-idle post must self-heal.
+      const rows = await db
+        .select()
+        .from(noodlePosts)
+        .where(and(isNull(noodlePosts.imageUrl), isNotNull(noodlePosts.imagePrompt)))
+        .orderBy(desc(noodlePosts.createdAt))
+        .limit(IMAGE_RETRY_SCAN_LIMIT);
+      const eligible: NoodlerManagedPost[] = [];
+      for (const row of rows) {
+        if (!accountIds.has(row.authorAccountId) || !imageClaimIsAvailable(row, at)) continue;
+        const metadata = parseRecord(row.metadata);
+        if (metadata.imagePendingReview === true || metadata.imageGenerationFailed !== true) continue;
+        if (noodlerPostImageRetryAttempts(metadata) >= NOODLER_POST_IMAGE_RETRY_LIMIT) continue;
+        eligible.push(mapManagedPost(row));
+        if (eligible.length >= Math.max(1, Math.floor(limit))) break;
+      }
+      return eligible;
     },
 
     // Unbounded — used by the disclosure-downgrade review, which must inspect every
