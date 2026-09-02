@@ -8080,6 +8080,21 @@ const pixelsOf = (canvas) => Array.from(canvas._data).join(",");
     assert.ok(fetches > settled, "a version bump retries");
     assert.equal(A.status, "ready", "…and a sheet that fits its id map loads");
     assert.ok(A.tileCanvas("t0"), "…with the theme's tiles served off the sheet again");
+
+    // ── AND THE STATE THIS RELEASE ACTUALLY SHIPS IN, UNTIL THE BAKE ─────────
+    // The four snow ids are in the painters and in the GENERATOR, but atlas.json
+    // and both PNGs are build outputs and have not been re-baked. So the atlas
+    // does not list them — which is the OTHER arm of the tier's guarantee, the
+    // per-tile one, and the arm that works: an unlisted id returns null and the
+    // Tier-0 painter answers. Procedural snow, not a see-through field. Pinned
+    // because "it degrades gracefully" is exactly the kind of claim that stops
+    // being true quietly.
+    assert.equal(A.tileCanvas("grassSnow"), null, "an id the atlas does not list gets no Tier-1 answer");
+    loadedPF.art.setTheme("sci-fi-colony");
+    loadedPF.art.setTheme("cozy-village");
+    const drawnSnow = loadedPF.art.tile("grassSnow");
+    assert.equal(drawnSnow._data[3], 255, "…so the Tier-0 painter draws it, opaque, rather than a transparent slot");
+    assert.notEqual(pixelsOf(drawnSnow), pixelsOf(loadedPF.art.tile("grass")), "…and it is snow, not the grass fallback");
   } finally {
     globalThis.fetch = prevFetch;
     globalThis.Image = prevImage;
