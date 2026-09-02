@@ -707,6 +707,7 @@
   "ui.noodle.noodlepostcard.edit": "Edit",
   "ui.noodle.noodlepostcard.editComment": "Edit comment",
   "ui.noodle.noodlepostcard.editPost": "Edit post",
+  "ui.noodle.noodlepostcard.generateImage": "Generate image",
   "ui.noodle.noodlepostcard.imageInValue1SComment": "Image in {{value1}}'s comment",
   "ui.noodle.noodlepostcard.imagePostedByValue1": "Image posted by {{value1}}",
   "ui.noodle.noodlepostcard.imagePrompt": "Image prompt",

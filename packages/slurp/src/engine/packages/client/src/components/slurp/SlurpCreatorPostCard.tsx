@@ -35,6 +35,7 @@ import { cn } from "../../lib/utils";
 import { ConversationMediaPickerPanel } from "../chat/ConversationMediaPickerPanel";
 import type { ChatImage } from "../../hooks/use-gallery";
 import { useSlurpMediaSrc } from "../../hooks/use-slurp-media-src";
+import { useConfirmNoodlerImagePrompts } from "../../hooks/use-slurp";
 import { Modal } from "../ui/Modal";
 import { Avatar, ProfileInitial } from "./SlurpShell";
 import { formatTime } from "./SlurpDateTime";
@@ -467,6 +468,7 @@ export function SlurpCreatorPostCard({
   const isEditingPost = Boolean(ctx.postManagement) && editingPostId === post.id;
   const imageCrop = readNoodlePostImageCrop(post.metadata);
   const [failedImageUrl, setFailedImageUrl] = useState<string | null>(null);
+  const retryImage = useConfirmNoodlerImagePrompts();
   const postImageSrc = useSlurpMediaSrc(post.imageUrl);
   const displayedImageUrl = postImageSrc && postImageSrc !== failedImageUrl ? postImageSrc : null;
   // Distinct from displayedImageUrl: while postImageSrc is still resolving (the authenticated
@@ -883,6 +885,22 @@ export function SlurpCreatorPostCard({
               {localizeUi("ui.noodle.noodlepostcard.imagePrompt")}
             </span>
             {post.imagePrompt}
+            {/* The post kept its prompt when the picture failed, so it can be drawn again on
+                demand instead of waiting for the automatic retry. */}
+            <button
+              type="button"
+              disabled={retryImage.isPending}
+              onClick={() =>
+                retryImage.mutate({
+                  targetAccountId: post.authorAccountId,
+                  prompts: [{ id: post.id, prompt: post.imagePrompt ?? "" }],
+                })
+              }
+              className="mt-2 flex items-center gap-1.5 rounded-lg border border-[var(--noodle-accent)]/40 px-2 py-1 font-semibold text-[var(--noodle-accent)] transition-colors hover:bg-[var(--noodle-accent)]/15 disabled:opacity-60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--noodle-accent)]/70"
+            >
+              <ImageIcon size={13} />
+              {localizeUi("ui.noodle.noodlepostcard.generateImage")}
+            </button>
           </div>
         ) : null}
         {isEditingPost ? (

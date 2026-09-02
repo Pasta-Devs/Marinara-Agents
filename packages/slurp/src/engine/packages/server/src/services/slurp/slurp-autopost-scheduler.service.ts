@@ -4,6 +4,8 @@ import { sweepStagedImages } from "../image/image-generation.js";
 import { createSlurpStorage } from "../storage/slurp.storage.js";
 import { reconcileNoodlerReserve, runNoodlerAutoPostPoll } from "./slurp-reserve.operation.js";
 import { tryBackfillNextNoodlerCreatorArtwork } from "./slurp-artwork.operation.js";
+import { slurpPollBackoffMs } from "./slurp-poll-backoff.js";
+import { createNoodlerNoodleImagesService } from "./slurp-images.service.js";
 
 const INITIAL_DELAY_MS = 30_000;
 const POLL_MS = 60_000;
@@ -35,8 +37,9 @@ export function startNoodleAutoPostScheduler(app: FastifyInstance, registerStop?
   let stopped = false;
   let running: Promise<void> = Promise.resolve();
   let timer: ReturnType<typeof setTimeout> | null = null;
+  let consecutiveFailures = 0;
 
-  const schedule = (delay = POLL_MS) => {
+  const schedule = (delay = slurpPollBackoffMs(POLL_MS, consecutiveFailures)) => {
     if (stopped) return;
     timer = setTimeout(() => {
       running = poll();
@@ -52,6 +55,7 @@ export function startNoodleAutoPostScheduler(app: FastifyInstance, registerStop?
       schedule();
       return;
     }
+    let failed = false;
     try {
       // Reconciliation walks every prepared post and every Noodle post. With posting off and no
       // reserve rows there is nothing for it to repair or publish, so skip the scan entirely
@@ -63,14 +67,24 @@ export function startNoodleAutoPostScheduler(app: FastifyInstance, registerStop?
       const artwork = await tryBackfillNextNoodlerCreatorArtwork(app.db);
       if (artwork !== "idle" && artwork !== "unavailable")
         logger.info("[noodle-autopost] Filled in a creator %s", artwork);
+      // Artwork has no budget of its own, so a connection that always fails would otherwise draw
+      // one image request a minute forever.
+      failed = artwork === "unavailable";
+      // A post whose picture failed published without it. Draw one of them per pass, so the
+      // post gets its image back without a separate scheduler.
+      const redrawn = await createNoodlerNoodleImagesService(app.db).retryNextFailedPostImage();
+      if (redrawn === "retried") logger.info("[noodle-autopost] Redrew a missing post image");
+      failed = failed || redrawn === "failed";
       if (noodlerReservePollIsIdle(settings) && !(await noodle.hasNoodlerPreparedPosts())) return;
       const outcome = await runNoodlerAutoPostPoll(app.db);
       if (outcome.published > 0) logger.info("[noodle-autopost] Published %d due Slurp post(s)", outcome.published);
       if (outcome.reserve === "prepared") logger.info("[noodle-autopost] Prepared one Slurp post");
       if (outcome.reserve === "scheduled") logger.info("[noodle-autopost] Scheduled one on-demand Slurp post");
     } catch (error) {
+      failed = true;
       logger.error(error, "[noodle-autopost] Reserve poll failed");
     } finally {
+      consecutiveFailures = failed ? consecutiveFailures + 1 : 0;
       schedule();
     }
   };

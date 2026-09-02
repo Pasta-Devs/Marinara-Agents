@@ -1,5 +1,23 @@
 import { isConnectionAdmissionFailure } from "../generation/connection-admission.js";
 
+/**
+ * A post whose image failed still publishes — the text is the post — so the picture is retried on
+ * a later poll instead of being lost. Bounded, because a misconfigured image connection must not
+ * mean one provider call per post per poll for ever.
+ */
+export const NOODLER_POST_IMAGE_RETRY_LIMIT = 3;
+
+/**
+ * Post metadata is parsed from persisted JSON, so the counter is whatever was written last —
+ * possibly a string, null, or absent. A NaN here would read as "under the limit" for ever and
+ * write back null, so the retry budget would never advance and the loop this limit exists to
+ * stop would run anyway.
+ */
+export function noodlerPostImageRetryAttempts(metadata: Record<string, unknown>): number {
+  const attempts = Math.floor(Number(metadata.imageRetryAttempts));
+  return Number.isFinite(attempts) && attempts > 0 ? attempts : 0;
+}
+
 export const NOODLE_IMAGE_GENERATION_MAX_ATTEMPTS = 2;
 export const NOODLE_IMAGE_GENERATION_RETRY_DELAY_MS = 500;
 

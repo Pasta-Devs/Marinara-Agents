@@ -22,6 +22,7 @@ import { noodleSamplingOptions } from "./slurp-sampling-options.js";
 import { parseGameJsonish } from "../game/jsonish.js";
 import { requireModelAnswer } from "./slurp-model-answer.js";
 import { withConnectionFallbackProvider } from "../llm/connection-fallback-provider.js";
+import { withConnectionAdmissionProvider } from "../generation/connection-admission.js";
 import { isConnectionAdmissionFailure, type ConnectionAdmissionMode } from "../generation/connection-admission.js";
 import type { ChatMessage } from "../llm/base-provider.js";
 import { createLLMProvider } from "../llm/provider-registry.js";
@@ -435,7 +436,7 @@ export async function generateNoodlerPost(
 
   const connections = createConnectionsStorage(db);
   const fallbackConnection = await connections.getFallbackForMain();
-  const provider = withConnectionFallbackProvider({
+  const fallbackProvider = withConnectionFallbackProvider({
     primary: createLLMProvider(
       input.connection.provider,
       resolveBaseUrl(input.connection),
@@ -451,8 +452,16 @@ export async function generateNoodlerPost(
     fallbackConnection,
     fallbackBaseUrl: fallbackConnection ? resolveBaseUrl(fallbackConnection) : "",
     category: "main",
-    admissionMode: input.admissionMode,
   });
+  // The fallback wrapper takes no admission mode — passing one silently dropped it, which left
+  // every automatic post unadmitted and, worse, never ran `beforeAttempt`, so the daily budget
+  // was never claimed and the reserve poll regenerated a post on every pass. Admission goes on
+  // the outside, where the composed provider's calls actually pass through it.
+  const provider = withConnectionAdmissionProvider(
+    fallbackProvider,
+    input.connection.id,
+    input.admissionMode ?? { kind: "foreground" },
+  );
   const recentPosts = await noodle.listNoodlerPostsByAccount(account.id, 8);
   const disclosureMode = account.settings.privacy.identityDisclosure ?? "secret";
   const linkedPublicAccount = await noodle.resolveAccountSource(account as SlurpAccount);
@@ -667,7 +676,10 @@ export async function generateNoodlerPost(
     (noodlerImageConnectionId ? await connections.getWithKey(noodlerImageConnectionId) : null) ??
     (await connections.getDefaultForImageGeneration());
   if (!imageConnection) {
+    // Keep the prompt: the post publishes without its picture, and the retry pass (or the
+    // user) draws it once a connection exists.
     const post = await persist({
+      imagePrompt: draftImagePrompt,
       metadata: {
         imageGenerationFailed: true,
         imageGenerationError: "No image generation connection is configured.",
@@ -705,8 +717,10 @@ export async function generateNoodlerPost(
       logger.warn(err, "[noodler] Failed to prepare image prompt review for %s", account.displayName);
       return {
         post: await persist({
+          imagePrompt: draftImagePrompt,
           metadata: {
             imageGenerationFailed: true,
+            imageRetryAttempts: 1,
             imageGenerationError: getErrorMessage(err).slice(0, 500),
           },
         }),
@@ -738,8 +752,10 @@ export async function generateNoodlerPost(
     logger.warn(err, "[noodler] Failed to generate image for %s", account.displayName);
     return {
       post: await persist({
+        imagePrompt: draftImagePrompt,
         metadata: {
           imageGenerationFailed: true,
+          imageRetryAttempts: 1,
           imageGenerationError: getErrorMessage(err).slice(0, 500),
         },
       }),
