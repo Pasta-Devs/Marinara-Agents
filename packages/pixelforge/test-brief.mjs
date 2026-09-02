@@ -25784,7 +25784,12 @@ const fire = (node, type) => Promise.all((node.listeners[type] ?? []).map((fn) =
     assert.ok(text.includes("The Amber Hearth Inn — gathering"), "…beside the location handle a line is keyed by");
     assert.ok(text.includes("The Whisperwood Reaches — wilds"), "…for every one of them");
     assert.ok(text.includes(`${maxBrief.name} — settlement`), "…the root included");
-    assert.ok(text.length < 3_000, `the worst-case digest stays about 2.5K (${text.length} chars)`);
+    // THE NEAREST-TO-BREAKING BOUND IN THIS BLOCK, and the climate rows moved it
+    // toward the wall: the biggest legal digest measures 2,718 against this 3,000,
+    // so the headroom is 282 characters and not a comfortable thousand. Stated so
+    // the next thing added to the digest is added knowing what is left.
+    assert.ok(text.length < 3_000, `the worst-case digest stays under 3K (${text.length} chars)`);
+    assert.ok(text.includes("Climate: "), "…with this world's climate in it, which is part of what it now costs");
   }
 
   // ── THE WORST-CASE NUMBER IS MEASURED, NOT ESTIMATED ──────────────────────
