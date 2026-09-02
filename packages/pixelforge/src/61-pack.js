@@ -81,12 +81,19 @@ PF.pack = (() => {
   // Optional on purpose, and that is still a byte argument: a generation made to
   // spell a word on every line would spend a tenth of its budget on it.
   const WEATHERS = PF.weather.WORDS;
+  // THE SKY WORDS THE GUIDANCE ASKS FOR: the five, less the one an untagged line
+  // already covers. An absent `w` is served under every sky, so a line tagged
+  // `fair` spends four characters buying the generalization it had for free. The
+  // SCHEMA still seals all five — a model that writes one is honoured rather than
+  // repaired — and the foot of this file pairs the two lists so dropping a second
+  // word here is a throw at load and not a vocabulary quietly narrowing.
+  const WEATHERS_ASKED = WEATHERS.filter((word) => word !== "fair");
   // THE E7 TOPIC SEAM (plan §2.2c). Optional per line, defaulting to NONE, and it
-  // exists so the Ask tree has branches to hang lines off when it arrives: rumor
-  // and work are the two E7 is load-bearing for, place and smalltalk are the ones
-  // a tree opens with. `guidance` below confines the tags it ASKS for to rumor
-  // and work — the seam is wider than the diet on purpose, because the schema
-  // seals and the guidance does not.
+  // is the tree's four branches: rumor and work are the two the window is
+  // load-bearing for, place and smalltalk are the ones it opens with. 0.13's
+  // guidance asked for two of them and the schema sealed four; 0.14 is the
+  // release that ends that diet, because every release it waited was a cohort of
+  // worlds sealed thin on exactly the tags the window renders.
   const TOPICS = ["rumor", "work", "place", "smalltalk"];
 
   // ── The quest template vocabulary (plan §2.2c) ──────────────────────────────
@@ -172,7 +179,8 @@ PF.pack = (() => {
     // and 130 sit above what a typical emission spends, the template cost above
     // even the widest row measured. What the schema ALLOWS is far bigger: a
     // 32-char slug, a 24-char giver, a 32-char variant and a 48-char title make
-    // a 217-char template, and a 200-char line with a tag is 279. So what the
+    // a 217-char template, and a 200-char line carrying BOTH tags — the topic and
+    // the 0.14 sky term — is 293 serialized, measured and pinned. So what the
     // sum shows is that the floors CLEAR A TYPICAL TEMPLATES-FIRST CUT, and it
     // is not a worst-case guarantee. It cannot be one and keep these floors:
     // 24 × 217 leaves 896 chars of index, which is two rows, and a floor sized
@@ -422,13 +430,28 @@ PF.pack = (() => {
    *  The default pack already writes titles this way; this is the sentence that
    *  asks a generated one to.
    *
-   *  TOPIC TAGS ARE CONFINED TO rumor|work HERE, while the SCHEMA seals all four
-   *  (plan §2.2c). That gap is deliberate and it is the byte diet: `place` and
-   *  `smalltalk` are the tags an Ask tree opens with and the two E7 is not
-   *  load-bearing for, so paying four extra characters a line for them now buys
-   *  nothing this release can read. The schema is the thing that seals forever and
-   *  the guidance is the thing that can be rewritten next release, so the wider
-   *  vocabulary belongs in the schema and the diet belongs here. */
+   *  THE BYTE DIET IS OVER, AND THIS IS THE RELEASE THAT ENDED IT (plan §2.7).
+   *  0.13 confined the topic tags it asked for to rumor|work while the schema
+   *  sealed all four, on the argument that `place` and `smalltalk` bought nothing
+   *  a release could read yet — with the note that the schema seals forever and
+   *  the guidance can be rewritten next release. The window is here, it renders
+   *  all four branches, and every release the diet ran was a cohort of worlds
+   *  sealed thin on the two tags the tree opens with. So the guidance now asks for
+   *  the whole vocabulary, and the four characters a tag costs are the cheapest
+   *  thing in this request.
+   *
+   *  THE SKY TAG IS THE ONE THAT STAYS OPTIONAL AND SAYS SO OUT LOUD. `w` is asked
+   *  for as an exception rather than as a field: a town's dialogue is mostly what
+   *  it says whatever the weather, and a generation that tagged every line would
+   *  hand back a pack whose topic branches vanish on the first fair day. The
+   *  guidance asks for a handful; the coverage the window depends on is untagged.
+   *
+   *  AND THE REGISTER ASK IS INVERTED (plan §2.7, ruling 4). 0.13 asked for MORE
+   *  FRIEND LINES because that register was where the settlement stopped sounding
+   *  like a signpost. 0.14 serves the stranger register and only that one, so a
+   *  pack written to the old ask spends its best writing on rows nothing reads.
+   *  Friend lines still seal — they are P2's inheritance — they are just not what
+   *  this call asks the model to spend its budget on. */
   function guidance(theme) {
     return [
       "You are writing an OFFLINE CONTENT PACK for a settlement that already exists: what its people say,",
@@ -454,14 +477,16 @@ PF.pack = (() => {
       "      any place of the kind named finishes a visit, so a title promising a particular one can mislead.",
       "    NEVER write money, pay, a price, a reward or experience. The game decides what work is worth.",
       "- lines: what somebody standing in a place says, keyed so the right line reaches the right moment.",
-      "    Each is {at, when, r, text} plus an optional topic.",
+      "    Each is {at, when, r, text} plus an optional topic and w.",
       `    at: one of ${LOCATIONS.join(" | ")} — the handle beside each place below.`,
       `    when: one of ${DAYPARTS.join(" | ")}.`,
       `    r: ${REGISTERS[0]} (they barely know you) or ${REGISTERS[1]} (they do).`,
-      "    topic (optional): rumor or work. Leave it off for anything else.",
+      `    topic (optional): one of ${TOPICS.join(" | ")} — tag every line that fits one; rumor and work matter most.`,
+      `    w (optional): one of ${WEATHERS_ASKED.join(" | ")} — ONLY for a line that needs that sky;`,
+      "      most lines should work any day, so leave it off unless the weather is what the line is about.",
       "    text: ONE spoken line, <=200 characters. No name tags, no quotation marks, no stage directions.",
-      "    Cover the places and hours somebody would actually be there; write more friend lines than you",
-      "    think you need, because that register is where the settlement stops sounding like a signpost.",
+      `    Cover the places and hours somebody would actually be there, and write mostly ${REGISTERS[0]} lines:`,
+      `    that is the register this game reads, and every ${REGISTERS[1]} line is written for a later one.`,
       "- escalation: ONE line per person, {npc, text}: the thing they say when the player asks properly",
       "    about the unresolved situation above — the door, not what is behind it. Keep it withholding.",
       "- overheard: {at, text} — half of somebody else's conversation, heard in passing. Nobody answers it.",
@@ -515,6 +540,13 @@ PF.pack = (() => {
               r: { type: "string", enum: REGISTERS },
               text: text(CAPS.text),
               topic: { type: "string", enum: TOPICS },
+              // THE SKY TERM, SEALED FROM 0.14 ON. Legal for NEW packs only — a
+              // 0.13 pack carries none and reads as any-weather, which is the
+              // read door's own semantics and why nothing had to migrate. Beside
+              // `topic` because property order is the emission order the guidance
+              // asks for out loud, and these are the two optional tags a line
+              // carries. `required` is untouched: both stay optional forever.
+              w: { type: "string", enum: WEATHERS },
             },
             required: ["at", "when", "r", "text"],
           },
@@ -549,6 +581,7 @@ PF.pack = (() => {
     DAYPARTS,
     REGISTERS,
     WEATHERS,
+    WEATHERS_ASKED,
     TOPICS,
     VERBS,
     MECHANICS,
@@ -2387,6 +2420,20 @@ const DEFAULT_PACKS = (() => {
   // recovered by asking whether the word is a catch role. A variant slug that was
   // also a role name would make that question unanswerable — every catch of that
   // role would pay a quest for one specific fish, silently and forever.
+  // THE GUIDANCE'S SKY LIST IS THE AXIS LESS EXACTLY ONE WORD, paired here for
+  // the reason every other table in this package is paired at load: the list the
+  // model is TAUGHT and the list the schema SEALS are allowed to differ by the
+  // one word an untagged line already covers, and by nothing else. A rename or a
+  // second exclusion is a throw at the desk rather than a vocabulary that quietly
+  // stopped asking for snow.
+  if (PF.pack.WEATHERS.length - PF.pack.WEATHERS_ASKED.length !== 1)
+    throw new Error(
+      `pixelforge: the guidance asks for ${PF.pack.WEATHERS_ASKED.length} of ${PF.pack.WEATHERS.length} sky words; exactly one is covered by an absent tag`,
+    );
+  for (const word of PF.pack.WEATHERS_ASKED)
+    if (!PF.pack.WEATHERS.includes(word))
+      throw new Error(`pixelforge: the guidance asks for a "${word}" sky, which the schema does not seal`);
+
   const roles = new Set(PF.economy.CATCH_ROLES);
   for (const [theme, byTag] of Object.entries(PF.economy.CATCH_TABLES)) {
     for (const table of Object.values(byTag)) {

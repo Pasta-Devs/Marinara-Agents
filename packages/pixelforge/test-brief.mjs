@@ -25891,23 +25891,70 @@ const fire = (node, type) => Promise.all((node.listeners[type] ?? []).map((fn) =
       ["templates", "lines", "escalation", "overheard"],
       "…and the schema's property order says the same thing a second way",
     );
-    // THE BYTE DIET. The schema seals four topic tags and the guidance names two:
-    // the seam is deliberately wider than the diet, because the schema is the half
-    // that seals forever and the guidance is the half a later release can rewrite.
-    assert.ok(text.includes("topic (optional): rumor or work"), "the guidance confines topic tags to the two E7 needs");
-    // Only `smalltalk` is checked, and the message says only that: "place" is a
-    // legitimate word in these instructions — it is a grain handle and a target
-    // shape — so its absence is not something the guidance can be asked for.
-    assert.ok(!text.includes("smalltalk"), "…and does not spend bytes teaching smalltalk, which it cannot read yet");
+    // THE DIET IS OVER, AND BOTH HALVES OF ITS RETIREMENT ARE PINNED. 0.13 asked
+    // for rumor|work while the schema sealed four, on the promise that the
+    // guidance is the half a later release can rewrite. This is that release: the
+    // window renders all four branches, so the ask is the whole vocabulary and the
+    // old NEGATIVE pin ("no smalltalk in the instructions") is inverted into its
+    // opposite — the lane now asserts every tag is taught.
+    assert.ok(
+      text.includes(`topic (optional): one of ${pack.TOPICS.join(" | ")}`),
+      "the guidance teaches the whole topic vocabulary",
+    );
+    for (const topic of pack.TOPICS)
+      assert.ok(text.includes(topic), `…and ${topic} is a word the model is actually given`);
     assert.deepEqual(
       pack.TOPICS,
       ["rumor", "work", "place", "smalltalk"],
-      "while the sealed vocabulary keeps all four",
+      "…which is the same four the vocabulary has always sealed",
     );
     assert.deepEqual(
       pack.schema().properties.lines.items.properties.topic.enum,
       pack.TOPICS,
       "…and the schema seals all four, because a schema is the thing that cannot be rewritten later",
+    );
+    // THE SKY TAG. The guidance asks for four of the five words and the schema
+    // seals all five: the missing one is `fair`, which an untagged line already
+    // covers, so asking for it would spend bytes on a generalization the read door
+    // gives away. The difference is exactly one word, and boot throws if it is not.
+    assert.ok(
+      text.includes(`w (optional): one of ${pack.WEATHERS_ASKED.join(" | ")}`),
+      "the guidance teaches the sky tag as an exception, not as a field",
+    );
+    assert.ok(
+      text.includes("most lines should work any day"),
+      "…and says out loud that most lines carry none, which is what keeps a branch alive on a fair day",
+    );
+    assert.deepEqual(
+      pack.schema().properties.lines.items.properties.w?.enum,
+      pack.WEATHERS,
+      "…while the schema seals all five, so a line tagged for the sky it was asked for is honoured",
+    );
+    assert.deepEqual(
+      pack.WEATHERS.filter((word) => !pack.WEATHERS_ASKED.includes(word)),
+      ["fair"],
+      "…and the one word it does not ask for is the one an absent tag already means",
+    );
+    assert.deepEqual(
+      pack.schema().properties.lines.items.required,
+      ["at", "when", "r", "text"],
+      "neither tag is required: a line with no topic and no sky is still a legal line",
+    );
+    assert.deepEqual(
+      Object.keys(pack.schema().properties.lines.items.properties),
+      ["at", "when", "r", "text", "topic", "w"],
+      "…and `w` sits beside `topic`, because property order is the emission order",
+    );
+    // THE REGISTER ASK IS INVERTED (ruling 4). 0.13 asked for MORE FRIEND LINES;
+    // 0.14 serves the stranger register and only that one, so a pack written to
+    // the old ask spends its best writing on rows nothing reads.
+    assert.ok(
+      text.includes(`write mostly ${pack.REGISTERS[0]} lines`),
+      "the guidance asks for the register the window actually serves",
+    );
+    assert.ok(
+      !/more friend lines than you/.test(text),
+      "…and no longer asks for more of the one it does not",
     );
     // ESCALATION IS NAMED AS E7'S CONVERGENCE POINT — the section the Ask tree
     // will land on, described as a door rather than as what is behind it.
@@ -26050,7 +26097,14 @@ const fire = (node, type) => Promise.all((node.listeners[type] ?? []).map((fn) =
 
   /** The shape a model that read the guidance would send: templates first, then a
    *  tagged index, then the two smaller sections. Sized by argument so the
-   *  truncation lane can build one that does not fit. */
+   *  truncation lane can build one that does not fit.
+   *
+   *  RE-TARGETED AT THE 0.14 ASK. The index carries all FOUR topic tags now,
+   *  because that is what the widened guidance asks for, and every fourth line
+   *  carries a sky term — the "most lines should work any day" proportion the
+   *  instructions state, so a mock emission that seals here is one the window can
+   *  actually serve four buttons off on a fair day. Mostly STRANGER, for the same
+   *  reason: it is the register this release reads. */
   const emission = (templates, lines) => ({
     templates: Array.from({ length: templates }, (_, i) => ({
       slug: `posted-work-${i}`,
@@ -26063,9 +26117,15 @@ const fire = (node, type) => Promise.all((node.listeners[type] ?? []).map((fn) =
     lines: Array.from({ length: lines }, (_, i) => ({
       at: pack.LOCATIONS[i % pack.LOCATIONS.length],
       when: pack.DAYPARTS[i % pack.DAYPARTS.length],
-      r: pack.REGISTERS[i % 2],
+      r: i % 5 === 0 ? pack.REGISTERS[1] : pack.REGISTERS[0],
       text: `Something a person standing there would actually say, number ${i}, and then a little more.`,
-      topic: ["rumor", "work"][i % 2],
+      topic: pack.TOPICS[i % pack.TOPICS.length],
+      // DELIBERATELY OUT OF STEP WITH THE TOPIC CYCLE ABOVE. On the same modulus
+      // every smalltalk line would carry a sky and "Pass the time" would be a
+      // button that vanished on a fair day — which is the failure the guidance's
+      // own "most lines should work any day" exists to prevent, and a fixture
+      // that reproduced it would hide it.
+      ...(i % 6 === 5 ? { w: pack.WEATHERS_ASKED[i % pack.WEATHERS_ASKED.length] } : {}),
     })),
     escalation: cast.map((npc) => ({ npc, text: "Ask me again when the room is empty and I will tell you." })),
     overheard: [{ at: "settlement", text: "…and they said the survey came back fine. Fine!", topic: "rumor" }],
@@ -26094,6 +26154,10 @@ const fire = (node, type) => Promise.all((node.listeners[type] ?? []).map((fn) =
       r: pack.REGISTERS[i % 2],
       text: fill(pack.CAPS.text, `A spoken line written out to the schema's two-hundred-character cap, number ${i}, `),
       topic: pack.TOPICS[i % pack.TOPICS.length],
+      // BOTH OPTIONAL TAGS, because "the schema's own caps" has to mean the
+      // schema this release seals: a fixture still carrying only `topic` would
+      // understate the widest legal row by the whole sky term.
+      w: pack.WEATHERS[i % pack.WEATHERS.length],
     })),
     escalation: [],
     overheard: [],
@@ -26171,6 +26235,62 @@ const fire = (node, type) => Promise.all((node.listeners[type] ?? []).map((fn) =
       "strictSchema is never sent: the tolerant parser is the contract",
     );
     assert.ok(sent[0].signal, "…and the call is abortable, because the budget is a real one");
+  });
+
+  // ── THE WIDENED ASK COMES BACK AS FOUR WORKING BUTTONS ───────────────────
+  // The point of widening the guidance, end to end: a model that answers it sends
+  // an index tagged with all four topics and a handful of skies, that index seals
+  // whole, and the talk window renders every branch off it on an ordinary fair
+  // day. 0.13's ask could not produce this pack — it taught two of the four tags —
+  // so a world sealed then shows one or two buttons however good its writing was.
+  await withPackCall(async ({ sent }) => {
+    const { sealed, failure } = await run();
+    assert.equal(failure, "none", "the widened emission is a whole answer");
+    // WHAT WENT OUT taught the whole vocabulary…
+    for (const topic of pack.TOPICS)
+      assert.ok(sent[0].body.instructions.includes(topic), `the request asks for ${topic}`);
+    assert.deepEqual(
+      Object.keys(sent[0].body.schema.properties.lines.items.properties),
+      ["at", "when", "r", "text", "topic", "w"],
+      "…and the schema that went with it seals both optional tags",
+    );
+    // …and what came back kept it through the seal.
+    assert.deepEqual(
+      [...new Set(sealed.lines.map((row) => row.topic))].sort(),
+      [...pack.TOPICS].sort(),
+      "every topic the guidance asks for survives validate()",
+    );
+    const skies = sealed.lines.filter((row) => row.w);
+    assert.ok(skies.length >= 2, `…and the sky terms with them (${skies.length} tagged rows)`);
+    assert.ok(
+      skies.length < sealed.lines.length / 2,
+      "…as the minority the instructions ask for, so a fair day is not a silent town",
+    );
+    // THE WINDOW, DRIVEN OFF IT. Four branches, four answers, on a fair day at the
+    // settlement — which is the claim the whole widening is for.
+    const folded = { pack: sealed, _askDay: -1, _askServed: new Map() };
+    const saveFold = loadedPF.save.packFold;
+    loadedPF.save.packFold = () => folded;
+    try {
+      const probe = {
+        sim: {
+          day: 3,
+          world: { seed: 4242 },
+          weather: () => ({ word: "fair", intensity: null }),
+          zone: () => ({ place: "settlement", mapKind: "town" }),
+          daypart: () => "day",
+        },
+      };
+      const who = { name: "Somebody" };
+      for (const branch of ["rumor", "work", "place", "smalltalk"]) {
+        assert.equal(loadedPF.pack.askHas(probe, who, branch), true, `the ${branch} button renders off a sealed pack`);
+        const said = loadedPF.pack.ask(probe, who, branch);
+        assert.ok(said, `…and answers with something (${branch})`);
+        assert.notEqual(loadedPF.pack.ask(probe, who, branch), said, `…and with something else the second time`);
+      }
+    } finally {
+      loadedPF.save.packFold = saveFold;
+    }
   });
 
   // ── TRUNCATED AT THE WALL: THE SALVAGE SEALS THIN RATHER THAN FAILING ─────
@@ -26251,6 +26371,23 @@ const fire = (node, type) => Promise.all((node.listeners[type] ?? []).map((fn) =
     assert.equal(probe.templates[0].title.length, pack.CAPS.title, "…and its titles");
     assert.equal(probe.lines[0].text.length, pack.CAPS.text, "…and its spoken lines");
     assert.ok(probe.lines[0].topic, "…and every line is tagged, the way the basis costs them");
+    // THE WIDEST LEGAL LINE ROW, MEASURED — the number the residual paragraph
+    // beside `floorBasis` states. It is the whole standing of "the row costs are
+    // measured density, not the schema's maximum", so it is pinned rather than
+    // restated: a 200-character line carrying BOTH optional tags.
+    const widest = JSON.stringify({
+      at: "sanctuary",
+      when: "night",
+      r: "stranger",
+      text: "x".repeat(pack.CAPS.text),
+      topic: "smalltalk",
+      w: "overcast",
+    });
+    assert.equal(widest.length, 293, `the widest legal line row is the 293 chars the floor table says (${widest.length})`);
+    assert.ok(
+      widest.length > pack.TUNING.floorBasis.lineChars * 2,
+      "…which is more than twice what the basis costs a typical one, and that gap IS the residual",
+    );
 
     const wall = pack.TUNING.floorBasis.truncTokens * pack.TUNING.floorBasis.charsPerToken;
     const cut = JSON.stringify(maxEmission(pack.CAPS.templates, 200)).slice(0, wall);
