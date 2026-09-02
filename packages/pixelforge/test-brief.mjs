@@ -25490,6 +25490,37 @@ const fire = (node, type) => Promise.all((node.listeners[type] ?? []).map((fn) =
     "two bands with the same year fail the build",
   );
 
+  // ── THE GROUND SUBSTITUTION, PAIRED AGAINST THE PAINTERS IT NAMES ──────────
+  // This table and the painters ship together for a reason: 10-art answers an id
+  // it does not know with the GRASS painter, so a broken row here is not a crash
+  // — it is a green square in the middle of a snowfield, on the one kind of day
+  // the table exists for. Both halves of every row are checked, and the word it
+  // keys on too.
+  assert.throws(
+    bootWeather(`crop: "cropSnow"`, `crop: "cropFrost"`),
+    /SUBS\.snow names a painter "cropFrost" the art module does not have/,
+    "a substitution pointing at a painter nobody has fails the build",
+  );
+  assert.throws(
+    bootWeather(`grass2: "grassSnow2"`, `gravel: "grassSnow2"`),
+    /SUBS substitutes a tile "gravel" the art module cannot paint/,
+    "…and so does one substituting FOR a tile nobody paints",
+  );
+  assert.throws(
+    bootWeather(`  const SUBS = {\n    snow:`, `  const SUBS = {\n    sleet:`),
+    /SUBS keys on a weather "sleet" the axis does not name/,
+    "…and so does a row keyed on a word the weather axis has never heard of",
+  );
+  // THE OTHER DIRECTION, which is the reason the table and the painters were cut
+  // into the same slice: rename the painter and the table is left pointing at
+  // nothing. A cut that landed this table one slice earlier would have been a
+  // hundred-percent red run for a slice, self-inflicted.
+  assert.throws(
+    bootIn("10-art.js", `    canopySnow(g) {`, `    canopyFrost(g) {`),
+    /SUBS\.snow names a painter "canopySnow" the art module does not have/,
+    "renaming the painter out from under the table fails the build too",
+  );
+
   // ── THE DERIVATION, AGAINST THE PLAN'S OWN WORKED ROWS ────────────────────
   // Ten rows recomputed by hand during the design and pinned here cell for cell.
   // These ARE the release's weather: every claim about what each band feels like
