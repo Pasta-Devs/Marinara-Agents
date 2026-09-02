@@ -26173,6 +26173,16 @@ const fire = (node, type) => Promise.all((node.listeners[type] ?? []).map((fn) =
     // above nothing and meaningfully below what a whole call returns.
     assert.ok(pack.TUNING.floorTemplates >= 1 && pack.TUNING.floorLines >= 1, "neither floor is zero");
     assert.ok(pack.TUNING.floorLines < pack.CAPS.lines / 4, "…and neither is so high that a thin pack cannot seal");
+    // THE NUMBERS THEMSELVES, BY VALUE. Everything above is symbolic and would
+    // stay green through any floor at all, which is exactly wrong for a value
+    // that decides which generations become permanent artifacts. The ruled floor
+    // is TEN and the basis costs a line at 140 — eight percent more than 0.13's
+    // 130, which is what the four topic values and the sky term cost — and both
+    // are written here so a change to either is a change somebody made on purpose.
+    assert.equal(pack.TUNING.floorLines, 10, "the line floor is the ruled ten");
+    assert.equal(pack.TUNING.floorTemplates, 3, "…and the template floor is three");
+    assert.equal(b.lineChars, 140, "…costed against a 140-char tagged line, the 0.14 row");
+    assert.equal(lines, 16, "…which the wall leaves room for sixteen of, as the table beside the floors says");
   }
 
   // ── THE REWARD DERIVATION (plan §2.6, RULED) ──────────────────────────────
@@ -26593,6 +26603,20 @@ const fire = (node, type) => Promise.all((node.listeners[type] ?? []).map((fn) =
       salvaged.lines.length < pack.TUNING.floorLines,
       `…and the index left under it is short of the floor (${salvaged.lines.length}/${pack.TUNING.floorLines})`,
     );
+    // HOW SHORT, BY VALUE — and the margin is worth writing down rather than
+    // inferring, because the floor came down from twelve to ten this release and
+    // "short of the floor" is a weaker claim than it was. A schema-max cut leaves
+    // EIGHT lines against a floor of ten: two. That is the honest size of the
+    // residual now, and it is the number that decides whether this lane still
+    // tests anything — a floor at eight would flip it from a documented
+    // limitation into a silently sealing one, and this equality is what makes
+    // that a red rather than a discovery.
+    assert.equal(salvaged.lines.length, 8, `the schema-max cut leaves eight lines (${salvaged.lines.length})`);
+    assert.equal(
+      pack.TUNING.floorLines - salvaged.lines.length,
+      2,
+      "…which is two short of the ruled floor, and that two is the whole margin",
+    );
   });
 
   // ── UNDER THE FLOOR IS A FAILURE, AND IT HAS ITS OWN VERDICT ──────────────
@@ -26621,6 +26645,39 @@ const fire = (node, type) => Promise.all((node.listeners[type] ?? []).map((fn) =
     const salvagedThin = await run();
     assert.equal(salvagedThin.sealed, null, "a salvage that comes up short does not seal");
     assert.equal(salvagedThin.failure, "thin", "…and says the content was thin rather than the request refused");
+  });
+
+  // ── THE BOUNDARY ITSELF, DRIVEN AT THE RULED VALUE ────────────────────────
+  // Every floor lane above is written against `TUNING.floorLines` and would stay
+  // green at any number at all. This one is written at TEN, because the floor is
+  // an acceptance boundary rather than a tuning knob: it decides which emissions
+  // become permanent artifacts, and 0.14 moved it down from twelve on a live
+  // measurement — an emission landing ON the old floor, against lines that now
+  // cost about eight percent more.
+  //
+  // Eleven seals and nine does not, and both are asserted with the LITERAL count,
+  // so a floor that drifts back up takes this lane red with it.
+  await withPackCall(async ({ state }) => {
+    for (const [count, expected] of [
+      [11, "seals"],
+      [10, "seals"],
+      [9, "fails"],
+    ]) {
+      state.reply = async () => ({ status: 200, body: { ok: true, data: emission(3, count) } });
+      const { sealed, failure } = await run();
+      if (expected === "seals") {
+        assert.ok(sealed, `an emission of ${count} lines seals`);
+        assert.equal(sealed.lines.length, count, `…with every line of it (${count})`);
+        assert.equal(failure, "none", "…and is not reported as a failure");
+      } else {
+        assert.equal(sealed, null, `an emission of ${count} lines does not seal`);
+        assert.equal(failure, "thin", "…and fails as thin, which is the honest verdict for too little content");
+      }
+    }
+    // AND TEN IS WHERE THE LINE IS. The pair above only says the boundary is
+    // somewhere between nine and ten; this says it is the ruled number and not a
+    // coincidence of the fixture.
+    assert.equal(pack.TUNING.floorLines, 10, "…and ten is the floor those three drove");
   });
 
   // ── A HOSTILE EMISSION IS STRIPPED, FOLDED AND REPAIRED AT THE SEAL ───────

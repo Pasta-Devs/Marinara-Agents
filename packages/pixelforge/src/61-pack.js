@@ -161,23 +161,24 @@ PF.pack = (() => {
     // #5135 output floor: a connection that gives us the minimum cuts the
     // emission's TAIL at 2,048 tokens, `salvageText` closes what is open, and
     // whatever templates-first order the model actually honoured is what
-    // survives. Every line is costed TAGGED — the topic tag is bytes the byte
-    // diet does not have to spend, so costing it in is the safe direction:
+    // survives. Every line is costed TAGGED — and from 0.14 that means costed
+    // with the SKY term too, which is where the extra ten characters a row went:
     //
     //   the truncation wall (#5135, connections may undercut) ....  2,048 tokens
     //   dense punctuation-heavy JSON, at three chars to the token .  6,144 chars
     //   the envelope (`{"templates":[`, `],"lines":[`, the close) .    -40 chars
     //   templates emit FIRST and may fill their own cap: 24 × 150 . -3,600 chars
     //   …so the index is left with ...............................   2,504 chars
-    //   a TAGGED line row costs about 130, which buys ............      19 lines
-    //   less the trailing partial row the salvage trims ..........      18 lines
+    //   a TAGGED line row costs about 140, which buys ............      17 lines
+    //   less the trailing partial row the salvage trims ..........      16 lines
     //
     // THE TWO ROW COSTS ARE MEASURED DENSITY, NOT THE SCHEMA'S MAXIMUM, and
     // that distinction is the whole standing of the sum. Serialized, the default
-    // pack's own rows run 112-137 chars a template (mean 121) and 97-140 chars a
-    // line with every one costed tagged (mean 119), across both themes — so 150
-    // and 130 sit above what a typical emission spends, the template cost above
-    // even the widest row measured. What the schema ALLOWS is far bigger: a
+    // pack's own rows run 112-137 chars a template (mean 121) and 97-151 chars a
+    // line with every one costed tagged (mean 126), across both themes — so 150
+    // sits above even the widest template measured, and 140 sits above the MEAN
+    // line and under the widest, which is what a density figure is: what a
+    // typical row costs, and not a ceiling. What the schema ALLOWS is far bigger: a
     // 32-char slug, a 24-char giver, a 32-char variant and a 48-char title make
     // a 217-char template, and a 200-char line carrying BOTH tags — the topic and
     // the 0.14 sky term — is 293 serialized, measured and pinned. So what the
@@ -198,13 +199,37 @@ PF.pack = (() => {
     // lane in the harness pins it, so it stays a known cost rather than
     // something the next reader rediscovers against a comment that denied it.
     //
-    // Eighteen lines and twenty-four templates against floors of twelve and
-    // three: a typical cut at this wall still seals, and a pack that came back
-    // with a quarter of an index still fails. `floorBasis` carries the inputs so
-    // the lane that re-runs the sum cannot drift from the table.
+    // Sixteen lines and twenty-four templates against floors of ten and three:
+    // a typical cut at this wall still seals, and a pack that came back with a
+    // quarter of an index still fails. `floorBasis` carries the inputs so the
+    // lane that re-runs the sum cannot drift from the table.
+    //
+    // ── WHY TEN AND NOT TWELVE (ruled, and irreversible in one direction) ─────
+    // The floor was twelve, and the live measurement is the reason it moved: a
+    // real floor-connection emission landed ON twelve, and 0.14 makes every line
+    // about eight percent costlier — four topic values instead of two, the sky
+    // term, a wider digest ahead of it. Held at twelve, that eight percent is the
+    // difference between a thin pack and a retry screen the player cannot get
+    // past, on the connections least able to try again.
+    //
+    // IT IS AN ACCEPTANCE BOUNDARY AND NOT A TUNING KNOB, which is why it is
+    // stated here rather than moved quietly. This number decides which
+    // generations become PERMANENT ARTIFACTS: lowering it seals packs that would
+    // have failed, and those packs are stored forever. Nothing already sealed
+    // moves; what moves is the next cohort.
+    //
+    // AND THE INVERSION IT ACCEPTS, said where it bites. A ten-line pack under
+    // the live distribution renders one topic branch at the talk window, maybe
+    // two. The enrichment that gives a legacy world all four cannot reach it —
+    // `fold()` is `sealed ?? defaults`, so a world with its own pack reads its own
+    // pack — so this floor is also the line under which a paid generation talks
+    // less than a world that never generated at all. The trade was taken with
+    // that stated: a thin pack written for THIS settlement beats a rich one
+    // written for nobody, and the way out is a wider generation rather than a
+    // blend.
     floorTemplates: 3,
-    floorLines: 12,
-    floorBasis: { truncTokens: 2_048, charsPerToken: 3, envelopeChars: 40, templateChars: 150, lineChars: 130 },
+    floorLines: 10,
+    floorBasis: { truncTokens: 2_048, charsPerToken: 3, envelopeChars: 40, templateChars: 150, lineChars: 140 },
     // ── The reward derivation (plan §2.6, RULED) ──────────────────────────────
     // MONEY IS DERIVED FROM (verb, n) AND THE PACK NEVER AUTHORS IT — the schema
     // excludes money and xp, the seal drops both, and `rewardFor` below is the
@@ -2509,6 +2534,11 @@ const DEFAULT_PACKS = (() => {
     const stock = new Set(PF.brief.defaults(theme, 1).cast.map((member) => member.name));
     if (pack.templates.length < PF.pack.TUNING.floorTemplates)
       throw new Error(`pixelforge: the default pack for "${theme}" is under its own template floor`);
+    // THE DEFAULT PACK IS HELD TO THE SAME FLOOR A GENERATED ONE IS, and it
+    // clears it with room that is worth naming rather than leaving to be
+    // discovered: the enriched literal carries 56 lines against a floor of 10, so
+    // the floor moving between 10 and 12 does not touch this assert either way.
+    // What it protects against is somebody thinning the literal.
     if (pack.lines.length < PF.pack.TUNING.floorLines)
       throw new Error(`pixelforge: the default pack for "${theme}" is under its own line floor`);
     for (const template of pack.templates) {
