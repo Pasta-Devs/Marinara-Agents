@@ -473,9 +473,24 @@ PF.Sim = class {
   }
 
   /** Re-place every scheduled NPC for the current daypart. Idempotent, O(cast),
-   *  and fires only on a boundary crossing (~4x/day) plus once per rebuild. */
+   *  and fires only on a boundary crossing (~4x/day) plus once per rebuild.
+   *
+   *  THE WEATHER'S BIAS IS ASSEMBLED HERE and the policy that spends it lives in
+   *  25-schedule, which is the same split the rest of this method keeps: the sim
+   *  owns zones, the table owns who-is-where-when. One `weather()` read for the
+   *  whole pass — the memo makes it a field compare on all but the first — and
+   *  the closure is the ONE place "indoors" is defined: INTERIOR-ZONE MEMBERSHIP,
+   *  the compiler's own `mapKind`, and not roofedness. A wilds is a `place` and
+   *  stands in the rain like the street does. */
   resolveSchedules() {
     this._daypart = this.daypart();
+    // Null on a fair or overcast day, so resolve() runs exactly as it always has
+    // and a legacy world (whose NPCs carry no `_sched` at all) is untouched
+    // either way. Rain, storm and snow raise it — the word alone, never the
+    // intensity: light rain still empties the street.
+    const bias = PF.weather.WORD_META[this.weather().word]?.indoors
+      ? { indoor: (zoneId) => this.world.zones[zoneId]?.mapKind === "building" }
+      : null;
     // Flatten first: splicing between zone arrays while iterating them would
     // skip or double-process an NPC.
     const all = [];
@@ -500,7 +515,7 @@ PF.Sim = class {
     const unplaced = new Set();
     for (const [fromId, npc] of all) {
       if (!npc._sched || npc._hold) continue; // _hold reserves a GM override seam
-      const handle = PF.schedule.resolve(npc._sched, this._daypart);
+      const handle = PF.schedule.resolve(npc._sched, this._daypart, bias);
       if (!handle) continue;
       const target = this.world.zones[handle.zoneId];
       if (!target) continue;

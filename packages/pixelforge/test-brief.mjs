@@ -2949,6 +2949,13 @@ const wayrestCast = [
     assert.ok(capacity < hearths.length, `seed ${seed}: the home box genuinely overflows (${capacity} tiles for 6)`);
 
     sim.clockMin = 23 * 60; // night: the whole household resolves to one door apron
+    // AND A PINNED FAIR SKY, because this lane is about the overflow ladder and
+    // not about the weather. The apron forced above is outdoors while the
+    // household's `hearth` handle still points indoors — a hybrid the compiler
+    // never mints (a door-apron home resolves no hearth at all) but one 0.14's
+    // wet-day bias would legitimately relocate, taking the undersized box under
+    // test out from under the case on whichever seeds roll rain on day 1.
+    sim.weatherOverride = { word: "fair" };
     sim.resolveSchedules();
 
     // The handle was actually selected, and the overflow path actually ran.
@@ -3787,6 +3794,11 @@ const zoneNamed = (w, name) => Object.values(w.zones).find((zone) => zone.name =
     const w = world.build(seed, "cozy-village", sealed);
     checkWorld(w, sealed, `beds seed ${seed}`);
     const sim = new loadedPF.Sim(w);
+    // A PINNED FAIR SKY. This lane is about the room behind the door — bed at
+    // night, street by day — and 0.14's wet-day bias keeps a resident at their
+    // own fireside through the daylight hours instead, on whichever seeds roll
+    // rain on day 1. The bias has its own case; this one predates it.
+    sim.weatherOverride = { word: "fair" };
 
     sim.clockMin = 23 * 60;
     sim.resolveSchedules();
@@ -4832,6 +4844,12 @@ const liveWorkBrief = (overrides = {}) => ({
     assert.ok(forge.object.includes("counter"), `seed ${seed}: it is still a shop — a counter to be served over`);
 
     const sim = new loadedPF.Sim(w);
+    // A PINNED FAIR SKY: the midday half below asserts the child is NOT in the
+    // shop, and on a wet day 0.14's bias legitimately puts them at their own
+    // fireside — which, over a live-work forge, is inside this very building.
+    // The claim under test is that the counter is the OWNER's station, and that
+    // is a fair-weather sentence.
+    sim.weatherOverride = { word: "fair" };
     sim.clockMin = 23 * 60;
     sim.resolveSchedules();
     const taken = new Set();
@@ -6584,7 +6602,15 @@ const cellarBrief = (prosperity) => ({
   assert.equal(keepers[0].name, "Keep", "and it is the first resident in cast order");
 
   // Midday: the head holds the building, the lodgers are out of it.
+  //
+  // A PINNED FAIR SKY, because "out of it" is a fair-weather sentence. These
+  // lodgers are hearth-less by construction — a named place's quarters resolve
+  // no fireside — so 0.14's wet-day bias sends each of them to their own BERTH,
+  // which is in this building. That is the design (the gathering keeps its own
+  // people and gains nobody else) and it has its own case; this one is about who
+  // KEEPS the inn.
   const sim = new loadedPF.Sim(w);
+  sim.weatherOverride = { word: "fair" };
   sim.clockMin = 12 * 60;
   sim.resolveSchedules();
   assert.equal(inn.npcs.length, 1, `at midday only the head is inside (${inn.npcs.map((n) => n.name).join()})`);
@@ -7430,8 +7456,13 @@ const cellarBrief = (prosperity) => ({
     Object.values(w.zones)
       .filter((z) => z.hearth)
       .reduce((n, z) => n + z.npcs.length, 0);
+  // A PINNED FAIR SKY THROUGHOUT. The shape under test is what the CLOCK does to
+  // a village, and 0.14's wet-day bias holds the noon half of it indoors on
+  // whichever seeds roll rain — which is that feature's whole point and its own
+  // case's business, not this one's.
   const at = (hour) => {
     const sim = new loadedPF.Sim(w);
+    sim.weatherOverride = { word: "fair" };
     sim.clockMin = hour * 60;
     sim.resolveSchedules();
     return { outdoors: w.zones.z1.npcs.length, indoors: fireside() };
@@ -7448,6 +7479,7 @@ const cellarBrief = (prosperity) => ({
   // Non-vacuous: they are at the FIRE, not merely somewhere indoors. Every one of
   // them is within reach of a hearth tile on the floor they are standing on.
   const sim = new loadedPF.Sim(w);
+  sim.weatherOverride = { word: "fair" };
   sim.clockMin = 6 * 60;
   sim.resolveSchedules();
   let besideAFire = 0;
@@ -25489,6 +25521,351 @@ const fire = (node, type) => Promise.all((node.listeners[type] ?? []).map((fn) =
     core.sim = wasSim;
     core.host = wasHost;
     loadedPF.assets._noPackage = wasNoPackage;
+  }
+}
+
+// 127. THE TOWN ANSWERS (0.14 §2.3): the HEARTH-FIRST wet-day bias. Bad weather
+// sends people to their own firesides — the streets empty, the houses lit. The
+// bed stays the NIGHT's box (v3 substituted the night handle and parked the town
+// on its own bunks at noon, which is this case's named dead tableau), the
+// gathering keeps only its own people, and nobody is sent anywhere that has not
+// already held them.
+{
+  const sealed = brief.validate(
+    {
+      scale: "village",
+      name: "Hearthvale",
+      places: [
+        { kind: "gathering", name: "The Amber Hearth Inn" },
+        { kind: "wilds", name: "The Whisperwood" },
+      ],
+      cast: [
+        { name: "Mira", role: "innkeeper", kind: "host", tint: "rose", home: "The Amber Hearth Inn", household: 1 },
+        { name: "Tam", role: "farmer", kind: "grower", tint: "green", home: "Hearthvale", household: 2 },
+        { name: "Rook", role: "guard", kind: "guard", tint: "blue", home: "Hearthvale", household: 3 },
+        { name: "Fen", role: "forager", kind: "wanderer", tint: "teal", home: "The Whisperwood", household: 4 },
+        { name: "Lodge", role: "lodger", kind: "folk", tint: "amber", home: "The Amber Hearth Inn", household: 5 },
+        { name: "Sol", role: "pedlar", kind: "merchant", tint: "violet", standing: "transient" },
+        { name: "Edge", role: "hermit", kind: "wanderer", tint: "grey", standing: "fringe" },
+        { name: "Ash", role: "beggar", kind: "folk", tint: "red", standing: "destitute" },
+      ],
+    },
+    ctx,
+  );
+  // A PINNED CLIMATE so the fixture's own sky is never the variable — every
+  // placement below is summoned through the override slot, which is the one
+  // surface a console can reach and the one the recipes use.
+  sealed.latitude = "temperate";
+  sealed.precipitation = "wet";
+  const w = world.build(424242, "cozy-village", sealed);
+  assert.equal(w.latitude, "temperate", "the fixture world took its pinned climate");
+  const cast = Object.values(w.zones).flatMap((zone) => zone.npcs);
+  const zoneOf = (npc) => Object.keys(w.zones).find((id) => w.zones[id].npcs.includes(npc));
+  const spot = (npc) => `${zoneOf(npc)}:${npc.x},${npc.y}`;
+  const named = (name) => cast.find((npc) => npc.name === name);
+  const inBox = (npc, handle) =>
+    zoneOf(npc) === handle.zoneId &&
+    npc.x >= handle.wander.x0 &&
+    npc.x <= handle.wander.x1 &&
+    npc.y >= handle.wander.y0 &&
+    npc.y <= handle.wander.y1;
+  // The same closure the sim builds, so the resolve-level assertions below argue
+  // about the shipped mechanism and not about a twin.
+  const bias = { indoor: (zoneId) => w.zones[zoneId]?.mapKind === "building" };
+  const resolve = loadedPF.schedule.resolve;
+  const place = (hour, word, intensity) => {
+    const sim = new loadedPF.Sim(w);
+    sim.weatherOverride = intensity ? { word, intensity } : { word };
+    sim.clockMin = hour * 60;
+    sim.resolveSchedules();
+    return sim;
+  };
+
+  // ── THE ROW THE BIAS EXISTS FOR ────────────────────────────────────────────
+  // An ordinary householder: the policy sends them to the plaza by day and they
+  // have a fireside of their own to be sent to instead.
+  const displaced = cast.filter((npc) => resolve(npc._sched, "day") === npc._sched.public && npc._sched.hearth);
+  assert.ok(displaced.length >= 20, `the fixture has a settlement of householders in it (${displaced.length})`);
+  place(12, "fair");
+  for (const npc of displaced) assert.equal(zoneOf(npc), "z1", `${npc.name} stands in the square at fair noon`);
+  place(12, "rain");
+  for (const npc of displaced) {
+    assert.ok(inBox(npc, npc._sched.hearth), `${npc.name} is at THEIR OWN fireside box at wet noon`);
+    assert.equal(w.zones[zoneOf(npc)].mapKind, "building", `…which is an interior (${npc.name})`);
+  }
+
+  // THE BUNK TABLEAU, PINNED DEAD BY NAME. v3 substituted the NIGHT handle, so
+  // at 07:00 the displaced day handle resolved to the one-tile bed box the cast
+  // was already lying in and the town spent eleven daylight hours standing on
+  // its own bunks. Every one-tile home box in the world is checked, at noon,
+  // under a storm.
+  const bunks = cast.filter((npc) => {
+    const b = npc._sched.home?.wander;
+    return b && b.x0 === b.x1 && b.y0 === b.y1;
+  });
+  assert.ok(bunks.length >= 20, `the world lays real one-tile beds (${bunks.length})`);
+  const onBunk = () =>
+    bunks.filter(
+      (npc) => spot(npc) === `${npc._sched.home.zoneId}:${npc._sched.home.wander.x0},${npc._sched.home.wander.y0}`,
+    );
+  place(23, "storm");
+  assert.ok(onBunk().length >= 20, `at night a stormy town IS in its beds (${onBunk().length} of ${bunks.length})`);
+  place(12, "storm");
+  // ONE NAMED EXCEPTION, and it is the design's own: a lodger in a named place's
+  // quarters has no fireside to be sent to, so the night berth is the only
+  // indoors they have. Everybody with a hearth is at it.
+  assert.deepEqual(
+    onBunk().map((npc) => npc.name),
+    ["Lodge"],
+    "at stormy noon nobody with a fireside stands on their own bunk — only the hearth-less lodger, at their berth",
+  );
+  assert.equal(named("Lodge")._sched.hearth, null, "…and that lodger really has no hearth to have gone to");
+
+  // AT NIGHT THE BIAS IS A NO-OP BY TABLE WALK, not by self-reference: every row
+  // whose night name is not `post` names a bed, and a bed is indoors, so nothing
+  // is ever displaced after dark. It is a daylight mechanism by construction.
+  place(23, "fair");
+  const clearNight = cast.map(spot).join("|");
+  place(23, "storm");
+  assert.equal(cast.map(spot).join("|"), clearNight, "a stormy night moves nobody");
+
+  // ── CAPACITY-NEUTRAL BY CONSTRUCTION ──────────────────────────────────────
+  // The freeze class dies here rather than being mitigated: every destination
+  // the bias can pick is one the DUSK or the NIGHT pass already assigns that
+  // same NPC, so no box ever receives an occupant it does not already hold.
+  for (const npc of cast) {
+    const s = npc._sched;
+    const wet = resolve(s, "day", bias);
+    assert.ok(
+      wet === resolve(s, "day") || wet === resolve(s, "dusk") || wet === resolve(s, "night"),
+      `${npc.name}'s wet-day destination is one the town already sends them to`,
+    );
+  }
+
+  // ── THE WET 07:00 BOUNDARY MOVES THE CAST, bed -> hearth ──────────────────
+  // Real assignments, not a no-op: v3's substitution resolved to the box the
+  // cast was standing in and moved NOBODY, which is the failure this lane is
+  // here to catch.
+  const morning = new loadedPF.Sim(w);
+  morning.weatherOverride = { word: "storm" };
+  morning.clockMin = 23 * 60;
+  morning.resolveSchedules();
+  const abed = new Map(displaced.map((npc) => [npc, spot(npc)]));
+  for (const npc of displaced) assert.ok(inBox(npc, npc._sched.home), `${npc.name} is in bed at 23:00`);
+  assert.equal(morning.waitUntil("day"), true, "the rest verb jumps to the next 07:00");
+  assert.equal(morning.clockMin, 7 * 60, "…and lands on the boundary");
+  const moved = displaced.filter((npc) => abed.get(npc) !== spot(npc));
+  assert.equal(moved.length, displaced.length, `the wet 07:00 pass moves the whole displaced cast (${moved.length})`);
+  for (const npc of displaced) assert.ok(inBox(npc, npc._sched.hearth), `${npc.name} woke to their own fireside`);
+
+  // ── THE ROWS THAT DO NOT MOVE ─────────────────────────────────────────────
+  // Every one of these reads the POLICY NAME off the template. There is no "is
+  // this the public handle" test and no NPC identity anywhere in the mechanism.
+  const sameUnderWeather = (name, hour, word) => {
+    const s = named(name)._sched;
+    assert.equal(
+      resolve(s, hour, bias),
+      resolve(s, hour),
+      `${name} answers the same ${hour} handle under ${word} as under a clear sky`,
+    );
+  };
+  // A grower works the land in the rain; the watch keeps a stormy night; the
+  // stall is tended; the fringe and the destitute are out in it, because the
+  // world has no roof for them and this package does not invent one.
+  sameUnderWeather("Tam", "day", "rain");
+  sameUnderWeather("Rook", "night", "storm");
+  sameUnderWeather("Sol", "day", "snow");
+  sameUnderWeather("Edge", "day", "storm");
+  sameUnderWeather("Ash", "day", "storm");
+  place(12, "storm");
+  for (const name of ["Tam", "Rook", "Sol", "Edge", "Ash", "Fen"])
+    assert.notEqual(w.zones[zoneOf(named(name))].mapKind, "building", `${name} is out in the storm at noon, honestly`);
+  // THE FRINGE AND THE DESTITUTE, STATED STRUCTURALLY, because for a row whose
+  // every anchor is `post` "unmoved" is true however the bias is written and a
+  // placement check alone would pin nothing. The real content is that there is
+  // no indoors anywhere in their schedule to be sent to: the world has no roof
+  // for them and this package does not invent one. This reds the day somebody
+  // gives them one — which is the change worth noticing.
+  for (const name of ["Edge", "Ash"]) {
+    const s = named(name)._sched;
+    for (const key of ["post", "home", "hearth", "public"])
+      assert.ok(
+        !s[key] || w.zones[s[key].zoneId].mapKind !== "building",
+        `${name} has no indoors anywhere in their schedule (${key})`,
+      );
+  }
+  // …and the exemption is doing the work rather than the geometry: Tam's night
+  // handle IS indoors, so without the policy-name test the bias would take him
+  // off his own land.
+  assert.equal(
+    w.zones[named("Tam")._sched.home.zoneId].mapKind,
+    "building",
+    "the grower has an indoors to be taken to",
+  );
+  // A NULL-HOME RESIDENT keeps their spot: no bed means no fireside either, and
+  // nowhere to go is answered by standing in the weather.
+  assert.equal(named("Fen")._sched.home, null, "the wilds sleeper has no bed");
+  assert.equal(named("Fen")._sched.hearth, null, "…and so no hearth");
+  assert.equal(resolve(named("Fen")._sched, "day", bias), named("Fen")._sched.public, "…and keeps the square");
+
+  // ── THE HEARTH-LESS LODGER FALLS TO THEIR BERTH ───────────────────────────
+  // The dusk name resolves null, so the night name answers — and the lookup is
+  // RAW, without resolve()'s own `?? sched.post` tail. With the tail this would
+  // hand back the inn's whole-room work post instead of the berth.
+  const lodge = named("Lodge")._sched;
+  assert.equal(lodge.hearth, null, "a named place's quarters resolve no fireside");
+  assert.equal(resolve(lodge, "day", bias), lodge.home, "so the lodger goes to their own berth, not to a post");
+  assert.notEqual(lodge.home, lodge.post, "…and those are genuinely different handles");
+
+  // ── THE GATHERING KEEPS ITS OWN PEOPLE AND GAINS NOBODY ELSE ──────────────
+  const inn = findZone(w, "The Amber Hearth Inn");
+  place(12, "fair");
+  const fairInn = new Set(inn.npcs.map((npc) => npc.name));
+  place(12, "rain");
+  const wetInn = inn.npcs.map((npc) => npc.name);
+  assert.deepEqual(wetInn.slice().sort(), ["Lodge", "Mira"], `the wet inn holds its keeper and its lodger (${wetInn})`);
+  assert.deepEqual([...fairInn], ["Mira"], "…where a fair noon holds only the keeper");
+  for (const name of wetInn)
+    assert.ok(
+      fairInn.has(name) || named(name)._sched.home?.zoneId === inn.id,
+      `${name} is one of the inn's own people, not somebody the weather concentrated into it`,
+    );
+
+  // ── INTENSITY-BLIND ───────────────────────────────────────────────────────
+  // Light rain empties the street exactly as heavy rain does. A drizzle reads as
+  // weather, not as an exception.
+  place(12, "rain", "light");
+  const light = cast.map(spot).join("|");
+  place(12, "rain", "heavy");
+  assert.equal(cast.map(spot).join("|"), light, "the bias never reads the intensity");
+  place(12, "fair");
+  assert.notEqual(cast.map(spot).join("|"), light, "…and the lane is not comparing two identical fair days");
+
+  // ── RULING 7: INTERIOR-ZONE MEMBERSHIP, NOT ROOFEDNESS ────────────────────
+  // The wilds is a `place`, so it is outdoors however dense the canopy. A hearth
+  // handle pointing at one is refused and the night name answers instead.
+  // Driven through a real Sim, so the closure under test is the one 30-sim
+  // builds and not a twin written here.
+  {
+    const mut = world.build(424242, "cozy-village", sealed);
+    const mutCast = Object.values(mut.zones).flatMap((zone) => zone.npcs);
+    const mutWhere = (npc) => Object.keys(mut.zones).find((id) => mut.zones[id].npcs.includes(npc));
+    const wilds = findZone(mut, "The Whisperwood");
+    assert.equal(wilds.mapKind, "place", "the wilds is a place and never a building");
+    const soul = mutCast.find((npc) => resolve(npc._sched, "day") === npc._sched.public && npc._sched.hearth);
+    const bed = soul._sched.home;
+    assert.equal(mut.zones[bed.zoneId].mapKind, "building", "the soul under test has a real bed indoors");
+    soul._sched.hearth = { zoneId: wilds.id, wander: { x0: 2, y0: 2, x1: 5, y1: 5 } };
+    const wet = new loadedPF.Sim(mut);
+    wet.weatherOverride = { word: "storm" };
+    wet.clockMin = 12 * 60;
+    wet.resolveSchedules();
+    assert.equal(mutWhere(soul), bed.zoneId, "a fireside out in the woods is not an indoors — the night name answers");
+    // A DOOR-APRON HOME is outdoors too, and with no fireside behind it both
+    // rungs fail and the resident honestly stays in the weather.
+    soul._sched.hearth = null;
+    soul._sched.home = { zoneId: "z1", wander: { x0: 4, y0: 4, x1: 6, y1: 5 } };
+    wet.resolveSchedules();
+    assert.equal(mutWhere(soul), "z1", "an apron home with no fireside leaves them out in the square");
+  }
+
+  // ── A LEGACY WORLD IS UNTOUCHED ───────────────────────────────────────────
+  // Structural, not incidental: legacy NPCs carry no `_sched` at all, and
+  // resolveSchedules skips them before the bias is ever consulted.
+  {
+    const legacy = world.build(11, "cozy-village");
+    const folk = Object.values(legacy.zones).flatMap((zone) => zone.npcs);
+    assert.ok(folk.length > 0, "the legacy world stands a cast up");
+    assert.equal(folk.filter((npc) => npc._sched).length, 0, "…carrying no schedules for a bias to read");
+    // Doubly structural, and worth saying which two guards: resolveSchedules
+    // skips a schedule-less NPC before the bias is consulted, and resolve()
+    // answers null for one anyway, under every sky.
+    assert.equal(resolve(undefined, "day", bias), null, "no schedule, no handle — bias or no bias");
+    const snap = (word) => {
+      const sim = new loadedPF.Sim(legacy);
+      sim.weatherOverride = { word };
+      sim.clockMin = 12 * 60;
+      sim.resolveSchedules();
+      return Object.values(legacy.zones)
+        .flatMap((zone) => zone.npcs.map((npc) => `${npc.name}@${npc.x},${npc.y}`))
+        .join("|");
+    };
+    assert.equal(snap("storm"), snap("fair"), "a legacy town is unmoved by weather");
+  }
+
+  // ── THE STORM MORNING, END TO END, ON A DERIVED SKY ───────────────────────
+  // No override anywhere: a thriving city, its own calendar, and the day the
+  // derivation rolls a storm. This is the felt outcome the release promises.
+  {
+    const city = brief.validate(
+      {
+        scale: "city",
+        prosperity: "thriving",
+        name: "Bastion",
+        backgroundPopulation: 120,
+        places: [
+          { kind: "gathering", name: "The Anchor" },
+          { kind: "wilds", name: "The Reach" },
+        ],
+        cast: [
+          { name: "Mira", role: "innkeeper", kind: "host", tint: "rose", home: "The Anchor", household: 1 },
+          { name: "Tam", role: "farmer", kind: "grower", tint: "green", home: "Bastion", household: 2 },
+          { name: "Rook", role: "guard", kind: "guard", tint: "blue", home: "Bastion", household: 3 },
+        ],
+      },
+      ctx,
+    );
+    city.latitude = "temperate";
+    city.precipitation = "wet";
+    const big = world.build(424242, "cozy-village", city);
+    const souls = Object.values(big.zones).flatMap((zone) => zone.npcs);
+    assert.ok(souls.length >= 90, `a thriving city stands up a real crowd (${souls.length})`);
+    assert.equal(loadedPF.weather.at(big, 49, null).word, "storm", "day 49 of this world storms on its own");
+    // The night before is wet too, and the bias sleeps straight through it —
+    // which is the daylight-mechanism claim arriving from the other side.
+    assert.equal(loadedPF.weather.at(big, 48, null).word, "rain", "…after a rainy day 48");
+
+    const sim = new loadedPF.Sim(big);
+    sim.day = 48;
+    sim.clockMin = 23 * 60;
+    sim.resolveSchedules();
+    const abedInCity = new Map(souls.map((npc) => [npc, `${npc.x},${npc.y}`]));
+    assert.equal(sim.waitUntil("day"), true, "the town sleeps through to 07:00");
+    assert.equal(sim.day, 49, "…waking into the storm");
+    assert.equal(sim.weather().word, "storm", "…which the sim reads off the derivation, with no override set");
+    assert.equal(sim.weatherOverride, null, "…there being none");
+
+    const street = big.zones.z1.npcs.length;
+    const lit = Object.values(big.zones).filter((zone) => zone.mapKind === "building" && zone.npcs.length).length;
+    assert.equal(street, 2, `the streets empty (${big.zones.z1.npcs.map((npc) => npc.name)})`);
+    assert.ok(lit >= 30, `and the houses are lit (${lit} interiors holding somebody)`);
+    // THE SAME MORNING UNDER A CLEAR SKY, so the numbers above are the weather's
+    // doing and not the hour's.
+    const clear = new loadedPF.Sim(big);
+    clear.weatherOverride = { word: "fair" };
+    clear.day = 49;
+    clear.clockMin = 7 * 60;
+    clear.resolveSchedules();
+    assert.ok(
+      big.zones.z1.npcs.length > 90,
+      `a fair 07:00 puts the same town in the square (${big.zones.z1.npcs.length})`,
+    );
+
+    // THE FREEZE CLASS, PINNED DEAD. Everyone is inside the box they were
+    // assigned — nobody was spilled outside their own wander box, which is what
+    // used to freeze an NPC permanently (stepNpcs' bounds test).
+    sim.resolveSchedules();
+    let outside = 0;
+    for (const zone of Object.values(big.zones))
+      for (const npc of zone.npcs) {
+        const b = npc.wander;
+        if (!(npc.x >= b.x0 && npc.x <= b.x1 && npc.y >= b.y0 && npc.y <= b.y1)) outside++;
+      }
+    assert.equal(outside, 0, `no NPC is stranded outside its own wander box after the wet crossing (${outside})`);
+    assert.ok(
+      souls.filter((npc) => abedInCity.get(npc) !== `${npc.x},${npc.y}`).length > 90,
+      "and the crossing really did move the town",
+    );
   }
 }
 
