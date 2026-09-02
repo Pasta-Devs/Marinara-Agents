@@ -724,10 +724,16 @@ PF.Hud = class {
     // 5. ONE ROW PER ERRAND, and the label names what the press settles. Two
     // errands to Bram are two labelled presses: a label is a mechanism only if it
     // says which row it is about.
-    for (const row of this._talkErrands(anchor))
-      rows.push(
-        paid(`deliver:${row.id}`, `Hand over: ${row.title || "an errand"}`, () => this.core.talkHandOver(row.id)),
-      );
+    // The row itself carries no title — a quest row is a closed eight-field
+    // literal and the words live on the TEMPLATE — so the title is resolved the
+    // way `rowText` resolves it, off the fold, with the mechanical phrase behind
+    // it for a row whose template this world no longer offers.
+    const folded = PF.save.packFold(core);
+    for (const row of this._talkErrands(anchor)) {
+      const template = PF.pack.templateOf(row.id);
+      const title = (template ? folded?.byId?.get(template)?.title : "") || `word for ${anchor.name}`;
+      rows.push(paid(`deliver:${row.id}`, `Hand over: ${title}`, () => this.core.talkHandOver(row.id)));
+    }
     // 6. THE DOOR THAT NEVER VANISHES. (The other one is the Say row below, which
     // is a permanent child rather than a rebuilt row — rebuilding it would throw
     // away whatever the player had half-typed.)

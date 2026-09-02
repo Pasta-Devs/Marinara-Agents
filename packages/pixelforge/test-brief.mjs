@@ -22052,6 +22052,11 @@ const fire = (node, type) => Promise.all((node.listeners[type] ?? []).map((fn) =
     host.narrationDone = true;
     hud.update();
     assert.ok(doorOf("Just talk"), "and the control goes back on its own");
+    // A REAL HUD IS TORN DOWN REALLY. It bound a document-level pointerdown when
+    // the window opened, and that listener is not a child of anything the stub
+    // swap removes — leaving it would be the exact leak `destroy()` exists to
+    // stop, and it would answer the NEXT block's presses.
+    hud.destroy();
     core.hud = stubHud;
 
     // THE TURN IS HALF THE QUESTION, NOT JUST THE PERSON (round-2 review).
@@ -22103,6 +22108,1087 @@ const fire = (node, type) => Promise.all((node.listeners[type] ?? []).map((fn) =
     core.host = null;
     core._talkConfirm = null;
     loadedPF.save.reset();
+  }
+}
+
+// ── THE DEFAULT PACKS LEARNED TO ANSWER (0.14 slice 4) ───────────────────────
+// The enrichment's whole point, said as arithmetic. The talk window renders a
+// topic branch only when it has a line to serve, and the packs it reads on a
+// legacy world and on a declined generation are these two — so a floor here is
+// the difference between four working branches and one.
+//
+// The boot assert at the foot of 61-pack enforces the same floor and throws on
+// the way in; this is where the numbers are visible, and where the STRANGER
+// clause is pinned in its own right: ruling 4 seals the friend register for this
+// release, so a pack whose topics live in friend lines has topic buttons that
+// never render, whatever the totals say.
+{
+  const pack = loadedPF.pack;
+  const HANDLES = ["settlement", "gathering", "wilds"];
+  const INTERIORS = ["workshop", "hall", "sanctuary", "dwelling"];
+  for (const theme of loadedPF.art.themeIds()) {
+    const lines = pack.defaults(theme).lines;
+    const strangers = lines.filter((row) => row.r === "stranger");
+    assert.ok(
+      strangers.length >= 2 * HANDLES.length * pack.TOPICS.length,
+      `${theme}: the enrichment is stranger-register (${strangers.length} of ${lines.length})`,
+    );
+    for (const at of HANDLES) {
+      for (const topic of pack.TOPICS) {
+        // ANY-WEATHER, deliberately: a topic whose only lines were sky-tagged
+        // would be a branch that disappeared on a fair day, which is most days.
+        const servable = strangers.filter(
+          (row) => row.at === at && row.topic === topic && row.w === undefined,
+        ).length;
+        assert.ok(servable >= 2, `${theme}: ${at}/${topic} has ${servable} any-weather stranger lines, needs two`);
+      }
+    }
+    // …AND THE INTERIOR HANDLES GET NO FLOOR, which is a decision rather than an
+    // omission: the ladder's third and fourth rungs relax the PLACE, so a smith
+    // with nothing workshop-shaped to say answers with something the town says.
+    // Pinned so a later pass does not "complete" the table and bury the design.
+    const interiorTagged = strangers.filter((row) => INTERIORS.includes(row.at) && row.topic !== undefined).length;
+    assert.equal(interiorTagged, 0, `${theme}: the interior handles carry no topic floor, by design`);
+    // The weather axis is SPENT, and spent as extras over the floor.
+    const skies = strangers.filter((row) => row.w !== undefined);
+    assert.ok(skies.length >= 2, `${theme}: the weather axis is actually used (${skies.length} lines)`);
+    for (const row of skies)
+      assert.ok(pack.WEATHERS.includes(row.w), `${theme}: "${row.w}" is a weather word this build knows`);
+  }
+}
+
+// ── THE TALK WINDOW, AND THE CLOCK IT STOPS (0.14 slice 4) ────────────────────
+// The release's flagship surface. Everything below drives the SHIPPED core and
+// the SHIPPED Hud over the FakeNode shim — `core.interact()` to open, the real
+// window controls to press, `sim.step()` to run frames, `hud.update()` to
+// reconcile — because the two halves of this feature are a DOM surface and a
+// stopped clock, and a lane that stubbed either would be watching neither.
+//
+// THE STUCK-CLOCK CLASS IS WHAT THIS BLOCK IS FOR. `talkAnchorId` freezes the
+// world's clock, so a latch that leaks is a world where time never passes again —
+// not a cosmetic bug, a save that can never see another dawn. It has exactly ONE
+// non-null writer (the window opening) and a finite table of clearers, and the
+// lanes below drive every clearer in that table plus the invariant underneath
+// them all: LATCH NULL ⇒ THE CLOCK RUNS.
+{
+  const core = loadedPF.core;
+  const realSetTimeout = globalThis.setTimeout;
+  const realClearTimeout = globalThis.clearTimeout;
+  const realWindow = globalThis.window;
+  globalThis.setTimeout = () => 0;
+  globalThis.clearTimeout = () => {};
+  // `_bindKeys` is what puts `_keyDown` on the core, and it wants a window to
+  // bind to. The keyboard Escape branch is a shipped leave condition, so it is
+  // driven here rather than left to the browser pass.
+  globalThis.window = { addEventListener() {}, removeEventListener() {} };
+  loadedPF.save.reset();
+
+  /** The fixed step the frame loop runs at (90-element), and how many of them a
+   *  game minute takes. `PF.CLOCK_SECONDS_PER_GAME_MINUTE` is 5 and the step is
+   *  1/60, so three hundred is the paper answer — and repeated addition of 1/60
+   *  lands at 4.999999999999938, a hair short, so the honest count is 301: the
+   *  clock crosses on the last of them. Every clock assertion below is that
+   *  arithmetic and not a tolerance, because "the clock did not move much" is
+   *  exactly the shape a banked accumulator sails straight through. */
+  const STEP = 1 / 60;
+  const MINUTE_STEPS = loadedPF.CLOCK_SECONDS_PER_GAME_MINUTE * 60 + 1;
+
+  /** One staged world, wired the way a live mount is. */
+  const stage = ({ seed = 4242, theme = "cozy-village", chatId = "chat-talk-window", sealed = null } = {}) => {
+    // TEAR THE LAST ONE DOWN FIRST, and it is not tidiness: the window binds a
+    // DOCUMENT-level pointerdown, so a fixture that walked away from an open one
+    // would leave a listener closed over a dead Hud on the page — which is the
+    // exact leak `destroy()` exists to stop, and a stale one would answer these
+    // lanes' presses instead of the live window.
+    core.hud?.destroy();
+    core.closeTalk();
+    const w = world.build(seed, theme, sealed);
+    const sim = new loadedPF.Sim(w);
+    const sent = [];
+    core.chatId = chatId;
+    core.sim = sim;
+    core._talkConfirm = null;
+    core._talkAnchor = null;
+    let accept = true;
+    const host = {
+      chatId,
+      chatMeta: {},
+      isStreaming: false,
+      narrationDone: true,
+      latestAssistant: { id: "m1" },
+      sendMessage: (text) => {
+        sent.push(text);
+        return accept;
+      },
+    };
+    core.host = host;
+    const mountEl = new FakeNode("div");
+    core._mainEl = mountEl;
+    const hud = new loadedPF.Hud(mountEl, core);
+    core.hud = hud;
+    core._keysBound = false;
+    core._bindKeys();
+    const standAt = (npc) => {
+      sim.x = npc.x * loadedPF.TILE + 8;
+      sim.y = npc.y * loadedPF.TILE + 8;
+    };
+    const openOn = (npc) => {
+      sim.mode = "walk";
+      standAt(npc);
+      sim.nearNpc = npc;
+      core.interact();
+      hud.update();
+    };
+    const steps = (n) => {
+      for (let i = 0; i < n; i++) sim.step(STEP, core.input);
+    };
+    const frames = (n) => {
+      for (let i = 0; i < n; i++) {
+        sim.step(STEP, core.input);
+        hud.update();
+      }
+    };
+    /** Fire a control the way a click does — with the event, so the repeat guard
+     *  is reachable. */
+    const press = (node, ev) => {
+      for (const fn of node.listeners?.click ?? []) fn({ preventDefault() {}, ...ev });
+    };
+    const rowLabelled = (prefix) =>
+      hud.talkRows.children.find((node) => String(node.textContent).startsWith(prefix)) ?? null;
+    const labels = () => hud.talkRows.children.map((node) => String(node.textContent));
+    return { w, sim, hud, sent, host, standAt, openOn, steps, frames, press, rowLabelled, labels,
+      accept: (value) => { accept = value; }, npcs: () => sim.zone().npcs };
+  };
+  const settle = async () => {
+    for (let i = 0; i < 8; i++) await Promise.resolve();
+  };
+  const mounted = (hud) => hud.talkEl.style.display === "flex";
+  // NOTHING IS LISTENING BEFORE ANY OF THIS OPENS A WINDOW. Stated as an
+  // assertion rather than assumed, because every pointer-outside lane below
+  // reads "how many handlers heard it", and one left behind by an earlier case
+  // would answer for a window that no longer exists.
+  assert.equal(fireDocument("pointerdown", { target: new FakeNode("div") }), 0, "no window listener is standing yet");
+
+  try {
+    // ── THE INVARIANT, FIRST: LATCH NULL ⇒ THE CLOCK RUNS ────────────────────
+    // Everything else in this block is about the freeze. This one is about the
+    // thaw, and it is the assertion the stuck-clock class actually dies on: with
+    // no conversation live, N stepped walk frames advance the clock, whatever
+    // else is true of the world. Exact arithmetic — 300 steps is one minute.
+    {
+      const t = stage();
+      assert.equal(t.sim.talkAnchorId, null, "a fresh sim is born with no conversation live");
+      const was = t.sim.clockMin;
+      t.steps(MINUTE_STEPS);
+      assert.equal(t.sim.clockMin, was + 1, "latch null ⇒ the clock runs: one game minute of frames is one game minute");
+      t.steps(MINUTE_STEPS * 2);
+      assert.equal(t.sim.clockMin, was + 3, "…and keeps running, minute for minute");
+    }
+
+    // ── THE WINDOW STOPS TIME, AND BANKS NOTHING ────────────────────────────
+    // 600 steps is two game minutes' worth of real seconds. Not one of them
+    // arrives — and `_clockAcc` does not fill either, which is the half a naive
+    // gate misses: an accumulator left accruing dumps every banked minute the
+    // instant the window closes, which is the same afternoon burnt one frame
+    // later. So the close is checked for EXACTLY +1 and never +2.
+    {
+      const t = stage();
+      const npc = t.npcs()[0];
+      t.openOn(npc);
+      assert.equal(t.sim.talkAnchorId, npc.id, "the press opened a conversation");
+      assert.equal(mounted(t.hud), true, "…and the window is up");
+      const held = t.sim.clockMin;
+      t.frames(MINUTE_STEPS * 2);
+      assert.equal(t.sim.clockMin, held, "the clock does not advance one minute while the window is open");
+      assert.equal(t.sim._clockAcc, 0, "…and the accumulator has not been quietly filling either");
+      assert.equal(mounted(t.hud), true, "…with the window still standing after all of it");
+      // THE UNFREEZE, on the same sim: closing IS the latch clear, and the very
+      // next minute's worth of frames lands one minute and not three.
+      core.closeTalk();
+      t.hud.update();
+      assert.equal(mounted(t.hud), false, "closing takes the window down");
+      assert.equal(t.sim.talkAnchorId, null, "…because closing IS clearing the latch");
+      t.steps(MINUTE_STEPS);
+      assert.equal(t.sim.clockMin, held + 1, "…and time starts again: exactly one minute, never the banked two");
+    }
+
+    // ── NPCS KEEP MOVING WHILE THE CLOCK DOES NOT ───────────────────────────
+    // The town stays alive while you read. What is frozen is the CLOCK and the
+    // person you are talking to — by IDENTITY, not by whoever is nearest, which
+    // is the whole of the crowd case: `nearNpc` freezes the drifter and lets the
+    // addressee walk off, and between 26 and 32px it freezes nobody at all.
+    {
+      const t = stage();
+      const [anchor, drifter] = t.npcs();
+      assert.ok(anchor && drifter, "the legacy village stands two people up in the open");
+      t.openOn(anchor);
+      const anchorWas = `${anchor.x},${anchor.y}`;
+      const drifterWas = `${drifter.x},${drifter.y}`;
+      let drifterMoved = false;
+      for (let i = 0; i < 3000; i++) {
+        t.sim.step(STEP, core.input);
+        if (`${drifter.x},${drifter.y}` !== drifterWas) drifterMoved = true;
+      }
+      assert.equal(`${anchor.x},${anchor.y}`, anchorWas, "the person being talked to stands still");
+      assert.equal(drifterMoved, true, "…and the town does not: the neighbour keeps wandering");
+      assert.equal(t.sim.talkAnchorId, anchor.id, "…with the conversation still live");
+    }
+
+    // ── THE HANDOFF: TIME STOPPED END TO END, THE ANCHOR FROZEN END TO END ──
+    // A paid press unmounts the window on the mode term and KEEPS the latch, so
+    // the freeze passes from the gate to the dialogue mode test with no gap. The
+    // clear lands at the walk entry the dialogue exit reaches.
+    {
+      const t = stage();
+      const [anchor, drifter] = t.npcs();
+      t.openOn(anchor);
+      const held = t.sim.clockMin;
+      const anchorWas = `${anchor.x},${anchor.y}`;
+      const drifterWas = `${drifter.x},${drifter.y}`;
+      core.talkFree();
+      await settle();
+      assert.equal(t.sim.mode, "dialogue", "the press took the turn");
+      assert.equal(t.sim.talkAnchorId, anchor.id, "…and the latch SURVIVED it: the conversation is still with them");
+      t.hud.update();
+      assert.equal(mounted(t.hud), false, "…while the window itself is gone, on the predicate's mode term");
+      // THE CROWD CASE, and this is where the old fence actually broke. In
+      // dialogue `nearNpc` stops being recomputed, so it points at whoever
+      // happened to be nearest at the moment the mode changed — point it at the
+      // NEIGHBOUR and a nearNpc-keyed freeze holds the wrong person still while
+      // the addressee walks off mid-sentence.
+      t.sim.nearNpc = drifter;
+      let drifterMoved = false;
+      for (let i = 0; i < 3000; i++) {
+        t.sim.step(STEP, core.input);
+        if (`${drifter.x},${drifter.y}` !== drifterWas) drifterMoved = true;
+      }
+      assert.equal(t.sim.clockMin, held, "time is still stopped, through the whole of the GM's answer");
+      assert.equal(`${anchor.x},${anchor.y}`, anchorWas, "…and the ANCHOR is the one standing still");
+      assert.equal(drifterMoved, true, "…not whoever `nearNpc` happens to point at");
+      core.setMode("walk"); // Resume walking — the dialogue exit
+      assert.equal(t.sim.talkAnchorId, null, "coming back to walk ends the conversation, at the one choke point");
+      t.steps(MINUTE_STEPS);
+      assert.equal(t.sim.clockMin, held + 1, "…and the clock runs again");
+    }
+
+    // ── EVERY CLEARER IN THE TABLE, DRIVEN ──────────────────────────────────
+    // One writer, a finite list of clearers. Each row below opens a window and
+    // ends it a different way, and each one asserts the same two things: the
+    // latch is null, and the clock is running again on the SAME sim.
+    {
+      const unfreezes = {
+        "the Leave row": (t) => t.press(t.hud.talkLeaveBtn),
+        "Escape at the keyboard": (t) => core._keyDown({ key: "Escape", target: null, preventDefault() {} }),
+        "Escape inside the Say field": (t) =>
+          t.hud.talkInput.listeners.keydown[0]({ key: "Escape", preventDefault() {} }),
+        "pressing E again": (t) => core.interact(),
+        "a press outside the window": () => fireDocument("pointerdown", { target: new FakeNode("div") }),
+        "the wait verb": (t) => t.sim.waitUntil("dusk"),
+        "the fishing verb's advance": (t) => t.sim.advanceMinutes(30),
+        "opening the journal": (t) => t.hud.toggleJournal(),
+        "opening the character sheet": (t) => t.hud.toggleSheet(),
+        "Escape closing every panel": (t) => t.hud.closePanels(),
+        "walking two tiles away": (t) => {
+          t.sim.x += 2 * loadedPF.TILE;
+          t.hud.update();
+        },
+        "the loading gate arming": (t) => {
+          loadedPF.save.gate = { chatId: core.chatId, state: "generating", attempts: 0, stage: "brief" };
+          t.hud.update();
+        },
+        "tearing the HUD down": (t) => t.hud.destroy(),
+      };
+      for (const [how, end] of Object.entries(unfreezes)) {
+        const t = stage({ chatId: `chat-clear-${how.replace(/\W+/g, "-")}` });
+        const npc = t.npcs()[0];
+        t.openOn(npc);
+        assert.equal(t.sim.talkAnchorId, npc.id, `${how}: a conversation is live to end`);
+        const held = t.sim.clockMin;
+        end(t);
+        assert.equal(t.sim.talkAnchorId, null, `${how} ends the conversation`);
+        loadedPF.save.gate = null;
+        // The clock movers move the clock themselves; what every row shares is
+        // that time is RUNNING afterwards, which is the invariant that matters.
+        const after = t.sim.clockMin;
+        t.steps(MINUTE_STEPS);
+        assert.equal(t.sim.clockMin, (after + 1) % (24 * 60), `…and the clock is running again after ${how}`);
+        void held;
+      }
+    }
+
+    // ── THE MOVERS CLEAR FIRST, AND A PRESS THROUGH THE GAP DIES ────────────
+    // A rail press spends time, and spending time is leaving the conversation.
+    // The clear is sim-side and the DOM follows on the next frame — so the honest
+    // assertion is the one the mechanism can make: the window is gone before the
+    // next frame, and a paid press racing that clear refuses at the prologue
+    // rather than composing against a zombie surface.
+    {
+      const t = stage();
+      const npc = t.npcs()[0];
+      t.openOn(npc);
+      const before = t.sim.clockMin;
+      t.sim.advanceMinutes(45);
+      assert.equal(t.sim.talkAnchorId, null, "the mover cleared the latch");
+      assert.notEqual(t.sim.clockMin, before, "…and then moved the clock");
+      const spent = t.sent.length;
+      core.talkFree(); // the press that raced the clear, on a DOM not yet reconciled
+      await settle();
+      assert.equal(t.sent.length, spent, "no paid press lands through a cleared latch");
+      t.hud.update();
+      assert.equal(mounted(t.hud), false, "…and the window is gone on the next frame");
+    }
+
+    // ── THE ONE-TILE BAND, AT THE PIXEL ─────────────────────────────────────
+    // Two full tiles centre to centre is over the line, and the predicate and the
+    // prose say the same thing: 32px closes, 31 does not. 26px is the open radius
+    // and is strictly inside it, so no position a window can open at is born
+    // closed — and closing is the unpause.
+    {
+      const t = stage();
+      const npc = t.npcs()[0];
+      t.openOn(npc);
+      t.sim.x = npc.x * loadedPF.TILE + 8 + 31;
+      t.hud.update();
+      assert.equal(mounted(t.hud), true, "31px away, the conversation is still on");
+      const held = t.sim.clockMin;
+      t.steps(MINUTE_STEPS * 2);
+      assert.equal(t.sim.clockMin, held, "…and time is still stopped");
+      t.sim.x = npc.x * loadedPF.TILE + 8 + 32;
+      t.hud.update();
+      assert.equal(mounted(t.hud), false, "32px is over the line");
+      assert.equal(t.sim.talkAnchorId, null, "…and stepping away IS the close");
+      t.steps(MINUTE_STEPS);
+      assert.equal(t.sim.clockMin, held + 1, "…which is also the unpause");
+    }
+
+    // ── E IN THE SIX-PIXEL BAND CLOSES IT ───────────────────────────────────
+    // Opening needs `nearNpc`, which is 26px; the window survives to 32. Without
+    // the close branch routed ahead of the whole guard compound, E was dead in
+    // between — neither opening nor closing.
+    {
+      const t = stage();
+      const npc = t.npcs()[0];
+      t.openOn(npc);
+      t.sim.x = npc.x * loadedPF.TILE + 8 + 29;
+      t.sim.step(STEP, core.input);
+      assert.equal(t.sim.nearNpc, null, "at 29px nobody is within reach to open on");
+      t.hud.update();
+      assert.equal(mounted(t.hud), true, "…but the window this far out is still open");
+      core.interact();
+      assert.equal(t.sim.talkAnchorId, null, "…and E closes it");
+    }
+
+    // ── THE MOVEMENT SURFACES DO NOT END THE CONVERSATION ───────────────────
+    // The document-level handler hears every press that does not stopPropagation,
+    // and the d-pad and rail buttons deliberately do not. Unexempted, a pointer
+    // player's FIRST step closed the window at zero tiles — against the ruling's
+    // own "more than one tile", on exactly the controls the window's partial
+    // geometry exists to keep live.
+    {
+      const t = stage();
+      const npc = t.npcs()[0];
+      t.openOn(npc);
+      for (const [what, node] of [
+        ["the d-pad", t.hud.dpad.children[0]],
+        ["the action rail", t.hud.waitBtn],
+        ["the census Talk button", t.hud.talkBtn],
+        ["the window's own rows", t.hud.talkRows],
+      ]) {
+        fireDocument("pointerdown", { target: node });
+        assert.equal(t.sim.talkAnchorId, npc.id, `a press on ${what} does not end the conversation`);
+      }
+      fireDocument("pointerdown", { target: new FakeNode("div") });
+      assert.equal(t.sim.talkAnchorId, null, "…and a press on anything else still does");
+      // AND THE PAIR IS UNBOUND with the window, so no listener outlives it.
+      const heardAfter = fireDocument("pointerdown", { target: new FakeNode("div") });
+      assert.equal(heardAfter, 0, "the pointerdown pair is unbound at the close, not left on the document");
+    }
+
+    // ── ONE SURFACE AT A TIME, IN BOTH DIRECTIONS ───────────────────────────
+    // Counting the window in `closePanels` alone gives the set no exclusion in
+    // the direction that matters: the topbar openers stay interactive over an
+    // open window by geometry, and an unexcluded journal mounts inset:0 at z-3
+    // over the top of it — a player reading a journal over a FROZEN CLOCK with an
+    // invisible window underneath, whose first Escape closes a surface they
+    // cannot see.
+    {
+      const t = stage();
+      const npc = t.npcs()[0];
+      for (const [what, open, isOpen] of [
+        ["the journal", () => t.hud.toggleJournal(), () => t.hud._journal],
+        ["the character sheet", () => t.hud.toggleSheet(), () => t.hud._sheet],
+      ]) {
+        t.openOn(npc);
+        const held = t.sim.clockMin;
+        open();
+        assert.equal(t.sim.talkAnchorId, null, `opening ${what} closes the window first`);
+        t.steps(MINUTE_STEPS);
+        assert.equal(t.sim.clockMin, held + 1, `…clock running, which is the point of closing it`);
+        assert.equal(isOpen(), true, `…and ${what} is the one surface up`);
+        // …AND THE OTHER DIRECTION: opening the window puts the panel away.
+        t.openOn(npc);
+        assert.equal(isOpen(), false, `opening the window closes ${what}`);
+        assert.equal(mounted(t.hud), true, "…leaving exactly one surface standing");
+        core.closeTalk();
+      }
+    }
+
+    // ── A BEAT RUNNING AT THE PRESS IS CLEARED, AND NONE STARTS OVER IT ─────
+    // The gate stops a beat from STARTING over an open window. A beat already
+    // RUNNING is the symmetric, worse case: `stepCutscene` is the only thing that
+    // advances a beat and the only thing that clears one, and it is now gated
+    // off — so the beat would pin `sim.cutscene` for the window's whole life,
+    // with the narration-collapse request stuck asserted and the caption painted
+    // dead centre of the play field, which is where this panel goes.
+    {
+      const t = stage();
+      const npc = t.npcs()[0];
+      // Stand somebody IN the vista corner, so the same two tiles are both the
+      // beat's trigger and a place a window can open.
+      npc.x = 2;
+      npc.y = 2;
+      t.sim.mode = "walk";
+      t.sim.x = 2 * loadedPF.TILE + 8;
+      t.sim.y = 2 * loadedPF.TILE + 8;
+      t.sim.step(STEP, core.input);
+      assert.ok(t.sim.cutscene, "the vista corner started a beat");
+      t.openOn(npc);
+      assert.equal(t.sim.cutscene, null, "opening the window clears the beat it interrupted");
+      assert.equal(core._cutsceneDeclared, false, "…and the memo with it, so the request is withdrawn");
+      // …AND NO BEAT STARTS while the conversation is live. The beat is re-armed
+      // by hand because the only thing that re-arms it is `stepCutscene` itself,
+      // which is exactly what the gate is holding off — so the honest staging is
+      // "armed, in the corner, window open" and the question is whether one
+      // starts.
+      t.sim._vistaArmed = true;
+      t.steps(600);
+      assert.equal(t.sim.cutscene, null, "…and no beat starts over an open window");
+      assert.equal(t.sim._vistaArmed, true, "…so the vista is still there to be seen afterwards");
+      assert.equal(t.sim.talkAnchorId, npc.id, "…with the conversation still open");
+      // And the control: end the conversation, and the beat the gate was holding
+      // off arrives on the very next frame.
+      core.closeTalk();
+      t.sim.step(STEP, core.input);
+      assert.ok(t.sim.cutscene, "…and it arrives the moment the conversation ends");
+    }
+
+    // ── THE EXCEPTION BELT IS THE PREDICATE, NOT VIGILANCE ──────────────────
+    // A throw out of a window handler loses at most one frame's reconcile: the
+    // rAF re-arm is the tick's FIRST statement and `hud.update()` its last, and
+    // `(mode, talkAnchorId)` stays the sole truth. So the honest promise is not
+    // "an exception cannot leave a latch set" — it is that the next frame renders
+    // whatever the latch says, and Escape still works.
+    {
+      const t = stage();
+      const npc = t.npcs()[0];
+      t.openOn(npc);
+      assert.throws(() => {
+        throw new Error("a window handler blew up");
+      }, /blew up/);
+      t.hud.update();
+      assert.equal(mounted(t.hud), true, "the window survives a handler that threw");
+      assert.equal(t.sim.talkAnchorId, npc.id, "…latch and all");
+      core._keyDown({ key: "Escape", target: null, preventDefault() {} });
+      assert.equal(t.sim.talkAnchorId, null, "…and Escape still ends it");
+    }
+
+    // ── THE CHAT-SWITCH AND REBUILD SEAMS ───────────────────────────────────
+    // These two REPLACE the sim, so a clock assertion on them would measure a
+    // brand-new sim that was never frozen — green paint under any bug. What they
+    // genuinely have to answer for is the surface: the window DOM is gone and the
+    // document-level pair is unbound, because the HUD and the page outlive both.
+    {
+      const t = stage();
+      const npc = t.npcs()[0];
+      t.openOn(npc);
+      assert.equal(mounted(t.hud), true, "a window is open across the seam");
+      core._switchChat({ chatId: "chat-somewhere-else", chatMeta: {} });
+      assert.equal(mounted(t.hud), false, "a chat switch takes the window down");
+      assert.equal(fireDocument("pointerdown", { target: new FakeNode("div") }), 0, "…and unbinds its listener");
+      assert.equal(core._talkAnchor, null, "…and forgets who it was anchored to");
+      loadedPF.save.reset();
+    }
+    {
+      const t = stage({ chatId: "chat-rebuild" });
+      const npc = t.npcs()[0];
+      t.openOn(npc);
+      loadedPF.save._rebuild(core, null);
+      assert.equal(mounted(t.hud), false, "a rebuild takes the window down");
+      assert.equal(fireDocument("pointerdown", { target: new FakeNode("div") }), 0, "…and unbinds its listener");
+      assert.equal(core.sim.talkAnchorId, null, "…and the world it comes back with has no conversation in it");
+      void t;
+    }
+
+    // ── WHAT THE WINDOW OFFERS, AND WHAT IT COSTS ───────────────────────────
+    {
+      const t = stage({ chatId: "chat-branches" });
+      const npc = t.npcs()[0];
+      t.openOn(npc);
+      assert.equal(t.hud.talkWho.textContent, `${npc.name} — ${npc.role}`, "the window says who it is");
+      // A LEGACY WORLD GETS ALL FOUR TOPIC BRANCHES, which is what the default
+      // pack's enrichment is FOR — and it is the inversion this release ships
+      // with: the worlds that paid two GM calls meet the thinnest window.
+      for (const label of [
+        "Ask about the local rumors",
+        "Ask about work",
+        "Ask about this place",
+        "Pass the time",
+      ])
+        assert.ok(t.rowLabelled(label), `a legacy world offers "${label}" (${t.labels().join(" | ")})`);
+      assert.ok(t.rowLabelled("What do you do?"), "…and answers for the record it has");
+      // THE AT-KEY, which is what decides WHICH lines a branch may serve. A
+      // stamped place handle wins; a zone with no stamp reads as a dwelling
+      // indoors and as the settlement everywhere else, so a legacy world — whose
+      // zones carry both stamps today, and whose successors may not — still lands
+      // on a real index cell rather than on `undefined`.
+      assert.equal(loadedPF.pack.askAt({ place: "gathering", mapKind: "building" }), "gathering", "a stamp wins");
+      assert.equal(loadedPF.pack.askAt({ mapKind: "building" }), "dwelling", "…an unstamped interior is a dwelling");
+      assert.equal(loadedPF.pack.askAt({ mapKind: "settlement" }), "settlement", "…and everything else the settlement");
+      assert.equal(loadedPF.pack.askAt(null), "settlement", "…and a zone that is not there at all does not throw");
+      assert.equal(
+        t.rowLabelled("Where do you live?"),
+        null,
+        "…and stays quiet about the one it does not: a legacy NPC carries no schedule",
+      );
+      // ZERO GM CALLS AND NO LEDGER LINE. The free branches are a lookup over an
+      // artifact already in memory; the narrator learns nothing about them.
+      const linesBefore = loadedPF.player.get(core).ledger.lines.length;
+      for (const label of ["Ask about the local rumors", "Ask about work", "What do you do?"]) {
+        t.press(t.rowLabelled(label));
+        assert.ok(t.hud.talkSaid.textContent, `"${label}" answers in the window`);
+        assert.equal(t.hud.talkSaid.style.display, "", "…visibly");
+      }
+      assert.deepEqual(t.sent, [], "…and not one of them asked the GM anything");
+      assert.equal(
+        loadedPF.player.get(core).ledger.lines.length,
+        linesBefore,
+        "…nor wrote a line the wrap-up would read out",
+      );
+      // NO FRIEND-REGISTER LINE IS EVER SERVED (ruling 4). Seven of the live
+      // pack's twelve lines hang on one clause, and this is the lane that pins it.
+      const folded = loadedPF.save.packFold(core);
+      const friends = new Set(folded.pack.lines.filter((row) => row.r === "friend").map((row) => row.text));
+      assert.ok(friends.size > 0, "the default pack really does carry friend lines to keep sealed");
+      for (let i = 0; i < 200; i++) {
+        for (const branch of ["rumor", "work", "place", "smalltalk"]) {
+          const said = loadedPF.pack.ask(core, npc, branch);
+          assert.ok(!said || !friends.has(said), `no friend-register line is ever served (${said})`);
+        }
+      }
+    }
+
+    // ── HONEST SUPPRESSION: A BRANCH WITH NOTHING TO SAY DOES NOT RENDER ────
+    // A thin pack is the generated world's normal state — the live measured one
+    // offers five stranger lines across four handles and four dayparts — so the
+    // window has to be honest about it rather than answering a rumor button with
+    // a work line.
+    {
+      const t = stage({ chatId: "chat-thin" });
+      const npc = t.npcs()[0];
+      const folded = loadedPF.save.packFold(core);
+      folded.pack = {
+        ...folded.pack,
+        lines: [
+          { at: "settlement", when: "day", r: "stranger", text: "Work's on the board." , topic: "work" },
+          { at: "settlement", when: "dusk", r: "friend", text: "A friend line nobody may serve.", topic: "rumor" },
+        ],
+      };
+      folded._askServed = new Map();
+      folded._askDay = -1;
+      t.openOn(npc);
+      assert.ok(t.rowLabelled("Ask about work"), "the one topic the pack can answer renders");
+      assert.equal(t.rowLabelled("Ask about the local rumors"), null, "…and the one it cannot does not");
+      assert.equal(t.rowLabelled("Ask about this place"), null, "…nor that one");
+      assert.equal(
+        t.rowLabelled("Pass the time"),
+        null,
+        "…and with no untagged or smalltalk stranger line, even passing the time is honestly absent",
+      );
+      // "PASS THE TIME" IS ALIVE ON ANY STRANGER LINE AT ALL, which is what makes
+      // it the branch that almost always renders.
+      folded.pack = { ...folded.pack, lines: [...folded.pack.lines, { at: "wilds", when: "night", r: "stranger", text: "Anything at all." }] };
+      folded._askServed = new Map();
+      core.closeTalk();
+      t.openOn(npc);
+      assert.ok(t.rowLabelled("Pass the time"), "one untagged stranger line anywhere keeps the door open");
+      assert.equal(loadedPF.pack.ask(core, npc, "smalltalk"), "Anything at all.", "…and it is what gets served");
+    }
+
+    // ── A LINE TAGGED FOR A SKY IS SERVED UNDER THAT SKY AND NO OTHER ───────
+    // The weather term is the axis the pack's `w` field spends, and it is the
+    // five WORDS: an intensity never enters it, so a line tagged `rain` is served
+    // under heavy rain and light rain alike. An ABSENT `w` reads as ANY weather,
+    // which is the generalization of "absent reads as fair" — and the reason the
+    // enrichment's floor is counted over any-weather lines.
+    {
+      const t = stage({ chatId: "chat-sky-lines" });
+      const npc = t.npcs()[0];
+      const folded = loadedPF.save.packFold(core);
+      folded.pack = {
+        ...folded.pack,
+        lines: [
+          { at: "settlement", when: "day", r: "stranger", text: "WET", topic: "rumor", w: "rain" },
+          { at: "settlement", when: "day", r: "stranger", text: "ANY", topic: "work" },
+        ],
+      };
+      folded._askServed = new Map();
+      folded._askDay = -1;
+      t.sim.weatherOverride = { word: "fair" };
+      t.sim._weatherMemo = null;
+      assert.equal(t.sim.weather().word, "fair", "the sky is fair");
+      assert.equal(loadedPF.pack.askHas(core, npc, "rumor"), false, "…so the rain line is not on offer");
+      assert.equal(loadedPF.pack.ask(core, npc, "work"), "ANY", "…while an untagged line is served under any sky");
+      t.sim.weatherOverride = { word: "rain", intensity: "heavy" };
+      t.sim._weatherMemo = null;
+      folded._askServed = new Map();
+      assert.equal(t.sim.weather().word, "rain", "…and now it is raining, hard");
+      assert.equal(loadedPF.pack.ask(core, npc, "rumor"), "WET", "the rain line is served — the word, at any intensity");
+      t.sim.weatherOverride = null;
+      t.sim._weatherMemo = null;
+    }
+
+    // ── THE PICK: RANKED BY THE HOUR, AND NOT RE-SERVED ACROSS A BOUNDARY ───
+    // A when-relaxed rung RANKS rather than pretends: circular daypart adjacency
+    // measured over START MINUTES, where night→dusk is 180 minutes and night→dawn
+    // is 480 — the two readings of "adjacent" disagree, and this is the one the
+    // plan picked. And the served set is per (day, BRANCH) rather than per rung,
+    // because the ladder picks the first non-empty rung and a when-pinned rung
+    // going empty across a boundary drops service onto a rung whose pool contains
+    // the line just served.
+    {
+      const t = stage({ chatId: "chat-pick" });
+      const npc = t.npcs()[0];
+      const folded = loadedPF.save.packFold(core);
+      folded.pack = {
+        ...folded.pack,
+        lines: [
+          { at: "settlement", when: "dawn", r: "stranger", text: "DAWN", topic: "rumor" },
+          { at: "settlement", when: "dusk", r: "stranger", text: "DUSK", topic: "rumor" },
+        ],
+      };
+      folded._askServed = new Map();
+      folded._askDay = -1;
+      t.sim.clockMin = 22 * 60; // night
+      assert.equal(t.sim.daypart(), "night", "the world is at night");
+      // THE METRIC ITSELF, because the two readings of "adjacent" disagree here
+      // and nowhere else: by START MINUTE night→dusk is 180 and night→dawn is
+      // 480; by position in the table they are a tie, and a tie hands the
+      // decision to the shuffle.
+      assert.ok(
+        loadedPF.pack.askDistance("dusk", "night") < loadedPF.pack.askDistance("dawn", "night"),
+        "dusk is nearer to night than dawn is, measured over the dayparts' start minutes",
+      );
+      // …AND THE BEHAVIOUR, ACROSS SEEDS. One seed proves nothing: the seeded
+      // shuffle would put DUSK first about half the time on its own, so the pin
+      // is that it is first EVERY time, which only ranking can buy.
+      for (let seed = 1; seed <= 24; seed++) {
+        t.sim.world.seed = seed;
+        folded._askServed = new Map();
+        assert.equal(
+          loadedPF.pack.ask(core, npc, "rumor"),
+          "DUSK",
+          `at night the dusk line is served first, whatever the shuffle says (seed ${seed})`,
+        );
+        assert.equal(loadedPF.pack.ask(core, npc, "rumor"), "DAWN", `…and the other follows (seed ${seed})`);
+      }
+      t.sim.world.seed = t.w.seed;
+      // AFTER EXHAUSTION, REPEATS ARE THE HONEST STATE. The rung's members are
+      // both served, so the set drops them and the walk restarts — a branch that
+      // went silent instead would be a button that stopped working halfway
+      // through an evening.
+      folded._askServed = new Map();
+      assert.equal(loadedPF.pack.ask(core, npc, "rumor"), "DUSK", "the walk starts");
+      assert.equal(loadedPF.pack.ask(core, npc, "rumor"), "DAWN", "…and covers the rung");
+      assert.equal(loadedPF.pack.ask(core, npc, "rumor"), "DUSK", "…and then goes round again rather than going quiet");
+      // THE MEMO IS BOUNDED BY THE DAY. `_askDay` is the purge field — the
+      // rotation itself comes from the day riding every signature — and without
+      // it the served sets grow for the life of the fold.
+      folded._askServed = new Map();
+      folded._askDay = t.sim.day;
+      loadedPF.pack.ask(core, npc, "rumor");
+      assert.equal(folded._askServed.get("rumor").size, 1, "the day's first read is remembered");
+      t.sim.day += 1;
+      loadedPF.pack.ask(core, npc, "rumor");
+      assert.equal(folded._askServed.get("rumor").size, 1, "…and a new day starts the walk over rather than piling up");
+      assert.equal(folded._askDay, t.sim.day, "…with the purge field moved to the day that did it");
+      // NOT RE-SERVED ACROSS A BOUNDARY. A line served on a when-pinned rung must
+      // not come straight back when the when-pinned rung goes empty and service
+      // falls through to a when-relaxed one.
+      folded._askServed = new Map();
+      folded._askDay = -1;
+      t.sim.clockMin = 5 * 60 + 30; // dawn: the when-pinned rung has DAWN in it
+      assert.equal(t.sim.daypart(), "dawn", "…and now it is dawn");
+      assert.equal(loadedPF.pack.ask(core, npc, "rumor"), "DAWN", "the when-pinned rung serves its own line");
+      t.sim.clockMin = 12 * 60; // day: nothing is when-pinned, the relaxed rung takes over
+      assert.equal(t.sim.daypart(), "day", "…and now it is the middle of the day");
+      assert.equal(
+        loadedPF.pack.ask(core, npc, "rumor"),
+        "DUSK",
+        "…and the line already served is not served again across the boundary",
+      );
+    }
+
+    // ── THE DOORS DIM, THEY NEVER VANISH ────────────────────────────────────
+    {
+      const t = stage({ chatId: "chat-doors" });
+      const npc = t.npcs()[0];
+      t.openOn(npc);
+      assert.ok(t.rowLabelled("Just talk"), "the free-talk door is there");
+      assert.equal(t.hud.talkSendBtn.style.opacity, "1", "…and the say door is live");
+      t.host.isStreaming = true;
+      t.hud.update();
+      assert.ok(t.rowLabelled("Just talk"), "streaming, the free-talk door is STILL there");
+      assert.equal(t.rowLabelled("Just talk").style.opacity, "0.45", "…dimmed");
+      assert.match(
+        String(t.rowLabelled("Just talk").getAttribute("title")),
+        /still being written/,
+        "…with the reason on it",
+      );
+      assert.equal(t.hud.talkSendBtn.style.opacity, "0.45", "…and so is the say door");
+      // AND THE REFUSAL REACHES THE TOAST BAND, which is the one channel a
+      // streaming refusal has while the window stays mounted.
+      const spent = t.sent.length;
+      t.press(t.rowLabelled("Just talk"));
+      await settle();
+      assert.equal(t.sent.length, spent, "…and a dimmed door sends nothing");
+      assert.match(t.hud.toastEl.textContent, /still being written/, "…saying so where the player can see it");
+      assert.equal(mounted(t.hud), true, "…with the window still up, which is why the band has to stay clear");
+      t.host.isStreaming = false;
+    }
+
+    // ── ONE PRESS PER ERRAND, AND THE LABEL NAMES WHAT IT SETTLES ───────────
+    {
+      const t = stage({ chatId: "chat-handover" });
+      const npc = t.npcs().find((row) => row.name === "Rook") ?? t.npcs()[0];
+      const take = (id) =>
+        loadedPF.player.quest(core, "accept", {
+          id,
+          g: `${t.w.startZone}|Mira`,
+          verb: "deliver",
+          target: npc.name,
+          n: 1,
+          r: { money: 8, xp: 0 },
+          day: t.sim.day,
+        });
+      // A ROW CARRIES NO TITLE — a quest row is a closed eight-field literal and
+      // the words live on the TEMPLATE — so the two ids below drive both arms of
+      // the resolver: one whose template this world still offers, and one whose
+      // does not, which falls back to the mechanical phrase rather than to a
+      // blank button.
+      assert.equal(take("b1.d1.b:deliver-rook"), true, "one errand to them, off a template the pack still has");
+      assert.equal(take("b1.d1.gone"), true, "…and a second whose template this world no longer offers");
+      t.openOn(npc);
+      const rowA = t.rowLabelled("Hand over: A message for the guard");
+      const rowB = t.rowLabelled(`Hand over: word for ${npc.name}`);
+      assert.ok(rowA && rowB, `one labelled branch per errand (${t.labels().join(" | ")})`);
+      assert.match(rowA.textContent, /\(asks the GM\)$/, "…each of them a paid press, and saying so");
+      t.press(rowA);
+      await settle();
+      const left = loadedPF.player.get(core).quests.active.map((row) => row.id);
+      assert.deepEqual(left, ["b1.d1.gone"], `"Hand over: A" settles row A and not row B (${left.join(", ")})`);
+      assert.equal(t.sent.length, 1, "…on exactly one GM call");
+    }
+
+    // ── THE ESCALATION PAIR: FREE DOOR, RATCHETED FOLLOW-UP ─────────────────
+    {
+      const t = stage({ chatId: "chat-escalation" });
+      const npc = t.npcs().find((row) => row.name === "Tam") ?? t.npcs()[0];
+      t.openOn(npc);
+      const reveal = t.rowLabelled("Ask what's going on");
+      assert.ok(reveal, `the pack wrote this person a door-line (${t.labels().join(" | ")})`);
+      t.press(reveal);
+      assert.ok(t.hud.talkSaid.textContent, "…and it is free, and it is read in the window");
+      assert.deepEqual(t.sent, [], "…costing nothing");
+      t.press(reveal);
+      assert.ok(t.hud.talkSaid.textContent, "…and re-readable forever");
+      const follow = t.rowLabelled("Press them about it");
+      assert.ok(follow, "…with a paid follow-up behind it");
+      t.press(follow);
+      await settle();
+      assert.equal(t.sent.length, 1, "the follow-up asks the GM");
+      assert.equal(loadedPF.pack.askBurned(core, npc), true, "…and retires for the session on the accepted turn");
+      core.setMode("walk");
+      t.openOn(npc);
+      assert.equal(t.rowLabelled("Press them about it"), null, "…so it is not offered again");
+      assert.ok(t.rowLabelled("Ask what's going on"), "…while the free door stays");
+    }
+
+    // ── THE SAY DOOR: UNCAPPED, SETTLES NOTHING, AND ESCAPE STILL WORKS ─────
+    {
+      const t = stage({ chatId: "chat-say" });
+      const npc = t.npcs().find((row) => row.name === "Rook") ?? t.npcs()[0];
+      assert.equal(
+        loadedPF.player.quest(core, "accept", {
+          id: "b1.d1.owed",
+          g: `${t.w.startZone}|Mira`,
+          verb: "deliver",
+          target: npc.name,
+          n: 1,
+          r: { money: 8, xp: 0 },
+          day: t.sim.day,
+          title: "Word",
+        }),
+        true,
+        "an errand is outstanding to them",
+      );
+      t.openOn(npc);
+      const long = "x".repeat(4000);
+      t.hud.talkInput.value = long;
+      t.hud.talkInput.listeners.keydown[0]({ key: "Enter", preventDefault() {} });
+      await settle();
+      assert.equal(t.sent.length, 1, "Enter in the say field sends");
+      assert.ok(t.sent[0].includes(long), "…with NO length cap: four thousand characters ride whole");
+      assert.equal(
+        loadedPF.player.get(core).quests.active.length,
+        1,
+        "…and saying something settles nothing — the errand is still owed",
+      );
+      // …AND ESCAPE OUT OF THE FIELD ENDS THE CONVERSATION, which is a SIM write:
+      // a DOM-only close would leave the latch set and the predicate would put the
+      // window straight back on the next frame.
+      core.setMode("walk");
+      t.openOn(npc);
+      t.hud.talkInput.listeners.keydown[0]({ key: "Escape", preventDefault() {} });
+      assert.equal(t.sim.talkAnchorId, null, "Escape in the say field clears the latch");
+      t.hud.update();
+      assert.equal(mounted(t.hud), false, "…so the window stays down rather than re-mounting");
+    }
+
+    // ── KEY REPEAT CANNOT ARM AND SPEND IN ONE HOLD ─────────────────────────
+    // `_keyDown` has no repeat guard, and the prologue's confirm returns in WALK
+    // mode without changing it — so a HELD Space on a focused paid control fired
+    // activation twice in one hold: press one arming the story-skip confirm and
+    // press two spending it, through a gap the walk fence cannot cover.
+    {
+      const t = stage({ chatId: "chat-repeat" });
+      const npc = t.npcs()[0];
+      t.host.narrationDone = false;
+      t.host.latestAssistant = { id: "m9" };
+      t.openOn(npc);
+      const door = t.rowLabelled("Just talk");
+      t.press(door);
+      await settle();
+      assert.equal(core._talkConfirm?.controlId, "free", "the first activation arms the question");
+      t.hud.update();
+      t.press(t.rowLabelled("Skip story & talk?"), { repeat: true });
+      await settle();
+      assert.deepEqual(t.sent, [], "a HELD key cannot arm and spend the confirm in one hold");
+      t.press(t.rowLabelled("Skip story & talk?"));
+      await settle();
+      assert.equal(t.sent.length, 1, "…while a real second press still answers it");
+      // AND THE WALK FENCE COVERS THE OTHER HALF: with no story pending, a repeat
+      // double-press dies on the mode, because the first one already left walk.
+      t.host.narrationDone = true;
+      core.setMode("walk");
+      t.openOn(npc);
+      const spent = t.sent.length;
+      const free = t.rowLabelled("Just talk");
+      t.press(free);
+      t.press(free); // the same hold, one frame later — no rAF has run
+      await settle();
+      assert.equal(t.sent.length, spent + 1, "a repeat press inside the setMode gap sends exactly once");
+    }
+
+    // ── A SPLICED ANCHOR CLOSES THE WINDOW, AND A PRESS RACING IT REFUSES ───
+    // Under the frozen clock a schedule can no longer take the partner
+    // mid-sentence — but a GM or console `resolveSchedules()` on an override
+    // write still can, and that is the path this drives.
+    {
+      const t = stage({ chatId: "chat-splice" });
+      const npc = t.npcs()[0];
+      t.openOn(npc);
+      const zone = t.sim.zone();
+      zone.npcs.splice(zone.npcs.indexOf(npc), 1);
+      const spent = t.sent.length;
+      core.talkFree(); // the press that raced the splice
+      await settle();
+      assert.equal(t.sent.length, spent, "no press composes against a ghost");
+      assert.equal(t.sim.talkAnchorId, null, "…the prologue closed the conversation instead");
+      assert.match(t.hud.toastEl.textContent, /not there any more/, "…and said so");
+      // …AND THE FRAME CHECK CATCHES IT WITH NO PRESS AT ALL.
+      zone.npcs.push(npc);
+      t.openOn(npc);
+      assert.equal(mounted(t.hud), true, "a window is open on them again");
+      zone.npcs.splice(zone.npcs.indexOf(npc), 1);
+      t.hud.update();
+      assert.equal(mounted(t.hud), false, "…and a splice closes it without anybody pressing anything");
+      assert.equal(t.sim.talkAnchorId, null, "…latch cleared, clock running");
+    }
+
+    // ── A COMPILED WORLD ANSWERS OFF ITS OWN RECORD ─────────────────────────
+    {
+      const sealedBrief = brief.validate(
+        {
+          scale: "village",
+          name: "Recordton",
+          places: [{ kind: "gathering", name: "The Rest" }],
+          cast: [
+            { name: "Wren", role: "reeve", kind: "leader", tint: "blue", home: "Recordton", household: 1 },
+            { name: "Bram", role: "smith", kind: "maker", tint: "red", home: "Recordton", household: 2 },
+          ],
+        },
+        { theme: "cozy-village", seed: 31 },
+      );
+      const t = stage({ seed: 31, chatId: "chat-compiled", sealed: sealedBrief });
+      const npc = t.npcs().find((row) => row._sched?.home?.zoneId) ?? t.npcs()[0];
+      assert.ok(npc?._sched, "a compiled world bakes a schedule onto its cast");
+      t.openOn(npc);
+      const work = t.rowLabelled("What do you do?");
+      const home = t.rowLabelled("Where do you live?");
+      assert.ok(work, "the record answers what they do");
+      assert.ok(home, "…and, on a compiled world, where they live");
+      t.press(work);
+      assert.match(t.hud.talkSaid.textContent, new RegExp(npc.role), "…out of the role the compiler wrote down");
+      t.press(home);
+      const homeZone = t.sim.world.zones[npc._sched.home.zoneId];
+      assert.ok(
+        t.hud.talkSaid.textContent.includes(homeZone.name),
+        `…and the zone NAME the brief named, not the id (${t.hud.talkSaid.textContent})`,
+      );
+    }
+
+    // ── ESCAPE IS LIVE UNDER THE GATE, UNTIL THE FRAME CLOSES IT ────────────
+    // The gate can ARM while a window is open — `_switchChat` and
+    // `maybeGenerateBrief` both do it — and `_keyDown`'s gate return precedes
+    // every other branch, so before the window's Escape was hoisted above it the
+    // player was left with a keyboard-dead surface over "Writing your world…"
+    // and a clock that had stopped.
+    {
+      const t = stage({ chatId: "chat-gate-escape" });
+      const npc = t.npcs()[0];
+      t.openOn(npc);
+      loadedPF.save.gate = { chatId: core.chatId, state: "generating", attempts: 0, stage: "brief" };
+      core._keyDown({ key: "Escape", target: null, preventDefault() {} });
+      assert.equal(t.sim.talkAnchorId, null, "Escape reaches the window even under the gate");
+      loadedPF.save.gate = null;
+      // …and the per-frame reconcile is the belt: arm the gate, run a frame, and
+      // the window is gone without anybody pressing anything.
+      t.openOn(npc);
+      assert.equal(mounted(t.hud), true, "a window is open again");
+      loadedPF.save.gate = { chatId: core.chatId, state: "generating", attempts: 0, stage: "brief" };
+      t.hud.update();
+      assert.equal(mounted(t.hud), false, "…and gate-arming closes it in the same frame");
+      assert.equal(t.sim.talkAnchorId, null, "…latch cleared, on a frame the sim is not even stepped");
+      loadedPF.save.gate = null;
+    }
+
+    // ── PRESSING THEM ABOUT IT SETTLES NOTHING ──────────────────────────────
+    // Only handover-shaped presses settle an errand. The escalation follow-up is
+    // a question, not a delivery, and a press that quietly finished an errand
+    // would make the labelled row a decoration.
+    {
+      const t = stage({ chatId: "chat-press-settles" });
+      const npc = t.npcs().find((row) => row.name === "Tam") ?? t.npcs()[0];
+      assert.equal(
+        loadedPF.player.quest(core, "accept", {
+          id: "b1.d1.owed-press",
+          g: `${t.w.startZone}|Mira`,
+          verb: "deliver",
+          target: npc.name,
+          n: 1,
+          r: { money: 8, xp: 0 },
+          day: t.sim.day,
+        }),
+        true,
+        "an errand is outstanding to them",
+      );
+      t.openOn(npc);
+      const follow = t.rowLabelled("Press them about it");
+      assert.ok(follow, `the escalation follow-up is on offer (${t.labels().join(" | ")})`);
+      t.press(follow);
+      await settle();
+      assert.equal(t.sent.length, 1, "the follow-up asked the GM");
+      assert.equal(
+        loadedPF.player.get(core).quests.active.length,
+        1,
+        "…and settled nothing: pressing somebody about a rumor is not handing them word",
+      );
+    }
+
+    // ── THE WINDOW'S SHAPE, PINNED WHERE IT IS STRUCTURAL ───────────────────
+    // The look is the browser pass's; these four are the plan's, and each of them
+    // is a behaviour rather than a taste.
+    {
+      const t = stage({ chatId: "chat-shape" });
+      const npc = t.npcs()[0];
+      t.openOn(npc);
+      const css = String(t.hud.talkEl.style.cssText);
+      // (1) NEVER an aria-modal dialog: `_hostOwnsKeyboard` treats any visible
+      // one as the host owning the keyboard, which would make the very keys that
+      // close this window inert the moment it opened.
+      assert.equal(t.hud.talkEl.getAttribute("role"), null, "the window is not a role=dialog");
+      assert.equal(t.hud.talkEl.getAttribute("aria-modal"), null, "…nor aria-modal");
+      assert.equal(t.hud.talkEl.getAttribute("aria-label"), "conversation", "…it wears the panels' bare aria-label");
+      // (2) A PARTIAL PANEL, not the exclusion set's `inset:0` shape. Full-screen
+      // would make a pointer player immobile — the ruling's own word — and put the
+      // clock movers, which are the presses that END the conversation, behind the
+      // thing they close.
+      assert.ok(!/inset:\s*0/.test(css), "…and it does not take the whole surface, the way the journal does");
+      assert.ok(/right:\s*\d+px/.test(css), "…it leaves the right-hand action rail its own room");
+      assert.ok(/bottom:calc\(190px/.test(css), "…and clears the d-pad and the toast band under it");
+      // (3) IT SCROLLS INSIDE ITSELF, on the four action menus' stated idiom —
+      // the row count is variable by construction — and the SCROLLER IS THE ROW
+      // LIST ALONE, so the Leave row and the Say field can never scroll out of
+      // reach.
+      assert.ok(/max-height:40vh/.test(css), "the window is height-bounded like its sibling menus");
+      assert.ok(/overflow:auto/.test(String(t.hud.talkRows.style.cssText)), "…with the ROW LIST as the scroller");
+      assert.ok(!/overflow:auto/.test(css), "…and not the window itself");
+      assert.equal(t.hud.talkEl.children.at(-1), t.hud.talkLeaveBtn, "Leave is the last row and never scrolls away");
+      assert.equal(t.hud.talkEl.children.at(-2), t.hud.talkSayRow, "…and the Say field sits above it, also pinned");
+      // (4) NO AUTOFOCUS: the window opens with the walk keys live.
+      assert.equal(document.activeElement, null, "the window does not steal focus when it opens");
+    }
+
+    // ── THE DIALOGUE TOAST IS FOR THE KEYBOARD BUTTON, NOT FOR A DOOR ───────
+    {
+      const t = stage({ chatId: "chat-toast" });
+      const npc = t.npcs()[0];
+      t.openOn(npc);
+      // MEASURED AT THE MODE CHANGE ITSELF, not after the press: the sender
+      // toasts "Talking to X" on the line after `setMode`, so a lane that looked
+      // at the band afterwards would read the sender's toast and be green over
+      // an instruction that fired and was immediately overwritten.
+      t.hud.toastEl.textContent = "";
+      core.setMode("dialogue"); // with the conversation still live: a window door
+      assert.equal(
+        t.hud.toastEl.textContent,
+        "",
+        "a dialogue entered out of a conversation gets no message-box instruction",
+      );
+      core.setMode("walk");
+      assert.equal(t.sim.talkAnchorId, null, "…and coming back to walk ended it");
+      t.hud.toastEl.textContent = "";
+      core.setMode("dialogue"); // the Keyboard button, with no conversation behind it
+      assert.match(
+        t.hud.toastEl.textContent,
+        /message box below/,
+        "…while the Keyboard button, which says nothing else, still gets its instruction",
+      );
+      core.setMode("walk");
+      // AND THE SENDER STILL NAMES WHO IS ANSWERING, which is the sentence the
+      // instruction was crowding out.
+      t.openOn(npc);
+      core.talkFree();
+      await settle();
+      assert.match(t.hud.toastEl.textContent, new RegExp(npc.name), "a window door names who is answering");
+    }
+  } finally {
+    globalThis.setTimeout = realSetTimeout;
+    globalThis.clearTimeout = realClearTimeout;
+    core._unbindKeys();
+    core._mainEl = null;
+    if (realWindow === undefined) delete globalThis.window;
+    else globalThis.window = realWindow;
+    loadedPF.save.gate = null;
+    core.chatId = null;
+    core.sim = null;
+    core.hud = null;
+    core.host = null;
+    core._talkConfirm = null;
+    core._talkAnchor = null;
+    globalThis.document._docListeners = {};
+    loadedPF.save.reset();
+    loadedPF.spatial.reset();
   }
 }
 
