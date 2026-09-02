@@ -26,7 +26,7 @@ import {
 import { tryNoodlerAccountOperation } from "./slurp-account-operation-lock.js";
 import { resolveNoodlerSourceSnapshot } from "./slurp-source-resolve.js";
 import { settleAgentJobsWithConcurrencyLimit } from "../agents/agent-concurrency.js";
-import { creatorPromotionForAccount } from "./slurp-ads.js";
+import { creatorAdForProfile } from "../garnish-ads/garnish-ads.service.js";
 
 export type GenerateAndApplyNoodlerPostResult =
   | {
@@ -238,7 +238,7 @@ export async function createNoodlerPost(
   const locked = await tryNoodlerAccountOperation(input.targetAccountId, async () => {
     const postId = media ? newId() : undefined;
     const account = await noodle.getNoodlerAccountById(input.targetAccountId);
-    const creatorPromotion = account ? creatorPromotionForAccount(account) : null;
+    const creatorPromotion = account ? creatorAdForProfile(account) : null;
     let lockedFollowUpPostId = input.lockedFollowUpPostId;
     const pendingLockedFollowUp = input.lockedFollowUp;
     if (lockedFollowUpPostId) {

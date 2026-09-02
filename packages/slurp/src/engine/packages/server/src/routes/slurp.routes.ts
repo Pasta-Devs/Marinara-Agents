@@ -62,7 +62,8 @@ import { clearNoodlerImageConnections } from "../services/slurp/slurp-image-conn
 import { generateAndApplyNoodlerCreatorReply } from "../services/slurp/slurp-creator-reply.operation.js";
 import { getNoodlerFanActivityStatus, runNoodlerFanActivity } from "../services/slurp/slurp-fan-activity.operation.js";
 import { admissionModeForRequest, isConnectionAdmissionFailure } from "../services/generation/connection-admission.js";
-import { adTagsFromPersona, createSlurpAds } from "../services/slurp/slurp-ads.js";
+import { createGarnishAds } from "../services/garnish-ads/garnish-ads.service.js";
+import { SLURP_GARNISH_PLATFORM, garnishContextForViewer } from "../services/slurp/slurp-garnish-context.js";
 import { generateNoodlerStageProfileDraft } from "../services/slurp/slurp-stage-profile-draft.service.js";
 import {
   getNoodlerImageConnections,
@@ -373,7 +374,7 @@ export async function slurpRoutes(app: FastifyInstance) {
   const characterGallery = createCharacterGalleryStorage(app.db);
   const connections = createConnectionsStorage(app.db);
   const noodlerImages = createNoodlerNoodleImagesService(app.db);
-  const ads = createSlurpAds(app.db);
+  const ads = createGarnishAds(app.db);
   const noodlerViewerSignalCache = new Map<string, { generationKey: string; value: NoodlerViewerSignalResponse }>();
 
   async function resolveNoodlerPublicIdentity(publicAccount: NoodleAccount) {
@@ -857,12 +858,17 @@ export async function slurpRoutes(app: FastifyInstance) {
     if (!settings.inlineAdsEnabled) return { items: [] };
     const persona = await characters.getPersona(parsed.data.personaId);
     const creator = parsed.data.creatorId ? await noodle.getNoodlerAccountById(parsed.data.creatorId) : null;
-    const items = await ads.listInlineAds(parsed.data.personaId, {
-      personaTags: persona ? adTagsFromPersona(persona) : [],
-      currentCreatorId: creator?.id,
-      currentCreatorHandle: creator?.handle,
-      contextTags: parsed.data.contextTags?.split(",") ?? [],
-    });
+    const items = await ads.listInline(
+      parsed.data.personaId,
+      SLURP_GARNISH_PLATFORM,
+      garnishContextForViewer({
+        persona,
+        creator,
+        contextTags: parsed.data.contextTags?.split(",") ?? [],
+        preferredTags: settings.inlineAdsPreferredTags,
+        steering: settings.inlineAdsSteering,
+      }),
+    );
     return { items };
   });
 
@@ -872,6 +878,14 @@ export async function slurpRoutes(app: FastifyInstance) {
     const viewer = await resolveViewerPersona(parsed.data.personaId);
     if (!viewer) return reply.code(404).send({ error: "Slurp persona not found" });
     return ads.hide(parsed.data.personaId, (req.params as { id: string }).id);
+  });
+
+  app.post("/noodler/viewer/ads/reset", async (req, reply) => {
+    const parsed = z.object({ personaId: z.string().trim().min(1) }).safeParse(req.body);
+    if (!parsed.success) return reply.code(400).send({ error: parsed.error.flatten() });
+    const viewer = await resolveViewerPersona(parsed.data.personaId);
+    if (!viewer) return reply.code(404).send({ error: "Slurp persona not found" });
+    return ads.reset(parsed.data.personaId);
   });
 
   async function resolveReadableNoodlerPost(personaId: string, postId: string) {

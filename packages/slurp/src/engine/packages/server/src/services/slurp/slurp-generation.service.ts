@@ -44,7 +44,7 @@ import { noodleResponseFormat } from "./slurp-response-format.js";
 import { buildSlurpPostTimingContext } from "./slurp-post-timing.js";
 import { resolveSlurpCreatorScheduleContext } from "./slurp-creator-schedule.js";
 import { createChatsStorage } from "../storage/chats.storage.js";
-import { creatorPromotionForAccount } from "./slurp-ads.js";
+import { creatorAdForProfile } from "../garnish-ads/garnish-ads.service.js";
 
 export type GeneratedNoodlerPostResult = {
   post: NoodlerManagedPost;
@@ -585,7 +585,7 @@ export async function generateNoodlerPost(
     : null;
 
   let lockedFollowUpPostId = input.request.lockedFollowUpPostId;
-  const creatorPromotion = creatorPromotionForAccount(account);
+  const creatorPromotion = creatorAdForProfile(account);
   const pendingLockedFollowUp = input.request.lockedFollowUp;
   if (lockedFollowUpPostId && pendingLockedFollowUp) {
     throw new Error("A Slurp post links either an existing follow-up or a new one, not both.");

@@ -1,11 +1,21 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-const ads = readFileSync("packages/slurp/src/engine/packages/server/src/services/slurp/slurp-ads.ts", "utf8");
+const ads = readFileSync(
+  "packages/slurp/src/engine/packages/server/src/services/garnish-ads/garnish-ads.service.ts",
+  "utf8",
+);
 assert.match(ads, /kind: "inline"/u);
 assert.match(ads, /kind: "creator"/u);
-assert.match(ads, /function adTagsFromPersona/u);
-assert.match(ads, /function creatorPromotionForAccount/u);
-assert.match(ads, /slurp\.viewer\.\$\{personaId\}\.ads/u);
+assert.match(ads, /function creatorAdForProfile/u);
+// The stored state key is deliberately unchanged by the garnish-ads rename, so
+// existing hidden-ad lists survive.
+assert.match(ads, /slurp\.viewer\.\$\{subjectId\}\.ads/u);
+
+const seam = readFileSync(
+  "packages/slurp/src/engine/packages/server/src/services/slurp/slurp-garnish-context.ts",
+  "utf8",
+);
+assert.match(seam, /function garnishTagsFromPersona/u);
 
 const routes = readFileSync("packages/slurp/src/engine/packages/server/src/routes/slurp.routes.ts", "utf8");
 assert.match(routes, /\/noodler\/viewer\/ads/u);
