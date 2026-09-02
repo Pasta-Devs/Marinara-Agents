@@ -64,9 +64,51 @@ const DAYPARTS = ["dawn", "day", "dusk", "night"];
 // is (theme × kind) and both halves are asserted complete at boot.
 const SPOT_TAGS = ["water-feature", "water-crossing"];
 
+// ── How the sky moves the water (plan §2.3) ─────────────────────────────────
+// The weather column, indexed by (weather WORD × entry RARITY) and stamped onto
+// every entry by `withSky` below. Rarity, because "rain brings the ordinary fish
+// up" is a fact about the MIX and not about carp in particular — and one row per
+// rarity is a retune a maintainer can hold in their head, where twenty-two
+// copies is one a retune half-lands on. `fair` is absent from every row on
+// purpose: a clear day IS the baseline, and `?? 1` reads it that way.
+//
+// THE WORD ONLY, never the intensity. The catch tables stay five-valued, exactly
+// as the pack's weather axis and the schedule bias do; blizzard fishing is a
+// playtest-driven retune if it is ever wanted, not a sixth column.
+//
+// AND THE ARITHMETIC, SAID PLAINLY, because two of these four rows are quieter
+// than they look: `_draw` normalizes by the sum it just added up, so a row that
+// multiplies EVERY rarity by the same number cancels exactly. As the starters
+// stand, `overcast` (×1.1 across the board) and `snow` (×0.7) leave the draw
+// bit-identical to a fair day — they are the sky's own restraint written down,
+// not a tuning that fires. Only `rain` (which lifts common and uncommon over
+// bait and the top tiers) and `storm` move the mix. Making either of the quiet
+// two do something is a one-number retune here and nothing else; the lane below
+// pins the current answer BY NAME so the day somebody changes it, it says so.
+//
+// STORM IS THE ONE ROW THAT CHANGES THE MIX rather than scaling it — rare ×1.5
+// against ×0.6 on everything else, and it is the release's only authored "fish
+// the storm" hook. Where that content CANNOT be reached is worth writing down:
+// 17-weather's warmth gate makes a storm arithmetically impossible at polar
+// latitude, in every season and at every precipitation, so a polar world never
+// sees this column at all — and the arid four-season worlds meet it about once
+// a year. Recorded rather than designed around; a column that never fires is
+// exactly what the `?? 1` default is for.
+const WEATHER_MIX = {
+  [BAIT_TYPE]: { overcast: 1.1, storm: 0.6, snow: 0.7 },
+  "catch-common": { overcast: 1.1, rain: 1.3, storm: 0.6, snow: 0.7 },
+  "catch-uncommon": { overcast: 1.1, rain: 1.4, storm: 0.6, snow: 0.7 },
+  "catch-rare": { overcast: 1.1, storm: 1.5, snow: 0.7 },
+  "catch-prize": { overcast: 1.1, storm: 0.6, snow: 0.7 },
+};
+/** Stamp each row's rarity column onto it. SPREAD FIRST, so an entry that ever
+ *  wants its own weather row writes a literal and wins — the shared row is a
+ *  default, not a ceiling. */
+const withSky = (rows) => rows.map((row) => ({ weather: WEATHER_MIX[row.role ?? BAIT_TYPE], ...row }));
+
 // ── What comes out of the water (plan §2.2) ──────────────────────────────────
 // One table per (theme, spot kind). An ENTRY is `{role, variant, weight,
-// minLevel, daypart}`:
+// minLevel, daypart, weather}`:
 //   • `role`   — the shared TYPE, one of CATCH_ROLES. ABSENT means bait, which is
 //                a yield in its own right and the only one that is also an input.
 //   • `variant`— the entry's slug, and the pouch row's `k`. Row identity is
@@ -76,9 +118,11 @@ const SPOT_TAGS = ["water-feature", "water-crossing"];
 //   • `minLevel` — the level the entry becomes REACHABLE at; below it the entry
 //                is not in the draw at all, which is what makes the ladder feel
 //                like it opens water up rather than merely raising a percentage.
-//   • `daypart`— per-daypart multipliers over `weight`, absent meaning 1. This is
-//                0.12's ONLY live modifier (weather is L2, M9) and it is where a
-//                night spot stops being the same spot as a noon one.
+//   • `daypart`— per-daypart multipliers over `weight`, absent meaning 1. Where
+//                a night spot stops being the same spot as a noon one.
+//   • `weather`— the same shape for the SKY, one multiplier per weather WORD.
+//                Stamped by rarity from WEATHER_MIX above rather than written
+//                per row, so the tables below still read as weights and hours.
 // NO PER-ENTRY XP: TUNING.catchXp is the single authority, keyed by TYPE, so a
 // rebalance happens in one place and cannot half-happen.
 //
@@ -88,38 +132,38 @@ const SPOT_TAGS = ["water-feature", "water-crossing"];
 // entries and not consolation prizes.
 const CATCH_TABLES = {
   "cozy-village": {
-    "water-feature": [
+    "water-feature": withSky([
       { variant: "worms", weight: 24, minLevel: 1, daypart: { dawn: 1.2, night: 0.7 } },
       { role: "catch-common", variant: "carp", weight: 34, minLevel: 1, daypart: { night: 0.7 } },
       { role: "catch-uncommon", variant: "bream", weight: 18, minLevel: 3, daypart: { dusk: 1.3 } },
       { role: "catch-rare", variant: "mirror-pike", weight: 6, minLevel: 7, daypart: { day: 0.6, night: 1.6 } },
       { role: "catch-prize", variant: "old-tench", weight: 2, minLevel: 12, daypart: { dawn: 2, day: 0.5 } },
-    ],
-    "water-crossing": [
+    ]),
+    "water-crossing": withSky([
       { variant: "grubs", weight: 22, minLevel: 1 },
       { role: "catch-common", variant: "minnow", weight: 32, minLevel: 1 },
       { role: "catch-uncommon", variant: "trout", weight: 17, minLevel: 4, daypart: { dawn: 1.4, dusk: 1.3 } },
       { role: "catch-rare", variant: "silver-eel", weight: 6, minLevel: 8, daypart: { day: 0.5, night: 1.8 } },
       { role: "catch-prize", variant: "crown-salmon", weight: 2, minLevel: 13, daypart: { dawn: 1.6 } },
-    ],
+    ]),
   },
   "sci-fi-colony": {
-    "water-feature": [
+    "water-feature": withSky([
       { variant: "chum", weight: 24, minLevel: 1 },
       { role: "catch-common", variant: "carp", weight: 28, minLevel: 1, daypart: { night: 0.7 } },
       { role: "catch-common", variant: "culture-kelp", weight: 14, minLevel: 1 },
       { role: "catch-uncommon", variant: "vat-strain", weight: 16, minLevel: 3, daypart: { dusk: 1.3 } },
       { role: "catch-rare", variant: "pressure-eel", weight: 6, minLevel: 7, daypart: { night: 1.6 } },
       { role: "catch-prize", variant: "heritage-koi", weight: 2, minLevel: 12, daypart: { dawn: 1.8, day: 0.5 } },
-    ],
-    "water-crossing": [
+    ]),
+    "water-crossing": withSky([
       { variant: "larvae", weight: 22, minLevel: 1 },
       { role: "catch-common", variant: "minnow", weight: 30, minLevel: 1 },
       { role: "catch-uncommon", variant: "filter-salvage", weight: 12, minLevel: 2 },
       { role: "catch-uncommon", variant: "trout", weight: 16, minLevel: 4, daypart: { dawn: 1.4 } },
       { role: "catch-rare", variant: "deepline-eel", weight: 6, minLevel: 8, daypart: { night: 1.8 } },
       { role: "catch-prize", variant: "ice-run-char", weight: 2, minLevel: 13, daypart: { dawn: 1.6 } },
-    ],
+    ]),
   },
 };
 
@@ -977,21 +1021,29 @@ PF.economy = {
     return row;
   },
 
-  /** Draw one entry: weight × this daypart's multiplier, over the entries the
-   *  player's level has opened up. Null when the level has opened nothing, which
-   *  a shipped table never does (every one of them holds a level-1 entry) and a
-   *  hostile one might. */
-  _draw(rnd, table, level, part) {
+  /** Draw one entry: weight × this daypart's multiplier × this sky's, over the
+   *  entries the player's level has opened up. Null when the level has opened
+   *  nothing, which a shipped table never does (every one of them holds a
+   *  level-1 entry) and a hostile one might.
+   *
+   *  `w` IS A WEATHER WORD and never a `{word, intensity}` row: the tables are
+   *  five-valued and a light shower fishes like a heavy one.
+   *
+   *  REWIND-EXACT WHATEVER THE FACTORS ARE, which is the property the whole
+   *  ladder rests on: exactly one `rnd()` is consumed per draw, before either
+   *  multiplier is looked at. Adding a column moves WHICH entry a roll lands on
+   *  and never where the stream stands afterwards. */
+  _draw(rnd, table, level, part, w) {
     let total = 0;
     for (const entry of table) {
       if (level < entry.minLevel) continue;
-      total += entry.weight * (entry.daypart?.[part] ?? 1);
+      total += entry.weight * (entry.daypart?.[part] ?? 1) * (entry.weather?.[w] ?? 1);
     }
     if (!(total > 0)) return null;
     let roll = rnd() * total;
     for (const entry of table) {
       if (level < entry.minLevel) continue;
-      roll -= entry.weight * (entry.daypart?.[part] ?? 1);
+      roll -= entry.weight * (entry.daypart?.[part] ?? 1) * (entry.weather?.[w] ?? 1);
       if (roll < 0) return entry;
     }
     return null;
@@ -1114,6 +1166,11 @@ PF.economy = {
       const day = sim.day;
       const castWindow = Math.floor(sim.clockMin / W);
       const part = sim.daypart();
+      // READ BESIDE `part` AND BEFORE THE ADVANCE, on exactly its terms: each
+      // window is fished under the sky it BEGAN under, so a session that crosses
+      // midnight picks up the new day's weather on the next window rather than
+      // on the crossing one. The word alone — the tables never see an intensity.
+      const wthr = sim.weather().word;
 
       sim.advanceMinutes(W);
       spent += W;
@@ -1135,7 +1192,7 @@ PF.economy = {
       // 0.12 anyway (fine and masterwork are not sold).
       const p = base * TUNING.toolMult[toolTier] * modMult[modTier];
       if (rnd() >= p) continue;
-      const entry = this._draw(rnd, table, level, part);
+      const entry = this._draw(rnd, table, level, part, wthr);
       if (!entry) continue;
       const type = this.entryType(entry);
       // The PRIOR level, read before the award, because award() returns the new
@@ -1249,6 +1306,16 @@ PF.economy = {
   for (const byTag of Object.values(CATCH_TABLES))
     for (const table of Object.values(byTag)) for (const entry of table) shippedVariants.add(entry.variant);
 
+  // THE WEATHER MIX PAIRS AGAINST THE RARITIES, both ways. A rarity with no row
+  // stamps `undefined` onto every entry of it — a whole tier that quietly stops
+  // caring about the sky — and a row keyed on a rarity nothing has is a tuning
+  // that never applies. Neither shows up anywhere else.
+  for (const rarity of [...CATCH_ROLES, BAIT_TYPE])
+    if (!PF.own(WEATHER_MIX, rarity)) throw new Error(`pixelforge: the weather mix has no row for "${rarity}"`);
+  for (const rarity of Object.keys(WEATHER_MIX))
+    if (!CATCH_ROLES.includes(rarity) && rarity !== BAIT_TYPE)
+      throw new Error(`pixelforge: the weather mix names a rarity "${rarity}" the catch roles do not`);
+
   for (const theme of PF.art?.themeIds?.() ?? []) {
     const skin = ITEM_SKINS[theme];
     if (!skin) throw new Error(`pixelforge: theme "${theme}" ships no item vocabulary`);
@@ -1323,6 +1390,17 @@ PF.economy = {
             throw new Error(`pixelforge: ${theme}/${tag}'s "${entry.variant}" is tuned for a daypart "${part}"`);
           if (!(typeof mult === "number" && Number.isFinite(mult) && mult >= 0))
             throw new Error(`pixelforge: ${theme}/${tag}'s "${entry.variant}" has a ${part} multiplier of ${mult}`);
+        }
+        // THE SAME WALK FOR THE SKY, against 17-weather's own list rather than a
+        // local mirror — the weather module is the enum authority and it loads
+        // first, so this reads it the way 61-pack reads DAYPARTS from here. A
+        // "rainy" or a "heavy rain" column would otherwise be a tuning nobody
+        // could ever see apply.
+        for (const [word, mult] of Object.entries(entry.weather ?? {})) {
+          if (!PF.weather.WORDS.includes(word))
+            throw new Error(`pixelforge: ${theme}/${tag}'s "${entry.variant}" is tuned for a weather "${word}"`);
+          if (!(typeof mult === "number" && Number.isFinite(mult) && mult >= 0))
+            throw new Error(`pixelforge: ${theme}/${tag}'s "${entry.variant}" has a ${word} multiplier of ${mult}`);
         }
       }
     }

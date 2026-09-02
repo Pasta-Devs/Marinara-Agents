@@ -14839,7 +14839,10 @@ await withSavePath(async ({ calls, behavior, makeCore }) => {
 // 20-world's host resolution — and each rewrite is asserted to have LANDED, so a
 // case cannot pass green because the line it meant to break moved.
 {
-  const stack = ["00-prelude.js", "10-art.js", "58-player.js", "59-economy.js"];
+  // 17-weather rides along because 59's catch-table boot block reads its WORDS
+  // list the way 61-pack reads 59's DAYPARTS — forward, and only ever forward.
+  // The bundle concatenates in filename order, so this stack has to say so too.
+  const stack = ["00-prelude.js", "10-art.js", "17-weather.js", "58-player.js", "59-economy.js"];
   const boot = (file, from, to) => {
     const source = stack
       .map((name) => {
@@ -14987,6 +14990,39 @@ await withSavePath(async ({ calls, behavior, makeCore }) => {
     boot("59-economy.js", `daypart: { dawn: 2, day: 0.5 }`, `daypart: { evening: 2, day: 0.5 }`),
     /cozy-village\/water-feature's "old-tench" is tuned for a daypart "evening"/,
     "a daypart the clock does not have fails the build",
+  );
+  // AND THE SAME WALK FOR THE SKY, against 17-weather's own word list. "rainy"
+  // is the exact shape that would ship as a column nobody could ever see apply.
+  assert.throws(
+    boot("59-economy.js", `"catch-common": { overcast: 1.1, rain: 1.3`, `"catch-common": { overcast: 1.1, rainy: 1.3`),
+    /cozy-village\/water-feature's "carp" is tuned for a weather "rainy"/,
+    "a weather word the sky does not have fails the build",
+  );
+  assert.throws(
+    boot(
+      "59-economy.js",
+      `"catch-uncommon": { overcast: 1.1, rain: 1.4`,
+      `"catch-uncommon": { overcast: 1.1, rain: "1.4"`,
+    ),
+    /cozy-village\/water-feature's "bream" has a rain multiplier of 1.4/,
+    "…and so does a multiplier that is not a number",
+  );
+  // THE MIX PAIRS AGAINST THE RARITIES BOTH WAYS. A rarity with no row stamps
+  // `undefined` onto every entry of that tier — a whole tier that quietly stops
+  // reading the sky — and a row keyed on a rarity nothing has never applies.
+  assert.throws(
+    boot("59-economy.js", `  "catch-rare": { overcast: 1.1, storm: 1.5, snow: 0.7 },\n`, ``),
+    /the weather mix has no row for "catch-rare"/,
+    "a rarity the mix forgot fails the build",
+  );
+  assert.throws(
+    boot(
+      "59-economy.js",
+      `  [BAIT_TYPE]: { overcast: 1.1`,
+      `  "catch-legendary": { overcast: 1 },\n  [BAIT_TYPE]: { overcast: 1.1`,
+    ),
+    /the weather mix names a rarity "catch-legendary" the catch roles do not/,
+    "…and so does a row for a rarity nothing has",
   );
   // AND A THEME WITH NO BAIT IN ITS WATER would sell a rod and hand over an empty
   // tin: the crude purchase's starter stack takes its slug from exactly here.
@@ -25866,6 +25902,100 @@ const fire = (node, type) => Promise.all((node.listeners[type] ?? []).map((fn) =
       souls.filter((npc) => abedInCity.get(npc) !== `${npc.x},${npc.y}`).length > 90,
       "and the crossing really did move the town",
     );
+  }
+}
+
+// 128. THE CATCH TABLE'S WEATHER COLUMN COMES ALIVE (0.14 §2.3). The column was
+// built and empty since 0.12 ("weather is L2, M9"); it now multiplies beside the
+// daypart factor, keyed on the WORD alone, and it costs the roll stream nothing.
+{
+  const E = loadedPF.economy;
+  const table = E.CATCH_TABLES["cozy-village"]["water-feature"];
+  const rarityOf = (entry) => entry.role ?? "bait";
+  // Every entry carries a column, stamped from its rarity. Non-vacuous the other
+  // way too: `fair` is in nobody's row, because a clear day IS the baseline.
+  for (const byTag of Object.values(E.CATCH_TABLES))
+    for (const rows of Object.values(byTag))
+      for (const entry of rows) {
+        assert.ok(entry.weather, `${entry.variant} carries a weather column`);
+        assert.equal("fair" in entry.weather, false, `…and no fair multiplier (${entry.variant})`);
+        for (const word of Object.keys(entry.weather))
+          assert.ok(loadedPF.weather.WORDS.includes(word), `…keyed on a real weather word (${word})`);
+      }
+
+  // THE MIX, MEASURED. One fixed roll stream, twenty thousand draws, at a level
+  // that has opened every entry.
+  const mix = (word) => {
+    const counts = new Map();
+    for (let i = 0; i < 20000; i++) {
+      const rnd = loadedPF.rng(loadedPF.hashStr(`catch-column|${i}`));
+      const drawn = E._draw(rnd, table, 15, "day", word);
+      // A draw that answers NOTHING is the half-applied-factor shape: a total
+      // summed one way and walked another leaves the roll unspent past the last
+      // entry. Named here so it reads as a finding and not as a crash.
+      assert.ok(drawn, `every ${word} draw answers with an entry`);
+      const rarity = rarityOf(drawn);
+      counts.set(rarity, (counts.get(rarity) ?? 0) + 1);
+    }
+    const total = [...counts.values()].reduce((a, b) => a + b, 0);
+    return (rarity) => (counts.get(rarity) ?? 0) / total;
+  };
+  const fair = mix("fair");
+  const storm = mix("storm");
+  const rain = mix("rain");
+  // STORM IS THE RARITY HOOK: rare ×1.5 while everything else takes ×0.6, so the
+  // one thing worth fishing a storm for is more than twice as likely.
+  assert.ok(
+    storm("catch-rare") > fair("catch-rare") * 2,
+    `a storm more than doubles the rare share (${fair("catch-rare")} -> ${storm("catch-rare")})`,
+  );
+  assert.ok(storm("catch-common") < fair("catch-common"), "…and the ordinary fish go down with it");
+  // RAIN LIFTS THE MIDDLE over bait and the top tiers.
+  assert.ok(rain("catch-common") > fair("catch-common"), "rain brings the common fish up");
+  assert.ok(rain("catch-uncommon") > fair("catch-uncommon"), "…and the uncommon further");
+  assert.ok(rain("bait") < fair("bait"), "…at the bait's expense");
+  // OVERCAST AND SNOW ARE UNIFORM SCALES AS THE STARTERS STAND, and `_draw`
+  // normalizes, so they cancel exactly and the draw is a fair day's. Pinned by
+  // name rather than left to be discovered: the day somebody makes either of
+  // them non-uniform, this lane says so and the comment beside WEATHER_MIX is
+  // the thing to re-read.
+  for (const word of ["overcast", "snow"]) {
+    const quiet = mix(word);
+    for (const rarity of [...E.CATCH_ROLES, "bait"])
+      assert.equal(quiet(rarity), fair(rarity), `${word} scales every rarity alike, so it moves no share (${rarity})`);
+  }
+
+  // THE ROLL STREAM POSITION IS UNMOVED. Exactly one rnd() per draw whatever the
+  // factors are, which is what makes a rewind through a 0.13 fishing turn land
+  // in the same place in the stream — it can draw a different variant, and it
+  // cannot desynchronise everything after it.
+  for (const word of loadedPF.weather.WORDS) {
+    const a = loadedPF.rng(loadedPF.hashStr("stream-pin"));
+    const b = loadedPF.rng(loadedPF.hashStr("stream-pin"));
+    E._draw(a, table, 15, "day", word);
+    E._draw(b, table, 15, "day", "fair");
+    assert.equal(a(), b(), `a ${word} draw leaves the stream exactly where a fair one does`);
+  }
+
+  // THE WORD ONLY. `_draw` is handed `sim.weather().word`, so a label can never
+  // reach a column — and an unknown key is simply no modifier, which is what
+  // lets a 0.15 word ride through this build's tables untouched.
+  const labelled = mix("heavy rain");
+  for (const rarity of [...E.CATCH_ROLES, "bait"])
+    assert.equal(labelled(rarity), fair(rarity), `an intensity label is no column at all (${rarity})`);
+
+  // AND THE CALL SITE READS IT BESIDE `part`, BEFORE THE ADVANCE — the cadence
+  // that makes each window fished under the sky it BEGAN under. Asserted on the
+  // source, in the idiom this file already uses for the tile generator's
+  // append-only table, because the ordering is the whole claim and a runtime
+  // check would need a whole session to say it.
+  {
+    const economySource = readFileSync(join(here, "src", "59-economy.js"), "utf8");
+    const loop = economySource.slice(economySource.indexOf("const part = sim.daypart();"));
+    const read = loop.indexOf("sim.weather().word");
+    const advance = loop.indexOf("sim.advanceMinutes(W)");
+    assert.ok(read >= 0 && advance >= 0, "the window loop still reads the sky and still advances the clock");
+    assert.ok(read < advance, "the sky is read BEFORE the window is spent, exactly as the daypart is");
   }
 }
 
