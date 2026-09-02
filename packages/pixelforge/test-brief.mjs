@@ -25798,9 +25798,15 @@ const fire = (node, type) => Promise.all((node.listeners[type] ?? []).map((fn) =
     wet.resolveSchedules();
     assert.equal(mutWhere(soul), bed.zoneId, "a fireside out in the woods is not an indoors — the night name answers");
     // A DOOR-APRON HOME is outdoors too, and with no fireside behind it both
-    // rungs fail and the resident honestly stays in the weather.
+    // rungs fail and the resident honestly stays in the weather — even when
+    // their POST is indoors, which is the sharpest form of the rule: post is the
+    // outdoors being escaped, so neither rung may fall back to it. This is the
+    // live-work owner whose household never claimed a lot: a lit room they work
+    // in, and a doorstep they call home.
     soul._sched.hearth = null;
     soul._sched.home = { zoneId: "z1", wander: { x0: 4, y0: 4, x1: 6, y1: 5 } };
+    soul._sched.post = { zoneId: bed.zoneId, wander: bed.wander };
+    assert.equal(mut.zones[soul._sched.post.zoneId].mapKind, "building", "…and that post really is a room");
     wet.resolveSchedules();
     assert.equal(mutWhere(soul), "z1", "an apron home with no fireside leaves them out in the square");
   }
