@@ -14999,35 +14999,34 @@ await withSavePath(async ({ calls, behavior, makeCore }) => {
     /cozy-village\/water-feature's "old-tench" is tuned for a daypart "evening"/,
     "a daypart the clock does not have fails the build",
   );
-  // AND THE SAME WALK FOR THE SKY, against 17-weather's own word list. "rainy"
+  // AND THE SAME WALK FOR THE SKY, against 17-weather's own word list. "stormy"
   // is the exact shape that would ship as a column nobody could ever see apply.
   assert.throws(
-    boot("59-economy.js", `"catch-common": { overcast: 1.1, rain: 1.3`, `"catch-common": { overcast: 1.1, rainy: 1.3`),
-    /cozy-village\/water-feature's "carp" is tuned for a weather "rainy"/,
+    boot("59-economy.js", `"catch-common": { storm: 0.6 }`, `"catch-common": { stormy: 0.6 }`),
+    /cozy-village\/water-feature's "carp" is tuned for a weather "stormy"/,
     "a weather word the sky does not have fails the build",
   );
   assert.throws(
-    boot(
-      "59-economy.js",
-      `"catch-uncommon": { overcast: 1.1, rain: 1.4`,
-      `"catch-uncommon": { overcast: 1.1, rain: "1.4"`,
-    ),
-    /cozy-village\/water-feature's "bream" has a rain multiplier of 1.4/,
+    boot("59-economy.js", `"catch-uncommon": { storm: 0.6 }`, `"catch-uncommon": { storm: "0.6" }`),
+    /cozy-village\/water-feature's "bream" has a storm multiplier of 0.6/,
     "…and so does a multiplier that is not a number",
   );
   // THE MIX PAIRS AGAINST THE RARITIES BOTH WAYS. A rarity with no row stamps
   // `undefined` onto every entry of that tier — a whole tier that quietly stops
   // reading the sky — and a row keyed on a rarity nothing has never applies.
+  // Still worth every line with only storm left in the rows (0.14 slice 2b): the
+  // rows ARE the retune surface, and an empty one is the shape that stops
+  // reading the sky without saying so.
   assert.throws(
-    boot("59-economy.js", `  "catch-rare": { overcast: 1.1, storm: 1.5, snow: 0.7 },\n`, ``),
+    boot("59-economy.js", `  "catch-rare": { storm: 1.5 },\n`, ``),
     /the weather mix has no row for "catch-rare"/,
     "a rarity the mix forgot fails the build",
   );
   assert.throws(
     boot(
       "59-economy.js",
-      `  [BAIT_TYPE]: { overcast: 1.1`,
-      `  "catch-legendary": { overcast: 1 },\n  [BAIT_TYPE]: { overcast: 1.1`,
+      `  [BAIT_TYPE]: { storm: 0.6 }`,
+      `  "catch-legendary": { storm: 1 },\n  [BAIT_TYPE]: { storm: 0.6 }`,
     ),
     /the weather mix names a rarity "catch-legendary" the catch roles do not/,
     "…and so does a row for a rarity nothing has",
@@ -25956,28 +25955,34 @@ const fire = (node, type) => Promise.all((node.listeners[type] ?? []).map((fn) =
   };
   const fair = mix("fair");
   const storm = mix("storm");
-  const rain = mix("rain");
-  // STORM IS THE RARITY HOOK: rare ×1.5 while everything else takes ×0.6, so the
-  // one thing worth fishing a storm for is more than twice as likely.
+  // STORM IS THE RARITY HOOK, and since slice 2b it is the ONLY one: rare ×1.5
+  // while everything else takes ×0.6, so the one thing worth fishing a storm for
+  // is more than twice as likely.
   assert.ok(
     storm("catch-rare") > fair("catch-rare") * 2,
     `a storm more than doubles the rare share (${fair("catch-rare")} -> ${storm("catch-rare")})`,
   );
   assert.ok(storm("catch-common") < fair("catch-common"), "…and the ordinary fish go down with it");
-  // RAIN LIFTS THE MIDDLE over bait and the top tiers.
-  assert.ok(rain("catch-common") > fair("catch-common"), "rain brings the common fish up");
-  assert.ok(rain("catch-uncommon") > fair("catch-uncommon"), "…and the uncommon further");
-  assert.ok(rain("bait") < fair("bait"), "…at the bait's expense");
-  // OVERCAST AND SNOW ARE UNIFORM SCALES AS THE STARTERS STAND, and `_draw`
-  // normalizes, so they cancel exactly and the draw is a fair day's. Pinned by
-  // name rather than left to be discovered: the day somebody makes either of
-  // them non-uniform, this lane says so and the comment beside WEATHER_MIX is
-  // the thing to re-read.
-  for (const word of ["overcast", "snow"]) {
+  // OVERCAST, RAIN AND SNOW MOVE NO SHARE — AND THIS LANE'S MEANING CHANGED WITH
+  // THE RULING. It used to say "inert BY ARITHMETIC": overcast and snow were
+  // uniform scales, `_draw` normalizes, so they cancelled exactly and it was
+  // worth pinning in case somebody made one of them non-uniform. Under B3-1
+  // those three skies are BITE-RATE-ONLY by DESIGN — their entries are deleted
+  // from every rarity row, rain's live ×1.3/×1.4 included — so a draw under them
+  // IS a fair draw, and the thing this lane now refuses is a resurrected mix
+  // column of any shape, uniform or not. Where those skies went is
+  // `TUNING.biteRate`, and case 128c is where the going is measured.
+  for (const word of ["overcast", "rain", "snow"]) {
     const quiet = mix(word);
     for (const rarity of [...E.CATCH_ROLES, "bait"])
-      assert.equal(quiet(rarity), fair(rarity), `${word} scales every rarity alike, so it moves no share (${rarity})`);
+      assert.equal(quiet(rarity), fair(rarity), `${word} draws exactly the fair mix, by design (${rarity})`);
   }
+  // AND THE ROWS SAY SO IN THE TABLE, not only in the measurement: storm is the
+  // only key any entry carries. Non-vacuous the other way too — the three walks
+  // above would pass just as happily over a table whose columns were ALL empty,
+  // and this refuses that as well as it refuses a resurrected rain row.
+  for (const row of Object.values(E.CATCH_TABLES).flatMap((byTag) => Object.values(byTag).flat()))
+    assert.deepEqual(Object.keys(row.weather), ["storm"], `${row.variant}'s only sky column is the storm`);
 
   // THE ROLL STREAM POSITION IS UNMOVED. Exactly one rnd() per draw whatever the
   // factors are, which is what makes a rewind through a 0.13 fishing turn land
@@ -26119,8 +26124,9 @@ const fire = (node, type) => Promise.all((node.listeners[type] ?? []).map((fn) =
     // THE OUTCOME A FAIR SESSION CANNOT PRODUCE. Storm is the one surviving mix
     // column — rare ×1.5 against ×0.6 on everything else — so a stormy day's
     // catch is more than twice as likely to be the rare one. Measured 4.99% ->
-    // 12.32% on these fixtures; pinned at the doubling so a retune of the
-    // coefficient does not have to come back through this file.
+    // 12.32% on these fixtures (11.40% once slice 2b's ×2 bite widened the
+    // storm's sample); pinned at the doubling so a retune of the coefficient
+    // does not have to come back through this file.
     assert.ok(
       storm.share("catch-rare") > fair.share("catch-rare") * 2,
       `a storm SESSION more than doubles the rare share (${fair.share("catch-rare")} -> ${storm.share("catch-rare")})`,
@@ -26129,6 +26135,307 @@ const fire = (node, type) => Promise.all((node.listeners[type] ?? []).map((fn) =
       storm.share("catch-common") < fair.share("catch-common"),
       `…and the ordinary fish go down with it (${fair.share("catch-common")} -> ${storm.share("catch-common")})`,
     );
+  } finally {
+    loadedPF.save.reset(); // the mutators self-dirty, and a dirty block arms a timer
+  }
+}
+
+// 128c. THE BITE RATE (0.14 slice 2b, rulings B3-1 and B3-2). The grey and wet
+// skies stopped moving the mix and started moving the BITE: how often a cast
+// lands anything at all, composed with the region's own water. Nothing here
+// touches the seed, the draw count or the stream position — only the number the
+// one existing draw is compared against.
+{
+  const E = loadedPF.economy;
+  const P = loadedPF.player;
+  const T = E.TUNING;
+  const PRECIP = loadedPF.weather.PRECIP_META;
+  const standAt = (sim, zoneId, row) => {
+    const z = sim.world.zones[zoneId];
+    for (let y = row.rect.y - 1; y <= row.rect.y + row.rect.h; y++) {
+      for (let x = row.rect.x - 1; x <= row.rect.x + row.rect.w; x++) {
+        if (x < 0 || y < 0 || x >= z.w || y >= z.h) continue;
+        if (z.ground[y * z.w + x] === "water" || z.solid[y * z.w + x]) continue;
+        sim.teleport(zoneId, x, y);
+        sim.step(0, {});
+        if (sim.nearFeature?.id === row.id) return true;
+      }
+    }
+    return false;
+  };
+  let chats = 0;
+  /** A dawn-to-night session at the legacy pond. `precipitation` is stamped onto
+   *  the built world because the axes are what the derivation reads, and the sky
+   *  is pinned by override so the two levers can be moved one at a time. */
+  const session = (stack, { word, seed, precipitation, level = 15, tier = "crude", bait = 0 }) => {
+    const w = stack.world.build(seed, "cozy-village", null);
+    if (precipitation) w.precipitation = precipitation;
+    const sim = new stack.Sim(w);
+    sim.clockMin = 6 * 60;
+    sim.day = 3;
+    sim.resolveSchedules();
+    const core = { chatId: `chat-bite-${++chats}`, sim, hud: { toast() {}, refreshChips() {} }, markDirty() {} };
+    assert.ok(standAt(sim, "village", w.zones.village.features[0]), `seed ${seed}: the fixture stands at the pond`);
+    stack.player.grant(core, { t: "rod", k: tier }, 1);
+    stack.player.equip(core, "fishing", "tool", { t: "rod", k: tier });
+    if (level > 1) stack.player.award(core, { xp: 5 * level * (level - 1), verb: "fishing" });
+    if (bait) stack.player.grant(core, { t: "bait", k: "worms" }, bait);
+    sim.weatherOverride = { word };
+    const out = stack.economy.fish(core, "night");
+    assert.equal(out.ok, true, `seed ${seed}: the ${word} session ran`);
+    return out;
+  };
+  const pool = (opts, stack = loadedPF) => {
+    let windows = 0;
+    let landed = 0;
+    const per = [];
+    const species = new Set();
+    for (let seed = 1; seed <= 20; seed++) {
+      const out = session(stack, { ...opts, seed });
+      windows += out.windows;
+      landed += out.caught.length;
+      per.push(out.caught.length / out.windows);
+      for (const row of out.caught) species.add(`${row.t}:${row.k}`);
+    }
+    return { windows, landed, rate: landed / windows, per, species: [...species].sort() };
+  };
+  try {
+    // ── THE ROWS, PAIRED AGAINST THE ENUMS THEY ARE KEYED ON ────────────────
+    // The same discipline the mix rows get: a plausible-looking key that no
+    // caller can ever produce is a tuning that never applies.
+    for (const word of Object.keys(T.biteRate))
+      assert.ok(loadedPF.weather.WORDS.includes(word), `biteRate is keyed on a real weather word (${word})`);
+    assert.equal("fair" in T.biteRate, false, "…and fair is absent, because a clear day IS the baseline");
+    assert.deepEqual(Object.keys(T.spotBite).sort(), [...E.SPOT_TAGS].sort(), "spotBite names the fishable tags");
+
+    // ── THE REGION'S WATER (B3-2) ───────────────────────────────────────────
+    // MODERATE is the anchor by construction, not by a number somebody typed:
+    // the derivation measures wetness FROM `PRECIP_META.moderate.wetness`, so
+    // the reference world is exactly 1 whatever that table says next.
+    assert.equal(E._regionBite({ precipitation: "moderate" }, "water-feature"), 1, "the reference world sits at x1");
+    assert.equal(E._regionBite({ precipitation: "arid" }, "water-feature"), 0.7, "an arid world's water is thinner");
+    assert.equal(E._regionBite({ precipitation: "wet" }, "water-feature"), 1.3, "…and a wet world's is fuller");
+    // Non-vacuous against the anchor being a coincidence: the bands ARE the
+    // wetness gaps times the coefficient.
+    for (const precipitation of loadedPF.weather.PRECIPS)
+      assert.ok(
+        Math.abs(
+          E._regionBite({ precipitation }, "water-feature") -
+            (1 + T.abundPerWet * (PRECIP[precipitation].wetness - PRECIP.moderate.wetness)),
+        ) < 1e-12,
+        `${precipitation} is the wetness gap, not a literal (${E._regionBite({ precipitation }, "water-feature")})`,
+      );
+    // Both spot kinds are 1.0 today, so the two are equal ON PURPOSE and the
+    // lane says which fact it is holding: still water and running water are a
+    // content difference now and a rate difference in one row later.
+    for (const precipitation of loadedPF.weather.PRECIPS)
+      assert.equal(
+        E._regionBite({ precipitation }, "water-crossing"),
+        E._regionBite({ precipitation }, "water-feature"),
+        `${precipitation}: the two spot kinds bite alike at the starters`,
+      );
+    // WHICH IS EXACTLY WHY THE SEAM NEEDS ITS OWN LANE. Equal starters make the
+    // spot factor invisible: delete it from the derivation and everything above
+    // stays green. So the row is moved off 1.0 in a rebuilt stack and the
+    // multiply is watched to happen — the "one row later" the comment promises,
+    // proven to be one row.
+    {
+      const source = MODULES.map((name) => {
+        const text = readFileSync(join(here, "src", name), "utf8");
+        if (name !== "59-economy.js") return text;
+        const patched = text.replace(
+          `spotBite: { "water-feature": 1, "water-crossing": 1 }`,
+          `spotBite: { "water-feature": 1, "water-crossing": 3 }`,
+        );
+        assert.notEqual(patched, text, "the rewrite still names the spot row it retunes");
+        return patched;
+      }).join("\n");
+      const tuned = new Function(`"use strict";\n${source}\nreturn PF;`)();
+      assert.equal(
+        tuned.economy._regionBite({ precipitation: "wet" }, "water-crossing"),
+        tuned.economy._regionBite({ precipitation: "wet" }, "water-feature") * 3,
+        "the spot factor multiplies into the same derivation, over the top of the water",
+      );
+    }
+    // A WORLD THAT NAMES NOTHING, or names nonsense, folds to the anchor rather
+    // than to NaN — the guarded axes read doing its job on the fishing path.
+    assert.equal(E._regionBite({ precipitation: "swamp" }, "water-feature"), 1, "a hostile axis folds to the anchor");
+    assert.equal(E._regionBite(undefined, "water-feature"), 1, "…and so does no world at all");
+    // `abundFloor` is an INERT guard on these coefficients — the thinnest
+    // shipped band is 0.7, well clear of 0.25 — and is here for a future wetness
+    // table, not for a value this build can reach. Said rather than pinned,
+    // because a lane over an unreachable branch is a lane that tests nothing.
+
+    // ── THE MEASURED BITE RATE, AGAINST `2 − p` ─────────────────────────────
+    // Same world, same seed, same spot, moderate water: N windows fair against N
+    // windows rain. The success probability at this fixture is exactly the
+    // curve's own arithmetic, and the hazard form's catches-per-window ratio at
+    // `chances` 2 is `2 − p` EXACTLY — which at this rung is 1.42 and not the
+    // folk "2×" the ten-minutes-to-five sentence sounds like. That sentence is
+    // the calibration example at the anchor; this is the number.
+    const level = 15;
+    const p = Math.min(T.baseCeil, T.baseAt1 + T.basePerLevel * (level - 1)) * T.toolMult[P.resolvedToolTier("crude")];
+    const fair = pool({ word: "fair", precipitation: "moderate", level });
+    const rain = pool({ word: "rain", precipitation: "moderate", level });
+    assert.ok(fair.windows > 1000, `the pool is big enough to measure a rate (${fair.windows} windows)`);
+    assert.equal(rain.windows, fair.windows, "the two skies fish exactly the same windows");
+    const ratio = rain.rate / fair.rate;
+    assert.ok(
+      Math.abs(ratio - (2 - p)) / (2 - p) < 0.05,
+      `a wet sky lands 2 − p times as many casts (predicted ${2 - p}, measured ${ratio})`,
+    );
+    assert.ok(ratio < 1.6, `…which is NOT the folk 2x, and the lane says so out loud (${ratio})`);
+    // AND THE RATE ITSELF, both sides, against the hazard the code is supposed
+    // to be computing. This is what reds if `chances` stops reaching the
+    // threshold at all: the fair side would be unchanged and the wet side would
+    // fall back onto it.
+    const hazard = (chances) => 1 - Math.pow(1 - Math.min(p, 1), chances);
+    assert.ok(Math.abs(fair.rate - p) / p < 0.05, `a fair day lands at p (${p} vs ${fair.rate})`);
+    assert.ok(Math.abs(rain.rate - hazard(2)) / hazard(2) < 0.05, `a rainy one at pw (${hazard(2)} vs ${rain.rate})`);
+    // NEVER WORSE THAN FAIR, fixture by fixture rather than in the aggregate:
+    // `pw >= p` wherever `chances >= 1`, which is the promise the hazard form
+    // makes at every rung of the ladder.
+    assert.ok(
+      fair.per.every((rate, i) => rain.per[i] >= rate),
+      "no fixture fishes worse in the rain than it does under a clear sky",
+    );
+    // AND ALL FOUR BAD SKIES BITE ALIKE, because they share the starter — storm
+    // included, which is the half of B3-1 that is easy to forget: the storm
+    // keeps its rarity lean AND gains the faster bite, and the two do not
+    // double-count. Landing is a threshold fact and the mix is a share fact.
+    for (const word of ["overcast", "snow", "storm"]) {
+      const wet = pool({ word, precipitation: "moderate", level });
+      assert.equal(wet.landed, rain.landed, `${word} bites at rain's rate — one starter, four skies`);
+    }
+
+    // ── THE EQUIPMENT PROMISE, KEPT UNDER EVERY SKY ─────────────────────────
+    // `min(p, 1)` keeps `pow` off a negative base, and with it a p at or over 1
+    // still ALWAYS lands: weather and water never manufacture that promise and
+    // never break it. Drop the clamp and a masterwork-and-bait cast starts
+    // missing in the rain, which is the one thing the ladder's top may not do.
+    for (const word of loadedPF.weather.WORDS) {
+      const out = session(loadedPF, {
+        word,
+        seed: 3,
+        precipitation: "moderate",
+        level: 20,
+        tier: "masterwork",
+        bait: 200,
+      });
+      assert.equal(out.caught.length, out.windows, `a p >= 1 cast lands every window under ${word}`);
+    }
+
+    // ── FEWER BITES, NEVER FEWER SPECIES ────────────────────────────────────
+    // The felt outcome of B3-2, and the exact line between the two levers:
+    // abundance touches the RATE, and the table stays whole. An arid world
+    // fishes sparse and a wet one teems, on the very same fair day — and both
+    // pull the same species out of the same water.
+    const arid = pool({ word: "fair", precipitation: "arid", level });
+    const wetWorld = pool({ word: "fair", precipitation: "wet", level });
+    assert.ok(arid.rate < fair.rate, `an arid world fishes sparse (${arid.rate} vs ${fair.rate})`);
+    assert.ok(wetWorld.rate > fair.rate, `…and a wet world teems (${wetWorld.rate} vs ${fair.rate})`);
+    assert.ok(
+      Math.abs(arid.rate - hazard(0.7)) / hazard(0.7) < 0.05,
+      `the arid rate is the water's own hazard (${hazard(0.7)} vs ${arid.rate})`,
+    );
+    assert.ok(
+      Math.abs(wetWorld.rate - hazard(1.3)) / hazard(1.3) < 0.05,
+      `and so is the wet one (${hazard(1.3)} vs ${wetWorld.rate})`,
+    );
+    assert.deepEqual(arid.species, wetWorld.species, "…out of the same species, every one of them");
+    assert.equal(
+      E.catchTable({ theme: "cozy-village", precipitation: "arid" }, "water-feature"),
+      E.catchTable({ theme: "cozy-village", precipitation: "wet" }, "water-feature"),
+      "…because the table itself never reads the axis",
+    );
+
+    // ── THE ANCHOR IS THE COMPAT PIN ────────────────────────────────────────
+    // A moderate-water world's FAIR day is untouched by the whole amendment,
+    // and that is what the `chances === 1` branch is for — the literal shipped
+    // expression, no round trip through `1 − (1 − p)` and the float dust it
+    // carries. Proven the only way that is not an argument: rebuild the stack
+    // with slice 2's roll in place of this one and compare the sessions.
+    {
+      const roll = `      const chances = regionBite * (TUNING.biteRate[wthr] ?? 1);
+      const pw = chances === 1 ? p : 1 - Math.pow(1 - Math.min(p, 1), chances);
+      if (rnd() >= pw) continue;`;
+      const source = MODULES.map((name) => {
+        const text = readFileSync(join(here, "src", name), "utf8");
+        if (name !== "59-economy.js") return text;
+        const patched = text.replace(roll, `      if (rnd() >= p) continue;`);
+        assert.notEqual(patched, text, "the rewrite still names the roll it is reverting");
+        return patched;
+      }).join("\n");
+      const slice2 = new Function(`"use strict";\n${source}\nreturn PF;`)();
+      slice2.api.postSpatialLocations = async () => ({ ok: false, status: 404, body: null });
+      slice2.api.patchMetadata = async () => {};
+      const before = session(slice2, { word: "fair", seed: 5, precipitation: "moderate", level });
+      const after = session(loadedPF, { word: "fair", seed: 5, precipitation: "moderate", level });
+      assert.ok(after.caught.length > 20, `the pinned session is a real one (${after.caught.length} fish)`);
+      assert.deepEqual(after.caught, before.caught, "a moderate world's fair day fishes exactly as it did in slice 2");
+      // Non-vacuous the other way: the amendment IS observable the moment the
+      // sky is not fair, which is the whole point of it.
+      assert.notDeepEqual(
+        session(loadedPF, { word: "rain", seed: 5, precipitation: "moderate", level }).caught,
+        session(slice2, { word: "rain", seed: 5, precipitation: "moderate", level }).caught,
+        "…and a rainy one does not",
+      );
+      // AND THE BRANCH IS NOT DECORATION. Its whole job is the last bit: the
+      // round trip through `1 − (1 − p)` is NOT the identity on this curve's own
+      // p values. Held here because the flip is real but sub-observable — the
+      // window it would move is one whose roll lands inside a 1e-16 sliver, so
+      // no finite session can be counted on to show it, and the honest pin is
+      // the arithmetic rather than a sample that will always come back equal.
+      const moved = [];
+      for (let l = 1; l <= P.CAPS.skillLevel; l++)
+        for (const tool of T.toolMult)
+          for (const mod of [1, T.baitMult]) {
+            const q = Math.min(T.baseCeil, T.baseAt1 + T.basePerLevel * (l - 1)) * tool * mod;
+            if (1 - Math.pow(1 - Math.min(q, 1), 1) !== q) moved.push(q);
+          }
+      assert.ok(moved.length > 0, `the round trip really does move p on this ladder (${moved.length} rungs)`);
+    }
+
+    // ── ZERO ADDED DRAWS ────────────────────────────────────────────────────
+    // The roll spends exactly the one `rnd()` it always spent, so the stream
+    // stands where it always stood after a failed window and `_draw` enters
+    // where it always entered. Asserted on the source in this file's own idiom,
+    // because a second draw hidden behind a threshold is invisible from outside
+    // a session and would desynchronise every rewind through a fishing turn.
+    {
+      const economySource = readFileSync(join(here, "src", "59-economy.js"), "utf8");
+      const start = economySource.indexOf("const rnd = PF.rng(PF.hashStr(");
+      const end = economySource.indexOf("const entry = this._draw(", start);
+      assert.ok(start >= 0 && end > start, "the window loop still seeds its stream and still draws from it");
+      // CODE ONLY: that stretch is mostly the comment explaining the threshold,
+      // and it quotes `rnd()` several times.
+      const code = economySource
+        .slice(start, end)
+        .split("\n")
+        .filter((line) => !/^\s*\/\//.test(line))
+        .join("\n");
+      const rolls = code.match(/rnd\(\)/g) ?? [];
+      assert.equal(rolls.length, 1, `exactly one draw stands between the stream and the table (${rolls.length})`);
+      // And the water is a pure read: the derivation never touches the stream.
+      const derivation = economySource.slice(
+        economySource.indexOf("_regionBite(world, tag) {"),
+        economySource.indexOf("/** Draw one entry"),
+      );
+      assert.ok(derivation.length > 0, "the derivation is where this lane thinks it is");
+      assert.equal(/rnd|PF\.rng/.test(derivation), false, "and it spends no randomness at all");
+    }
+
+    // ── THE SAME WINDOW, THE SAME FISH ──────────────────────────────────────
+    // A window that lands under BOTH fair and rain yields the IDENTICAL variant
+    // now, because rain's draw IS the fair draw — the mix rows are gone and the
+    // stream position is shared. Only storm's surviving column moves it.
+    for (let i = 0; i < 200; i++) {
+      const table = E.CATCH_TABLES["cozy-village"]["water-feature"];
+      const drawn = (word) => E._draw(loadedPF.rng(loadedPF.hashStr(`same-fish|${i}`)), table, 15, "day", word);
+      const base = drawn("fair");
+      for (const word of ["overcast", "rain", "snow"])
+        assert.equal(drawn(word), base, `a ${word} window lands the fish its fair twin would (${i})`);
+    }
   } finally {
     loadedPF.save.reset(); // the mutators self-dirty, and a dirty block arms a timer
   }
