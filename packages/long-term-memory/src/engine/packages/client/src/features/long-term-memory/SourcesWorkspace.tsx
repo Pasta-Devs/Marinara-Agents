@@ -503,14 +503,14 @@ function BulkDestinationPicker({
           }}
           className={
             inline
-              ? "mari-editor-panel overflow-hidden"
+              ? "mari-editor-panel mari-editor-panel--soft overflow-hidden"
               : "fixed inset-0 z-50 m-0 h-full max-h-none w-full max-w-none bg-black/50 p-0 sm:grid sm:place-items-center sm:p-4"
           }
         >
           <section
             className={
               inline
-                ? "flex w-full flex-col bg-[var(--background)] text-[var(--foreground)]"
+                ? "flex max-h-[min(42rem,calc(100vh-8rem))] w-full flex-col text-[var(--foreground)]"
                 : "flex h-full w-full flex-col bg-[var(--background)] text-[var(--foreground)] sm:h-auto sm:max-h-[min(42rem,calc(100vh-2rem))] sm:max-w-2xl sm:rounded-md sm:border sm:border-[var(--border)] sm:shadow-xl"
             }
           >
@@ -529,8 +529,8 @@ function BulkDestinationPicker({
                 onClick={closePicker}
               />
             </header>
-            <div className="min-h-0 flex-1 overflow-y-auto">
-              <div className="sticky top-0 z-10 space-y-3 bg-[var(--background)] p-4 pb-3">
+            <div data-ltm-bulk-destination-scroll className="min-h-0 flex-1 overflow-y-auto overscroll-contain">
+              <div className={`${inline ? "" : "sticky top-0 z-10 bg-[var(--background)]"} space-y-3 p-4 pb-3`}>
                 <div className="rounded-md border border-[var(--border)] bg-[var(--secondary)]/35 p-3">
                   <p className="text-xs font-semibold uppercase tracking-wide text-[var(--muted-foreground)]">
                     {localizeUi("ui.longTermMemory.sourcesworkspace.primaryLocation")}

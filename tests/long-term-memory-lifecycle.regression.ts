@@ -2886,6 +2886,17 @@ async function main() {
       await addDestination.click();
       const bulkBoundary = page.locator("[data-ltm-bulk-destination]");
       await bulkBoundary.locator('[data-ltm-availability-tab="chat"]').click();
+      const bulkDestinationScroll = bulkBoundary.locator("[data-ltm-bulk-destination-scroll]");
+      const bulkDestinationScrollMetrics = await bulkDestinationScroll.evaluate((element) => ({
+        clientHeight: element.clientHeight,
+        scrollHeight: element.scrollHeight,
+      }));
+      assert.ok(bulkDestinationScrollMetrics.scrollHeight > bulkDestinationScrollMetrics.clientHeight);
+      await bulkDestinationScroll.hover();
+      await page.mouse.wheel(0, 400);
+      await page.waitForFunction(
+        () => (document.querySelector("[data-ltm-bulk-destination-scroll]")?.scrollTop ?? 0) > 0,
+      );
       for (let index = 0; index < 99; index += 1) {
         const bulkChat = bulkBoundary.locator(`[data-ltm-availability-target="chat:bulk-chat-${index}"] input`);
         await bulkChat.evaluate((element) => (element as HTMLInputElement).click());
