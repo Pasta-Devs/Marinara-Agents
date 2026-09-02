@@ -10,6 +10,27 @@
 // session disagreeing about when the evening starts.
 PF.DAYPART_STARTS = { dawn: 5 * 60, day: 7 * 60, dusk: 18 * 60, night: 21 * 60 };
 
+/** THE FOUR TILES A PLAYER IS "AT" — the shared half of the two proximity reads
+ *  below, and only that half. Standing corner-on to a pond is standing NEAR the
+ *  bank rather than at it, and both reads had that decision written out as their
+ *  own four-element literal: one edit to reach eight neighbours, two places to
+ *  make it, and a package where the board and the water disagreed about what
+ *  "at" means.
+ *
+ *  WHAT IS DELIBERATELY NOT SHARED is everything each read does with these
+ *  tiles. `nearFeature` keeps its TWO-SIDED test — the tile is water AND lies in
+ *  a registry rect — and its bounds check; `nearBoard` keeps its reserved-id
+ *  lookup and no water term at all. Merging those would be the bug: the water
+ *  term is what says which pond a bank belongs to, and a board rect holds no
+ *  water tile by construction. The lanes that stand at one and not the other are
+ *  what hold that line. */
+const ORTHOGONAL_NEIGHBOURS = (tx, ty) => [
+  [tx, ty - 1],
+  [tx, ty + 1],
+  [tx - 1, ty],
+  [tx + 1, ty],
+];
+
 PF.Sim = class {
   constructor(world) {
     this.world = world;
@@ -207,17 +228,12 @@ PF.Sim = class {
       // those by design (the wilds ford lays path straight across its stream,
       // and a compiled pool's well stands inside the anchor rect beside it).
       //
-      // Four neighbours, not eight: standing corner-on to a pond is standing
-      // near the bank, not at it. Skipped whole on a zone with no register,
-      // which is most of them.
+      // Four neighbours, not eight (ORTHOGONAL_NEIGHBOURS, one file up): standing
+      // corner-on to a pond is standing near the bank, not at it. Skipped whole on
+      // a zone with no register, which is most of them.
       this.nearFeature = null;
       if (z.features.length) {
-        for (const [nx, ny] of [
-          [tx, ty - 1],
-          [tx, ty + 1],
-          [tx - 1, ty],
-          [tx + 1, ty],
-        ]) {
+        for (const [nx, ny] of ORTHOGONAL_NEIGHBOURS(tx, ty)) {
           if (nx < 0 || ny < 0 || nx >= z.w || ny >= z.h) continue;
           if (z.ground[ny * z.w + nx] !== "water") continue;
           const row = z.features.find(
@@ -233,7 +249,7 @@ PF.Sim = class {
       // recomputed on the same terms: every walking frame, off the feet tile,
       // null the moment they step away.
       //
-      // Four neighbours again, and NO WATER TERM. The two-sided test one block up
+      // The same four neighbours, and NO WATER TERM. The two-sided test one block up
       // cannot serve here: it is water that says which pond a bank belongs to, and
       // a board rect holds no water tile by construction (20-world refuses one).
       // What is left is the rect alone — which is safe here for the reason it is
@@ -246,12 +262,7 @@ PF.Sim = class {
       this.nearBoard = null;
       const board = z.features.length ? z.features.find((f) => f.id === PF.world.BOARD_FEATURE_ID) : null;
       if (board) {
-        for (const [nx, ny] of [
-          [tx, ty - 1],
-          [tx, ty + 1],
-          [tx - 1, ty],
-          [tx + 1, ty],
-        ]) {
+        for (const [nx, ny] of ORTHOGONAL_NEIGHBOURS(tx, ty)) {
           if (
             nx >= board.rect.x &&
             nx < board.rect.x + board.rect.w &&

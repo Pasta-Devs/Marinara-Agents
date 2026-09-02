@@ -117,7 +117,10 @@ PF.mountSetup = (el, props) => {
   const generateRow = PF.el(
     "label",
     { style: "display:flex;gap:8px;align-items:center;font:12px/1.5 inherit;cursor:pointer;margin-top:10px;" },
-    [generateIn, PF.el("span", { text: "Generate a unique world with your GM connection (one call)" })],
+    // TWO CALLS, and the label says so because the player is the one who pays for
+    // them: the brief that describes the settlement, and the content pack that
+    // gives its people something to say. It has been two since the pack landed.
+    [generateIn, PF.el("span", { text: "Generate a unique world with your GM connection (two calls)" })],
   );
   const connSel = select([["", "Loading connections…"]]);
   const partyBox = PF.el("div", {

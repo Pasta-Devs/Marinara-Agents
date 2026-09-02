@@ -24381,6 +24381,14 @@ const fire = (node, type) => Promise.all((node.listeners[type] ?? []).map((fn) =
         await tick();
         assert.equal(postCount(), 1, "exactly one brief call");
         assert.equal(packCount(), 1, "…and exactly one pack call");
+        // …WHICH IS TWO, AND THE WIZARD SAYS TWO. The player pays for both, so
+        // the checkbox beside the choice has to count them honestly — it said
+        // "(one call)" from before the pack existed. Pinned off the shipped source
+        // because the wizard's DOM is not reachable from here, and pinned HERE
+        // because this is the case that counts the calls it describes.
+        const wizard = readFileSync(join(here, "src", "80-setup.js"), "utf8");
+        assert.ok(wizard.includes("(two calls)"), "the wizard tells the player it is two calls");
+        assert.ok(!wizard.includes("(one call)"), "…and no longer promises one");
         const patches = calls.filter((c) => c.kind === "patch");
         assert.deepEqual(
           patches.map((c) => Object.keys(c.patch).sort()),
