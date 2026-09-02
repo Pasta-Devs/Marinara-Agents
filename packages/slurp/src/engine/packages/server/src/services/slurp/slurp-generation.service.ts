@@ -667,7 +667,10 @@ export async function generateNoodlerPost(
     (noodlerImageConnectionId ? await connections.getWithKey(noodlerImageConnectionId) : null) ??
     (await connections.getDefaultForImageGeneration());
   if (!imageConnection) {
+    // Keep the prompt: the post publishes without its picture, and the retry pass (or the
+    // user) draws it once a connection exists.
     const post = await persist({
+      imagePrompt: draftImagePrompt,
       metadata: {
         imageGenerationFailed: true,
         imageGenerationError: "No image generation connection is configured.",
@@ -705,8 +708,10 @@ export async function generateNoodlerPost(
       logger.warn(err, "[noodler] Failed to prepare image prompt review for %s", account.displayName);
       return {
         post: await persist({
+          imagePrompt: draftImagePrompt,
           metadata: {
             imageGenerationFailed: true,
+            imageRetryAttempts: 1,
             imageGenerationError: getErrorMessage(err).slice(0, 500),
           },
         }),
@@ -738,8 +743,10 @@ export async function generateNoodlerPost(
     logger.warn(err, "[noodler] Failed to generate image for %s", account.displayName);
     return {
       post: await persist({
+        imagePrompt: draftImagePrompt,
         metadata: {
           imageGenerationFailed: true,
+          imageRetryAttempts: 1,
           imageGenerationError: getErrorMessage(err).slice(0, 500),
         },
       }),

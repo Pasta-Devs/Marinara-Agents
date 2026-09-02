@@ -1,6 +1,7 @@
 import type { FastifyInstance } from "fastify";
 import { logger } from "../../lib/logger.js";
 import { runNoodlerFanActivity, type NoodlerFanRunResult } from "./slurp-fan-activity.operation.js";
+import { slurpPollBackoffMs } from "./slurp-poll-backoff.js";
 
 const INITIAL_DELAY_MS = 45_000;
 const POLL_MS = 60_000;
@@ -12,6 +13,7 @@ export function startNoodlerFanActivityScheduler(
   let stopped = false;
   let active: Promise<NoodlerFanRunResult> | null = null;
   let timer: ReturnType<typeof setTimeout> | null = null;
+  let consecutiveFailures = 0;
   const schedule = (delay: number) => {
     if (stopped) return;
     timer = setTimeout(() => void poll(), delay);
@@ -28,11 +30,13 @@ export function startNoodlerFanActivityScheduler(
       if (result.status === "generated" || result.status === "resumed") {
         logger.info("[noodler-fan] Audience run %s created %d interactions", result.status, result.created);
       }
+      consecutiveFailures = 0;
     } catch (error) {
+      consecutiveFailures += 1;
       logger.warn(error, "[noodler-fan] Automatic audience activity failed");
     } finally {
       active = null;
-      schedule(POLL_MS);
+      schedule(slurpPollBackoffMs(POLL_MS, consecutiveFailures));
     }
   };
   const stop = async () => {

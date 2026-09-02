@@ -1,5 +1,12 @@
 import { isConnectionAdmissionFailure } from "../generation/connection-admission.js";
 
+/**
+ * A post whose image failed still publishes — the text is the post — so the picture is retried on
+ * a later poll instead of being lost. Bounded, because a misconfigured image connection must not
+ * mean one provider call per post per poll for ever.
+ */
+export const NOODLER_POST_IMAGE_RETRY_LIMIT = 3;
+
 export const NOODLE_IMAGE_GENERATION_MAX_ATTEMPTS = 2;
 export const NOODLE_IMAGE_GENERATION_RETRY_DELAY_MS = 500;
 

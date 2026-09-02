@@ -104,6 +104,7 @@ import {
   type PersistedNoodleRefreshSchedule,
 } from "../slurp/slurp-refresh-schedule.js";
 import { pruneNoodleRefreshRuns } from "./slurp-refresh-run-retention.js";
+import { NOODLER_POST_IMAGE_RETRY_LIMIT } from "../slurp/slurp-image-retry.js";
 import { normalizeNoodlerSeenAt } from "../slurp/slurp-viewer-unseen.js";
 import { createCharactersStorage } from "./characters.storage.js";
 import {
@@ -3203,6 +3204,30 @@ export function createSlurpStorage(db: DB) {
         .orderBy(desc(noodlePosts.createdAt))
         .limit(Math.max(1, Math.min(50, Math.floor(limit))));
       return rows.map(mapManagedPost);
+    },
+
+    /**
+     * Slurp creator posts that published without their picture and still have a prompt to draw
+     * from. The pending-review marker is excluded: those wait for the user, not for a retry.
+     */
+    async listNoodlerPostsAwaitingImageRetry(limit = 1, at = now()): Promise<NoodlerManagedPost[]> {
+      const accountIds = new Set((await this.listNoodlerAccounts()).map((account) => account.id));
+      if (accountIds.size === 0) return [];
+      const rows = await db
+        .select()
+        .from(noodlePosts)
+        .where(and(isNull(noodlePosts.imageUrl), isNotNull(noodlePosts.imagePrompt)))
+        .orderBy(desc(noodlePosts.createdAt));
+      const eligible: NoodlerManagedPost[] = [];
+      for (const row of rows) {
+        if (!accountIds.has(row.authorAccountId) || !imageClaimIsAvailable(row, at)) continue;
+        const metadata = parseRecord(row.metadata);
+        if (metadata.imagePendingReview === true || metadata.imageGenerationFailed !== true) continue;
+        if (Number(metadata.imageRetryAttempts ?? 0) >= NOODLER_POST_IMAGE_RETRY_LIMIT) continue;
+        eligible.push(mapManagedPost(row));
+        if (eligible.length >= Math.max(1, Math.floor(limit))) break;
+      }
+      return eligible;
     },
 
     // Unbounded — used by the disclosure-downgrade review, which must inspect every
