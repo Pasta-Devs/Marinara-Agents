@@ -109,7 +109,7 @@ assert.match(
 );
 assert.match(
   home,
-  /onRefresh=\{\(\) =>[\s\S]*?viewerQuery\.refetch\(\)[\s\S]*?noodleTimelineRefreshed/u,
+  /onRefresh=\{\(\) =>[\s\S]*?viewerQuery\.refetch\(\)[\s\S]*?ui\.slurp\.feed\.refreshed/u,
   "The timeline refresh action must refetch and report completion",
 );
 

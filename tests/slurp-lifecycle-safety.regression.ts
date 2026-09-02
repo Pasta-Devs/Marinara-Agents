@@ -85,7 +85,7 @@ assert.match(shell, /style=\{\{ paddingBottom: BOTTOM_SAFE_INSET \}\}/u);
 assert.match(home, /<SlurpMobileHeader[\s\S]*?triggerRef=\{mobileDrawerTriggerRef\}/u);
 assert.match(home, /ref=\{setStickyHeader\}[\s\S]*?HIDE_ON_SCROLL_CLASS/u);
 assert.match(shell, /--slurp-canvas/u, "Slurp must own a theme-safe canvas token");
-assert.match(home, /ui\.slurp\.home\.forYou/u, "the Home feed must use the compact feed-first masthead");
+assert.match(home, /ui\.noodle\.noodleshell\.home/u, "the Home feed must use the compact studio masthead");
 assert.match(home, /ui\.slurp\.home\.tonight/u, "the desktop discovery rail must have a Slurp identity");
 assert.match(home, /SLURP_MOMENT_WINDOW_MS = 24 \* 60 \* 60 \* 1000/u);
 assert.match(home, /data-component="SlurpHome\.Moments"/u, "Home must expose the real 24-hour Moments shelf");
@@ -119,6 +119,11 @@ assert.match(
   home,
   /data-slurp-creator-tools[\s\S]*?<NoodlerPostComposer/u,
   "managed Creator Rooms must retain publishing",
+);
+assert.match(
+  home,
+  /data-slurp-creator-tools[\s\S]*?onClick=\{onEdit\}[\s\S]*?setAccessSettingsOpen\(true\)[\s\S]*?setAutomationOpen\(true\)[\s\S]*?hidden=\{!creatorToolsOpen\}[\s\S]*?<NoodlerPostComposer/u,
+  "Creator Tools must keep its management actions visible while disclosing the composer separately",
 );
 assert.match(home, /ui\.slurp\.discover\.title/u);
 assert.match(home, /sm:grid-cols-2/u, "Discover must present creators as adaptive cards");
@@ -168,14 +173,25 @@ assert.match(settings, /selectedCreatorId/u, "creator settings must keep an expl
 assert.match(settings, /data-slurp-settings-layout/u, "settings must expose its responsive layout boundary");
 assert.match(
   shell,
-  /slurpSettingsActive[\s\S]*?@min-\[1024px\]:max-w-\[1096px\]/u,
-  "settings must not inherit the narrow creator-feed measure",
+  /slurpActive \? "max-w-\[1680px\]" : "max-w-\[1360px\]"/u,
+  "every Slurp view must share one wide desktop frame",
 );
 assert.match(
   shell,
-  /\{!slurpSettingsActive && !slurpProfileActive && rightRail\}/u,
-  "settings and wide Creator profiles must not reserve an empty discovery rail",
+  /export type NoodleShellContextualRail = "populated" \| "blank" \| "spanning"/u,
+  "Slurp views must declare how they use the contextual rail",
 );
+assert.match(
+  shell,
+  /aria-hidden="true"[\s\S]*?data-slurp-contextual-rail="blank"/u,
+  "Creator profiles must reserve a non-interactive blank contextual rail",
+);
+assert.match(
+  home,
+  /navigation\.view === "profile"[\s\S]*?\? \("blank" as const\)[\s\S]*?navigation\.view === "hub" \|\| navigation\.view === "search"/u,
+  "Creator profiles must use the blank rail while Home and Discover populate it",
+);
+assert.doesNotMatch(settings, /max-w-\[1096px\]/u, "settings must fill the shared Slurp desktop frame");
 assert.match(settings, /data-slurp-setting-toggle/u);
 assert.match(settings, /role="switch"/u, "polished settings toggles must retain native checkbox semantics");
 assert.match(settings, /snap-x grid-flow-col/u, "creator settings must stay browsable before master-detail fits");
@@ -219,7 +235,7 @@ assert.match(profileSurface, /<Upload size=\{13\}/u);
 assert.match(profileSurface, /<Upload size=\{12\}/u);
 assert.match(profileSurface, /ui\.slurp\.artwork\.generateBanner/u);
 assert.match(profileSurface, /ui\.slurp\.artwork\.generateAvatar/u);
-assert.match(profileSurface, /bottom-2 right-14 flex h-11 w-11/u);
+assert.match(profileSurface, /end-\[4\.25rem\] top-3 flex h-11 w-11/u);
 assert.doesNotMatch(
   profileSurface,
   /sm:opacity-0 group-hover:opacity-100/u,
@@ -229,11 +245,27 @@ assert.match(home, /ui\.slurp\.profile\.follow[\s\S]*?ui\.slurp\.profile\.subscr
 assert.match(home, /management: true/u, "subscriber data must be marked as creator management");
 assert.match(home, /ui\.slurp\.profile\.creatorToolsDetail/u);
 assert.match(home, /ui\.slurp\.profile\.creatorRoom/u);
-assert.match(profileSurface, /sm:h-72/u, "Creator Rooms must keep an immersive desktop banner");
 assert.match(
   profileSurface,
-  /sm:grid-cols-\[minmax\(0,1fr\)_auto\]/u,
+  /h-52[\s\S]*?@min-\[760px\]:h-72/u,
+  "Creator Rooms must scale the banner from mobile to desktop",
+);
+assert.match(profileSurface, /@min-\[1040px\]:h-80/u, "wide Creator Rooms must retain the cinematic banner scale");
+assert.match(
+  profileSurface,
+  /@min-\[860px\]:grid-cols-\[minmax\(0,1fr\)_auto\]/u,
   "Creator Room identity and actions must use a responsive non-overlapping grid",
+);
+assert.match(profileSurface, /className="@container/u, "Creator Rooms must respond to their actual canvas width");
+assert.match(
+  shell,
+  /size === "xl"[\s\S]*?h-24 w-24[\s\S]*?@min-\[1040px\]:h-36/u,
+  "Creator avatars must scale from a compact mobile portrait to the wide-desktop hero",
+);
+assert.match(
+  profileSurface,
+  /min-w-\[6\.25rem\][\s\S]*?snap-start[\s\S]*?@min-\[620px\]:flex-1/u,
+  "profile tabs must scroll without crushing labels on narrow canvases and distribute on desktop",
 );
 assert.doesNotMatch(
   profileSurface,
@@ -243,6 +275,13 @@ assert.doesNotMatch(
 assert.match(profileSurface, /data-slurp-creator-hero/u, "Creator Rooms must expose their unified identity hero");
 assert.match(profileSurface, /spotlight/u, "Slurp Creator Rooms must support the media-led spotlight treatment");
 assert.match(profileSurface, /linear-gradient\(to_top/u, "Creator banners must fade into the profile canvas");
+assert.match(profileSurface, /--slurp-violet/u, "Creator Rooms must inherit Slurp's atmospheric gradient palette");
+assert.match(profileSurface, /after:scale-x-100/u, "Creator profile tabs must use the flat accent-underline treatment");
+assert.doesNotMatch(
+  profileSurface,
+  /spotlight\s*\?\s*"rounded-\[1\.5rem\]/u,
+  "the spotlight identity must blend into the banner instead of becoming another rounded card",
+);
 assert.match(profileSurface, /preTabsContent && \(/u, "Creator Tools must remain separate from public profile content");
 assert.match(home, /data-slurp-home-masthead/u, "Home must expose one unified lobby masthead");
 assert.doesNotMatch(

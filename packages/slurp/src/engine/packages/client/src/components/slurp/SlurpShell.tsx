@@ -65,10 +65,14 @@ export function getNoodleAccentStyle(accent: string, style: CSSProperties = {}):
       "light-dark(color-mix(in srgb, var(--background) 99%, var(--foreground)), color-mix(in srgb, var(--background) 96%, #3b1c2c))",
     "--slurp-surface-raised":
       "light-dark(color-mix(in srgb, var(--background) 96%, var(--foreground)), color-mix(in srgb, var(--background) 91%, #472036))",
+    "--slurp-glass":
+      "light-dark(color-mix(in srgb, var(--background) 91%, transparent), color-mix(in srgb, #21101d 82%, transparent))",
+    "--slurp-coral": "light-dark(#b86447, #ff936f)",
+    "--slurp-violet": "light-dark(#76558f, #b994e8)",
     "--slurp-warm": "light-dark(#9b5a35, #f2b56f)",
     "--slurp-success": "light-dark(#25745b, #72d6ad)",
     "--slurp-canvas-art":
-      "radial-gradient(circle at 14% -10%, color-mix(in srgb, var(--noodle-accent) 13%, transparent), transparent 32rem), radial-gradient(circle at 92% 12%, color-mix(in srgb, #b45c8d 10%, transparent), transparent 29rem), linear-gradient(180deg, color-mix(in srgb, var(--noodle-accent) 3%, transparent), transparent 24rem)",
+      "radial-gradient(ellipse 48rem 34rem at 10% -10%, color-mix(in srgb, var(--noodle-accent) 20%, transparent), transparent 70%), radial-gradient(ellipse 42rem 36rem at 94% 8%, color-mix(in srgb, var(--slurp-violet) 15%, transparent), transparent 72%), radial-gradient(ellipse 34rem 28rem at 64% 96%, color-mix(in srgb, var(--slurp-coral) 10%, transparent), transparent 74%), linear-gradient(180deg, color-mix(in srgb, var(--noodle-accent) 5%, transparent), transparent 28rem)",
     ...style,
   } as CSSProperties;
 }
@@ -238,7 +242,13 @@ export function Avatar({
   solid?: boolean;
 }) {
   const dimension =
-    size === "sm" ? "h-8 w-8" : size === "xl" ? "h-32 w-32 sm:h-36 sm:w-36" : size === "lg" ? "h-24 w-24" : "h-11 w-11";
+    size === "sm"
+      ? "h-8 w-8"
+      : size === "xl"
+        ? "h-24 w-24 @min-[680px]:h-32 @min-[680px]:w-32 @min-[1040px]:h-36 @min-[1040px]:w-36"
+        : size === "lg"
+          ? "h-24 w-24"
+          : "h-11 w-11";
   // NoodleR avatars are served by the package's own route, which a bare <img> cannot
   // authenticate against; the hook swaps those for a fetched object URL and passes the rest through.
   const avatarSrc = useSlurpMediaSrc(account.avatarUrl, { width: size === "xl" || size === "lg" ? 320 : 96 });
@@ -314,6 +324,7 @@ export function ProfileInitial({
 
 export type NoodleShellView = "home" | "noodler" | "search" | "profile" | "settings" | null;
 type NoodleShellMode = "noodle" | "noodler" | "slurp";
+export type NoodleShellContextualRail = "populated" | "blank" | "spanning";
 
 export interface NoodleShellProps {
   activeView: NoodleShellView;
@@ -321,10 +332,8 @@ export interface NoodleShellProps {
   appMode?: NoodleShellMode;
   /** Overrides whether the Home/Hub destination is selected when app mode and subview are separate. */
   homeActive?: boolean;
-  /** Posts published since this viewer persona last had the NoodleR feed shown to it. */
+  /** Posts published since this viewer persona last had the NoodleR or Slurp feed shown to it. */
   noodlerUnseenCount?: number;
-  /** The same for the public Noodle timeline. */
-  noodleUnseenCount?: number;
   personaAccount: NoodleAccount | null;
   sortedPersonaAccounts: NoodleAccount[];
   visiblePersonaAccounts: NoodleAccount[];
@@ -355,6 +364,8 @@ export interface NoodleShellProps {
   onCompose?: (opener: HTMLElement) => void;
   /** Optional right-hand rail (search box, suggestions, etc). Omitted entirely on surfaces that don't need one. */
   rightRail?: ReactNode;
+  /** Wide-screen Slurp geometry: show a populated rail, reserve an empty rail, or let content span both columns. */
+  contextualRail?: NoodleShellContextualRail;
   /** Theme-dependent overlays (lightboxes and modals) that must render inside the token scope. */
   overlays?: ReactNode;
   /** Accent hex driving `--noodle-accent` for every reused surface. NoodleR passes NOODLE_PINK; defaults to Noodle blue. */
@@ -367,7 +378,6 @@ export function NoodleShell({
   appMode,
   homeActive: homeActiveOverride,
   noodlerUnseenCount = 0,
-  noodleUnseenCount = 0,
   personaAccount,
   sortedPersonaAccounts,
   visiblePersonaAccounts,
@@ -390,6 +400,7 @@ export function NoodleShell({
   onOpenSettings,
   onCompose,
   rightRail,
+  contextualRail,
   overlays,
   accent = NOODLE_BLUE,
   children,
@@ -403,7 +414,8 @@ export function NoodleShell({
   const noodlerActive = resolvedAppMode === "noodler";
   const slurpActive = resolvedAppMode === "slurp";
   const slurpSettingsActive = slurpActive && activeView === "settings";
-  const slurpProfileActive = slurpActive && activeView === "profile";
+  const resolvedContextualRail = contextualRail ?? (rightRail ? "populated" : "spanning");
+  const reserveContextualRail = slurpActive && resolvedContextualRail !== "spanning";
   const homeLabel = noodlerActive
     ? localizeUi("ui.noodle.noodleshell.hub")
     : slurpActive
@@ -464,7 +476,8 @@ export function NoodleShell({
                       </span>
                     )}
                     <p className="mt-3 truncate text-lg font-bold">
-                      {personaAccount?.displayName ?? localizeUi("ui.noodle.noodleshell.noodleAccount")}
+                      {personaAccount?.displayName ??
+                        localizeUi(slurpActive ? "ui.slurp.account.title" : "ui.noodle.noodleshell.noodleAccount")}
                     </p>
                     <p className="truncate text-sm text-[var(--muted-foreground)]">
                       {personaAccount
@@ -509,7 +522,7 @@ export function NoodleShell({
                   >
                     <Home size={23} />
                     <span className="min-w-0 flex-1">{homeLabel}</span>
-                    {noodlerActive && noodlerUnseenCount > 0 && (
+                    {(noodlerActive || slurpActive) && noodlerUnseenCount > 0 && (
                       <span className="min-w-5 rounded-full bg-[var(--noodle-accent)] px-1.5 text-center text-[0.65rem] font-black text-zinc-950">
                         {noodlerUnseenCount > 99 ? "99+" : noodlerUnseenCount}
                       </span>
@@ -545,7 +558,7 @@ export function NoodleShell({
                     >
                       <User size={23} />
                       {slurpActive
-                        ? localizeUi("ui.slurp.navigation.profile", { defaultValue: "Creator profile" })
+                        ? localizeUi("ui.slurp.navigation.profile")
                         : localizeUi("ui.noodle.noodlehome.profile")}
                     </button>
                   )}
@@ -653,8 +666,11 @@ export function NoodleShell({
           )}
         </AnimatePresence>
         <div className="flex min-h-0 flex-1 justify-center overflow-hidden">
-          <div className="flex min-h-0 w-full max-w-[1360px] justify-center">
-            <aside className="hidden w-[14rem] shrink-0 border-r border-[var(--noodle-divider)] bg-[linear-gradient(180deg,var(--slurp-surface-raised,var(--background)),var(--background)_38%)] @min-[1024px]:flex @min-[1024px]:flex-col">
+          <div
+            className={cn("flex min-h-0 w-full justify-center", slurpActive ? "max-w-[1680px]" : "max-w-[1360px]")}
+            data-slurp-desktop-frame={slurpActive ? resolvedContextualRail : undefined}
+          >
+            <aside className="hidden w-[14rem] shrink-0 border-r border-[var(--noodle-divider)] bg-[radial-gradient(circle_at_12%_6%,color-mix(in_srgb,var(--noodle-accent)_13%,transparent),transparent_16rem),linear-gradient(180deg,color-mix(in_srgb,var(--slurp-surface-raised,var(--background))_96%,transparent),var(--background)_42%)] shadow-[18px_0_54px_-48px_var(--noodle-accent)] @min-[1024px]:flex @min-[1024px]:flex-col">
               <div className="flex min-h-0 flex-1 flex-col px-4 py-4">
                 <div className="mb-5 flex h-12 items-center gap-3 px-2">
                   <NoodleLogo
@@ -727,7 +743,7 @@ export function NoodleShell({
                       )}
                       <User size={22} className="!text-[var(--noodle-accent)]" />
                       {slurpActive
-                        ? localizeUi("ui.slurp.navigation.profile", { defaultValue: "Creator profile" })
+                        ? localizeUi("ui.slurp.navigation.profile")
                         : localizeUi("ui.noodle.noodlehome.profile")}
                     </button>
                   )}
@@ -831,7 +847,8 @@ export function NoodleShell({
                     )}
                     <div className="min-w-0 flex-1">
                       <p className="truncate text-sm font-semibold">
-                        {personaAccount?.displayName ?? localizeUi("ui.noodle.noodleshell.noodleAccount")}
+                        {personaAccount?.displayName ??
+                          localizeUi(slurpActive ? "ui.slurp.account.title" : "ui.noodle.noodleshell.noodleAccount")}
                       </p>
                       <p className="truncate text-xs text-[var(--muted-foreground)]">
                         {personaAccount
@@ -850,14 +867,30 @@ export function NoodleShell({
             <main
               className={cn(
                 "flex min-h-0 w-full flex-1 flex-col @min-[1024px]:pb-0",
-                slurpSettingsActive || slurpProfileActive
-                  ? "pb-0 @min-[1024px]:max-w-[1096px]"
-                  : "pb-[calc(56px+var(--slurp-bottom-safe-inset))] @min-[1024px]:max-w-[680px] @min-[1024px]:border-r @min-[1024px]:border-[var(--noodle-divider)]",
+                slurpActive
+                  ? cn(
+                      "pb-[calc(56px+var(--slurp-bottom-safe-inset))] @min-[1024px]:pb-0",
+                      reserveContextualRail &&
+                        "@min-[1280px]:border-r @min-[1280px]:border-[var(--noodle-divider)] @min-[1280px]:shadow-[18px_0_54px_-52px_var(--noodle-accent)]",
+                    )
+                  : slurpSettingsActive
+                    ? "pb-0 @min-[1024px]:max-w-[1096px]"
+                    : "pb-[calc(56px+var(--slurp-bottom-safe-inset))] @min-[1024px]:max-w-[680px] @min-[1024px]:border-r @min-[1024px]:border-[var(--noodle-divider)]",
               )}
             >
               {children}
             </main>
-            {!slurpSettingsActive && !slurpProfileActive && rightRail}
+            {slurpActive && resolvedContextualRail === "blank" ? (
+              <aside
+                className="relative hidden w-[20rem] shrink-0 overflow-hidden bg-[linear-gradient(180deg,color-mix(in_srgb,var(--slurp-surface,var(--background))_42%,transparent),transparent_30rem)] @min-[1280px]:block"
+                aria-hidden="true"
+                data-slurp-contextual-rail="blank"
+              >
+                <span className="pointer-events-none absolute -right-28 top-8 h-72 w-72 rounded-full bg-[var(--noodle-accent)]/[0.045] blur-3xl" />
+              </aside>
+            ) : resolvedContextualRail === "populated" ? (
+              rightRail
+            ) : null}
           </div>
         </div>
 
@@ -894,7 +927,9 @@ export function NoodleShell({
             <button
               type="button"
               onClick={onMobileHomeTap}
-              aria-label={localizeUi("ui.noodle.noodleshell.noodleValue1", { value1: homeLabel })}
+              aria-label={
+                slurpActive ? homeLabel : localizeUi("ui.noodle.noodleshell.noodleValue1", { value1: homeLabel })
+              }
               aria-current={homeActive ? "page" : undefined}
               className={cn(
                 "relative flex items-center justify-center transition-colors hover:bg-[var(--noodle-accent)]/10 active:bg-[var(--noodle-accent)]/15 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--noodle-accent)]",
@@ -915,9 +950,7 @@ export function NoodleShell({
                 type="button"
                 onClick={onOpenProfile}
                 aria-label={
-                  slurpActive
-                    ? localizeUi("ui.slurp.navigation.profile", { defaultValue: "Creator profile" })
-                    : localizeUi("ui.noodle.noodlehome.profile")
+                  slurpActive ? localizeUi("ui.slurp.navigation.profile") : localizeUi("ui.noodle.noodlehome.profile")
                 }
                 aria-current={activeView === "profile" ? "page" : undefined}
                 className={cn(

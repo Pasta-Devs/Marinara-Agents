@@ -272,13 +272,14 @@ export function SlurpSettings({
   return (
     <>
       <main className="h-full overflow-y-auto bg-[var(--slurp-canvas,var(--background))] pb-[calc(5rem+env(safe-area-inset-bottom))] sm:pb-8">
-        <div
-          className="mx-auto flex w-full max-w-[1096px] flex-col gap-6 p-4 sm:p-6 lg:gap-8 lg:p-8"
-          data-slurp-settings-layout
-        >
-          <header className="relative isolate flex flex-wrap items-start justify-between gap-5 overflow-hidden rounded-2xl bg-[linear-gradient(135deg,var(--slurp-surface-raised,var(--background)),color-mix(in_srgb,var(--noodle-accent)_16%,var(--slurp-surface-raised)))] p-5 shadow-[0_20px_48px_-34px_rgba(0,0,0,0.9)] ring-1 ring-inset ring-[var(--border)] sm:p-7">
+        <div className="mx-auto flex w-full flex-col gap-6 p-4 sm:p-6 lg:gap-8 lg:p-8" data-slurp-settings-layout>
+          <header className="relative isolate flex flex-wrap items-start justify-between gap-5 overflow-hidden rounded-[1.75rem] bg-[linear-gradient(120deg,var(--slurp-surface-raised,var(--background)),color-mix(in_srgb,var(--noodle-accent)_15%,var(--slurp-surface-raised))_58%,color-mix(in_srgb,var(--slurp-violet)_10%,var(--slurp-surface-raised)))] p-5 shadow-[0_30px_72px_-50px_var(--noodle-accent)] ring-1 ring-inset ring-white/[0.06] sm:p-7">
             <span
               className="pointer-events-none absolute -end-12 -top-20 -z-10 h-52 w-52 rounded-full bg-[var(--noodle-accent)]/10 blur-3xl"
+              aria-hidden="true"
+            />
+            <span
+              className="pointer-events-none absolute -bottom-24 start-1/3 -z-10 h-48 w-72 rounded-full bg-[var(--slurp-coral)]/[0.08] blur-3xl"
               aria-hidden="true"
             />
             <div className="min-w-0">
@@ -337,7 +338,7 @@ export function SlurpSettings({
 
           <div className="md:grid md:grid-cols-[12rem_minmax(0,1fr)] md:items-start md:gap-6 lg:grid-cols-[13rem_minmax(0,1fr)] lg:gap-8">
             <nav
-              className="sticky top-4 hidden rounded-xl bg-[var(--slurp-surface,var(--background))] p-2 shadow-[0_16px_36px_-28px_rgba(0,0,0,0.8)] ring-1 ring-inset ring-[var(--border)] md:flex md:flex-col"
+              className="sticky top-4 hidden rounded-2xl bg-[linear-gradient(180deg,color-mix(in_srgb,var(--noodle-accent)_5%,var(--slurp-surface)),var(--slurp-surface))] p-2 shadow-[0_22px_52px_-38px_rgba(0,0,0,0.9)] ring-1 ring-inset ring-white/[0.05] md:flex md:flex-col"
               aria-label={t("ui.slurp.settings.sectionsLabel")}
             >
               {settingsSections.map((item) => (
@@ -353,7 +354,7 @@ export function SlurpSettings({
               ))}
             </nav>
 
-            <div className="mt-5 min-w-0 rounded-2xl bg-[var(--slurp-surface,var(--background))] p-4 shadow-[0_20px_50px_-36px_rgba(0,0,0,0.95)] ring-1 ring-inset ring-[var(--border)] md:mt-0 md:p-6 lg:p-8">
+            <div className="mt-5 min-w-0 rounded-[1.75rem] bg-[linear-gradient(145deg,var(--slurp-surface),color-mix(in_srgb,var(--slurp-violet)_3%,var(--slurp-surface)))] p-4 shadow-[0_28px_68px_-50px_rgba(0,0,0,0.98)] ring-1 ring-inset ring-white/[0.05] md:mt-0 md:p-6 lg:p-8">
               {section === "general" && (
                 <div className="space-y-6">
                   <SectionTitle
@@ -417,8 +418,8 @@ export function SlurpSettings({
                       onChange={(value) => update("autoPostingScheduleEnabled", value)}
                     />
                     <Toggle
-                      label="Inline promotions"
-                      detail="Show small fictional ads between Creator posts."
+                      label={t("ui.slurp.settings.inlinePromotions")}
+                      detail={t("ui.slurp.settings.inlinePromotionsDetail")}
                       value={settings.inlineAdsEnabled}
                       onChange={(value) => update("inlineAdsEnabled", value)}
                     />

@@ -1172,8 +1172,6 @@ export interface NoodlePostCardCtx {
   voteInPoll?: (post: NoodlePostCardModel, optionId: string, selectedOptionId: string | null) => void;
   /** Preserve the public timeline's legacy body/poll duplicate suppression. */
   deduplicatePollBody?: boolean;
-  /** Keep a deliberately framed upload fully visible instead of applying the public feed's center crop. */
-  imageFit?: "cover" | "contain";
   /** Post image crop, replacement, and removal capability. */
   imageEditing?: NoodlePostCardImageEditingCap;
   /** Generate a missing post image from its saved prompt. */
@@ -1233,7 +1231,6 @@ interface NoodlePostCardControllerOptions {
   openAuthorProfile?: (accountId: string) => void;
   voteInPoll?: (post: NoodlePostCardModel, optionId: string, selectedOptionId: string | null) => void;
   deduplicatePollBody?: boolean;
-  imageFit?: "cover" | "contain";
   imageEditing?: {
     loadPostImage: (post: NoodlePostCardModel) => Promise<File | string>;
   };
@@ -1483,7 +1480,6 @@ export function useNoodlePostCardController(options: NoodlePostCardControllerOpt
     openAuthorProfile: options.openAuthorProfile,
     voteInPoll: options.voteInPoll,
     deduplicatePollBody: options.deduplicatePollBody ?? true,
-    imageFit: options.imageFit ?? "cover",
     imageEditing: imageEditor.cap,
     titleEditing: options.titleMaxLength
       ? {
@@ -1548,7 +1544,6 @@ export function NoodlePostCard({ post, ctx }: { post: NoodlePostCardModel; ctx: 
   const accountByHandle = ctx.accountByHandle ?? new Map<string, NoodleAccount>();
   const authorAccount = accountById.get(post.authorAccountId) ?? null;
   const author = authorAccount ?? post.authorSnapshot;
-  const containImage = ctx.imageFit === "contain";
   const imageCrop = readNoodlePostImageCrop(post.metadata);
 
   // Card-owned defaults for absent capability groups. Hosts pass only the capabilities they
@@ -1867,7 +1862,7 @@ export function NoodlePostCard({ post, ctx }: { post: NoodlePostCardModel; ctx: 
                 disabled={!canOpenAuthorProfile}
                 className="font-semibold transition-colors enabled:hover:text-[var(--noodle-accent)] disabled:cursor-default"
               >
-                {author?.displayName ?? localizeUi("ui.noodle.noodlepostcard.noodleUser")}
+                {author?.displayName ?? localizeUi("ui.slurp.profile.fallbackUser")}
               </button>
               <span className="text-xs text-[var(--muted-foreground)]">@{author?.handle ?? "noodle"}</span>
               <span className="text-xs text-[var(--muted-foreground)]">
@@ -2001,43 +1996,23 @@ export function NoodlePostCard({ post, ctx }: { post: NoodlePostCardModel; ctx: 
                 title={localizeUi("ui.noodle.noodlepostcard.openImage")}
                 aria-label={localizeUi("ui.noodle.noodlepostcard.openPostImage")}
               >
-                {containImage || imageCrop ? (
-                  <PostImageFrame
-                    src={post.imageUrl}
-                    crop={imageCrop}
-                    alt={localizeUi("ui.noodle.noodlepostcard.imagePostedByValue1", {
-                      value1: author?.displayName ?? localizeUi("ui.noodle.noodlepostcard.noodleUser"),
-                    })}
-                  />
-                ) : (
-                  <img
-                    src={post.imageUrl}
-                    alt={localizeUi("ui.noodle.noodlepostcard.imagePostedByValue1", {
-                      value1: author?.displayName ?? localizeUi("ui.noodle.noodlepostcard.noodleUser"),
-                    })}
-                    className="max-h-96 w-full object-cover"
-                  />
-                )}
+                <PostImageFrame
+                  src={post.imageUrl}
+                  crop={imageCrop}
+                  alt={localizeUi("ui.noodle.noodlepostcard.imagePostedByValue1", {
+                    value1: author?.displayName ?? localizeUi("ui.slurp.profile.fallbackUser"),
+                  })}
+                />
               </button>
             ) : (
               <div className="mt-3 overflow-hidden rounded-xl">
-                {containImage || imageCrop ? (
-                  <PostImageFrame
-                    src={post.imageUrl}
-                    crop={imageCrop}
-                    alt={localizeUi("ui.noodle.noodlepostcard.imagePostedByValue1", {
-                      value1: author?.displayName ?? localizeUi("ui.noodle.noodlepostcard.noodleUser"),
-                    })}
-                  />
-                ) : (
-                  <img
-                    src={post.imageUrl}
-                    alt={localizeUi("ui.noodle.noodlepostcard.imagePostedByValue1", {
-                      value1: author?.displayName ?? localizeUi("ui.noodle.noodlepostcard.noodleUser"),
-                    })}
-                    className="max-h-96 w-full object-cover"
-                  />
-                )}
+                <PostImageFrame
+                  src={post.imageUrl}
+                  crop={imageCrop}
+                  alt={localizeUi("ui.noodle.noodlepostcard.imagePostedByValue1", {
+                    value1: author?.displayName ?? localizeUi("ui.slurp.profile.fallbackUser"),
+                  })}
+                />
               </div>
             )
           ) : post.imagePrompt ? (
@@ -2179,7 +2154,7 @@ export function NoodlePostCard({ post, ctx }: { post: NoodlePostCardModel; ctx: 
                         <Avatar
                           account={
                             actor ?? {
-                              displayName: localizeUi("ui.noodle.noodlepostcard.noodleUser"),
+                              displayName: localizeUi("ui.slurp.profile.fallbackUser"),
                               avatarUrl: null,
                             }
                           }
@@ -2197,7 +2172,7 @@ export function NoodlePostCard({ post, ctx }: { post: NoodlePostCardModel; ctx: 
                             disabled={!actorAccount}
                             className="max-w-full truncate font-semibold !text-[var(--foreground)] transition-colors enabled:hover:!text-[var(--noodle-accent)] disabled:cursor-default"
                           >
-                            {actor?.displayName ?? localizeUi("ui.noodle.noodlepostcard.noodleUser")}
+                            {actor?.displayName ?? localizeUi("ui.slurp.profile.fallbackUser")}
                           </button>
                           <span className="truncate !text-[var(--noodle-accent-foreground)]">
                             @{actor?.handle ?? "noodle"}
@@ -2280,7 +2255,7 @@ export function NoodlePostCard({ post, ctx }: { post: NoodlePostCardModel; ctx: 
                             <img
                               src={reply.imageUrl}
                               alt={localizeUi("ui.noodle.noodlepostcard.imageInValue1SComment", {
-                                value1: actor?.displayName ?? localizeUi("ui.noodle.noodlepostcard.noodleUser"),
+                                value1: actor?.displayName ?? localizeUi("ui.slurp.profile.fallbackUser"),
                               })}
                               className="max-h-72 w-full object-cover"
                             />

@@ -225,6 +225,25 @@ if (missingNoodleKeys.length > 0) {
   throw new Error(`Noodle English localization is missing: ${missingNoodleKeys.join(", ")}`);
 }
 
+// Slurp ships its own copy of the Noodle UI catalog. Without this the Slurp client could
+// reference a key that only exists in the Noodle package and render the raw key id instead.
+const slurpClientRoot = join(repoRoot, "packages/slurp/src/engine/packages/client/src");
+const slurpEnglish = JSON.parse(await readFile(join(slurpClientRoot, "localization/locales/en.json"), "utf8"));
+assertRecord(slurpEnglish, "Slurp en UI localization");
+const referencedSlurpKeys = new Set();
+for (const file of await collectSourceFiles(slurpClientRoot)) {
+  const source = await readFile(file, "utf8");
+  for (const match of source.matchAll(/["'](ui\.(?:noodle|slurp)\.[A-Za-z0-9_.-]+)["']/gu)) {
+    referencedSlurpKeys.add(match[1]);
+  }
+}
+const missingSlurpKeys = [...referencedSlurpKeys]
+  .filter((key) => !(key in slurpEnglish) && !(`${key}_one` in slurpEnglish && `${key}_other` in slurpEnglish))
+  .sort();
+if (missingSlurpKeys.length > 0) {
+  throw new Error(`Slurp English localization is missing: ${missingSlurpKeys.join(", ")}`);
+}
+
 console.log(
   `Noodle UI locales valid: en=${noodleEnglishKeys.length}, de=${Object.keys(noodleCatalogs.get("de")).length}, ko=${Object.keys(noodleCatalogs.get("ko")).length}, pl=${Object.keys(noodleCatalogs.get("pl")).length}.`,
 );

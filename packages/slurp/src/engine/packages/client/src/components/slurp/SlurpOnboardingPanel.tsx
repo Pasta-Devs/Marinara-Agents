@@ -1052,9 +1052,9 @@ export function SlurpOnboardingWizard({
                 )}
                 <label className="flex min-h-14 items-center justify-between gap-4 rounded-md border border-[#5b3a52] px-3 py-2">
                   <span className="min-w-0">
-                    <span className="block text-sm font-semibold">Generation connection</span>
+                    <span className="block text-sm font-semibold">{t("ui.slurp.onboarding.generationConnection")}</span>
                     <span className="block text-xs leading-5 text-[#d8c9d4]">
-                      Choose the language model that writes creator posts.
+                      {t("ui.slurp.onboarding.generationConnectionHelp")}
                     </span>
                   </span>
                   <select
@@ -1063,7 +1063,7 @@ export function SlurpOnboardingWizard({
                     className="h-9 max-w-[55%] rounded-md border border-[#ff7ec1]/45 bg-[#17121b] px-2 text-sm text-[#fff7fc]"
                     disabled={connectionsQuery.isLoading}
                   >
-                    <option value="">Select a connection</option>
+                    <option value="">{t("ui.slurp.onboarding.generationConnectionPlaceholder")}</option>
                     {(connectionsQuery.data ?? [])
                       .filter((connection) => connection.provider !== "image_generation")
                       .map((connection) => (
