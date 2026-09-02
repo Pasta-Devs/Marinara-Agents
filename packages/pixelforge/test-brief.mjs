@@ -24612,4 +24612,877 @@ const fire = (node, type) => Promise.all((node.listeners[type] ?? []).map((fn) =
   }
 }
 
+// 121. THE SKY SUBSTRATE'S OWN TABLES (0.14 §2.1). 17-weather ships six paired
+// vocabularies and one continuous derivation over their product, and every
+// pairing is asserted INSIDE the bundle's IIFE at load. The positive half is
+// free — the harness could not have got this far if the module threw — so this
+// case is mostly the negative half, in the placers' idiom (20-world, 59-economy):
+// a rewrite that breaks one pairing has to name itself.
+{
+  const W = loadedPF.weather;
+  const stack = ["00-prelude.js", "10-art.js", "17-weather.js"];
+  const bootIn = (file, from, to) => {
+    const source = stack
+      .map((name) => {
+        const text = readFileSync(join(here, "src", name), "utf8");
+        if (name !== file) return text;
+        const patched = text.replace(from, to);
+        assert.notEqual(patched, text, `the rewrite still names ${file}'s "${from}"`);
+        return patched;
+      })
+      .join("\n");
+    return () => new Function(`"use strict";\n${source}\nreturn PF;`)();
+  };
+  const bootWeather = (from, to) => bootIn("17-weather.js", from, to);
+  // THE BUNDLE-BOOT LANE. `node --check` passes an evaluation-order mistake, and
+  // the shipped artifact is one concatenated IIFE — so what has to be proven is
+  // that the whole thing EVALUATES, which also proves every table below cleared
+  // its own boot assert on the way past.
+  assert.ok(
+    new Function(
+      `"use strict";\n${MODULES.map((name) => readFileSync(join(here, "src", name), "utf8")).join("\n")}\nreturn PF;`,
+    )().weather.WORDS.length,
+    "the whole bundle evaluates — every throw below is a rewrite talking",
+  );
+
+  assert.throws(
+    bootWeather(`polar: { warmth: 0, swing: 1, structure: "four" },`, ``),
+    /latitude "polar" has no LAT_META row/,
+    "a band on the axis with no row fails the build",
+  );
+  assert.throws(
+    bootWeather(
+      `    temperate: { warmth: 2, swing: 2, structure: "four" },`,
+      `    boreal: { warmth: 1, swing: 2, structure: "four" },\n    temperate: { warmth: 2, swing: 2, structure: "four" },`,
+    ),
+    /LAT_META names a latitude "boreal" the axis does not/,
+    "…and a row with no band on the axis fails it from the other side",
+  );
+  assert.throws(
+    bootWeather(
+      `temperate: { warmth: 2, swing: 2, structure: "four" }`,
+      `temperate: { warmth: 2, swing: 2, structure: "six" }`,
+    ),
+    /latitude "temperate" names a season structure "six"/,
+    "a band pointing at a season set that does not exist fails the build",
+  );
+  assert.throws(
+    bootWeather(`arid: { wetness: 0.5 },`, ``),
+    /precipitation "arid" has no PRECIP_META row/,
+    "the precipitation axis is paired the same way",
+  );
+  // THE CLASS THE ORDINAL KEYING WAS CHOSEN TO KILL. An index-keyed table one
+  // entry short computes NaN for exactly one season of exactly one structure —
+  // no throw, no red, just a world whose winter has no sky.
+  assert.throws(
+    bootWeather(`four: [0, 1, 0, -1],`, `four: [0, 1, 0],`),
+    /TEMP_PHASE\.four has 3 entries for 4 seasons/,
+    "a phase table short of its season set fails the build",
+  );
+  assert.throws(
+    bootWeather(`four: [1, 1, 1, 1],`, `four: [1, 1, 1, "wet"],`),
+    /WET_PHASE\.four holds a non-finite entry/,
+    "…and so does one holding something that is not a number",
+  );
+  assert.throws(
+    bootWeather(
+      `two: [TUNING.wetSeasonFactor, TUNING.drySeasonFactor],`,
+      `two: [TUNING.drySeasonFactor, TUNING.wetSeasonFactor],`,
+    ),
+    /the wet season is not wetter than the dry one/,
+    "a wet season drier than the dry one fails the build — the name has to be true",
+  );
+  assert.throws(
+    bootWeather(`label: { light: "light snow", heavy: "heavy snow" }`, `label: { light: "light snow" }`),
+    /weather "snow" has no "heavy" label/,
+    "an intensity-taking word missing half its wire text fails the build",
+  );
+  assert.throws(
+    bootWeather(
+      `tint: { light: "rgba(70,90,110,.12)", heavy: "rgba(70,90,110,.24)" }`,
+      `tint: { light: "rgba(70,90,110,.12)" }`,
+    ),
+    /weather "rain" tints but has no "heavy" tint/,
+    "…and so does one that would make heavy rain look exactly like light rain",
+  );
+  // THE COUPLING, DELIBERATE: a theme added to 10-art breaks boot until this
+  // table learns it, which is a red at the desk instead of a climateless world.
+  assert.throws(
+    bootIn(
+      "10-art.js",
+      `  const THEMES = {\n    "cozy-village": {`,
+      `  const THEMES = {\n    "moor-hamlet": { label: "Moor", palette: {}, painters: {} },\n    "cozy-village": {`,
+    ),
+    /theme "moor-hamlet" has no THEME_AXES entry/,
+    "a theme with art and no climate fails the build",
+  );
+  assert.throws(
+    bootWeather(
+      `precipitation: { arid: 1, moderate: 6, wet: 3 }`,
+      `precipitation: { arid: 1, moderate: 6, monsoon: 3 }`,
+    ),
+    /theme "cozy-village" weights a precipitation "monsoon" the axis does not name/,
+    "a distribution naming a band the axis does not fails the build",
+  );
+  assert.throws(
+    bootWeather(
+      `latitude: { tropical: 1, temperate: 6, subpolar: 2 }`,
+      `latitude: { tropical: 0, temperate: 0, subpolar: 0 }`,
+    ),
+    /theme "cozy-village" has no latitude band it can ever roll/,
+    "…and so does one that sums to nothing",
+  );
+  // A ZERO OR OMITTED BAND IS DATA. Cozy rolls no polar and that is the
+  // distribution speaking, so the assert above must NOT be a per-band demand.
+  assert.equal(loadedPF.weather.THEME_AXES["cozy-village"].latitude.polar, undefined, "cozy names no polar band");
+  assert.doesNotThrow(
+    bootWeather(
+      `latitude: { tropical: 1, temperate: 6, subpolar: 2 }`,
+      `latitude: { tropical: 0, temperate: 6, subpolar: 2 }`,
+    ),
+    "a band weighted zero is a distribution decision, not a build failure",
+  );
+  // DEGENERACY: five bands must buy five skies.
+  assert.throws(
+    bootWeather(
+      `subpolar: { warmth: 1, swing: 2, structure: "four" }`,
+      `subpolar: { warmth: 2, swing: 2, structure: "four" }`,
+    ),
+    /latitudes "subpolar" and "temperate" produce the same sky all year/,
+    "two bands with the same year fail the build",
+  );
+
+  // ── THE DERIVATION, AGAINST THE PLAN'S OWN WORKED ROWS ────────────────────
+  // Ten rows recomputed by hand during the design and pinned here cell for cell.
+  // These ARE the release's weather: every claim about what each band feels like
+  // is a claim about these numbers.
+  // Half-up to two places, because the table is written the way a person rounds
+  // and `toFixed` is not: 5.425 is a hair under 5.425 in binary and renders 5.42.
+  const round = (n, places = 2) => {
+    const scale = 10 ** places;
+    return Math.round(n * scale + 1e-9) / scale;
+  };
+  const WORKED = [
+    ["equatorial", "wet", 0, { snow: 0, rain: 6.3, storm: 1.05, overcast: 3.52, fair: 4 }, 0.75, 49],
+    ["equatorial", "wet", 1, { snow: 0, rain: 1.05, storm: 0.18, overcast: 1.42, fair: 5.43 }, 0.13, 15],
+    ["tropical", "wet", 0, { snow: 0, rain: 6.3, storm: 1.58, overcast: 3.52, fair: 4 }, 0.75, 51],
+    ["tropical", "wet", 1, { snow: 0, rain: 1.05, storm: 0.09, overcast: 1.42, fair: 5.43 }, 0.13, 14],
+    ["temperate", "moderate", 1, { snow: 0, rain: 2, storm: 0.5, overcast: 1.8, fair: 4 }, 0.24, 30],
+    ["temperate", "moderate", 3, { snow: 1.5, rain: 0.5, storm: 0, overcast: 1.8, fair: 4 }, 0.24, 26],
+    ["subpolar", "moderate", 1, { snow: 0, rain: 2, storm: 0.33, overcast: 1.8, fair: 4 }, 0.24, 29],
+    ["subpolar", "moderate", 3, { snow: 2, rain: 0, storm: 0, overcast: 1.8, fair: 4 }, 0.24, 26],
+    ["polar", "arid", 1, { snow: 0.13, rain: 0.38, storm: 0, overcast: 1.2, fair: 6.25 }, 0.06, 6],
+    ["polar", "arid", 3, { snow: 0.5, rain: 0, storm: 0, overcast: 1.2, fair: 6.25 }, 0.06, 6],
+  ];
+  for (const [latitude, precipitation, index, want, heavy, indoors] of WORKED) {
+    const row = W.weightsFor(latitude, precipitation, index);
+    const where = `${latitude}/${precipitation}/${W.SEASON_SETS[W.LAT_META[latitude].structure][index]}`;
+    let sum = 0;
+    for (const word of W.WORDS) {
+      assert.equal(round(row[word]), want[word], `${where}: ${word} weight (${row[word]})`);
+      sum += row[word];
+    }
+    // The two derived columns, which are where the design claims actually live:
+    // `heavy` is the intensity draw's threshold — the same wet mass the row is
+    // built from — and `indoors` is the rate at which the schedule bias fires.
+    const mass = W.wetMass(latitude, precipitation, index);
+    assert.equal(round(Math.min(W.TUNING.heavyMax, W.TUNING.heavyBase * mass)), heavy, `${where}: the heavy threshold`);
+    assert.equal(round(((row.snow + row.rain + row.storm) / sum) * 100, 0), indoors, `${where}: the indoors share`);
+  }
+  // TWO CROSS-ROW FACTS the table's own reading depends on, so nobody has to
+  // take them on trust: `heavyMax` is an inert guard on these coefficients (it
+  // binds in two of the forty-eight rows, and by six thousandths), and the
+  // indoors rate's ceiling sits on the WET two-season halves, not on winter.
+  let binds = 0;
+  let lowest = 1;
+  let highest = 0;
+  for (const latitude of W.LATITUDES)
+    for (const precipitation of W.PRECIPS) {
+      const seasons = W.SEASON_SETS[W.LAT_META[latitude].structure].length;
+      for (let index = 0; index < seasons; index++) {
+        if (W.TUNING.heavyBase * W.wetMass(latitude, precipitation, index) >= W.TUNING.heavyMax) binds++;
+        const row = W.weightsFor(latitude, precipitation, index);
+        const sum = W.WORDS.reduce((total, word) => total + row[word], 0);
+        const share = (row.snow + row.rain + row.storm) / sum;
+        lowest = Math.min(lowest, share);
+        highest = Math.max(highest, share);
+      }
+    }
+  assert.equal(binds, 2, `the heavy ceiling binds in two rows of forty-eight (${binds})`);
+  assert.equal(round(lowest * 100, 1), 2.0, `the quietest sky is 2.0% indoors weather (${lowest})`);
+  assert.equal(round(highest * 100, 1), 51.2, `and the wettest is 51.2% (${highest})`);
+
+  // THE CLAIMS THOSE ROWS ARE MADE OF, said as asserts rather than as prose.
+  const share = (latitude, precipitation, index, word) => {
+    const row = W.weightsFor(latitude, precipitation, index);
+    return row[word] / W.WORDS.reduce((sum, key) => sum + row[key], 0);
+  };
+  // The founding scenario, restored: the pole CAN snow in summer, and can never
+  // thunderstorm — in any season, at any precipitation.
+  assert.ok(share("polar", "arid", 1, "snow") > 0, "the pole can snow in its own summer");
+  for (const precipitation of W.PRECIPS)
+    for (let index = 0; index < 4; index++)
+      assert.equal(W.weightsFor("polar", precipitation, index).storm, 0, "a polar world never storms");
+  // Warm-wet violence only: the monsoon half storms harder than the equator's
+  // steady state, and the same world's dry half is calmer than it.
+  assert.ok(
+    share("tropical", "wet", 0, "storm") > share("equatorial", "wet", 0, "storm"),
+    "the monsoon half storms harder than the steady equator",
+  );
+  assert.ok(
+    share("tropical", "wet", 1, "storm") < share("equatorial", "wet", 1, "storm"),
+    "…and the same world's dry half is calmer",
+  );
+  // Sleet country versus the hard winter: temperate winters still rain, subpolar
+  // winters do not, and subpolar SHOULDERS carry the flurries temperate's do not.
+  assert.ok(W.weightsFor("temperate", "moderate", 3).rain > 0, "a temperate winter still rains");
+  assert.equal(W.weightsFor("subpolar", "moderate", 3).rain, 0, "a subpolar winter does not");
+  assert.equal(W.weightsFor("temperate", "moderate", 0).snow, 0, "a temperate spring never snows");
+  assert.ok(W.weightsFor("subpolar", "moderate", 0).snow > 0, "…and a subpolar one flurries");
+  // `cold` splits the wet mass rather than adding to it, which is why the
+  // indoors RATE is the precipitation axis's and latitude only reaches it
+  // through storm. Stated here so nobody reads the absence as a bug later.
+  for (const latitude of W.LATITUDES)
+    for (const precipitation of W.PRECIPS) {
+      const seasons = W.SEASON_SETS[W.LAT_META[latitude].structure].length;
+      for (let index = 0; index < seasons; index++) {
+        const row = W.weightsFor(latitude, precipitation, index);
+        assert.equal(
+          round(row.snow + row.rain),
+          round(W.wetMass(latitude, precipitation, index)),
+          `${latitude}/${precipitation}/${index}: snow + rain is the wet mass, exactly`,
+        );
+      }
+    }
+  // FOUR SEASON NAMES, THREE SKIES — the flat wetness table's recorded identity.
+  for (const latitude of ["temperate", "subpolar", "polar"])
+    for (const precipitation of W.PRECIPS)
+      assert.deepEqual(
+        W.weightsFor(latitude, precipitation, 0),
+        W.weightsFor(latitude, precipitation, 2),
+        `${latitude}/${precipitation}: spring and autumn are the same sky, by design`,
+      );
+
+  // `wetMass` HAS ONE HOME, and both consumers reach it. The intensity threshold
+  // is derived from the same mass the row is, so a wetness retune cannot make a
+  // monsoon wetter and softer at the same time with every assert still green.
+  assert.equal(typeof W.wetMass, "function", "the wet mass is its own exported function");
+  assert.equal(W.wetMass("tropical", "wet", 0) / W.wetMass("tropical", "wet", 1), 6, "the monsoon swing is 6x");
+  // REACHED THROUGH at(), because that is the consumer the shared home exists
+  // for and a threshold recomputed from the table here would agree with an
+  // inline copy inside at() that had quietly dropped the seasonal phase. What
+  // that copy costs is the monsoon: both halves of the year would draw against
+  // the same flat mass, and the wet season would stop raining harder than the
+  // dry one while every table assert above stayed green.
+  const heavyHalves = (latitude, precipitation, seed) => {
+    const w = { seed, latitude, precipitation };
+    const tally = new Map();
+    for (let day = 1; day <= 3000; day++) {
+      const sky = W.at(w, day, null);
+      if (!sky.intensity) continue;
+      const key = W.season(w, day);
+      const row = tally.get(key) ?? { heavy: 0, all: 0 };
+      row.all++;
+      if (sky.intensity === "heavy") row.heavy++;
+      tally.set(key, row);
+    }
+    return tally;
+  };
+  const monsoon = heavyHalves("equatorial", "wet", 7);
+  const wetHalf = monsoon.get("wet season");
+  const dryHalf = monsoon.get("dry season");
+  assert.ok(wetHalf.all > 200 && dryHalf.all > 50, "both halves of the year drew enough wet days to measure");
+  // The design's own numbers are 0.75 and 0.13; a phase-less inline copy would
+  // put BOTH halves at 0.42, which is why the bands are set on either side of it.
+  assert.ok(
+    wetHalf.heavy / wetHalf.all > 0.6,
+    `the monsoon half rains hard (${(wetHalf.heavy / wetHalf.all).toFixed(3)})`,
+  );
+  assert.ok(
+    dryHalf.heavy / dryHalf.all < 0.25,
+    `…and the dry half almost never does (${(dryHalf.heavy / dryHalf.all).toFixed(3)})`,
+  );
+  for (const word of W.WORDS)
+    assert.ok(
+      Object.prototype.hasOwnProperty.call(W.weightsFor("tropical", "wet", 0), word),
+      `the weight row carries ${word} and nothing else — the wet mass does not ride in it`,
+    );
+  assert.equal(
+    Object.keys(W.weightsFor("tropical", "wet", 0)).length,
+    W.WORDS.length,
+    "…and the row is exactly the words, which is what keeps the product assert green",
+  );
+}
+
+// 122. THE CALENDAR (0.14 §2.1). A 365-day year whose PHASE is the world's own,
+// season spans derived by floor rather than from a boundary table, and a
+// season-start that is FLOORED AT DAY 1.
+{
+  const W = loadedPF.weather;
+  const four = { seed: 7, latitude: "subpolar", precipitation: "wet" };
+  const two = { seed: 7, latitude: "tropical", precipitation: "wet" };
+
+  // A TWO-SEASON WORLD CARRIES ITS OWN NAMES, and its boundaries land where
+  // seasonStartDay says — never where a hand-derived length would put them.
+  assert.equal(W.season(two, 1), "wet season", "a tropical world opens in a season of its own vocabulary");
+  assert.equal(W.season(two, 36), "wet season", "…which runs to its boundary");
+  assert.equal(W.season(two, 37), "dry season", "…and turns over at it");
+  assert.equal(W.seasonStartDay(two, 36), 1, "the opening half starts at the day the world did");
+  assert.equal(W.seasonStartDay(two, 37), 37, "…and the next one at its own first day");
+  assert.equal(W.seasonStartDay(two, 219), 219, "…and the one after that 182 days later");
+  assert.equal(W.season(two, 219), "wet season", "the year comes back around to where it started");
+  assert.equal(W.SEASON_SETS.two.length, 2, "a two-structure world has two seasons and not four");
+  assert.equal(W.SEASON_SETS[W.LAT_META[four.latitude].structure].length, 4, "…and a poleward one has four");
+
+  // THE SPANS PARTITION THE YEAR. Derived, so there is no boundary table to keep
+  // in step with the season set — and a season never straddles the year edge.
+  for (const world of [four, two]) {
+    const n = W.SEASON_SETS[W.LAT_META[world.latitude].structure].length;
+    const seen = new Map();
+    for (let day = 1; day <= W.TUNING.yearDays; day++) {
+      const start = W.seasonStartDay(world, day);
+      const name = W.season(world, day);
+      if (!seen.has(name)) seen.set(name, new Set());
+      seen.get(name).add(start);
+    }
+    assert.equal(seen.size, n, `every one of the ${n} seasons is reached inside one year`);
+  }
+
+  // THE DAY-1 FLOOR. The full-year offset lands almost every world's day 1
+  // mid-season, so the unfloored arithmetic names days before the world existed:
+  // on this seed it answers -50. What the floor buys is that every day this
+  // function hands back is a day somebody could have lived, so the ledger's scan
+  // reads "first" as first SINCE THE WORLD BEGAN and its bound only shrinks.
+  //
+  // Said honestly, because it is worth knowing which half is load-bearing: the
+  // hostile-day fold below clamps a sub-1 day to 1 as well, so an unfloored scan
+  // could not have reported a DIFFERENT answer here — it would have re-read day 1
+  // up to 182 times to reach the same one. The floor is what makes the returned
+  // day true, and what keeps the scan's cost the season's rather than the year's.
+  const deep = { seed: 4, latitude: "subpolar", precipitation: "moderate" };
+  assert.equal(W.season(deep, 1), "winter", "this world opens deep in its own winter");
+  assert.ok(W.seasonStartDay(deep, 8) >= 1, "the season start is a day the world has lived");
+  assert.equal(W.seasonStartDay(deep, 8), 1, "…which for a mid-winter opening is day 1 itself");
+  for (const world of [four, two, deep])
+    for (let day = 1; day <= 400; day++) {
+      const start = W.seasonStartDay(world, day);
+      assert.ok(start >= 1 && start <= day, `seasonStartDay(${day}) = ${start} is a lived day at or before it`);
+    }
+
+  // DAY 300 AND PAST IT. The year multiplies live day values about nine times
+  // past anything 0.13 play produced, and the sweep said no day-consuming site
+  // has a magnitude assumption in it. This is that sweep's pin on the arithmetic
+  // 0.14 actually adds.
+  for (const day of [299, 300, 365, 366, 730, 4000]) {
+    assert.ok(W.SEASON_SETS.four.includes(W.season(four, day)), `day ${day} names a real season`);
+    assert.ok(W.WORDS.includes(W.at(four, day, null).word), `day ${day} draws a real sky`);
+  }
+  assert.equal(W.season(four, 1), W.season(four, 1 + W.TUNING.yearDays), "a year later is the same season");
+  assert.equal(W.seasonIndex(four, 40), W.seasonIndex(four, 40 + W.TUNING.yearDays), "…by ordinal too");
+
+  // TOTAL FOR A HOSTILE DAY. `day` is a plain int the save path already clamps,
+  // but a console, a future caller or a hand-edited row can hand this anything,
+  // and a NaN day would make a NaN season index and an undefined season word.
+  for (const day of [0, -5, -1e9, NaN, Infinity, -Infinity, null, undefined, "12", "abc", {}, [], 2 ** 60]) {
+    const label = JSON.stringify(day) ?? String(day);
+    assert.ok(W.SEASON_SETS.four.includes(W.season(four, day)), `a day of ${label} still names a season`);
+    assert.ok(Number.isInteger(W.seasonIndex(four, day)), `…and a real ordinal`);
+    assert.ok(W.seasonStartDay(four, day) >= 1, `…and a season start of at least 1`);
+    const sky = W.at(four, day, null);
+    assert.ok(W.WORDS.includes(sky.word), `…and a real weather word`);
+  }
+}
+
+// 123. THE MINT AND THE TWO BRIEF DOORS (0.14 §2.1). The axes are the world's,
+// not the save's: minted per (seed, theme, distributions), stamped at runtime,
+// and hintable from a brief that knows what its setting is.
+{
+  const W = loadedPF.weather;
+  const theme = "cozy-village";
+
+  // THE HINT WINS, on either axis, independently.
+  assert.equal(W.axesFor({ latitude: "polar" }, 424242, theme).latitude, "polar", "a named band is taken as named");
+  assert.equal(W.axesFor({ precipitation: "arid" }, 424242, theme).precipitation, "arid", "…on the other axis too");
+  // A HOSTILE HINT IS NOT A HINT, and it is not a default either: the roll owns
+  // the axis, and a word off Object.prototype must never reach a table key.
+  for (const hostile of ["constructor", "__proto__", "toString", "", "POLAR", 7, null, {}])
+    for (const field of ["latitude", "precipitation"]) {
+      const rolled = W.axesFor({ [field]: hostile }, 424242, theme);
+      assert.deepEqual(rolled, W.axesFor({}, 424242, theme), `a ${field} of ${String(hostile)} rolls like no hint`);
+      assert.ok(W.LATITUDES.includes(rolled.latitude) && W.PRECIPS.includes(rolled.precipitation), "…to real bands");
+    }
+  // THE THEME IS RESOLVED THE SAME WAY, for the same reason.
+  for (const hostile of ["constructor", "__proto__", "moor-hamlet", 7, null, undefined])
+    assert.deepEqual(
+      W.axesFor({}, 424242, hostile),
+      W.axesFor({}, 424242, "cozy-village"),
+      `a theme of ${String(hostile)} falls to the default distribution`,
+    );
+  // A DISTRIBUTION IS A DISTRIBUTION: cozy never rolls a band it does not name.
+  const rolls = new Set();
+  for (let seed = 1; seed <= 600; seed++) rolls.add(W.axesFor({}, seed, theme).latitude);
+  assert.ok(!rolls.has("polar") && !rolls.has("equatorial"), "cozy rolls neither pole nor equator");
+  assert.equal(rolls.size, 3, "…and reaches all three bands it does name");
+
+  // BOTH DOORS FOLD, AND BOTH FOLD TO ABSENT. A hostile band must not pin an
+  // axis the roll owns — at the seal, where the brief is written, and at the
+  // load, where a hand-edited one arrives.
+  for (const field of ["latitude", "precipitation"]) {
+    const sealed = loadedPF.brief.validate(
+      { scale: "village", name: "Foldwick", [field]: "constructor", cast: [] },
+      { theme, seed: 909 },
+    );
+    assert.equal(sealed[field], undefined, `the seal door drops a hostile ${field} to absent`);
+    assert.ok(
+      sealed._repairs.some((line) => line.startsWith(`${field}:`)),
+      "…and says so, rather than dropping it silently",
+    );
+    const stored = { ...loadedPF.brief.defaults(theme, 909), [field]: "constructor" };
+    const folded = loadedPF.brief.foldStored(stored, 909);
+    assert.equal(folded[field], null, `the load door folds a hostile ${field} away from any table key`);
+    assert.equal(stored[field], "constructor", "…on its own copy — the stored brief is the identity and never moves");
+    const world = loadedPF.world.build(909, theme, stored);
+    assert.deepEqual(
+      { latitude: world.latitude, precipitation: world.precipitation },
+      W.axesFor({}, 909, theme),
+      "…and the world rolls exactly as an unhinted one would",
+    );
+  }
+  // A BRIEF SEALED BEFORE THE FIELDS EXISTED carries neither and keeps neither.
+  const legacyBrief = loadedPF.brief.defaults(theme, 909);
+  assert.equal("latitude" in legacyBrief, false, "a brief nobody pinned seals without the field at all");
+  assert.equal("precipitation" in legacyBrief, false, "…either of them");
+  assert.equal("latitude" in loadedPF.brief.foldStored(legacyBrief, 909), false, "…and the load door adds nothing");
+  // A PINNED ONE KEEPS BOTH, through both doors and into the world.
+  const pinned = loadedPF.brief.validate(
+    { scale: "village", name: "Pinwick", latitude: "polar", precipitation: "arid", cast: [] },
+    { theme, seed: 909 },
+  );
+  assert.equal(pinned.latitude, "polar", "a brief that named its climate seals with it");
+  assert.equal(loadedPF.world.build(909, theme, pinned).latitude, "polar", "…and the world plays it");
+
+  // SCHEMA AND GUIDANCE both carry the fields, since the model can only write
+  // what it is told about.
+  const schemaText = JSON.stringify(loadedPF.brief.schema());
+  assert.ok(schemaText.includes(`"latitude"`) && schemaText.includes("subpolar"), "the schema exposes the axis");
+  assert.ok(schemaText.includes(`"precipitation"`) && schemaText.includes("moderate"), "…and its partner");
+  const guidanceText = loadedPF.brief.guidance(theme);
+  assert.ok(guidanceText.includes("latitude (optional)"), "the guidance teaches the axis as optional");
+  assert.ok(guidanceText.includes("omit to let the world roll its own"), "…and says what omitting means");
+
+  // THE LEGACY WORLD IS A HAND WORLD, so it takes the fixed middle rather than a
+  // roll — and the DEGRADE arm is not that: a sealed brief that failed to
+  // compile is still this brief's world, and re-stamps from it.
+  const legacyWorld = loadedPF.world.build(4242, theme, null);
+  assert.equal(legacyWorld.brieved, undefined, "the no-brief path really is the legacy layout");
+  assert.equal(legacyWorld.latitude, "temperate", "…and it takes the fixed middle of the latitude axis");
+  assert.equal(legacyWorld.precipitation, "moderate", "…and of the other one");
+  const degraded = loadedPF.world.build(4242, theme, {
+    ...pinned,
+    // Passes build()'s shape gate and then blows up inside the fold, which is
+    // the shape of every real "sealed but will not compile" arrival.
+    cast: [
+      {
+        get name() {
+          throw new Error("this cast member will not serialize");
+        },
+      },
+    ],
+  });
+  assert.equal(degraded.brieved, undefined, "the brief did fail to compile");
+  assert.equal(degraded.latitude, "polar", "…and the degraded world still plays the climate the brief pinned");
+  assert.equal(degraded.precipitation, "arid", "…on both axes");
+}
+
+// 124. THE SKY AT A DAY (0.14 §2.2): a pure function of (seed, day, override),
+// day-stable in BOTH halves of the pair, and rewind-exact for the same reason
+// the quest board is.
+{
+  const W = loadedPF.weather;
+  const world = { seed: 7, latitude: "subpolar", precipitation: "wet" };
+
+  // DETERMINISM ACROSS A REBUILD. Nothing about the sky is saved, so "the same"
+  // has to mean re-derived identically from a fresh world object.
+  for (let day = 1; day <= 40; day++) {
+    const again = W.at({ seed: 7, latitude: "subpolar", precipitation: "wet" }, day, null);
+    assert.deepEqual(again, W.at(world, day, null), `day ${day} re-derives identically`);
+  }
+  // …AND ACROSS A REWIND, which is the same fact walked backwards.
+  const forward = [];
+  for (let day = 1; day <= 20; day++) forward.push(JSON.stringify(W.at(world, day, null)));
+  for (let day = 20; day >= 1; day--)
+    assert.equal(JSON.stringify(W.at(world, day, null)), forward[day - 1], `day ${day} is the same on the way back`);
+
+  // A FRESH OBJECT EVERY CALL — the transition compare depends on it, because a
+  // reference compare would report a change on every midnight forever.
+  assert.notEqual(W.at(world, 5, null), W.at(world, 5, null), "at() hands back a new object each time");
+  assert.deepEqual(W.at(world, 5, null), W.at(world, 5, null), "…carrying the same answer");
+
+  // INTENSITY RIDES ONLY THE TWO WORDS THAT TAKE ONE, and it is day-stable.
+  let sawHeavy = false;
+  let sawLight = false;
+  for (let day = 1; day <= 400; day++) {
+    const sky = W.at(world, day, null);
+    const takes = W.WORD_META[sky.word].takesIntensity;
+    assert.equal(takes ? W.INTENSITIES.includes(sky.intensity) : sky.intensity === null, true, `day ${day} intensity`);
+    if (sky.intensity === "heavy") sawHeavy = true;
+    if (sky.intensity === "light") sawLight = true;
+  }
+  assert.ok(sawHeavy && sawLight, "a wet subpolar year reaches both intensities");
+  // Desert rain is almost always light; wet-world rain is often not. The
+  // threshold derives from the same mass the odds do.
+  const heavyRate = (latitude, precipitation) => {
+    const w = { seed: 7, latitude, precipitation };
+    let heavy = 0;
+    let wet = 0;
+    for (let day = 1; day <= 2000; day++) {
+      const sky = W.at(w, day, null);
+      if (!sky.intensity) continue;
+      wet++;
+      if (sky.intensity === "heavy") heavy++;
+    }
+    return heavy / wet;
+  };
+  assert.ok(heavyRate("subpolar", "wet") > heavyRate("subpolar", "arid"), "wet worlds rain and snow harder");
+
+  // THE OVERRIDE BEATS THE DERIVATION — inside its own day range and nowhere
+  // else. The range is a predicate and not a latch, because the live day moves
+  // BOTH ways: rewinding into an override's range re-arms it (correct — the sky
+  // at day D is what it was the first time through day D), and rewinding to
+  // before it was ever set must not.
+  const summoned = { word: "storm", sinceDay: 10, untilDay: 12 };
+  assert.equal(W.at(world, 9, summoned).word, W.at(world, 9, null).word, "before sinceDay the derivation stands");
+  for (const day of [10, 11, 12]) assert.equal(W.at(world, day, summoned).word, "storm", `day ${day} is the GM's`);
+  assert.equal(
+    W.at(world, 13, summoned).word,
+    W.at(world, 13, null).word,
+    "after untilDay the derivation stands again",
+  );
+  assert.equal(W.at(world, 1, { word: "storm" }).word, "storm", "an unbounded override runs from day 1");
+  assert.equal(W.at(world, 9000, { word: "storm" }).word, "storm", "…and forever");
+
+  // DRAW ORDER: the word draw is always made and discarded, the intensity draw
+  // always second. So an override naming the very word the derivation rolled
+  // cannot flip the day's intensity.
+  const cozy = { seed: 424242, latitude: "temperate", precipitation: "wet" };
+  assert.equal(W.at(cozy, 6, null).word, "rain", "this world's day 6 rains on its own");
+  assert.equal(W.at(cozy, 6, null).intensity, "heavy", "…heavily");
+  assert.deepEqual(W.at(cozy, 6, { word: "rain" }), W.at(cozy, 6, null), "a GM asking for rain gets that same rain");
+  assert.equal(
+    W.at(cozy, 6, { word: "rain", intensity: "light" }).intensity,
+    "light",
+    "…and one asking for light gets it",
+  );
+
+  // THE FOLD: word must be real, intensity must be legal FOR THAT WORD, days
+  // must be positive ints — and a bad intensity drops while the ROW survives,
+  // because a GM who wrote "heavy storm" meant a storm.
+  assert.equal(W.foldOverride({ word: "blizzard" }), null, "a word this build does not know is no override");
+  assert.equal(W.foldOverride({ word: "constructor" }), null, "…including the words every object answers to");
+  assert.equal(W.foldOverride(null), null, "…and neither is nothing");
+  assert.equal(W.foldOverride("storm"), null, "…or a bare string");
+  assert.deepEqual(
+    W.foldOverride({ word: "storm", intensity: "heavy" }),
+    { word: "storm" },
+    "storm takes no intensity",
+  );
+  assert.deepEqual(
+    W.foldOverride({ word: "rain", intensity: "heavy" }),
+    { word: "rain", intensity: "heavy" },
+    "rain does",
+  );
+  assert.deepEqual(W.foldOverride({ word: "rain", intensity: "torrential" }), { word: "rain" }, "…but only a real one");
+  assert.deepEqual(
+    W.foldOverride({ word: "snow", sinceDay: 4, untilDay: 9, note: "hi" }),
+    { word: "snow", sinceDay: 4, untilDay: 9 },
+    "the range rides and nothing else does",
+  );
+  for (const bad of [0, -3, 1.5, "4", NaN, Infinity, null])
+    assert.equal("sinceDay" in W.foldOverride({ word: "snow", sinceDay: bad }), false, `sinceDay ${String(bad)} drops`);
+  // A FORWARD WORD folds to "no override" for this runtime and nothing else —
+  // the raw row is metadata, and metadata is never written back.
+  const forwardRow = { word: "fog", intensity: "heavy", sinceDay: 3 };
+  assert.equal(W.foldOverride(forwardRow), null, "a 0.15 word is simply unread here");
+  assert.deepEqual(forwardRow, { word: "fog", intensity: "heavy", sinceDay: 3 }, "…and the row itself is untouched");
+
+  // THE MEMO COMPARAND is the whole override and not its word, because changing
+  // only the intensity is the documented verification incantation.
+  assert.notEqual(
+    W.overrideKey({ word: "storm" }),
+    W.overrideKey({ word: "storm", intensity: "heavy" }),
+    "the comparand sees an intensity change",
+  );
+  assert.notEqual(W.overrideKey({ word: "storm" }), W.overrideKey({ word: "storm", untilDay: 4 }), "…and a range one");
+  assert.equal(W.overrideKey(null), W.overrideKey(undefined), "…and reads absent and cleared alike");
+
+  // THE HEADER LABELS, all seven of them, off the one table four readers share.
+  assert.equal(W.labelFor("fair", null), "fair");
+  assert.equal(W.labelFor("overcast", null), "overcast");
+  assert.equal(W.labelFor("storm", null), "storm");
+  assert.equal(W.labelFor("rain", "light"), "light rain");
+  assert.equal(W.labelFor("rain", "heavy"), "heavy rain");
+  assert.equal(W.labelFor("snow", "light"), "light snow");
+  assert.equal(W.labelFor("snow", "heavy"), "heavy snow");
+  assert.equal(W.labelFor("constructor", "heavy"), "fair", "an unknown word cannot reach a table through the label");
+}
+
+// 125. THE HEADER GROUP AND THE LEDGER PARK (0.14 §2.3). The header is the sky's
+// whole channel to the GM; the park is the ledger's, and it holds no state.
+{
+  const W = loadedPF.weather;
+  const build = (seed, latitude, precipitation) => {
+    const sealed = loadedPF.brief.defaults("cozy-village", seed);
+    sealed.latitude = latitude;
+    sealed.precipitation = precipitation;
+    const built = loadedPF.world.build(seed, "cozy-village", sealed);
+    assert.equal(built.latitude, latitude, "the pinned world got its climate");
+    assert.equal(built.precipitation, precipitation, "…on both axes");
+    return built;
+  };
+  const snowy = build(7, "subpolar", "wet");
+
+  // THE THREE-WORD GROUP. Daypart, weather, season — the daypart so the light
+  // and "who is about" stay consistent with what we render, the weather because
+  // this is the only channel it has, and the season because "it should not snow
+  // in summer, unless" is a judgment only the season lets the GM make.
+  const sim = new loadedPF.Sim(snowy);
+  sim.day = 58;
+  const header = sim.header();
+  assert.ok(header.startsWith("[World:"), "the header still opens the way the wrap-up pin says it does");
+  assert.ok(header.includes("(day, light snow, autumn)"), `the three words ride the paren group (${header})`);
+  sim.day = 7;
+  assert.ok(sim.header().includes("(day, storm, summer)"), `and they follow the world (${sim.header()})`);
+  // The memo is a perf cache keyed on the whole override, and it must not answer
+  // for a day or an override it was not taken under.
+  sim.day = 58;
+  assert.equal(sim.weather().word, "snow", "the memo re-derives when the day moves");
+  sim.weatherOverride = { word: "fair" };
+  assert.equal(sim.weather().word, "fair", "…and when the override does");
+  sim.weatherOverride = { word: "rain" };
+  assert.equal(sim.weather().intensity !== null, true, "…including a change that only moves the intensity");
+  sim.weatherOverride = null;
+  assert.equal(sim.weather().word, "snow", "…and back");
+  assert.notEqual(sim.weather(), sim.weather(), "the memo hands back a copy, never its own row");
+
+  // NOTHING PARKS ON A RESTORE. A world reopened on a snowy day has not just had
+  // it start snowing, and a rebuild must say nothing at all.
+  assert.deepEqual(new loadedPF.Sim(snowy)._weatherNotes, [], "construction files nothing");
+  const restored = loadedPF.save.simFromSaved(
+    { v: 1, seed: 7, theme: "cozy-village", zone: snowy.startZone, day: 58, clockMin: 8 * 60 },
+    {},
+    "chat-weather-restore",
+  );
+  assert.deepEqual(restored._weatherNotes, [], "a restore straight onto a snowy day files nothing either");
+  const resolver = new loadedPF.Sim(snowy);
+  resolver.day = 58;
+  resolver.resolveSchedules();
+  assert.deepEqual(resolver._weatherNotes, [], "…and neither does a re-resolve");
+
+  // THE THREE MOVERS, and only them. Each compares the sky ACROSS ITS OWN MOVE.
+  const parkOf = (world, from, to, override) => {
+    const s = new loadedPF.Sim(world);
+    s.weatherOverride = override ?? null;
+    s.day = from;
+    s.clockMin = 8 * 60;
+    s._weatherNotes.length = 0;
+    s.advanceMinutes((to - from) * 24 * 60);
+    return s._weatherNotes;
+  };
+  assert.deepEqual(parkOf(snowy, 57, 58), [{ text: "First snow.", day: 58 }], "the season's first snow says so");
+  assert.deepEqual(
+    parkOf(snowy, 304, 305),
+    [{ text: "Snow came in.", day: 305 }],
+    "a later one in the same season does not",
+  );
+  assert.deepEqual(parkOf(snowy, 310, 311), [{ text: "A storm came in.", day: 311 }], "a storm claims no first");
+  assert.deepEqual(parkOf(snowy, 6, 7), [{ text: "A storm came in.", day: 7 }], "…in any season");
+  assert.deepEqual(parkOf(snowy, 1, 2), [], "an ordinary day crossing files nothing");
+  assert.deepEqual(parkOf(snowy, 58, 304), [], "…and neither does a jump that lands on a quiet day");
+  // THE DAY IS THE DAY IT HAPPENED, which is what the `{text, day}` row is for.
+  assert.equal(parkOf(snowy, 304, 305)[0].day, 305, "the line is filed under the crossing's own day, not the drain's");
+  // PAST DAY 300, where the year arithmetic is nine times anything 0.13 saw.
+  assert.ok(parkOf(snowy, 310, 311)[0].day > 300, "the park works in the fourth digit of the calendar");
+
+  // THE DAY-1 FLOOR'S OUTCOME: a world that opens deep in its own winter still
+  // gets a true "First snow." for its genuine first snowfall.
+  const deep = build(4, "subpolar", "moderate");
+  assert.equal(W.season(deep, 1), "winter", "this world's day 1 is mid-winter");
+  assert.deepEqual(parkOf(deep, 7, 8), [{ text: "First snow.", day: 8 }], "…and its first snowfall is a first");
+
+  // THE PARK SEES THE OVERRIDE, exactly as at() does — three arguments at both
+  // sites. A GM-summoned storm is a storm the ledger tells, and the recipes lean
+  // on the tell firing.
+  const quiet = build(424242, "temperate", "wet");
+  assert.equal(W.at(quiet, 2, null).word, "fair", "day 2 of this world is fair on its own");
+  assert.deepEqual(parkOf(quiet, 1, 2), [], "…so an ordinary crossing files nothing");
+  assert.deepEqual(
+    parkOf(quiet, 1, 2, { word: "storm", sinceDay: 2 }),
+    [{ text: "A storm came in.", day: 2 }],
+    "a GM-summoned storm parks the line the recipe expects",
+  );
+
+  // A CAP OF FOUR, AND NO OVERWRITE. A full queue drops the NEW line rather than
+  // losing one a frame has not filed yet.
+  const busy = new loadedPF.Sim(snowy);
+  busy.day = 310;
+  busy.clockMin = 8 * 60;
+  busy._weatherNotes.length = 0;
+  for (let step = 0; step < 36; step++) busy.advanceMinutes(24 * 60);
+  assert.equal(busy.day, 346, "the walk crossed thirty-six days");
+  assert.deepEqual(
+    busy._weatherNotes.map((note) => note.day),
+    [311, 314, 328, 334],
+    "the queue holds the four earliest notable crossings and drops the fifth",
+  );
+
+  // WAIT AND STEP ARE MOVERS TOO. Wait is a button; step is the walked minute.
+  const waiter = new loadedPF.Sim(snowy);
+  waiter.day = 57;
+  waiter.clockMin = 23 * 60;
+  waiter._weatherNotes.length = 0;
+  assert.equal(waiter.waitUntil("day"), true, "the rest action lands on the boundary");
+  assert.equal(waiter.day, 58, "…on the next day");
+  assert.deepEqual(waiter._weatherNotes, [{ text: "First snow.", day: 58 }], "…and the wait files the crossing");
+  const walker = new loadedPF.Sim(snowy);
+  walker.day = 57;
+  walker.clockMin = 24 * 60 - 1;
+  walker._weatherNotes.length = 0;
+  for (let frame = 0; frame < 400 && walker.day === 57; frame++) walker.step(1 / 60, {});
+  assert.equal(walker.day, 58, "a walked midnight crosses the day");
+  assert.deepEqual(walker._weatherNotes, [{ text: "First snow.", day: 58 }], "…and files it too");
+}
+
+// 126. THE OVERRIDE'S RESIDENCY (0.14 §2.2). Chat metadata, never the save
+// envelope — and the envelope's four pins are asserted UNMOVED by this release.
+{
+  const W = loadedPF.weather;
+  const seed = 7;
+  const sealed = loadedPF.brief.defaults("cozy-village", seed);
+  sealed.latitude = "subpolar";
+  sealed.precipitation = "wet";
+  const meta = (row) => ({ pixelforgeBrief: sealed, ...(row ? { pixelforgeWeather: row } : {}) });
+  const saved = { v: 1, seed, theme: "cozy-village", zone: "z1", clockMin: 8 * 60 };
+
+  // HYDRATED AT THE LOAD DOOR, and folded there.
+  const plain = loadedPF.save.simFromSaved({ ...saved, day: 58 }, meta(), "chat-weather-a");
+  assert.equal(plain.weatherOverride, null, "no key means no override");
+  assert.equal(plain.weather().word, "snow", "…and the derivation stands");
+  const held = loadedPF.save.simFromSaved({ ...saved, day: 58 }, meta({ word: "fair" }), "chat-weather-b");
+  assert.deepEqual(held.weatherOverride, { word: "fair" }, "a real row hydrates");
+  assert.equal(held.weather().word, "fair", "…and the GM's sky stands over the derivation");
+  assert.equal(held.header().includes("(day, fair,"), true, `…all the way to the wire (${held.header()})`);
+  const hostile = loadedPF.save.simFromSaved({ ...saved, day: 58 }, meta({ word: "constructor" }), "chat-weather-c");
+  assert.equal(hostile.weatherOverride, null, "a hostile row folds to no override");
+  assert.equal(hostile.weather().word, "snow", "…and the world keeps its own weather");
+  // THE DAY RANGE SURVIVES A REBUILD, which is the rewind case: the row is
+  // re-read every time, so liveness is evaluated against the day being lived.
+  const ranged = meta({ word: "storm", sinceDay: 20, untilDay: 22 });
+  for (const [day, want] of [
+    [19, "the derivation"],
+    [20, "storm"],
+    [22, "storm"],
+    [23, "the derivation"],
+  ]) {
+    const at = loadedPF.save.simFromSaved({ ...saved, day }, ranged, `chat-weather-r${day}`);
+    const derived = W.at(at.world, day, null).word;
+    assert.equal(at.weather().word, want === "storm" ? "storm" : derived, `a rebuild at day ${day} gets ${want}`);
+  }
+  // THE FIELD IS DECLARED ABOVE THE CONSTRUCTOR'S OWN resolveSchedules, so the
+  // first read of the sky on any world at load time is never `undefined`.
+  const fresh = new loadedPF.Sim(plain.world);
+  assert.equal(fresh.weatherOverride, null, "the field exists before anything reads it");
+  assert.equal(typeof fresh._weatherMetaApplied, "string", "…and so does its comparand");
+
+  // NOTHING IS EVER WRITTEN BACK. The row is somebody else's to own.
+  const writes = [];
+  const realPatch = loadedPF.api.patchMetadata;
+  loadedPF.api.patchMetadata = async (chatId, patch) => void writes.push([chatId, patch]);
+  try {
+    const row = { word: "fog", intensity: "heavy", sinceDay: 3 };
+    const carrier = meta(row);
+    const forward = loadedPF.save.simFromSaved({ ...saved, day: 5 }, carrier, "chat-weather-fwd");
+    assert.equal(forward.weatherOverride, null, "a word from a later build is simply unread");
+    assert.deepEqual(carrier.pixelforgeWeather, row, "…and the row survives the round trip verbatim");
+    assert.deepEqual(writes, [], "reading the slot writes nothing, ever");
+  } finally {
+    loadedPF.api.patchMetadata = realPatch;
+  }
+
+  // THE SAVE ENVELOPE DOES NOT MOVE — not conditionally, not at all. A weather
+  // key in the registry would have thrown the load-time probe for every user on
+  // every boot, and a conditionally-emitted one is the registry's own named bug.
+  const snapshot = loadedPF.save.snapshot({ sim: plain, chatId: "chat-weather-a" });
+  for (const key of Object.keys(snapshot))
+    assert.ok(!/weather|latitude|precipitation|season/i.test(key), `the envelope grew a "${key}" key`);
+  assert.equal("weatherOverride" in snapshot, false, "the runtime override is not in the envelope");
+  const before = JSON.stringify(loadedPF.save.snapshot({ sim: plain, chatId: "chat-weather-a" }));
+  plain.weatherOverride = { word: "storm" };
+  plain._weatherNotes.push({ text: "A storm came in.", day: 58 });
+  assert.equal(
+    JSON.stringify(loadedPF.save.snapshot({ sim: plain, chatId: "chat-weather-a" })),
+    before,
+    "setting an override and parking a line move ZERO save bytes",
+  );
+
+  // ── THE MID-SESSION RECONCILER (90-element) ──────────────────────────────
+  // The host hands us the whole metadata blob every props delivery, so a future
+  // writer patching the key is answered without waiting for a boundary. The
+  // comparand is the APPLIED MEMO, which is what keeps a console-summoned sky
+  // alive across the many deliveries a single turn makes.
+  const core = loadedPF.core;
+  const wasChatId = core.chatId;
+  const wasSim = core.sim;
+  const wasHost = core.host;
+  const wasNoPackage = loadedPF.assets._noPackage;
+  try {
+    loadedPF.assets._noPackage = true;
+    core.chatId = "chat-weather-props";
+    core.sim = loadedPF.save.simFromSaved({ ...saved, day: 58 }, meta(), "chat-weather-props");
+    let resolves = 0;
+    const realResolve = core.sim.resolveSchedules.bind(core.sim);
+    core.sim.resolveSchedules = () => {
+      resolves++;
+      realResolve();
+    };
+    const deliver = (row) =>
+      core.onMainProps({ chatId: "chat-weather-props", narrationDone: false, chatMeta: meta(row) });
+
+    deliver(null);
+    assert.equal(resolves, 0, "a delivery with no key re-resolves nothing");
+    assert.equal(core.sim.weatherOverride, null, "…and assigns nothing");
+
+    // A CONSOLE-SET SKY IS INVISIBLE TO THIS. Without the applied memo, the very
+    // first streamed token re-folded the absent key to null, called that a
+    // change, and erased the storm the verification incantation had just made.
+    core.sim.weatherOverride = { word: "storm" };
+    deliver(null);
+    deliver(null);
+    assert.deepEqual(core.sim.weatherOverride, { word: "storm" }, "no delivery claws back a summoned sky");
+    assert.equal(resolves, 0, "…and none of them re-resolve");
+
+    // A KEY APPEARING MID-SESSION ASSIGNS AND RE-RESOLVES EXACTLY ONCE.
+    deliver({ word: "snow", intensity: "heavy" });
+    assert.deepEqual(core.sim.weatherOverride, { word: "snow", intensity: "heavy" }, "the written key wins");
+    assert.equal(resolves, 1, "…and the town answers once");
+    deliver({ word: "snow", intensity: "heavy" });
+    deliver({ word: "snow", intensity: "heavy" });
+    assert.equal(resolves, 1, "an unchanged key re-resolves nothing, however many turns go by");
+    // …and a change that only moves the intensity IS a change.
+    deliver({ word: "snow", intensity: "light" });
+    assert.equal(resolves, 2, "the comparand sees an intensity-only edit");
+    assert.deepEqual(core.sim.weatherOverride, { word: "snow", intensity: "light" }, "…and applies it");
+    // A CLEARED KEY clears the override, once.
+    deliver(null);
+    assert.equal(core.sim.weatherOverride, null, "clearing the row clears the sky");
+    assert.equal(resolves, 3, "…once");
+    deliver(null);
+    assert.equal(resolves, 3, "…and stays quiet after");
+  } finally {
+    core.chatId = wasChatId;
+    core.sim = wasSim;
+    core.host = wasHost;
+    loadedPF.assets._noPackage = wasNoPackage;
+  }
+}
+
 console.log("brief validator + compiler: all cases passed");
