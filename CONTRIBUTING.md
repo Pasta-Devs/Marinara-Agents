@@ -83,6 +83,34 @@ Both builders accept package IDs for a focused rebuild. When a build changes an 
 
 The catalog `generatedAt` field is preserved across rebuilds rather than stamped with the current time. This keeps a no-op rebuild byte-identical and stops the timestamp from being a guaranteed merge conflict between concurrent package PRs. A rebuild that touches nothing substantive should leave `catalog/**/catalog.json` unchanged — if `git status` shows only a `generatedAt` diff, discard it. To intentionally refresh the timestamp (for example when promoting a release), run the builder with `MARINARA_CATALOG_STAMP_GENERATED_AT=1`.
 
+### Release notes
+
+A package documents its own releases in `packages/<id>/CHANGELOG.md`, newest first:
+
+```markdown
+## 1.3.0 — 2026-09-01
+- Scene detection now handles flashbacks.
+- Fixed the tracker losing state after a summary.
+
+## 1.2.1 — 2026-08-20 [highlight]
+- Fixed the agent silently failing on long chats.
+```
+
+The catalog build turns these into a `notes.json` published beside every `catalog.json` — the published lanes, the legacy alias, and the preview overlay. The Engine shows the newest entry in its update prompt and the whole list as a Version history in Download Agents.
+
+Notes live in a sidecar, never on a catalog entry and never in a manifest. The Engine's catalog entry schema is strict and its parser drops entries carrying keys it does not know, so a new entry key would empty the Agents browser on every already-shipped Engine that predates it. A manifest key is worse: it rewrites every artifact and every checksum to publish a sentence.
+
+Rules:
+
+- **A minor or major bump needs an entry; a patch does not.** The build fails on a feature release with no matching changelog entry, including a package's first appearance. Optional notes rot, and a version history full of gaps reads as abandoned software.
+- **The newest entry must be the version the catalog publishes.** Otherwise the notes describe a release nobody is installing.
+- **The dot means "you will notice this", not "you should install this".** The Engine's prompt updates everything at once; the marker only decides what a user reads first. It defaults from the version bump — minor and major are notable, patch is not — so you rarely set it by hand. `[highlight]` is for a patch that repairs something badly broken; `[quiet]` is for a minor that only adds something invisible. Mark everything and the marker stops meaning anything.
+- **English only.** Notes are not localized. The chrome around them is.
+- **Plain text.** The Engine renders notes verbatim, never as Markdown or HTML, because an operator can point it at any catalog. Bullet characters survive; links and formatting do not.
+- Caps: 1000 characters per entry and 20 entries per package, both enforced at build time. Older entries fall off the end; an over-long entry fails the build rather than being truncated in someone's update prompt.
+
+`validate-catalog.mjs` re-derives every sidecar from the committed changelogs and rejects a mismatch, so a hand-edited `notes.json` cannot drift from the repository.
+
 ### Packages that are not ready for everyone
 
 `scripts/catalog-incomplete.mjs` holds two sets, because "not finished" and "not promoted" are different states. Both keep the package building normally — payload, manifest, artifact, and locales stay committed so development and testing continue — and both are enforced at the single catalog chokepoint (`writeCatalogFamily`), so every builder inherits them and whichever builder runs next relocates or drops a stale committed entry for a newly-marked id.
@@ -123,6 +151,7 @@ npm run check
 node scripts/test-catalog-lanes.mjs
 node scripts/validate-package-locales.mjs
 node scripts/validate-catalog.mjs
+node scripts/tests/catalog-release-notes.regression.mjs
 git diff --check
 ```
 
