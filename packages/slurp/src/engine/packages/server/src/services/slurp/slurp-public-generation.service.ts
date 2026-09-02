@@ -14,6 +14,7 @@ import { clampGenerationMaxOutputTokens } from "../generation/output-token-limit
 import { noodleSamplingOptions } from "./slurp-sampling-options.js";
 import { noodleTimelineRefreshMaxTokens } from "./slurp-post-target.js";
 import { withConnectionFallbackProvider } from "../llm/connection-fallback-provider.js";
+import { withConnectionAdmissionProvider } from "../generation/connection-admission.js";
 import type { ChatMessage } from "../llm/base-provider.js";
 import { createLLMProvider } from "../llm/provider-registry.js";
 import { createCharacterGalleryStorage } from "../storage/character-gallery.storage.js";
@@ -145,14 +146,20 @@ export function createPublicNoodleGenerationService(db: DB) {
           input.connection.defaultParameters,
         );
         const fallbackConnection = await connections.getFallbackForMain();
-        const provider = withConnectionFallbackProvider({
+        const fallbackProvider = withConnectionFallbackProvider({
           primary: primaryProvider,
           primaryConnectionId: input.connection.id,
           fallbackConnection,
           fallbackBaseUrl: fallbackConnection ? resolveBaseUrl(fallbackConnection) : "",
           category: "main",
-          admissionMode: input.admissionMode,
         });
+        // Admission wraps the composed provider: the fallback wrapper has no admission mode to
+        // hand it to, so passing one there dropped it silently.
+        const provider = withConnectionAdmissionProvider(
+          fallbackProvider,
+          input.connection.id,
+          input.admissionMode ?? { kind: "foreground" },
+        );
         await ensurePersonaAccounts(noodle, characters);
         if (settings.allowProfessorMari) await ensureProfessorMariAccount(noodle, characters);
         const personaAccount = await resolvePersonaAccount(noodle, characters, input.personaId);

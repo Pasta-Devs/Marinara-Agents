@@ -62,3 +62,19 @@ const generation = read("slurp-generation.service.ts");
 assert.equal(generation.split("imagePrompt: draftImagePrompt").length - 1, 6);
 
 console.log("slurp image retry regression passed");
+
+// The Engine's fallback wrapper takes no admission mode. Passing one there compiles (the
+// package bundles with esbuild, which does not typecheck) but drops it, so the generation ran
+// unadmitted and never booked its daily attempt — the reserve poll then regenerated a post on
+// every pass. Admission must wrap the composed provider instead.
+for (const file of ["slurp-generation.service.ts", "slurp-public-generation.service.ts"]) {
+  const source = read(file);
+  const fallbackCall = source.slice(
+    source.indexOf("withConnectionFallbackProvider({"),
+    source.indexOf("withConnectionAdmissionProvider("),
+  );
+  assert.doesNotMatch(fallbackCall, /admissionMode/, `${file} passes admissionMode to the fallback wrapper`);
+  assert.match(source, /withConnectionAdmissionProvider\(\s*fallbackProvider,/, `${file} does not admit its provider`);
+}
+
+console.log("slurp connection admission regression passed");
