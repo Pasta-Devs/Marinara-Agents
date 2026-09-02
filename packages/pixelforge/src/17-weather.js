@@ -392,6 +392,22 @@ PF.weather = (() => {
   }
 
   // ── The GM override slot ───────────────────────────────────────────────────
+  // WRITTEN BY NOTHING IN THIS RELEASE except a console, deliberately: the host
+  // dispatches `onHostEvent` on engine-defined type strings only, so there is no
+  // surface for a real writer to sit on yet (that is the feature request's).
+  // What exists is the READ side, whole and verifiable, and the incantation is
+  // TWO lines — the runtime slot is a sim field, and the town only re-places on
+  // a resolve:
+  //
+  //     core.sim.weatherOverride = { word: "storm" };
+  //     core.sim.resolveSchedules();
+  //
+  // Any of the five words; rain and snow take an optional `intensity: "heavy"`.
+  // The renderer answers on the next frame either way — only the schedule bias
+  // needs the second line. A console write touches the RUNTIME slot only:
+  // metadata stays untouched, which is exactly right for a throwaway check, and
+  // the mid-session reconciler compares metadata against its own applied memo so
+  // no props delivery claws the summoned sky back.
   /** Fold a raw `pixelforgeWeather` metadata row into an override, or null.
    *
    *  FOLD, NEVER THROW, AND NEVER WRITE BACK. The key is chat metadata, which is
