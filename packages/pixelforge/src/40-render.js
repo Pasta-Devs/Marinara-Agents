@@ -9,7 +9,7 @@ PF.Render = class {
     this.canvas = canvas;
     this.ctx = canvas.getContext("2d");
     this.ctx.imageSmoothingEnabled = false;
-    this._zoneCache = new Map(); // zoneId → {base, overhead}
+    this._zoneCache = new Map(); // `zoneId|weatherClass` → {base, overhead}
   }
 
   /** Drop a zone's composites. PREFIX DELETE, because a zone is cached under a
@@ -23,7 +23,8 @@ PF.Render = class {
   }
 
   /** Drop every zone composite (chat/world switch): the cache is keyed by zone
-   *  id alone, so a new world's zones would otherwise reuse stale composites. */
+   *  id and weather class, neither of which is world-unique, so a new world's
+   *  zones would otherwise reuse stale composites. */
   clearZones() {
     this._zoneCache.clear();
   }
@@ -247,9 +248,11 @@ PF.Render = class {
     // Clipped to the VIEWPORT, never the canvas: the letterbox bands are where
     // the host's own scene art shows through, and it is not raining on that.
     const bar = (x, y, w, h) => {
+      const left = Math.max(x, offX);
+      const right = Math.min(x + w, offX + viewW);
       const top = Math.max(y, offY);
       const bottom = Math.min(y + h, offY + viewH);
-      if (bottom > top) ctx.fillRect(x, top, w, bottom - top);
+      if (right > left && bottom > top) ctx.fillRect(left, top, right - left, bottom - top);
     };
     for (let i = 0; i < row.n; i++) {
       const seed = PF.hashStr(`fall|${i}`);
