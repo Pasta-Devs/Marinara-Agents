@@ -22538,8 +22538,8 @@ const fire = (node, type) => Promise.all((node.listeners[type] ?? []).map((fn) =
       const npc = t.npcs()[0];
       // 24 is 18-brief's cap on a cast name, so this is the widest label the
       // census button can ever be asked to draw.
-      npc.name = "Wrenmarshall Ashenbrook";
-      assert.equal(npc.name.length, 23, "…and the probe name is at the seal's own cap, less the space it needs");
+      npc.name = "Wrenmarshall Ashenbrooke";
+      assert.equal(npc.name.length, 24, "…and the probe name is at the seal's own cap for a cast name");
       t.openOn(npc);
       t.hud.update();
       assert.equal(t.hud.talkBtn.textContent, `Leave ${npc.name} (E)`, "the census button is naming the anchor");
@@ -23011,7 +23011,12 @@ const fire = (node, type) => Promise.all((node.listeners[type] ?? []).map((fn) =
           }
         }
       }
-      assert.ok(cells >= 90, `…across every cell the shipped defaults can answer twice in (${cells})`);
+      // BY VALUE, because a slack bound would go green on a pack that lost half
+      // its coverage: the shipped defaults reach two or more lines in exactly 96
+      // (theme, handle, daypart, branch) cells, and every one of them answers a
+      // second press with something new. Forty-eight of these said one sentence
+      // forever before the fall-through.
+      assert.equal(cells, 96, `…across every cell the shipped defaults can answer twice in (${cells})`);
     }
 
     // ── THE DOORS DIM, THEY NEVER VANISH ────────────────────────────────────
@@ -24467,10 +24472,13 @@ const fire = (node, type) => Promise.all((node.listeners[type] ?? []).map((fn) =
       assert.ok(packBody, "the pack call went out");
       const row = packBody.userContent.split("\n").find((line) => line.startsWith("Climate: "));
       assert.equal(row, `Climate: ${pinned} latitude, arid.`, "…describing the sealed brief's own climate");
-      assert.notEqual(pinned, placeholder, "…which is NOT the band the placeholder world was standing in");
+      // AND THE PLACEHOLDER REALLY WAS STANDING THERE WITH A DIFFERENT ANSWER,
+      // which is what makes this red by value: the world carries a climate stamp
+      // of its own, the pinned band is not it, and its word is not in the request.
+      assert.ok(loadedPF.weather.LATITUDES.includes(placeholder), "the placeholder world carries a band of its own");
       assert.ok(
         !packBody.userContent.includes(`Climate: ${placeholder} latitude`),
-        "…so a placeholder read would have said something else, and this lane would see it",
+        "…and it is not the one that went out, so a world read would have shown here",
       );
     });
   });
@@ -25855,7 +25863,15 @@ const fire = (node, type) => Promise.all((node.listeners[type] ?? []).map((fn) =
     // rows) + (blank + header + 10 people).
     const rows = measured.split("\n");
     assert.equal(rows.length, 23, "…across twenty-three rows, one of them per person");
-    assert.equal(2 + 2 + (1 + 1 + 5) + (1 + 1 + 10), 23, "…which is the anatomy the table beside digest() writes out");
+    // THE ANATOMY, COUNTED OFF THE ROWS rather than restated as a sum: 2 opening
+    // + 2 climate, then a blank + header + 5 places, then a blank + header + 10
+    // people. Counting the sections is what makes the total auditable — an
+    // arithmetic identity beside it would be true whatever the digest did.
+    const blanks = rows.map((row, i) => (row === "" ? i : -1)).filter((i) => i >= 0);
+    assert.deepEqual(blanks, [4, 11], "the two section breaks fall where the anatomy says");
+    assert.equal(blanks[0], 4, "…4 rows of opening block: the name, the situation and the two climate rows");
+    assert.equal(blanks[1] - blanks[0] - 1, 6, "…a PLACES header and five place rows");
+    assert.equal(rows.length - blanks[1] - 1, 11, "…a PEOPLE header and ten people");
     // THE CLIMATE ROWS SIT IN THE OPENING BLOCK, under no section header — the one
     // placement that is both idiomatic (plain pushes, no separator convention to
     // violate) and safe. Parked at the tail they would read as an eleventh cast
@@ -25995,11 +26011,13 @@ const fire = (node, type) => Promise.all((node.listeners[type] ?? []).map((fn) =
       hostile.length <= 2_718,
       `…and the whole digest is inside the table's bound off a 9,000-char input (${hostile.length} chars)`,
     );
-    // THE CLIMATE ROWS ARE TWO ROWS AND NEVER THREE. A ten-thousand-character
-    // latitude with a newline in it is what would otherwise buy a third row in the
-    // opening block, and the digest's whole structure is rows.
-    assert.equal(rows.filter((row) => row.startsWith("Climate: ")).length, 1, "a hostile climate is one row, not two");
-    assert.equal(rows.filter((row) => row.startsWith("Weather runs to: ")).length, 1, "…and the sky row is still one");
+    // THE OPENING BLOCK IS FOUR ROWS AND NEVER FIVE, counted STRUCTURALLY for the
+    // cast section's reason: a newline that survived the latitude shows up as a
+    // row too many rather than as text in the wrong place. Name, situation, and
+    // the two climate rows — everything before the blank that opens PLACES.
+    assert.equal(rows.indexOf(""), 4, "the hostile climate is two rows in a four-row opening block, not three");
+    assert.ok(rows[2].startsWith("Climate: "), "…with the climate row where it belongs");
+    assert.ok(rows[3].startsWith("Weather runs to: "), "…and the sky row under it");
     assert.ok(
       rows.find((row) => row.startsWith("Climate: ")).length <= "Climate: ".length + 24 + " latitude, ".length + 24 + 1,
       "…with both axis words clipped at 24, the same cap every other name here gets",
@@ -26052,12 +26070,19 @@ const fire = (node, type) => Promise.all((node.listeners[type] ?? []).map((fn) =
     // window renders all four branches, so the ask is the whole vocabulary and the
     // old NEGATIVE pin ("no smalltalk in the instructions") is inverted into its
     // opposite — the lane now asserts every tag is taught.
+    const topicLine = text.split("\n").find((line) => line.includes("topic (optional)"));
+    assert.ok(topicLine, "the guidance has a topic line at all");
     assert.ok(
-      text.includes(`topic (optional): one of ${pack.TOPICS.join(" | ")}`),
+      topicLine.includes(`one of ${pack.TOPICS.join(" | ")}`),
       "the guidance teaches the whole topic vocabulary",
     );
+    // ON THE TOPIC LINE and not merely somewhere in the text: `place` is a grain
+    // handle and a target shape, and `work` is what the board posts, so both are
+    // words these instructions carry whatever the tag list says. A search over the
+    // whole string is green on 0.13's two-tag diet for three of the four —
+    // measured, not assumed.
     for (const topic of pack.TOPICS)
-      assert.ok(text.includes(topic), `…and ${topic} is a word the model is actually given`);
+      assert.ok(topicLine.includes(topic), `…and ${topic} is on the list of tags, not merely a word in the text`);
     assert.deepEqual(
       pack.TOPICS,
       ["rumor", "work", "place", "smalltalk"],
@@ -26453,9 +26478,10 @@ const fire = (node, type) => Promise.all((node.listeners[type] ?? []).map((fn) =
   await withPackCall(async ({ sent }) => {
     const { sealed, failure } = await run();
     assert.equal(failure, "none", "the widened emission is a whole answer");
-    // WHAT WENT OUT taught the whole vocabulary…
-    for (const topic of pack.TOPICS)
-      assert.ok(sent[0].body.instructions.includes(topic), `the request asks for ${topic}`);
+    // WHAT WENT OUT taught the whole vocabulary — read off the TAG LINE, because
+    // `place` and `work` are words these instructions carry for other reasons.
+    const asked = sent[0].body.instructions.split("\n").find((line) => line.includes("topic (optional)"));
+    for (const topic of pack.TOPICS) assert.ok(asked.includes(topic), `the request asks for ${topic}`);
     assert.deepEqual(
       Object.keys(sent[0].body.schema.properties.lines.items.properties),
       ["at", "when", "r", "text", "topic", "w"],
@@ -26682,10 +26708,15 @@ const fire = (node, type) => Promise.all((node.listeners[type] ?? []).map((fn) =
         assert.equal(failure, "thin", "…and fails as thin, which is the honest verdict for too little content");
       }
     }
-    // AND TEN IS WHERE THE LINE IS. The pair above only says the boundary is
-    // somewhere between nine and ten; this says it is the ruled number and not a
-    // coincidence of the fixture.
-    assert.equal(pack.TUNING.floorLines, 10, "…and ten is the floor those three drove");
+    // AND THE THREE COUNTS REALLY STRADDLE THE FLOOR. Written at literals so a
+    // floor that drifted would take this lane red, and checked against the
+    // constant so a floor that drifted with them cannot leave three counts all on
+    // one side of it, still green and testing nothing.
+    assert.deepEqual(
+      [11, 10, 9].map((count) => count >= pack.TUNING.floorLines),
+      [true, true, false],
+      "…and the three counts drove both sides of the ruled floor",
+    );
   });
 
   // ── A HOSTILE EMISSION IS STRIPPED, FOLDED AND REPAIRED AT THE SEAL ───────
