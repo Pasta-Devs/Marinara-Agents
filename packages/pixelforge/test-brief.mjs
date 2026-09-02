@@ -7748,6 +7748,221 @@ const pixelsOf = (canvas) => Array.from(canvas._data).join(",");
   );
 }
 
+// ── THE SKY REACHES THE PICTURE (0.14 slice 3) ──────────────────────────────
+// 40-render is not in MODULES — a canvas context wants a page — so it is loaded
+// HERE, over the same PF the rest of this file drives, with the software canvas
+// under it. Everything the weather does to the screen lives in that one module
+// and in nothing else, so leaving it unloaded would leave the whole visible half
+// of this release unwatched: the ground substitution, the tint's position
+// relative to the darkness block, and the particle pass.
+{
+  new Function("PF", readFileSync(join(here, "src", "40-render.js"), "utf8"))(loadedPF);
+  const meanLuma = (canvas) => {
+    const d = canvas._data;
+    let sum = 0;
+    for (let i = 0; i < d.length; i += 4) sum += 0.299 * d[i] + 0.587 * d[i + 1] + 0.114 * d[i + 2];
+    return sum / (d.length / 4);
+  };
+  /** The particle pass reads `performance.now()` and nothing else does, so a
+   *  stubbed clock is what turns "is it alive?" into a comparison. defineProperty
+   *  rather than assignment: `performance` is an accessor on the Node global and
+   *  this file is a module, where a bare assignment to one throws. */
+  const withClock = (ms, run) => {
+    const was = Object.getOwnPropertyDescriptor(globalThis, "performance");
+    Object.defineProperty(globalThis, "performance", { value: { now: () => ms }, configurable: true });
+    try {
+      return run();
+    } finally {
+      Object.defineProperty(globalThis, "performance", was);
+    }
+  };
+
+  const built = world.build(424242, "cozy-village", brief.defaults("cozy-village", 424242));
+  const zones = Object.values(built.zones);
+  const outside = built.zones[built.startZone];
+  const inside = zones.find((z) => z.mapKind === "building");
+  assert.equal(outside.mapKind, "settlement", "the world opens outdoors");
+  assert.ok(inside, "…and has somewhere indoors to stand");
+  assert.ok(
+    outside.ground.some((id) => loadedPF.own(loadedPF.weather.SUBS.snow, id)),
+    "the settlement has ground snow can lie on",
+  );
+  // A PAVED zone: an exterior with nothing snowable in it, which is the third
+  // case the composite class has to get right and the only one no compiled world
+  // reliably offers. Cloned rather than compiled so the lane cannot drift with
+  // the generator's taste in ground cover.
+  const paved = { ...outside, id: "z-paved", ground: outside.ground.map(() => "path"), overhead: outside.overhead.map(() => 0) };
+  // …and its opposite: a grove whose ONLY snowable id is in the OVERHEAD layer.
+  // `canopy` lives there, so a substitution wired into the ground loop alone
+  // leaves green treetops standing over a white field — and every ground-side
+  // assertion stays green over it.
+  const grove = {
+    ...outside,
+    id: "z-grove",
+    ground: outside.ground.map(() => "path"),
+    overhead: outside.overhead.map((_, i) => (i % 3 === 0 ? "canopy" : 0)),
+  };
+
+  const stand = (zone, sky) => ({
+    x: zone.w * 8,
+    y: zone.h * 8,
+    facing: 0,
+    phase: 0,
+    moving: false,
+    nearNpc: null,
+    mode: "walk",
+    zone: () => zone,
+    darkness: () => 0, // NOON: the darkness block returns exactly 0 from 07:00 to 18:00
+    weather: () => sky,
+  });
+  const FAIR = { word: "fair", intensity: null };
+
+  withCanvas(() => {
+    const render = new loadedPF.Render(shimCanvas(loadedPF.VW, loadedPF.VH));
+    const frame = (zone, sky, ms = 1000) =>
+      withClock(ms, () => {
+        render.draw(stand(zone, sky), { frame: false });
+        return pixelsOf(render.canvas);
+      });
+    const luma = (zone, sky, ms = 1000) =>
+      withClock(ms, () => {
+        render.draw(stand(zone, sky), { frame: false });
+        return meanLuma(render.canvas);
+      });
+
+    // ── THE PAINT CONTRACT ───────────────────────────────────────────────────
+    // The substitution is a rename at paint time and NOTHING ELSE. A zone array
+    // written in the renderer is the 0.10 bug class: the compiled world would
+    // start carrying the weather, the save would carry it after that, and a
+    // thaw would never come.
+    const groundWas = outside.ground.slice();
+    const overheadWas = outside.overhead.slice();
+    frame(outside, { word: "snow", intensity: "heavy" });
+    assert.deepEqual(outside.ground, groundWas, "a snow day never writes the zone's ground array");
+    assert.deepEqual(outside.overhead, overheadWas, "…nor its overhead array");
+
+    // ── THE COMPOSITE CLASS ──────────────────────────────────────────────────
+    const classesFor = (zone, sky) => {
+      render.clearZones();
+      frame(zone, sky);
+      return [...render._zoneCache.keys()];
+    };
+    assert.deepEqual(
+      classesFor(outside, { word: "snow", intensity: "light" }),
+      [`${outside.id}|snow`],
+      "a snowable exterior composites under the snow class",
+    );
+    assert.deepEqual(
+      classesFor(outside, { word: "rain", intensity: "heavy" }),
+      [`${outside.id}|base`],
+      "…and under the base class for every other sky — only snow moves the ground",
+    );
+    assert.deepEqual(
+      classesFor(inside, { word: "snow", intensity: "heavy" }),
+      [`${inside.id}|base`],
+      "it does not snow in the inn",
+    );
+    assert.deepEqual(
+      classesFor(paved, { word: "snow", intensity: "heavy" }),
+      [`${paved.id}|base`],
+      "…and a zone with nothing snowable in it never pays for a second composite",
+    );
+    // Both classes can be live at once (walk out of a snowy square into a paved
+    // one and back), and invalidating a zone has to take BOTH — a stale
+    // composite under either name is a zone that never repaints.
+    render.clearZones();
+    frame(outside, FAIR);
+    frame(outside, { word: "snow", intensity: "light" });
+    assert.equal(render._zoneCache.size, 2, "the two classes cache side by side");
+    render.invalidateZone(outside.id);
+    assert.equal(render._zoneCache.size, 0, "…and invalidating the zone takes both of them");
+
+    // ── THE SNOW ACTUALLY ARRIVES ────────────────────────────────────────────
+    const fairFrame = frame(outside, FAIR);
+    const snowFrame = frame(outside, { word: "snow", intensity: "light" });
+    assert.notEqual(snowFrame, fairFrame, "a snow day paints a different world");
+    assert.ok(
+      luma(outside, { word: "snow", intensity: "light" }) > luma(outside, FAIR) + 10,
+      "…and a brighter one: the ground went white",
+    );
+    // BOTH LAYERS. `canopy` is overhead, so a grove whose only snowable id sits
+    // there is the case a ground-only substitution renders as green treetops
+    // over a white field — and it is the case no ground assertion can see.
+    assert.ok(
+      luma(grove, { word: "snow", intensity: "light" }) > luma(grove, FAIR) + 5,
+      "the snow reaches the overhead layer too — treetops, not just the ground",
+    );
+
+    // ── THE TINT, AND WHERE IT SITS ──────────────────────────────────────────
+    // At NOON `darkness()` returns exactly 0, so the day/night block never runs.
+    // A tint applied inside it would be invisible for eleven hours a day, which
+    // is most of the hours anyone plays. Overcast is the clean witness: it tints
+    // and carries no particles, so the difference below is the tint and nothing
+    // else.
+    const fairLuma = luma(outside, FAIR);
+    assert.ok(
+      luma(outside, { word: "overcast", intensity: null }) < fairLuma - 5,
+      "an overcast noon is greyer than a fair one — the tint is not behind the darkness gate",
+    );
+    const lightRain = luma(outside, { word: "rain", intensity: "light" });
+    const heavyRain = luma(outside, { word: "rain", intensity: "heavy" });
+    assert.ok(lightRain < fairLuma - 5, "rain tints at noon");
+    assert.ok(heavyRain < lightRain - 5, "…and heavy rain is measurably deeper than light rain");
+    // The structural half of the same promise, at the source: whichever word
+    // takes an intensity and tints at all must carry BOTH alphas, and the heavy
+    // one must be the deeper.
+    const alphaOf = (color) => Number(String(color).match(/,([^,)]+)\)$/)[1]);
+    assert.ok(
+      alphaOf(loadedPF.weather.WORD_META.rain.tint.heavy) > alphaOf(loadedPF.weather.WORD_META.rain.tint.light),
+      "the heavy rain alpha is the deeper of the pair",
+    );
+    assert.equal(loadedPF.weather.WORD_META.snow.tint, null, "snow does not tint — the tiles carry it");
+
+    // ── PARTICLES, AND THE CLOCK THEY RIDE ───────────────────────────────────
+    // The pass is render-only and takes its phase from `performance.now()`, so
+    // the SAME sky at two different instants must paint two different frames —
+    // that is the whole of "the world stays alive". And a sky with nothing
+    // falling out of it must paint the same frame at both, or the pass is
+    // running where it should not.
+    assert.notEqual(
+      frame(outside, { word: "rain", intensity: "heavy" }, 0),
+      frame(outside, { word: "rain", intensity: "heavy" }, 900),
+      "rain is falling: the same sky at two instants is two pictures",
+    );
+    assert.notEqual(
+      frame(outside, { word: "snow", intensity: "light" }, 0),
+      frame(outside, { word: "snow", intensity: "light" }, 900),
+      "…and so is snow",
+    );
+    assert.equal(
+      frame(outside, FAIR, 0),
+      frame(outside, FAIR, 900),
+      "a fair sky drops nothing, at any instant",
+    );
+    // HEAVY AND LIGHT MUST READ AS DIFFERENT WEATHER. The felt half is an eye
+    // check; the structural half is that the two rows differ in both count and
+    // fall speed, and that the frames they paint are not the same frame.
+    const rows = loadedPF.weather.TUNING.particles;
+    assert.ok(rows.heavy.n > rows.light.n, "heavy runs more streaks");
+    assert.ok(rows.heavy.fall > rows.light.fall, "…and drops them faster");
+    assert.notEqual(
+      frame(outside, { word: "rain", intensity: "heavy" }, 500),
+      frame(outside, { word: "rain", intensity: "light" }, 500),
+      "heavy rain and light rain are not the same picture at the same instant",
+    );
+
+    // ── AND NONE OF IT REACHES INDOORS ───────────────────────────────────────
+    // One assertion covers all three: same interior, worst sky, two instants.
+    // A tint would darken it, a substitution would whiten it, a particle would
+    // move between the two — so identical frames say all three stayed outside.
+    assert.equal(
+      frame(inside, { word: "storm", intensity: null }, 0),
+      frame(inside, FAIR, 900),
+      "the storm stops at the door: no tint, no snow, no rain indoors",
+    );
+  });
+}
+
 // ── A DAY HAS A SHAPE (0.10.0) ─────────────────────────────────────────────
 // An ordinary resident's dawn and dusk were both `post`, so a settlement stood
 // at its work anchors from waking until sleeping and the only thing a whole day
