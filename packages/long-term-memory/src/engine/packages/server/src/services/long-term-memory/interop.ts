@@ -712,14 +712,24 @@ export async function previewPackageLorebooks(
     totalImported = matchingBooks.reduce((count, book) => count + book.counts.imported, 0);
   let remaining = request.limit;
   const books = matchingBooks.map((book) => {
-      if (!remaining) return { ...book, entries: [] };
       const entries = book.entries.flatMap((entry) => {
-        if (!remaining) return [];
-        const candidates = entry.candidates.slice(0, remaining);
-        remaining -= candidates.length;
-        return candidates.length ? [{ ...entry, candidateCount: candidates.length, candidates }] : [];
-      });
-      return { ...book, entries };
+          if (!remaining) return [];
+          const candidates = entry.candidates.slice(0, remaining);
+          remaining -= candidates.length;
+          return candidates.length ? [{ ...entry, candidateCount: candidates.length, candidates }] : [];
+        }),
+        candidates = entries.flatMap((entry) => entry.candidates),
+        imported = candidates.filter((candidate) => candidate.status === "imported").length;
+      return {
+        ...book,
+        counts: {
+          entries: entries.length,
+          candidates: candidates.length,
+          pending: candidates.length - imported,
+          imported,
+        },
+        entries,
+      };
     }),
     entries = books.reduce((count, book) => count + book.entries.length, 0),
     samples = books.flatMap((book) => book.entries.flatMap((entry) => entry.candidates)),

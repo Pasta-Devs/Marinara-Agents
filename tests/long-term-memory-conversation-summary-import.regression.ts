@@ -52,7 +52,7 @@ async function main() {
     { configurePackageRuntime },
     { previewPackageInterop, previewPackageLorebooks, sourcePackageDetails, importPackageInterop },
     { LongTermMemoryStorage },
-    { ltmInteropPreviewRequestSchema, ltmSourceDetailsRequestSchema },
+    { ltmInteropPreviewRequestSchema, ltmLorebookPreviewResponseSchema, ltmSourceDetailsRequestSchema },
   ] = await Promise.all([
     import("../packages/long-term-memory/src/engine/packages/server/src/services/long-term-memory/package-runtime.ts"),
     import("../packages/long-term-memory/src/engine/packages/server/src/services/long-term-memory/interop.ts"),
@@ -124,6 +124,15 @@ async function main() {
                   { id: "lore-entry", name: "Moon Vault", content: "The Moon Vault is sealed." },
                   { id: "lore-entry-two", name: "Sun Vault", content: "The Sun Vault is open." },
                 ],
+              },
+              {
+                id: "lorebook-large",
+                data: { name: "Large Lorebook", category: "World" },
+                entries: Array.from({ length: 101 }, (_, index) => ({
+                  id: `large-lore-entry-${index}`,
+                  name: `Large Entry ${index}`,
+                  content: `Large lore content ${index}.`,
+                })),
               },
             ];
           },
@@ -247,8 +256,14 @@ async function main() {
       );
       assert.equal(explicitCharacter.imported[0]?.note.modes[0], "game");
 
-      const lorebookPreview = await previewPackageLorebooks({ limit: 100 }, join(dataDir, "long-term-memory"));
-      const limitedLorebookPreview = await previewPackageLorebooks({ limit: 1 }, join(dataDir, "long-term-memory"));
+      const lorebookPreview = await previewPackageLorebooks(
+        { query: "Imported", limit: 100 },
+        join(dataDir, "long-term-memory"),
+      );
+      const limitedLorebookPreview = await previewPackageLorebooks(
+        { query: "Imported", limit: 1 },
+        join(dataDir, "long-term-memory"),
+      );
       assert.equal(lorebookPreview.books[0]?.entries[0]?.candidates[0]?.importMode, "roleplay");
       const lorebookGamePreview = await previewPackageLorebooks(
         { limit: 100, mode: "game" },
@@ -265,6 +280,15 @@ async function main() {
       assert.equal(limitedLorebookPreview.counts.candidates, 1);
       assert.equal(limitedLorebookPreview.totals.candidates, 2);
       assert.equal(limitedLorebookPreview.truncated, true);
+      const largeLorebookPreview = ltmLorebookPreviewResponseSchema.parse(
+        await previewPackageLorebooks({ query: "Large", limit: 100 }, join(dataDir, "long-term-memory")),
+      );
+      assert.equal(largeLorebookPreview.books[0]?.counts.entries, 100);
+      assert.equal(largeLorebookPreview.books[0]?.counts.candidates, 100);
+      assert.equal(largeLorebookPreview.books[0]?.counts.pending, 100);
+      assert.equal(largeLorebookPreview.totals.entries, 101);
+      assert.equal(largeLorebookPreview.totals.candidates, 101);
+      assert.equal(largeLorebookPreview.truncated, true);
       const importedLorebook = await importPackageInterop(
         { source: "lorebooks", sourceIds: [lorebookSourceId], extract: true, limit: 100 },
         join(dataDir, "long-term-memory"),
