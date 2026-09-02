@@ -120,6 +120,28 @@ PF.core = {
     const meta = p.chatMeta && typeof p.chatMeta === "object" ? p.chatMeta : {};
     PF.save.ensurePresent(this, meta);
 
+    // THE GM'S SKY, RECONCILED. The host hands us the whole metadata blob on
+    // every props delivery, so a future writer patching `pixelforgeWeather`
+    // mid-story is answered here — the town re-places under the new sky the
+    // moment the key lands, without waiting for a boundary.
+    //
+    // COMPARED AGAINST THE APPLIED MEMO, never against `sim.weatherOverride`.
+    // The memo tracks METADATA, which a console never touches, so a summoned
+    // storm is invisible to this and no props delivery claws it back — where a
+    // comparison against the live field would have re-folded the absent key to
+    // null on the first streamed token, called that a change, and undone it. An
+    // unchanged or absent key assigns nothing and re-resolves nothing, which
+    // matters on a surface that runs once per turn and then some.
+    if (this.sim) {
+      const folded = PF.weather.foldOverride(meta.pixelforgeWeather);
+      const applied = PF.weather.overrideKey(folded);
+      if (applied !== this.sim._weatherMetaApplied) {
+        this.sim.weatherOverride = folded;
+        this.sim._weatherMetaApplied = applied;
+        this.sim.resolveSchedules();
+      }
+    }
+
     // Mode arbitration: replay > combat > (walk|dialogue kept as-is).
     // Prefer the real combat signal (Capability API 1.11, #5094): true the
     // instant the combat UI actually mounts. Fallback for older engines is the
@@ -616,6 +638,14 @@ PF.core = {
           this._declareChrome();
         }
         if (res.zoneChanged) this._zoneChanged();
+      }
+      // The notable-sky lines the clock movers parked. The sim holds no core and
+      // no generation, so it cannot file its own — it queues `{text, day}` rows
+      // and a frame spends them. The DAY RIDES: a multi-day fishing session files
+      // day 12's snow under day 12, not under the day the drain happened to run.
+      if (sim._weatherNotes.length) {
+        const gen = PF.save._gen ?? 0;
+        for (const note of sim._weatherNotes.splice(0)) PF.player.log(this, note.text, note.day, gen);
       }
       if (this._underlayEl) this.render?.draw(sim);
       // Positional autosave: at most one save per 30s of movement — the real

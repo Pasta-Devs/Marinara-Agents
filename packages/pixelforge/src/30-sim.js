@@ -61,6 +61,30 @@ PF.Sim = class {
     // fold its narration box away so the world has the screen to itself.
     this.cutscene = null;
     this._vistaArmed = true;
+    // THE GM'S SKY, when one has been set. Hydrated from chat metadata by
+    // simFromSaved and re-read on every rebuild; NEVER serialized — it is not an
+    // envelope key and it never will be. DECLARED HERE, above the
+    // resolveSchedules() below, and that placement is load-bearing: the schedule
+    // bias reads the weather, so a field appended after that call would be
+    // `undefined` at the first read on every world at load time. (weather() and
+    // 17-weather's at() both tolerate a nullish override regardless.)
+    this.weatherOverride = null;
+    // The serialized last-APPLIED metadata fold. The mid-session reconciler
+    // compares chat metadata against THIS and never against `weatherOverride`
+    // itself — so a console-written runtime sky is invisible to it, and the
+    // reconciler cannot mistake "the metadata key is still absent" for "the
+    // player's override was just cleared".
+    this._weatherMetaApplied = "";
+    // Day-keyed cache for weather(): the render pass reads the sky every frame
+    // for its tint and particles, and the raw derivation is a template literal, a
+    // string hash and an rng construction. A perf cache and NOT a transition
+    // detector — the ledger park derives both sides of a crossing itself.
+    this._weatherMemo = null;
+    // Notable-sky lines the clock movers parked, waiting for a frame to file
+    // them. `{text, day}` rows, because the day is the day it HAPPENED: a
+    // multi-day fishing session files day 12's snow under day 12 and not under
+    // the day the drain ran. Runtime-only, capped, never saved.
+    this._weatherNotes = [];
     // Place everyone for the starting clock. A restore overwrites clockMin
     // AFTER construction and calls this again (see 60-save simFromSaved).
     this.resolveSchedules();
@@ -234,6 +258,7 @@ PF.Sim = class {
     if (this.mode === "walk" || this.mode === "dialogue") {
       if (this.mode === "walk") {
         let advanced = false;
+        const dayBefore = this.day;
         this._clockAcc += dt;
         while (this._clockAcc >= PF.CLOCK_SECONDS_PER_GAME_MINUTE) {
           this._clockAcc -= PF.CLOCK_SECONDS_PER_GAME_MINUTE;
@@ -247,6 +272,11 @@ PF.Sim = class {
         // A fixed 1/60s step advances at most one game minute per ~300 frames,
         // so a boundary can never be skipped between checks.
         if (advanced && this.daypart() !== this._daypart) this.resolveSchedules();
+        // The first of the three movers. Midnight is NOT a daypart boundary, so
+        // this is the only thing that notices a walked-through day change — and
+        // it costs a single integer compare on every other advanced minute,
+        // which is why no per-minute weather() read is spent here.
+        if (advanced) this._parkWeather(dayBefore, this.day);
       }
       if (this.mode === "walk") this.stepCutscene(dt, z);
       this.stepNpcs(dt, z);
@@ -290,6 +320,74 @@ PF.Sim = class {
     return "night";
   }
 
+  /** THE DAY'S SKY: `{word, intensity}`, memoised per (day, override).
+   *
+   *  The render pass reads this EVERY FRAME — for the tint, the composite class
+   *  and the particles — and the raw derivation underneath is a template
+   *  literal, a string hash and an rng construction, so the uncached version is
+   *  that work sixty times a second. One comparison serves every consumer.
+   *
+   *  The key is the SERIALIZED WHOLE of the override, not its word: a console
+   *  change from `{word:"storm"}` to `{word:"storm", intensity:"heavy"}` is the
+   *  documented verification incantation, and a word-only key would sit on it
+   *  until the day rolled.
+   *
+   *  A PERF CACHE, NOT A TRANSITION DETECTOR. There is no `_weather` field
+   *  anywhere: the ledger park derives both sides of a crossing itself, which is
+   *  what keeps the sky a pure function of the saved clock. */
+  weather() {
+    const overrideKey = PF.weather.overrideKey(this.weatherOverride);
+    const memo = this._weatherMemo;
+    if (memo && memo.day === this.day && memo.overrideKey === overrideKey)
+      return { word: memo.word, intensity: memo.intensity };
+    const sky = PF.weather.at(this.world, this.day, this.weatherOverride);
+    this._weatherMemo = { day: this.day, overrideKey, word: sky.word, intensity: sky.intensity };
+    return sky;
+  }
+
+  /** The season word for the live day, on this world's own 365-day calendar. */
+  season() {
+    return PF.weather.season(this.world, this.day);
+  }
+
+  /** Park a ledger line when a LIVE day-crossing brings a notable sky in.
+   *
+   *  Called by the three clock MOVERS and by nothing else — never by
+   *  resolveSchedules, never by the constructor, never by simFromSaved. That is
+   *  what keeps a restore silent: a rebuild re-derives the same sky it always
+   *  had, and a world reopened on a snowy day has not just had it start snowing.
+   *
+   *  BOTH SIDES ARE DERIVED HERE, so the park needs no state of its own and is
+   *  rewind-exact. The compare reads `.word`: at() returns a fresh object every
+   *  call, so a reference compare would file a line on every midnight of a
+   *  six-day snowy stretch. Intensity never reaches the ledger either — the
+   *  ledger says snow, the header says how hard.
+   *
+   *  "FIRST" MEANS FIRST OF THE DAYS THE WORLD HAS LIVED. The scan walks back to
+   *  seasonStartDay(), which floors at day 1, so a world whose calendar opens
+   *  mid-winter still gets a true "First snow." for its genuine first snowfall
+   *  instead of losing it to months of phantom pre-world time. The bound is that
+   *  function's and never a hand-derived season length — under a 365-day year a
+   *  hand bound is wrong by up to 182 days. */
+  _parkWeather(dayBefore, dayAfter) {
+    if (dayBefore === dayAfter) return;
+    const after = PF.weather.at(this.world, dayAfter, this.weatherOverride).word;
+    if (!PF.weather.TUNING.notable.includes(after)) return;
+    if (PF.weather.at(this.world, dayBefore, this.weatherOverride).word === after) return;
+    let text = "A storm came in.";
+    if (after === "snow") {
+      // Storms claim no first — a season's first storm is not a calendar fact
+      // the way the first snow is.
+      let seen = false;
+      for (let day = PF.weather.seasonStartDay(this.world, dayAfter); day < dayAfter && !seen; day++)
+        seen = PF.weather.at(this.world, day, this.weatherOverride).word === "snow";
+      text = seen ? "Snow came in." : "First snow.";
+    }
+    // Queued without overwrite: a full queue drops the NEW line rather than
+    // losing one a frame has not filed yet.
+    if (this._weatherNotes.length < 4) this._weatherNotes.push({ text, day: dayAfter });
+  }
+
   /** Jump the clock to the next occurrence of a daypart's start (the "wait
    *  until dusk" rest action). A JUMP, not an advance: NPCs re-place in one
    *  shot. Walk mode only, so it can never collide with the dialogue freeze. */
@@ -299,10 +397,12 @@ PF.Sim = class {
     // undefined, and the guard below would have waved it through onto clockMin.
     const at = Object.prototype.hasOwnProperty.call(PF.DAYPART_STARTS, target) ? PF.DAYPART_STARTS[target] : undefined;
     if (at === undefined || this.mode !== "walk") return false;
+    const dayBefore = this.day;
     if (at <= this.clockMin) this.day++;
     this.clockMin = at;
     this._clockAcc = 0;
     this.resolveSchedules();
+    this._parkWeather(dayBefore, this.day); // the second of the three movers
     return true;
   }
 
@@ -361,12 +461,14 @@ PF.Sim = class {
    *  count, so a caller can tell a clock that moved from one that did not. */
   advanceMinutes(n) {
     if (!Number.isInteger(n) || n <= 0) return 0;
+    const dayBefore = this.day;
     this.clockMin += n;
     while (this.clockMin >= 24 * 60) {
       this.clockMin -= 24 * 60;
       this.day++;
     }
     this.resolveSchedules();
+    this._parkWeather(dayBefore, this.day); // the third of the three movers
     return n;
   }
 
@@ -563,9 +665,15 @@ PF.Sim = class {
   header() {
     const z = this.zone();
     const near = this.nearNpc ? `; near: ${this.nearNpc.name} (${this.nearNpc.role})` : "";
-    // The daypart word is one token and keeps the GM's light and "who is about"
-    // narration consistent with what we render and where NPCs actually are.
-    return `[World: ${z.name}; ${this.clockLabel()} (${this.daypart()})${near}]`;
+    // THREE WORDS IN THE PAREN GROUP, and each earns its permanent per-turn cost.
+    // The daypart keeps the GM's light and "who is about" narration consistent
+    // with what we render and where NPCs actually are. The weather word is the
+    // whole channel the sky reaches the narrator through — live, every turn, at
+    // the same tier. And the SEASON is the word that lets the GM make a judgment
+    // the daypart cannot: it should not snow in summer, unless the world it is
+    // snowing in is one where that means something.
+    const sky = this.weather();
+    return `[World: ${z.name}; ${this.clockLabel()} (${this.daypart()}, ${PF.weather.labelFor(sky.word, sky.intensity)}, ${this.season()})${near}]`;
   }
 
   /** The metered turn prefix (docs/brief-schema.md §7): name+role ride the

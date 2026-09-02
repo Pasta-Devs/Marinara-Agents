@@ -1227,6 +1227,29 @@ PF.save = {
     // itself. Own-property only, both places.
     const hasZone = (id) => typeof id === "string" && Object.prototype.hasOwnProperty.call(world.zones, id);
     const sim = new PF.Sim(world);
+    // THE GM'S SKY, hydrated from chat metadata — the package's OTHER store, and
+    // the right one for a slot like this. The save ENVELOPE is closed to it: a
+    // registered key that emits only sometimes throws the load-time registry
+    // probe for every user on every boot, and past that assert it is the
+    // "listed but not emitted -> silently deleted" case the registry's own
+    // comment calls the slice-1 bug. Metadata costs zero envelope bytes and zero
+    // pins, and it carries the forward-compat argument the pack key already
+    // states in its own header: an older client never reads or writes this key
+    // at all, so a word this build does not know survives a round trip through
+    // it verbatim.
+    //
+    // FOLD, NEVER WRITE BACK. 0.14 reads the row, folds an unknown word to "no
+    // override" for its own runtime only, and writes nothing — so the raw row is
+    // still there for the build that understands it.
+    //
+    // AHEAD OF THE resolveSchedules() BELOW, deliberately: the schedule bias
+    // reads the sky, so boot placement has to happen against the overridden one.
+    // simFromSaved is also the right home rather than restore(): the quarantine
+    // bag is kept OUT of here because re-reading it would resurrect a slot a
+    // re-adoption had just consumed, and the override has nothing to consume —
+    // it is idempotent config, so re-reading it on every rebuild is the feature.
+    sim.weatherOverride = PF.weather.foldOverride(meta && typeof meta === "object" ? meta.pixelforgeWeather : null);
+    sim._weatherMetaApplied = PF.weather.overrideKey(sim.weatherOverride);
     // Additive-only by policy (plan §Q1): keys a NEWER build added ride through
     // this one instead of being erased by the next flush. Collected OUTSIDE the
     // version gate deliberately — a build that cannot even parse `v` is exactly

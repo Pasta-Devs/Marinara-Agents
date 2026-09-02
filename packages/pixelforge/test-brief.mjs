@@ -54,6 +54,7 @@ const MODULES = [
   "00-prelude.js",
   "10-art.js",
   "15-assets.js",
+  "17-weather.js",
   "18-brief.js",
   "20-world.js",
   "25-schedule.js",
@@ -1186,11 +1187,22 @@ const wayrestCast = [
     zoneId: "z1",
     nearNpc: null,
     dirty: false,
+    day: 1,
     zone() {
       return this.world.zones[this.zoneId];
     },
     clockLabel: () => "Day 1 · 08:00",
     daypart: () => "day",
+    // The borrowed header reads the sky and the season too, from 0.14 on. The
+    // contract of this stand-in is what its own shape implies — exactly what the
+    // borrowed prototype reads, never a partial Sim API — so the two go in
+    // beside `daypart`, off the real module rather than as canned strings.
+    weather() {
+      return loadedPF.weather.at(this.world, this.day, null);
+    },
+    season() {
+      return loadedPF.weather.season(this.world, this.day);
+    },
   };
   // Borrow the real methods off the shipped Sim prototype.
   sim.header = loadedPF.Sim.prototype.header.bind(sim);
@@ -2546,8 +2558,13 @@ const wayrestCast = [
   delete held._hold;
 
   // The header carries the daypart so the GM narrates the light we render.
+  // RE-PINNED TO THE PREFIX for 0.14's three-word group — `(dusk, light rain,
+  // autumn)` — and deliberately NOT to a literal group: the weather word is a
+  // DRAW off the derivation, so a one-file tuning retune could turn a daypart
+  // assert red without touching a daypart. The prefix is what this pin was
+  // always about.
   dayOf(19 * 60);
-  assert.ok(sim.header().includes("(dusk)"), `the header names the daypart (${sim.header()})`);
+  assert.ok(sim.header().includes("(dusk,"), `the header names the daypart (${sim.header()})`);
 
   // NPCs sharing a destination box must not stack: talk-targeting picks the
   // nearest with a strict <, so anyone underneath the top sprite would be
@@ -13323,6 +13340,7 @@ await withSavePath(async ({ calls, behavior, makeCore }) => {
     "00-prelude.js",
     "10-art.js",
     "15-assets.js",
+    "17-weather.js",
     "18-brief.js",
     "20-world.js",
     "25-schedule.js",
@@ -14490,7 +14508,7 @@ await withSavePath(async ({ calls, behavior, makeCore }) => {
   // Negative half: the assertion fails the build from either side of the
   // duplication. 20-world loads 18-brief's table at boot, so both files are in
   // the same forced stack and either one can be the thing that moved.
-  const parts = ["00-prelude.js", "10-art.js", "15-assets.js", "18-brief.js", "20-world.js"];
+  const parts = ["00-prelude.js", "10-art.js", "15-assets.js", "17-weather.js", "18-brief.js", "20-world.js"];
   const bootWorld = (file, from, to) => {
     const source = parts
       .map((name) => {
@@ -23264,6 +23282,12 @@ const fire = (node, type) => Promise.all((node.listeners[type] ?? []).map((fn) =
         name: solid(24, "Wrenfallowmere"),
         surround: "water",
         prosperity: "thriving",
+        // BOTH AXES PINNED, because this is the fixture that answers "what is the
+        // biggest legal brief" — and a brief whose author named its climate is
+        // strictly bigger than one that let the world roll. The digest does not
+        // read them yet; when it does, its re-measure lands on this shape.
+        latitude: "subpolar",
+        precipitation: "wet",
         situation: solid(240, "Theford"),
         places: ["gathering", "workshop", "workshop", "sanctuary"].map((kind, i) => ({
           kind,
@@ -24529,6 +24553,63 @@ const fire = (node, type) => Promise.all((node.listeners[type] ?? []).map((fn) =
   // way a frozen-constant lane can go quietly green.
   assert.equal(checked, Object.keys(LAYOUTS).length, `every frozen layout was checked (${checked})`);
   assert.equal(checked, themes.length * LAYOUT_SEEDS.length * 3, "…and the table covers the full product");
+
+  // (3) A PIN MEANS NO DRAW. A brief that names both axes spends neither stream,
+  // so it cannot move a fingerprint either — and this is the half that says the
+  // frozen table above is measuring the mint and not just the tile RNG.
+  for (const theme of themes)
+    for (const seed of LAYOUT_SEEDS) {
+      const sealed = loadedPF.brief.defaults(theme, seed);
+      sealed.latitude = "polar";
+      sealed.precipitation = "arid";
+      const w = loadedPF.world.build(seed, theme, sealed);
+      assert.equal(w.latitude, "polar", `the pinned latitude reached the world at ${theme}/${seed}`);
+      assert.equal(w.precipitation, "arid", "…and the pinned precipitation");
+      assert.equal(
+        layoutFingerprint(w),
+        LAYOUTS[`${theme}|${seed}|defaults`],
+        `pinning both axes moved the ${theme}/${seed} layout`,
+      );
+    }
+
+  // (4) TWO STREAMS, DIRECTLY. One stream per axis is what lets a brief pin one
+  // without disturbing the other's roll; one shared stream would let a pinned
+  // latitude silently re-roll the precipitation of every world that named one.
+  for (const theme of themes)
+    for (const seed of LAYOUT_SEEDS) {
+      const open = loadedPF.weather.axesFor({}, seed, theme);
+      assert.equal(
+        loadedPF.weather.axesFor({ latitude: "polar" }, seed, theme).precipitation,
+        open.precipitation,
+        `pinning latitude moved the precipitation roll at ${theme}/${seed}`,
+      );
+      assert.equal(
+        loadedPF.weather.axesFor({ precipitation: "arid" }, seed, theme).latitude,
+        open.latitude,
+        `pinning precipitation moved the latitude roll at ${theme}/${seed}`,
+      );
+    }
+
+  // …AND THE HALF THE PROBE ABOVE CANNOT SEE, which is why it is here. Each mint
+  // constructs its OWN rng from its own hash rather than sharing a live one, so
+  // the two probes above stay green even if BOTH axes are keyed to the SAME
+  // stream name — the pin passes while the axes have silently become one axis
+  // wearing two words. What a shared stream actually costs is the JOINT space:
+  // both bands would then be chosen by the same uniform draw, and cozy's nine
+  // (latitude x precipitation) pairs would collapse to the five its two
+  // cumulative tables happen to line up on — no subpolar desert, ever, on any
+  // seed. So the pin is the product, reached.
+  for (const [theme, expected] of [
+    ["cozy-village", 3 * 3],
+    ["sci-fi-colony", 5 * 3],
+  ]) {
+    const pairs = new Set();
+    for (let seed = 1; seed <= 1200; seed++) {
+      const axes = loadedPF.weather.axesFor({}, seed, theme);
+      pairs.add(`${axes.latitude}/${axes.precipitation}`);
+    }
+    assert.equal(pairs.size, expected, `${theme} reaches every band pair its two rows allow (${pairs.size})`);
+  }
 }
 
 console.log("brief validator + compiler: all cases passed");
