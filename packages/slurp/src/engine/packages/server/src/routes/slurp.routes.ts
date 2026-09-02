@@ -980,6 +980,30 @@ export async function slurpRoutes(app: FastifyInstance) {
     return { ok: true };
   });
 
+  app.post("/noodler/ads/generate", async (req, reply) => {
+    const parsed = z
+      .object({ connectionId: z.string().trim().min(1).optional(), count: z.number().int().min(1).max(10).optional() })
+      .safeParse(req.body ?? {});
+    if (!parsed.success) return reply.code(400).send({ error: parsed.error.flatten() });
+    const settings = await noodle.getSettings();
+    try {
+      const items = await generateGarnishAds(app.db, ads.pool, {
+        connectionId: parsed.data.connectionId,
+        count: parsed.data.count,
+        tone: settings.inlineAdsTone,
+        era: settings.inlineAdsEra,
+        contentCeiling: settings.inlineAdsContentCeiling,
+        worldContext: settings.inlineAdsWorldContext,
+      });
+      // Pruning runs after generation so the pool cannot grow without also
+      // shedding what the audience keeps dismissing.
+      const retired = await retireWeakGarnishAds(ads.pool, qualityScores(await ads.pool.listEvents()));
+      return { items, retired };
+    } catch (error) {
+      return reply.code(502).send({ error: (error as Error).message });
+    }
+  });
+
   app.get("/noodler/ads/export", async () => exportGarnishAds(ads.pool, SLURP_GARNISH_PLATFORM));
 
   app.post("/noodler/ads/import", async (req, reply) => {
