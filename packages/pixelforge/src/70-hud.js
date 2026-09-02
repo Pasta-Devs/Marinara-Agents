@@ -297,6 +297,74 @@ PF.Hud = class {
     this.journalEl.style.display = "none";
     this.sheetEl.style.display = "none";
 
+    // ── THE TALK WINDOW (plan §2.5) ─────────────────────────────────────────
+    // The release's flagship surface, and the one panel here that is deliberately
+    // NOT `inset:0`. The other three own the screen; this one is docked over the
+    // play field and leaves the topbar, the right-hand action rail and the d-pad
+    // VISIBLE AND INTERACTIVE, because the ruling this is built to says the player
+    // stays mobile while it is open. A full-surface window would make a pointer
+    // player immobile and put the clock movers — the presses that END the
+    // conversation and restart time — behind the very thing they close.
+    //
+    // THE THREE GEOMETRY CONSTRAINTS ARE THE PLAN'S; the exact look is the browser
+    // pass's. (a) nothing of it overlaps topbar, rail or d-pad at any z-index;
+    // (b) it clears the bottom TOAST band, which is the only channel a streaming
+    // refusal has while the window stays mounted — painted over, that refusal is a
+    // press that visibly did nothing; (c) it SCROLLS INSIDE ITSELF on the four
+    // action menus' own idiom (max-height 40vh, overflow auto), because the row
+    // count is variable by construction — name and role, up to two record
+    // branches, up to four topic branches, an escalation pair, one row per live
+    // errand, three doors and Leave. The scroller is the ROW LIST alone, on the
+    // journal's three-row shape: the Leave row and the Say input must never scroll
+    // out of reach.
+    //
+    // AND IT IS NOT AN `aria-modal` DIALOG, for the panels' reason above: it would
+    // make `_hostOwnsKeyboard` true and kill the keys that close it.
+    this.talkWho = PF.el("div", { style: "font:700 12px/1.5 inherit;flex:0 0 auto;" });
+    this.talkSaid = PF.el("div", {
+      style:
+        "flex:0 0 auto;display:none;font:12px/1.6 inherit;opacity:0.92;border-left:2px solid rgba(243,239,226,0.35);padding-left:8px;",
+    });
+    // The spoken line announces itself: it replaces itself in place, and a reader
+    // who cannot see the swap would otherwise never learn the person answered.
+    this.talkSaid.setAttribute("role", "status");
+    this.talkSaid.setAttribute("aria-live", "polite");
+    this.talkRows = PF.el("div", {
+      style: "flex:1 1 auto;overflow:auto;display:flex;flex-direction:column;gap:6px;align-items:stretch;",
+    });
+    // NO AUTOFOCUS, deliberately: the window opens with the walk keys live, and a
+    // focused input would swallow WASD from the first frame. Its own keydown is
+    // bound below — Escape closes, Enter sends, and neither calls preventDefault,
+    // because the host's own handling of those keys is not ours to cancel.
+    this.talkInput = PF.el("input", {
+      type: "text",
+      "aria-label": "say something",
+      placeholder: "Say something…",
+      style:
+        "flex:1 1 auto;min-width:0;pointer-events:auto;background:rgba(20,24,20,0.9);color:#f3efe2;" +
+        "border:1px solid rgba(243,239,226,0.35);border-radius:8px;padding:8px 10px;font:12px/1.3 inherit;",
+    });
+    this.talkInput.addEventListener("keydown", (ev) => this._talkInputKey(ev));
+    this.talkSendBtn = this._btn("Send (asks the GM)", () => this._talkSay());
+    this.talkSayRow = PF.el("div", { style: "flex:0 0 auto;display:flex;gap:6px;align-items:stretch;" }, [
+      this.talkInput,
+      this.talkSendBtn,
+    ]);
+    this.talkLeaveBtn = this._btn("Leave", () => this.core.closeTalk());
+    this.talkLeaveBtn.style.flex = "0 0 auto";
+    this.talkEl = PF.el(
+      "div",
+      {
+        "aria-label": "conversation",
+        style:
+          "position:absolute;left:12px;right:184px;bottom:calc(190px + env(safe-area-inset-bottom,0px));" +
+          "display:none;flex-direction:column;gap:8px;max-height:40vh;z-index:3;pointer-events:auto;" +
+          "padding:10px 12px;box-sizing:border-box;border-radius:10px;background:rgba(12,14,12,0.94);" +
+          "border:1px solid rgba(243,239,226,0.3);color:#f3efe2;font:12px/1.6 ui-monospace,Consolas,monospace;",
+      },
+      [this.talkWho, this.talkSaid, this.talkRows, this.talkSayRow, this.talkLeaveBtn],
+    );
+
     this.root = PF.el(
       "div",
       { style: "position:absolute;inset:0;pointer-events:none;font-family:ui-monospace,Consolas,monospace;" },
@@ -308,6 +376,7 @@ PF.Hud = class {
         this.captionEl,
         this.toastEl,
         this.locToastEl,
+        this.talkEl,
         this.journalEl,
         this.sheetEl,
         this.gateEl,
@@ -379,6 +448,12 @@ PF.Hud = class {
       },
     ];
     this._journalTab = 0;
+    // The talk window's own state: whether the DOM is up, the memo key its rows
+    // were drawn from, and the latched document-level pointerdown pair (see
+    // `_bindTalkOutside`). All three are cleared by the unmount.
+    this._talkMounted = false;
+    this._talkRowKey = null;
+    this._talkOutside = null;
     // The instance id of the row whose "set aside" has been pressed once, and the
     // sentence the last press left behind (see `_dropQuestPress`).
     this._dropQuestPress();
@@ -404,7 +479,287 @@ PF.Hud = class {
   destroy() {
     clearTimeout(this._toastTimer);
     clearTimeout(this._locToastTimer);
+    // THE TALK WINDOW'S TWO TEARDOWN DUTIES, and they are here because neither is
+    // covered by the line below. `root.remove()` takes every CHILD of the root
+    // with it — which is the whole teardown story for the gate and the two panels
+    // — but the window owns a DOCUMENT-level pointerdown pair, which is not a
+    // child of anything we remove, and a LATCH on the sim, which SURVIVES this by
+    // design (a version bump or an error retry remounts the element around the
+    // same singleton, 90-element). A latch left set on a surviving sim is a world
+    // whose clock never runs again, and a listener left bound is a closure over a
+    // window nobody can see.
+    this._unbindTalkOutside();
+    if (this.core?.sim) this.core.sim.talkAnchorId = null;
     this.root.remove();
+  }
+
+  // ── The talk window (plan §2.5) ────────────────────────────────────────────
+
+  /** THE MOUNTED PREDICATE, RECONCILED — the first thing `update()` does, on
+   *  every path it has (gated, replay and stepped alike), which is what lets the
+   *  window close while the sim is not being stepped at all.
+   *
+   *  The window's DOM is up IFF `sim.mode === "walk" && sim.talkAnchorId != null`.
+   *  There is no second source of truth and no "close the window" call that does
+   *  not go through the latch: closing IS clearing it, and the DOM follows here.
+   *  That is what makes the exception story a property rather than a discipline —
+   *  a throw out of any window handler loses at most one frame's reconcile, and
+   *  the next frame renders whatever the latch says.
+   *
+   *  LEAVING WALK UNMOUNTS AND DOES NOT CLEAR. That asymmetry is the handoff: a
+   *  paid press enters dialogue, the window goes, and the latch keeps the partner
+   *  frozen and the clock stopped through the GM's whole answer. It clears at
+   *  `setMode`'s walk ENTRY, which every dialogue exit reaches. */
+  _syncTalk() {
+    const core = this.core;
+    const sim = core?.sim;
+    if (!sim || sim.talkAnchorId == null || sim.mode !== "walk") {
+      if (this._talkMounted) this._talkUnmount();
+      return;
+    }
+    // In walk with the latch set, every leave condition IS a latch clear.
+    const anchor = core._talkAnchor;
+    const leave =
+      // The anchor object and the latch disagreeing is a state nothing should be
+      // able to reach; if it ever is, the conversation is over rather than
+      // rendered against whichever half is stale.
+      !anchor ||
+      anchor.id !== sim.talkAnchorId ||
+      // ANCHOR LIVENESS, evaluated BEFORE the band. NPC coordinates are
+      // zone-local tiles rewritten into the destination frame on a splice, so a
+      // cross-zone distance compare is a category error that can land ~0px
+      // "away" — identity membership in the live zone's array is the question,
+      // and it answers a splice, a despawn, a zone change and a world
+      // replacement in one read.
+      !sim.zone().npcs.includes(anchor) ||
+      // THE ONE-TILE BAND. Two full tiles centre to centre is over the line, and
+      // the predicate says exactly what the prose says: `>=`, not `>`, so 32px
+      // from a tile-aligned rest closes it. The geometry is derived rather than
+      // tuned — "within one tile" is the adjacency ring (16px orthogonal, ~22.6
+      // diagonal) plus the half-tile of slack continuous player coordinates
+      // need, and 32 strictly covers the 26px open radius, so no position a
+      // window can open at is born closed.
+      Math.hypot(anchor.x * PF.TILE + 8 - sim.x, anchor.y * PF.TILE + 8 - sim.y) >= PF.Hud.TUNING.leavePx() ||
+      // THE LOADING GATE, which is orthogonal to mode: under it the tick returns
+      // before `sim.step`, so a window left mounted there is a keyboard-dead
+      // surface over "Writing your world…".
+      PF.save.gateHolds(core);
+    if (leave) {
+      core.closeTalk();
+      return;
+    }
+    if (!this._talkMounted) {
+      this._talkMounted = true;
+      this.talkEl.style.display = "flex";
+    }
+    this._talkRender(anchor);
+  }
+
+  _talkUnmount() {
+    this._talkMounted = false;
+    this._talkRowKey = null;
+    this.talkEl.style.display = "none";
+    this._unbindTalkOutside();
+  }
+
+  /** Called by the core when the window OPENS. The panels close from this side of
+   *  the exclusion — the other three toggles close the window from theirs — and
+   *  the reveal starts empty, because the last thing somebody said is not
+   *  something the next person says. */
+  onTalkOpened() {
+    this.closeJournal();
+    this.closeSheet();
+    this.closeBoard();
+    this._talkRowKey = null;
+    this._talkReveal("");
+    this.talkInput.value = "";
+    this._bindTalkOutside();
+    this.update();
+  }
+
+  /** POINTER-DOWN OUTSIDE CLOSES IT — the mouse exit, and the reason it needs a
+   *  latched pair rather than a child listener: a document-level handler is not a
+   *  child of `this.root`, so `destroy()`'s `root.remove()` does not take it.
+   *  Bound at open, unbound at close AND in `destroy()`.
+   *
+   *  THE EXEMPTION SET IS THE WHOLE DESIGN. The handler hears every press whose
+   *  surface does not stopPropagation, and the d-pad and rail buttons deliberately
+   *  do not — they `preventDefault` and let the event through. So without these,
+   *  a pointer player's FIRST movement press closed the window at zero tiles,
+   *  against the ruling's own "more than one tile", on exactly the controls the
+   *  window's partial geometry was shaped to keep live. With them, movement leaves
+   *  through the 32px band and a rail press leaves through the mover's own latch
+   *  clear — both honest closes through their own doors. Everything else outside
+   *  still closes. */
+  _bindTalkOutside() {
+    if (this._talkOutside) return;
+    this._talkOutside = (ev) => {
+      const target = ev?.target;
+      if (!target) return;
+      for (const exempt of [this.talkEl, this.talkBtn, this.dpad, this.actions]) if (exempt?.contains?.(target)) return;
+      this.core.closeTalk();
+    };
+    document.addEventListener("pointerdown", this._talkOutside);
+  }
+
+  _unbindTalkOutside() {
+    if (!this._talkOutside) return;
+    document.removeEventListener("pointerdown", this._talkOutside);
+    this._talkOutside = null;
+  }
+
+  /** The line the anchor just said, or "" for nothing said yet. */
+  _talkReveal(text) {
+    this.talkSaid.textContent = text;
+    this.talkSaid.style.display = text ? "" : "none";
+  }
+
+  /** Why every paid control is dimmed right now, or null. The covenant is that
+   *  the doors NEVER VANISH — they dim, with the title saying why — so a player
+   *  can always see that talking is a thing this window does. */
+  _talkDoorNote() {
+    const core = this.core;
+    if (typeof core.host?.sendMessage !== "function") return "The story isn't taking turns right now.";
+    if (core.host.isStreaming) return "The story is still being written…";
+    return null;
+  }
+
+  /** What the row list is drawn FROM. The clock is frozen while the window is
+   *  open, so the day, the daypart and the sky cannot move under it — they are in
+   *  the key anyway, because an override write is a props delivery and not a
+   *  clock. What genuinely does move is the errand list (a settle), the
+   *  escalation ratchet, the dim state and which control is holding the confirm. */
+  _talkKeyOf(anchor) {
+    const sim = this.core.sim;
+    const errands = this._talkErrands(anchor)
+      .map((row) => row.id)
+      .join(",");
+    // THE ARMED READ AND NOT THE RAW MEMO. `talkConfirmArmed` is also where the
+    // question goes stale — the narration finishing drops it with no press at all
+    // — so a key built off the memo alone would leave "Skip story & talk?" drawn
+    // on a control whose question no longer exists.
+    const confirm = this.core.talkConfirmArmed?.() === true ? (this.core._talkConfirm?.controlId ?? "") : "";
+    return [
+      anchor.id,
+      sim.day,
+      sim.daypart(),
+      sim.weather().word,
+      errands,
+      PF.pack.askBurned(this.core, anchor) ? "burnt" : "",
+      this._talkDoorNote() ?? "",
+      confirm,
+    ].join("|");
+  }
+
+  /** The live `deliver` rows this person is the target of. Read fresh: the
+   *  window draws one labelled branch per row, and a row settled a press ago is
+   *  a branch that should already be gone. */
+  _talkErrands(anchor) {
+    const player = PF.player.get(this.core);
+    const rows = Array.isArray(player?.quests?.active) ? player.quests.active : [];
+    return rows.filter((row) => String(row?.verb) === "deliver" && String(row?.target) === anchor.name);
+  }
+
+  _talkRender(anchor) {
+    const key = this._talkKeyOf(anchor);
+    if (key === this._talkRowKey) return;
+    this._talkRowKey = key;
+    this.talkWho.textContent = anchor.role ? `${anchor.name} — ${anchor.role}` : anchor.name;
+    const core = this.core;
+    const note = this._talkDoorNote();
+    const armed = core._talkConfirm?.controlId ?? null;
+    /** One paid control. Labelled "(asks the GM)" on its face — that suffix IS
+     *  the covenant's marker — dimmed with a reason rather than removed, and
+     *  re-labelled into the question when the confirm is armed on THIS control.
+     *  `ev.repeat` is ignored: `_keyDown` has no repeat guard, so a HELD Space on
+     *  a focused control fired activation twice in one hold — press one arming
+     *  the story-skip confirm and press two spending it, defeating the "smallest
+     *  honest gate is an affirmative press" contract through a gap the walk fence
+     *  cannot cover. */
+    const paid = (id, label, onpress) => {
+      const asking = armed === id && core.talkConfirmArmed?.(id) === true;
+      const node = this._btn(asking ? "Skip story & talk?" : `${label} (asks the GM)`, (ev) => {
+        if (ev?.repeat) return;
+        onpress();
+      });
+      node.style.textAlign = "left";
+      if (note) {
+        node.style.opacity = "0.45";
+        node.setAttribute("title", note);
+      }
+      return node;
+    };
+    /** One FREE branch: a pack or record read, zero GM calls, and the answer
+     *  lands in the reveal above rather than anywhere the narrator can see. */
+    const free = (label, answer) =>
+      this._btn(label, () => {
+        const said = typeof answer === "function" ? answer() : answer;
+        if (said) this._talkReveal(said);
+      });
+    const rows = [];
+    // 2. THE COMPILED RECORD — only the halves the record actually carries.
+    const record = PF.pack.askRecord(core, anchor);
+    if (record.work) rows.push(free("What do you do?", record.work));
+    if (record.home) rows.push(free("Where do you live?", record.home));
+    // 3. THE PACK'S TOPICS, WITH HONEST SUPPRESSION: a branch with no servable
+    // line does not render. On a thin generated pack that is one or two buttons
+    // rather than four that answer with somebody else's topic — and on the
+    // enriched defaults it is all four, which is the inversion 0.14 ships with:
+    // the worlds that paid two GM calls meet the thinnest window.
+    for (const [branch, label] of [
+      ["rumor", "Ask about the local rumors"],
+      ["work", "Ask about work"],
+      ["place", "Ask about this place"],
+      ["smalltalk", "Pass the time"],
+    ])
+      if (PF.pack.askHas(core, anchor, branch)) rows.push(free(label, () => PF.pack.ask(core, anchor, branch)));
+    // 4. THE ESCALATION PAIR: the sealed door-line is FREE and re-readable
+    // forever; the follow-up behind it is paid and RATCHETED per session.
+    const sealedLine = PF.pack.askEscalation(core, anchor);
+    if (sealedLine) {
+      rows.push(free("Ask what's going on", sealedLine));
+      if (!PF.pack.askBurned(core, anchor))
+        rows.push(paid("press", "Press them about it", () => this.core.talkPress()));
+    }
+    // 5. ONE ROW PER ERRAND, and the label names what the press settles. Two
+    // errands to Bram are two labelled presses: a label is a mechanism only if it
+    // says which row it is about.
+    for (const row of this._talkErrands(anchor))
+      rows.push(
+        paid(`deliver:${row.id}`, `Hand over: ${row.title || "an errand"}`, () => this.core.talkHandOver(row.id)),
+      );
+    // 6. THE DOOR THAT NEVER VANISHES. (The other one is the Say row below, which
+    // is a permanent child rather than a rebuilt row — rebuilding it would throw
+    // away whatever the player had half-typed.)
+    rows.push(paid("free", "Just talk", () => this.core.talkFree()));
+    this.talkRows.replaceChildren(...rows);
+    // The Say door's own dim state, applied to the permanent node.
+    const sayAsking = armed === "say" && core.talkConfirmArmed?.("say") === true;
+    this.talkSendBtn.textContent = sayAsking ? "Skip story & talk?" : "Send (asks the GM)";
+    this.talkSendBtn.style.opacity = note ? "0.45" : "1";
+    if (note) this.talkSendBtn.setAttribute("title", note);
+    else this.talkSendBtn.removeAttribute?.("title");
+  }
+
+  /** The say door's own keydown. Escape closes the window (a SIM write — a
+   *  DOM-only close would leave the latch set and the mounted predicate would
+   *  put the window straight back on the next frame); Enter sends. Neither calls
+   *  preventDefault, and WASD types text while focus is in here — which is the
+   *  whole reason the d-pad had to stay reachable. */
+  _talkInputKey(ev) {
+    const key = String(ev?.key ?? "").toLowerCase();
+    if (key === "escape") {
+      this.talkInput.blur?.();
+      this.core.closeTalk();
+      return;
+    }
+    if (key === "enter" && !ev.repeat) this._talkSay();
+  }
+
+  _talkSay() {
+    const text = String(this.talkInput.value ?? "").trim();
+    if (!text) return;
+    this.core.talkSay(text);
   }
 
   /** `kind` picks the SURFACE, not the styling: "location" goes to the top strip
@@ -635,6 +990,10 @@ PF.Hud = class {
       this.toast(this.boardRefusal(view.reason));
       return;
     }
+    // The window is the one member of the set the board CAN be opened over — the
+    // rail stays live by the window's own geometry — so this is the direction
+    // that had to be wired, and it is a latch clear: the clock starts again.
+    this.core.closeTalk?.();
     this._renderBoard(view);
     this.boardMenu.style.display = "flex";
   }
@@ -928,7 +1287,17 @@ PF.Hud = class {
    *  press with consequences behind it. It rides the return for the same reason
    *  the panels do: "something was open" is the honest answer either way. */
   closePanels() {
-    const open = this._journal || this._sheet || this.boardMenu.style.display === "flex";
+    // THE TALK WINDOW COUNTS AS ONE OF THEM, in both halves of the exclusion.
+    // This is Escape's close-ALL path; the direction that actually matters is the
+    // other one — each of the three toggles closes the WINDOW before it opens, and
+    // the window's own open closes all three — because the topbar openers stay
+    // interactive over an open window by geometry, and an unexcluded journal
+    // mounts `inset:0` at z-3 over the top of it: a player reading a journal over
+    // a FROZEN CLOCK with an invisible window underneath, whose first Escape
+    // closes a surface they cannot see.
+    const open =
+      this._journal || this._sheet || this.boardMenu.style.display === "flex" || this.core.talkOpen?.() === true;
+    this.core.closeTalk?.();
     this.closeJournal();
     this.closeSheet();
     this.closeBoard();
@@ -950,6 +1319,9 @@ PF.Hud = class {
     // is that same rule for the other way they leave it.
     this.closeSheet();
     this.closeBoard();
+    // …AND THE TALK WINDOW, which is the one member of the set that also stops
+    // the clock: closing it here is a latch clear, and time starts again.
+    this.core.closeTalk?.();
     this._journal = true;
     // THESE TWO ARE DEFENSIVE SYMMETRY, and saying so is the point: the CLOSE
     // side is the load-bearing one, and every close routes through
@@ -1390,6 +1762,7 @@ PF.Hud = class {
     // that covered only the journal would be a rule waiting for the next tab.
     this.closeJournal();
     this.closeBoard();
+    this.core.closeTalk?.();
     this._sheet = true;
     this._sheetKey = this._sheetValueKey();
     this._renderSheet();
@@ -1647,6 +2020,13 @@ PF.Hud = class {
 
   /** Cheap per-frame sync — writes DOM only on change. */
   update() {
+    // THE TALK WINDOW'S LEAVE CHECK AND MOUNT RECONCILE, FIRST — above the
+    // `if (gate) return` further down, and that placement is the whole point. The
+    // element tick calls this on its GATED and REPLAY branches too, where
+    // `sim.step` is skipped entirely; a check written where it reads naturally,
+    // inside the walk block at the foot of this method, could never fire on the
+    // one condition it was sited for. One site serves every frame.
+    this._syncTalk();
     const sim = this.core.sim;
     if (!sim) return;
     const mode = sim.mode;
@@ -1760,7 +2140,14 @@ PF.Hud = class {
       this.fishMenu.style.display = "none";
       this.sleepMenu.style.display = "none";
       this.boardMenu.style.display = "none";
-      if (mode === "dialogue" && !gate) this.toast("Type in the message box below — Resume to keep walking");
+      // THE DIALOGUE TOAST IS CONDITIONAL NOW. It is an instruction for the
+      // Keyboard button, which hands the turn over with nothing else said. A
+      // dialogue entered through a talk-window door needs no instruction: the
+      // player pressed a control with "(asks the GM)" written on it, and the
+      // sender's own toast names who is answering. The latch still being set is
+      // exactly "this dialogue came out of a conversation".
+      if (mode === "dialogue" && !gate && sim.talkAnchorId == null)
+        this.toast("Type in the message box below — Resume to keep walking");
     }
     // Nothing below the gate means anything: there is no beat to caption, nobody
     // to be standing next to, and the clock is not running.
@@ -1774,20 +2161,25 @@ PF.Hud = class {
       this.captionEl.style.opacity = caption ? "1" : "0";
     }
     if (this._mode === "walk") {
-      const canTalk = !!sim.nearNpc;
-      // The Talk button is ALSO where a skip is confirmed (90-element `interact`):
-      // while the latest GM turn still holds narration the player has not been
-      // shown, the first press asks instead of sending. It has to be part of the
-      // memo key or the question would be asked and never drawn — the old key was
-      // the bare `canTalk` boolean, which does not move when only the label does.
-      const asking = canTalk && this.core.talkConfirmArmed?.() === true;
-      const talkKey = canTalk ? `${asking ? "skip" : "talk"}:${sim.nearNpc.name}` : "";
+      // THE CENSUS CONTROL, DECOUPLED FROM THE CONFIRM (plan §2.5). The skip
+      // question now belongs to the control inside the window that is asking it,
+      // so this button is a plain toggle again — and while a window is MOUNTED it
+      // names the LATCHED ANCHOR, never `nearNpc`. That is not tidiness: the
+      // anchor floats free of proximity by design, so a button reading "Talk to
+      // Bram (E)" whose press closed the WREN window would be exactly the
+      // label/verb disagreement the confirm's own docstring exists to forbid.
+      // Between 26px and the 32px close bound `nearNpc` is already null while the
+      // window is still open, which is precisely where the two would part.
+      const mounted = this.core.talkOpen?.() === true;
+      const anchor = mounted ? this.core._talkAnchor : null;
+      const canTalk = mounted || !!sim.nearNpc;
+      const talkKey = mounted ? `leave:${anchor?.name ?? ""}` : sim.nearNpc ? `talk:${sim.nearNpc.name}` : "";
       if (talkKey !== this._talkKey) {
         this._talkKey = talkKey;
         this.talkBtn.style.opacity = canTalk ? "1" : "0.45";
-        this.talkBtn.textContent = asking
-          ? "Skip story & talk?"
-          : canTalk
+        this.talkBtn.textContent = mounted
+          ? `Leave ${anchor?.name ?? "them"} (E)`
+          : sim.nearNpc
             ? `Talk to ${sim.nearNpc.name} (E)`
             : "Talk (E)";
       }
@@ -1897,4 +2289,21 @@ PF.Hud = class {
       }
     }
   }
+};
+
+// ── The talk window's one tuned number (plan §2.5) ────────────────────────────
+// The economy's TUNING idiom: a number the layer spends is written down once,
+// with the reason it is that number.
+PF.Hud.TUNING = {
+  // "Stepping more than one tile from the partner closes the window" — ruling
+  // B2-3b's own words, turned into a predicate that says the same thing the prose
+  // says. Two full tiles centre to centre is over the line, so the bound is
+  // `(leaveTiles + 1) * TILE` and the test is `>=`: at 32px the window closes.
+  // Both halves of that agreeing matters — an earlier draft said "≥ 2 tiles is
+  // over the line" while its predicate said "exceeds", and the two disagreed at
+  // exactly the distance an axis-aligned step from a tile-aligned rest lands on.
+  leaveTiles: 1,
+  leavePx() {
+    return (this.leaveTiles + 1) * PF.TILE;
+  },
 };

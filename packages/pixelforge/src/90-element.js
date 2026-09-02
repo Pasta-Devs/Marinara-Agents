@@ -21,10 +21,17 @@ PF.core = {
   _lastT: 0,
   _acc: 0,
   _narrationDoneWas: true,
-  // The person the Talk button is currently asking to skip unread story for AND
-  // the GM turn it is asking about, or null. See interact() — it is one press of
-  // state and nothing persists it.
+  // The window control currently asking to skip unread story, WHO it is asking
+  // about and WHICH GM turn — `{anchorId, controlId, turn}`, or null. See
+  // `talkSend()` — it is one press of state and nothing persists it.
   _talkConfirm: null,
+  // The NPC OBJECT the open talk window is anchored to, captured at open. The
+  // sim's `talkAnchorId` is the truth about whether a conversation is live; this
+  // is what the window RENDERS from and what press-time liveness is checked
+  // against by identity. Meaningful only while the latch is set — every reader
+  // tests the latch first, and the HUD's reconcile closes the window outright if
+  // the two ever disagree, so a stale object here can never be read.
+  _talkAnchor: null,
   _keysBound: false,
   _resizeObs: null,
   _resumeMode: "walk", // mode to restore when combat/replay ends
@@ -215,6 +222,18 @@ PF.core = {
     // question. (talkConfirmArmed drops it on its own too — this is the seam
     // where "the same id in a different world" could otherwise match.)
     this._talkConfirm = null;
+    // AND SO DOES AN OPEN CONVERSATION, for the same reason and with one more
+    // thing to take with it: the window's DOM and the document-level pointerdown
+    // pair it bound, which is not a child of anything a teardown removes.
+    //
+    // ONE SITING HONESTY, so a later fix does not "repair" it: `this.sim` was
+    // reassigned two screens up (`PF.save.restore`), so the latch cleared here is
+    // a CONSTRUCTOR-FRESH null on a brand-new sim, not the departing sim's. That
+    // is harmless by design — the old sim is discarded whole, and the declaration
+    // in the constructor is what actually carries the "a fresh sim cannot inherit
+    // a freeze" guarantee. Do not capture the old sim to make this line "work";
+    // the load-bearing half here is the DOM and the listener.
+    this.closeTalk();
     this._lastPosSave = 0;
     this.hud?.refreshChips();
     void PF.spatial.refresh(this);
@@ -227,6 +246,29 @@ PF.core = {
       this._resumeMode = prev; // don't collapse dialogue into walk on exit (review finding)
     }
     this.sim.mode = mode;
+    // THE CONVERSATION LATCH IS CLEARED ON THE WALK ENTRY, and this is the ONE
+    // site that does it (plan §2.5). Not a new discipline — the function's own:
+    // this is already "the one function that changes mode", and it already drops
+    // `_talkConfirm` two lines down under a comment arguing exactly this hazard
+    // class. Every dialogue exit in the tree ends in `setMode("walk")` — the
+    // dialogue-Escape branch, `resume()`, the refusal arm and the `.catch` — so
+    // the four-site clear-set a per-exit repair would create is one line here.
+    //
+    // THE RULE IS "THE WALK ENTRY", NOT "THE RETURN PATH", and that wording is
+    // what makes it cover the fifth exit: combat or replay entered over a live
+    // conversation returns through `setMode(this._resumeMode)`, whose range is
+    // {walk, dialogue} by construction — walk when it interrupted an open window
+    // (cleared here) and dialogue when it interrupted a paid press (where the
+    // latch is SUPPOSED to survive, and the conversation ends at that mode's own
+    // exits, which all end here). Do not bolt a second clear onto that call.
+    //
+    // AND THE EARLY RETURN AT THE TOP OF THIS FUNCTION IS LOAD-BEARING FOR IT:
+    // Escape out of a paid press, open a new window on the next person, and the
+    // original send's stale `.catch` finally fires its `setMode("walk")` — which
+    // the already-in-walk return no-ops, so a stale rejection cannot null a live
+    // latch. A "fix" that hoisted this clear above that return, or hung it off a
+    // mode test outside this function, would kill live conversations.
+    if (mode === "walk") this.sim.talkAnchorId = null;
     // A pending skip-confirm does not survive the mode changing under it. The
     // question is asked in walk mode standing next to somebody, and every way out
     // of that frame — the Keyboard button handing the turn to the host, a cutscene
@@ -331,50 +373,173 @@ PF.core = {
    *  the NPC would let ONE press spend B on the permission they gave for A. The
    *  permission was for the narration they had decided to skip; a different one
    *  is asked about in its own right. */
-  talkConfirmArmed() {
+  talkConfirmArmed(controlId) {
     if (!this._talkConfirm) return false;
-    const npc = this.sim?.nearNpc;
+    const anchorId = this.sim?.talkAnchorId ?? null;
     const turn = this.host?.latestAssistant?.id ?? null;
-    if (!this._storyPending() || !npc || npc.id !== this._talkConfirm.id || turn !== this._talkConfirm.turn) {
+    // THE STALENESS HALF, and it is keyed to the ANCHOR rather than to a live
+    // proximity read (plan §2.5). `nearNpc` self-clears the moment anybody
+    // wanders nearer, so in the crowd this window exists for — a plaza, an inn —
+    // the whole paid set was unpressable: press one armed, a neighbour drifted,
+    // press two found the question gone and asked it again. The question belongs
+    // to the person the conversation is WITH, and it goes stale when the
+    // conversation ends, when the story is read, or when a new turn arrives.
+    if (
+      !this._storyPending() ||
+      anchorId == null ||
+      anchorId !== this._talkConfirm.anchorId ||
+      turn !== this._talkConfirm.turn
+    ) {
       this._talkConfirm = null;
       return false;
     }
-    return true;
+    // THE CONTROL HALF, and it deliberately does NOT clear. A per-person memo
+    // leaks permission across controls: arming on "Say something…" must not be
+    // spendable on "Hand over", which settles an errand. Asking about a different
+    // control is how that control comes to arm its own question, so the answer is
+    // false and the memo stands. An argument-less read is the HUD asking "is
+    // anything armed at all", which is a question about the person.
+    return controlId === undefined || controlId === this._talkConfirm.controlId;
   },
 
-  interact() {
+  /** Is the talk window mounted right now? The mounted predicate, in one place,
+   *  so the census button, the panel toggles and `interact()` all read the same
+   *  fact the HUD renders from. */
+  talkOpen() {
+    return !!this.sim && this.sim.mode === "walk" && this.sim.talkAnchorId != null;
+  },
+
+  /** OPEN THE WINDOW on somebody. A zero-call read: nothing is composed, nothing
+   *  is sent, and the GM is not told a conversation started. */
+  openTalk(npc) {
     const sim = this.sim;
+    if (!sim || !npc) return;
+    this._talkAnchor = npc;
+    sim.talkAnchorId = npc.id;
+    // THE CUTSCENE CLEAR AT OPEN, on `setMode`'s own idiom two screens up and for
+    // the same reason it lives there. The clock gate stops a beat from STARTING
+    // over an open window; a beat already RUNNING when E was pressed would be the
+    // symmetric, worse case — `stepCutscene` is the only thing that advances a
+    // beat and the only thing that clears one, and it is now gated off, so the
+    // beat would pin `sim.cutscene` non-null for the window's whole life: the
+    // narration-collapse request stuck asserted and the caption painted dead
+    // centre of the play field, which is where this panel goes. `_vistaArmed`
+    // stays down deliberately: the player who pressed E mid-beat chose the
+    // conversation over the view.
+    sim.cutscene = null;
+    this._cutsceneDeclared = false;
+    this._declareChrome();
+    this.hud?.onTalkOpened();
+  },
+
+  /** CLOSE IT, which is the same thing as ending the conversation: the latch is
+   *  the single close authority, and unfreezing the clock and the partner is what
+   *  closing MEANS. The DOM is reconciled off the same latch. */
+  closeTalk() {
+    if (this.sim) this.sim.talkAnchorId = null;
+    this._talkAnchor = null;
+    this.hud?._talkUnmount?.();
+  },
+
+  /** THE INTERACT PRESS — the E key and the census Talk button, unchanged as a
+   *  surface and completely changed in what it does. It no longer SENDS: it opens
+   *  the talk window on the person within reach, and pressing again closes it.
+   *  Every GM call this used to make now lives behind a labelled control inside
+   *  that window, routed through the one prologue below.
+   *
+   *  THE CLOSE HALF COMES FIRST, and as its own branch ahead of the WHOLE guard
+   *  compound rather than merely ahead of the `nearNpc` term. Opening needs
+   *  `nearNpc` (26px); the window survives out to 32px — so without the reroute,
+   *  E was dead in that six-pixel band, neither opening nor closing. The compound
+   *  below is one statement, so "ahead of the nearNpc guard" necessarily means
+   *  ahead of the mode and null-sim terms too, and saying so is the point: this
+   *  branch runs before all three. (The census button stays visible in dialogue
+   *  mode, harmlessly — no window is mounted there and this branch no-ops.) */
+  interact() {
+    if (this.talkOpen()) {
+      this.closeTalk();
+      return;
+    }
+    const sim = this.sim;
+    // OPENING IS A ZERO-CALL READ, so the guards are the ones that decide whether
+    // there is anybody to talk to at all: walk mode (which is also the same-tick
+    // re-entrancy fence), somebody within reach, and a world that has finished
+    // being written. `sendMessage` and `isStreaming` are NOT among them any more —
+    // those refuse a TURN, and this press no longer takes one; they moved into
+    // the paid prologue, where the doors dim and say why.
     if (!sim || sim.mode !== "walk" || !sim.nearNpc) return;
     if (PF.save.gateHolds(this)) return; // nobody to talk to in a world still being written
-    if (!this.host?.sendMessage) return;
+    this.openTalk(sim.nearNpc);
+  },
+
+  /** THE ONE PAID PRESS (plan §2.5). Every control in the window labelled "(asks
+   *  the GM)" comes through here — the free-talk door, the say door, the
+   *  escalation follow-up, and one per outstanding errand — so the guard block
+   *  that used to live inline in `interact()` is written once and every paid press
+   *  passes all of it.
+   *
+   *  THE SEVEN STEPS, in order, and none of them was dropped in the move:
+   *   (1) WALK MODE — the same-tick re-entrancy fence. A second press inside the
+   *       setMode-to-rAF gap dies here, key repeat included: "the window closes on
+   *       a mode change" is a next-frame RENDERING property, not a same-tick state
+   *       check, and `isStreaming` is a prop that cannot cover the gap.
+   *   (2) PRESS-TIME LIVENESS, AND THE LATCH BESIDE IT. `sentSim` is captured at
+   *       SEND and is blind to a splice or a rebuild that landed BEFORE the press;
+   *       this is that fence's missing front half. The latch check is the other
+   *       half of a one-frame gap: a clock mover clears the latch sim-side, and
+   *       the HUD does not reconcile the DOM away until the next frame — a press
+   *       out of that zombie window must die here rather than compose.
+   *   (3) `gateHolds`, which can ARM AFTER the window opened (`_switchChat` and
+   *       `maybeGenerateBrief` both arm it) — and under the gate the sim is not
+   *       stepped, so no sim-side check would ever run.
+   *   (4) the host can take a turn at all;
+   *   (5) `isStreaming` — a toast and no send. This is the ONE refusal that leaves
+   *       the window MOUNTED, which is why the window's geometry has to leave the
+   *       bottom toast band clear: painted over, it is a press that visibly did
+   *       nothing.
+   *   (6) THE RELOCATED SKIP CONFIRM, keyed {anchorId, controlId, turn} and read
+   *       BEFORE anything is composed — `composePrefix` overwrites `_pendingIntro`,
+   *       so a confirm asked after it would burn a tell for a turn never sent. The
+   *       first press re-labels THE PRESSED CONTROL into the question; the second
+   *       spends it. The 0.11 protection survives whole, translated from
+   *       per-person staleness to per-anchor + per-control staleness: no press can
+   *       spend unread narration without an affirmative press on the same control
+   *       against the same person.
+   *   (7) compose, send, and the single accepted-turn `.then`.
+   *
+   *  `settles` is per branch AND per row: a row id settles THAT errand, `true`
+   *  settles every errand to the name (0.13's implicit handover, preserved
+   *  verbatim for the free-talk door), and anything else settles nothing. */
+  talkSend({ controlId, action, settles, onAccepted }) {
+    const sim = this.sim;
+    const anchor = this._talkAnchor;
+    if (!sim || sim.mode !== "walk") return;
+    if (!anchor || sim.talkAnchorId !== anchor.id || !sim.zone().npcs.includes(anchor)) {
+      this.closeTalk();
+      this.hud?.toast("They're not there any more.");
+      return;
+    }
+    if (PF.save.gateHolds(this)) return;
+    if (typeof this.host?.sendMessage !== "function") return;
     if (this.host.isStreaming) {
       this.hud?.toast("The story is still being written…");
       return;
     }
-    const npc = sim.nearNpc;
-    // UNREAD STORY IS NOT SOMETHING A GREETING GETS TO SPEND (playtest 2).
-    // The maintainer wandered off mid-narration, pressed E on the nearest NPC,
-    // and lost everything from the arrival narration onward: the turn this sends
-    // ends the one being presented, so the segments they had not reached simply
-    // never appeared — survived only in Logs — and they never said to skip them.
+    // UNREAD STORY IS NOT SOMETHING A PRESS GETS TO SPEND (playtest 2). The
+    // maintainer wandered off mid-narration, pressed E on the nearest NPC, and
+    // lost everything from the arrival narration onward: the turn this sends ends
+    // the one being presented, so the segments they had not reached never
+    // appeared — they survived only in Logs — and nobody had said to skip them.
     //
     // WALKING IS NOT BLOCKED and never should be; the world staying live under
     // the narration is the point of it. What is gated is the TURN, and the
-    // smallest honest gate is an affirmative press: the first one turns the
-    // button into the question and sends nothing, the second sends. The keyboard
-    // path is the same button, so `e` asks once too.
+    // smallest honest gate is an affirmative press.
     //
-    // A CONFIRM AND NOT A FAST-FORWARD, deliberately. Fast-forwarding is the
-    // better affordance and the package cannot do it: presentation is advanced by
-    // host-private state (there is no such call on the surface props), so a
-    // package-side "skip" could only ever mean sending anyway and calling it
-    // skipping. The dialogue model that would make this moot is a roadmap item.
-    if (this._storyPending() && !this.talkConfirmArmed()) {
-      // Keyed on the TURN as well as the person: _storyPending() has already
-      // established there is a latest assistant turn, and the permission the
-      // second press gives is permission to spend THAT one.
-      this._talkConfirm = { id: npc.id, turn: this.host?.latestAssistant?.id ?? null };
-      this.hud?.toast("Story still to read — press again to skip ahead and talk.");
+    // A CONFIRM AND NOT A FAST-FORWARD, deliberately: presentation is advanced by
+    // host-private state, so a package-side "skip" could only ever mean sending
+    // anyway and calling it skipping.
+    if (this._storyPending() && !this.talkConfirmArmed(controlId)) {
+      this._talkConfirm = { anchorId: anchor.id, controlId, turn: this.host?.latestAssistant?.id ?? null };
       this.hud?.update();
       return;
     }
@@ -384,9 +549,14 @@ PF.core = {
     // which means an unfenced bump would credit the arriving chat's block with the
     // departing chat's conversation.
     const gen = PF.save._gen ?? 0;
+    // THE HANDOFF, FREEZE TO FREEZE. This unmounts the window on the mounted
+    // predicate's mode term and does NOT clear the latch: walk-with-latch froze
+    // the clock and the partner through the gate, dialogue freezes them through
+    // the mode test, and at the transition instant both are true. The latch
+    // clears on the eventual `setMode("walk")`, whichever exit gets there.
     this.setMode("dialogue");
-    this.hud?.toast(`Talking to ${npc.name}`);
-    const text = `${sim.composePrefix(npc)} I walk up to ${npc.name} the ${npc.role} and greet them.`;
+    this.hud?.toast(`Talking to ${anchor.name}`);
+    const text = `${sim.composePrefix(anchor)} ${action}`;
     // THE COMPOSED TURN'S OWN PENDING, captured HERE and closure-local. Two
     // readings of this would be wrong and both are easy: re-reading
     // `sim._pendingIntro` after the await finds the null commitIntro left behind
@@ -427,31 +597,18 @@ PF.core = {
           // the one-shot intro flags burn, and for the same reason — a refused
           // or failed send is not a conversation. SETTLEMENT-scoped (plan §2:
           // rel keys are per settlement), so one person is one row wherever in
-          // the world you happen to meet them. Surfacing the disposition in the
-          // turn header is P2's own item and deliberately not here.
-          PF.player.bump(this, sim.world.startZone, npc.name, { t: 1 }, gen);
-          // THE DELIVER VERB'S ONE SITE (0.13 §2.3). An errand is finished by
-          // TALKING — no item moves, because there is no quest-item type and
-          // inventing one for a word would be a format change nothing else asks
-          // for — so the handover is exactly this accepted turn, and it is the
-          // one quest verb that costs a GM call at all (Ruling 1 is lean, not
-          // zero). Gated on the captured generation AND on the sim still being
-          // the one the greeting was composed against; on a mismatch nothing is
-          // settled and the quest is still there to be finished by talking again.
-          //
-          // WHO THE ERRAND WAS RUN TO IS `npc`, the binding this whole method was
-          // composed against, and NOT a live proximity read. This used to copy
-          // `npc.name` into a `sentTo` of its own under a comment about the
-          // schedules walking somebody out of the room — which was two claims and
-          // both were wrong: `npc` is a const binding on the object the player
-          // walked up to, so a copy of its name guards nothing the binding does
-          // not, and the schedules cannot rename anybody. The hazard the closure
-          // really does answer is the OTHER shape this line could have taken —
-          // asking `this.sim.nearNpc` HERE, after the await, which is asking who
-          // is standing there now, after the host has had its whole thinking time
-          // for somebody else to wander in. The delivery was to the person the
-          // player greeted.
-          if (sentSim === this.sim) this.hud?.questFilled(PF.pack.delivered(this, npc.name, gen));
+          // the world you happen to meet them.
+          PF.player.bump(this, sim.world.startZone, anchor.name, { t: 1 }, gen);
+          if (sentSim === this.sim) {
+            onAccepted?.();
+            // WHO THE ERRAND WAS RUN TO IS `anchor`, the binding the window and
+            // this whole send were composed against, and NOT a live proximity
+            // read: the `.then` runs after the host has had its whole thinking
+            // time for somebody else to wander in. The delivery was to the
+            // person the player was talking to.
+            if (settles)
+              this.hud?.questFilled(PF.pack.delivered(this, anchor.name, gen, settles === true ? "" : settles));
+          }
         }
       })
       .catch((err) => {
@@ -461,6 +618,64 @@ PF.core = {
         console.warn("[pixelforge] interact send failed", err);
       });
     PF.save.markDirty(this);
+  },
+
+  /** THE FREE-TALK DOOR — the 0.13 greeting, verbatim, relocated into the window.
+   *  It settles EVERY errand to the name, which is 0.13's implicit handover kept
+   *  exactly as it was: the labelled rows are A mechanism for finishing an errand
+   *  on purpose, not the only one. */
+  talkFree() {
+    const npc = this._talkAnchor;
+    if (!npc) return;
+    this.talkSend({
+      controlId: "free",
+      action: `I walk up to ${npc.name} the ${npc.role} and greet them.`,
+      settles: true,
+    });
+  },
+
+  /** THE SAY DOOR. NO LENGTH CAP is imposed here, and that is the one deliberate
+   *  exception in a package that caps every other part of a composed turn at a
+   *  named number (situation 240, place flavor 120, persona 100, names 24). The
+   *  difference is what the text IS: every door those caps govern is STORED DATA
+   *  re-entering composition, and this is live player input, typed this second by
+   *  the person whose turn it is. If the host refuses the turn the player gets the
+   *  generic refusal and the typed text is not preserved — said plainly, because
+   *  the downstream bound is not something this package can see. */
+  talkSay(text) {
+    const npc = this._talkAnchor;
+    const said = String(text ?? "");
+    if (!npc || !said) return;
+    this.talkSend({ controlId: "say", action: `I say to ${npc.name} the ${npc.role}: "${said}"`, settles: false });
+  },
+
+  /** THE ESCALATION FOLLOW-UP, ratcheted per session: it retires on the ACCEPTED
+   *  turn and comes back only when the pack fold is rebuilt (a reload, a rewind, a
+   *  chat switch) — the `_filled` class of recorded cost. */
+  talkPress() {
+    const npc = this._talkAnchor;
+    if (!npc) return;
+    this.talkSend({
+      controlId: "press",
+      action: `I press ${npc.name} the ${npc.role} about what they were hinting at.`,
+      settles: false,
+      onAccepted: () => PF.pack.askBurn(this, npc),
+    });
+  },
+
+  /** ONE ERRAND, BY ROW ID. The id and never the row object: the branch was drawn
+   *  when the window opened and settles after an await, so the object is stale by
+   *  construction and `settle` pays off whatever it is handed. `delivered` re-finds
+   *  the live row at press time and refuses on a miss. */
+  talkHandOver(rowId) {
+    const npc = this._talkAnchor;
+    const id = String(rowId ?? "");
+    if (!npc || !id) return;
+    this.talkSend({
+      controlId: `deliver:${id}`,
+      action: `I hand over what I was asked to bring ${npc.name} the ${npc.role}.`,
+      settles: id,
+    });
   },
 
   /** A ZONE THE PLAYER WALKED INTO — the frame loop's own arrival, and one of the
@@ -525,9 +740,28 @@ PF.core = {
     };
     this._keyDown = (ev) => {
       if (!this.sim || !this._mainEl) return;
-      if (PF.save.gateHolds(this)) return; // nothing to walk in yet
+      // ESCAPE CLOSES THE TALK WINDOW, and it is ABOVE the gate return on purpose
+      // (plan §2.5). The gate can ARM while a window is open — `_switchChat` and
+      // `maybeGenerateBrief` both do it — and under it every branch below this
+      // line is dead, so a window mounted at that moment was a keyboard-dead
+      // surface over "Writing your world…" with the clock stopped behind it. The
+      // HUD's per-frame reconcile closes it too; this is the key half of the same
+      // hole, and it is worth having because the two run on different signals.
+      //
+      // AND IT CLOSES THE ONLY WAY A CLOSE IS DEFINED: by CLEARING THE LATCH, a
+      // sim write. A DOM-only close would leave the latch set, and the mounted
+      // predicate would put the window straight back on the next frame — a window
+      // that will not close, with a symptom pointing nowhere near its cause.
       const t = ev.target;
-      if (t && (t.tagName === "INPUT" || t.tagName === "TEXTAREA" || t.isContentEditable)) return;
+      const typing = !!t && (t.tagName === "INPUT" || t.tagName === "TEXTAREA" || t.isContentEditable);
+      if (!typing && this.talkOpen() && String(ev.key).toLowerCase() === "escape") {
+        this.closeTalk();
+        return;
+      }
+      if (PF.save.gateHolds(this)) return; // nothing to walk in yet
+      // Typing goes to whoever is being typed into — the host's message box, or
+      // the window's own Say field, which carries its own Escape and Enter.
+      if (typing) return;
       const k = ev.key.toLowerCase();
       if (this.sim.mode === "dialogue" && k === "escape") {
         this.setMode("walk");

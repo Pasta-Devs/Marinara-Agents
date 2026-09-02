@@ -41,6 +41,20 @@ PF.Sim = class {
     // names. NEVER SERIALIZED and never restored — a reload starts the day's
     // receipts empty, which is the recorded cost of the rule.
     this._filled = null;
+    // THE CONVERSATION LATCH (plan §2.5): the id of the person a conversation is
+    // live with, or null. ONE FIELD WITH ONE MEANING, and four readers spend it —
+    // the clock gate below (an open talk window stops time), the partner freeze in
+    // `stepNpcs`, the window's mounted predicate (70-hud) and the paid press's
+    // prologue (90-element). Set only by the window opening; cleared by every leave
+    // condition, by `setMode`'s walk entry, by the two clock movers, and by the
+    // teardown seams.
+    //
+    // DECLARED HERE rather than sprung into existence, on `_filled`'s own rule one
+    // line up — and load-bearing rather than tidy: a leaked latch is a world where
+    // time never passes, so a fresh sim must be born with the clock running, and
+    // the gate must read the same shape on a sim that has never seen a window.
+    // RUNTIME-ONLY: never serialized, never restored.
+    this.talkAnchorId = null;
     this._npcTimers = new Map();
     this._rnd = PF.rng((world.seed ^ 0x9e3779b9) >>> 0);
     this.dirty = false; // save-worthy change happened
@@ -251,12 +265,29 @@ PF.Sim = class {
       }
     }
     // NPCs keep wandering in walk AND dialogue (the world stays alive while you
-    // read), but the CLOCK only advances while walking: a conversation should
-    // never burn the afternoon, and a daypart boundary crossing mid-dialogue
-    // would relocate the very NPC you are talking to. Package-local clock only —
-    // never the host time endpoints (issue #5076).
+    // read), but the CLOCK only advances while walking WITH NO TALK WINDOW OPEN: a
+    // conversation should never burn the afternoon, and a daypart boundary crossing
+    // mid-dialogue would relocate the very NPC you are talking to. Package-local
+    // clock only — never the host time endpoints (issue #5076).
+    //
+    // THE LATCH IS THE SECOND HALF OF THAT SENTENCE (plan §2.5, ruling B2-3b). The
+    // talk window keeps the player in WALK mode on purpose — they stay mobile — so
+    // the mode test alone stops nothing, and the freeze the 0.12 precedent above
+    // describes is extended one latch over. `_clockAcc` is inside the gate and not
+    // beside it: an accumulator that kept filling would bank the minutes and dump
+    // them the instant the window closed, which is the same afternoon burnt with
+    // one frame of delay.
+    //
+    // `stepCutscene` rides the same gate. A beat takes its seconds from `dt` rather
+    // than from the clock, and the vista corner is about two tiles from anywhere a
+    // window can open — so without this a seven-second beat could start over an
+    // open window, ask the host to fold its narration away, and burn `_vistaArmed`
+    // on a beat nobody was looking at. It can only ever block a beat from STARTING:
+    // opening the window clears any beat already running (90-element `openTalk`, on
+    // `setMode`'s own idiom), so no live beat is ever stranded behind this.
     if (this.mode === "walk" || this.mode === "dialogue") {
-      if (this.mode === "walk") {
+      const timePasses = this.mode === "walk" && this.talkAnchorId == null;
+      if (timePasses) {
         let advanced = false;
         const dayBefore = this.day;
         this._clockAcc += dt;
@@ -278,7 +309,7 @@ PF.Sim = class {
         // which is why no per-minute weather() read is spent here.
         if (advanced) this._parkWeather(dayBefore, this.day);
       }
-      if (this.mode === "walk") this.stepCutscene(dt, z);
+      if (timePasses) this.stepCutscene(dt, z);
       this.stepNpcs(dt, z);
     }
     return { zoneChanged: false };
@@ -390,13 +421,22 @@ PF.Sim = class {
 
   /** Jump the clock to the next occurrence of a daypart's start (the "wait
    *  until dusk" rest action). A JUMP, not an advance: NPCs re-place in one
-   *  shot. Walk mode only, so it can never collide with the dialogue freeze. */
+   *  shot. Walk mode only, so it can never collide with the dialogue freeze —
+   *  and it ENDS a conversation rather than colliding with the talk window's
+   *  freeze either (plan §2.5): waiting for dusk while standing in front of
+   *  somebody is spending time, and spending time is leaving the conversation.
+   *  The clear is the FIRST thing a wait that is going to happen does; the HUD
+   *  reconciles the window away on the next frame, off the same latch. */
   waitUntil(target) {
     // Own-property, now that the table is shared and reachable from more than one
     // button: `starts["constructor"]` answered with a FUNCTION, which is not
     // undefined, and the guard below would have waved it through onto clockMin.
     const at = Object.prototype.hasOwnProperty.call(PF.DAYPART_STARTS, target) ? PF.DAYPART_STARTS[target] : undefined;
     if (at === undefined || this.mode !== "walk") return false;
+    // AFTER the refusal above and before anything moves: a wait that refuses has
+    // spent no time, and a silent close on a call that did nothing would be the
+    // stuck-clock class inverted — a window that vanished for no visible reason.
+    this.talkAnchorId = null;
     const dayBefore = this.day;
     if (at <= this.clockMin) this.day++;
     this.clockMin = at;
@@ -452,6 +492,18 @@ PF.Sim = class {
    *  among them, and a second silent gate here would turn one of them into a
    *  no-op nobody could tell from a cast that caught nothing.
    *
+   *  IT DOES CLEAR THE CONVERSATION LATCH, and that paragraph is why the sentence
+   *  above needs this one beside it (plan §2.5). The argument up there is against
+   *  a silent SECOND REFUSAL — a gate that turns a real call into a no-op nobody
+   *  can tell from a cast that caught nothing. This is not that: the call still
+   *  does everything it was asked to do, and the clear is a documented side effect
+   *  of the thing it was asked to do. Time cannot pass under an open talk window,
+   *  so a mover either ends the conversation or breaks the freeze; this ends it,
+   *  after the same guard the refusal above uses, and the HUD unmounts the window
+   *  off the same latch on the next frame. Fishing is the caller that makes this
+   *  safe to state so flatly: `fish()` is synchronous end to end, so no window can
+   *  open between its entry reads and its last advance.
+   *
    *  `_clockAcc` is deliberately left alone. waitUntil clears it because it
    *  JUMPS to a target and a leftover fraction would tick that target's minute
    *  early; an advance lays whole minutes on top of a fraction the player has
@@ -461,6 +513,9 @@ PF.Sim = class {
    *  count, so a caller can tell a clock that moved from one that did not. */
   advanceMinutes(n) {
     if (!Number.isInteger(n) || n <= 0) return 0;
+    // The clock's other callable door, and the same first act for the same
+    // reason — after the refusal, before the clock moves (see the docstring).
+    this.talkAnchorId = null;
     const dayBefore = this.day;
     this.clockMin += n;
     while (this.clockMin >= 24 * 60) {
@@ -589,10 +644,22 @@ PF.Sim = class {
 
   stepNpcs(dt, z) {
     for (const npc of z.npcs) {
-      // The person you are talking TO stands still. nearNpc stops updating the
-      // moment dialogue starts, so it still points at whoever was greeted —
-      // drifting away mid-sentence read as if they had stopped listening.
-      if (this.mode === "dialogue" && this.nearNpc && npc.id === this.nearNpc.id) {
+      // THE PERSON YOU ARE TALKING TO STANDS STILL, and the LATCH is what says
+      // who that is — read FIRST, and by IDENTITY (plan §2.5). `nearNpc` is a
+      // nearest-within-26px proximity read, which is the wrong question in a
+      // crowd: it freezes whoever has wandered closest while the person actually
+      // being addressed keeps walking, and between 26 and 32px — where the talk
+      // window is still open — it is null and freezes nobody at all.
+      if (npc.id === this.talkAnchorId) {
+        npc.stepPhase = 0;
+        continue;
+      }
+      // The classic fence, kept for dialogue entered WITHOUT a window (the
+      // Keyboard button, and any future path that does the same). Guarded on the
+      // latch being absent so exactly ONE freeze authority reads at a time: with
+      // a conversation live, the line above has already answered, and this one
+      // must never pick a second, nearer bystander to freeze beside it.
+      if (this.talkAnchorId == null && this.mode === "dialogue" && this.nearNpc && npc.id === this.nearNpc.id) {
         npc.stepPhase = 0;
         continue;
       }
@@ -735,6 +802,13 @@ PF.Sim = class {
     // channel. The one exception is the exception that proves it: a `deliver`
     // errand finishes on a turn the player was sending anyway, and even then
     // what the GM sees is a greeting, not a handover.
+    //
+    // 0.14 MOVES WHERE THAT TURN IS PRESSED AND NOT WHAT THE GM SEES. The talk
+    // window labels the press ("Hand over: <title>") so the PLAYER knows which
+    // errand they are settling; what rides to the narrator is still this prefix
+    // and a sentence about walking up to somebody. And the window's free reads —
+    // the record answers, the pack lines — reach the GM not at all: they compose
+    // nothing, send nothing, and write no ledger line.
     const ledger = this._composeLedger();
     if (ledger) parts.push(ledger.text);
     // The ephemeral half of the flush, handed to the sender rather than stored:

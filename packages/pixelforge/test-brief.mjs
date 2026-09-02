@@ -18275,6 +18275,30 @@ globalThis.document = {
   querySelectorAll(selector) {
     return this._staged.filter((node) => stagedMatches(node, selector));
   },
+  // (iv) …and the document can be LISTENED TO. The talk window's
+  // pointer-down-outside close is a DOCUMENT-level pair — it has to be, because a
+  // press outside the window lands on a node the window does not own — and it is
+  // the one listener in the package that `destroy()`'s `root.remove()` cannot
+  // take with it. Without these two the bind/unbind discipline that keeps it from
+  // outliving its window would be browser-only, which is where a teardown goes to
+  // stop being watched.
+  _docListeners: {},
+  addEventListener(type, fn) {
+    (this._docListeners[type] ??= []).push(fn);
+  },
+  removeEventListener(type, fn) {
+    const list = this._docListeners[type];
+    if (!list) return;
+    const at = list.indexOf(fn);
+    if (at >= 0) list.splice(at, 1);
+  },
+};
+/** Fire a document-level event at whatever is currently bound. Returns how many
+ *  listeners heard it, which is the half a bind/unbind lane actually asks about. */
+const fireDocument = (type, event) => {
+  const list = globalThis.document._docListeners[type] ?? [];
+  for (const fn of list.slice()) fn(event);
+  return list.length;
 };
 const walkNodes = (node, out = []) => {
   out.push(node);
@@ -19950,6 +19974,11 @@ const fire = (node, type) => Promise.all((node.listeners[type] ?? []).map((fn) =
       toast: (text) => toasts.push(text),
       refreshChips() {},
       update() {},
+      // The talk window's two HUD-side hooks. Stubbed rather than omitted for the
+      // reason `questFilled` is here at all: a stub that does not model the
+      // surface turns a shipped call into a thrown "not a function".
+      onTalkOpened() {},
+      _talkUnmount() {},
       questFilled: (done) => filled.push(...done),
     };
     const active = () => P.get(core).quests.active;
@@ -20230,6 +20259,8 @@ const fire = (node, type) => Promise.all((node.listeners[type] ?? []).map((fn) =
       toast() {},
       refreshChips() {},
       update() {},
+      onTalkOpened() {},
+      _talkUnmount() {},
       questFilled: (done) => filled.push(...done),
     };
     let accept = true;
@@ -20260,10 +20291,23 @@ const fire = (node, type) => Promise.all((node.listeners[type] ?? []).map((fn) =
     const rook = w.zones.village.npcs.find((npc) => npc.name === "Rook");
     const tam = w.zones.village.npcs.find((npc) => npc.name === "Tam");
     assert.ok(rook && tam, "the legacy village stands two people up in the open");
+    // ── `interact()` NO LONGER SENDS (0.14 slice 4) ─────────────────────────
+    // The press OPENS the talk window; the greeting is now a labelled control
+    // INSIDE it — "Just talk (asks the GM)", which settles every errand to the
+    // name exactly as 0.13's bare greeting did. So the two-step below is what a
+    // press used to be, driven through the shipped path: open if it is not
+    // already open (a second `interact()` would TOGGLE it shut), then press the
+    // door. Every case in this block asks the same question it always did — what
+    // one greeting costs and what it settles — of the surface that now asks it.
     const talkTo = (npc) => {
       sim.mode = "walk";
       sim.nearNpc = npc;
-      core.interact();
+      // A conversation with somebody ELSE ends before this one starts, which is
+      // what walking away does. A conversation with the SAME person is the one
+      // being pressed again — which is exactly what the two-press confirm is.
+      if (core.talkOpen() && core._talkAnchor !== npc) core.closeTalk();
+      if (!core.talkOpen()) core.interact();
+      core.talkFree();
     };
 
     // ── THE HANDOVER: ONE TURN, ONE COMPLETION ───────────────────────────────
@@ -21818,7 +21862,15 @@ const fire = (node, type) => Promise.all((node.listeners[type] ?? []).map((fn) =
     // questFilled stands in for the real Hud's own (70-hud): Talk's accepted turn
     // is the deliver verb's completion site, and a stub that did not model the
     // surface would turn a settled errand into a thrown "not a function".
-    core.hud = { toast: (text) => toasts.push(text), refreshChips() {}, update() {}, questFilled() {} };
+    const stubHud = {
+      toast: (text) => toasts.push(text),
+      refreshChips() {},
+      update() {},
+      onTalkOpened() {},
+      _talkUnmount() {},
+      questFilled() {},
+    };
+    core.hud = stubHud;
     const host = {
       chatId: "chat-talk-skip",
       isStreaming: false,
@@ -21831,27 +21883,57 @@ const fire = (node, type) => Promise.all((node.listeners[type] ?? []).map((fn) =
     };
     core.host = host;
     const villagers = w.zones.village.npcs;
+    // ── `interact()` NO LONGER SENDS (0.14 slice 4) ─────────────────────────
+    // The press OPENS the talk window; the greeting is now a labelled control
+    // INSIDE it — "Just talk (asks the GM)", which settles every errand to the
+    // name exactly as 0.13's bare greeting did. So the two-step below is what a
+    // press used to be, driven through the shipped path: open if it is not
+    // already open (a second `interact()` would TOGGLE it shut), then press the
+    // door. Every case in this block asks the same question it always did — what
+    // one greeting costs and what it settles — of the surface that now asks it.
     const talkTo = (npc) => {
       sim.mode = "walk";
       sim.nearNpc = npc;
-      core.interact();
+      // A conversation with somebody ELSE ends before this one starts, which is
+      // what walking away does. A conversation with the SAME person is the one
+      // being pressed again — which is exactly what the two-press confirm is.
+      if (core.talkOpen() && core._talkAnchor !== npc) core.closeTalk();
+      if (!core.talkOpen()) core.interact();
+      core.talkFree();
     };
     const settle = async () => {
       for (let i = 0; i < 8; i++) await Promise.resolve();
     };
 
+    // ── THE 0.11 PROTECTION SURVIVES WHOLE, TRANSLATED (0.14 slice 4) ────────
+    // `interact()` no longer sends, so the press this case is about is a press on
+    // a CONTROL INSIDE the talk window — and the confirm moved with it. It is now
+    // keyed {anchorId, controlId, turn} rather than {npcId, turn}, and the three
+    // deliberate inversions are called out where they bite:
+    //   • the QUESTION IS DRAWN ON THE PRESSED CONTROL, not on the census button
+    //     (which is a plain toggle again — a button that both opens a window and
+    //     asks a question about a turn is a button whose press means two things);
+    //   • NEIGHBOUR DRIFT NO LONGER CLEARS IT. That was the point of the re-key:
+    //     the old read was `sim.nearNpc`, which self-clears the instant anybody
+    //     wanders nearer, so in the crowd this window exists for the whole paid
+    //     set was unpressable. A different ANCHOR clears it; a passer-by does not;
+    //   • ARMING ON ONE CONTROL DOES NOT SPEND ON ANOTHER. Permission given to
+    //     "Say something…" is not permission for "Hand over", which settles an
+    //     errand and pays for it.
+    // What did NOT change is the contract: no press spends unread narration
+    // without an affirmative press on the same control against the same person.
+
     // THE REPORTED PRESS: story still to read, so it asks.
     talkTo(villagers[0]);
     await settle();
     assert.deepEqual(sent, [], "the first press sends nothing while there is narration to read");
-    assert.equal(core.talkConfirmArmed(), true, "…it arms the question on the button instead");
-    assert.ok(
-      toasts.some((text) => /press again/i.test(text)),
-      "…and says so out loud",
-    );
+    assert.equal(core.talkConfirmArmed(), true, "…it arms the question instead");
+    assert.equal(core._talkConfirm.controlId, "free", "…on the control that was pressed");
+    assert.equal(core._talkConfirm.anchorId, villagers[0].id, "…about the person being talked to");
     assert.equal(sim.mode, "walk", "…and does not hand the keyboard away either");
+    assert.equal(core.talkOpen(), true, "…with the window still up, which is where the question is drawn");
 
-    // AND THE SECOND PRESS IS THE AFFIRMATIVE ONE.
+    // AND THE SECOND PRESS ON THE SAME CONTROL IS THE AFFIRMATIVE ONE.
     talkTo(villagers[0]);
     await settle();
     assert.equal(sent.length, 1, "the second press sends, exactly once");
@@ -21859,35 +21941,66 @@ const fire = (node, type) => Promise.all((node.listeners[type] ?? []).map((fn) =
     assert.equal(core.talkConfirmArmed(), false, "and the question is spent with it");
     assert.equal(sim.mode, "dialogue", "…the turn having been taken");
 
+    // A PRESS ON A DIFFERENT CONTROL DOES NOT SPEND THE PERMISSION. Arming on the
+    // free-talk door is not permission for the say door, which is a different
+    // sentence — and not for a handover, which pays.
+    sent.length = 0;
+    core.setMode("walk");
+    core._talkConfirm = null;
+    host.narrationDone = false;
+    host.latestAssistant = { id: "m1b" };
+    talkTo(villagers[0]);
+    await settle();
+    assert.equal(core._talkConfirm?.controlId, "free", "the free-talk door holds the question");
+    core.talkSay("hello");
+    await settle();
+    assert.deepEqual(sent, [], "…and the say door cannot spend it");
+    assert.equal(core._talkConfirm?.controlId, "say", "…it asks in its own right instead");
+    core.talkSay("hello");
+    await settle();
+    assert.equal(sent.length, 1, "…which its own second press then answers");
+    assert.ok(sent[0].includes('"hello"'), "…sending what was typed");
+
     // NO REGRESSION FOR THE ORDINARY PRESS: nothing unread, one press, one turn.
     sent.length = 0;
+    core.setMode("walk");
     host.narrationDone = true;
     talkTo(villagers[0]);
     await settle();
-    assert.equal(sent.length, 1, "with the narration read, Talk still sends on the first press");
+    assert.equal(sent.length, 1, "with the narration read, the door still sends on the first press");
 
     // AND A CHAT WITH NO GM TURN IN IT HAS NO STORY TO LOSE. `narrationDone` is
     // false there too — the host has no message to compare its marker against —
     // so without the second half of the test every greeting in a fresh chat
     // would need two presses.
     sent.length = 0;
+    core.setMode("walk");
     host.narrationDone = false;
     host.latestAssistant = null;
     talkTo(villagers[0]);
     await settle();
     assert.equal(sent.length, 1, "an empty chat skips nothing, so it asks nothing");
 
-    // THE QUESTION IS PER-PERSON, and it goes stale rather than carrying.
+    // THE QUESTION IS PER-PERSON, AND "PERSON" IS THE ANCHOR — the deliberate
+    // inversion. A neighbour drifting inside 26px used to clear it, because the
+    // read was a live proximity one; now it is the person the conversation is
+    // with, and a passer-by is not that person.
     sent.length = 0;
+    core.setMode("walk");
     host.latestAssistant = { id: "m2" };
     talkTo(villagers[0]);
     await settle();
-    assert.equal(core.talkConfirmArmed(), true, "armed for the person you are standing at");
+    assert.equal(core.talkConfirmArmed(), true, "armed for the person you are talking to");
     sim.nearNpc = villagers[1];
-    assert.equal(core.talkConfirmArmed(), false, "…and not for the next person you walk up to");
+    assert.equal(core.talkConfirmArmed(), true, "…and somebody wandering nearer does not take it away");
+    assert.equal(sim.talkAnchorId, villagers[0].id, "…because the conversation is still with the first one");
+    // …AND TALKING TO SOMEBODY ELSE DOES. Opening a window on the next person
+    // ends the conversation the question was asked about, which is what makes it
+    // per-person rather than per-turn-only.
     talkTo(villagers[1]);
     await settle();
     assert.deepEqual(sent, [], "who is asked in their own right");
+    assert.equal(core._talkConfirm.anchorId, villagers[1].id, "…the question having moved with the conversation");
 
     // NARRATION FINISHING DROPS IT WITHOUT A PRESS: the question was only ever
     // about story that was still pending.
@@ -21895,32 +22008,62 @@ const fire = (node, type) => Promise.all((node.listeners[type] ?? []).map((fn) =
     host.narrationDone = true;
     assert.equal(core.talkConfirmArmed(), false, "…and is gone the moment there is nothing left to read");
 
-    // WHAT THE MAINTAINER ACTUALLY SEES: the button carries the question.
+    // WHAT THE MAINTAINER ACTUALLY SEES: the PRESSED CONTROL carries the
+    // question, and the census button stays a plain toggle. Under the real HUD,
+    // because the label is the thing being asserted.
     host.narrationDone = false;
+    host.latestAssistant = { id: "m2b" };
+    core.setMode("walk");
+    core.closeTalk();
+    core._talkConfirm = null;
     const hud = new loadedPF.Hud(new FakeNode("div"), core);
     core.hud = hud;
     sim.mode = "walk";
     sim.nearNpc = villagers[1];
-    core._talkConfirm = null;
+    // STAND WHERE THE PRESS WOULD HAVE BEEN MADE. Everything above drives the
+    // sender, which fences on identity membership; the HUD also fences on the
+    // ONE-TILE BAND, so a case that set `nearNpc` by hand from across the square
+    // would watch the window close on the frame it opened.
+    sim.x = villagers[1].x * loadedPF.TILE + 8;
+    sim.y = villagers[1].y * loadedPF.TILE + 8;
     hud.update();
-    assert.equal(hud.talkBtn.textContent, `Talk to ${villagers[1].name} (E)`, "unarmed, it is the ordinary Talk");
+    assert.equal(hud.talkBtn.textContent, `Talk to ${villagers[1].name} (E)`, "unarmed, the census button offers Talk");
     core.interact();
+    hud.update();
+    assert.equal(
+      hud.talkBtn.textContent,
+      `Leave ${villagers[1].name} (E)`,
+      "…and with a window open it is the close verb, against the person the window is anchored to",
+    );
+    const doorOf = (label) =>
+      hud.talkRows.children.find((node) => String(node.textContent).startsWith(label)) ?? null;
+    assert.ok(doorOf("Just talk"), "the free-talk door is rendered");
+    assert.equal(doorOf("Just talk").textContent, "Just talk (asks the GM)", "…labelled as a paid press");
+    core.talkFree();
     await settle();
     hud.update();
-    assert.equal(hud.talkBtn.textContent, "Skip story & talk?", "armed, the button IS the confirm");
+    assert.deepEqual(sent, [], "the press asked rather than sent");
+    assert.ok(doorOf("Skip story & talk?"), "armed, the PRESSED CONTROL is the question");
+    assert.equal(
+      hud.talkBtn.textContent,
+      `Leave ${villagers[1].name} (E)`,
+      "…and the census button never becomes it",
+    );
     host.narrationDone = true;
     hud.update();
-    assert.equal(hud.talkBtn.textContent, `Talk to ${villagers[1].name} (E)`, "and it goes back on its own");
+    assert.ok(doorOf("Just talk"), "and the control goes back on its own");
+    core.hud = stubHud;
 
     // THE TURN IS HALF THE QUESTION, NOT JUST THE PERSON (round-2 review).
     // `narrationDone` is PER-TURN and goes false again for every new GM turn, so
     // "there is still story to read" is not the same fact from one turn to the
     // next. The player can arm the confirm, type into the host's own message box
     // instead of pressing again, and have a NEW turn land unread — and a confirm
-    // that remembered only the NPC would let ONE press spend the new narration on
-    // the permission they gave for the old one, which is the exact loss the
-    // confirm exists to prevent.
+    // that remembered only the person would let ONE press spend the new narration
+    // on the permission they gave for the old one.
     sent.length = 0;
+    core.setMode("walk");
+    core.closeTalk();
     core._talkConfirm = null;
     host.narrationDone = false;
     host.latestAssistant = { id: "m3" };
@@ -21938,12 +22081,14 @@ const fire = (node, type) => Promise.all((node.listeners[type] ?? []).map((fn) =
     // AND A MODE CHANGE DROPS IT. The question is asked in walk mode standing
     // next to somebody, and every way out of that frame — the Keyboard button
     // handing the turn back to the host, a cutscene beat, combat — is the player
-    // doing something other than what the question was about. Named as a clear
-    // condition when the confirm shipped; pinned here.
+    // doing something other than what the question was about. It now drops for
+    // TWO reasons at once, and both are the same rule: setMode clears the memo,
+    // and its walk entry clears the LATCH the question is keyed to.
     sent.length = 0;
     assert.equal(core.talkConfirmArmed(), true, "armed before the mode changes under it");
     core.setMode("dialogue"); // the Keyboard button
     core.setMode("walk"); // Resume walking
+    assert.equal(sim.talkAnchorId, null, "…and coming back to walk has ended the conversation");
     sim.nearNpc = villagers[1];
     assert.equal(core.talkConfirmArmed(), false, "the question does not survive the mode changing under it");
     talkTo(villagers[1]);
@@ -27474,8 +27619,27 @@ const fire = (node, type) => Promise.all((node.listeners[type] ?? []).map((fn) =
     const source = MODULES.map((name) => {
       const text = readFileSync(join(here, "src", name), "utf8");
       if (name !== "61-pack.js") return text;
-      const patched = text.replace("const WEATHERS = PF.weather.WORDS;", `const WEATHERS = ["fair"];`);
+      const patched = text
+        .replace("const WEATHERS = PF.weather.WORDS;", `const WEATHERS = ["fair"];`)
+        // …AND THE BUILT-IN DEFAULT PACK IS NARROWED WITH IT, because a stack
+        // cannot boot on its OWN artifact when its enum rejects it: 0.14's
+        // enrichment tags three default lines per theme with a sky the one-word
+        // enum has never heard of, and the boot assert at the foot of 61-pack
+        // throws before this case gets to seal anything. A real 0.13 client never
+        // met these lines — the defaults are compiled in, not stored — so this is
+        // reconstructing the 0.13 stack rather than working around a check. What
+        // the case measures is untouched by it: the seal below reads the STORED
+        // pack literal built right here, and never the defaults.
+        .replace(
+          "const sky = (at, when, text, topic, w) => line(at, when, \"stranger\", text, topic, w);",
+          'const sky = (at, when, text, topic) => line(at, when, "stranger", text, topic);',
+        );
       assert.notEqual(patched, text, "the rewrite still names 61-pack's weather axis");
+      assert.ok(!patched.includes("PF.weather.WORDS"), "…and really did narrow it");
+      assert.ok(
+        patched.includes("const sky = (at, when, text, topic) =>"),
+        "…and the default pack's weather writer with it",
+      );
       return patched;
     }).join("\n");
     const oldPF = new Function(`"use strict";\n${source}\nreturn PF;`)();

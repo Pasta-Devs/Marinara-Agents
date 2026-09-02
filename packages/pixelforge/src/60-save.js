@@ -2210,6 +2210,14 @@ PF.save = {
     const meta =
       core.host && typeof core.host.chatMeta === "object" && core.host.chatMeta !== null ? core.host.chatMeta : {};
     core.sim = this.simFromSaved(saved, meta, core.chatId);
+    // AN OPEN CONVERSATION DOES NOT SURVIVE THE WORLD BEING REPLACED (plan §2.5).
+    // The anchor it was rendering is an orphan of a destroyed world that nothing
+    // will ever move again, and the load-bearing half of this call is what the
+    // fresh sim's own constructor cannot do: unmount the window's DOM and unbind
+    // the document-level pointerdown pair it left on the page. `_switchChat`
+    // carries the same line for the same reason, and both of them null a
+    // constructor-fresh field rather than the departing sim's — deliberately.
+    core.closeTalk?.();
     this._lastSerialized = JSON.stringify(this.snapshot(core));
     core.render?.clearZones();
     // A rebuild can change the theme; the asset loader is theme-aware and

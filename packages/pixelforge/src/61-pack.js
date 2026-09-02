@@ -1485,8 +1485,14 @@ PF.pack = (() => {
      *  `.then`, after the host has taken the turn.
      *
      *  THE ONE NON-GM-FREE QUEST VERB, stated rather than discovered (Ruling 1 is
-     *  "lean", not "zero"): the handover costs exactly one GM call, which is the
-     *  greeting the player was sending anyway.
+     *  "lean", not "zero"): the handover costs exactly one GM call — and 0.14 says
+     *  WHICH call rather than leaving it implicit in the greeting. The talk window
+     *  draws one LABELLED branch per outstanding errand ("Hand over: <title>"), and
+     *  that press settles that row; the free-talk door still settles every row to
+     *  the name, exactly as 0.13's bare greeting did. So the honest claim is narrow
+     *  and worth making narrowly: no press that is not handover-shaped can settle
+     *  an errand, and every settling press says on its face what it settles. A bare
+     *  `interact()` — which now only OPENS the window — settles nothing at all.
      *
      *  BOTH FENCES ARE THE CALLER'S and both are needed. `gen` is the generation
      *  the turn was composed under — a chat switch under the await would otherwise
@@ -1500,7 +1506,7 @@ PF.pack = (() => {
      *  `name` is captured AT SEND for the same reason: the person the player
      *  walked up to is the person the errand was run to, whoever is standing
      *  there by the time the host answers. */
-    delivered(core, name, gen) {
+    delivered(core, name, gen, rowId) {
       const sim = core?.sim;
       const world = sim?.world;
       if (!world) return [];
@@ -1509,19 +1515,277 @@ PF.pack = (() => {
       if (!to) return [];
       const player = PF.player.get(core);
       const rows = Array.isArray(player?.quests?.active) ? player.quests.active : [];
-      const due = rows.filter((row) => str(row.verb) === "deliver" && str(row.target) === to);
+      // THE OPTIONAL ROW ID, and it is an ID rather than the row OBJECT for
+      // `turnIn`'s stated reason one screen up: the window drew its "Hand over"
+      // branch when it opened and settles it after an await, so it is strictly
+      // staler than the board menu that comment already guards — and `settle`
+      // reads the reward off the object it is handed, so a stale one pays a stale
+      // reward against a live row. Named, the branch RE-FINDS the row here, at
+      // settle time, in the live list; a miss filters to nothing and settles
+      // nothing, which is the refusal. Unnamed, every row to the name settles —
+      // 0.13's implicit handover, preserved verbatim for the "Just talk" door.
+      const wanted = str(rowId);
+      const due = rows.filter(
+        (row) => str(row.verb) === "deliver" && str(row.target) === to && (!wanted || str(row.id) === wanted),
+      );
       const filled = [];
       for (const row of due) {
         // THE GIVER == TARGET CASE IS RECORDED HARMLESS, not defended against: a
         // template whose giver is also its target bumps the same person twice in
         // one turn (once for the conversation in 90-element, once for the errand
         // here), which reads as two encounters on a turn that was two things.
+        //
+        // 0.14 WIDENS THE COUNT AND NOT THE ARGUMENT. The talk window's paid set
+        // is four presses deep — free talk, say something, press them about it,
+        // and one per errand — so one conversation can now bump the same person
+        // up to four times, once per ACCEPTED turn. That is still what the count
+        // says it is: `t` counts encounters, four accepted turns are four of
+        // them, and the only reader is P2's disposition ladder, which does not
+        // exist yet. Restated rather than left saying "twice", because a number
+        // in a comment that has stopped being the number is how the next reader
+        // concludes a fifth bump is a bug.
         const done = this.settle(core, row, gen, (giver, paid) =>
           giver && giver !== to ? `Took ${giver}'s word to ${to} — ${paid}.` : `Took word to ${to} — ${paid}.`,
         );
         if (done) filled.push(done);
       }
       return filled;
+    },
+
+    // ── The Ask ladder: what a person says when you ask (plan §2.6) ──────────
+    // The talk window's free half reads lines out of the folded pack. Four
+    // branches — rumor, work, place, and "Pass the time" — and NONE of them costs
+    // a GM call: this is a lookup over an artifact that is already in memory.
+    //
+    // THE UNIVERSE IS STRANGER-ONLY (ruling 4). The friend register is written,
+    // sealed and stored, and 0.14 serves none of it: friendship is P2's, and a
+    // stopgap that guessed at it would be a promotion the player never earned.
+    // On the live measured pack that is 5 of 12 lines, which is the honest cost
+    // of the ruling and the reason the ladder below relaxes as hard as it does.
+    //
+    // THE WEATHER TERM: a line with no `w` is served under any sky, and a line
+    // tagged `rain` is served under any RAIN — the axis is the five words and an
+    // intensity never enters it (§2.2's consumer rule, spent here).
+    /** The at-key for a zone: its stamped place handle, or the legacy reading —
+     *  an interior is a dwelling, everything else is the settlement. Stamped
+     *  handles win; legacy zones carry both stamps. */
+    askAt(zone) {
+      const stamped = str(zone?.place);
+      if (stamped) return stamped;
+      return zone?.mapKind === "building" ? "dwelling" : "settlement";
+    },
+
+    /** Every stranger line this sky can serve, as {line, index} — the index is
+     *  the line's identity for the served set, stable for a session because the
+     *  fold is rebuilt exactly when the world is. */
+    askUniverse(folded, word) {
+      const out = [];
+      const lines = Array.isArray(folded?.pack?.lines) ? folded.pack.lines : [];
+      lines.forEach((line, index) => {
+        if (line?.r !== "stranger") return;
+        if (line.w && line.w !== word) return;
+        out.push({ line, index });
+      });
+      return out;
+    },
+
+    /** The ladder for one branch, as an ordered list of rungs. Each rung is a
+     *  membership predicate plus the SIGNATURE its seeded order hashes over —
+     *  `at` rides the signature only for at-pinned rungs and `part` only for
+     *  when-pinned ones, so two rungs that select the same set key the same
+     *  order.
+     *
+     *  TOPIC BRANCHES RELAX `at` AND NEVER TOPIC: R3/R4 widen from this place to
+     *  anywhere, because a rumor branch that answered with a work line would be
+     *  a button that lied about what it asks. "Pass the time" is the branch that
+     *  has somewhere to fall — smalltalk first, then the untagged pool, which is
+     *  where most of a hand-written pack lives. */
+    askRungs(branch, at, part) {
+      const has = (topic) => (row) => row.line.topic === topic;
+      const untagged = (row) => row.line.topic === undefined;
+      const here = (row) => row.line.at === at;
+      const now = (row) => row.line.when === part;
+      const rung = (test, pins) => ({ test, pins });
+      if (branch === "smalltalk") {
+        return [
+          rung((r) => here(r) && now(r) && has("smalltalk")(r), "s1|at|part"),
+          rung((r) => here(r) && has("smalltalk")(r), "s2|at"),
+          rung((r) => here(r) && now(r) && untagged(r), "s3|at|part"),
+          rung((r) => here(r) && untagged(r), "s4|at"),
+          rung((r) => has("smalltalk")(r), "s5"),
+          rung(untagged, "s6"),
+        ];
+      }
+      return [
+        rung((r) => here(r) && now(r) && has(branch)(r), "r1|at|part"),
+        rung((r) => here(r) && has(branch)(r), "r2|at"),
+        rung((r) => now(r) && has(branch)(r), "r3|part"),
+        rung(has(branch), "r4"),
+      ];
+    },
+
+    /** CIRCULAR DAYPART ADJACENCY, measured over the START MINUTES of the four
+     *  dayparts and not over their order in the table. The two readings disagree:
+     *  by start minute, night→dusk is 180 minutes and night→dawn is 480, so dusk
+     *  is genuinely nearer the hour; by ordinal position the two are a tie. A
+     *  when-relaxed rung ranks rather than pretends — a dawn line at midday is
+     *  served only when nothing nearer the hour exists. */
+    askDistance(when, part) {
+      const starts = PF.DAYPART_STARTS;
+      const a = PF.own(starts, when) ? starts[when] : null;
+      const b = PF.own(starts, part) ? starts[part] : null;
+      if (a === null || b === null) return 24 * 60;
+      const raw = Math.abs(a - b);
+      return Math.min(raw, 24 * 60 - raw);
+    },
+
+    /** Does this branch have anything at all to say here, right now? The window
+     *  asks before it renders, because a topic branch with no servable line DOES
+     *  NOT RENDER — honest suppression, and the reason a thin generated pack shows
+     *  one or two topic buttons rather than four dead ones. Peeks: it walks the
+     *  same rungs the serve does and consumes nothing. */
+    askHas(core, npc, branch) {
+      return !!this.askPeek(core, npc, branch);
+    },
+
+    /** The shared walk. `consume` false answers "is there a rung with anything in
+     *  it"; `consume` true also picks, records the pick in the branch's served set
+     *  and hands back the line. */
+    askPeek(core, npc, branch, consume) {
+      const sim = core?.sim;
+      if (!sim || !npc) return null;
+      const folded = PF.save?.packFold?.(core);
+      if (!folded) return null;
+      const word = sim.weather().word;
+      const universe = this.askUniverse(folded, word);
+      if (!universe.length) return null;
+      const at = this.askAt(sim.zone());
+      const part = sim.daypart();
+      // THE MEMO'S PURGE, and the day is what rotates it. `_askDay` is the purge
+      // field alone — the day also rides every signature, so a new day both keys
+      // fresh orders and starts fresh served sets.
+      if (folded._askDay !== sim.day) {
+        folded._askDay = sim.day;
+        folded._askServed = new Map();
+      }
+      folded._askServed ??= new Map();
+      const rungs = this.askRungs(branch, at, part);
+      for (const { test, pins } of rungs) {
+        const members = universe.filter(test);
+        if (!members.length) continue;
+        if (!consume) return members[0].line.text;
+        // THE SERVED SET IS PER (day, BRANCH) and never per rung. The ladder
+        // picks the first NON-EMPTY rung, so a when-pinned rung going empty
+        // across a daypart boundary drops service onto a when-relaxed rung whose
+        // pool CONTAINS the line just served — and a per-rung cursor would serve
+        // it straight back. One set per branch, read by every rung of that
+        // branch, closes the fall-through by construction.
+        const served = folded._askServed.get(branch) ?? new Set();
+        let pool = members.filter((row) => !served.has(row.index));
+        if (!pool.length) {
+          // The wrap: this rung is exhausted, so its members leave the set and
+          // the walk restarts. After exhaustion repeats are the honest state.
+          for (const row of members) served.delete(row.index);
+          pool = members;
+        }
+        // The rung's canonical order: a seeded Fisher-Yates over its members in
+        // index order, keyed by the MEMBERSHIP SIGNATURE rather than by anything
+        // positional — deterministic across processes and across a rewind.
+        const signature =
+          `${sim.world.seed >>> 0}|ask|${branch}|${pins}|${sim.day}|${word}` +
+          `${pins.includes("|at") ? `|${at}` : ""}${pins.includes("|part") ? `|${part}` : ""}`;
+        const order = members.slice();
+        const rnd = PF.rng(PF.hashStr(signature));
+        for (let i = order.length - 1; i > 0; i--) {
+          const j = (rnd() * (i + 1)) | 0;
+          [order[i], order[j]] = [order[j], order[i]];
+        }
+        const rank = new Map(order.map((row, position) => [row.index, position]));
+        // The pick: nearest the hour first (D-M9's ranking), a w-tagged line
+        // ahead of an untagged one at equal distance, then the seeded order.
+        let best = null;
+        for (const row of pool) {
+          const key = [this.askDistance(row.line.when, part), row.line.w ? 0 : 1, rank.get(row.index) ?? 0];
+          if (
+            !best ||
+            key[0] < best.key[0] ||
+            (key[0] === best.key[0] && (key[1] < best.key[1] || (key[1] === best.key[1] && key[2] < best.key[2])))
+          )
+            best = { row, key };
+        }
+        served.add(best.row.index);
+        folded._askServed.set(branch, served);
+        return best.row.line.text;
+      }
+      return null;
+    },
+
+    /** Serve one line for a branch, or null when nothing in the pack answers it.
+     *  Zero GM calls, no ledger line, no trace in anybody's context. */
+    ask(core, npc, branch) {
+      return this.askPeek(core, npc, branch, true);
+    },
+
+    /** THE COMPILED RECORD, ANSWERED MECHANICALLY (plan §2.5 item 2). Two of the
+     *  window's branches read the WORLD rather than the pack, and what they hand
+     *  back is PACKAGE TEXT built out of compiled facts — never invented prose and
+     *  never the persona, which is the GM's to voice. Either half is null when the
+     *  record does not carry it, and the window suppresses the branch: a legacy
+     *  world has a role and no schedule, so it answers "what do you do" and stays
+     *  honestly quiet about where anybody lives.
+     *
+     *  Returns { work, home }. */
+    askRecord(core, npc) {
+      const out = { work: null, home: null };
+      const sim = core?.sim;
+      if (!sim?.world || !npc) return out;
+      const sched = npc._sched && typeof npc._sched === "object" ? npc._sched : null;
+      const role = str(npc.role);
+      if (role) {
+        const standing = str(sched?.standing) || "resident";
+        out.work =
+          standing === "transient"
+            ? `I'm a ${role}. Passing through, mostly.`
+            : standing === "fringe"
+              ? `I'm a ${role}, when anyone asks. I keep to the edge of the place.`
+              : standing === "destitute"
+                ? `I'm a ${role}. Such work as there is.`
+                : `I'm the ${role} here.`;
+      }
+      const homeId = str(sched?.home?.zoneId);
+      const zone = homeId && PF.own(sim.world.zones, homeId) ? sim.world.zones[homeId] : null;
+      if (zone?.name) out.home = `${zone.name}. That's where you'll find me when the light goes.`;
+      return out;
+    },
+
+    /** The escalation door: the sealed line this person has, if the pack wrote
+     *  one for them. Cast-only by the seal's own fence, so a legacy or default
+     *  world answers for its four stock residents and nobody else. */
+    askEscalation(core, npc) {
+      const folded = PF.save?.packFold?.(core);
+      const name = str(npc?.name);
+      if (!folded || !name) return null;
+      const rows = Array.isArray(folded.pack?.escalation) ? folded.pack.escalation : [];
+      const row = rows.find((entry) => str(entry?.npc) === name);
+      return row ? str(row.text) : null;
+    },
+
+    /** Has this person's paid follow-up already been spent this session? A
+     *  RATCHET rather than a cooldown: once pressed it does not come back until
+     *  the fold is rebuilt (a reload, a rewind, a chat switch), which is the
+     *  `_filled` class of recorded cost. */
+    askBurned(core, npc) {
+      const folded = PF.save?.packFold?.(core);
+      const name = str(npc?.name);
+      return !!(folded?._askBurns && name && folded._askBurns.has(name));
+    },
+
+    askBurn(core, npc) {
+      const folded = PF.save?.packFold?.(core);
+      const name = str(npc?.name);
+      if (!folded || !name) return;
+      folded._askBurns ??= new Set();
+      folded._askBurns.add(name);
     },
 
     // ── generate(): the second generation call ───────────────────────────────
@@ -1683,12 +1947,28 @@ PF.pack = (() => {
 // exactly what `quests_done_board` claims about itself.
 const DEFAULT_PACKS = (() => {
   // Compact writers: the sealed shape is the object below, and the tuple form is
-  // what keeps sixty-odd lines of dialogue readable in a source file. `w` is
-  // omitted from every one of them deliberately — an absent `w` reads as ANY
-  // weather, so these lines are the ones a town always has to say, whatever the
-  // sky is doing. A weather-tagged default pack is a content decision nobody has
-  // made; the axis is here and the enrichment pass is where it would be spent.
-  const line = (at, when, r, text, topic) => (topic ? { at, when, r, text, topic } : { at, when, r, text });
+  // what keeps a hundred-odd lines of dialogue readable in a source file.
+  //
+  // `w` IS NOW A PARAMETER AND STILL OMITTED FROM ALMOST EVERY LINE. An absent
+  // `w` reads as ANY weather, so the bulk of this artifact is the lines a town
+  // always has to say, whatever the sky is doing — and the coverage floor below
+  // is asserted over THOSE, because a topic whose only lines were weather-tagged
+  // would be a branch that vanished on a fair day. The handful that do carry one
+  // are extras: a wet square, a wet river, a first fall.
+  const line = (at, when, r, text, topic, w) => {
+    const row = { at, when, r, text };
+    if (topic) row.topic = topic;
+    if (w) row.w = w;
+    return row;
+  };
+  // THE WEATHER-TAGGED EXTRAS GET THEIR OWN WRITER, and the reason is a lane
+  // rather than readability. `w` is a 0.14 word: a synthetic 0.13 stack — which
+  // the byte-stability case builds by narrowing this file's enum to one word —
+  // cannot boot on a built-in artifact tagged with a sky it does not have, and a
+  // real 0.13 client never sees these defaults at all (they are compiled in, not
+  // stored). One writer means that case narrows the pack the way it narrows the
+  // enum, in one replace, instead of grepping a literal.
+  const sky = (at, when, text, topic, w) => line(at, when, "stranger", text, topic, w);
   const cast = (name, text) => ({ npc: name, text });
   const heard = (at, text, topic) => (topic ? { at, text, topic } : { at, text });
 
@@ -1765,6 +2045,101 @@ const DEFAULT_PACKS = (() => {
         line("sanctuary", "day", "friend", "I come here to think and end up not thinking. It works."),
         line("dwelling", "day", "stranger", "This is somebody's house, you know."),
         line("dwelling", "day", "friend", "Door's open. Wipe your feet."),
+        // ── THE 0.14 ENRICHMENT (plan §2.7) ──────────────────────────────────
+        // Every line below is STRANGER, and that is the whole design of it. The
+        // talk window serves the stranger register and only that one this
+        // release, so a pack whose topics live in friend lines has topic buttons
+        // that never render — and the default pack is the artifact a legacy world
+        // and a declined generation both read. The floor is TWO per (handle ×
+        // topic) rather than one: a rung of size one makes a topic button say the
+        // same sentence forever, and the cycle it is built on meaningless on
+        // exactly the worlds this exists for. Asserted at boot, below.
+        //
+        // THE INTERIOR HANDLES GET NO FLOOR — workshop, hall, sanctuary and
+        // dwelling. The ladder's third and fourth rungs relax the PLACE rather
+        // than the topic, so a smith with nothing workshop-shaped to say answers
+        // with something the town says, which is honest, where answering with
+        // another topic's line would not be.
+        line("settlement", "day", "stranger", "There's talk the miller's shorting people. Talk, mind.", "rumor"),
+        line("settlement", "dusk", "stranger", "You'll hear about the field before you've been here a week.", "rumor"),
+        line(
+          "settlement",
+          "dusk",
+          "stranger",
+          "Anything wants doing, it wants doing before dark. Ask at the board.",
+          "work",
+        ),
+        line("settlement", "day", "stranger", "Well's in the middle, board's by the well. That's most of it.", "place"),
+        line("settlement", "dawn", "stranger", "Cold one. It'll turn by noon. It usually turns by noon.", "smalltalk"),
+        line(
+          "settlement",
+          "night",
+          "stranger",
+          "Quiet, isn't it. I like it better this way, if I'm honest.",
+          "smalltalk",
+        ),
+        line(
+          "gathering",
+          "dusk",
+          "stranger",
+          "Half of what gets said in here is worth hearing. The other half's worth more.",
+          "rumor",
+        ),
+        line(
+          "gathering",
+          "night",
+          "stranger",
+          "Somebody was asking after you. Or after somebody. I wasn't listening.",
+          "rumor",
+        ),
+        line("gathering", "day", "stranger", "If you want paying work, the board outside is the honest list.", "work"),
+        line(
+          "gathering",
+          "dawn",
+          "stranger",
+          "Kitchen always wants hands. Say I sent you; it'll count for nothing.",
+          "work",
+        ),
+        line(
+          "gathering",
+          "night",
+          "stranger",
+          "Fire's the warmest corner. Everything else in here is a draught.",
+          "place",
+        ),
+        line("gathering", "dusk", "stranger", "Long day for everybody, by the look of it.", "smalltalk"),
+        line("gathering", "dawn", "stranger", "Too early to be sensible. Sit down anyway.", "smalltalk"),
+        line(
+          "wilds",
+          "day",
+          "stranger",
+          "People say things about out here. Mostly people who don't come out here.",
+          "rumor",
+        ),
+        line(
+          "wilds",
+          "night",
+          "stranger",
+          "There's a story about the far marker. I'd rather tell it indoors.",
+          "rumor",
+        ),
+        line("wilds", "dawn", "stranger", "Good water down that way, if you've a line and the patience.", "work"),
+        line("wilds", "day", "stranger", "Anything you gather out here, somebody in town will take off you.", "work"),
+        line(
+          "wilds",
+          "dusk",
+          "stranger",
+          "Path forks past the old stone. Left goes home, right goes further.",
+          "place",
+        ),
+        line("wilds", "day", "stranger", "It's bigger than it looks from the gate. Everything out here is.", "place"),
+        line("wilds", "dawn", "stranger", "Nobody out but us and the birds, then.", "smalltalk"),
+        line("wilds", "night", "stranger", "Walking it after dark, are you. Well. So am I.", "smalltalk"),
+        // The weather axis, spent on three lines rather than sprinkled: they are
+        // EXTRAS over the floor, so a fair day loses nothing by not serving them.
+        sky("settlement", "day", "Rain like this and the square turns to soup. Mind the low end.", "place", "rain"),
+        sky("wilds", "day", "Wet day's a good day for the water, if you don't mind being wet.", "work", "rain"),
+        sky("settlement", "day", "First snow always catches somebody out. Usually me.", "smalltalk", "snow"),
       ],
       escalation: [
         cast("Mira", "You heard about the field, then? Ask me again when the room's empty."),
@@ -1829,6 +2204,106 @@ const DEFAULT_PACKS = (() => {
         line("sanctuary", "day", "friend", "I come here to think and end up not thinking. It works."),
         line("dwelling", "day", "stranger", "These are somebody's quarters, you know."),
         line("dwelling", "day", "friend", "Hatch is open. Knock the dust off first."),
+        // ── THE 0.14 ENRICHMENT (plan §2.7) ──────────────────────────────────
+        // The cozy pack's twin, line for line and floor for floor. See the note
+        // over there: stranger register only, two per (handle × topic) across
+        // settlement / gathering / wilds, no floor on the interior handles.
+        line(
+          "settlement",
+          "day",
+          "stranger",
+          "There's talk the recyclers are being run past spec. Talk, mind.",
+          "rumor",
+        ),
+        line("settlement", "dusk", "stranger", "You'll hear about the seals before you've been here a week.", "rumor"),
+        line(
+          "settlement",
+          "dusk",
+          "stranger",
+          "Anything wants doing, it wants doing before amber. Check the terminal.",
+          "work",
+        ),
+        line(
+          "settlement",
+          "day",
+          "stranger",
+          "Recycler's in the middle, terminal's beside it. That's most of it.",
+          "place",
+        ),
+        line(
+          "settlement",
+          "dawn",
+          "stranger",
+          "Cold start. It evens out by mid-cycle. It usually evens out.",
+          "smalltalk",
+        ),
+        line(
+          "settlement",
+          "night",
+          "stranger",
+          "Quiet, isn't it. I like it better this way, if I'm honest.",
+          "smalltalk",
+        ),
+        line(
+          "gathering",
+          "dusk",
+          "stranger",
+          "Half of what gets said in here is worth hearing. The other half's worth more.",
+          "rumor",
+        ),
+        line(
+          "gathering",
+          "night",
+          "stranger",
+          "Somebody was asking after you. Or after somebody. I wasn't listening.",
+          "rumor",
+        ),
+        line("gathering", "day", "stranger", "If you want paid work, the terminal outside is the honest list.", "work"),
+        line(
+          "gathering",
+          "dawn",
+          "stranger",
+          "Galley always wants hands. Say I sent you; it'll count for nothing.",
+          "work",
+        ),
+        line("gathering", "night", "stranger", "Heater's the warmest corner. The rest of it is vent draught.", "place"),
+        line("gathering", "dusk", "stranger", "Long shift for everybody, by the look of it.", "smalltalk"),
+        line("gathering", "dawn", "stranger", "Too early in the cycle to be sensible. Sit down anyway.", "smalltalk"),
+        line(
+          "wilds",
+          "day",
+          "stranger",
+          "People say things about out here. Mostly people who don't come out here.",
+          "rumor",
+        ),
+        line("wilds", "night", "stranger", "There's a story about the far beacon. I'd rather tell it inside.", "rumor"),
+        line("wilds", "dawn", "stranger", "Good pools down that way, if you've a line and the patience.", "work"),
+        line(
+          "wilds",
+          "day",
+          "stranger",
+          "Anything you bring back off the flats, somebody in the base will take.",
+          "work",
+        ),
+        line("wilds", "dusk", "stranger", "Line forks past mast nine. Left goes back, right goes further.", "place"),
+        line("wilds", "day", "stranger", "It's bigger than it looks from the lock. Everything out here is.", "place"),
+        line("wilds", "dawn", "stranger", "Nobody out but us and the dust, then.", "smalltalk"),
+        line(
+          "wilds",
+          "night",
+          "stranger",
+          "Walking the flats on the night cycle, are you. Well. So am I.",
+          "smalltalk",
+        ),
+        sky(
+          "settlement",
+          "day",
+          "Rain on the deck plates and the yard turns slick. Mind the low end.",
+          "place",
+          "rain",
+        ),
+        sky("wilds", "day", "Wet cycle's a good cycle for the pools, if you don't mind being wet.", "work", "rain"),
+        sky("settlement", "day", "First fall always catches somebody out. Usually me.", "smalltalk", "snow"),
       ],
       escalation: [
         cast("Mira", "You heard about the readings, then? Ask me again when the galley's empty."),
@@ -1930,6 +2405,25 @@ const DEFAULT_PACKS = (() => {
       if (row.topic !== undefined && !PF.pack.TOPICS.includes(row.topic))
         throw new Error(`pixelforge: a default ${theme} line is tagged "${row.topic}"`);
       if (!row.text) throw new Error(`pixelforge: a default ${theme} line has no text`);
+    }
+    // ── THE COVERAGE FLOOR (plan §2.7, owned by slice 4) ────────────────────
+    // The talk window renders a topic branch only when it has a line to serve,
+    // so this is the assertion that makes "a legacy world gets all four branches
+    // on day one" a fact rather than a hope. Three handles because those are the
+    // three a legacy layout actually stands up; TWO because a rung of one makes
+    // the cycle meaningless; and ANY-WEATHER because a topic whose only lines
+    // were sky-tagged would be a branch that disappeared on a fair day, which is
+    // most days in most worlds.
+    for (const at of ["settlement", "gathering", "wilds"]) {
+      for (const topic of PF.pack.TOPICS) {
+        const servable = pack.lines.filter(
+          (row) => row.r === "stranger" && row.at === at && row.topic === topic && row.w === undefined,
+        ).length;
+        if (servable < 2)
+          throw new Error(
+            `pixelforge: the default pack for "${theme}" has ${servable} any-weather stranger line(s) for ${at}/${topic}; the talk window needs two`,
+          );
+      }
     }
     for (const row of pack.escalation) {
       if (!stock.has(row.npc))
