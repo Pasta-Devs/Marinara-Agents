@@ -925,6 +925,16 @@ PF.pack = (() => {
           ? stored
           : null;
       const demoted = !!stored && !sealed;
+      // `sealed ?? defaults` IS AN INVERSION AND IT IS ACCEPTED, said here because
+      // this line is where it happens. The default packs carry the 0.14 coverage
+      // floor — two stranger lines per (handle × topic), so all four talk-window
+      // branches render — and a world that SUCCEEDED at generation reads none of
+      // it: a thin sealed pack that only cleared the line floor renders one or two
+      // branches, and no enrichment written here can reach it. So a legacy world
+      // and a declined generation are the RICHER conversation this release, and
+      // the world that paid for a pack is the poorer one. The fix is a wider
+      // generation, not a merge — a fallback blended into sealed content would
+      // put the stock cast's sentences in a stranger town's mouths.
       const pack = sealed ?? this.defaults(theme);
       const known = new Set();
       for (const zoneId of Object.keys(world?.zones ?? {})) {
@@ -2080,9 +2090,20 @@ const DEFAULT_PACKS = (() => {
         // release, so a pack whose topics live in friend lines has topic buttons
         // that never render — and the default pack is the artifact a legacy world
         // and a declined generation both read. The floor is TWO per (handle ×
-        // topic) rather than one: a rung of size one makes a topic button say the
-        // same sentence forever, and the cycle it is built on meaningless on
-        // exactly the worlds this exists for. Asserted at boot, below.
+        // topic) rather than one: a rung of size one leaves the ladder's first
+        // rung holding a single line, which is why `askPeek` falls through to the
+        // next rung rather than restarting inside an exhausted one. Asserted at
+        // boot, below.
+        //
+        // WHAT IT COST, MEASURED: 24 lines a theme, 32 rows to 56, and the
+        // serialized artifact grows +3,230 chars for the village and +3,286 for
+        // the colony — against `CAPS.lines` of 320, nowhere near anything. It is
+        // COMPILED IN rather than stored, so not one byte of it reaches a save.
+        //
+        // AND IT IS AN INVERSION, said here as well as at the read door: a world
+        // that succeeded at generation gets its own sealed pack and reads none of
+        // this (`fold`'s `sealed ?? defaults`), so the towns with no generation
+        // behind them are the ones that talk best this release.
         //
         // THE INTERIOR HANDLES GET NO FLOOR — workshop, hall, sanctuary and
         // dwelling. The ladder's third and fourth rungs relax the PLACE rather

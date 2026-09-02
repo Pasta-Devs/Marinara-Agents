@@ -7617,13 +7617,24 @@ const shapeOf = (canvas) => {
   return out.join(".");
 };
 const pixelsOf = (canvas) => Array.from(canvas._data).join(",");
-/** How many DISTINCT opaque colours a tile is painted in. One is a flat square
- *  — a lawn, whatever the id on it says. */
-const tonesOf = (canvas) => {
-  const seen = new Set();
+/** HOW FLAT A TILE IS: the share of its opaque pixels painted in the single
+ *  commonest tone. A distinct-colour COUNT was the first cut at this and it does
+ *  not measure relief — a flat square with a two-pixel accent on it carries three
+ *  tones and reads as a lawn. The share does: the four snow tiles measure between
+ *  0.44 and 0.87, so the ceiling the lanes below spend sits above every shipped
+ *  tile with room, and a painter reduced to one `rect` plus a garnish is 0.99 and
+ *  fails. */
+const flatnessOf = (canvas) => {
+  const counts = new Map();
   const d = canvas._data;
-  for (let i = 0; i < d.length; i += 4) if (d[i + 3] !== 0) seen.add(`${d[i]},${d[i + 1]},${d[i + 2]}`);
-  return seen.size;
+  let opaque = 0;
+  for (let i = 0; i < d.length; i += 4) {
+    if (d[i + 3] === 0) continue;
+    opaque += 1;
+    const key = `${d[i]},${d[i + 1]},${d[i + 2]}`;
+    counts.set(key, (counts.get(key) ?? 0) + 1);
+  }
+  return opaque ? Math.max(...counts.values()) / opaque : 1;
 };
 /** An rng stream that shares nothing with the stream beside it: a painter that
  *  reads either one paints two different tiles, and a painter that reads
@@ -7852,14 +7863,17 @@ const SNOW_IDS = ["grassSnow", "grassSnow2", "cropSnow", "canopySnow"];
   // …AND NONE OF THEM IS A FLAT FIELD. Snow reads flat, which is exactly why a
   // painter can be reduced to one `rect` over the whole tile and still pass
   // every comparison above — it differs from the summer tile, and it differs
-  // from the other theme's. All four carry the three snow tones on purpose:
-  // cropSnow's furrows are what keep a field a field in winter.
+  // from the other theme's. Measured as a SHARE and not as a colour count:
+  // cropSnow's furrows are what keep a field a field in winter, and a count of
+  // three is satisfied by a two-pixel garnish on a lawn.
   for (const theme of TIER1.themes())
-    for (const id of SNOW_IDS)
+    for (const id of SNOW_IDS) {
+      const flat = flatnessOf(baked[theme][id]);
       assert.ok(
-        tonesOf(baked[theme][id]) >= 3,
-        `tier-1 ${theme}: ${id} carries relief — a snow tile painted in one flat colour is a lawn with a winter name`,
+        flat <= 0.9,
+        `tier-1 ${theme}: ${id} carries relief — its commonest tone covers ${Math.round(flat * 100)}% of it, and a snow tile painted in one flat colour is a lawn with a winter name`,
       );
+    }
   // Dither-free at this tier too, for Tier-0's reason: the shape comparisons
   // above only divide the palette out while the shape holds still.
   for (const theme of TIER1.themes())
@@ -7878,11 +7892,18 @@ const SNOW_IDS = ["grassSnow", "grassSnow2", "cropSnow", "canopySnow"];
   // rather than grepped. The source pin below counts one exact literal, which a
   // painter can walk around with `rect(0, 0, 16, 16, …)`, a `T`-free spelling or
   // a different palette key; the corners are the property that actually matters.
+  // ALL FOUR CORNERS AND ONE PIXEL IN FROM THE DIAGONAL — two samples left a
+  // painter free to fill the other two and still read as clear, and the inset
+  // pair catches the fill that only rounds the very corner off.
   for (const theme of TIER1.themes())
     for (const id of ["fence", "well", "trunk"])
       for (const [x, y] of [
         [0, 0],
+        [15, 0],
+        [0, 15],
         [15, 15],
+        [1, 1],
+        [14, 14],
       ])
         assert.equal(
           baked[theme][id]._data[(y * 16 + x) * 4 + 3],
@@ -7926,6 +7947,7 @@ const SNOW_IDS = ["grassSnow", "grassSnow2", "cropSnow", "canopySnow"];
     2,
     "…and both Tier-0 palettes do too",
   );
+
 }
 
 // ── THE SKY REACHES THE PICTURE (0.14 slice 3) ──────────────────────────────
@@ -22572,11 +22594,27 @@ const fire = (node, type) => Promise.all((node.listeners[type] ?? []).map((fn) =
     {
       const t = stage();
       const npc = t.npcs()[0];
-      for (const [what, open, isOpen] of [
-        ["the journal", () => t.hud.toggleJournal(), () => t.hud._journal],
-        ["the character sheet", () => t.hud.toggleSheet(), () => t.hud._sheet],
+      // THE BOARD IS THE THIRD MEMBER OF THE SET, and it is the one that is NOT a
+      // full-surface panel: it opens over the window by geometry, which is
+      // exactly why its own toggle carries a latch clear — and that clearer went
+      // undriven while only the two panels had rows here.
+      const boardFeature =
+        (t.sim.zone().features ?? []).find((f) => f.id === loadedPF.world.BOARD_FEATURE_ID) ?? null;
+      assert.ok(boardFeature, "the staged village stands a board to read");
+      for (const [what, arm, open, isOpen] of [
+        ["the journal", () => {}, () => t.hud.toggleJournal(), () => t.hud._journal],
+        ["the character sheet", () => {}, () => t.hud.toggleSheet(), () => t.hud._sheet],
+        [
+          "the work board",
+          () => {
+            t.sim.nearBoard = boardFeature;
+          },
+          () => t.hud.toggleBoard(),
+          () => t.hud.boardMenu.style.display === "flex",
+        ],
       ]) {
         t.openOn(npc);
+        arm();
         const held = t.sim.clockMin;
         open();
         assert.equal(t.sim.talkAnchorId, null, `opening ${what} closes the window first`);
@@ -22762,8 +22800,11 @@ const fire = (node, type) => Promise.all((node.listeners[type] ?? []).map((fn) =
         null,
         "…and with no untagged or smalltalk stranger line, even passing the time is honestly absent",
       );
-      // "PASS THE TIME" IS ALIVE ON ANY STRANGER LINE AT ALL, which is what makes
-      // it the branch that almost always renders.
+      // …AND ONE UNTAGGED STRANGER LINE ANYWHERE BRINGS IT BACK, which is what
+      // makes it the branch that almost always renders: the untagged pool is
+      // where most of a hand-written pack lives, and the smalltalk ladder falls
+      // into it. A stranger line tagged for another TOPIC does not — that is the
+      // pin two lines up.
       folded.pack = { ...folded.pack, lines: [...folded.pack.lines, { at: "wilds", when: "night", r: "stranger", text: "Anything at all." }] };
       folded._askServed = new Map();
       core.closeTalk();

@@ -612,7 +612,8 @@ PF.Hud = class {
    *  child of `this.root`, so `destroy()`'s `root.remove()` does not take it.
    *  Bound at open, unbound at close AND in `destroy()`.
    *
-   *  THE EXEMPTION SET IS THE WHOLE DESIGN. The handler hears every press whose
+   *  THE EXEMPTION SET IS THE WHOLE DESIGN, and it is THREE SURFACES: the window
+   *  itself, the d-pad, and the action rail. The handler hears every press whose
    *  surface does not stopPropagation, and the d-pad and rail buttons deliberately
    *  do not — they `preventDefault` and let the event through. So without these,
    *  a pointer player's FIRST movement press closed the window at zero tiles,
@@ -620,13 +621,18 @@ PF.Hud = class {
    *  window's partial geometry was shaped to keep live. With them, movement leaves
    *  through the 32px band and a rail press leaves through the mover's own latch
    *  clear — both honest closes through their own doors. Everything else outside
-   *  still closes. */
+   *  still closes.
+   *
+   *  THE CENSUS BUTTON IS NOT A FOURTH ENTRY. It is a child of the rail, so the
+   *  rail's own `contains` already answers for it, and naming it again was a line
+   *  that could never fire — while reading as though the rail did not cover it.
+   *  The harness presses it by name anyway, which is what keeps that true. */
   _bindTalkOutside() {
     if (this._talkOutside) return;
     this._talkOutside = (ev) => {
       const target = ev?.target;
       if (!target) return;
-      for (const exempt of [this.talkEl, this.talkBtn, this.dpad, this.actions]) if (exempt?.contains?.(target)) return;
+      for (const exempt of [this.talkEl, this.dpad, this.actions]) if (exempt?.contains?.(target)) return;
       this.core.closeTalk();
     };
     document.addEventListener("pointerdown", this._talkOutside);
