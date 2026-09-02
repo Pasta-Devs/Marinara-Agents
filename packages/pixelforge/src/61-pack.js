@@ -1650,7 +1650,25 @@ PF.pack = (() => {
 
     /** The shared walk. `consume` false answers "is there a rung with anything in
      *  it"; `consume` true also picks, records the pick in the branch's served set
-     *  and hands back the line. */
+     *  and hands back the line.
+     *
+     *  AN EXHAUSTED RUNG FALLS THROUGH TO THE NEXT ONE rather than starting over
+     *  inside itself, and that one sentence is the whole reason this walk has two
+     *  passes: the default pack's coverage floor counts TWO lines per (at, topic)
+     *  while R1 pins (at, WHEN, topic), so R1 holds exactly one line wherever it
+     *  holds any — and a wrap that restarted inside R1 would answer every press
+     *  after the first with the same sentence, forever, in half the cells the
+     *  enrichment was written for (48 of the 96 (theme, at, daypart, branch) cells
+     *  whose reachable pool has two or more lines, measured on the shipped
+     *  defaults). Falling through costs nothing and stays inside the branch: R2-R4
+     *  are supersets of R1 with the same topic, and the smalltalk rungs are the
+     *  fall the branch is named for.
+     *
+     *  THE SECOND PASS IS THE WRAP, and it only runs when the WHOLE ladder is
+     *  exhausted — every line this branch can reach under this sky has been served
+     *  today. Then the set clears and the walk restarts from the top rung, because
+     *  after exhaustion repeats are the honest state and a branch that went silent
+     *  would be a button that stopped working halfway through an evening. */
     askPeek(core, npc, branch, consume) {
       const sim = core?.sim;
       if (!sim || !npc) return null;
@@ -1670,52 +1688,63 @@ PF.pack = (() => {
       }
       folded._askServed ??= new Map();
       const rungs = this.askRungs(branch, at, part);
-      for (const { test, pins } of rungs) {
-        const members = universe.filter(test);
-        if (!members.length) continue;
-        if (!consume) return members[0].line.text;
-        // THE SERVED SET IS PER (day, BRANCH) and never per rung. The ladder
-        // picks the first NON-EMPTY rung, so a when-pinned rung going empty
-        // across a daypart boundary drops service onto a when-relaxed rung whose
-        // pool CONTAINS the line just served — and a per-rung cursor would serve
-        // it straight back. One set per branch, read by every rung of that
-        // branch, closes the fall-through by construction.
-        const served = folded._askServed.get(branch) ?? new Set();
-        let pool = members.filter((row) => !served.has(row.index));
-        if (!pool.length) {
-          // The wrap: this rung is exhausted, so its members leave the set and
-          // the walk restarts. After exhaustion repeats are the honest state.
-          for (const row of members) served.delete(row.index);
-          pool = members;
+      if (!consume) {
+        for (const { test } of rungs) {
+          const members = universe.filter(test);
+          if (members.length) return members[0].line.text;
         }
-        // The rung's canonical order: a seeded Fisher-Yates over its members in
-        // index order, keyed by the MEMBERSHIP SIGNATURE rather than by anything
-        // positional — deterministic across processes and across a rewind.
-        const signature =
-          `${sim.world.seed >>> 0}|ask|${branch}|${pins}|${sim.day}|${word}` +
-          `${pins.includes("|at") ? `|${at}` : ""}${pins.includes("|part") ? `|${part}` : ""}`;
-        const order = members.slice();
-        const rnd = PF.rng(PF.hashStr(signature));
-        for (let i = order.length - 1; i > 0; i--) {
-          const j = (rnd() * (i + 1)) | 0;
-          [order[i], order[j]] = [order[j], order[i]];
+        return null;
+      }
+      // THE SERVED SET IS PER (day, BRANCH) and never per rung. The ladder walks
+      // the rungs in order, so a when-pinned rung going empty across a daypart
+      // boundary drops service onto a when-relaxed rung whose pool CONTAINS the
+      // line just served — and a per-rung cursor would serve it straight back.
+      // One set per branch, read by every rung of that branch, closes the
+      // fall-through by construction.
+      const served = folded._askServed.get(branch) ?? new Set();
+      // Pass 0 honours the set; pass 1 is the wrap, and it is reached only when
+      // no rung of the ladder had an unserved member left.
+      for (let pass = 0; pass < 2; pass++) {
+        for (const { test, pins } of rungs) {
+          const members = universe.filter(test);
+          if (!members.length) continue;
+          const pool = members.filter((row) => !served.has(row.index));
+          // The fall-through: this rung has nothing new, so the next rung — the
+          // same branch, one relaxation wider — gets asked instead.
+          if (!pool.length) continue;
+          // The rung's canonical order: a seeded Fisher-Yates over its members in
+          // index order, keyed by the MEMBERSHIP SIGNATURE rather than by anything
+          // positional — deterministic across processes and across a rewind.
+          const signature =
+            `${sim.world.seed >>> 0}|ask|${branch}|${pins}|${sim.day}|${word}` +
+            `${pins.includes("|at") ? `|${at}` : ""}${pins.includes("|part") ? `|${part}` : ""}`;
+          const order = members.slice();
+          const rnd = PF.rng(PF.hashStr(signature));
+          for (let i = order.length - 1; i > 0; i--) {
+            const j = (rnd() * (i + 1)) | 0;
+            [order[i], order[j]] = [order[j], order[i]];
+          }
+          const rank = new Map(order.map((row, position) => [row.index, position]));
+          // The pick: nearest the hour first (D-M9's ranking), a w-tagged line
+          // ahead of an untagged one at equal distance, then the seeded order.
+          let best = null;
+          for (const row of pool) {
+            const key = [this.askDistance(row.line.when, part), row.line.w ? 0 : 1, rank.get(row.index) ?? 0];
+            if (
+              !best ||
+              key[0] < best.key[0] ||
+              (key[0] === best.key[0] && (key[1] < best.key[1] || (key[1] === best.key[1] && key[2] < best.key[2])))
+            )
+              best = { row, key };
+          }
+          served.add(best.row.index);
+          folded._askServed.set(branch, served);
+          return best.row.line.text;
         }
-        const rank = new Map(order.map((row, position) => [row.index, position]));
-        // The pick: nearest the hour first (D-M9's ranking), a w-tagged line
-        // ahead of an untagged one at equal distance, then the seeded order.
-        let best = null;
-        for (const row of pool) {
-          const key = [this.askDistance(row.line.when, part), row.line.w ? 0 : 1, rank.get(row.index) ?? 0];
-          if (
-            !best ||
-            key[0] < best.key[0] ||
-            (key[0] === best.key[0] && (key[1] < best.key[1] || (key[1] === best.key[1] && key[2] < best.key[2])))
-          )
-            best = { row, key };
-        }
-        served.add(best.row.index);
-        folded._askServed.set(branch, served);
-        return best.row.line.text;
+        // Every rung walked with nothing unserved in any of them: the branch has
+        // said everything it can say today, so the set clears and pass 1 serves
+        // from the top rung again.
+        served.clear();
       }
       return null;
     },

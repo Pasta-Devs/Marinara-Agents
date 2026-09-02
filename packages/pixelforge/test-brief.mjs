@@ -22752,9 +22752,9 @@ const fire = (node, type) => Promise.all((node.listeners[type] ?? []).map((fn) =
     // measured over START MINUTES, where night→dusk is 180 minutes and night→dawn
     // is 480 — the two readings of "adjacent" disagree, and this is the one the
     // plan picked. And the served set is per (day, BRANCH) rather than per rung,
-    // because the ladder picks the first non-empty rung and a when-pinned rung
-    // going empty across a boundary drops service onto a rung whose pool contains
-    // the line just served.
+    // because the ladder walks its rungs in order and a when-pinned rung going
+    // empty across a boundary drops service onto a rung whose pool contains the
+    // line just served.
     {
       const t = stage({ chatId: "chat-pick" });
       const npc = t.npcs()[0];
@@ -22826,6 +22826,93 @@ const fire = (node, type) => Promise.all((node.listeners[type] ?? []).map((fn) =
         "DUSK",
         "…and the line already served is not served again across the boundary",
       );
+    }
+
+    // ── AN EXHAUSTED RUNG FALLS THROUGH; IT DOES NOT REPEAT ITSELF ──────────
+    // The boot floor counts TWO stranger lines per (at, topic) and R1 pins
+    // (at, WHEN, topic) — so R1 holds exactly one line wherever it holds any, and
+    // a wrap that restarted inside R1 would answer every press after the first
+    // with the same sentence for the rest of the day. The fall-through stays
+    // INSIDE the branch (R2-R4 are supersets with the same topic), so this buys
+    // variety without a topic button ever answering with another topic's line.
+    {
+      const t = stage({ chatId: "chat-fallthrough" });
+      const npc = t.npcs()[0];
+      const folded = loadedPF.save.packFold(core);
+      folded.pack = {
+        ...folded.pack,
+        lines: [
+          { at: "settlement", when: "dawn", r: "stranger", text: "R1-ONLY", topic: "rumor" },
+          { at: "settlement", when: "dusk", r: "stranger", text: "R2-WIDER", topic: "rumor" },
+          { at: "wilds", when: "dawn", r: "stranger", text: "R3-ELSEWHERE", topic: "rumor" },
+        ],
+      };
+      folded._askServed = new Map();
+      folded._askDay = -1;
+      t.sim.clockMin = 5 * 60 + 30; // dawn: R1 = {R1-ONLY}, a rung of exactly one
+      assert.equal(t.sim.daypart(), "dawn", "it is dawn");
+      assert.equal(loadedPF.pack.ask(core, npc, "rumor"), "R1-ONLY", "the pinned rung serves its one line");
+      assert.equal(
+        loadedPF.pack.ask(core, npc, "rumor"),
+        "R2-WIDER",
+        "…and the second press falls through to the next rung rather than saying it again",
+      );
+      assert.equal(
+        loadedPF.pack.ask(core, npc, "rumor"),
+        "R3-ELSEWHERE",
+        "…and the third reaches the at-relaxed rung, still inside the rumor branch",
+      );
+      // ONLY WHEN THE WHOLE LADDER IS SPENT does the walk go round, and it
+      // restarts at the TOP rung rather than wherever it stopped.
+      assert.equal(
+        loadedPF.pack.ask(core, npc, "rumor"),
+        "R1-ONLY",
+        "…and only with every reachable line served does the walk start over, from the top",
+      );
+
+      // THE SHIPPED DEFAULTS, CELL BY CELL. The invariant is stated over the
+      // branch's REACHABLE pool rather than over any one rung: wherever a branch
+      // can reach two or more lines, two presses must not be the same sentence.
+      // Before the fall-through this was false in half of them.
+      const saveFold = loadedPF.save.packFold;
+      let cells = 0;
+      for (const theme of loadedPF.art.themeIds()) {
+        const pack = loadedPF.pack.defaults(theme);
+        const stranger = pack.lines.filter((row) => row.r === "stranger" && !row.w);
+        for (const at of ["settlement", "gathering", "wilds"]) {
+          for (const when of loadedPF.pack.DAYPARTS) {
+            for (const branch of ["rumor", "work", "place", "smalltalk"]) {
+              const reach =
+                branch === "smalltalk"
+                  ? stranger.filter((row) => row.topic === "smalltalk" || row.topic === undefined)
+                  : stranger.filter((row) => row.topic === branch);
+              if (reach.length < 2) continue;
+              const cell = { pack, _askDay: -1, _askServed: new Map() };
+              const probe = {
+                sim: {
+                  day: 3,
+                  world: { seed: 424242 },
+                  weather: () => ({ word: "fair", intensity: null }),
+                  zone: () => ({ place: at, mapKind: "town" }),
+                  daypart: () => when,
+                },
+              };
+              loadedPF.save.packFold = () => cell;
+              const first = loadedPF.pack.ask(probe, npc, branch);
+              const second = loadedPF.pack.ask(probe, npc, branch);
+              loadedPF.save.packFold = saveFold;
+              if (!first) continue;
+              cells += 1;
+              assert.notEqual(
+                second,
+                first,
+                `${theme}/${at}/${when}/${branch} answers a second press with a different line (pool of ${reach.length})`,
+              );
+            }
+          }
+        }
+      }
+      assert.ok(cells >= 90, `…across every cell the shipped defaults can answer twice in (${cells})`);
     }
 
     // ── THE DOORS DIM, THEY NEVER VANISH ────────────────────────────────────
