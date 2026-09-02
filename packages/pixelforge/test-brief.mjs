@@ -2950,11 +2950,15 @@ const wayrestCast = [
 
     sim.clockMin = 23 * 60; // night: the whole household resolves to one door apron
     // AND A PINNED FAIR SKY, because this lane is about the overflow ladder and
-    // not about the weather. The apron forced above is outdoors while the
-    // household's `hearth` handle still points indoors — a hybrid the compiler
-    // never mints (a door-apron home resolves no hearth at all) but one 0.14's
-    // wet-day bias would legitimately relocate, taking the undersized box under
-    // test out from under the case on whichever seeds roll rain on day 1.
+    // not about the weather. The apron forced above is outdoors, which is a
+    // hybrid the compiler never mints — and it is not the hearth that would
+    // relocate anybody: measured on every seed here, all six of these souls
+    // resolve `hearth` NULL. It is HEARTH0, the household's head, who owns the
+    // minted workshop and therefore carries an INDOOR `post` (s1). The wet-day
+    // bias reaches its dusk rung at night, that rung's name is literally `post`
+    // for a `maker:resident`, and it would walk exactly one of the six out of the
+    // undersized box this case is measuring — on whichever seeds roll rain on
+    // day 1.
     sim.weatherOverride = { word: "fair" };
     sim.resolveSchedules();
 
@@ -7456,10 +7460,15 @@ const cellarBrief = (prosperity) => ({
     Object.values(w.zones)
       .filter((z) => z.hearth)
       .reduce((n, z) => n + z.npcs.length, 0);
-  // A PINNED FAIR SKY THROUGHOUT. The shape under test is what the CLOCK does to
-  // a village, and 0.14's wet-day bias holds the noon half of it indoors on
-  // whichever seeds roll rain — which is that feature's whole point and its own
-  // case's business, not this one's.
+  // A PINNED FAIR SKY HERE, WHERE NOON IS MEASURED. The shape under test is what
+  // the CLOCK does to a village, and 0.14's wet-day bias holds the noon half of
+  // it indoors on whichever seeds roll rain — which is that feature's whole
+  // point and its own case's business, not this one's. (Seed 7's day 1 IS rain,
+  // so this pin is doing work rather than restating a fair day.) DAWN needs no
+  // such pin and does not carry one below: every soul in this fixture already
+  // resolves somewhere indoors at first light — hearth, bed, or a keeper's own
+  // indoor post — so the bias has nobody to move and all five words place the
+  // village identically.
   const at = (hour) => {
     const sim = new loadedPF.Sim(w);
     sim.weatherOverride = { word: "fair" };
@@ -7479,7 +7488,6 @@ const cellarBrief = (prosperity) => ({
   // Non-vacuous: they are at the FIRE, not merely somewhere indoors. Every one of
   // them is within reach of a hearth tile on the floor they are standing on.
   const sim = new loadedPF.Sim(w);
-  sim.weatherOverride = { word: "fair" };
   sim.clockMin = 6 * 60;
   sim.resolveSchedules();
   let besideAFire = 0;
@@ -26002,6 +26010,127 @@ const fire = (node, type) => Promise.all((node.listeners[type] ?? []).map((fn) =
     const advance = loop.indexOf("sim.advanceMinutes(W)");
     assert.ok(read >= 0 && advance >= 0, "the window loop still reads the sky and still advances the clock");
     assert.ok(read < advance, "the sky is read BEFORE the window is spent, exactly as the daypart is");
+  }
+
+  // AND THE STAMP IS A DEFAULT, NOT A CEILING. `withSky` spreads the row AFTER
+  // the shared column on purpose, so an entry that ever writes its own `weather`
+  // literal wins. Nothing shipped writes one — which is exactly why the contract
+  // needs a lane rather than an audience: flip the two and every shipped table
+  // still reads identically, and the first entry that wants its own sky would
+  // silently get its rarity's instead. Proven by handing the module a table that
+  // DOES write one and rebuilding the stack over it, the case-129 idiom.
+  {
+    const carp = `{ role: "catch-common", variant: "carp", weight: 34, minLevel: 1, daypart: { night: 0.7 } }`;
+    const source = MODULES.map((name) => {
+      const text = readFileSync(join(here, "src", name), "utf8");
+      if (name !== "59-economy.js") return text;
+      const patched = text.replace(carp, `${carp.slice(0, -2)}, weather: { rain: 9 } }`);
+      assert.notEqual(patched, text, "the fixture still finds the entry it writes a literal onto");
+      return patched;
+    }).join("\n");
+    const litPF = new Function(`"use strict";\n${source}\nreturn PF;`)();
+    const lit = litPF.economy.CATCH_TABLES["cozy-village"]["water-feature"];
+    const own = lit.find((entry) => entry.variant === "carp");
+    assert.deepEqual(own.weather, { rain: 9 }, "an entry's own weather row survives the stamp");
+    // Non-vacuous: the stamp is still stamping. The neighbour with no literal
+    // carries its rarity's shared row exactly as it does in the real build.
+    const bream = lit.find((entry) => entry.variant === "bream");
+    assert.deepEqual(
+      bream.weather,
+      table.find((entry) => entry.variant === "bream").weather,
+      "…while the entry beside it still takes the shared row",
+    );
+    assert.notDeepEqual(own.weather, bream.weather, "…and the two are genuinely different columns");
+  }
+}
+
+// 128b. THE CALL SITE IS WIRED, PROVEN THROUGH A REAL SESSION. Case 128 pins
+// `_draw` against a word handed to it directly, which is one assertion short of
+// the thing a player experiences: it stays green if the window loop hands the
+// draw a literal instead of the sky it just read. So this fishes a real pond,
+// same world, same day, same windows, once under a pinned fair sky and once
+// under a pinned storm, and holds the two mixes apart. Replace
+// `sim.weather().word` with `"fair"` and the two runs come back identical.
+{
+  const E = loadedPF.economy;
+  const P = loadedPF.player;
+  /** The bank of a registry row — the fishing block's own helper, re-declared
+   *  because that block scopes it and this lane is not inside it. */
+  const standAt = (sim, zoneId, row) => {
+    const z = sim.world.zones[zoneId];
+    for (let y = row.rect.y - 1; y <= row.rect.y + row.rect.h; y++) {
+      for (let x = row.rect.x - 1; x <= row.rect.x + row.rect.w; x++) {
+        if (x < 0 || y < 0 || x >= z.w || y >= z.h) continue;
+        if (z.ground[y * z.w + x] === "water" || z.solid[y * z.w + x]) continue;
+        sim.teleport(zoneId, x, y);
+        sim.step(0, {});
+        if (sim.nearFeature?.id === row.id) return true;
+      }
+    }
+    return false;
+  };
+  let chats = 0;
+  try {
+    // LEVEL 15, which is the level that has opened the rare rung (mirror-pike is
+    // minLevel 7) and is far enough from the next one that no session here can
+    // level out from under its own hash: leaving 15 costs 150 xp and a dawn-to-
+    // night day pays about 40.
+    const session = (word, seed) => {
+      const w = world.build(seed, "cozy-village", null);
+      const sim = new loadedPF.Sim(w);
+      sim.clockMin = 6 * 60;
+      sim.day = 3;
+      sim.resolveSchedules();
+      const core = { chatId: `chat-skywire-${++chats}`, sim, hud: { toast() {}, refreshChips() {} }, markDirty() {} };
+      assert.ok(standAt(sim, "village", w.zones.village.features[0]), `seed ${seed}: the fixture stands at the pond`);
+      P.grant(core, { t: "rod", k: "crude" }, 1);
+      P.equip(core, "fishing", "tool", { t: "rod", k: "crude" });
+      P.award(core, { xp: 5 * 15 * 14, verb: "fishing" });
+      sim.weatherOverride = { word };
+      // The override really took, which is the one way this lane could go
+      // vacuous without saying so.
+      assert.equal(sim.weather().word, word, `seed ${seed}: the session really fishes a ${word} day`);
+      const out = E.fish(core, "night");
+      assert.equal(out.ok, true, `seed ${seed}: the ${word} session ran`);
+      assert.equal(
+        P.resolvedLevel(P.get(core).skills?.verbs?.fishing),
+        15,
+        `seed ${seed}: …without levelling out from under its own hash`,
+      );
+      return out;
+    };
+    const day = (word) => {
+      const counts = new Map();
+      let landed = 0;
+      let windows = 0;
+      for (let seed = 1; seed <= 20; seed++) {
+        const out = session(word, seed);
+        windows += out.windows;
+        landed += out.caught.length;
+        for (const row of out.caught) counts.set(row.t, (counts.get(row.t) ?? 0) + 1);
+      }
+      return { windows, landed, share: (t) => (counts.get(t) ?? 0) / landed };
+    };
+    const fair = day("fair");
+    const storm = day("storm");
+    // Non-vacuous by size: a share out of a handful of fish says nothing.
+    assert.ok(fair.landed > 300, `the fair day landed enough fish to have a mix (${fair.landed})`);
+    assert.ok(storm.landed > 300, `and so did the storm (${storm.landed})`);
+    // THE OUTCOME A FAIR SESSION CANNOT PRODUCE. Storm is the one surviving mix
+    // column — rare ×1.5 against ×0.6 on everything else — so a stormy day's
+    // catch is more than twice as likely to be the rare one. Measured 4.99% ->
+    // 12.32% on these fixtures; pinned at the doubling so a retune of the
+    // coefficient does not have to come back through this file.
+    assert.ok(
+      storm.share("catch-rare") > fair.share("catch-rare") * 2,
+      `a storm SESSION more than doubles the rare share (${fair.share("catch-rare")} -> ${storm.share("catch-rare")})`,
+    );
+    assert.ok(
+      storm.share("catch-common") < fair.share("catch-common"),
+      `…and the ordinary fish go down with it (${fair.share("catch-common")} -> ${storm.share("catch-common")})`,
+    );
+  } finally {
+    loadedPF.save.reset(); // the mutators self-dirty, and a dirty block arms a timer
   }
 }
 

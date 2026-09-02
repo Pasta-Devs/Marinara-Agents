@@ -135,10 +135,31 @@ PF.schedule = (() => {
    *  ladder and no concentration to mitigate: the wet 07:00 pass is the dusk
    *  relocation run early.
    *
-   *  AND AT NIGHT IT IS A NO-OP BY TABLE WALK rather than by self-reference:
-   *  every row whose night name is not `post` names a bed, and a bed is indoors,
-   *  so rule 2 answers before rule 3 can run. The bias is a daylight mechanism by
-   *  construction. */
+   *  AND AT NIGHT IT IS A NO-OP BECAUSE OF WHERE THE DESTINATIONS ARE, not
+   *  because the table walk cannot happen. The reason to state it that way is
+   *  that the walk DOES happen: rule 3 is entered whenever a night name resolves
+   *  to something outdoors, and on real worlds that is somebody with no `home`
+   *  handle at all — a wilds resident, a lodger nobody laid a bed for — whose
+   *  night name falls through to `sched.post` (measured over 960 compiled worlds,
+   *  both themes and all four scales: 244 night resolutions reach the loop). They
+   *  find no indoor anchor either, because a `post` outdoors means the compiler
+   *  resolved no hearth for them, so they keep the handle they had.
+   *
+   *  What makes the pass a no-op is the compiler's own guarantee: IT NEVER MINTS
+   *  AN OUTDOOR `home` HANDLE. Every one is a bed box inside a dwelling interior
+   *  or an inn berth (same 960 worlds: 50,832 home handles, zero outdoors), so
+   *  anybody who HAS one is already indoors at night and rule 2 answers first.
+   *  Hand-force the shape the compiler will not mint — an outdoor `home` beside
+   *  an indoor anchor — and rule 3 fires at night through the DUSK rung exactly
+   *  as it does at noon; the harness does precisely that (case 14j) and watches
+   *  the household head walk into the building they work in. The invariant is
+   *  that the destinations are indoors, and nothing else.
+   *
+   *  ONE COLLISION WORTH KNOWING ABOUT, since those 244 are all of it: when the
+   *  night handle IS the `post` fallback and the row's dusk name is also `post`,
+   *  the loop's first rung re-tests the handle rule 2 has just rejected. Wasted,
+   *  never wrong — `bias.indoor` is pure and the second rung still gets its
+   *  turn — and cheaper to leave than to special-case. */
   function resolve(sched, daypart, bias) {
     if (!sched) return null;
     // Most specific first. The `:keeper` tier exists so a template can describe
