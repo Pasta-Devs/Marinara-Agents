@@ -29,6 +29,46 @@ function parseSemver(value, context) {
   return match.slice(1, 4).map(Number);
 }
 
+/** SemVer precedence, so ordering does not depend on any component staying small.
+ *
+ *  Packed arithmetic (major * 1e6 + minor * 1e3 + patch) looks tidy and is wrong:
+ *  1.0.1001 outranks 1.1.0 under it. A release carrying a prerelease suffix also
+ *  precedes the release it leads to, per SemVer, and dotted prerelease identifiers
+ *  compare numerically when both sides are numeric and as text otherwise. */
+function comparePrereleaseIdentifiers(left, right) {
+  const leftParts = left.split(".");
+  const rightParts = right.split(".");
+  for (let index = 0; index < Math.max(leftParts.length, rightParts.length); index += 1) {
+    const leftPart = leftParts[index];
+    const rightPart = rightParts[index];
+    // A shorter set of identifiers has lower precedence when all preceding ones are equal.
+    if (leftPart === undefined) return -1;
+    if (rightPart === undefined) return 1;
+    if (leftPart === rightPart) continue;
+    const leftNumeric = /^\d+$/u.test(leftPart);
+    const rightNumeric = /^\d+$/u.test(rightPart);
+    if (leftNumeric && rightNumeric) return Number(leftPart) - Number(rightPart);
+    // Numeric identifiers always have lower precedence than alphanumeric ones.
+    if (leftNumeric !== rightNumeric) return leftNumeric ? -1 : 1;
+    return leftPart < rightPart ? -1 : 1;
+  }
+  return 0;
+}
+
+export function compareVersions(left, right, context) {
+  const leftParts = parseSemver(left, context);
+  const rightParts = parseSemver(right, context);
+  for (let index = 0; index < 3; index += 1) {
+    if (leftParts[index] !== rightParts[index]) return leftParts[index] - rightParts[index];
+  }
+  const leftPrerelease = left.includes("-") ? left.slice(left.indexOf("-") + 1) : null;
+  const rightPrerelease = right.includes("-") ? right.slice(right.indexOf("-") + 1) : null;
+  if (leftPrerelease === rightPrerelease) return 0;
+  if (leftPrerelease === null) return 1;
+  if (rightPrerelease === null) return -1;
+  return comparePrereleaseIdentifiers(leftPrerelease, rightPrerelease);
+}
+
 /** Whether moving from `previous` to `version` changed the major or minor part.
  *
  *  This is the default for the highlight dot, and it is why authors almost never
@@ -89,11 +129,9 @@ export function parsePackageChangelog(markdown, context) {
   });
 
   for (let index = 1; index < entries.length; index += 1) {
-    const [major, minor, patch] = parseSemver(entries[index - 1].version, context);
-    const [olderMajor, olderMinor, olderPatch] = parseSemver(entries[index].version, context);
-    const newer = major * 1e6 + minor * 1e3 + patch;
-    const older = olderMajor * 1e6 + olderMinor * 1e3 + olderPatch;
-    if (newer <= older) throw new Error(`${context}: entries must be newest first`);
+    if (compareVersions(entries[index - 1].version, entries[index].version, context) <= 0) {
+      throw new Error(`${context}: entries must be newest first`);
+    }
   }
 
   // Older entries fall off the end rather than failing the build: a long-lived
@@ -106,8 +144,12 @@ export async function readPackageReleaseNotes(repoRoot, id) {
   let markdown;
   try {
     markdown = await readFile(join(repoRoot, "packages", id, "CHANGELOG.md"), "utf8");
-  } catch {
-    return null;
+  } catch (error) {
+    // Only a missing file means "this package publishes no notes". A permission
+    // error or an unreadable directory swallowed here would silently drop a
+    // package's notes from the catalog instead of failing the build.
+    if (error?.code === "ENOENT") return null;
+    throw error;
   }
   return parsePackageChangelog(markdown, `packages/${id}/CHANGELOG.md`);
 }
@@ -156,7 +198,9 @@ export function assertReleaseNotesForFeatureBumps(entries, notesDocument, previo
     const { id, version } = entry.manifest;
     const previous = previousVersions.get(id) ?? null;
     if (previous === version) continue;
-    if (!isNotableBump(version, previous ?? "0.0.0", `packages/${id}`)) continue;
+    // A first appearance always owes notes, checked before the bump test: an
+    // initial 0.0.1 reads as a patch against a synthetic 0.0.0 and would slip past.
+    if (previous !== null && !isNotableBump(version, previous, `packages/${id}`)) continue;
     const published = notesDocument.packages[id]?.versions.some((note) => note.version === version);
     if (published) continue;
     throw new Error(

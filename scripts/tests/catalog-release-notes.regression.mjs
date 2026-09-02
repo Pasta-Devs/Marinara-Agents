@@ -8,6 +8,7 @@ import {
   MAX_RELEASE_NOTE_VERSIONS,
   assertReleaseNotesForFeatureBumps,
   buildReleaseNotesDocument,
+  compareVersions,
   parsePackageChangelog,
 } from "../catalog-release-notes.mjs";
 
@@ -34,6 +35,23 @@ function entry(id, version, { min = "2.3.0", maxExclusive = "3.0.0" } = {}) {
     },
   };
 }
+
+// ── SemVer precedence ─────────────────────────────────────────────────────────
+// Packed arithmetic (major * 1e6 + minor * 1e3 + patch) reads tidily and ranks
+// 1.0.1001 above 1.1.0, which would let an out-of-order changelog through.
+assert.ok(compareVersions("1.1.0", "1.0.1001", "fixture") > 0, "A minor bump outranks any patch count");
+assert.ok(compareVersions("2.0.0", "1.999.999", "fixture") > 0);
+assert.ok(compareVersions("1.0.0", "1.0.0-rc.1", "fixture") > 0, "A release outranks its own prerelease");
+assert.ok(compareVersions("1.0.0-rc.2", "1.0.0-rc.1", "fixture") > 0, "Numeric identifiers compare numerically");
+assert.ok(compareVersions("1.0.0-rc.10", "1.0.0-rc.9", "fixture") > 0, "…not as text");
+assert.ok(compareVersions("1.0.0-beta", "1.0.0-alpha", "fixture") > 0);
+assert.ok(compareVersions("1.0.0-rc.1.1", "1.0.0-rc.1", "fixture") > 0, "More identifiers outrank fewer");
+assert.equal(compareVersions("1.2.3", "1.2.3", "fixture"), 0);
+
+assert.doesNotThrow(
+  () => parsePackageChangelog("## 1.1.0 — 2026-09-01\n- x\n\n## 1.0.1001 — 2026-08-01\n- y\n", "fixture"),
+  "A high patch count below a minor bump is correctly ordered",
+);
 
 // ── Parsing and the highlight default ─────────────────────────────────────────
 const parsed = parsePackageChangelog(
@@ -107,6 +125,11 @@ assert.throws(
   () => assertReleaseNotesForFeatureBumps([entry("alpha", "1.0.0")], emptyNotes, new Map()),
   /with no packages\/alpha\/CHANGELOG\.md entry/u,
   "A package's first appearance owes the user a sentence too",
+);
+assert.throws(
+  () => assertReleaseNotesForFeatureBumps([entry("alpha", "0.0.1")], emptyNotes, new Map()),
+  /with no packages\/alpha\/CHANGELOG\.md entry/u,
+  "…including one that first appears at 0.0.1, which reads as a patch against a synthetic 0.0.0",
 );
 
 // ── End to end through the lane chokepoint ────────────────────────────────────

@@ -126,10 +126,20 @@ if (JSON.stringify(legacyCatalog) !== JSON.stringify(catalogsByMajor.get(LEGACY_
 // notes.json was hand-edited, or a changelog changed without a rebuild, and the
 // text users read in the update prompt would no longer match the repository.
 async function readCommittedNotes(path) {
+  let raw;
   try {
-    return JSON.parse(await readFile(join(repoRoot, path), "utf8"));
-  } catch {
-    return null;
+    raw = await readFile(join(repoRoot, path), "utf8");
+  } catch (error) {
+    // Only a missing file counts as "no sidecar". Mapping a parse failure or a
+    // permission error to absent would let a corrupt notes.json pass validation
+    // for any lane that is expected to have none.
+    if (error?.code === "ENOENT") return null;
+    throw error;
+  }
+  try {
+    return JSON.parse(raw);
+  } catch (error) {
+    throw new Error(`${path} is not valid JSON`, { cause: error });
   }
 }
 
@@ -152,6 +162,10 @@ if (previewCatalog.packages.length > 0) {
     await assertNotesSidecar(`catalog/preview/v${major}/notes.json`, lane.packages);
   }
   await assertNotesSidecar("catalog/preview/notes.json", expectedPreviewLanes.get(LEGACY_CATALOG_MAJOR).packages);
+} else if ((await readCommittedNotes("catalog/preview/notes.json")) !== null) {
+  // The overlay directory is removed when nothing is staging-only, so a surviving
+  // sidecar means a stale generated payload that no rebuild would produce.
+  throw new Error("catalog/preview/notes.json exists with no staging-only packages — rebuild the catalog to remove it");
 }
 const packagesWithChangelogs = await listPackagesWithChangelogs(repoRoot);
 console.log(
