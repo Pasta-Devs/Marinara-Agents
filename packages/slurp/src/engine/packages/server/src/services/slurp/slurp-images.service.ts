@@ -17,7 +17,11 @@ import { createConnectionsStorage } from "../storage/connections.storage.js";
 import { createPromptOverridesStorage } from "../storage/prompt-overrides.storage.js";
 import { resolveNoodlerImageConnectionId } from "./slurp-image-connections.js";
 import { loadPrompt, NOODLE_IMAGE_POST } from "../prompt-overrides/index.js";
-import { generateNoodleImageWithRetry, NOODLER_POST_IMAGE_RETRY_LIMIT } from "./slurp-image-retry.js";
+import {
+  generateNoodleImageWithRetry,
+  noodlerPostImageRetryAttempts,
+  NOODLER_POST_IMAGE_RETRY_LIMIT,
+} from "./slurp-image-retry.js";
 import { rewriteNoodleImagePrompt } from "./slurp-image-prompt-rewrite.js";
 import { isConnectionAdmissionFailure, type ConnectionAdmissionMode } from "../generation/connection-admission.js";
 import { characterAppearanceFromRow, characterNoodleImageContextFromRow } from "./slurp-public-images.service.js";
@@ -344,15 +348,24 @@ export function createNoodlerNoodleImagesService(db: DB) {
     prompts: ReviewedNoodleImagePrompt[];
     debugMode: boolean;
     admissionMode?: ConnectionAdmissionMode;
-  }): Promise<{ ok: true; finalized: number } | { ok: false; error: "missing_connection"; message: string }> => {
+  }): Promise<
+    { ok: true; finalized: number; deferred: number } | { ok: false; error: "missing_connection"; message: string }
+  > => {
     const settings = await noodle.getSettings();
     let finalized = 0;
+    // Branches where no provider call was made: a claim we could not take, a missing connection,
+    // a busy connection. The caller must not read these as a provider failure, or a healthy
+    // system backs its own polling off while the user is simply using the connection.
+    let deferred = 0;
     for (const promptOverride of input.prompts) {
       const claimToken = newId();
       // Reuses the shared post-image claim; the NoodleR-account check below rejects any
       // non-NoodleR post so a public post id can never be finalized through this route.
       const claimed = await noodle.claimPostImage(promptOverride.id, claimToken, imageClaimLeaseUntil());
-      if (!claimed) continue;
+      if (!claimed) {
+        deferred += 1;
+        continue;
+      }
       const account = await noodle.getNoodlerAccountById(claimed.authorAccountId);
       if (!account) {
         await noodle.releasePostImageClaim(claimed.id, claimToken);
@@ -367,6 +380,7 @@ export function createNoodlerNoodleImagesService(db: DB) {
         (await connections.getDefaultForImageGeneration());
       if (!imageConnection) {
         await noodle.releasePostImageClaim(claimed.id, claimToken);
+        deferred += 1;
         continue;
       }
       if (!claimed.imagePrompt) {
@@ -412,12 +426,13 @@ export function createNoodlerNoodleImagesService(db: DB) {
         // untouched and let a later pass draw it.
         if (isConnectionAdmissionFailure(error)) {
           await noodle.releasePostImageClaim(claimed.id, claimToken);
+          deferred += 1;
           continue;
         }
         logger.warn(error, "[noodler] Failed to generate reviewed image for %s", account.displayName);
         await renewClaim();
         if (claimOwned) {
-          const attempts = Number(claimed.metadata.imageRetryAttempts ?? 0) + 1;
+          const attempts = noodlerPostImageRetryAttempts(claimed.metadata) + 1;
           await noodle.finalizePostImageClaim(claimed.id, claimToken, {
             imageUrl: null,
             // The prompt survives a provider failure: it is what a later retry (automatic or
@@ -483,7 +498,7 @@ export function createNoodlerNoodleImagesService(db: DB) {
         throw error;
       }
     }
-    return { ok: true, finalized };
+    return { ok: true, finalized, deferred };
   };
 
   return {
@@ -501,8 +516,11 @@ export function createNoodlerNoodleImagesService(db: DB) {
         debugMode: false,
         admissionMode: { kind: "background" },
       });
-      if (!result.ok) return "failed";
-      return result.finalized > 0 ? "retried" : "failed";
+      // A missing image connection is a deferral, not a provider failure: nothing was sent, and
+      // the poll must keep its normal cadence for the posting work that does not need images.
+      if (!result.ok) return "idle";
+      if (result.finalized > 0) return "retried";
+      return result.deferred > 0 ? "idle" : "failed";
     },
   };
 }

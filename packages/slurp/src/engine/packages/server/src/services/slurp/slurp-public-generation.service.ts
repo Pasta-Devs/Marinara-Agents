@@ -160,6 +160,10 @@ export function createPublicNoodleGenerationService(db: DB) {
           input.connection.id,
           input.admissionMode ?? { kind: "foreground" },
         );
+        // The text-only retry and the correction pass are steps inside the refresh the first call
+        // already admitted, not attempts of their own: admitting them again would let a foreground
+        // request arriving mid-refusal abort work that is already half paid for.
+        const stepProvider = withConnectionAdmissionProvider(fallbackProvider, input.connection.id, { kind: "none" });
         await ensurePersonaAccounts(noodle, characters);
         if (settings.allowProfessorMari) await ensureProfessorMariAccount(noodle, characters);
         const personaAccount = await resolvePersonaAccount(noodle, characters, input.personaId);
@@ -320,7 +324,7 @@ export function createPublicNoodleGenerationService(db: DB) {
           );
           requestMessages = prompt.textOnlyMessages;
           firstAttemptKind = "text_only_fallback";
-          result = await provider.chatComplete(prompt.textOnlyMessages, completionOptions);
+          result = await stepProvider.chatComplete(prompt.textOnlyMessages, completionOptions);
         }
         let content = result.content ?? "";
         logDebugOverride(
@@ -366,7 +370,7 @@ export function createPublicNoodleGenerationService(db: DB) {
             "[debug/noodle] Correction prompt sent to model:\n%s",
             formatNoodleMessagesForLog(correctionMessages),
           );
-          result = await provider.chatComplete(correctionMessages, completionOptions);
+          result = await stepProvider.chatComplete(correctionMessages, completionOptions);
           content = result.content ?? "";
           logDebugOverride(
             debugMode,
