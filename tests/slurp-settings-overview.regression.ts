@@ -29,7 +29,7 @@ async function main() {
   assert.match(home, /section: "overview"/u);
   assert.match(
     settings,
-    /const settingsSections = \["overview", "general", "creators", "images", "audience", "advanced"\]/u,
+    /const settingsSections = \["overview", "general", "creators", "images", "audience", "ads", "advanced"\]/u,
   );
   assert.match(settings, /section === "overview"/u);
   assert.match(settings, /const imagesReady = imageConnections\.length > 0 && imageEnabledCreators\.length > 0/u);
@@ -42,6 +42,25 @@ async function main() {
   assert.match(shell, /"--slurp-hero"/u);
   assert.match(shell, /"--slurp-nav-active"/u);
   assert.match(english, /"ui\.slurp\.settings\.tabs\.overview": "Overview"/u);
+  assert.match(home, /inlineAdsEnabled=\{slurpSettingsQuery\.data\?\.inlineAdsEnabled !== false\}/u);
+  assert.match(home, /if \(!inlineAdsEnabled \|\| searchTerm \|\| tab !== "all" \|\| !ad\) return null;/u);
+  assert.match(home, /onCompose: openPostComposer/u);
+  assert.match(settings, /value=\{settings\.inlineAdsEnabled\}/u);
+  assert.match(settings, /section === "ads"/u);
+  assert.match(settings, /inlineAdsFrequency/u);
+  assert.match(settings, /inlineAdsSteering/u);
+  assert.match(
+    shell,
+    /data-component="NoodleView\.MobileBottomNav"[\s\S]*data-component="NoodleView\.MobileAccountSwitcher"/u,
+  );
+  assert.match(shell, /onClick=\{\(\) => onMobileDrawerOpenChange\(true\)\}[\s\S]*NOODLER_LOGO_SRC/u);
+  assert.doesNotMatch(
+    shell.slice(
+      shell.indexOf('data-component="NoodleView.MobileDrawer"'),
+      shell.indexOf("</aside>", shell.indexOf('data-component="NoodleView.MobileDrawer"')),
+    ),
+    /MobileAccountSwitcher/u,
+  );
 
   console.log("Slurp settings overview regressions passed.");
 }

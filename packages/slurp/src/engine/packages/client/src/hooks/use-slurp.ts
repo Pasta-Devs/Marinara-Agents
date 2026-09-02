@@ -73,13 +73,23 @@ export const noodleKeys = {
   noodlerReserveStatus: () => [...noodleKeys.noodlerRoot(), "reserve-status"] as const,
   noodlerImageConnections: () => [...noodleKeys.noodlerRoot(), "image-connections"] as const,
   noodlerFanStatus: () => [...noodleKeys.noodlerRoot(), "fan-status"] as const,
-  ads: (personaId: string, creatorId?: string | null) =>
-    [...noodleKeys.noodlerViewers(), "ads", personaId, creatorId ?? "none"] as const,
+  // contextTags belongs in the key: it is part of the request, so leaving it
+  // out meant switching tab or crossing into evening never refetched.
+  ads: (personaId: string, creatorId?: string | null, contextTags: string[] = []) =>
+    [...noodleKeys.noodlerViewers(), "ads", personaId, creatorId ?? "none", contextTags.join(",")] as const,
+  adPool: () => [...noodleKeys.noodlerRoot(), "ad-pool"] as const,
+  adState: (personaId: string) => [...noodleKeys.noodlerViewers(), "ad-state", personaId] as const,
 };
+
+export type SlurpContentRating = "tame" | "suggestive" | "explicit";
 
 export type SlurpPromotion = {
   id: string;
+  platform?: "slurp" | "noodle";
   kind: "creator" | "inline";
+  contentRating?: SlurpContentRating;
+  origin?: "builtin" | "user" | "generated";
+  retiredAt?: string | null;
   brand: string;
   product: string;
   copy: string;
@@ -93,7 +103,7 @@ export type SlurpPromotion = {
 
 export function useSlurpInlineAds(personaId: string | null, creatorId?: string | null, contextTags: string[] = []) {
   return useQuery({
-    queryKey: noodleKeys.ads(personaId ?? "none", creatorId),
+    queryKey: noodleKeys.ads(personaId ?? "none", creatorId, contextTags),
     queryFn: () =>
       api.get<{ items: SlurpPromotion[] }>(
         `/slurp/noodler/viewer/ads?personaId=${encodeURIComponent(personaId!)}${creatorId ? `&creatorId=${encodeURIComponent(creatorId)}` : ""}${contextTags.length ? `&contextTags=${encodeURIComponent(contextTags.join(","))}` : ""}`,
@@ -116,8 +126,92 @@ export function useHideSlurpAd() {
   });
 }
 
+export function useRecordSlurpAdAction() {
+  return useMutation({
+    mutationFn: ({ personaId, promotionId }: { personaId: string; promotionId: string }) =>
+      api.post(`/slurp/noodler/viewer/ads/${encodeURIComponent(promotionId)}/action`, { personaId }),
+  });
+}
+
+export function useHideSlurpAdBrand() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ personaId, brand }: { personaId: string; brand: string }) =>
+      api.post(`/slurp/noodler/viewer/ads/brand/hide`, { personaId, brand }),
+    onSuccess: (_state, input) => {
+      void qc.invalidateQueries({ queryKey: noodleKeys.adState(input.personaId) });
+      void qc.invalidateQueries({
+        queryKey: noodleKeys.noodlerViewers(),
+        predicate: (query) => query.queryKey.includes(input.personaId),
+      });
+    },
+  });
+}
+
+export function useUnhideSlurpAdBrand() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ personaId, brand }: { personaId: string; brand: string }) =>
+      api.post(`/slurp/noodler/viewer/ads/brand/unhide`, { personaId, brand }),
+    onSuccess: (_state, input) => qc.invalidateQueries({ queryKey: noodleKeys.adState(input.personaId) }),
+  });
+}
+
+export function useSlurpAdState(personaId: string | null) {
+  return useQuery({
+    queryKey: noodleKeys.adState(personaId ?? "none"),
+    queryFn: () =>
+      api.get<{ hiddenBrands: string[]; hidden: SlurpPromotion[]; seen: SlurpPromotion[] }>(
+        `/slurp/noodler/viewer/ads/state?personaId=${encodeURIComponent(personaId!)}`,
+      ),
+    enabled: Boolean(personaId),
+  });
+}
+
+export function useSlurpAdPool() {
+  return useQuery({
+    queryKey: noodleKeys.adPool(),
+    queryFn: () => api.get<{ items: SlurpPromotion[] }>(`/slurp/noodler/ads/pool`),
+  });
+}
+
+export function useGenerateSlurpAds() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (count?: number) =>
+      api.post<{ items: SlurpPromotion[]; retired: string[] }>(`/slurp/noodler/ads/generate`, { count }),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: noodleKeys.adPool() });
+      void qc.invalidateQueries({ queryKey: noodleKeys.noodlerViewers() });
+    },
+  });
+}
+
+export function useDeleteSlurpAd() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (promotionId: string) => api.delete(`/slurp/noodler/ads/pool/${encodeURIComponent(promotionId)}`),
+    onSuccess: () => qc.invalidateQueries({ queryKey: noodleKeys.adPool() }),
+  });
+}
+
+export function useResetSlurpAds() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (personaId: string) => api.post(`/slurp/noodler/viewer/ads/reset`, { personaId }),
+    onSuccess: (_state, personaId) => queryClient.invalidateQueries({ queryKey: noodleKeys.ads(personaId) }),
+  });
+}
+
 export type SlurpSettings = {
   inlineAdsEnabled: boolean;
+  inlineAdsFrequency: "light" | "standard" | "frequent";
+  inlineAdsSteering: "balanced" | "personalized" | "random";
+  inlineAdsPreferredTags: string[];
+  inlineAdsContentCeiling: SlurpContentRating;
+  inlineAdsTone: "corporate" | "scammy" | "local" | "luxury" | "unhinged";
+  inlineAdsEra: "present" | "nineties" | "cyberpunk" | "retrofuture";
+  inlineAdsWorldContext: string;
   refreshesPerDay: number;
   generationGuidance: string;
   postsPerDay: number;

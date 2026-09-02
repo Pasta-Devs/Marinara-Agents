@@ -66,6 +66,8 @@ import {
   useNoodlerSubscribers,
   useNoodlerUnseenCount,
   useHideSlurpAd,
+  useHideSlurpAdBrand,
+  useRecordSlurpAdAction,
   useSlurpInlineAds,
   useMarkNoodlerFeedSeen,
   useNoodlerViewer,
@@ -1343,6 +1345,16 @@ export function SlurpHome({ navigation, onNavigate }: SlurpHomeProps) {
   const mainAuthorProfile = shellPersonaAccount
     ? (accountsQuery.data?.find((profile) => profile.sourceAccountId === shellPersonaAccount.id) ?? null)
     : null;
+  const openPostComposer = () => {
+    if (mainAuthorProfile) {
+      onNavigate({ mode: "creator", view: "profile", accountId: mainAuthorProfile.id });
+    } else if (shellPersonaAccount) {
+      onNavigate({ mode: "creator", view: "create-profile", sourceAccountId: shellPersonaAccount.id });
+    } else {
+      onNavigate({ mode: "creator", view: "profiles" });
+    }
+    setMobileDrawerOpen(false);
+  };
 
   const shellProps = {
     appMode: "slurp" as const,
@@ -1395,6 +1407,7 @@ export function SlurpHome({ navigation, onNavigate }: SlurpHomeProps) {
       );
     },
     onOpenSettings: openSettings,
+    onCompose: openPostComposer,
     // Every NoodleR branch spreads shellProps, so the lightbox mounts once wherever the user is.
     overlays: postCardController.imageLightbox ? (
       <ChatImageLightbox
@@ -1427,6 +1440,7 @@ export function SlurpHome({ navigation, onNavigate }: SlurpHomeProps) {
             setOnboardingState("entered");
             setOnboardingMode("first-run");
           }}
+          viewerPersonaId={viewerPersonaId}
         />
         <SlurpOnboardingWizard
           open={onboardingMode !== null}
@@ -2027,6 +2041,8 @@ export function SlurpHome({ navigation, onNavigate }: SlurpHomeProps) {
         authorProfile={accountsQuery.isSuccess ? mainAuthorProfile : null}
         onToggleSubscription={toggleCreatorSubscription}
         togglePending={toggleSubscription.isPending || toggleFollow.isPending}
+        inlineAdsEnabled={slurpSettingsQuery.data?.inlineAdsEnabled !== false}
+        inlineAdsFrequency={slurpSettingsQuery.data?.inlineAdsFrequency ?? "standard"}
       />
       <SlurpOnboardingWizard
         open={onboardingMode !== null}
@@ -3995,6 +4011,8 @@ function ViewerHub({
   authorProfile,
   onToggleSubscription,
   togglePending,
+  inlineAdsEnabled,
+  inlineAdsFrequency,
   newSinceAt,
   onFeedShown,
 }: {
@@ -4029,6 +4047,8 @@ function ViewerHub({
   authorProfile: NoodlerManagedStageProfile | null;
   onToggleSubscription: (creatorAccountId: string, subscribed: boolean) => void;
   togglePending: boolean;
+  inlineAdsEnabled: boolean;
+  inlineAdsFrequency: "light" | "standard" | "frequent";
 }) {
   const { t: localizeUi } = useUiTranslation();
   const [scroller, setScroller] = useState<HTMLDivElement | null>(null);
@@ -4042,6 +4062,13 @@ function ViewerHub({
     new Date().getHours() >= 18 ? "night" : "day",
   ]);
   const hideSlurpAd = useHideSlurpAd();
+  const hideSlurpAdBrand = useHideSlurpAdBrand();
+  const recordSlurpAdAction = useRecordSlurpAdAction();
+  const inlineAdEvery = inlineAdsFrequency === "light" ? 8 : inlineAdsFrequency === "frequent" ? 2 : 4;
+  const inlineAdForIndex = (index: number) => {
+    if (index <= 0 || index % inlineAdEvery !== inlineAdEvery - 1) return null;
+    return inlineAdsQuery.data?.items[Math.floor(index / inlineAdEvery) - 1] ?? null;
+  };
   const profileKey = (scope?.creators ?? []).map((creator) => creator.profile.id).join("\u0000");
   useEffect(() => {
     setVisibleFeedCount(NOODLER_FEED_WINDOW_SIZE);
@@ -4407,34 +4434,32 @@ function ViewerHub({
                 <Fragment key={item.post.id}>
                   {index === dividerIndex && <NewSinceLastVisitDivider />}
                   {renderFeedPost(item)}
-                  {slurpSettingsQuery.data?.inlineAdsEnabled !== false &&
-                    !searchTerm &&
-                    tab === "all" &&
-                    index > 0 &&
-                    index % 4 === 3 &&
-                    inlineAdsQuery.data?.items[index / 4 - 1] && (
+                  {(() => {
+                    // One place decides whether this row gets an ad. The slot
+                    // maths used to be copy-pasted six times inside the JSX.
+                    const ad = inlineAdForIndex(index);
+                    if (!inlineAdsEnabled || searchTerm || tab !== "all" || !ad) return null;
+                    return (
                       <SlurpInlineAd
-                        promotion={inlineAdsQuery.data.items[index / 4 - 1]!}
+                        promotion={ad}
                         labels={{
                           sponsored: localizeUi("ui.slurp.ads.sponsored"),
                           hide: localizeUi("ui.slurp.ads.hide"),
+                          hideBrand: localizeUi("ui.slurp.ads.hideBrand"),
                           actionFallback: localizeUi("ui.slurp.ads.view"),
                         }}
-                        onAction={() =>
-                          toast.info(
-                            localizeUi("ui.slurp.ads.opened", {
-                              brand: inlineAdsQuery.data!.items[index / 4 - 1]!.brand,
-                            }),
-                          )
-                        }
-                        onHide={() =>
-                          hideSlurpAd.mutate({
-                            personaId: scope!.viewer.entityId,
-                            promotionId: inlineAdsQuery.data!.items[index / 4 - 1]!.id,
-                          })
+                        onAction={() => {
+                          // The rating system has no positive signal without this.
+                          recordSlurpAdAction.mutate({ personaId: scope!.viewer.entityId, promotionId: ad.id });
+                          toast.info(localizeUi("ui.slurp.ads.opened", { brand: ad.brand }));
+                        }}
+                        onHide={() => hideSlurpAd.mutate({ personaId: scope!.viewer.entityId, promotionId: ad.id })}
+                        onHideBrand={() =>
+                          hideSlurpAdBrand.mutate({ personaId: scope!.viewer.entityId, brand: ad.brand })
                         }
                       />
-                    )}
+                    );
+                  })()}
                   {tab === "all" && !searchTerm && index === Math.min(2, visibleFeed.length - 1) && (
                     <SlurpInlineSuggestedCreators
                       creators={suggestedCreators}

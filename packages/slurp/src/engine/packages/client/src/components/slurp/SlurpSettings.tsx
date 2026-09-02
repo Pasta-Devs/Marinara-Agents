@@ -18,6 +18,7 @@ import {
   UsersRound,
 } from "lucide-react";
 import type { ReactNode } from "react";
+import { api } from "../../lib/api-client";
 import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
@@ -33,6 +34,9 @@ import {
   useNoodlerReserveStatus,
   useRefreshNoodlerFanActivityNow,
   useRefreshTargetedNoodlerCreatorsNow,
+  useResetSlurpAds,
+  useSlurpAdPool,
+  useGenerateSlurpAds,
   useSlurpConnections,
   useSlurpSettings,
   useUpdateNoodlerAutoPosting,
@@ -63,10 +67,11 @@ type SlurpSettingsProps = {
   onEditCreator: (creator: NoodlerManagedStageProfile) => void;
   onRedraftCreator: (creator: NoodlerManagedStageProfile) => void;
   onRestartOnboarding: () => void;
+  viewerPersonaId: string | null;
 };
 
 const archetypes = ["ordinary", "eccentric", "crossFandom", "raider", "organicDiscovery", "freeResource"] as const;
-const settingsSections = ["overview", "general", "creators", "images", "audience", "advanced"] as const;
+const settingsSections = ["overview", "general", "creators", "images", "audience", "ads", "advanced"] as const;
 const DEFAULT_SLURP_GENERATION_GUIDANCE =
   "All Slurp creators and viewers are adults (18+). This is an adult creator page. Posts are normallly sexually suggestive to outright NSFW. Creators will use Slurp to often excite its readers with their posts. The level of NSFW of a post is dependent on the creator's personality, a shy, innocent person will be suggestive, but still overall tame. On the other end of the spectrum, an outgoing personality who has no problems with sex, will often post very explicit material.";
 const DEFAULT_SLURP_IMAGE_GENERATION_PROMPT =
@@ -139,10 +144,14 @@ export function SlurpSettings({
   onEditCreator,
   onRedraftCreator,
   onRestartOnboarding,
+  viewerPersonaId,
 }: SlurpSettingsProps) {
   const { t, i18n } = useTranslation();
   const settingsQuery = useSlurpSettings();
   const updateSettings = useUpdateSlurpSettings();
+  const resetAds = useResetSlurpAds();
+  const adPool = useSlurpAdPool();
+  const generateAds = useGenerateSlurpAds();
   const settings = settingsQuery.data;
   const [generationGuidanceDraft, setGenerationGuidanceDraft] = useState("");
   const [generationGuidanceEditorOpen, setGenerationGuidanceEditorOpen] = useState(false);
@@ -492,6 +501,13 @@ export function SlurpSettings({
                       healthy={settings.fanActivityEnabled}
                     />
                   </div>
+
+                  <Toggle
+                    label={t("ui.slurp.settings.inlinePromotions")}
+                    detail={t("ui.slurp.settings.inlinePromotionsDetail")}
+                    value={settings.inlineAdsEnabled}
+                    onChange={(value) => update("inlineAdsEnabled", value)}
+                  />
 
                   <button
                     type="button"
@@ -1048,6 +1064,179 @@ export function SlurpSettings({
                       {t("ui.slurp.settings.creators.none")}
                     </div>
                   )}
+                </div>
+              )}
+
+              {section === "ads" && (
+                <div className="space-y-5">
+                  <SectionTitle title={t("ui.slurp.settings.ads.title")} detail={t("ui.slurp.settings.ads.detail")} />
+                  <Toggle
+                    label={t("ui.slurp.settings.inlinePromotions")}
+                    detail={t("ui.slurp.settings.inlinePromotionsDetail")}
+                    value={settings.inlineAdsEnabled}
+                    onChange={(value) => update("inlineAdsEnabled", value)}
+                  />
+                  <Field
+                    label={t("ui.slurp.settings.ads.frequency")}
+                    detail={t("ui.slurp.settings.ads.frequencyDetail")}
+                  >
+                    <select
+                      value={settings.inlineAdsFrequency}
+                      disabled={updateSettings.isPending}
+                      onChange={(event) =>
+                        void update("inlineAdsFrequency", event.target.value as SlurpSettings["inlineAdsFrequency"])
+                      }
+                      className="min-h-11 w-full rounded-lg border border-[var(--slurp-outline)] bg-[var(--slurp-canvas)] px-3 text-base focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--slurp-focus)] disabled:opacity-50 sm:text-sm"
+                    >
+                      <option value="light">{t("ui.slurp.settings.ads.frequencyLight")}</option>
+                      <option value="standard">{t("ui.slurp.settings.ads.frequencyStandard")}</option>
+                      <option value="frequent">{t("ui.slurp.settings.ads.frequencyFrequent")}</option>
+                    </select>
+                  </Field>
+                  <Field label={t("ui.slurp.settings.ads.steering")} detail={t("ui.slurp.settings.ads.steeringDetail")}>
+                    <select
+                      value={settings.inlineAdsSteering}
+                      disabled={updateSettings.isPending}
+                      onChange={(event) =>
+                        void update("inlineAdsSteering", event.target.value as SlurpSettings["inlineAdsSteering"])
+                      }
+                      className="min-h-11 w-full rounded-lg border border-[var(--slurp-outline)] bg-[var(--slurp-canvas)] px-3 text-base focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--slurp-focus)] disabled:opacity-50 sm:text-sm"
+                    >
+                      <option value="personalized">{t("ui.slurp.settings.ads.steeringPersonalized")}</option>
+                      <option value="balanced">{t("ui.slurp.settings.ads.steeringBalanced")}</option>
+                      <option value="random">{t("ui.slurp.settings.ads.steeringRandom")}</option>
+                    </select>
+                  </Field>
+                  <Field label={t("ui.slurp.settings.ads.ceiling")} detail={t("ui.slurp.settings.ads.ceilingDetail")}>
+                    <select
+                      value={settings.inlineAdsContentCeiling}
+                      disabled={updateSettings.isPending}
+                      onChange={(event) =>
+                        void update(
+                          "inlineAdsContentCeiling",
+                          event.target.value as SlurpSettings["inlineAdsContentCeiling"],
+                        )
+                      }
+                      className="min-h-11 w-full rounded-lg border border-[var(--slurp-outline)] bg-[var(--slurp-canvas)] px-3 text-base focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--slurp-focus)] disabled:opacity-50 sm:text-sm"
+                    >
+                      <option value="tame">{t("ui.slurp.settings.ads.ceilingTame")}</option>
+                      <option value="suggestive">{t("ui.slurp.settings.ads.ceilingSuggestive")}</option>
+                      <option value="explicit">{t("ui.slurp.settings.ads.ceilingExplicit")}</option>
+                    </select>
+                  </Field>
+                  <Field label={t("ui.slurp.settings.ads.tone")} detail={t("ui.slurp.settings.ads.toneDetail")}>
+                    <select
+                      value={settings.inlineAdsTone}
+                      disabled={updateSettings.isPending}
+                      onChange={(event) =>
+                        void update("inlineAdsTone", event.target.value as SlurpSettings["inlineAdsTone"])
+                      }
+                      className="min-h-11 w-full rounded-lg border border-[var(--slurp-outline)] bg-[var(--slurp-canvas)] px-3 text-base focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--slurp-focus)] disabled:opacity-50 sm:text-sm"
+                    >
+                      <option value="corporate">{t("ui.slurp.settings.ads.toneCorporate")}</option>
+                      <option value="scammy">{t("ui.slurp.settings.ads.toneScammy")}</option>
+                      <option value="local">{t("ui.slurp.settings.ads.toneLocal")}</option>
+                      <option value="luxury">{t("ui.slurp.settings.ads.toneLuxury")}</option>
+                      <option value="unhinged">{t("ui.slurp.settings.ads.toneUnhinged")}</option>
+                    </select>
+                  </Field>
+                  <Field label={t("ui.slurp.settings.ads.era")} detail={t("ui.slurp.settings.ads.eraDetail")}>
+                    <select
+                      value={settings.inlineAdsEra}
+                      disabled={updateSettings.isPending}
+                      onChange={(event) =>
+                        void update("inlineAdsEra", event.target.value as SlurpSettings["inlineAdsEra"])
+                      }
+                      className="min-h-11 w-full rounded-lg border border-[var(--slurp-outline)] bg-[var(--slurp-canvas)] px-3 text-base focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--slurp-focus)] disabled:opacity-50 sm:text-sm"
+                    >
+                      <option value="present">{t("ui.slurp.settings.ads.eraPresent")}</option>
+                      <option value="nineties">{t("ui.slurp.settings.ads.eraNineties")}</option>
+                      <option value="cyberpunk">{t("ui.slurp.settings.ads.eraCyberpunk")}</option>
+                      <option value="retrofuture">{t("ui.slurp.settings.ads.eraRetrofuture")}</option>
+                    </select>
+                  </Field>
+                  <Field label={t("ui.slurp.settings.ads.world")} detail={t("ui.slurp.settings.ads.worldDetail")}>
+                    <textarea
+                      rows={3}
+                      value={settings.inlineAdsWorldContext}
+                      disabled={updateSettings.isPending}
+                      maxLength={1200}
+                      onChange={(event) => void update("inlineAdsWorldContext", event.target.value)}
+                      className="w-full rounded-lg border border-[var(--slurp-outline)] bg-[var(--slurp-canvas)] p-3 text-base focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--slurp-focus)] disabled:opacity-50 sm:text-sm"
+                    />
+                  </Field>
+                  <div className="rounded-xl border border-[var(--slurp-outline)] p-4">
+                    <h2 className="text-sm font-bold">{t("ui.slurp.settings.ads.pool")}</h2>
+                    <p className="mt-1 text-xs leading-5 text-[var(--slurp-muted)]">
+                      {t("ui.slurp.settings.ads.poolDetail", { count: adPool.data?.items.length ?? 0 })}
+                    </p>
+                    <div className="mt-3 flex flex-wrap gap-2">
+                      <button
+                        type="button"
+                        disabled={generateAds.isPending}
+                        onClick={() => generateAds.mutate(undefined)}
+                        className="min-h-9 rounded-md bg-[var(--noodle-accent)] px-3 text-xs font-bold text-zinc-950 hover:opacity-90 disabled:opacity-50"
+                      >
+                        {generateAds.isPending
+                          ? t("ui.slurp.settings.ads.generating")
+                          : t("ui.slurp.settings.ads.generate")}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => void api.download("/slurp/noodler/ads/export", "slurp-ads.json")}
+                        className="min-h-9 rounded-md border border-[var(--slurp-outline)] px-3 text-xs font-bold hover:bg-[var(--accent)]"
+                      >
+                        {t("ui.slurp.settings.ads.export")}
+                      </button>
+                    </div>
+                  </div>
+                  <div>
+                    <h2 className="text-sm font-bold">{t("ui.slurp.settings.ads.themes")}</h2>
+                    <p className="mt-1 text-xs leading-5 text-[var(--slurp-muted)]">
+                      {t("ui.slurp.settings.ads.themesDetail")}
+                    </p>
+                    <div className="mt-3 flex flex-wrap gap-2">
+                      {["coffee", "beauty", "luxury", "nightlife", "fashion"].map((tag) => {
+                        const selected = settings.inlineAdsPreferredTags.includes(tag);
+                        return (
+                          <button
+                            key={tag}
+                            type="button"
+                            aria-pressed={selected}
+                            disabled={updateSettings.isPending}
+                            onClick={() =>
+                              void update(
+                                "inlineAdsPreferredTags",
+                                selected
+                                  ? settings.inlineAdsPreferredTags.filter((value) => value !== tag)
+                                  : [...settings.inlineAdsPreferredTags, tag],
+                              )
+                            }
+                            className={`min-h-10 rounded-full px-4 text-sm font-semibold ring-1 ring-inset transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--slurp-focus)] disabled:opacity-50 ${selected ? "bg-[var(--slurp-nav-active)] text-[var(--slurp-text)] ring-[var(--noodle-accent)]/45" : "bg-[var(--slurp-surface-raised)] text-[var(--slurp-muted)] ring-[var(--slurp-outline)] hover:text-[var(--slurp-text)]"}`}
+                          >
+                            {t(`ui.slurp.settings.ads.theme.${tag}`)}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                  <div className="flex flex-wrap items-center justify-between gap-4 rounded-xl bg-[var(--slurp-surface-raised)] p-4 ring-1 ring-inset ring-[var(--slurp-outline)]">
+                    <div>
+                      <h2 className="text-sm font-bold">{t("ui.slurp.settings.ads.reset")}</h2>
+                      <p className="mt-1 text-xs leading-5 text-[var(--slurp-muted)]">
+                        {t("ui.slurp.settings.ads.resetDetail")}
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      disabled={!viewerPersonaId || resetAds.isPending}
+                      onClick={() => viewerPersonaId && resetAds.mutate(viewerPersonaId)}
+                      className="inline-flex min-h-11 items-center gap-2 rounded-lg border border-[var(--slurp-outline)] px-4 text-sm font-bold text-[var(--slurp-text)] transition-colors hover:bg-[var(--accent)] disabled:opacity-50"
+                    >
+                      <RotateCcw size={15} aria-hidden="true" />
+                      {t("ui.slurp.settings.ads.resetAction")}
+                    </button>
+                  </div>
                 </div>
               )}
 
