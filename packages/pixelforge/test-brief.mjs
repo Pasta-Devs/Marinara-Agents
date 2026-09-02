@@ -24363,4 +24363,172 @@ const fire = (node, type) => Promise.all((node.listeners[type] ?? []).map((fn) =
   });
 }
 
+// 120. THE SIDE-STREAM PIN — existing seeds keep their exact layouts (0.14 §2.1,
+// §0.19). The release mints two climate AXES per world, and the one thing a mint
+// must not do is move the tile RNG: compile runs ONE main stream
+// (`const rnd = PF.rng(seed)`, 20-world) and an insertion into it re-lays every
+// world that ever existed. The tree's own answer is the SIDE STREAM, whose
+// comment states the rule out loud — "a side stream, so minting residents does
+// not shift the tile RNG under the ground cover and every world that had no
+// minting still lays the same grass" — and the axis mint copies it verbatim,
+// one named stream per axis.
+//
+// THE FINGERPRINTS BELOW WERE TAKEN BEFORE 17-weather EXISTED, which is the only
+// reason they are evidence and not a tautology: they are the layouts this
+// build's predecessor laid, frozen as constants in their own commit, and every
+// later slice re-proves its worlds against them.
+//
+// `mintStamp` IS IN THE HASH ON PURPOSE. It rides the `|residents|` stream, so a
+// mint that migrated into the main stream moves it and the failure names which
+// stream broke rather than just saying "a world changed". The two world stamps
+// the release ADDS (`latitude`, `precipitation`) are deliberately OUT of it: a
+// fingerprint that hashed them could never say "identical EXCEPT the stamps".
+{
+  // The harness's own working set of seeds, gathered from the compiler cases
+  // above — small ordinals plus the two large ones the housing and binding
+  // cases lean on.
+  const LAYOUT_SEEDS = [1, 2, 3, 4, 5, 7, 11, 31, 80021, 424242];
+
+  /** Everything about a built world that the tile streams decide, and nothing
+   *  else: geometry, cover, collision, where the cast stands, and the mint
+   *  stamp. Not the theme palette, not prose, not the axis stamps. */
+  const layoutFingerprint = (w) => {
+    const h = createHash("sha256");
+    h.update(`${w.startZone}|${w.mintStamp}`);
+    for (const id of Object.keys(w.zones).sort()) {
+      const z = w.zones[id];
+      h.update(`\nZ ${id}|${z.name}|${z.w}x${z.h}|${z.mapKind ?? ""}|${z.place ?? ""}`);
+      h.update(`\ng ${z.ground.join(",")}`);
+      h.update(`\no ${z.object.join(",")}`);
+      h.update(`\nc ${z.overhead.join(",")}`);
+      h.update(`\ns ${Array.from(z.solid).join(",")}`);
+      for (const npc of z.npcs) h.update(`\nn ${npc.id}|${npc.name}|${npc.x}|${npc.y}`);
+    }
+    return h.digest("hex").slice(0, 16);
+  };
+
+  // Three brief shapes, because the three take three different paths through
+  // build(): no brief at all is the legacy layout, the themed default is the
+  // worked example every compiler case is driven through, and the every-cap
+  // brief is the one that mints the most people and so spends the most of the
+  // resident side stream.
+  const maxShapeBrief = (theme, seed) =>
+    loadedPF.brief.validate(
+      {
+        scale: "city",
+        name: "Wrenfallowmere Crossing".slice(0, 24),
+        surround: "water",
+        prosperity: "thriving",
+        situation: "The ford went in the flood and nobody will say who let the upstream weir go unwatched. "
+          .repeat(3)
+          .slice(0, 240),
+        places: ["The Amber Hearth Inn", "The Long Water Workyard", "The Whisperwood Reaches", "The Chapter Hall"].map(
+          (name, i) => ({ kind: ["gathering", "workshop", "wilds", "hall"][i], name, flavor: "" }),
+        ),
+        cast: Array.from({ length: 10 }, (_, i) => ({
+          name: `Personage Number ${String(i).padStart(2, "0")}`.slice(0, 24),
+          role: `understudy to the ${String(i)}`.slice(0, 24),
+          kind: "folk",
+          tint: "blue",
+          home: "The Amber Hearth Inn",
+          household: i + 1,
+          persona:
+            `Wants the weir rebuilt before the spring and is hiding what the last survey said, number ${i}.`.slice(
+              0,
+              100,
+            ),
+        })),
+      },
+      { theme, seed },
+    );
+
+  const briefFor = (shape, theme, seed) => {
+    if (shape === "legacy") return null;
+    if (shape === "defaults") return loadedPF.brief.defaults(theme, seed);
+    return maxShapeBrief(theme, seed);
+  };
+
+  // Taken against the 0.13.0 tree, one commit before 17-weather.js landed.
+  const LAYOUTS = {
+    "cozy-village|1|legacy": "cf46649ec5c6b349",
+    "cozy-village|1|defaults": "8e666935dc3bc3f1",
+    "cozy-village|1|maxBrief": "1e19c99434a1158f",
+    "cozy-village|2|legacy": "b162a3091ba35899",
+    "cozy-village|2|defaults": "0fc70b0fb89f71fb",
+    "cozy-village|2|maxBrief": "3691d4d124b2cec2",
+    "cozy-village|3|legacy": "6c978a992a9041b3",
+    "cozy-village|3|defaults": "0e0fbfc2b5e3fb42",
+    "cozy-village|3|maxBrief": "02232043dc426847",
+    "cozy-village|4|legacy": "2f823c92752f9cc1",
+    "cozy-village|4|defaults": "f249d2b26380bbfb",
+    "cozy-village|4|maxBrief": "d7bcbcb7ec2561f3",
+    "cozy-village|5|legacy": "4f4d9fbc079dc3d8",
+    "cozy-village|5|defaults": "55aca0213f69e3a4",
+    "cozy-village|5|maxBrief": "e6b0ea3e95aae891",
+    "cozy-village|7|legacy": "26b1bfe2a5e5e541",
+    "cozy-village|7|defaults": "666c649632695d74",
+    "cozy-village|7|maxBrief": "c8797b46e37345fc",
+    "cozy-village|11|legacy": "34c824678792be49",
+    "cozy-village|11|defaults": "3a791f437313b1f2",
+    "cozy-village|11|maxBrief": "5f8918478c32efe8",
+    "cozy-village|31|legacy": "c2d3ffda6eb1cbd7",
+    "cozy-village|31|defaults": "deefc2f185fed000",
+    "cozy-village|31|maxBrief": "9fcf772a8adf364d",
+    "cozy-village|80021|legacy": "eb066c1cfea95532",
+    "cozy-village|80021|defaults": "e6097a7a7a224fc9",
+    "cozy-village|80021|maxBrief": "359e2bd4c85da12b",
+    "cozy-village|424242|legacy": "6292c385ef49fb4b",
+    "cozy-village|424242|defaults": "4e31414de565cb65",
+    "cozy-village|424242|maxBrief": "8c50550c1eff34f0",
+    "sci-fi-colony|1|legacy": "a319fe23cf92a4db",
+    "sci-fi-colony|1|defaults": "28444a2092c52e59",
+    "sci-fi-colony|1|maxBrief": "6e76e78427329da4",
+    "sci-fi-colony|2|legacy": "fb99db68144637bc",
+    "sci-fi-colony|2|defaults": "65a24934bedd2502",
+    "sci-fi-colony|2|maxBrief": "87e85073c89085af",
+    "sci-fi-colony|3|legacy": "fb3a709e55da69c3",
+    "sci-fi-colony|3|defaults": "4cf3662becdaefd3",
+    "sci-fi-colony|3|maxBrief": "8ec80f6d2e981e6e",
+    "sci-fi-colony|4|legacy": "c96a0065a44541a7",
+    "sci-fi-colony|4|defaults": "cc539d32c86d4394",
+    "sci-fi-colony|4|maxBrief": "f133f2aafe4766cd",
+    "sci-fi-colony|5|legacy": "5dbafb5da6ed4b40",
+    "sci-fi-colony|5|defaults": "2231cbd515d7a330",
+    "sci-fi-colony|5|maxBrief": "3aadbf62aa46643d",
+    "sci-fi-colony|7|legacy": "ce85743023c950d9",
+    "sci-fi-colony|7|defaults": "6bc1b62d6193ae37",
+    "sci-fi-colony|7|maxBrief": "47953215276cee1a",
+    "sci-fi-colony|11|legacy": "e4acc2456cf5e425",
+    "sci-fi-colony|11|defaults": "8f9665e3bc23eb69",
+    "sci-fi-colony|11|maxBrief": "4c8f568355c7ca2c",
+    "sci-fi-colony|31|legacy": "5bad5d9f4d0b2eeb",
+    "sci-fi-colony|31|defaults": "893dc7d0f9f48ef7",
+    "sci-fi-colony|31|maxBrief": "679e9cb3200f997d",
+    "sci-fi-colony|80021|legacy": "8eefc91e8551cff7",
+    "sci-fi-colony|80021|defaults": "b381f71e4ade57c6",
+    "sci-fi-colony|80021|maxBrief": "6243e3cb97807224",
+    "sci-fi-colony|424242|legacy": "cc16a560ba4863e0",
+    "sci-fi-colony|424242|defaults": "3dda8c65a3ccfba0",
+    "sci-fi-colony|424242|maxBrief": "2450dd6ccc5b8c3e",
+  };
+
+  const themes = loadedPF.art.themeIds();
+  let checked = 0;
+  for (const theme of themes) {
+    for (const seed of LAYOUT_SEEDS) {
+      for (const shape of ["legacy", "defaults", "maxBrief"]) {
+        const key = `${theme}|${seed}|${shape}`;
+        const got = layoutFingerprint(loadedPF.world.build(seed, theme, briefFor(shape, theme, seed)));
+        assert.equal(got, LAYOUTS[key], `the ${shape} layout at ${theme}/${seed} moved (${got})`);
+        checked++;
+      }
+    }
+  }
+  // The table has to actually be walked. A shrunk theme list or a renamed shape
+  // would otherwise pass this case by checking nothing at all, which is the one
+  // way a frozen-constant lane can go quietly green.
+  assert.equal(checked, Object.keys(LAYOUTS).length, `every frozen layout was checked (${checked})`);
+  assert.equal(checked, themes.length * LAYOUT_SEEDS.length * 3, "…and the table covers the full product");
+}
+
 console.log("brief validator + compiler: all cases passed");
