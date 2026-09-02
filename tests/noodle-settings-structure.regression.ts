@@ -13,6 +13,8 @@ async function main() {
   assert.match(slurpSettings, /useSlurpSettings|useUpdateSlurpSettings/u);
   assert.match(slurpHome, /SlurpOnboardingPanel/u);
   assert.match(slurpTypes, /mode: "creator-settings"/u);
+  assert.match(slurpTypes, /section\?: "overview" \| "general"/u);
+  assert.match(slurpSettings, /section === "overview"/u);
   assert.match(slurpTypes, /sourceAccountId: string/u);
   assert.match(slurpStore, /marinara:slurp:package-ui/u);
   assert.doesNotMatch(slurpStore, /marinara:noodle:ui|LEGACY_UI_STATE_KEY.*noodle/u);

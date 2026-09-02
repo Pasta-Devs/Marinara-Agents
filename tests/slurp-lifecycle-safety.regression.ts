@@ -17,6 +17,9 @@ const storage = read("packages/slurp/src/engine/packages/server/src/services/sto
 const settings = read("packages/slurp/src/engine/packages/client/src/components/slurp/SlurpSettings.tsx");
 const profileSurface = read("packages/slurp/src/engine/packages/client/src/components/slurp/SlurpProfileSurface.tsx");
 const creatorPostCard = read("packages/slurp/src/engine/packages/client/src/components/slurp/SlurpCreatorPostCard.tsx");
+const creatorProfileCard = read(
+  "packages/slurp/src/engine/packages/client/src/components/slurp/SlurpCreatorProfileCard.tsx",
+);
 const mediaHook = read("packages/slurp/src/engine/packages/client/src/hooks/use-slurp-media-src.ts");
 const slurpMedia = read("packages/slurp/src/engine/packages/server/src/services/slurp/slurp-media.ts");
 const artwork = read("packages/slurp/src/engine/packages/server/src/services/slurp/slurp-artwork.operation.ts");
@@ -128,8 +131,8 @@ assert.match(
 assert.match(home, /ui\.slurp\.discover\.title/u);
 assert.match(home, /sm:grid-cols-2/u, "Discover must present creators as adaptive cards");
 assert.match(
-  home,
-  /function SlurpDiscoverCreatorCard[\s\S]*?useNearViewportSlurpMediaSrc\(creator\.profile\.bannerUrl/u,
+  creatorProfileCard,
+  /export function SlurpCreatorProfileCard[\s\S]*?useNearViewportSlurpMediaSrc\(creator\.profile\.bannerUrl/u,
 );
 assert.match(home, /tabs=\{\[\{ id: "emoji"/u, "the main composer must expose only its functional emoji media tab");
 assert.doesNotMatch(home, /tabs=\{\[[^\]]*id: "gif"/u, "the main composer must not expose its no-op GIF action");
@@ -167,7 +170,11 @@ assert.match(
   /md:grid-cols-\[12rem_minmax\(0,1fr\)\][\s\S]*?lg:grid-cols-\[13rem_minmax\(0,1fr\)\]/u,
   "settings must keep a responsive desktop section rail",
 );
-assert.match(settings, /<select[\s\S]*?settingsSections\.map/u, "narrow settings must expose one section selector");
+assert.match(
+  settings,
+  /snap-x[\s\S]*?settingsSections\.map/u,
+  "narrow settings must expose a horizontally scrollable section navigation",
+);
 assert.match(settings, /aria-live="polite"/u, "settings saves must announce their state");
 assert.match(settings, /selectedCreatorId/u, "creator settings must keep an explicit master-detail selection");
 assert.match(settings, /data-slurp-settings-layout/u, "settings must expose its responsive layout boundary");

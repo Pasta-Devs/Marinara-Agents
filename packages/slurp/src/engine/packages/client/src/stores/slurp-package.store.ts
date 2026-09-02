@@ -33,7 +33,7 @@ function isSlurpNavigation(value: unknown): value is SlurpNavigationState {
     return (
       (value.tab === undefined || value.tab === "creator") &&
       (value.section === undefined ||
-        ["general", "creators", "images", "audience", "advanced"].includes(value.section as string)) &&
+        ["overview", "general", "creators", "images", "audience", "advanced"].includes(value.section as string)) &&
       (value.returnTo === undefined || isSlurpNavigation(value.returnTo))
     );
   }

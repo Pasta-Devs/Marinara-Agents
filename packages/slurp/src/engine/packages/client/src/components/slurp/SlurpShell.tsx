@@ -56,23 +56,34 @@ export const NOODLE_PERSONA_SWITCHER_PAGE_SIZE = 5;
 export function getNoodleAccentStyle(accent: string, style: CSSProperties = {}): CSSProperties {
   return {
     "--noodle-accent": accent,
-    "--noodle-accent-foreground":
-      "light-dark(color-mix(in srgb, var(--noodle-accent) 65%, var(--foreground)), var(--noodle-accent))",
-    "--noodle-divider": "var(--marinara-chat-chrome-panel-divider)",
-    "--slurp-canvas":
-      "light-dark(color-mix(in srgb, var(--background) 97%, var(--foreground)), color-mix(in srgb, var(--background) 92%, #2d1723))",
-    "--slurp-surface":
-      "light-dark(color-mix(in srgb, var(--background) 99%, var(--foreground)), color-mix(in srgb, var(--background) 96%, #3b1c2c))",
-    "--slurp-surface-raised":
-      "light-dark(color-mix(in srgb, var(--background) 96%, var(--foreground)), color-mix(in srgb, var(--background) 91%, #472036))",
-    "--slurp-glass":
-      "light-dark(color-mix(in srgb, var(--background) 91%, transparent), color-mix(in srgb, #21101d 82%, transparent))",
-    "--slurp-coral": "light-dark(#b86447, #ff936f)",
-    "--slurp-violet": "light-dark(#76558f, #b994e8)",
-    "--slurp-warm": "light-dark(#9b5a35, #f2b56f)",
-    "--slurp-success": "light-dark(#25745b, #72d6ad)",
+    "--noodle-accent-foreground": "light-dark(#8d174f, #ff9bd0)",
+    "--noodle-divider": "light-dark(rgba(95, 32, 67, 0.18), rgba(255, 187, 222, 0.13))",
+    "--slurp-canvas": "light-dark(#fff6fb, #100a12)",
+    "--slurp-surface": "light-dark(#fffafd, #18101b)",
+    "--slurp-surface-raised": "light-dark(#f9eaf3, #211624)",
+    "--slurp-glass": "light-dark(rgba(255, 250, 253, 0.88), rgba(31, 18, 33, 0.82))",
+    "--slurp-text": "light-dark(#321424, #fff7fc)",
+    "--slurp-muted": "light-dark(#73576a, #cdb9c7)",
+    "--slurp-outline": "light-dark(rgba(95, 32, 67, 0.18), rgba(255, 187, 222, 0.13))",
+    "--slurp-coral": "light-dark(#ad432d, #ff936f)",
+    "--slurp-violet": "light-dark(#67417e, #c29af1)",
+    "--slurp-warm": "light-dark(#895019, #f2b56f)",
+    "--slurp-success": "light-dark(#17694d, #72d6ad)",
+    "--slurp-warning": "light-dark(#8a4b0c, #ffc56e)",
+    "--slurp-danger": "light-dark(#a51d3d, #ff8ba5)",
+    "--slurp-focus": "light-dark(#9d1c5c, #ff9bd0)",
+    "--slurp-hero":
+      "linear-gradient(118deg, light-dark(#9f1f5c, #8f174f), light-dark(#dc3b7c, #d92e75) 46%, light-dark(#7b3b9e, #6d2b91) 78%, light-dark(#c34e39, #bd452f))",
+    "--slurp-nav-active":
+      "linear-gradient(105deg, color-mix(in srgb, var(--noodle-accent) 24%, var(--slurp-surface-raised)), color-mix(in srgb, var(--slurp-violet) 12%, var(--slurp-surface-raised)))",
+    "--slurp-shadow": "0 28px 70px -46px rgba(99, 13, 60, 0.82)",
+    "--background": "var(--slurp-canvas)",
+    "--foreground": "var(--slurp-text)",
+    "--muted-foreground": "var(--slurp-muted)",
+    "--border": "var(--slurp-outline)",
+    "--accent": "color-mix(in srgb, var(--noodle-accent) 10%, var(--slurp-surface-raised))",
     "--slurp-canvas-art":
-      "radial-gradient(ellipse 48rem 34rem at 10% -10%, color-mix(in srgb, var(--noodle-accent) 20%, transparent), transparent 70%), radial-gradient(ellipse 42rem 36rem at 94% 8%, color-mix(in srgb, var(--slurp-violet) 15%, transparent), transparent 72%), radial-gradient(ellipse 34rem 28rem at 64% 96%, color-mix(in srgb, var(--slurp-coral) 10%, transparent), transparent 74%), linear-gradient(180deg, color-mix(in srgb, var(--noodle-accent) 5%, transparent), transparent 28rem)",
+      "radial-gradient(ellipse 48rem 34rem at 8% -12%, color-mix(in srgb, var(--noodle-accent) 28%, transparent), transparent 68%), radial-gradient(ellipse 42rem 36rem at 96% 6%, color-mix(in srgb, var(--slurp-violet) 22%, transparent), transparent 70%), radial-gradient(ellipse 34rem 28rem at 62% 98%, color-mix(in srgb, var(--slurp-coral) 15%, transparent), transparent 72%), linear-gradient(180deg, color-mix(in srgb, var(--noodle-accent) 7%, transparent), transparent 30rem)",
     ...style,
   } as CSSProperties;
 }
@@ -435,7 +446,7 @@ export function NoodleShell({
       <div
         className={cn(
           "mari-chrome-token-scope relative flex h-full min-h-0 flex-col bg-[var(--background)] text-[var(--foreground)] antialiased",
-          slurpActive && "bg-[var(--slurp-canvas)] [background-image:var(--slurp-canvas-art)]",
+          slurpActive && "bg-[var(--slurp-canvas)] @min-[1024px]:[background-image:var(--slurp-canvas-art)]",
           NOODLE_ICON_SCOPE_CLASS,
         )}
         data-component="NoodleView"

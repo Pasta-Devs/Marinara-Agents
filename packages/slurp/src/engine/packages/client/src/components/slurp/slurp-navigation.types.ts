@@ -23,7 +23,7 @@ export type SlurpNavigationState =
   | {
       mode: "creator-settings";
       tab?: "creator";
-      section?: "general" | "creators" | "images" | "audience" | "advanced";
+      section?: "overview" | "general" | "creators" | "images" | "audience" | "advanced";
       returnTo?: SlurpNavigationState;
     };
 

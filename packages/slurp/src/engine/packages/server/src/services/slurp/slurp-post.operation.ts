@@ -228,6 +228,7 @@ export async function createNoodlerPost(
   input: NoodlerPostCreateInput & {
     format?: NoodlerContentFormat;
     postType?: "post" | "story";
+    linkedPostId?: string | null;
     lockedFollowUpPostId?: string;
     lockedFollowUp?: { title: string; content: string };
   },
@@ -277,6 +278,7 @@ export async function createNoodlerPost(
             metadata: {
               noodlerContentFormat: input.format ?? "caption",
               noodlerPostType: input.postType ?? "post",
+              ...(input.postType === "story" && input.linkedPostId ? { noodlerLinkedPostId: input.linkedPostId } : {}),
               ...(creatorPromotion
                 ? {
                     slurpSponsoredPromotion: {

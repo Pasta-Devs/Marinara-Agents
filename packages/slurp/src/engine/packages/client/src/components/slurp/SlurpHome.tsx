@@ -179,6 +179,7 @@ interface NoodlerPostSubmission {
   poll: { question: string; options: string[] } | null;
   format: NoodlerContentFormat;
   postType: "post" | "story";
+  linkedPostId: string | null;
 }
 
 type SlurpViewerCreator = NonNullable<ReturnType<typeof useNoodlerViewer>["data"]>["creators"][number];
@@ -190,6 +191,7 @@ interface NoodlerPostDraft {
   image: NoodlerPostDraftImage | null;
   poll: NoodlePollInput | null;
   postType: "post" | "story";
+  linkedPostId: string | null;
 }
 
 interface PendingNoodlerImage {
@@ -203,6 +205,7 @@ const EMPTY_NOODLER_POST_DRAFT: NoodlerPostDraft = {
   image: null,
   poll: null,
   postType: "post",
+  linkedPostId: null,
 };
 
 function isEmptyNoodlerPostDraft(draft: NoodlerPostDraft): boolean {
@@ -212,12 +215,18 @@ function isEmptyNoodlerPostDraft(draft: NoodlerPostDraft): boolean {
     draft.access === EMPTY_NOODLER_POST_DRAFT.access &&
     !draft.image &&
     !draft.poll &&
-    draft.postType === EMPTY_NOODLER_POST_DRAFT.postType
+    draft.postType === EMPTY_NOODLER_POST_DRAFT.postType &&
+    draft.linkedPostId === EMPTY_NOODLER_POST_DRAFT.linkedPostId
   );
 }
 
 function isSlurpStory(post: NoodlerPostView | NoodlerManagedPost): boolean {
   return (post as NoodlerPostView & { story?: boolean }).story === true || post.metadata?.noodlerPostType === "story";
+}
+
+function linkedPostIdForStory(post: NoodlerPostView): string | null {
+  const linkedPostId = (post as NoodlerPostView & { linkedPostId?: unknown }).linkedPostId;
+  return typeof linkedPostId === "string" && linkedPostId.length > 0 ? linkedPostId : null;
 }
 
 function NoodlerDraftImageFrame({ image }: { image: NoodlerPostDraftImage }) {
@@ -503,7 +512,7 @@ export function SlurpHome({ navigation, onNavigate }: SlurpHomeProps) {
     onNavigate({
       mode: "creator-settings",
       tab: "creator",
-      section: "general",
+      section: "overview",
       returnTo: { mode: "creator", view: "hub" },
     });
     setMobileDrawerOpen(false);
@@ -1236,6 +1245,7 @@ export function SlurpHome({ navigation, onNavigate }: SlurpHomeProps) {
     poll,
     format,
     postType,
+    linkedPostId,
   }: NoodlerPostSubmission) => {
     await createPost.mutateAsync({
       targetAccountId: profileId,
@@ -1246,6 +1256,7 @@ export function SlurpHome({ navigation, onNavigate }: SlurpHomeProps) {
       poll,
       format,
       postType,
+      linkedPostId: linkedPostId ?? null,
     });
     toast.success(localizeUi("ui.noodle.noodlerhome.noodlerPostPublished"));
   };
@@ -3526,6 +3537,7 @@ function StageProfileView({
                 <NoodlerPostComposer
                   key={profile.id}
                   profile={profile}
+                  availablePosts={posts}
                   draft={draft}
                   onDraftChange={onDraftChange}
                   onClearDraft={onClearDraft}
@@ -4004,6 +4016,7 @@ function ViewerHub({
   const followedCreatorIds = new Set(scope?.viewer.settings.social.followingAccountIds ?? []);
   const creators = scope?.creators ?? [];
   const moments = creators
+    .filter((creator) => tab === "all" || creator.followed)
     .flatMap((creator) =>
       creator.posts
         .filter((post) => isSlurpStory(post) && new Date(post.createdAt).getTime() >= momentCutoff)
@@ -4211,7 +4224,7 @@ function ViewerHub({
       <div
         ref={setStickyHeader}
         className={cn(
-          "sticky top-0 z-30 border-b border-white/[0.055] bg-[linear-gradient(110deg,color-mix(in_srgb,var(--slurp-surface,var(--background))_91%,transparent),color-mix(in_srgb,var(--noodle-accent)_10%,var(--slurp-surface))_55%,color-mix(in_srgb,var(--slurp-violet)_8%,var(--slurp-surface)))] shadow-[0_24px_60px_-42px_rgba(0,0,0,0.98)] backdrop-blur-xl",
+          "sticky top-0 z-30 border-b border-white/[0.055] bg-[var(--slurp-surface,var(--background))] shadow-[0_24px_60px_-42px_rgba(0,0,0,0.98)] backdrop-blur-xl @min-[1024px]:bg-[linear-gradient(110deg,color-mix(in_srgb,var(--slurp-surface,var(--background))_91%,transparent),color-mix(in_srgb,var(--noodle-accent)_10%,var(--slurp-surface))_55%,color-mix(in_srgb,var(--slurp-violet)_8%,var(--slurp-surface)))]",
           HIDE_ON_SCROLL_CLASS,
         )}
         data-component="SlurpHome.StickyHeader"
@@ -4292,7 +4305,7 @@ function ViewerHub({
         />
       </div>
       {!isLoading && !isError && scope && (
-        <div className="flex items-end justify-between gap-4 bg-[linear-gradient(180deg,color-mix(in_srgb,var(--noodle-accent)_3%,var(--slurp-canvas)),var(--slurp-canvas))] px-4 pb-3 pt-7 sm:px-5">
+        <div className="flex items-end justify-between gap-4 bg-[var(--slurp-canvas)] px-4 pb-3 pt-7 sm:px-5 @min-[1024px]:bg-[linear-gradient(180deg,color-mix(in_srgb,var(--noodle-accent)_3%,var(--slurp-canvas)),var(--slurp-canvas))]">
           <div>
             <div className="flex items-center gap-2">
               <span className="h-1.5 w-1.5 rounded-full bg-[var(--slurp-warm)]" aria-hidden="true" />
@@ -4529,6 +4542,12 @@ function SlurpMomentsShelf({
     return true;
   });
   const seenAt = newSinceAt ? new Date(newSinceAt).getTime() : NaN;
+  creatorMoments.sort((left, right) => {
+    const leftNew = !Number.isNaN(seenAt) && new Date(left.post.createdAt).getTime() > seenAt;
+    const rightNew = !Number.isNaN(seenAt) && new Date(right.post.createdAt).getTime() > seenAt;
+    if (leftNew !== rightNew) return leftNew ? -1 : 1;
+    return new Date(right.post.createdAt).getTime() - new Date(left.post.createdAt).getTime();
+  });
 
   return (
     <section
@@ -4537,7 +4556,7 @@ function SlurpMomentsShelf({
       className={cn(
         "relative isolate overflow-hidden",
         embedded
-          ? "bg-[linear-gradient(180deg,color-mix(in_srgb,var(--noodle-accent)_5%,transparent),transparent)] pb-1 after:pointer-events-none after:absolute after:inset-x-0 after:bottom-0 after:h-6 after:bg-[linear-gradient(to_bottom,transparent,var(--slurp-canvas))] after:content-['']"
+          ? "bg-[var(--slurp-canvas)] pb-1 after:pointer-events-none after:absolute after:inset-x-0 after:bottom-0 after:h-6 after:bg-[linear-gradient(to_bottom,transparent,var(--slurp-canvas))] after:content-[''] @min-[1024px]:bg-[linear-gradient(180deg,color-mix(in_srgb,var(--noodle-accent)_5%,transparent),transparent)]"
           : "mx-3 mt-3 rounded-2xl bg-[linear-gradient(145deg,var(--slurp-surface-raised),color-mix(in_srgb,var(--noodle-accent)_7%,var(--slurp-canvas)))] py-4 shadow-[0_18px_40px_-34px_rgba(0,0,0,0.9)] ring-1 ring-inset ring-[var(--noodle-divider)] sm:mx-4",
       )}
     >
@@ -4765,6 +4784,15 @@ function SlurpMomentViewer({
             {!moment.post.locked && moment.post.content && (
               <p className="mt-2 line-clamp-3 max-w-md text-sm leading-6 text-white/85">{moment.post.content}</p>
             )}
+            {linkedPostIdForStory(moment.post) && onOpenProfile && (
+              <button
+                type="button"
+                onClick={openProfile}
+                className="mt-4 inline-flex min-h-10 items-center gap-2 rounded-lg bg-white/12 px-3 text-xs font-bold text-white ring-1 ring-inset ring-white/20 hover:bg-white/18 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white"
+              >
+                <Link size={14} aria-hidden="true" /> {localizeUi("ui.slurp.moments.viewLinkedPost")}
+              </button>
+            )}
             {moment.post.locked && (
               <div className="mt-4 grid grid-cols-2 gap-2">
                 <button
@@ -4818,6 +4846,7 @@ type NoodlerComposerTool = "image" | "poll" | "media" | "access";
 
 function NoodlerPostComposer({
   profile,
+  availablePosts,
   collapsible = true,
   draft,
   onDraftChange,
@@ -4829,6 +4858,7 @@ function NoodlerPostComposer({
   guidePending,
 }: {
   profile: NoodlerManagedStageProfile;
+  availablePosts: SlurpProfilePost[];
   collapsible?: boolean;
   draft: NoodlerPostDraft;
   onDraftChange: (patch: Partial<NoodlerPostDraft>) => void;
@@ -4856,7 +4886,10 @@ function NoodlerPostComposer({
   const mediaToolRef = useRef<HTMLDivElement | null>(null);
   const accessToolRef = useRef<HTMLDivElement | null>(null);
   const composerBusyRef = useRef(false);
-  const { title, body, access, image, poll, postType } = draft;
+  const { title, body, access, image, poll, postType, linkedPostId } = draft;
+  const linkablePosts = availablePosts
+    .map((entry) => ("managed" in entry ? entry.managed : entry.viewerPost))
+    .filter((post): post is NoodlerManagedPost | NoodlerPostView => Boolean(post) && !isSlurpStory(post));
   // Format is an internal tag for the AI/length policy, not a choice we make the
   // human author pick. Derive it from what they actually did: a title makes it an
   // announcement (long_form when long); otherwise a caption (long_form when long).
@@ -5122,7 +5155,10 @@ function NoodlerPostComposer({
                 disabled={composerBusy}
                 onClick={() => {
                   setActiveTool(null);
-                  updateDraft({ postType: option, ...(option === "story" ? { poll: null, title: "" } : {}) });
+                  updateDraft({
+                    postType: option,
+                    ...(option === "story" ? { poll: null, title: "" } : { linkedPostId: null }),
+                  });
                 }}
                 className={cn(
                   "min-h-9 rounded-md px-3 text-xs font-bold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--noodle-accent)] disabled:opacity-50",
@@ -5344,6 +5380,26 @@ function NoodlerPostComposer({
         )}
         className="min-h-20 w-full resize-none border-0 bg-transparent py-2 text-[1rem] leading-6 text-[var(--foreground)] outline-none placeholder:text-[var(--muted-foreground)]"
       />
+      {postType === "story" && (
+        <label className="mb-3 block space-y-1">
+          <span className="text-xs font-bold text-[var(--muted-foreground)]">
+            {localizeUi("ui.slurp.stories.linkPost")}
+          </span>
+          <select
+            value={linkedPostId ?? ""}
+            onChange={(event) => updateDraft({ linkedPostId: event.target.value || null })}
+            disabled={composerBusy}
+            className="h-10 w-full rounded-lg border border-[var(--noodle-divider)] bg-[var(--background)] px-3 text-sm text-[var(--foreground)] outline-none focus-visible:ring-2 focus-visible:ring-[var(--noodle-accent)]"
+          >
+            <option value="">{localizeUi("ui.slurp.stories.noLinkedPost")}</option>
+            {linkablePosts.map((post) => (
+              <option key={post.id} value={post.id}>
+                {post.title || post.content.slice(0, 70) || post.id}
+              </option>
+            ))}
+          </select>
+        </label>
+      )}
       {pendingImage && (
         <PostImageCropEditor
           source={pendingImage.source}

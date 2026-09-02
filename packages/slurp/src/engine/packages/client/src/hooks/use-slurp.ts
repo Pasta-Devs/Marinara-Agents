@@ -644,6 +644,7 @@ type NoodlerFormatRequest = {
 type NoodlerCreatePostRequest = Omit<NoodlerPostCreateInput, "uploadedImageUrl" | "imageCrop"> & {
   image?: NoodlerPostDraftImage | null;
   postType?: "post" | "story";
+  linkedPostId?: string | null;
 } & NoodlerFormatRequest;
 
 type NoodlerGeneratePostRequest = Omit<NoodlerGenerationRequest, "uploadedImageUrl" | "imageCrop"> & {

@@ -112,8 +112,9 @@ const slurpNoodlerPostCreateBaseSchema = (
 const slurpNoodlerPostCreateWithMediaSchema = slurpNoodlerPostCreateBaseSchema
   .extend({
     postType: slurpPostTypeSchema.default("post"),
+    linkedPostId: z.string().trim().min(1).nullable().optional(),
   })
-  .superRefine(({ postType: _postType, ...rest }, ctx) => {
+  .superRefine(({ postType: _postType, linkedPostId: _linkedPostId, ...rest }, ctx) => {
     const result = noodlerPostCreateWithMediaSchema.safeParse(rest);
     if (!result.success) {
       for (const issue of result.error.issues) ctx.addIssue(issue);
@@ -650,7 +651,11 @@ export async function slurpRoutes(app: FastifyInstance) {
    * The shared Engine view type has no price field, and adding one there would force an
    * engine.min bump for a presentation detail. The package widens it locally instead.
    */
-  type NoodlerPricedPostView = NoodlerPostView & { unlockPrice: number | null; story: boolean };
+  type NoodlerPricedPostView = NoodlerPostView & {
+    unlockPrice: number | null;
+    story: boolean;
+    linkedPostId: string | null;
+  };
 
   async function projectViewerPosts(
     context: ViewerContext,
@@ -706,6 +711,10 @@ export async function slurpRoutes(app: FastifyInstance) {
             // presentation only — nothing on the unlock route reads it back or checks funds.
             unlockPrice: locked ? noodlerUnlockPriceFromMetadata(post.metadata) : null,
             story: post.metadata.noodlerPostType === "story",
+            linkedPostId:
+              post.metadata.noodlerPostType === "story" && typeof post.metadata.noodlerLinkedPostId === "string"
+                ? post.metadata.noodlerLinkedPostId
+                : null,
             createdAt: post.createdAt,
             interactions: locked ? [] : visibleInteractions,
             likeCount: allInteractions.filter((item) => item.type === "like").length,
@@ -1135,6 +1144,15 @@ export async function slurpRoutes(app: FastifyInstance) {
     }
     if (decoded.data.postType === "story" && decoded.data.poll) {
       return reply.code(400).send({ error: "Stories cannot contain polls." });
+    }
+    if (decoded.data.linkedPostId) {
+      if (decoded.data.postType !== "story") {
+        return reply.code(400).send({ error: "Only Stories can link to a Post." });
+      }
+      const linkedPost = await noodle.getNoodlerPostById(decoded.data.linkedPostId);
+      if (!linkedPost || linkedPost.authorAccountId !== decoded.data.targetAccountId) {
+        return reply.code(400).send({ error: "The linked Post must belong to this Creator." });
+      }
     }
     const result = await createNoodlerPost(app.db, decoded.data, decoded.media);
     if (result.status === "created") return reply.code(201).send(result.post);
