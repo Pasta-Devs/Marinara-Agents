@@ -345,6 +345,29 @@ PF.weather = (() => {
     };
   }
 
+  /** EVERY SKY A CLIMATE CAN PRODUCE, in WORDS order: the union of the words
+   *  carrying a non-zero weight across this latitude's own season set. It lives
+   *  here, beside the derivation it reads, for `wetMass`'s reason — the digest
+   *  that tells a generation which weather to write lines for has to describe the
+   *  same sky `at()` will draw, and a hand table saying "the tropics get no snow"
+   *  is an opinion a coefficient retune falsifies silently while every assert
+   *  stays green. Through the derivation it is arithmetic, and it moves when the
+   *  arithmetic does.
+   *
+   *  It walks the season set of THIS band's structure, which is the precondition
+   *  `wetMass` states: an index out of range for the band NaNs the whole row. A
+   *  latitude the table does not know folds to temperate, the same fallback
+   *  `axesOf` and `weightsFor` already spend. */
+  function wordsFor(latitude, precipitation) {
+    const band = PF.own(LAT_META, latitude) ?? LAT_META.temperate;
+    const seen = new Set();
+    for (let index = 0; index < SEASON_SETS[band.structure].length; index++) {
+      const row = weightsFor(latitude, precipitation, index);
+      for (const word of WORDS) if (row[word] > 0) seen.add(word);
+    }
+    return WORDS.filter((word) => seen.has(word));
+  }
+
   /** One weighted pick off a weight row, in WORDS order so the walk is stable. */
   function drawWord(row, roll) {
     let sum = 0;
@@ -543,6 +566,7 @@ PF.weather = (() => {
     seasonStartDay,
     wetMass,
     weightsFor,
+    wordsFor,
     at,
     labelFor,
     foldOverride,

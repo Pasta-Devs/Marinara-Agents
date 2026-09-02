@@ -311,14 +311,15 @@ PF.pack = (() => {
    *
    *    the settlement's name row and the two section headers ............    201
    *    the situation, with its lead-in (18-brief caps the field at 240) .    270
+   *    the two climate rows, at their widest (temperate/moderate) ......    136
    *    the zone list: the root plus 4 places × (name 24 + kind + dashes) .    189
    *    the cast: 10 × (name 24 + role 24 + home 24 + persona 100 + 18) ..  1,900
-   *    the newlines joining the twenty-one rows ........................     20
+   *    the newlines joining the twenty-three rows ......................     22
    *                                                                       ------
-   *                                                                        2,580
+   *                                                                        2,718
    *
-   *  …which is the plan's ~2.5K, and it leaves better than 5,200 chars of the cap
-   *  for the player's own words. 2,580 is MEASURED and not estimated: the harness
+   *  …which is the plan's ~2.5K, and it leaves better than 5,000 chars of the cap
+   *  for the player's own words. 2,718 is MEASURED and not estimated: the harness
    *  searches for the biggest digest a legal brief can produce — every field at
    *  its cap, in tokens with no space near the cut so `capText` clips at the cap
    *  exactly rather than at a word boundary short of it — and pins the number, so
@@ -347,14 +348,52 @@ PF.pack = (() => {
    *  the list teaches the mapping from "The Amber Hearth Inn" to `gathering` in
    *  the same breath that it teaches the inn exists. Without it the model has to
    *  guess which of seven handles a name belongs under, and a guessed handle is a
-   *  line that never renders anywhere. */
-  function digest(brief) {
+   *  line that never renders anywhere.
+   *
+   *  ── THE CLIMATE, AND WHY IT IS A SECOND ARGUMENT ─────────────────────────
+   *  `axes` is `{latitude, precipitation}` and the two rows it renders exist so a
+   *  generation does not solicit snow lines for a jungle. It is an ARGUMENT and
+   *  not a field on the brief because this function receives only the brief, and
+   *  a world's climate is a derivation off (brief hint, seed, theme) that lives in
+   *  17-weather — computing a theme default here would be a second authority for
+   *  the sky, disagreeing with the first on every world whose brief named nothing.
+   *
+   *  ABSENT MEANS OMITTED, both rows, and that is a legal call: it is 0.13's own
+   *  shape, and a caller with no climate to state should say nothing rather than
+   *  make one up. The shipped compose site always resolves one.
+   *
+   *  THE SECOND ROW IS DERIVED AND NOT A TABLE. `wordsFor` walks the same weight
+   *  rows `at()` draws from, so the sentence describes the sky this world will
+   *  actually have — including the honest cases nobody would write down by hand,
+   *  like both two-season structures having no snow at any precipitation.
+   *
+   *  AND THE ROWS ARE A BELT, NOT A FOLD. Everything rendered here goes through
+   *  `capText` exactly as every other row does, because the object handed in is
+   *  the same untrusted channel the brief came off: a nine-thousand-character
+   *  latitude clips to 24 and cannot eat the cast list, and no value can inject a
+   *  second row. What guarantees the words are a REAL climate is the fold at the
+   *  compose site (`axesFor`), one screen up — the belt only guarantees that a
+   *  hostile one cannot damage the request. */
+  function digest(brief, axes) {
     const cast = Array.isArray(brief?.cast) ? brief.cast : [];
     const places = Array.isArray(brief?.places) ? brief.places : [];
     const name = capText(brief?.name, 24) || "the settlement";
     const out = [`The settlement is ${name}.`];
     const situation = capText(brief?.situation, 240);
     if (situation) out.push(`What is unresolved right now: ${situation}`);
+    // THE OPENING BLOCK IS WHERE THEY LAND. It takes plain pushes and has no
+    // separator convention to violate, and — the reason it is not a tail append —
+    // a row parked under the PEOPLE header reads as an eleventh cast member, which
+    // is the mistake this file's own section comment warns about.
+    const latitude = capText(axes?.latitude, 24);
+    const precipitation = capText(axes?.precipitation, 24);
+    if (latitude && precipitation) {
+      out.push(`Climate: ${latitude} latitude, ${precipitation}.`);
+      out.push(
+        `Weather runs to: ${PF.weather.wordsFor(latitude, precipitation).join(", ")}` +
+          ` — write no line for a sky this world never has.`,
+      );
+    }
     out.push("", "PLACES — the second word is the location handle a line is keyed by:", `- ${name} — settlement`);
     for (const place of places) {
       const placeName = capText(place?.name, 24);
@@ -1903,7 +1942,16 @@ PF.pack = (() => {
         const base = {
           instructions: guidance(theme),
           // THE DIGEST FIRST, the player's own words after (plan §2.2b).
-          userContent: composeUserContent(digest(brief), preferences),
+          //
+          // THE CLIMATE COMES OFF THE SEALED BRIEF AND NEVER OFF THE STANDING
+          // WORLD, and that is the whole of the digest door (plan §2.1). On the
+          // creation path both calls happen before the real world compiles — the
+          // world standing here is boot's placeholder — so reading `world.latitude`
+          // would describe a climate this settlement is not going to have, on
+          // exactly the worlds that pay for a pack. `axesFor` is pure and it is
+          // the same derivation the compile will run: same brief, same seed, same
+          // theme, same answer, whichever of them happens first.
+          userContent: composeUserContent(digest(brief, PF.weather.axesFor(brief, seed, theme)), preferences),
           schema: schema(),
         };
         // ONE DOOR. Everything the route hands back that is an object at all goes

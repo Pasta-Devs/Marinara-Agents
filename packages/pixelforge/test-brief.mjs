@@ -24399,6 +24399,74 @@ const fire = (node, type) => Promise.all((node.listeners[type] ?? []).map((fn) =
     });
   });
 
+  // ── CELL 1b: THE PACK CALL DESCRIBES THE SEALED BRIEF'S SKY, NOT THE WORLD'S ─
+  // The creation path makes both calls BEFORE the real world compiles, so the
+  // world standing while the pack call is composed is boot's PLACEHOLDER. A digest
+  // that read `world.latitude` would describe a climate this settlement is never
+  // going to have — on exactly the worlds that paid for a pack — so the door
+  // resolves the climate from the SEALED BRIEF, the seed and the theme, which is
+  // the same derivation the compile will run a moment later.
+  //
+  // RED BY VALUE AND NOT BY LUCK: the brief pins a band the placeholder does not
+  // carry, and the two are asserted DIFFERENT before the call goes out. A world
+  // read would print the other word.
+  //
+  // The real `pack.generate` runs here — no `withPack` — because the compose site
+  // IS what is under test.
+  await withSavePath(async ({ behavior, tick, makeCore }) => {
+    await withGeneration(async ({ responses }) => {
+      behavior.get = async () => ({ available: true, status: 200, body: { exists: false } });
+      const meta = wizardConfig();
+      const core = makeCore("chat-pack-climate", 4242);
+      core.host.chatMeta = meta;
+      core.sim = loadedPF.save.restore(meta, "chat-pack-climate");
+      assert.equal(core.sim.world.interim, true, "the world standing at the call is the placeholder");
+      const placeholder = core.sim.world.latitude;
+      // A band the placeholder does not carry — that difference is what makes a
+      // world read visible rather than a coin flip.
+      const pinned = loadedPF.weather.LATITUDES.find((band) => band !== placeholder);
+      assert.ok(pinned, "…and there is another band to pin");
+      const briefData = { ...gateBriefData, latitude: pinned, precipitation: "arid" };
+      let packBody = null;
+      responses.post = async (chatId, body) => {
+        if (!body?.schema?.properties?.templates)
+          return { status: 200, body: { ok: true, data: briefData } };
+        packBody = body;
+        const giver = briefData.cast[0].name;
+        return {
+          status: 200,
+          body: {
+            ok: true,
+            data: {
+              templates: [
+                { giver, verb: "catch", target: { role: "catch-common" }, n: 3, title: "Three for the pot" },
+                { giver, verb: "visit", target: { place: "wilds" }, n: 1, title: "Walk out" },
+                { giver, verb: "deliver", target: { npc: briefData.cast[1].name }, n: 1, title: "Word to the mill" },
+              ],
+              lines: Array.from({ length: loadedPF.pack.TUNING.floorLines }, (_, i) => ({
+                at: "settlement",
+                when: "day",
+                r: "stranger",
+                text: `A line ${i}`,
+              })),
+            },
+          },
+        };
+      };
+      loadedPF.save.armGate(core, meta);
+      await loadedPF.save.maybeGenerateBrief(core);
+      await tick();
+      assert.ok(packBody, "the pack call went out");
+      const row = packBody.userContent.split("\n").find((line) => line.startsWith("Climate: "));
+      assert.equal(row, `Climate: ${pinned} latitude, arid.`, "…describing the sealed brief's own climate");
+      assert.notEqual(pinned, placeholder, "…which is NOT the band the placeholder world was standing in");
+      assert.ok(
+        !packBody.userContent.includes(`Climate: ${placeholder} latitude`),
+        "…so a placeholder read would have said something else, and this lane would see it",
+      );
+    });
+  });
+
   // ── CELL 2: a foreign pack at creation is ABSENT, not a demotion ───────────
   await withSavePath(async ({ calls, behavior, tick, makeCore }) => {
     await withGeneration(async () => {
@@ -25666,6 +25734,13 @@ const fire = (node, type) => Promise.all((node.listeners[type] ?? []).map((fn) =
     },
     { theme: "cozy-village", seed: 4242 },
   );
+  // THE CLIMATE THE SHIPPED COMPOSE SITE WOULD RESOLVE for a brief — the same
+  // derivation off the same three inputs (`axesFor(sealed, seed, theme)`), so
+  // every lane below measures the digest the route actually receives rather than
+  // a 0.13-shaped one with no climate in it. A `digest(brief)` with no second
+  // argument is still legal and still omits both rows; the lane for that is at the
+  // foot of this block.
+  const climateOf = (b, seed = 4242, theme = "cozy-village") => loadedPF.weather.axesFor(b, seed, theme);
   assert.equal(maxBrief.cast.length, 10, "the worst-case fixture really is at the cast cap");
   assert.equal(maxBrief.places.length, 4, "…and at the place cap");
   assert.ok(
@@ -25679,7 +25754,7 @@ const fire = (node, type) => Promise.all((node.listeners[type] ?? []).map((fn) =
   // persona is the voice source: a cast list of names and roles writes dialogue
   // that could belong to anybody.
   {
-    const text = pack.digest(maxBrief);
+    const text = pack.digest(maxBrief, climateOf(maxBrief));
     for (const member of maxBrief.cast) {
       assert.ok(text.includes(member.name), `the digest names ${member.name}`);
       assert.ok(text.includes(member.role), "…with their role");
@@ -25719,10 +25794,15 @@ const fire = (node, type) => Promise.all((node.listeners[type] ?? []).map((fn) =
         prosperity: "thriving",
         // BOTH AXES PINNED, because this is the fixture that answers "what is the
         // biggest legal brief" — and a brief whose author named its climate is
-        // strictly bigger than one that let the world roll. The digest does not
-        // read them yet; when it does, its re-measure lands on this shape.
-        latitude: "subpolar",
-        precipitation: "wet",
+        // strictly bigger than one that let the world roll. THE PAIR IS THE
+        // MEASURED MAXIMUM and not the longest-looking one: walked over all
+        // fifteen legal (latitude, precipitation) pairs, temperate/moderate
+        // renders the biggest climate block at 138 characters. `equatorial` is
+        // the longest word on the first row and loses more than it gains on the
+        // second — a two-season structure reaches no snow at any precipitation —
+        // and subpolar/moderate is one character short of this.
+        latitude: "temperate",
+        precipitation: "moderate",
         situation: solid(240, "Theford"),
         places: ["gathering", "workshop", "workshop", "sanctuary"].map((kind, i) => ({
           kind,
@@ -25760,9 +25840,54 @@ const fire = (node, type) => Promise.all((node.listeners[type] ?? []).map((fn) =
       everyCap.cast.every((m) => m.persona.length === 100),
       "…with personas at the full 100, which a spaced phrase never reaches",
     );
-    const measured = loadedPF.pack.digest(everyCap);
-    assert.equal(measured.length, 2_580, "the biggest legal digest is the 2,580 chars the table beside digest() says");
-    assert.equal(measured.split("\n").length, 21, "…across twenty-one rows, one of them per person");
+    const measured = loadedPF.pack.digest(everyCap, climateOf(everyCap));
+    assert.equal(measured.length, 2_718, "the biggest legal digest is the 2,718 chars the table beside digest() says");
+    // TWENTY-THREE ROWS, WITH THE ANATOMY STATED so the count is auditable rather
+    // than a number that moved: 2 opening + 2 climate + (blank + header + 5 place
+    // rows) + (blank + header + 10 people).
+    const rows = measured.split("\n");
+    assert.equal(rows.length, 23, "…across twenty-three rows, one of them per person");
+    assert.equal(2 + 2 + (1 + 1 + 5) + (1 + 1 + 10), 23, "…which is the anatomy the table beside digest() writes out");
+    // THE CLIMATE ROWS SIT IN THE OPENING BLOCK, under no section header — the one
+    // placement that is both idiomatic (plain pushes, no separator convention to
+    // violate) and safe. Parked at the tail they would read as an eleventh cast
+    // member, which is the mistake digest()'s own section comment warns about.
+    assert.equal(rows[2], "Climate: temperate latitude, moderate.", "the climate row follows the situation");
+    assert.ok(rows[3].startsWith("Weather runs to: "), "…with the reachable sky under it");
+    assert.equal(rows[4], "", "…and the blank that opens PLACES comes after both, not before them");
+    assert.ok(rows.at(-1).startsWith("- Person"), "…so the last row is still a person");
+    // AND THE SECOND ROW IS DERIVED, not a hand table: it lists what `weightsFor`
+    // can actually draw for this band, which is the whole point of the row.
+    assert.equal(
+      rows[3],
+      `Weather runs to: ${loadedPF.weather.wordsFor("temperate", "moderate").join(", ")}` +
+        ` — write no line for a sky this world never has.`,
+      "…spelled from the derivation rather than from a list somebody kept in step",
+    );
+  }
+
+  // ── NO CLIMATE, NO ROWS — THE 0.13 CALL SHAPE IS STILL LEGAL ──────────────
+  // `digest()` receives only the brief, so it cannot compute a theme default
+  // itself without becoming a second authority for the sky. A caller with no
+  // climate to state says nothing: both rows are omitted and the digest is the
+  // 0.13 shape, to the character.
+  {
+    const bare = loadedPF.pack.digest(maxBrief);
+    assert.ok(!bare.includes("Climate:"), "a digest with no axes carries no climate row");
+    assert.ok(!bare.includes("Weather runs to:"), "…nor the sky row under it");
+    const withClimate = loadedPF.pack.digest(maxBrief, climateOf(maxBrief));
+    assert.equal(
+      withClimate.split("\n").length - bare.split("\n").length,
+      2,
+      "…and the two rows are the whole of the difference",
+    );
+    // HALF AN ARGUMENT IS NO ARGUMENT. A partial or empty object states nothing,
+    // so it renders nothing rather than half a climate.
+    for (const partial of [{}, { latitude: "temperate" }, { precipitation: "wet" }, null])
+      assert.ok(
+        !loadedPF.pack.digest(maxBrief, partial).includes("Climate:"),
+        `a ${JSON.stringify(partial)} climate renders no row`,
+      );
   }
 
   // ── AND THE PREFERENCES CLIP AGAINST WHAT IS LEFT ─────────────────────────
@@ -25773,13 +25898,13 @@ const fire = (node, type) => Promise.all((node.listeners[type] ?? []).map((fn) =
   {
     const preferences = `Setting: ${"a long and detailed description of the valley. ".repeat(200)}`.slice(0, 7_800);
     assert.equal(preferences.length, 7_800, "the fixture is the biggest setting the wizard can hand us");
-    const composed = pack.composeUserContent(pack.digest(maxBrief), preferences);
+    const composed = pack.composeUserContent(pack.digest(maxBrief, climateOf(maxBrief)), preferences);
     assert.ok(composed.length <= pack.USER_CONTENT_CAP, `the request is legal (${composed.length} chars)`);
-    assert.ok(composed.startsWith(pack.digest(maxBrief)), "the digest is whole and first");
+    assert.ok(composed.startsWith(pack.digest(maxBrief, climateOf(maxBrief))), "the digest is whole and first");
     assert.ok(composed.includes("a long and detailed description"), "…and the player's own words are in there too");
     assert.ok(composed.endsWith("…"), "it is the SETTING that lost its tail, and it says so");
     // A setting that fits is not clipped at all.
-    const short = pack.composeUserContent(pack.digest(maxBrief), "Setting: a quiet valley.");
+    const short = pack.composeUserContent(pack.digest(maxBrief, climateOf(maxBrief)), "Setting: a quiet valley.");
     assert.ok(short.endsWith("Setting: a quiet valley."), "a setting inside the room left is sent whole");
     // …and no setting at all is just the digest.
     assert.equal(pack.composeUserContent("DIGEST", "   "), "DIGEST", "an empty setting adds nothing to send");
@@ -25817,20 +25942,33 @@ const fire = (node, type) => Promise.all((node.listeners[type] ?? []).map((fn) =
   // are what `capText` exists for; and the newline is the structural one, because
   // the section header promises the model ONE ROW PER PERSON and a raw newline in
   // a persona is a second row with nobody's name on it.
+  //
+  // THIS IS THE BELT AND NOT THE FOLD, and the two are tested apart on purpose.
+  // `digest()` is called DIRECTLY here, so a hostile climate argument exercises
+  // the `capText` on the way through — all it has to guarantee is that no value
+  // can eat the cast list or inject a row. What guarantees the words are a REAL
+  // climate is `axesFor` at the compose site, one screen upstream, and the lane
+  // for that drives a generation instead (see the creation-path case).
   {
-    const hostile = pack.digest({
-      name: `Sharp${String.fromCharCode(7)}town <script>alert(1)</script> and then a great deal more name than this`,
-      situation: `A situation ${"that runs on and on ".repeat(60)}`,
-      places: [{ kind: "gathering", name: `The Inn\nof Two Rows and a name far past the cap it is allowed` }],
-      cast: [
-        {
-          name: `Wren Ash\nSecond Row`,
-          role: `miller${String.fromCharCode(0)} and a role description that is much too long to be one`,
-          home: `The Mill <b>bold</b> and a home address longer than any cap`,
-          persona: `Wants the ford rebuilt.\nAnd hides who let it go. ${"Padding to nine thousand. ".repeat(360)}`,
-        },
-      ],
-    });
+    const hostile = pack.digest(
+      {
+        name: `Sharp${String.fromCharCode(7)}town <script>alert(1)</script> and then a great deal more name than this`,
+        situation: `A situation ${"that runs on and on ".repeat(60)}`,
+        places: [{ kind: "gathering", name: `The Inn\nof Two Rows and a name far past the cap it is allowed` }],
+        cast: [
+          {
+            name: `Wren Ash\nSecond Row`,
+            role: `miller${String.fromCharCode(0)} and a role description that is much too long to be one`,
+            home: `The Mill <b>bold</b> and a home address longer than any cap`,
+            persona: `Wants the ford rebuilt.\nAnd hides who let it go. ${"Padding to nine thousand. ".repeat(360)}`,
+          },
+        ],
+      },
+      {
+        latitude: `subpolar\nSecond Row <b>${"and a band name padded out past every cap there is. ".repeat(200)}`,
+        precipitation: `wet${String.fromCharCode(0)} and a precipitation word nobody wrote`,
+      },
+    );
     const rows = hostile.split("\n");
     // ONE ROW PER PERSON, and counted STRUCTURALLY — everything after the PEOPLE
     // header is the cast section, so a newline that survived any of the four
@@ -25846,8 +25984,17 @@ const fire = (node, type) => Promise.all((node.listeners[type] ?? []).map((fn) =
       `every field on the row is inside its own cap, so the row is inside 190 (${people[0].length})`,
     );
     assert.ok(
-      hostile.length <= 2_580,
+      hostile.length <= 2_718,
       `…and the whole digest is inside the table's bound off a 9,000-char input (${hostile.length} chars)`,
+    );
+    // THE CLIMATE ROWS ARE TWO ROWS AND NEVER THREE. A ten-thousand-character
+    // latitude with a newline in it is what would otherwise buy a third row in the
+    // opening block, and the digest's whole structure is rows.
+    assert.equal(rows.filter((row) => row.startsWith("Climate: ")).length, 1, "a hostile climate is one row, not two");
+    assert.equal(rows.filter((row) => row.startsWith("Weather runs to: ")).length, 1, "…and the sky row is still one");
+    assert.ok(
+      rows.find((row) => row.startsWith("Climate: ")).length <= "Climate: ".length + 24 + " latitude, ".length + 24 + 1,
+      "…with both axis words clipped at 24, the same cap every other name here gets",
     );
     // NOTHING A TAG OR A CONTROL BYTE CAN BE REASSEMBLED FROM.
     assert.ok(!/[<>]/.test(hostile), "no angle bracket survives, so no tag fragment can");
@@ -26226,7 +26373,17 @@ const fire = (node, type) => Promise.all((node.listeners[type] ?? []).map((fn) =
       ["instructions", "schema", "userContent"],
       "three fields, no more",
     );
-    assert.equal(sent[0].body.userContent.startsWith(pack.digest(sealedBrief)), true, "the digest leads the request");
+    // THE DIGEST LEADS THE REQUEST, and it is the digest WITH this world's
+    // climate in it — resolved from the SEALED BRIEF, the seed and the theme, the
+    // three inputs `axesFor` takes and the only three that exist on the creation
+    // path. There is no world to read yet.
+    const axes = loadedPF.weather.axesFor(sealedBrief, 4242, "cozy-village");
+    assert.equal(
+      sent[0].body.userContent.startsWith(pack.digest(sealedBrief, axes)),
+      true,
+      "the digest leads the request, climate rows and all",
+    );
+    assert.ok(sent[0].body.userContent.includes(`Climate: ${axes.latitude} latitude`), "…naming this world's band");
     assert.ok(sent[0].body.userContent.includes("a valley that floods"), "…and the player's setting follows it");
     assert.ok(sent[0].body.userContent.length <= pack.USER_CONTENT_CAP, "inside the route's character cap");
     assert.equal(
@@ -26235,6 +26392,38 @@ const fire = (node, type) => Promise.all((node.listeners[type] ?? []).map((fn) =
       "strictSchema is never sent: the tolerant parser is the contract",
     );
     assert.ok(sent[0].signal, "…and the call is abortable, because the budget is a real one");
+  });
+
+  // ── THE FOLD, TESTED WHERE THE FOLD IS ────────────────────────────────────
+  // The digest's own hostile lane exercises the `capText` BELT, because it calls
+  // `digest()` directly and there is no fold at that door. The FOLD is here, at
+  // the compose site: the brief a pack is composed from is a round-tripped object
+  // off chat metadata, so its `latitude` is whatever a hand-edited save says it
+  // is, and `axesFor` is what turns that back into a band this build knows. A
+  // hostile hint is not defaulted, it simply stops being a hint — the roll owns
+  // the axis — so what reaches `userContent` is a real climate and never the
+  // stored word.
+  await withPackCall(async ({ sent }) => {
+    const poisoned = {
+      ...sealedBrief,
+      latitude: "constructor",
+      precipitation: `wet <script>alert(1)</script> ${"and a great deal more than a word. ".repeat(40)}`,
+    };
+    const { sealed } = await run({ brief: poisoned });
+    assert.ok(sealed, "the call still goes out and still seals");
+    const body = sent.at(-1).body.userContent;
+    const row = body.split("\n").find((line) => line.startsWith("Climate: "));
+    assert.ok(row, "the request still carries a climate row");
+    assert.ok(!row.includes("constructor"), "…and the hostile band never reaches it");
+    assert.ok(!row.includes("<script>"), "…nor the tag fragment beside it");
+    const drawn = loadedPF.weather.axesFor(poisoned, 4242, "cozy-village");
+    assert.ok(
+      loadedPF.weather.LATITUDES.includes(drawn.latitude) &&
+        loadedPF.weather.PRECIPS.includes(drawn.precipitation),
+      "…because the fold drew a real band for both axes",
+    );
+    assert.equal(row, `Climate: ${drawn.latitude} latitude, ${drawn.precipitation}.`, "…and that is what went out");
+    assert.ok(body.length <= pack.USER_CONTENT_CAP, "…inside the route's cap, as everything here must be");
   });
 
   // ── THE WIDENED ASK COMES BACK AS FOUR WORKING BUTTONS ───────────────────
