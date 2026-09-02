@@ -25264,15 +25264,22 @@ const fire = (node, type) => Promise.all((node.listeners[type] ?? []).map((fn) =
   assert.equal(sim.weather().word, "snow", "…and back");
   assert.notEqual(sim.weather(), sim.weather(), "the memo hands back a copy, never its own row");
 
-  // NOTHING PARKS ON A RESTORE. A world reopened on a snowy day has not just had
-  // it start snowing, and a rebuild must say nothing at all.
+  // NOTHING PARKS ON A RESTORE. A world reopened on a notable day has not just
+  // had that sky blow in, and a rebuild must say nothing at all.
+  //
+  // THE DAY BELONGS TO THE WORLD THE RESTORE ACTUALLY BUILDS, which is the whole
+  // load the fixture carries: the metadata below is EMPTY, so this is the legacy
+  // temperate/moderate world and not the subpolar one above, and day 7 is its
+  // first notable crossing (overcast -> storm). Restored onto a day whose
+  // crossing is not notable — day 58 there is fair -> rain — the assert would
+  // hold for a build that parked on the restore path too, and say nothing.
   assert.deepEqual(new loadedPF.Sim(snowy)._weatherNotes, [], "construction files nothing");
   const restored = loadedPF.save.simFromSaved(
-    { v: 1, seed: 7, theme: "cozy-village", zone: snowy.startZone, day: 58, clockMin: 8 * 60 },
+    { v: 1, seed: 7, theme: "cozy-village", zone: snowy.startZone, day: 7, clockMin: 8 * 60 },
     {},
     "chat-weather-restore",
   );
-  assert.deepEqual(restored._weatherNotes, [], "a restore straight onto a snowy day files nothing either");
+  assert.deepEqual(restored._weatherNotes, [], "a restore straight onto a storm files nothing either");
   const resolver = new loadedPF.Sim(snowy);
   resolver.day = 58;
   resolver.resolveSchedules();

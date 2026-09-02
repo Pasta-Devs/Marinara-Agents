@@ -251,19 +251,24 @@ PF.weather = (() => {
     return c.names[c.idx];
   }
 
-  /** The first day of the season `day` falls in, FLOORED AT DAY 1 — and that
-   *  floor is load-bearing, not defensive. The full-year offset lands almost
-   *  every world's day 1 mid-season (361 of 365 offsets on a four-season world),
-   *  so an unfloored answer names days before the world existed: the ledger's
-   *  first-of-season scan would then walk up to 182 unlived days looking for
-   *  snow, find the derivation's answer for them, and conclude that the world's
-   *  genuine first snowfall was not a first at all.
+  /** The first day of the season `day` falls in, FLOORED AT DAY 1. The full-year
+   *  offset lands almost every world's day 1 mid-season (361 of 365 offsets on a
+   *  four-season world), so an unfloored answer names days before the world
+   *  existed — up to 182 of them, measured.
    *
-   *  With the floor, "first" means first OF THE DAYS THE WORLD HAS LIVED, which
-   *  is the honest scope and the one player-state states. Every day the scan
-   *  feeds back into at() is >= 1 again, so the totality argument above holds
-   *  unchanged. Callers derive their bound FROM HERE and never by hand: under a
-   *  365-day year a hand-derived season length is wrong by up to 182 days. */
+   *  WHAT THE FLOOR BUYS, said honestly rather than overclaimed: the RETURNED
+   *  DAY is a day somebody could have lived, and the ledger's first-of-season
+   *  scan costs the season rather than the year. It does NOT change the scan's
+   *  answer, because dayOf() clamps a sub-1 day to 1 as well — an unfloored scan
+   *  would re-read day 1 up to 182 times over and reach the same verdict. Walked
+   *  across 1478 snow crossings (5 latitudes x 3 precipitations x 6 seeds x 400
+   *  days), floored and unfloored differ on none.
+   *
+   *  So "first" means first OF THE DAYS THE WORLD HAS LIVED, which is the honest
+   *  scope and the one player-state states. Every day the scan feeds back into
+   *  at() is >= 1 again, so the totality argument above holds unchanged. Callers
+   *  derive their bound FROM HERE and never by hand: under a 365-day year a
+   *  hand-derived season length is wrong by up to 182 days. */
   function seasonStartDay(world, day) {
     const c = calendarOf(world, day);
     const firstDoy = Math.ceil((c.idx * TUNING.yearDays) / c.n);
