@@ -25999,4 +25999,125 @@ const fire = (node, type) => Promise.all((node.listeners[type] ?? []).map((fn) =
   }
 }
 
+// 129. THE PACK'S WEATHER AXIS RE-POINTS AT 17-WEATHER (0.14 §2.7). The enum
+// authority moves; the seal, the schema and the stored bytes do not.
+{
+  const pack = loadedPF.pack;
+  assert.equal(pack.VERSION, 1, "the widening costs no packVersion bump");
+
+  const sealedBrief = loadedPF.brief.validate(
+    {
+      scale: "village",
+      name: "Packton",
+      cast: ["Alder Vance", "Marla", "Wren Ash", "Perrin Quill"].map((name, index) => ({
+        name,
+        kind: "folk",
+        tint: "blue",
+        home: "Packton",
+        household: index + 1,
+      })),
+    },
+    { theme: "cozy-village", seed: 77 },
+  );
+  // A raw pack whose lines are 0.13-SHAPED: the only `w` values that build could
+  // ever have sealed are absent and "fair", because "fair" was the whole enum.
+  const rawPack = (weathers) => ({
+    templates: Array.from({ length: pack.TUNING.floorTemplates }, (_, i) => ({
+      slug: `w-ballast-${i}`,
+      giver: "Perrin Quill",
+      verb: "visit",
+      target: { place: "hall" },
+      n: 1,
+      title: `Ballast ${i}`,
+    })),
+    lines: Array.from({ length: pack.TUNING.floorLines }, (_, i) => ({
+      at: "settlement",
+      when: "day",
+      r: "stranger",
+      text: `line ${i}`,
+      ...(weathers[i % weathers.length] ? { w: weathers[i % weathers.length] } : {}),
+    })),
+  });
+  const seal = (raw, sealer = pack) => sealer.validate(raw, { theme: "cozy-village", seed: 77, brief: sealedBrief });
+
+  // THE FIVE WORDS SEAL NOW, and a word the sky does not have still does not.
+  {
+    const sealed = seal(rawPack(["fair", "overcast", "rain", "storm", "snow"]));
+    assert.deepEqual(
+      [...new Set(sealed.lines.map((row) => row.w))].sort(),
+      ["fair", "overcast", "rain", "snow", "storm"],
+      "every weather word survives the seal",
+    );
+    const refused = seal(rawPack(["fog"]));
+    assert.equal(refused.lines.length, pack.TUNING.floorLines, "a forward word drops the WORD and not the line");
+    assert.equal(
+      refused.lines.every((row) => row.w === undefined),
+      true,
+      "…and folds to absent rather than riding through",
+    );
+  }
+  // AN ABSENT `w` STAYS ABSENT, which is the byte diet and now also the read
+  // rule: a line with no weather is served under every sky.
+  {
+    const bare = seal(rawPack([null]));
+    assert.equal(bare.lines.length, pack.TUNING.floorLines, "the untagged lines are all there to be checked");
+    assert.equal(
+      bare.lines.every((row) => !("w" in row)),
+      true,
+      "absent stays absent through the seal",
+    );
+  }
+
+  // ZERO SEALED BYTES MOVE. Proven the only way that is not an argument: seal
+  // the same 0.13-shaped pack under a stack whose 61-pack still declares the
+  // one-word enum, and compare the two artifacts byte for byte.
+  {
+    const source = MODULES.map((name) => {
+      const text = readFileSync(join(here, "src", name), "utf8");
+      if (name !== "61-pack.js") return text;
+      const patched = text.replace("const WEATHERS = PF.weather.WORDS;", `const WEATHERS = ["fair"];`);
+      assert.notEqual(patched, text, "the rewrite still names 61-pack's weather axis");
+      return patched;
+    }).join("\n");
+    const oldPF = new Function(`"use strict";\n${source}\nreturn PF;`)();
+    oldPF.api.postSpatialLocations = async () => ({ ok: false, status: 404, body: null });
+    oldPF.api.patchMetadata = async () => {};
+    assert.deepEqual(oldPF.pack.WEATHERS, ["fair"], "the 0.13 stack under test really is one-worded");
+    const oldBrief = oldPF.brief.validate(
+      {
+        scale: "village",
+        name: "Packton",
+        cast: ["Alder Vance", "Marla", "Wren Ash", "Perrin Quill"].map((name, index) => ({
+          name,
+          kind: "folk",
+          tint: "blue",
+          home: "Packton",
+          household: index + 1,
+        })),
+      },
+      { theme: "cozy-village", seed: 77 },
+    );
+    const raw = rawPack(["fair", null]);
+    const then = oldPF.pack.validate(raw, { theme: "cozy-village", seed: 77, brief: oldBrief });
+    const now = seal(raw);
+    assert.ok(then && now, "both builds seal it");
+    assert.equal(JSON.stringify(now), JSON.stringify(then), "a 0.13-shaped pack seals to the same bytes under 0.14");
+    // Non-vacuous the other way: the widening IS observable on a pack that uses
+    // it, so the identity above is about 0.13's OWN values and not about a seal
+    // that ignores the axis.
+    const wide = rawPack(["storm"]);
+    assert.notEqual(
+      JSON.stringify(seal(wide)),
+      JSON.stringify(oldPF.pack.validate(wide, { theme: "cozy-village", seed: 77, brief: oldBrief })),
+      "…and a pack that names a 0.14 word does NOT seal the same, which is the widening working",
+    );
+  }
+
+  // AND THE AXIS IS THE SKY'S OWN ARRAY, not a copy of it — the DAYPARTS idiom,
+  // asserted last so the behaviour above is what a reverted re-point reds on.
+  // A copy is a second list that a sixth weather word would leave behind.
+  assert.equal(pack.WEATHERS, loadedPF.weather.WORDS, "the pack's axis IS the sky's list, not a copy of it");
+  assert.deepEqual(pack.WEATHERS, ["fair", "overcast", "rain", "storm", "snow"], "…all five words of it");
+}
+
 console.log("brief validator + compiler: all cases passed");

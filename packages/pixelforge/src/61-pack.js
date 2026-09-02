@@ -68,13 +68,19 @@ PF.pack = (() => {
   // TWO REGISTERS, stranger and friend — the ROADMAP's own words for E1 (iii),
   // and what P2's disposition ladder will switch between.
   const REGISTERS = ["stranger", "friend"];
-  // THE WEATHER AXIS, built and empty. L2 owns the rest of this list; until then
-  // "fair" is the only value there is, and it is OPTIONAL on a line precisely so
-  // the seam costs nothing: a generation that had to spell one constant word on
-  // every line would spend a tenth of its budget saying "fair" (plan §2.2b's byte
-  // diet). Absent reads as fair, here and forever.
-  const WEATHERS = ["fair"];
-  const WEATHER_DEFAULT = "fair";
+  // THE WEATHER AXIS, and 17-weather is its authority — the DAYPARTS idiom one
+  // line up, and legal here for the same reason: 17 loads before 61, so this is
+  // a forward read and a backward one would be a TypeError at load rather than a
+  // second list quietly disagreeing with the sky.
+  //
+  // AN ABSENT `w` READS AS ANY WEATHER, which is the generalization of the
+  // "absent reads as fair" this line used to say while fair was the only value
+  // there was. The first reader defines read semantics, and §2.6's is: a line
+  // with no `w` is served under every sky, a line tagged `rain` is served under
+  // any rain — the axis is the five WORDS and an intensity never enters it.
+  // Optional on purpose, and that is still a byte argument: a generation made to
+  // spell a word on every line would spend a tenth of its budget on it.
+  const WEATHERS = PF.weather.WORDS;
   // THE E7 TOPIC SEAM (plan §2.2c). Optional per line, defaulting to NONE, and it
   // exists so the Ask tree has branches to hang lines off when it arrives: rumor
   // and work are the two E7 is load-bearing for, place and smalltalk are the ones
@@ -1678,8 +1684,10 @@ PF.pack = (() => {
 const DEFAULT_PACKS = (() => {
   // Compact writers: the sealed shape is the object below, and the tuple form is
   // what keeps sixty-odd lines of dialogue readable in a source file. `w` is
-  // omitted deliberately — absent reads as fair, and the axis costs nothing until
-  // L2 fills it.
+  // omitted from every one of them deliberately — an absent `w` reads as ANY
+  // weather, so these lines are the ones a town always has to say, whatever the
+  // sky is doing. A weather-tagged default pack is a content decision nobody has
+  // made; the axis is here and the enrichment pass is where it would be spent.
   const line = (at, when, r, text, topic) => (topic ? { at, when, r, text, topic } : { at, when, r, text });
   const cast = (name, text) => ({ npc: name, text });
   const heard = (at, text, topic) => (topic ? { at, text, topic } : { at, text });
