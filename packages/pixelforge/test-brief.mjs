@@ -23013,6 +23013,23 @@ const fire = (node, type) => Promise.all((node.listeners[type] ?? []).map((fn) =
       t.hud.update();
       assert.equal(mounted(t.hud), false, "…and a splice closes it without anybody pressing anything");
       assert.equal(t.sim.talkAnchorId, null, "…latch cleared, clock running");
+      // …AND WALKING THROUGH A DOOR IS THE SAME QUESTION ASKED THE OTHER WAY.
+      // Identity membership is checked against the LIVE zone's array, so a
+      // player who steps into the inn has left the conversation — no cross-zone
+      // distance compare, which would be a category error: NPC coordinates are
+      // zone-local tiles rewritten into the destination frame on a splice, and
+      // two overlapping zones can put the partner ~0px "away".
+      zone.npcs.push(npc);
+      t.openOn(npc);
+      const held = t.sim.clockMin;
+      const elsewhere = Object.values(t.sim.world.zones).find((z) => z.id !== zone.id);
+      assert.ok(elsewhere, "the world has somewhere else to walk to");
+      t.sim.zoneId = elsewhere.id;
+      t.hud.update();
+      assert.equal(mounted(t.hud), false, "walking into another zone closes the window");
+      assert.equal(t.sim.talkAnchorId, null, "…and ends the conversation");
+      t.steps(MINUTE_STEPS);
+      assert.equal(t.sim.clockMin, held + 1, "…with the clock running again on the other side of the door");
     }
 
     // ── A COMPILED WORLD ANSWERS OFF ITS OWN RECORD ─────────────────────────
