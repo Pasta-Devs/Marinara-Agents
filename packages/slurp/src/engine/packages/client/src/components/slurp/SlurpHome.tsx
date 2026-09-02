@@ -1,6 +1,8 @@
 import {
   ArrowLeft,
   ArrowRight,
+  Bookmark,
+  BookmarkCheck,
   Check,
   ChevronDown,
   ChevronLeft,
@@ -122,7 +124,6 @@ import {
   HIDE_ON_SCROLL_CLASS,
   NoodleShell,
   ProfileInitial,
-  SlurpMobileHeader,
   useHideOnScroll,
   NOODLE_PERSONA_SWITCHER_PAGE_SIZE,
   NOODLE_PINK,
@@ -222,6 +223,13 @@ function isEmptyNoodlerPostDraft(draft: NoodlerPostDraft): boolean {
 
 function isSlurpStory(post: NoodlerPostView | NoodlerManagedPost): boolean {
   return (post as NoodlerPostView & { story?: boolean }).story === true || post.metadata?.noodlerPostType === "story";
+}
+
+const DEFAULT_SLURP_SUBSCRIPTION_PRICE = 5;
+
+function slurpSubscriptionPriceOf(profile: unknown): number {
+  const price = (profile as { subscriptionPrice?: unknown } | null)?.subscriptionPrice;
+  return typeof price === "number" && price >= 0 ? price : DEFAULT_SLURP_SUBSCRIPTION_PRICE;
 }
 
 function linkedPostIdForStory(post: NoodlerPostView): string | null {
@@ -1594,7 +1602,7 @@ export function SlurpHome({ navigation, onNavigate }: SlurpHomeProps) {
     );
   }
 
-  if (profileDraft || creationStep === "draft") {
+  if ((profileDraft || creationStep === "draft") && !editingProfileId) {
     return (
       <NoodleShell {...shellProps}>
         <NoodlerFrame
@@ -1686,6 +1694,11 @@ export function SlurpHome({ navigation, onNavigate }: SlurpHomeProps) {
           <StageProfileView
             key={`${selectedProfile.id}:${shellPersonaAccount?.id ?? "no-viewer"}`}
             profile={selectedProfile}
+            profileDraft={editingProfileId === selectedProfile.id ? profileDraft : null}
+            onProfileChange={(patch) => setProfileDraft((current) => (current ? { ...current, ...patch } : current))}
+            onCancelEdit={closeProfileEditor}
+            onSaveEdit={saveProfile}
+            profileSavePending={updateProfile.isPending}
             posts={postsQuery.data ?? []}
             viewerCreator={selectedViewerCreator}
             viewerAccount={shellPersonaAccount}
@@ -1971,9 +1984,6 @@ export function SlurpHome({ navigation, onNavigate }: SlurpHomeProps) {
   return (
     <NoodleShell {...shellProps} rightRail={feedRightRail}>
       <ViewerHub
-        personaAccount={shellPersonaAccount}
-        onOpenMobileDrawer={() => setMobileDrawerOpen(true)}
-        mobileDrawerTriggerRef={mobileDrawerTriggerRef}
         personas={personas}
         personasLoading={personasQuery.isLoading}
         personasError={personasQuery.isError}
@@ -2984,6 +2994,11 @@ function SlurpProfileMediaTile({
 
 function StageProfileView({
   profile,
+  profileDraft,
+  onProfileChange,
+  onCancelEdit,
+  onSaveEdit,
+  profileSavePending,
   posts,
   viewerCreator,
   viewerAccount,
@@ -3020,6 +3035,11 @@ function StageProfileView({
   onOpenImage,
 }: {
   profile: NoodlerManagedStageProfile;
+  profileDraft: NoodleStageProfileInput | null;
+  onProfileChange: (patch: Partial<NoodleStageProfileInput>) => void;
+  onCancelEdit: () => void;
+  onSaveEdit: () => void;
+  profileSavePending: boolean;
   posts: SlurpProfilePost[];
   viewerCreator: NonNullable<ReturnType<typeof useNoodlerViewer>["data"]>["creators"][number] | null;
   viewerAccount: NoodleAccount | null;
@@ -3089,6 +3109,14 @@ function StageProfileView({
   // Every Slurp Creator profile is operator-managed, so post controls and artwork editing stay
   // available regardless of which viewer persona is looking at the profile.
   const managedCreator = true;
+  const editing = Boolean(profileDraft);
+  const editDraft = profileDraft ?? {
+    displayName: profile.displayName,
+    handle: profile.handle,
+    bio: profile.bio,
+    stagePersonality: profile.stagePersonality,
+    disclosureMode: profile.disclosureMode ?? "hinted",
+  };
   const viewerPostById = new Map((viewerCreator?.posts ?? []).map((post) => [post.id, post]));
   const projectedPosts = posts.flatMap((entry) => {
     const managedPost = "managed" in entry ? entry.managed : null;
@@ -3325,7 +3353,7 @@ function StageProfileView({
           </button>
         }
         account={profile}
-        displayHandle={profile.handle}
+        displayHandle={editing ? editDraft.handle : profile.handle}
         identityEyebrow={localizeUi("ui.slurp.profile.creatorRoom")}
         handleMeta={
           <>
@@ -3364,7 +3392,7 @@ function StageProfileView({
         // one the shell keeps its plain accent band.
         banner={{
           url: bannerSrc,
-          canEdit: true,
+          canEdit: editing,
           uploadTarget: uploadProfileBanner.isPending ? "banner" : null,
           fileRef: profileBannerFileRef,
           onFileChange: (event) => {
@@ -3384,7 +3412,7 @@ function StageProfileView({
           },
         }}
         avatarUpload={{
-          canEdit: true,
+          canEdit: editing,
           uploadTarget: uploadProfileAvatar.isPending ? "avatar" : null,
           fileRef: profileAvatarFileRef,
           onFileChange: (event) => {
@@ -3404,23 +3432,65 @@ function StageProfileView({
           },
         }}
         decorativeBanner={false}
+        editor={{
+          isEditing: editing,
+          onStartEditing: onEdit,
+          onCancel: onCancelEdit,
+          onSave: onSaveEdit,
+          canSave: Boolean(editDraft.displayName.trim() && editDraft.handle.trim()),
+          isSaving: profileSavePending,
+          name: editDraft.displayName,
+          onNameChange: (value) => onProfileChange({ displayName: value }),
+          handle: editDraft.handle,
+          onHandleChange: (value) => onProfileChange({ handle: value }),
+          bio: editDraft.bio,
+          onBioChange: (value) => onProfileChange({ bio: value }),
+          location: "",
+          onLocationChange: () => undefined,
+          privateFields: (
+            <div className="space-y-3 rounded-xl border border-[var(--noodle-divider)] bg-[var(--accent)]/35 p-4">
+              <div>
+                <p className="text-sm font-bold">{localizeUi("ui.noodle.stageprofileform.stageVoice")}</p>
+                <p className="mt-1 text-xs leading-5 text-[var(--muted-foreground)]">
+                  {localizeUi("ui.noodle.stageprofileform.voiceAttitudeBoundariesAndCreatorPersona")}
+                </p>
+                <textarea
+                  value={editDraft.stagePersonality}
+                  maxLength={1000}
+                  onChange={(event) => onProfileChange({ stagePersonality: event.target.value })}
+                  className="mt-2 min-h-24 w-full resize-y rounded-lg border border-[var(--noodle-divider)] bg-[var(--background)] p-3 text-sm outline-none focus:border-[var(--noodle-accent)]"
+                />
+              </div>
+              <AudienceStancePresets
+                disabled={profileSavePending}
+                onApply={(sentence) =>
+                  onProfileChange({ stagePersonality: appendAudienceStance(editDraft.stagePersonality, sentence) })
+                }
+              />
+            </div>
+          ),
+        }}
         leadingActions={
-          !viewingOwnCreator && viewerCreator ? (
+          !editing && !viewingOwnCreator && viewerCreator ? (
             <>
               <button
                 type="button"
                 disabled={followPending}
                 onClick={() => onToggleFollow(profile.id, viewerCreator.followed)}
-                className={cn(
-                  "inline-flex min-h-11 items-center justify-center rounded-lg px-5 text-sm font-bold transition-[background-color,opacity,transform] active:scale-[0.96] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--noodle-accent)] motion-reduce:transition-none motion-reduce:active:scale-100 disabled:cursor-not-allowed disabled:opacity-50",
+                className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-full border border-[var(--noodle-divider)] text-[var(--noodle-accent)] transition-[background-color,opacity,transform] hover:bg-[var(--accent)] active:scale-[0.96] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--noodle-accent)] motion-reduce:transition-none motion-reduce:active:scale-100 disabled:cursor-not-allowed disabled:opacity-50"
+                aria-label={
                   viewerCreator.followed
-                    ? "border border-[var(--noodle-divider)] bg-transparent text-[var(--foreground)] hover:bg-[var(--accent)]"
-                    : "bg-[var(--foreground)] text-[var(--background)] hover:opacity-90",
-                )}
+                    ? localizeUi("ui.noodle.connections.tabs.following")
+                    : localizeUi("ui.slurp.profile.follow")
+                }
+                aria-pressed={viewerCreator.followed}
+                title={
+                  viewerCreator.followed
+                    ? localizeUi("ui.noodle.connections.tabs.following")
+                    : localizeUi("ui.slurp.profile.follow")
+                }
               >
-                {viewerCreator.followed
-                  ? localizeUi("ui.slurp.profile.following")
-                  : localizeUi("ui.slurp.profile.follow")}
+                {viewerCreator.followed ? <BookmarkCheck size={19} /> : <Bookmark size={19} />}
               </button>
               <button
                 type="button"
@@ -3435,7 +3505,9 @@ function StageProfileView({
               >
                 {viewerCreator.subscribed
                   ? localizeUi("ui.slurp.profile.subscribed")
-                  : localizeUi("ui.slurp.profile.subscribe")}
+                  : `${localizeUi("ui.slurp.profile.subscribe")} · ${localizeUi("ui.noodle.unlocksheet.price", {
+                      amount: slurpSubscriptionPriceOf(profile),
+                    })}`}
               </button>
             </>
           ) : null
@@ -3460,7 +3532,7 @@ function StageProfileView({
         activeTab={activeTab}
         onTabChange={setActiveTab}
         preTabsContent={
-          managedCreator ? (
+          managedCreator && !editing ? (
             <section
               data-slurp-creator-tools
               className="bg-[linear-gradient(110deg,color-mix(in_srgb,var(--noodle-accent)_7%,transparent),color-mix(in_srgb,var(--slurp-violet)_4%,transparent)_62%,transparent)]"
@@ -3899,9 +3971,6 @@ function StageProfileView({
 }
 
 function ViewerHub({
-  personaAccount,
-  onOpenMobileDrawer,
-  mobileDrawerTriggerRef,
   personas,
   personasLoading,
   personasError,
@@ -3929,9 +3998,6 @@ function ViewerHub({
   newSinceAt,
   onFeedShown,
 }: {
-  personaAccount: NoodleAccount | null;
-  onOpenMobileDrawer: () => void;
-  mobileDrawerTriggerRef: React.RefObject<HTMLButtonElement | null>;
   personas: Persona[];
   personasLoading: boolean;
   personasError: boolean;
@@ -4202,8 +4268,9 @@ function ViewerHub({
                   creator={creator}
                   pending={togglePending}
                   onOpenProfile={postCardCtx.openAuthorProfile}
-                  onToggleFollow={onToggleFollow}
-                  onToggleSubscription={onToggleSubscription}
+                  showFollow={false}
+                  showSubscription={false}
+                  showProfileAction
                 />
               ))}
             </div>
@@ -4219,8 +4286,7 @@ function ViewerHub({
 
   return (
     <div ref={setScroller} className="min-h-0 flex-1 overflow-y-auto">
-      {/* NoodleR opened straight onto its tab row while Noodle showed a wordmark bar;
-          both surfaces now carry the same phone header, and it travels with the tabs. */}
+      {/* Keep the feed controls attached to the scroller so the bar follows the reader's scroll. */}
       <div
         ref={setStickyHeader}
         className={cn(
@@ -4229,11 +4295,6 @@ function ViewerHub({
         )}
         data-component="SlurpHome.StickyHeader"
       >
-        <SlurpMobileHeader
-          personaAccount={personaAccount}
-          onOpenDrawer={onOpenMobileDrawer}
-          triggerRef={mobileDrawerTriggerRef}
-        />
         <div
           className="relative isolate overflow-hidden px-3 pb-2 pt-2 @min-[1024px]:px-5 @min-[1024px]:pt-4"
           data-slurp-home-masthead

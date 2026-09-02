@@ -1242,6 +1242,7 @@ export function useRefreshAllNoodlerCreatorsNow() {
     onSuccess: () =>
       Promise.all([
         qc.invalidateQueries({ queryKey: noodleKeys.noodlerAccounts() }),
+        qc.invalidateQueries({ queryKey: noodleKeys.noodlerReserveStatus() }),
         qc.invalidateQueries({
           queryKey: [...noodleKeys.noodlerRoot(), "posts"],
         }),
@@ -1260,6 +1261,7 @@ export function useRefreshTargetedNoodlerCreatorsNow() {
     onSuccess: () =>
       Promise.all([
         qc.invalidateQueries({ queryKey: noodleKeys.noodlerAccounts() }),
+        qc.invalidateQueries({ queryKey: noodleKeys.noodlerReserveStatus() }),
         qc.invalidateQueries({
           queryKey: [...noodleKeys.noodlerRoot(), "posts"],
         }),

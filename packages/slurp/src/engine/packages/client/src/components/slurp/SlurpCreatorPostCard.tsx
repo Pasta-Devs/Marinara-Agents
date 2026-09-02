@@ -281,7 +281,7 @@ export function LockedSlurpPostCard({
               type="button"
               disabled={unlockPending || subscriptionPending}
               onClick={() => setUnlockSheetOpen(true)}
-              className="mt-5 inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-xl bg-[var(--noodle-accent)] px-4 text-sm font-bold text-zinc-950 shadow-[0_10px_28px_-18px_var(--noodle-accent)] transition-[opacity,transform] hover:opacity-90 active:scale-[0.96] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--noodle-accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--slurp-surface)] motion-reduce:transition-none motion-reduce:active:scale-100 disabled:cursor-not-allowed disabled:opacity-50 [&_svg]:!text-zinc-950"
+              className="mt-5 inline-flex min-h-11 items-center justify-center gap-2 rounded-full bg-[var(--noodle-accent)] px-5 text-sm font-bold text-zinc-950 shadow-[0_10px_28px_-18px_var(--noodle-accent)] transition-[opacity,transform] hover:opacity-90 active:scale-[0.96] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--noodle-accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--slurp-surface)] motion-reduce:transition-none motion-reduce:active:scale-100 disabled:cursor-not-allowed disabled:opacity-50 [&_svg]:!text-zinc-950"
             >
               <Eye size={14} /> {localizeUi("ui.noodle.lockednoodlerpostcard.unlock")}
             </button>

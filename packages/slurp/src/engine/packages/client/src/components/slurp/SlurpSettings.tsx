@@ -40,6 +40,7 @@ import {
   useUpdateSlurpImageConnections,
   useUpdateSlurpSettings,
   type SlurpSettings,
+  type SlurpReserveStatus,
   type SlurpScheduleSlot,
 } from "../../hooks/use-slurp";
 import { showConfirmDialog } from "../../lib/app-dialogs";
@@ -67,7 +68,7 @@ type SlurpSettingsProps = {
 const archetypes = ["ordinary", "eccentric", "crossFandom", "raider", "organicDiscovery", "freeResource"] as const;
 const settingsSections = ["overview", "general", "creators", "images", "audience", "advanced"] as const;
 const DEFAULT_SLURP_GENERATION_GUIDANCE =
-  "All Slurp creators and viewers are adults (18+). This is an adult creator page: flirty, suggestive, teasing, and sensual posts are common, and explicit posts appear regularly when they suit the creator — but they are not required and need not be the majority. Tease the locked posts and answer flirty comments in kind. Keep each creator's personality intact: a shy creator flirts shyly, a blunt one bluntly, a funny one filthily. Ordinary posts — updates, humor, behind the scenes, project news — matter just as much and keep both the page and the character human. Keep low mood or conflict uncommon and character-specific, and do not let recent posts set the default mood.";
+  "All Slurp creators and viewers are adults (18+). This is an adult creator page. Posts are normallly sexually suggestive to outright NSFW. Creators will use Slurp to often excite its readers with their posts. The level of NSFW of a post is dependent on the creator's personality, a shy, innocent person will be suggestive, but still overall tame. On the other end of the spectrum, an outgoing personality who has no problems with sex, will often post very explicit material.";
 const DEFAULT_SLURP_IMAGE_GENERATION_PROMPT =
   "Create a polished social-media image for an adult Creator post. Match the creator's identity, personality, body, clothing, and established visual details. Follow the post's mood and subject. Describe the pose, expression, setting, lighting, camera angle, composition, and visible details clearly. Flirty, suggestive, sensual, or explicit imagery is allowed when it fits the post and creator, but do not force sexual content into ordinary updates. Keep the image coherent, intentional, and suitable for a public or locked Creator feed.";
 
@@ -178,8 +179,8 @@ export function SlurpSettings({
   const imageSettingsQuery = useSlurpImageConnections(
     section === "overview" || section === "images" || section === "creators",
   );
-  const fanStatusQuery = useNoodlerFanActivityStatus(section === "audience");
-  const reserveStatusQuery = useNoodlerReserveStatus(section === "creators");
+  const fanStatusQuery = useNoodlerFanActivityStatus(section === "overview" || section === "audience");
+  const reserveStatusQuery = useNoodlerReserveStatus(section === "overview" || section === "creators");
   const updateAuto = useUpdateNoodlerAutoPosting();
   const updateScheduleSlot = useUpdateNoodlerScheduleSlot();
   const refreshFans = useRefreshNoodlerFanActivityNow();
@@ -303,8 +304,8 @@ export function SlurpSettings({
   return (
     <>
       <main className="h-full overflow-y-auto bg-[var(--slurp-canvas)] pb-[calc(5rem+env(safe-area-inset-bottom))] text-[var(--slurp-text)] sm:pb-8">
-        <div className="mx-auto flex w-full flex-col gap-6 p-4 sm:p-6 lg:gap-8 lg:p-8" data-slurp-settings-layout>
-          <header className="relative isolate flex flex-wrap items-start justify-between gap-3 overflow-hidden rounded-2xl bg-[linear-gradient(120deg,color-mix(in_srgb,var(--slurp-surface-raised)_94%,transparent),color-mix(in_srgb,var(--noodle-accent)_17%,var(--slurp-surface-raised))_58%,color-mix(in_srgb,var(--slurp-violet)_13%,var(--slurp-surface-raised)))] p-4 shadow-[var(--slurp-shadow)] ring-1 ring-inset ring-[var(--slurp-outline)] sm:gap-5 sm:rounded-[1.75rem] sm:p-7">
+        <div className="mx-auto flex w-full flex-col gap-4 p-3 sm:p-5 lg:gap-6 lg:p-6" data-slurp-settings-layout>
+          <header className="relative isolate flex flex-wrap items-start justify-between gap-3 overflow-hidden rounded-2xl bg-[linear-gradient(120deg,color-mix(in_srgb,var(--slurp-surface-raised)_94%,transparent),color-mix(in_srgb,var(--noodle-accent)_17%,var(--slurp-surface-raised))_58%,color-mix(in_srgb,var(--slurp-violet)_13%,var(--slurp-surface-raised)))] p-4 shadow-[var(--slurp-shadow)] ring-1 ring-inset ring-[var(--slurp-outline)] sm:gap-4 sm:p-5">
             <span
               className="pointer-events-none absolute -end-12 -top-20 -z-10 h-52 w-52 rounded-full bg-[var(--noodle-accent)]/10 blur-3xl"
               aria-hidden="true"
@@ -317,10 +318,10 @@ export function SlurpSettings({
               <p className="hidden text-xs font-bold uppercase tracking-[0.18em] text-[var(--noodle-accent)] sm:block">
                 {t("ui.slurp.settings.backstage")}
               </p>
-              <h1 className="text-xl font-black tracking-tight text-balance sm:mt-1 sm:text-3xl">
+              <h1 className="text-xl font-black tracking-tight text-balance sm:mt-1 sm:text-2xl">
                 {t("ui.slurp.settings.title")}
               </h1>
-              <p className="mt-2 hidden max-w-2xl text-sm leading-6 text-[var(--slurp-muted)] text-pretty sm:block">
+              <p className="mt-1 hidden max-w-2xl text-xs leading-5 text-[var(--slurp-muted)] text-pretty sm:block">
                 {t("ui.slurp.settings.detail")}
               </p>
             </div>
@@ -380,10 +381,10 @@ export function SlurpSettings({
               ))}
             </nav>
 
-            <div className="mt-5 min-w-0 rounded-[1.75rem] bg-[linear-gradient(145deg,var(--slurp-surface),color-mix(in_srgb,var(--slurp-violet)_4%,var(--slurp-surface)))] p-4 shadow-[var(--slurp-shadow)] ring-1 ring-inset ring-[var(--slurp-outline)] md:mt-0 md:p-6 lg:p-8">
+            <div className="mt-4 min-w-0 rounded-2xl bg-[linear-gradient(145deg,var(--slurp-surface),color-mix(in_srgb,var(--slurp-violet)_4%,var(--slurp-surface)))] p-3 shadow-[var(--slurp-shadow)] ring-1 ring-inset ring-[var(--slurp-outline)] md:mt-0 md:p-5 lg:p-6">
               {section === "overview" && (
-                <div className="space-y-5">
-                  <section className="relative isolate overflow-hidden rounded-[1.5rem] bg-[var(--slurp-hero)] p-5 text-white shadow-[0_30px_70px_-38px_rgba(184,28,102,0.9)] sm:p-7">
+                <div className="space-y-4">
+                  <section className="relative isolate overflow-hidden rounded-2xl bg-[var(--slurp-hero)] p-4 text-white shadow-[0_30px_70px_-38px_rgba(184,28,102,0.9)] sm:p-5">
                     <span
                       className="pointer-events-none absolute -end-12 -top-20 -z-10 h-64 w-64 rounded-full border-[2rem] border-white/10"
                       aria-hidden="true"
@@ -393,12 +394,12 @@ export function SlurpSettings({
                         <p className="text-xs font-bold uppercase tracking-[0.16em] text-white/75">
                           {t("ui.slurp.settings.overview.eyebrow")}
                         </p>
-                        <h2 className="mt-2 text-2xl font-black tracking-tight text-balance sm:text-3xl">
+                        <h2 className="mt-1 text-xl font-black tracking-tight text-balance sm:text-2xl">
                           {automaticPublishingActive
                             ? t("ui.slurp.settings.overview.live")
                             : t("ui.slurp.settings.overview.paused")}
                         </h2>
-                        <p className="mt-2 max-w-xl text-sm leading-6 text-white/85 text-pretty">
+                        <p className="mt-1 max-w-xl text-xs leading-5 text-white/85 text-pretty">
                           {automaticPublishingActive
                             ? t("ui.slurp.settings.overview.liveDetail", {
                                 posts: settings.postsPerDay,
@@ -419,7 +420,19 @@ export function SlurpSettings({
                     </div>
                   </section>
 
-                  <div className="grid gap-4 lg:grid-cols-2">
+                  <OverviewActivity
+                    reserveStatus={reserveStatusQuery.data}
+                    reserveLoading={reserveStatusQuery.isLoading}
+                    reserveError={reserveStatusQuery.isError}
+                    fanStatus={fanStatusQuery.data}
+                    refreshPending={refreshCreators.isPending || refreshFans.isPending}
+                    onRetry={() => {
+                      void reserveStatusQuery.refetch();
+                      void fanStatusQuery.refetch();
+                    }}
+                  />
+
+                  <div className="grid gap-3 lg:grid-cols-2">
                     <OverviewCard
                       icon={<Activity size={21} aria-hidden="true" />}
                       title={t("ui.slurp.settings.tabs.publishing")}
@@ -498,7 +511,7 @@ export function SlurpSettings({
               )}
 
               {section === "general" && (
-                <div className="space-y-6">
+                <div className="space-y-4">
                   <SectionTitle
                     title={t("ui.slurp.settings.publishing.title")}
                     detail={t("ui.slurp.settings.publishing.detail")}
@@ -658,7 +671,7 @@ export function SlurpSettings({
               )}
 
               {section === "images" && (
-                <div className="space-y-6">
+                <div className="space-y-4">
                   <SectionTitle
                     title={t("ui.slurp.settings.images.title")}
                     detail={t("ui.slurp.settings.images.detail")}
@@ -1120,7 +1133,7 @@ export function SlurpSettings({
               )}
 
               {section === "audience" && (
-                <div className="space-y-6">
+                <div className="space-y-4">
                   <div className="flex flex-wrap items-start justify-between gap-3">
                     <SectionTitle
                       title={t("ui.slurp.settings.audience.title")}
@@ -1153,7 +1166,7 @@ export function SlurpSettings({
                     onChange={(value) => update("fanActivityEnabled", value)}
                   />
                   {settings.fanActivityEnabled ? (
-                    <div className="space-y-6">
+                    <div className="space-y-4">
                       <div className="grid gap-4 sm:grid-cols-2">
                         <Field
                           label={t("ui.slurp.settings.audience.runsPerDay")}
@@ -1559,17 +1572,17 @@ function OverviewCard({
     <button
       type="button"
       onClick={onClick}
-      className="group min-h-44 rounded-2xl bg-[var(--slurp-surface-raised)] p-5 text-start shadow-[0_20px_48px_-38px_rgba(71,16,52,0.9)] ring-1 ring-inset ring-[var(--slurp-outline)] transition-[background-color,transform] hover:bg-[color-mix(in_srgb,var(--noodle-accent)_6%,var(--slurp-surface-raised))] active:scale-[0.96] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--slurp-focus)] motion-reduce:transition-none motion-reduce:active:scale-100"
+      className="group min-h-36 rounded-xl bg-[var(--slurp-surface-raised)] p-4 text-start shadow-[0_20px_48px_-38px_rgba(71,16,52,0.9)] ring-1 ring-inset ring-[var(--slurp-outline)] transition-[background-color,transform] hover:bg-[color-mix(in_srgb,var(--noodle-accent)_6%,var(--slurp-surface-raised))] active:scale-[0.96] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--slurp-focus)] motion-reduce:transition-none motion-reduce:active:scale-100"
     >
       <span className="flex items-start gap-4">
         <span
-          className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br ${toneClass} text-white shadow-lg`}
+          className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-gradient-to-br ${toneClass} text-white shadow-lg`}
         >
           {icon}
         </span>
         <span className="min-w-0 flex-1">
           <span className="flex items-center gap-2">
-            <span className="text-base font-black">{title}</span>
+            <span className="text-sm font-black">{title}</span>
             {healthy !== undefined &&
               (healthy ? (
                 <CheckCircle2 size={15} className="shrink-0 text-[var(--slurp-success)]" aria-hidden="true" />
@@ -1587,9 +1600,9 @@ function OverviewCard({
               ))}
             </span>
           )}
-          <span className="mt-3 block space-y-1">
+          <span className="mt-2 block space-y-0.5">
             {details.map((detail) => (
-              <span key={detail} className="block text-xs leading-5 text-[var(--slurp-muted)]">
+              <span key={detail} className="block text-xs leading-4 text-[var(--slurp-muted)]">
                 {detail}
               </span>
             ))}
@@ -1602,6 +1615,136 @@ function OverviewCard({
         />
       </span>
     </button>
+  );
+}
+
+function OverviewActivity({
+  reserveStatus,
+  reserveLoading,
+  reserveError,
+  fanStatus,
+  refreshPending,
+  onRetry,
+}: {
+  reserveStatus?: SlurpReserveStatus;
+  reserveLoading: boolean;
+  reserveError: boolean;
+  fanStatus?: { usedRuns: number; runLimit: number; lastRun: { status: string; finishedAt: string | null } | null };
+  refreshPending: boolean;
+  onRetry: () => void;
+}) {
+  const { t, i18n } = useTranslation();
+  const formatTime = (value: string | null | undefined) =>
+    value
+      ? new Date(value).toLocaleTimeString(i18n.language, { hour: "numeric", minute: "2-digit" })
+      : t("ui.slurp.settings.overview.activity.notAvailable");
+  const usage = reserveStatus ? `${reserveStatus.textAttemptsUsed} / ${reserveStatus.postsPerDay}` : "--";
+  const fanUsage = fanStatus ? `${fanStatus.usedRuns} / ${fanStatus.runLimit}` : "--";
+
+  return (
+    <section
+      className="rounded-xl bg-[var(--slurp-surface-raised)] p-4 ring-1 ring-inset ring-[var(--slurp-outline)]"
+      aria-labelledby="slurp-activity-title"
+    >
+      <div className="flex items-center justify-between gap-3">
+        <div className="flex min-w-0 items-center gap-2">
+          <Activity size={17} className="shrink-0 text-[var(--noodle-accent)]" aria-hidden="true" />
+          <h2 id="slurp-activity-title" className="text-sm font-black">
+            {t("ui.slurp.settings.overview.activity.title")}
+          </h2>
+        </div>
+        {(reserveError || fanStatus === undefined) && (
+          <button
+            type="button"
+            onClick={onRetry}
+            className="inline-flex min-h-9 items-center gap-1.5 rounded-md px-2 text-xs font-semibold text-[var(--noodle-accent)] hover:bg-[var(--accent)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--slurp-focus)]"
+          >
+            <RefreshCw size={13} aria-hidden="true" />
+            {t("capabilities.actions.tryAgain")}
+          </button>
+        )}
+      </div>
+      <div className="mt-3 grid gap-2 sm:grid-cols-2">
+        <ActivityRow
+          icon={
+            refreshPending ? (
+              <Loader2 size={15} className="animate-spin motion-reduce:animate-none" />
+            ) : (
+              <CheckCircle2 size={15} />
+            )
+          }
+          label={t("ui.slurp.settings.overview.activity.current")}
+          value={
+            refreshPending
+              ? t("ui.slurp.settings.overview.activity.generating")
+              : t("ui.slurp.settings.overview.activity.idle")
+          }
+          tone={refreshPending ? "active" : "ready"}
+        />
+        <ActivityRow
+          icon={<CalendarClock size={15} />}
+          label={t("ui.slurp.settings.overview.activity.prepared")}
+          value={reserveLoading ? "..." : reserveStatus ? `${reserveStatus.preparedCount}` : "--"}
+          detail={
+            reserveStatus?.preparedThrough
+              ? t("ui.slurp.settings.overview.activity.through", { time: formatTime(reserveStatus.preparedThrough) })
+              : undefined
+          }
+          tone="waiting"
+        />
+        <ActivityRow
+          icon={<Sparkles size={15} />}
+          label={t("ui.slurp.settings.overview.activity.textUsage")}
+          value={usage}
+          detail={t("ui.slurp.settings.overview.activity.today")}
+          tone="active"
+        />
+        <ActivityRow
+          icon={<Megaphone size={15} />}
+          label={t("ui.slurp.settings.overview.activity.audience")}
+          value={fanUsage}
+          detail={
+            fanStatus?.lastRun
+              ? t("ui.slurp.settings.overview.activity.lastRun", { time: formatTime(fanStatus.lastRun.finishedAt) })
+              : undefined
+          }
+          tone="ready"
+        />
+      </div>
+    </section>
+  );
+}
+
+function ActivityRow({
+  icon,
+  label,
+  value,
+  detail,
+  tone,
+}: {
+  icon: ReactNode;
+  label: string;
+  value: string;
+  detail?: string;
+  tone: "active" | "ready" | "waiting";
+}) {
+  const toneClass =
+    tone === "active"
+      ? "text-[var(--noodle-accent)]"
+      : tone === "waiting"
+        ? "text-[var(--slurp-warning)]"
+        : "text-[var(--slurp-success)]";
+  return (
+    <div className="flex min-h-14 items-center gap-3 rounded-lg bg-[var(--slurp-canvas)] px-3 py-2 ring-1 ring-inset ring-[var(--slurp-outline)]">
+      <span className={`shrink-0 ${toneClass}`} aria-hidden="true">
+        {icon}
+      </span>
+      <span className="min-w-0 flex-1">
+        <span className="block text-xs font-semibold text-[var(--slurp-muted)]">{label}</span>
+        {detail && <span className="block truncate text-[0.68rem] text-[var(--slurp-muted)]">{detail}</span>}
+      </span>
+      <span className={`shrink-0 text-sm font-black ${toneClass}`}>{value}</span>
+    </div>
   );
 }
 
@@ -1658,7 +1801,7 @@ function Toggle({
   return (
     <label
       data-slurp-setting-toggle
-      className={`group flex ${compact ? "min-h-11" : "min-h-[4.5rem]"} cursor-pointer items-center justify-between gap-4 rounded-xl bg-[var(--slurp-surface-raised,var(--background))] px-4 py-3 text-sm shadow-[0_10px_24px_-24px_rgba(0,0,0,0.9)] ring-1 ring-inset ring-transparent transition-[background-color,box-shadow] hover:bg-[var(--accent)]/40 hover:ring-[var(--border)] focus-within:ring-2 focus-within:ring-[var(--noodle-accent)] motion-reduce:transition-none`}
+      className={`group flex ${compact ? "min-h-11" : "min-h-16"} cursor-pointer items-center justify-between gap-4 rounded-lg bg-[var(--slurp-surface-raised,var(--background))] px-3 py-2 text-sm shadow-[0_10px_24px_-24px_rgba(0,0,0,0.9)] ring-1 ring-inset ring-transparent transition-[background-color,box-shadow] hover:bg-[var(--accent)]/40 hover:ring-[var(--border)] focus-within:ring-2 focus-within:ring-[var(--noodle-accent)] motion-reduce:transition-none`}
     >
       <span className="min-w-0">
         <span className="block font-semibold">{label}</span>

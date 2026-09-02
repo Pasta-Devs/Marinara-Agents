@@ -28,6 +28,7 @@ export function SlurpCreatorProfileCard({
   onToggleSubscription,
   showFollow = variant === "regular",
   showSubscription = true,
+  showProfileAction = false,
   className,
 }: {
   creator: SlurpCreatorProfileCardCreator;
@@ -38,6 +39,7 @@ export function SlurpCreatorProfileCard({
   onToggleSubscription?: (creatorAccountId: string, subscribed: boolean) => void;
   showFollow?: boolean;
   showSubscription?: boolean;
+  showProfileAction?: boolean;
   className?: string;
 }) {
   const { t: localizeUi } = useUiTranslation();
@@ -45,7 +47,8 @@ export function SlurpCreatorProfileCard({
   const { src: bannerSrc, observe: observeBanner } = useNearViewportSlurpMediaSrc(creator.profile.bannerUrl ?? null, {
     width: 640,
   });
-  const actions = (showFollow && onToggleFollow) || (showSubscription && onToggleSubscription);
+  const actions =
+    (showFollow && onToggleFollow) || (showSubscription && onToggleSubscription) || (showProfileAction && openProfile);
 
   if (variant === "compact") {
     return (
@@ -136,9 +139,7 @@ export function SlurpCreatorProfileCard({
           </p>
         )}
         {actions && (
-          <div
-            className={cn("mt-auto grid gap-2 pt-4", showFollow && showSubscription ? "grid-cols-2" : "grid-cols-1")}
-          >
+          <div className="mt-auto flex flex-wrap gap-2 pt-4">
             {showFollow && onToggleFollow && (
               <button
                 type="button"
@@ -159,6 +160,15 @@ export function SlurpCreatorProfileCard({
                 {creator.subscribed
                   ? localizeUi("ui.slurp.profile.subscribed")
                   : localizeUi("ui.slurp.profile.subscribe")}
+              </button>
+            )}
+            {showProfileAction && openProfile && (
+              <button
+                type="button"
+                onClick={openProfile}
+                className="min-h-11 flex-1 rounded-lg border border-[var(--noodle-divider)] px-3 text-xs font-bold text-[var(--foreground)] hover:bg-[var(--accent)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--noodle-accent)]"
+              >
+                {localizeUi("ui.noodle.noodlehome.profile")}
               </button>
             )}
           </div>

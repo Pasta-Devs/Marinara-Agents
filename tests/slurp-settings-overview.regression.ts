@@ -35,6 +35,9 @@ async function main() {
   assert.match(settings, /const imagesReady = imageConnections\.length > 0 && imageEnabledCreators\.length > 0/u);
   assert.match(settings, /save\(\{ autoPostingScheduleEnabled: true, postsPerDay: value \}\)/u);
   assert.match(settings, /settings\.fanActivityEnabled \? \(/u);
+  assert.match(settings, /<OverviewActivity/u);
+  assert.match(settings, /section === "overview" \|\| section === "audience"/u);
+  assert.match(english, /"ui\.slurp\.settings\.overview\.activity\.title": "Activity"/u);
   assert.match(settings, /ui\.slurp\.settings\.audience\.feedExperience/u);
   assert.match(shell, /"--slurp-hero"/u);
   assert.match(shell, /"--slurp-nav-active"/u);

@@ -36,6 +36,7 @@ interface SlurpProfileSurfaceProps<TTab extends string = SlurpProfileTab> {
   editor?: {
     isEditing: boolean;
     onStartEditing: () => void;
+    onCancel: () => void;
     onSave: () => void;
     canSave: boolean;
     isSaving: boolean;
@@ -47,6 +48,7 @@ interface SlurpProfileSurfaceProps<TTab extends string = SlurpProfileTab> {
     onBioChange: (value: string) => void;
     location: string;
     onLocationChange: (value: string) => void;
+    privateFields?: ReactNode;
   };
   followAction?: { followed: boolean; pending: boolean; onToggle: () => void };
   leadingActions?: ReactNode;
@@ -119,7 +121,7 @@ export function SlurpProfileSurface<TTab extends string = SlurpProfileTab>({
   const hasProfileActions = Boolean(leadingActions || editor || followAction || secondaryActions);
   const profileActions = (
     <div className="grid min-h-11 w-full min-w-0 grid-cols-2 gap-2 [&>button]:min-w-0 [&>button:only-child]:col-span-2 @min-[560px]:flex @min-[560px]:w-auto @min-[560px]:flex-wrap @min-[560px]:justify-start @min-[560px]:[&>button:only-child]:col-span-1 @min-[860px]:justify-end">
-      {leadingActions}
+      {!editor?.isEditing && leadingActions}
       {editor ? (
         <button
           type="button"
@@ -153,7 +155,17 @@ export function SlurpProfileSurface<TTab extends string = SlurpProfileTab>({
             : localizeUi("ui.noodle.noodlehome.follow")}
         </button>
       ) : null}
-      {secondaryActions}
+      {editor?.isEditing ? (
+        <button
+          type="button"
+          onClick={editor.onCancel}
+          className="min-h-11 rounded-xl border border-[var(--noodle-divider)] px-5 text-xs font-bold transition-colors hover:bg-[var(--accent)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--noodle-accent)]"
+        >
+          {localizeUi("ui.slurp.creatorForm.cancel")}
+        </button>
+      ) : (
+        secondaryActions
+      )}
     </div>
   );
   return (
@@ -356,6 +368,7 @@ export function SlurpProfileSurface<TTab extends string = SlurpProfileTab>({
                 placeholder={localizeUi("ui.noodle.noodleprofilesurface.somewhereCozy")}
               />
             </label>
+            {editor.privateFields}
           </div>
         ) : (
           <div
