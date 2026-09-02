@@ -7542,8 +7542,13 @@ const shimCanvas = (w, h) => {
       span(x, y, sw, sh, (i) => put(i, color, color[3], op));
     },
     drawImage(src, ...rest) {
+      // The PIXEL size, which for an <img> is not the same thing as `width` /
+      // `height` — those reflect the attributes. A canvas has no natural size
+      // and falls through to its own.
+      const srcW = src.naturalWidth ?? src.width;
+      const srcH = src.naturalHeight ?? src.height;
       const [sx, sy, sw, sh, dx, dy, dw, dh] =
-        rest.length >= 8 ? rest : [0, 0, src.width, src.height, rest[0], rest[1], src.width, src.height];
+        rest.length >= 8 ? rest : [0, 0, srcW, srcH, rest[0], rest[1], srcW, srcH];
       const op = this.globalCompositeOperation;
       for (let y = 0; y < dh; y++) {
         for (let x = 0; x < dw; x++) {
@@ -7552,8 +7557,8 @@ const shimCanvas = (w, h) => {
           if (tx < 0 || ty < 0 || tx >= w || ty >= h) continue;
           const ux = sx + Math.floor((x * sw) / dw);
           const uy = sy + Math.floor((y * sh) / dh);
-          if (ux < 0 || uy < 0 || ux >= src.width || uy >= src.height) continue;
-          const j = (uy * src.width + ux) * 4;
+          if (ux < 0 || uy < 0 || ux >= srcW || uy >= srcH) continue;
+          const j = (uy * srcW + ux) * 4;
           const alpha = src._data[j + 3] / 255;
           if (alpha <= 0) continue;
           put((ty * w + tx) * 4, [src._data[j], src._data[j + 1], src._data[j + 2]], alpha, op);
@@ -7961,6 +7966,140 @@ const pixelsOf = (canvas) => Array.from(canvas._data).join(",");
       "the storm stops at the door: no tint, no snow, no rain indoors",
     );
   });
+}
+
+// ── A SHEET THAT CANNOT HOLD ITS OWN ID MAP (0.14 slice 3) ──────────────────
+// The degradation guarantee this package leans on everywhere is CONDITIONAL,
+// and the condition is easy to miss: `tileCanvas` returns null — and the Tier-0
+// painter answers — only for an id the atlas does NOT list. An id the atlas DOES
+// list, against a sheet too small to hold it, blits an empty in-bounds slot or a
+// no-op out-of-bounds rect. That is a SEE-THROUGH world, not procedural art, and
+// it is exactly the shape a release that appends four tile ids produces if the
+// sheet ships un-rebaked.
+//
+// So: the whole theme falls to Tier-0, and the terminal it falls into has to be
+// TERMINAL. "failed" is the deliberately transient one (a 30-second refetch of
+// the entire asset set), and a shipped-artifact mismatch is identical on every
+// retry — routing it there re-fetches forever, on exactly the broken installs.
+{
+  const prevFetch = globalThis.fetch;
+  const prevImage = globalThis.Image;
+  const prevWarn = console.warn;
+  const prevOffscreen = loadedPF.offscreen;
+  const A = loadedPF.assets;
+  const was = {
+    status: A.status,
+    atlas: A.atlas,
+    sprites: A.sprites,
+    atlasTheme: A.atlasTheme,
+    img: A._atlasImg,
+    requested: A._requestedTheme,
+    queued: A._queuedTheme,
+    failedAt: A._failedAt,
+    noPackage: A._noPackage,
+    latch: A._capacityLatch,
+    theme: loadedPF.art.theme,
+  };
+  // 33 ids over 8 columns need FIVE rows. The sheet below starts with four —
+  // 0.13's shipped shape, against 0.14's id map.
+  const tiles = {};
+  for (let i = 0; i < 33; i++) tiles[`t${i}`] = i;
+  let sheetHeight = 64;
+  let fetches = 0;
+  const warnings = [];
+  globalThis.fetch = async (url) => {
+    fetches += 1;
+    return {
+      ok: true,
+      json: async () =>
+        String(url).includes("sprites.json")
+          ? { frameWidth: 12, frameHeight: 16, frames: 4, rows: ["down", "up", "left", "right"], actors: {} }
+          : { tileSize: 16, columns: 8, tiles },
+    };
+  };
+  globalThis.Image = class {
+    set src(value) {
+      fetches += 1;
+      queueMicrotask(() => {
+        this.complete = true;
+        this.naturalWidth = 128;
+        // The pixel height, which is the one the guard has to read: `_image()`
+        // resolves on load without decode(), so the attribute-shadowed `height`
+        // is not it.
+        this.naturalHeight = sheetHeight;
+        this.width = 128;
+        // …and `height` is STAGED TO DISAGREE, because on a real <img> it can:
+        // it reflects the attribute, not the decoded pixels. A guard that read
+        // this number would measure whatever the markup happened to say, which
+        // is why the shipped one reads `naturalHeight` — and why this lane is
+        // the one place that difference can be proven.
+        this.height = 640;
+        this._data = new Uint8ClampedArray(128 * sheetHeight * 4).fill(255);
+        this.onload?.();
+      });
+    }
+  };
+  console.warn = (...args) => warnings.push(args.map(String).join(" "));
+  loadedPF.offscreen = shimCanvas;
+  try {
+    let cleared = 0;
+    const core = {
+      host: { packageId: "pixelforge", packageVersion: "0.14.0" },
+      render: { clearZones: () => (cleared += 1) },
+    };
+    Object.assign(A, {
+      status: "idle",
+      atlas: null,
+      _noPackage: false,
+      _failedAt: 0,
+      _requestedTheme: null,
+      _queuedTheme: null,
+      _capacityLatch: null,
+    });
+    loadedPF.art.setTheme("cozy-village");
+    await A.load(core);
+    assert.notEqual(A.status, "ready", "a sheet too small for its id map never goes ready");
+    assert.equal(A.tileCanvas("t0"), null, "…so every tile in the theme falls to Tier-0, not to a see-through slot");
+    // The existing failure path does not evict. This one must: a guard firing on
+    // the theme-change path would otherwise leave zones already composited from
+    // the old Tier-1 sheet standing beside fresh Tier-0 paint.
+    assert.equal(cleared, 1, "…after evicting the zones the old sheet had already composited");
+    assert.equal(warnings.length, 1, "…and it says so once");
+    const settled = fetches;
+    await A.load(core);
+    await A.load(core);
+    assert.equal(fetches, settled, "the latch is ONE-WAY: no 30-second refetch loop on a broken install");
+    assert.equal(warnings.length, 1, "…and no second warning either");
+
+    // A REAL FIX ARRIVES AS A VERSION BUMP, and that is a different key: the
+    // latch is per (theme, packageVersion), so the fixed install retries once
+    // rather than staying dark until somebody reinstalls.
+    sheetHeight = 80;
+    core.host.packageVersion = "0.14.1";
+    await A.load(core);
+    assert.ok(fetches > settled, "a version bump retries");
+    assert.equal(A.status, "ready", "…and a sheet that fits its id map loads");
+    assert.ok(A.tileCanvas("t0"), "…with the theme's tiles served off the sheet again");
+  } finally {
+    globalThis.fetch = prevFetch;
+    globalThis.Image = prevImage;
+    console.warn = prevWarn;
+    loadedPF.offscreen = prevOffscreen;
+    Object.assign(A, {
+      status: was.status,
+      atlas: was.atlas,
+      sprites: was.sprites,
+      atlasTheme: was.atlasTheme,
+      _atlasImg: was.img,
+      _requestedTheme: was.requested,
+      _queuedTheme: was.queued,
+      _failedAt: was.failedAt,
+      _noPackage: was.noPackage,
+      _capacityLatch: was.latch,
+    });
+    A._tileCanvases.clear();
+    loadedPF.art.setTheme(was.theme);
+  }
 }
 
 // ── A DAY HAS A SHAPE (0.10.0) ─────────────────────────────────────────────
