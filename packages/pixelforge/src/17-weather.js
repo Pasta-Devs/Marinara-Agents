@@ -199,6 +199,27 @@ PF.weather = (() => {
     snow: { label: { light: "light snow", heavy: "heavy snow" }, tint: null, indoors: true, takesIntensity: true },
   };
 
+  // ── The ground substitution ────────────────────────────────────────────────
+  // Snow is the one word that changes what you STAND on rather than the light
+  // over it, and this is the whole mechanism: a paint-time rename, read by the
+  // renderer's zone composite and by nothing else. The zone arrays are never
+  // touched — a compiled world holds `grass` in January exactly as it does in
+  // July, and the substitution lives in the picture.
+  //
+  // KEYED BY WORD, NOT INTENSITY, deliberately: the snow ground is binary. A
+  // flurry and a blizzard stand on the same white tiles, and what tells them
+  // apart is how much is falling and how dark the sky sits — the intensity
+  // reaches the header label, the rain tint and the particle pass, and stops.
+  //
+  // WHAT IS NOT HERE IS THE DESIGN. Paths, roads and stone stay bare because a
+  // trodden way is the first thing to clear; `dirt` stays bare too, and the
+  // snowed-crop-beside-bare-dirt seam at a field edge is the accepted price of
+  // that; water STAYS WATER, because it is liquid and fishable and a frozen
+  // pond is a mechanic nobody has asked for.
+  const SUBS = {
+    snow: { grass: "grassSnow", grass2: "grassSnow2", crop: "cropSnow", canopy: "canopySnow" },
+  };
+
   // ── Defensive resolution ───────────────────────────────────────────────────
   /** The world's axes, or the legacy defaults. Every table read in this module
    *  goes through here or through PF.own: a world object can arrive from a save
@@ -513,6 +534,7 @@ PF.weather = (() => {
     WORDS,
     INTENSITIES,
     WORD_META,
+    SUBS,
     TUNING,
     axesFor,
     axesOf,
@@ -596,6 +618,22 @@ PF.weather = (() => {
         say(`weather "${word}" has no "${level}" label`);
       if (row.tint != null && typeof PF.own(row.tint, level) !== "string")
         say(`weather "${word}" tints but has no "${level}" tint`);
+    }
+  }
+
+  // ── The ground substitution ────────────────────────────────────────────────
+  // Both halves of every row are painter ids, and 10-art answers an id it does
+  // not know with the GRASS painter — so a typo here is not a crash, it is a
+  // green square in the middle of a snowfield, on the one kind of day the table
+  // exists for. `painterNames()` is exported for exactly this comparison.
+  {
+    const painters = new Set(PF.art?.painterNames?.() ?? []);
+    for (const [word, map] of Object.entries(W.SUBS)) {
+      if (!W.WORDS.includes(word)) say(`SUBS keys on a weather "${word}" the axis does not name`);
+      for (const [from, to] of Object.entries(map)) {
+        if (!painters.has(from)) say(`SUBS substitutes a tile "${from}" the art module cannot paint`);
+        if (!painters.has(to)) say(`SUBS.${word} names a painter "${to}" the art module does not have`);
+      }
     }
   }
 

@@ -7359,16 +7359,27 @@ const cellarBrief = (prosperity) => ({
 // not render as nothing, it renders as GRASS (10-art's tile() falls back to the
 // grass painter for an unknown id), so a bridge with no painter would have been
 // a lawn laid across a pond and every assertion in this file would have passed.
+//
+// AND THE SUBSTITUTES JOIN IT (0.14 slice 3). A snow day does not place new
+// tiles — it SWAPS ids at paint time through 17-weather's SUBS table, which is
+// the same hole one layer further in: an id the compiler places, a table
+// renames, and no painter answers to draws as GRASS on the one kind of day the
+// swap exists for. So every placed tile is checked under its snow name too.
 {
   const drawable = new Set(loadedPF.art.painterNames());
   assert.ok(drawable.size > 10, `the art module reported its painters (${drawable.size})`);
   const missing = new Map();
+  const substitutes = Object.values(loadedPF.weather.SUBS);
+  const swap = (tile) => substitutes.map((map) => loadedPF.own(map, tile)).filter(Boolean);
   const look = (w, label) => {
     for (const zone of Object.values(w.zones)) {
       for (const layer of ["ground", "object", "overhead"]) {
         for (const tile of zone[layer]) {
-          if (!tile || drawable.has(tile)) continue;
-          if (!missing.has(tile)) missing.set(tile, `${label} ${zone.id}`);
+          if (!tile) continue;
+          for (const name of [tile, ...swap(tile)]) {
+            if (drawable.has(name)) continue;
+            if (!missing.has(name)) missing.set(name, `${label} ${zone.id}`);
+          }
         }
       }
     }
@@ -7436,6 +7447,304 @@ const cellarBrief = (prosperity) => ({
   assert.ok(
     generator.indexOf("\n  bridge(g, rnd) {") > generator.indexOf("\n  bell(g) {"),
     "…with the new id on the END of the table, where the atlas index map can take it",
+  );
+}
+
+// ── A SOFTWARE CANVAS, the size of what the art actually touches ─────────────
+// 10-art's painters use exactly `fillStyle` + `fillRect` and `clearRect`, and
+// 40-render adds `drawImage`, one composite op and a stroke. That is the whole
+// surface, so this is four bytes a pixel with those calls written on it rather
+// than a canvas emulator.
+//
+// It exists because the one question a painter can get wrong is invisible to
+// every name comparison in this file: `grassSnow` can be REGISTERED, pass the
+// placed-tile sweep, and still paint the same green square as `grass`. Pixels
+// are the only witness, and a headless suite that never rasterizes one is
+// exactly the blind spot the placed-tile sweep above was written for.
+const parseColor = (value) => {
+  if (typeof value !== "string") return null;
+  const text = value.trim();
+  if (text.startsWith("#")) {
+    const body =
+      text.length === 4
+        ? text
+            .slice(1)
+            .split("")
+            .map((c) => c + c)
+            .join("")
+        : text.slice(1);
+    if (body.length !== 6 || !/^[0-9a-f]{6}$/i.test(body)) return null;
+    return [parseInt(body.slice(0, 2), 16), parseInt(body.slice(2, 4), 16), parseInt(body.slice(4, 6), 16), 1];
+  }
+  const call = text.match(/^rgba?\(([^)]+)\)$/);
+  if (!call) return null;
+  const parts = call[1].split(",").map((n) => Number(n));
+  if (parts.length < 3 || parts.some((n) => !Number.isFinite(n))) return null;
+  return [parts[0], parts[1], parts[2], parts.length > 3 ? parts[3] : 1];
+};
+const shimCanvas = (w, h) => {
+  const data = new Uint8ClampedArray(w * h * 4);
+  const put = (i, color, alpha, op) => {
+    const [r, g, b] = color;
+    const dstA = data[i + 3] / 255;
+    if (op === "multiply") {
+      // Only ever spent over an opaque frame here, which is what the tint pass
+      // does: source × destination, mixed in by the source alpha.
+      data[i] = (data[i] * r) / 255 + data[i] * (1 - alpha) * (1 - r / 255);
+      data[i + 1] = (data[i + 1] * g) / 255 + data[i + 1] * (1 - alpha) * (1 - g / 255);
+      data[i + 2] = (data[i + 2] * b) / 255 + data[i + 2] * (1 - alpha) * (1 - b / 255);
+      return;
+    }
+    if (op === "lighter") {
+      data[i] += r * alpha;
+      data[i + 1] += g * alpha;
+      data[i + 2] += b * alpha;
+      data[i + 3] = Math.max(data[i + 3], alpha * 255);
+      return;
+    }
+    const outA = alpha + dstA * (1 - alpha);
+    if (outA <= 0) {
+      data[i] = data[i + 1] = data[i + 2] = data[i + 3] = 0;
+      return;
+    }
+    data[i] = (r * alpha + data[i] * dstA * (1 - alpha)) / outA;
+    data[i + 1] = (g * alpha + data[i + 1] * dstA * (1 - alpha)) / outA;
+    data[i + 2] = (b * alpha + data[i + 2] * dstA * (1 - alpha)) / outA;
+    data[i + 3] = outA * 255;
+  };
+  const span = (x, y, sw, sh, run) => {
+    const x0 = Math.max(0, Math.round(x));
+    const y0 = Math.max(0, Math.round(y));
+    const x1 = Math.min(w, Math.round(x + sw));
+    const y1 = Math.min(h, Math.round(y + sh));
+    for (let yy = y0; yy < y1; yy++) for (let xx = x0; xx < x1; xx++) run((yy * w + xx) * 4, xx, yy);
+  };
+  const ctx = {
+    fillStyle: "#000000",
+    strokeStyle: "#000000",
+    lineWidth: 1,
+    globalCompositeOperation: "source-over",
+    imageSmoothingEnabled: true,
+    createRadialGradient: () => ({ addColorStop() {} }),
+    // The letterbox frame is chrome, not a fact any lane reads.
+    strokeRect() {},
+    save() {},
+    restore() {},
+    clearRect(x, y, sw, sh) {
+      span(x, y, sw, sh, (i) => {
+        data[i] = data[i + 1] = data[i + 2] = data[i + 3] = 0;
+      });
+    },
+    fillRect(x, y, sw, sh) {
+      const color = parseColor(this.fillStyle);
+      if (!color) return; // a gradient fill: not a shape this file measures
+      const op = this.globalCompositeOperation;
+      span(x, y, sw, sh, (i) => put(i, color, color[3], op));
+    },
+    drawImage(src, ...rest) {
+      const [sx, sy, sw, sh, dx, dy, dw, dh] =
+        rest.length >= 8 ? rest : [0, 0, src.width, src.height, rest[0], rest[1], src.width, src.height];
+      const op = this.globalCompositeOperation;
+      for (let y = 0; y < dh; y++) {
+        for (let x = 0; x < dw; x++) {
+          const tx = Math.round(dx) + x;
+          const ty = Math.round(dy) + y;
+          if (tx < 0 || ty < 0 || tx >= w || ty >= h) continue;
+          const ux = sx + Math.floor((x * sw) / dw);
+          const uy = sy + Math.floor((y * sh) / dh);
+          if (ux < 0 || uy < 0 || ux >= src.width || uy >= src.height) continue;
+          const j = (uy * src.width + ux) * 4;
+          const alpha = src._data[j + 3] / 255;
+          if (alpha <= 0) continue;
+          put((ty * w + tx) * 4, [src._data[j], src._data[j + 1], src._data[j + 2]], alpha, op);
+        }
+      }
+    },
+  };
+  return { tagName: "CANVAS", width: w, height: h, _data: data, getContext: () => ctx };
+};
+/** Run a body with the software canvas under PF.offscreen, Tier-1 parked so the
+ *  Tier-0 painters are the ones answering, and every tile cache emptied on the
+ *  way in AND out — `tile()` memoizes per theme, and a shim canvas left in that
+ *  map would leak into whatever a later case draws. */
+const withCanvas = (run) => {
+  const realOffscreen = loadedPF.offscreen;
+  const realStatus = loadedPF.assets.status;
+  const realTheme = loadedPF.art.theme;
+  const clearArtCaches = () => {
+    // setTheme is the only public cache eviction, and it no-ops on the theme it
+    // is already standing in — so bounce off the other one.
+    loadedPF.art.setTheme(loadedPF.art.theme === "cozy-village" ? "sci-fi-colony" : "cozy-village");
+    loadedPF.art.setTheme(realTheme);
+  };
+  loadedPF.offscreen = shimCanvas;
+  loadedPF.assets.status = "idle";
+  clearArtCaches();
+  try {
+    run();
+  } finally {
+    loadedPF.offscreen = realOffscreen;
+    loadedPF.assets.status = realStatus;
+    clearArtCaches();
+  }
+};
+/** A tile's SHAPE, with the palette divided out: each distinct colour is
+ *  replaced by the order it is first seen in raster order. Two themes running
+ *  the SAME painter over different palettes produce the same string; a real
+ *  painter override cannot. This is the only comparison that can tell a themed
+ *  snow tile from a base one that merely got recoloured — which is the exact
+ *  miss a same-theme pin stays green over. */
+const shapeOf = (canvas) => {
+  const seen = new Map();
+  const out = [];
+  const d = canvas._data;
+  for (let i = 0; i < d.length; i += 4) {
+    const key = d[i + 3] === 0 ? "-" : `${d[i]},${d[i + 1]},${d[i + 2]},${d[i + 3]}`;
+    if (!seen.has(key)) seen.set(key, seen.size);
+    out.push(seen.get(key));
+  }
+  return out.join(".");
+};
+const pixelsOf = (canvas) => Array.from(canvas._data).join(",");
+
+// ── THE SNOW GROUND, IN BOTH TIERS AND BOTH THEMES (0.14 slice 3) ───────────
+// Snow is the one weather that changes the GROUND rather than the light, and it
+// does it by substitution: `SUBS` renames four ids at paint time and the
+// painters answer. Three things can go wrong and none of them throws — a
+// missing painter draws GRASS in a snowfield (10-art's unknown-id fallback), a
+// missing THEME painter draws the base shape (a comms mast turning into a
+// leafy blob every snow day, on the theme where snow shows most), and a
+// painter that exists but paints the summer tile is a snow day that never
+// arrives. Each gets a lane.
+{
+  const W = loadedPF.weather;
+  const drawable = new Set(loadedPF.art.painterNames());
+
+  // The table pairs against the painters it names, which is also what the
+  // module's own boot assert says — this lane says it where a reader looks.
+  assert.deepEqual(Object.keys(W.SUBS), ["snow"], "snow is the one word that changes the ground");
+  for (const [word, map] of Object.entries(W.SUBS)) {
+    assert.ok(W.WORDS.includes(word), `SUBS keys on the weather word "${word}"`);
+    for (const [from, to] of Object.entries(map)) {
+      assert.ok(drawable.has(from), `SUBS substitutes a real tile id (${from})`);
+      assert.ok(drawable.has(to), `…for one the art module can actually paint (${to})`);
+    }
+  }
+  assert.deepEqual(
+    Object.keys(W.SUBS.snow).sort(),
+    ["canopy", "crop", "grass", "grass2"],
+    "the four snowable ids, and no path, road, stone, dirt or water among them",
+  );
+
+  withCanvas(() => {
+    const drawn = {};
+    for (const theme of ["cozy-village", "sci-fi-colony"]) {
+      loadedPF.art.setTheme(theme);
+      drawn[theme] = {};
+      for (const id of ["grass", "grass2", "crop", "canopy", "grassSnow", "grassSnow2", "cropSnow", "canopySnow"])
+        drawn[theme][id] = loadedPF.art.tile(id);
+      // THE SNOW TILE IS NOT THE SUMMER TILE. Without this the whole slice can
+      // ship as a rename: every id registered, every sweep green, and a
+      // blizzard standing on grass.
+      for (const [from, to] of Object.entries(W.SUBS.snow))
+        assert.notEqual(
+          pixelsOf(drawn[theme][to]),
+          pixelsOf(drawn[theme][from]),
+          `${theme}: ${to} paints different pixels from ${from}`,
+        );
+    }
+
+    // THE THEME DIMENSION. sci-fi overrides `crop` and `canopy` in fair
+    // weather — a hydroponics tray and a comms mast — so their snow twins need
+    // overrides too, or the theme swaps SHAPES on snow days and a same-theme
+    // pin never sees it. Shape, not pixels: a palette recolour moves every
+    // pixel and proves nothing.
+    for (const id of ["cropSnow", "canopySnow"])
+      assert.notEqual(
+        shapeOf(drawn["sci-fi-colony"][id]),
+        shapeOf(drawn["cozy-village"][id]),
+        `${id} is a themed shape, not the base one recoloured`,
+      );
+    // …and the control that keeps the line above honest: `grass` is overridden
+    // by neither theme, so its snow twins must come out shape-IDENTICAL across
+    // the two palettes. If this ever fails the comparison above is measuring
+    // colour and the theme lane is worthless.
+    for (const id of ["grassSnow", "grassSnow2"])
+      assert.equal(
+        shapeOf(drawn["sci-fi-colony"][id]),
+        shapeOf(drawn["cozy-village"][id]),
+        `${id} is one shape both palettes recolour — the shape comparison divides the palette out`,
+      );
+
+    // THE GROUND SHOWS UNDER A FENCE AND A TREE. Object painters used to fill
+    // their own background with `grass1`, which on a snow day is a green square
+    // under every fence and — on sci-fi, whose `grass1` is regolith brown — a
+    // brown one under every guard rail and mast. Stripped at all ten sites; the
+    // renderer draws objects straight over the ground, so transparent is the
+    // whole fix.
+    for (const theme of ["cozy-village", "sci-fi-colony"]) {
+      loadedPF.art.setTheme(theme);
+      for (const id of ["fence", "trunk"]) {
+        const tile = loadedPF.art.tile(id);
+        for (const [x, y] of [
+          [0, 0],
+          [15, 15],
+        ])
+          assert.equal(
+            tile._data[(y * 16 + x) * 4 + 3],
+            0,
+            `${theme}: ${id} leaves the ground it stands on showing at (${x},${y})`,
+          );
+      }
+    }
+  });
+
+  // Tier-0's own source, swept whole for the fill that was stripped: four sites
+  // live in this file (base fence/trunk, sci-fi trunk/fence) and one regex
+  // covers them all, which is what stops the next painter from re-introducing
+  // the class one tile at a time.
+  const runtimeArt = readFileSync(join(here, "src", "10-art.js"), "utf8");
+  assert.equal(
+    (runtimeArt.match(/px\(g, 0, 0, T, T, PAL\.grass1\)/g) ?? []).length,
+    1,
+    "the only Tier-0 painter that lays grass is `grass` — no object declares the ground it stands on",
+  );
+
+  // ── AND THE SAME FOUR IDS IN TIER-1 (the shipped atlas) ───────────────────
+  // The generator writes PNGs to disk and cannot run inside this process, so
+  // its tables are read as SOURCE — the bridge case's precedent, and enough to
+  // catch the failure that matters: a tile added to one tier and forgotten in
+  // the other.
+  const generator = readFileSync(join(here, "build", "build-art.mjs"), "utf8");
+  const themeArt = generator.slice(0, generator.indexOf("const PAINTERS = {"));
+  for (const id of ["grassSnow", "grassSnow2", "cropSnow", "canopySnow"]) {
+    assert.ok(new RegExp(`\\n {2}${id}\\(g\\) \\{`).test(generator), `the Tier-1 generator paints ${id}`);
+    // APPENDED, NEVER INSERTED: that table's key order IS the atlas index map,
+    // so a snow tile slotted in beside `grass` where it reads nicely would
+    // shift every shipped index under it and repaint the whole world.
+    assert.ok(
+      generator.indexOf(`\n  ${id}(g) {`) > generator.indexOf("\n  bridge(g, rnd) {"),
+      `…with ${id} on the END of the table, where the atlas index map can take it`,
+    );
+  }
+  for (const id of ["cropSnow", "canopySnow"])
+    assert.ok(themeArt.includes(`${id}(g) {`), `…and the colony overrides ${id}, as it overrides the summer tile`);
+  assert.equal(
+    (generator.match(/g\.rect\(0, 0, T, T, PAL\.grass1\)/g) ?? []).length,
+    1,
+    "…and the only Tier-1 painter that lays grass is `grass`, for the same reason",
+  );
+  // Both palettes learn the snow keys — the base one warm-white for the cozy
+  // look, the colony's blue-white — or a snow tile bakes as `undefined`.
+  assert.equal(
+    (generator.match(/snow1: "/g) ?? []).length,
+    2,
+    "both Tier-1 palettes carry the snow keys (base + the colony override)",
+  );
+  assert.equal(
+    (runtimeArt.match(/snow1: "/g) ?? []).length,
+    2,
+    "…and both Tier-0 palettes do too",
   );
 }
 
