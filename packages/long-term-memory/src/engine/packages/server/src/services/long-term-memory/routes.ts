@@ -49,6 +49,8 @@ import {
   ltmSectionSchema,
   ltmStatusSchema,
   ltmSourceDerivedMemoriesResponseSchema,
+  ltmSourceDetailsRequestSchema,
+  ltmSourceDetailsResponseSchema,
   ltmSubjectsSchema,
   ltmRejectedSuggestionsResponseSchema,
 } from "../../../../shared/src/features/agents/long-term-memory/schema.js";
@@ -84,6 +86,7 @@ import {
   PROFESSOR_MARI_CHARACTER_ID,
   previewPackageInterop,
   previewPackageLorebooks,
+  sourcePackageDetails,
 } from "./interop.js";
 import {
   getLtmScopeChatIds,
@@ -841,6 +844,13 @@ export function createLongTermMemoryRoutes(runtime: {
         const chat = chatId ? await getPackagePersistence().getChat(chatId) : null;
         if (explicitChatId && !chat) return reply.status(404).send({ error: "Chat not found" });
         const operationId = randomUUID();
+        const controller = new AbortController();
+        const abort = () => controller.abort();
+        const close = () => {
+          if (request.raw.aborted) abort();
+        };
+        request.raw.once("aborted", abort);
+        request.raw.once("close", close);
         try {
           let languageModel;
           try {
@@ -867,6 +877,7 @@ export function createLongTermMemoryRoutes(runtime: {
               instruction: body.instruction,
               operationId,
               applyLowRisk: body.applyLowRisk,
+              signal: controller.signal,
               root,
               chatId: chat?.id,
             }),
@@ -875,6 +886,9 @@ export function createLongTermMemoryRoutes(runtime: {
           logger.error(error, "[ltm] Source note extraction route failed");
           const result = routeError(error, "Failed to extract long-term memory from source note");
           return reply.status(result.statusCode).send(result.body);
+        } finally {
+          request.raw.off("aborted", abort);
+          request.raw.off("close", close);
         }
       },
     );
@@ -882,6 +896,20 @@ export function createLongTermMemoryRoutes(runtime: {
       ltmInteropPreviewResponseSchema.parse(
         await previewPackageInterop(ltmInteropPreviewRequestSchema.parse(request.body ?? {}), root),
       ),
+    );
+    app.post<{ Body: unknown }>(
+      "/import/source-details",
+      { bodyLimit: DRAFT_BODY_LIMIT_BYTES },
+      async (request, reply) => {
+        try {
+          return ltmSourceDetailsResponseSchema.parse(
+            await sourcePackageDetails(ltmSourceDetailsRequestSchema.parse(request.body ?? {}), root),
+          );
+        } catch (error) {
+          const result = routeError(error, "Could not load long-term memory source details.");
+          return reply.status(result.statusCode).send(result.body);
+        }
+      },
     );
     app.post<{ Body: unknown }>(
       "/import/lorebooks/preview",
@@ -896,12 +924,13 @@ export function createLongTermMemoryRoutes(runtime: {
       { bodyLimit: DRAFT_BODY_LIMIT_BYTES },
       async (request, reply) => {
         const controller = new AbortController(),
-          abort = () => controller.abort();
+          abort = () => controller.abort(),
+          close = () => {
+            if (request.raw.aborted) abort();
+          };
         const body = ltmImportSourceNotesRequestSchema.parse(request.body ?? {});
         request.raw.once("aborted", abort);
-        request.raw.once("close", () => {
-          if (request.raw.aborted) abort();
-        });
+        request.raw.once("close", close);
         try {
           return ltmImportSourceNotesResponseSchema.parse(await importPackageInterop(body, root, controller.signal));
         } catch (error) {
@@ -909,6 +938,7 @@ export function createLongTermMemoryRoutes(runtime: {
           return reply.status(result.statusCode).send(result.body);
         } finally {
           request.raw.off("aborted", abort);
+          request.raw.off("close", close);
         }
       },
     );

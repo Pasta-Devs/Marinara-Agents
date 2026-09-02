@@ -3,7 +3,7 @@ import { useEffect, useId, useLayoutEffect, useRef, useState, type KeyboardEvent
 export type LtmWorkspacePane = "navigator" | "workbench" | "inspector";
 
 const compactBreakpointRem = 48;
-const wideBreakpointRem = 64;
+const wideBreakpointRem = 72;
 
 type WorkspaceSlot = {
   label: string;
