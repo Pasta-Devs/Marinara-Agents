@@ -24,6 +24,33 @@ PF.Hud = class {
         "pointer-events:auto;background:rgba(20,24,20,0.88);color:#f3efe2;border:1px solid rgba(243,239,226,0.35);" +
         "border-radius:8px;padding:9px 13px;font:700 12px/1 ui-monospace,Consolas,monospace;cursor:pointer;min-height:40px;",
     };
+    // ── THE RAIL CORRIDOR (plan §2.5, geometry constraint (a)) ───────────────
+    // The action column is anchored 12px from the right and its buttons grow
+    // LEFTWARD, so the talk window's own right inset is a PROMISE about how wide
+    // they are allowed to get — and it was a guess until this block. The window's
+    // bottom clears about three stacked buttons; the fourth and every one above it
+    // sit beside the conversation, and "Leave <24-character cast name> (E)" is 34
+    // characters — near 270px of 12px monospace against a corridor of 172. Any
+    // generated name over about nine characters painted over the window.
+    //
+    // ONE NUMBER, DERIVED, AND BOTH SURFACES SPEND IT. The corridor is sized on
+    // the widest label the rail can produce with NOTHING GENERATED in it — "Buy a
+    // angling rig (85 credits)", thirty characters — so no word this package
+    // writes itself is ever cut. What clips is generated text: a cast name on the
+    // census button, a spot name on the fishing one, both off a channel with no
+    // cap this file can trust. The clip is VISUAL ONLY — `textContent` stays
+    // whole, so the accessible name still reads the full label.
+    //
+    // The window's own title row is deliberately NOT clipped: the window bounds it
+    // already, and cutting "<name> — <role>" would lose the role to save a line.
+    const RAIL_ADVANCE = 7.2; // one 12px monospace character, the widest common advance
+    const RAIL_CHROME = 28; // 13px of padding and a 1px border, on both sides
+    const RAIL_INSET = 12; // what the column and the window are both inset by
+    const RAIL_BTN_MAX = Math.ceil(30 * RAIL_ADVANCE + RAIL_CHROME);
+    // The window's right inset: the column's own inset, the widest button it may
+    // draw, and one inset of clear air between the two.
+    this.RAIL_RESERVE = RAIL_INSET + RAIL_BTN_MAX + RAIL_INSET;
+    S.railBtn = `${S.btn}max-width:${RAIL_BTN_MAX}px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;`;
     this.S = S;
 
     // Cutscene caption: centred, non-interactive, only while a beat runs.
@@ -60,7 +87,7 @@ PF.Hud = class {
       [this.locChip, this.clockChip, this.purseChip, this.journalChip, this.sheetChip],
     );
 
-    this.talkBtn = this._btn("Talk (E)", () => core.interact());
+    this.talkBtn = this._btn("Talk (E)", () => core.interact(), S.railBtn);
     // S3's one live transaction (P1's bed). Shown whenever there is a berth to be
     // had where the player is standing — a keeper within reach, or the room they
     // keep with them in it (59-economy berthOffer) — and shown REFUSING rather
@@ -72,21 +99,21 @@ PF.Hud = class {
     // button that ships visible is on screen for every frame before the first
     // update — and for the whole of a mount that never reaches one (no sim yet),
     // quoting a room in a world that has not compiled.
-    this.berthBtn = this._btn("Rent a berth", () => this.rentBerth());
+    this.berthBtn = this._btn("Rent a berth", () => this.rentBerth(), S.railBtn);
     this.berthBtn.style.display = "none";
     // The keeper's SECOND trade (M8's amendment: no rod is ever free). Same
     // discipline as the berth beside it — boot hidden, offer-gated per frame,
     // dimmed rather than hidden when the purse is short — with one deliberate
     // divergence: it VANISHES once the ladder is topped out, because rod
     // ownership is global and permanent and a forever-dimmed chip is dead chrome.
-    this.buyRodBtn = this._btn("Buy a rod", () => this.buyRod());
+    this.buyRodBtn = this._btn("Buy a rod", () => this.buyRod(), S.railBtn);
     this.buyRodBtn.style.display = "none";
-    this.travelBtn = this._btn("Travel", () => this.toggleTravel());
+    this.travelBtn = this._btn("Travel", () => this.toggleTravel(), S.railBtn);
     // 0.12's headline verb, on the same gating as the berth: shown whenever the
     // player is standing at a registry spot that holds water — INCLUDING when
     // they have no rod, because the refusal is what points them at the vendor and
     // a button that hides itself teaches nobody the mechanic exists.
-    this.fishBtn = this._btn("🎣 Fish…", () => this.toggleFish());
+    this.fishBtn = this._btn("🎣 Fish…", () => this.toggleFish(), S.railBtn);
     this.fishBtn.style.display = "none";
     this.fishMenu = PF.el("div", {
       style:
@@ -96,7 +123,7 @@ PF.Hud = class {
     // you can only do where you have a bed, and the only one that leaves a
     // wrap-up behind. Boot hidden and offer-gated per frame, like the berth that
     // sells the bed in the first place.
-    this.sleepBtn = this._btn("🛏 Sleep…", () => this.toggleSleep());
+    this.sleepBtn = this._btn("🛏 Sleep…", () => this.toggleSleep(), S.railBtn);
     this.sleepBtn.style.display = "none";
     this.sleepMenu = PF.el("div", {
       style:
@@ -115,15 +142,15 @@ PF.Hud = class {
     // reached from a button in this column, so a post-playtest reshape — a
     // different trigger, a different surface — moves the entry and the gate and
     // leaves the work untouched.
-    this.boardBtn = this._btn("📋 Board", () => this.toggleBoard());
+    this.boardBtn = this._btn("📋 Board", () => this.toggleBoard(), S.railBtn);
     this.boardBtn.style.display = "none";
     this.boardMenu = PF.el("div", {
       style:
         "display:none;flex-direction:column;gap:6px;align-items:flex-end;max-height:40vh;overflow:auto;pointer-events:auto;",
     });
-    this.waitBtn = this._btn("⏩ Wait…", () => this.toggleWait());
-    this.keyboardBtn = this._btn("Keyboard", () => core.setMode("dialogue"));
-    this.resumeBtn = this._btn("▶ Resume walking", () => core.resume());
+    this.waitBtn = this._btn("⏩ Wait…", () => this.toggleWait(), S.railBtn);
+    this.keyboardBtn = this._btn("Keyboard", () => core.setMode("dialogue"), S.railBtn);
+    this.resumeBtn = this._btn("▶ Resume walking", () => core.resume(), S.railBtn);
     this.waitMenu = PF.el("div", {
       style:
         "display:none;flex-direction:column;gap:6px;align-items:flex-end;max-height:40vh;overflow:auto;pointer-events:auto;",
@@ -357,7 +384,7 @@ PF.Hud = class {
       {
         "aria-label": "conversation",
         style:
-          "position:absolute;left:12px;right:184px;bottom:calc(190px + env(safe-area-inset-bottom,0px));" +
+          `position:absolute;left:12px;right:${this.RAIL_RESERVE}px;bottom:calc(190px + env(safe-area-inset-bottom,0px));` +
           "display:none;flex-direction:column;gap:8px;max-height:40vh;z-index:3;pointer-events:auto;" +
           "padding:10px 12px;box-sizing:border-box;border-radius:10px;background:rgba(12,14,12,0.94);" +
           "border:1px solid rgba(243,239,226,0.3);color:#f3efe2;font:12px/1.6 ui-monospace,Consolas,monospace;",
@@ -461,8 +488,11 @@ PF.Hud = class {
     this.refreshChips();
   }
 
-  _btn(text, onclick) {
-    return PF.el("button", { type: "button", style: this.S.btn, text, onclick });
+  /** A button in this HUD's clothes. `style` is the seam the RAIL spends: its
+   *  column shares a corridor with the talk window, so its buttons wear the
+   *  clipping variant while menu rows inside a bounded panel wear the plain one. */
+  _btn(text, onclick, style) {
+    return PF.el("button", { type: "button", style: style ?? this.S.btn, text, onclick });
   }
 
   /** A glyph-width topbar opener: a button wearing the chip's styling, boot

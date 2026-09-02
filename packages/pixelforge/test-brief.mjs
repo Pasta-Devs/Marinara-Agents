@@ -22504,6 +22504,64 @@ const fire = (node, type) => Promise.all((node.listeners[type] ?? []).map((fn) =
       assert.equal(heardAfter, 0, "the pointerdown pair is unbound at the close, not left on the document");
     }
 
+    // ── THE RAIL CLEARS THE WINDOW, MEASURED AND NOT ASSUMED ────────────────
+    // The window's right inset is a promise about how wide the action column may
+    // get, and the old shape lane pinned only that the inset EXISTS (`right:\d+px`)
+    // — never that anything honours it. It did not: the census button reads
+    // "Leave <cast name> (E)", cast names run to 24 characters, and the fourth
+    // rail button up is level with the conversation. So this lane measures the
+    // corridor with the WORST NAME THE SEAL ALLOWS in it.
+    {
+      const t = stage({ chatId: "chat-clearance" });
+      const npc = t.npcs()[0];
+      // 24 is 18-brief's cap on a cast name, so this is the widest label the
+      // census button can ever be asked to draw.
+      npc.name = "Wrenmarshall Ashenbrook";
+      assert.equal(npc.name.length, 23, "…and the probe name is at the seal's own cap, less the space it needs");
+      t.openOn(npc);
+      t.hud.update();
+      assert.equal(t.hud.talkBtn.textContent, `Leave ${npc.name} (E)`, "the census button is naming the anchor");
+      // The three numbers, all read off the shipped styles rather than restated:
+      // where the column sits, where the window stops, and what each button is
+      // allowed to grow to.
+      const px = (css, prop) => {
+        const hit = new RegExp(`${prop}:\\s*(\\d+)px`).exec(String(css));
+        return hit ? Number(hit[1]) : null;
+      };
+      const railInset = px(t.hud.actions.style.cssText, "right");
+      const windowRight = px(t.hud.talkEl.style.cssText, "right");
+      assert.ok(railInset !== null && windowRight !== null, "both surfaces declare their right inset in pixels");
+      // One 12px monospace character, the widest common advance — the same number
+      // the HUD sizes the corridor with, restated here so the lane MEASURES the
+      // labels rather than trusting the constant that produced them.
+      const ADVANCE = 7.2;
+      const CHROME = 28;
+      for (const node of t.hud.actions.children) {
+        const label = String(node.textContent ?? "");
+        if (!label) continue; // the four menus, empty until they are opened
+        const cap = px(node.style.cssText, "max-width");
+        assert.ok(cap !== null, `the rail button "${label}" declares a width it may not pass`);
+        assert.match(
+          String(node.style.cssText),
+          /text-overflow:ellipsis/,
+          `…and "${label}" says so with an ellipsis rather than a silent cut`,
+        );
+        const drawn = Math.min(Math.ceil(label.length * ADVANCE + CHROME), cap);
+        assert.ok(
+          railInset + drawn <= windowRight,
+          `"${label}" is ${drawn}px at ${railInset}px in, which clears the window's ${windowRight}px inset`,
+        );
+      }
+      // AND THE UNCLIPPED LABEL REALLY WOULD NOT HAVE. This is the number the
+      // lane exists for: without the cap the census button overruns the corridor,
+      // so the clip is load-bearing and not decoration.
+      const bare = Math.ceil(t.hud.talkBtn.textContent.length * ADVANCE + CHROME);
+      assert.ok(
+        railInset + bare > windowRight,
+        `…and unclipped it would have been ${bare}px, over the ${windowRight - railInset}px corridor`,
+      );
+    }
+
     // ── ONE SURFACE AT A TIME, IN BOTH DIRECTIONS ───────────────────────────
     // Counting the window in `closePanels` alone gives the set no exclusion in
     // the direction that matters: the topbar openers stay interactive over an
