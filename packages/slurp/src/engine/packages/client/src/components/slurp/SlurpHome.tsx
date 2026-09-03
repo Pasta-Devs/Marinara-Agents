@@ -9,7 +9,9 @@ import {
   ChevronRight,
   Clock3,
   Eye,
+  LayoutGrid,
   Link,
+  List,
   Loader2,
   Lock,
   MessageCircle,
@@ -138,7 +140,7 @@ import {
   NOODLE_PINK,
 } from "./SlurpShell";
 import { SlurpProfileSurface } from "./SlurpProfileSurface";
-import { SlurpSettings } from "./SlurpSettings";
+import { SlurpSettings, SlurpSettingsSidebar } from "./SlurpSettings";
 import { NoodleImageComposer } from "./SlurpImageComposer";
 import { NoodlePollComposer } from "./SlurpPollComposer";
 import { PostImageCropEditor, PostImageFrame } from "./PostImageCropEditor";
@@ -1475,7 +1477,12 @@ export function SlurpHome({ navigation, onNavigate }: SlurpHomeProps) {
 
   if (navigation.mode === "creator-settings") {
     return (
-      <NoodleShell {...shellProps}>
+      <NoodleShell
+        {...shellProps}
+        desktopSidebar={
+          <SlurpSettingsSidebar navigation={navigation} onNavigate={onNavigate} onExit={exitToCreatorHub} />
+        }
+      >
         <SlurpSettings
           navigation={navigation}
           onNavigate={onNavigate}
@@ -3092,6 +3099,45 @@ function SlurpProfileMediaTile({
   );
 }
 
+/**
+ * The same feed as images only. Locked and text posts have nothing to show on a wall, so they
+ * sit this view out rather than becoming grey squares.
+ */
+function SlurpMediaWall({
+  items,
+  onOpenImage,
+  onLoadMore,
+  total,
+}: {
+  items: { post: NoodlerPostView & { locked?: boolean }; creator: { profile: NoodlerStageProfile } }[];
+  onOpenImage: (url: string, id: string) => void;
+  onLoadMore?: () => void;
+  total: number;
+}) {
+  const { t: localizeUi } = useUiTranslation();
+  const tiles = items.flatMap<SlurpProfileImagePost>(({ post, creator }) => {
+    if (post.locked || typeof post.imageUrl !== "string") return [];
+    return [{ ...toNoodlePostCardModel(post, creator.profile), imageUrl: post.imageUrl }];
+  });
+  if (tiles.length === 0) {
+    return (
+      <p className="px-4 py-8 text-xs text-[var(--muted-foreground)]">
+        {localizeUi("ui.slurp.home.layout.empty", { defaultValue: "No images in this feed yet." })}
+      </p>
+    );
+  }
+  return (
+    <div className="bg-[var(--slurp-canvas)] pb-6">
+      <div className="grid grid-cols-2 gap-px bg-[var(--noodle-divider)] @min-[620px]:grid-cols-3">
+        {tiles.map((post) => (
+          <SlurpProfileMediaTile key={post.id} post={post} onOpenImage={onOpenImage} />
+        ))}
+      </div>
+      {onLoadMore && <LoadMoreFeedButton visible={items.length} total={total} onLoadMore={onLoadMore} />}
+    </div>
+  );
+}
+
 function StageProfileView({
   profile,
   profileDraft,
@@ -4147,6 +4193,7 @@ function ViewerHub({
   const [discoverCollapsed, setDiscoverCollapsed] = useState(false);
   const [visibleFeedCount, setVisibleFeedCount] = useState(NOODLER_FEED_WINDOW_SIZE);
   const [activeMomentId, setActiveMomentId] = useState<string | null>(null);
+  const [feedLayout, setFeedLayout] = useState<"list" | "wall">("list");
   const [momentCutoff] = useState(() => Date.now() - SLURP_MOMENT_WINDOW_MS);
   const inlineAdsQuery = useSlurpInlineAds(scope?.viewer.entityId ?? null, null, [
     tab === "all" ? "discover" : "following",
@@ -4435,8 +4482,8 @@ function ViewerHub({
             type="button"
             onClick={onOpenWallet}
             className="justify-self-end flex h-9 items-center gap-1.5 rounded-full px-3 text-sm font-semibold tabular-nums text-[var(--muted-foreground)] ring-1 ring-inset ring-[var(--noodle-divider)] transition-colors hover:bg-[var(--accent)] hover:text-[var(--foreground)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--noodle-accent)]"
-            aria-label={localizeUi("ui.slurp.wallet.balance", { amount: activeWalletCoins })}
-            title={localizeUi("ui.slurp.wallet.balance", { amount: activeWalletCoins })}
+            aria-label={localizeUi("ui.slurp.wallet.balance", { amount: walletCoins })}
+            title={localizeUi("ui.slurp.wallet.balance", { amount: walletCoins })}
           >
             {walletCoins}
             <span
@@ -4453,42 +4500,72 @@ function ViewerHub({
             aria-hidden="true"
           />
           {/* Flat underline tabs: the accent marks the active feed, nothing else competes with the posts. */}
-          <div
-            className="relative grid grid-cols-2 @min-[1024px]:max-w-xs"
-            role="tablist"
-            aria-label={localizeUi("ui.noodle.viewerhub.feedTabs")}
-          >
-            {(
-              [
-                { id: "following", label: localizeUi("ui.noodle.viewerhub.tabs.following") },
-                { id: "all", label: localizeUi("ui.noodle.viewerhub.tabs.allCreators") },
-              ] as const
-            ).map((option) => (
-              <button
-                key={option.id}
-                type="button"
-                onClick={() => onTabChange(option.id)}
-                role="tab"
-                aria-selected={tab === option.id}
-                className={cn(
-                  "relative flex min-h-11 items-center justify-center px-3 text-sm font-bold text-[var(--muted-foreground)] transition-colors hover:text-[var(--foreground)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--noodle-accent)]",
-                  tab === option.id && "text-[var(--foreground)]",
-                )}
-              >
-                {option.label}
-              </button>
-            ))}
-            {/* One underline that travels, rather than two that blink in and out. Half the row
-                wide so the transform is a plain 0/100%, with the bar centred inside it. */}
-            <span
-              className={cn(
-                "pointer-events-none absolute bottom-0 left-0 h-0.5 w-1/2 transition-transform duration-200 ease-out motion-reduce:transition-none",
-                tab === "all" && "translate-x-full",
-              )}
-              aria-hidden="true"
+          <div className="flex items-center justify-between gap-3">
+            <div
+              className="relative grid flex-1 grid-cols-2 @min-[1024px]:max-w-xs"
+              role="tablist"
+              aria-label={localizeUi("ui.noodle.viewerhub.feedTabs")}
             >
-              <span className="mx-auto block h-full w-12 rounded-full bg-[var(--noodle-accent)]" />
-            </span>
+              {(
+                [
+                  { id: "following", label: localizeUi("ui.noodle.viewerhub.tabs.following") },
+                  { id: "all", label: localizeUi("ui.noodle.viewerhub.tabs.allCreators") },
+                ] as const
+              ).map((option) => (
+                <button
+                  key={option.id}
+                  type="button"
+                  onClick={() => onTabChange(option.id)}
+                  role="tab"
+                  aria-selected={tab === option.id}
+                  className={cn(
+                    "relative flex min-h-11 items-center justify-center px-3 text-sm font-bold text-[var(--muted-foreground)] transition-colors hover:text-[var(--foreground)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--noodle-accent)]",
+                    tab === option.id && "text-[var(--foreground)]",
+                  )}
+                >
+                  {option.label}
+                </button>
+              ))}
+              {/* One underline that travels, rather than two that blink in and out. Half the row
+                wide so the transform is a plain 0/100%, with the bar centred inside it. */}
+              <span
+                className={cn(
+                  "pointer-events-none absolute bottom-0 left-0 h-0.5 w-1/2 transition-transform duration-200 ease-out motion-reduce:transition-none",
+                  tab === "all" && "translate-x-full",
+                )}
+                aria-hidden="true"
+              >
+                <span className="mx-auto block h-full w-12 rounded-full bg-[var(--noodle-accent)]" />
+              </span>
+            </div>
+            {/* List or media wall. Same feed, two ways to read it. */}
+            <div className="flex shrink-0 items-center gap-1 rounded-full bg-[var(--accent)] p-1 ring-1 ring-inset ring-[var(--noodle-divider)]">
+              {(
+                [
+                  { id: "list", icon: List, label: localizeUi("ui.slurp.home.layout.list", { defaultValue: "List" }) },
+                  {
+                    id: "wall",
+                    icon: LayoutGrid,
+                    label: localizeUi("ui.slurp.home.layout.wall", { defaultValue: "Media wall" }),
+                  },
+                ] as const
+              ).map((option) => (
+                <button
+                  key={option.id}
+                  type="button"
+                  onClick={() => setFeedLayout(option.id)}
+                  aria-pressed={feedLayout === option.id}
+                  title={option.label}
+                  aria-label={option.label}
+                  className={cn(
+                    "flex h-8 w-8 items-center justify-center rounded-full text-[var(--muted-foreground)] transition-colors hover:text-[var(--foreground)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--noodle-accent)]",
+                    feedLayout === option.id && "bg-[var(--slurp-surface-raised)] text-[var(--foreground)] shadow-sm",
+                  )}
+                >
+                  <option.icon size={17} aria-hidden="true" />
+                </button>
+              ))}
+            </div>
           </div>
         </div>
         <SlurpMomentsShelf moments={moments} newSinceAt={newSinceAt} onOpenMoment={setActiveMomentId} embedded />
@@ -4540,6 +4617,17 @@ function ViewerHub({
                   ? localizeUi("ui.noodle.viewerhub.noFollowedPosts")
                   : localizeUi("ui.noodle.viewerhub.noPostsYet")}
             </p>
+          ) : feedLayout === "wall" ? (
+            <SlurpMediaWall
+              items={visibleFeed}
+              onOpenImage={(url, id) => postCardCtx.setImageLightbox?.(createNoodleLightboxImage(id, url))}
+              onLoadMore={
+                visibleFeed.length < feed.length
+                  ? () => setVisibleFeedCount((count) => Math.min(feed.length, count + NOODLER_FEED_WINDOW_SIZE))
+                  : undefined
+              }
+              total={feed.length}
+            />
           ) : (
             <div className="space-y-4 bg-[var(--slurp-canvas)] px-3 pb-6 sm:px-4">
               {visibleFeed.map((item, index) => (

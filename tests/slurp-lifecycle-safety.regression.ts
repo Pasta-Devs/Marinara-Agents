@@ -91,6 +91,11 @@ assert.match(
 );
 assert.match(home, /useNoodlerViewerWallets\(\)/u, "Slurp must load wallets for every persona");
 assert.match(home, /personaWallets: viewerWalletsQuery\.data/u, "persona wallets must reach the switcher");
+assert.doesNotMatch(
+  home,
+  /aria-label=\{localizeUi\("ui\.slurp\.wallet\.balance", \{ amount: activeWalletCoins \}\)\}/u,
+  "ViewerHub must use its wallet prop",
+);
 assert.match(shell, /function CoinBadge[\s\S]*?>\s*C\s*</u, "balances must use the compact C coin badge");
 assert.match(home, /const accessViewerAccounts = viewerAccounts\.filter/u);
 assert.match(home, /!personaBackedCreator && \([\s\S]*?setAutomationOpen\(true\)/u);
