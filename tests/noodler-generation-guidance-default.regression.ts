@@ -29,28 +29,54 @@ const replyGeneration = readFileSync(
   "utf8",
 );
 
-function defaultGuidance(source: string): string {
-  const match = source.match(
-    /(?:^|\n)(?:export )?const NOODLER_DEFAULT_GENERATION_GUIDANCE\s*(?::\s*string\s*)?=\s*\n?\s*"((?:[^"\\]|\\.)*)";/u,
-  );
-  assert.ok(match, "NOODLER_DEFAULT_GENERATION_GUIDANCE must be a single double-quoted literal");
+/** The three spice levels, as the literal block both sides must agree on character for character. */
+function guidancePresets(source: string): string {
+  const match = source.match(/const SLURP_GUIDANCE_PRESETS = \{([\s\S]*?)\n\} as const;/u);
+  assert.ok(match, "SLURP_GUIDANCE_PRESETS must be a single object of double-quoted literals");
   return match[1];
 }
 
-const serverDefault = defaultGuidance(storage);
-const clientDefault = defaultGuidance(
-  settings.replace("DEFAULT_SLURP_GENERATION_GUIDANCE", "NOODLER_DEFAULT_GENERATION_GUIDANCE"),
-);
-assert.doesNotMatch(home, /NOODLER_DEFAULT_GENERATION_GUIDANCE/u);
-assert.equal(clientDefault, serverDefault, "Slurp settings and server defaults must match exactly");
+function level(presets: string, name: string): string {
+  const match = presets.match(new RegExp(`\\n  ${name}:\\s+"((?:[^"\\\\]|\\\\.)*)",?`, "u"));
+  assert.ok(match, `spice level ${name} must be a single double-quoted literal`);
+  return match[1];
+}
 
-// Adult-first *variety*, not explicit dominance. The confirmed product decision is that explicit
-// posts appear regularly but are neither mandatory nor necessarily the majority, and that
-// ordinary posts stay important rather than being demoted to filler.
+const serverPresets = guidancePresets(storage);
+const serverDefault = level(serverPresets, "steamy");
+assert.doesNotMatch(home, /NOODLER_DEFAULT_GENERATION_GUIDANCE/u);
+assert.equal(
+  guidancePresets(settings),
+  serverPresets,
+  "Slurp settings and server spice levels must match exactly, or the level picker cannot tell which one is active",
+);
+
+// The guidance ships as three spice levels, and the middle one is the default. Every level is
+// adult-first and keeps each creator's personality intact; they differ only in how explicit they
+// let the posts get, and none of them demote ordinary posts to filler.
 assert.match(serverDefault, /adults \(18\+\)/u);
 assert.match(serverDefault, /^All Slurp creators and viewers/u);
-assert.match(serverDefault, /not required and need not be the majority/u);
-assert.doesNotMatch(serverDefault, /norm here, not the exception|most posts are lewd|the minority/u);
+
+const levels = ["mild", "steamy", "explicit"] as const;
+for (const level of levels)
+  assert.match(serverPresets, new RegExp(`\\n  ${level}:\\s+"`, "u"), `missing level: ${level}`);
+assert.match(
+  storage,
+  /export const NOODLER_DEFAULT_GENERATION_GUIDANCE: string = SLURP_GUIDANCE_PRESETS\.steamy;/u,
+  "the middle level must be the shipped default",
+);
+// The levels must actually differ in explicitness, or the control does nothing.
+assert.match(
+  serverPresets,
+  /\n  mild:\s+"[^"]*[Dd]o not write explicit/u,
+  "the mild level must forbid explicit detail",
+);
+assert.match(serverPresets, /\n  explicit:\s+"[^"]*norm here rather than the exception/u);
+assert.doesNotMatch(serverPresets, /\n  mild:\s+"[^"]*norm here rather than the exception/u);
+for (const level of levels) assert.match(serverPresets, new RegExp(`\\n  ${level}:\\s+"[^"]*adults \\(18\\+\\)`, "u"));
+// The typo'd build of the middle level must migrate forward rather than look like a user edit.
+assert.doesNotMatch(serverPresets, /normallly/u);
+assert.match(storage, /LEGACY_TYPO_SLURP_DEFAULT_GENERATION_GUIDANCE/u);
 
 // The exact previously shipped prompt migrates, while any customized value remains untouched.
 assert.match(storage, /LEGACY_NOODLER_DEFAULT_GENERATION_GUIDANCE/u);
@@ -71,11 +97,14 @@ assert.doesNotMatch(storage, /"noodle\.settings"/u);
 assert.doesNotMatch(readme, /does not make content mature by default/u);
 assert.doesNotMatch(enLocale, /does not make content mature by default/u);
 assert.match(readme, /shipped default guidance is adult-first/u);
-assert.match(settings, /Restore default/u);
-assert.match(settings, /Edit prompt/u);
-assert.match(settings, /Save prompt/u);
+// The copy itself lives in the locale catalog; the surface only references the keys.
+assert.match(enLocale, /"ui\.slurp\.settings\.prompts\.restoreDefault": "Restore default"/u);
+assert.match(enLocale, /"ui\.slurp\.settings\.prompts\.edit": "Edit prompt"/u);
+assert.match(enLocale, /"ui\.slurp\.settings\.prompts\.save": "Save prompt"/u);
 assert.match(settings, /ui\.slurp\.settings\.images\.instructions/u);
-assert.match(settings, /Edit image generation prompt/u);
+assert.match(enLocale, /Edit image generation prompt/u);
+// The spice picker must reach the surface, not just the catalog.
+assert.match(settings, /SLURP_GUIDANCE_PRESETS\[level\]/u, "the spice picker must apply a shipped level");
 assert.match(settings, /restoreDefaultImagePrompt/u);
 assert.match(settings, /saveImagePrompt/u);
 assert.match(storage, /NOODLER_DEFAULT_IMAGE_GENERATION_PROMPT/u);

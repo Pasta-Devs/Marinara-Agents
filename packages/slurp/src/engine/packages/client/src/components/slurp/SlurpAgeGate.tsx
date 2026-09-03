@@ -139,7 +139,7 @@ export function SlurpAgeGate({ personaName, onComplete, isPending }: Props) {
         <button
           type="button"
           onClick={() => setExplained(true)}
-          className="h-12 rounded-md bg-[var(--noodle-accent)] text-base font-black uppercase tracking-wide text-zinc-950 [&_svg]:!text-zinc-950 hover:opacity-90"
+          className="h-12 rounded-lg bg-[var(--noodle-accent)] text-base font-black uppercase tracking-wide text-zinc-950 [&_svg]:!text-zinc-950 hover:opacity-90"
         >
           {tt("explainerContinue", "Got it, continue")}
         </button>
@@ -199,7 +199,7 @@ export function SlurpAgeGate({ personaName, onComplete, isPending }: Props) {
         )}
       </p>
 
-      <label className="flex items-start gap-3 rounded-md border border-[var(--border)] px-3 py-3 text-sm leading-5">
+      <label className="flex items-start gap-3 rounded-lg border border-[var(--border)] px-3 py-3 text-sm leading-5">
         <input
           type="checkbox"
           checked={confirmedAdult}
@@ -213,7 +213,7 @@ export function SlurpAgeGate({ personaName, onComplete, isPending }: Props) {
         type="button"
         onClick={enter}
         disabled={!charged || !confirmedAdult || isPending}
-        className="h-12 rounded-md bg-[var(--noodle-accent)] text-base font-black uppercase tracking-wide text-zinc-950 [&_svg]:!text-zinc-950 hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-40"
+        className="h-12 rounded-lg bg-[var(--noodle-accent)] text-base font-black uppercase tracking-wide text-zinc-950 [&_svg]:!text-zinc-950 hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-40"
       >
         {isPending ? <Loader2 size={18} className="mx-auto animate-spin" /> : tt("enter", "Enter Slurp")}
       </button>

@@ -68,8 +68,18 @@ import {
   GARNISH_EXPORT_VERSION,
 } from "../services/garnish-ads/garnish-ads.export.js";
 import { createGarnishAds } from "../services/garnish-ads/garnish-ads.service.js";
+import type { GarnishAd } from "../services/garnish-ads/garnish-ads.types.js";
+// Used by the ad generate route. These were referenced without ever being imported, so every
+// generate call died with a ReferenceError that the route reported as a bare 502.
+import { generateGarnishAds, retireWeakGarnishAds } from "../services/slurp/slurp-garnish-generation.service.js";
+import { qualityScores } from "../services/garnish-ads/garnish-ads.rating.js";
 import { newId } from "../utils/id-generator.js";
 import { SLURP_GARNISH_PLATFORM, garnishContextForViewer } from "../services/slurp/slurp-garnish-context.js";
+import { generateGarnishAdImage } from "../services/slurp/slurp-garnish-image.service.js";
+import { resolveGarnishAdImageAbsolutePath, unlinkGarnishAdImage } from "../services/slurp/slurp-garnish-image.js";
+import { readGarnishLorebookContext } from "../services/slurp/slurp-garnish-lorebook.js";
+import { syncGarnishAdsWithLorebook } from "../services/slurp/slurp-garnish-sync.service.js";
+import { createLorebooksStorage } from "../services/storage/lorebooks.storage.js";
 import { generateNoodlerStageProfileDraft } from "../services/slurp/slurp-stage-profile-draft.service.js";
 import {
   getNoodlerImageConnections,
@@ -435,6 +445,30 @@ export async function slurpRoutes(app: FastifyInstance) {
 
   app.get("/noodler/accounts", async (_req, reply) => {
     return noodle.listNoodlerStageProfiles();
+  });
+
+  // Fan and follower totals per creator account, so a list of profiles needs one request
+  // instead of one per row. Keyed by creator account id.
+  // ponytail: counts by scanning; swap for aggregate queries if a player ever keeps
+  // enough creator profiles for this to show up in the request time.
+  app.get("/noodler/account-connection-counts", async (_req, _reply) => {
+    const [creators, accounts] = await Promise.all([noodle.listNoodlerAccounts(), noodle.listAccounts()]);
+    const followerCounts = new Map<string, number>();
+    for (const account of accounts) {
+      for (const followedId of account.settings.social.followingAccountIds ?? []) {
+        followerCounts.set(followedId, (followerCounts.get(followedId) ?? 0) + 1);
+      }
+    }
+    const entries = await Promise.all(
+      creators.map(async (creator) => [
+        creator.id,
+        {
+          fans: (await noodle.listSubscriptionsForCreator(creator.id)).length,
+          followers: followerCounts.get(creator.id) ?? 0,
+        },
+      ]),
+    );
+    return Object.fromEntries(entries) as Record<string, { fans: number; followers: number }>;
   });
 
   app.get("/noodler/accounts/:id/avatar/:fileName", async (req, reply) => {
@@ -976,9 +1010,62 @@ export async function slurpRoutes(app: FastifyInstance) {
   });
 
   app.delete("/noodler/ads/pool/:id", async (req) => {
-    await ads.pool.remove((req.params as { id: string }).id);
+    const { id } = req.params as { id: string };
+    const existing = (await ads.pool.listAll()).find((ad) => ad.id === id);
+    await ads.pool.remove(id);
+    // Otherwise every deleted ad leaves its artwork behind on disk forever.
+    unlinkGarnishAdImage(id, existing?.imageUrl);
     return { ok: true };
   });
+
+  app.post("/noodler/ads/:id/image", async (req, reply) => {
+    const { id } = req.params as { id: string };
+    const ad = (await ads.pool.listAll(SLURP_GARNISH_PLATFORM)).find((row) => row.id === id);
+    if (!ad) return reply.code(404).send({ error: "Not Found" });
+    const settings = await noodle.getSettings();
+    const outcome = await generateGarnishAdImage(app.db, ads.pool, ad, settings.imageGenerationConnectionId);
+    if (outcome === "unavailable") {
+      return reply.code(400).send({ error: "Select an image generation connection first." });
+    }
+    if (outcome === "failed") return reply.code(502).send({ error: "Could not generate that image." });
+    const updated = (await ads.pool.listAll(SLURP_GARNISH_PLATFORM)).find((row) => row.id === id);
+    return { ad: updated ?? ad };
+  });
+
+  app.get("/noodler/ads/:id/image/:fileName", async (req, reply) => {
+    const { id, fileName } = req.params as { id: string; fileName: string };
+    const ad = (await ads.pool.listAll()).find((row) => row.id === id);
+    const absolute = resolveGarnishAdImageAbsolutePath(id, ad?.imageUrl);
+    if (!absolute || basename(absolute) !== fileName || !existsSync(absolute)) {
+      return reply.code(404).send({ error: "Not Found" });
+    }
+    const width = z.coerce
+      .number()
+      .int()
+      .optional()
+      .safeParse((req.query as { width?: string }).width);
+    const served = await resolveNoodlerMediaVariant(absolute, width.success ? width.data : undefined);
+    return reply
+      .header("Cache-Control", "private, max-age=31536000, immutable")
+      .sendFile(basename(served), dirname(served));
+  });
+
+  app.post("/noodler/ads/lorebook/sync", async (req, reply) => {
+    const parsed = z.object({ force: z.boolean().optional() }).safeParse(req.body ?? {});
+    if (!parsed.success) return reply.code(400).send({ error: parsed.error.flatten() });
+    const outcome = await syncGarnishAdsWithLorebook(app.db, ads.pool, { force: parsed.data.force });
+    if (outcome === "failed") return reply.code(502).send({ error: "Could not sync the pool to that lorebook." });
+    return { outcome };
+  });
+
+  app.get("/noodler/ads/lorebooks", async () => ({
+    // Lorebook rows are typed through Record<string, unknown>, so id and name are read rather
+    // than accessed off the declared type.
+    items: (await createLorebooksStorage(app.db).list())
+      .map((book) => book as { id?: unknown; name?: unknown })
+      .filter((book): book is { id: string; name: string } => typeof book.id === "string")
+      .map((book) => ({ id: book.id, name: typeof book.name === "string" ? book.name : book.id })),
+  }));
 
   app.post("/noodler/ads/generate", async (req, reply) => {
     const parsed = z
@@ -987,18 +1074,37 @@ export async function slurpRoutes(app: FastifyInstance) {
     if (!parsed.success) return reply.code(400).send({ error: parsed.error.flatten() });
     const settings = await noodle.getSettings();
     try {
+      // A selected lorebook is the setting the ads live in, so it leads the world context.
+      const lorebook = settings.inlineAdsLorebookId
+        ? await readGarnishLorebookContext(app.db, settings.inlineAdsLorebookId)
+        : null;
       const items = await generateGarnishAds(app.db, ads.pool, {
-        connectionId: parsed.data.connectionId,
+        // Ads generate through the same connection as the rest of Slurp; only the main
+        // connection was consulted before, so a Slurp-only setup could never generate.
+        connectionId: parsed.data.connectionId ?? settings.generationConnectionId ?? undefined,
         count: parsed.data.count,
         tone: settings.inlineAdsTone,
         era: settings.inlineAdsEra,
         contentCeiling: settings.inlineAdsContentCeiling,
-        worldContext: settings.inlineAdsWorldContext,
+        worldContext: [lorebook?.text, settings.inlineAdsWorldContext].filter((part) => part?.trim()).join("\n\n"),
       });
+      let images = 0;
+      if (settings.inlineAdsImagesEnabled) {
+        for (const ad of items) {
+          if (
+            (await generateGarnishAdImage(app.db, ads.pool, ad, settings.imageGenerationConnectionId)) === "generated"
+          )
+            images += 1;
+        }
+      }
+      if (lorebook) await noodle.updateSettings({ inlineAdsLorebookRevision: lorebook.revision });
       // Pruning runs after generation so the pool cannot grow without also
       // shedding what the audience keeps dismissing.
       const retired = await retireWeakGarnishAds(ads.pool, qualityScores(await ads.pool.listEvents()));
-      return { items, retired };
+      // Re-read: the pool now carries the generated image URLs.
+      const stored = await ads.pool.listAll(SLURP_GARNISH_PLATFORM);
+      const byId = new Map(stored.map((ad): [string, GarnishAd] => [ad.id, ad]));
+      return { items: items.map((ad) => byId.get(ad.id) ?? ad), retired, images };
     } catch (error) {
       return reply.code(502).send({ error: (error as Error).message });
     }

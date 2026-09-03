@@ -36,7 +36,14 @@ import {
   useRefreshTargetedNoodlerCreatorsNow,
   useResetSlurpAds,
   useSlurpAdPool,
+  useDeleteSlurpAd,
+  useGenerateSlurpAdImage,
+  useSlurpAdLorebooks,
+  useSyncSlurpAdLorebook,
+  useSlurpAdState,
+  useUnhideSlurpAdBrand,
   useGenerateSlurpAds,
+  useImportSlurpAds,
   useSlurpConnections,
   useSlurpSettings,
   useUpdateNoodlerAutoPosting,
@@ -72,8 +79,17 @@ type SlurpSettingsProps = {
 
 const archetypes = ["ordinary", "eccentric", "crossFandom", "raider", "organicDiscovery", "freeResource"] as const;
 const settingsSections = ["overview", "general", "creators", "images", "audience", "ads", "advanced"] as const;
-const DEFAULT_SLURP_GENERATION_GUIDANCE =
-  "All Slurp creators and viewers are adults (18+). This is an adult creator page. Posts are normallly sexually suggestive to outright NSFW. Creators will use Slurp to often excite its readers with their posts. The level of NSFW of a post is dependent on the creator's personality, a shy, innocent person will be suggestive, but still overall tame. On the other end of the spectrum, an outgoing personality who has no problems with sex, will often post very explicit material.";
+// Three shipped spice levels. Kept byte-identical to the server presets so the settings surface
+// can tell which level is active and restore one exactly.
+const SLURP_GUIDANCE_PRESETS = {
+  mild: "All Slurp creators and viewers are adults (18+). This is an adult creator page, but a restrained one: posts are flirty, teasing, and suggestive rather than graphic. Innuendo, charm, and anticipation do the work, and locked posts are teased instead of described. Do not write explicit sexual detail. Keep each creator's personality intact: a shy creator flirts shyly, a blunt one flirts bluntly. Ordinary posts about their day, work, and mood stay just as important as the flirty ones.",
+  steamy:
+    "All Slurp creators and viewers are adults (18+). This is an adult creator page. Posts are normally sexually suggestive to outright NSFW. Creators will use Slurp to often excite their readers with their posts. The level of NSFW of a post is dependent on the creator's personality, a shy, innocent person will be suggestive, but still overall tame. On the other end of the spectrum, an outgoing personality who has no problems with sex, will often post very explicit material.",
+  explicit:
+    "All Slurp creators and viewers are adults (18+). This is an explicit adult creator page. Sexual content is the norm here rather than the exception, and creators describe it directly and in detail when it suits them. Tease the locked posts hard and answer flirty comments in kind. Keep each creator's personality intact: a shy creator is explicit shyly, a blunt one is explicit bluntly. Ordinary posts about their day, work, and mood still appear and keep the feed believable.",
+} as const;
+const SLURP_GUIDANCE_LEVELS = ["mild", "steamy", "explicit"] as const;
+const DEFAULT_SLURP_GENERATION_GUIDANCE: string = SLURP_GUIDANCE_PRESETS.steamy;
 const DEFAULT_SLURP_IMAGE_GENERATION_PROMPT =
   "Create a polished social-media image for an adult Creator post. Match the creator's identity, personality, body, clothing, and established visual details. Follow the post's mood and subject. Describe the pose, expression, setting, lighting, camera angle, composition, and visible details clearly. Flirty, suggestive, sensual, or explicit imagery is allowed when it fits the post and creator, but do not force sexual content into ordinary updates. Keep the image coherent, intentional, and suitable for a public or locked Creator feed.";
 
@@ -152,6 +168,14 @@ export function SlurpSettings({
   const resetAds = useResetSlurpAds();
   const adPool = useSlurpAdPool();
   const generateAds = useGenerateSlurpAds();
+  const importAds = useImportSlurpAds();
+  const adsImportRef = useRef<HTMLInputElement>(null);
+  const adState = useSlurpAdState(section === "ads" ? viewerPersonaId : null);
+  const unhideBrand = useUnhideSlurpAdBrand();
+  const deleteAd = useDeleteSlurpAd();
+  const generateAdImage = useGenerateSlurpAdImage();
+  const adLorebooks = useSlurpAdLorebooks(section === "ads");
+  const syncAdLorebook = useSyncSlurpAdLorebook();
   const settings = settingsQuery.data;
   const [generationGuidanceDraft, setGenerationGuidanceDraft] = useState("");
   const [generationGuidanceEditorOpen, setGenerationGuidanceEditorOpen] = useState(false);
@@ -163,6 +187,7 @@ export function SlurpSettings({
   const [scheduleCreatorId, setScheduleCreatorId] = useState<string | null>(null);
   const [selectedCreatorId, setSelectedCreatorId] = useState<string | null>(null);
   const [customPaceOpen, setCustomPaceOpen] = useState(false);
+  const [adsWorldDraft, setAdsWorldDraft] = useState<string | null>(null);
   const [saveState, setSaveState] = useState<"idle" | "saving" | "saved" | "error">("idle");
   useEffect(() => {
     if (settings) {
@@ -216,6 +241,8 @@ export function SlurpSettings({
   const scheduleSlots =
     reserveStatusQuery.data?.creators.find((creator) => creator.accountId === scheduleCreatorId)?.slots ?? [];
   const generationGuidanceIsDefault = settings?.generationGuidance === DEFAULT_SLURP_GENERATION_GUIDANCE;
+  const guidanceLevel =
+    SLURP_GUIDANCE_LEVELS.find((level) => SLURP_GUIDANCE_PRESETS[level] === settings?.generationGuidance) ?? null;
   const imagePromptIsDefault = settings?.imageGenerationPrompt === DEFAULT_SLURP_IMAGE_GENERATION_PROMPT;
   const activityPreset = settings && slurpActivityPresetForSettings(settings);
   const creators = accountsQuery.data ?? [];
@@ -295,7 +322,7 @@ export function SlurpSettings({
         <button
           type="button"
           onClick={() => void settingsQuery.refetch()}
-          className="inline-flex min-h-10 items-center gap-2 rounded-md border border-[var(--noodle-accent)]/40 px-3 font-semibold text-[var(--noodle-accent)]"
+          className="inline-flex min-h-10 items-center gap-2 rounded-lg border border-[var(--noodle-accent)]/40 px-3 font-semibold text-[var(--noodle-accent)]"
         >
           <RefreshCw size={14} />
           {t("capabilities.actions.tryAgain")}
@@ -314,7 +341,7 @@ export function SlurpSettings({
     <>
       <main className="h-full overflow-y-auto bg-[var(--slurp-canvas)] pb-[calc(5rem+env(safe-area-inset-bottom))] text-[var(--slurp-text)] sm:pb-8">
         <div className="mx-auto flex w-full flex-col gap-4 p-3 sm:p-5 lg:gap-6 lg:p-6" data-slurp-settings-layout>
-          <header className="relative isolate flex flex-wrap items-start justify-between gap-3 overflow-hidden rounded-2xl bg-[linear-gradient(120deg,color-mix(in_srgb,var(--slurp-surface-raised)_94%,transparent),color-mix(in_srgb,var(--noodle-accent)_17%,var(--slurp-surface-raised))_58%,color-mix(in_srgb,var(--slurp-violet)_13%,var(--slurp-surface-raised)))] p-4 shadow-[var(--slurp-shadow)] ring-1 ring-inset ring-[var(--slurp-outline)] sm:gap-4 sm:p-5">
+          <header className="relative isolate flex flex-wrap items-start justify-between gap-3 overflow-hidden rounded-xl bg-[linear-gradient(120deg,color-mix(in_srgb,var(--slurp-surface-raised)_94%,transparent),color-mix(in_srgb,var(--noodle-accent)_17%,var(--slurp-surface-raised))_58%,color-mix(in_srgb,var(--slurp-violet)_13%,var(--slurp-surface-raised)))] p-4 shadow-[var(--slurp-shadow)] ring-1 ring-inset ring-[var(--slurp-outline)] sm:gap-4 sm:p-5">
             <span
               className="pointer-events-none absolute -end-12 -top-20 -z-10 h-52 w-52 rounded-full bg-[var(--noodle-accent)]/10 blur-3xl"
               aria-hidden="true"
@@ -374,7 +401,7 @@ export function SlurpSettings({
 
           <div className="md:grid md:grid-cols-[12rem_minmax(0,1fr)] md:items-start md:gap-6 lg:grid-cols-[13rem_minmax(0,1fr)] lg:gap-8">
             <nav
-              className="sticky top-4 hidden rounded-2xl bg-[linear-gradient(180deg,color-mix(in_srgb,var(--noodle-accent)_7%,var(--slurp-surface)),var(--slurp-surface))] p-2 shadow-[var(--slurp-shadow)] ring-1 ring-inset ring-[var(--slurp-outline)] md:flex md:flex-col"
+              className="sticky top-4 hidden rounded-xl bg-[linear-gradient(180deg,color-mix(in_srgb,var(--noodle-accent)_7%,var(--slurp-surface)),var(--slurp-surface))] p-2 shadow-[var(--slurp-shadow)] ring-1 ring-inset ring-[var(--slurp-outline)] md:flex md:flex-col"
               aria-label={t("ui.slurp.settings.sectionsLabel")}
             >
               {settingsSections.map((item) => (
@@ -390,10 +417,10 @@ export function SlurpSettings({
               ))}
             </nav>
 
-            <div className="mt-4 min-w-0 rounded-2xl bg-[linear-gradient(145deg,var(--slurp-surface),color-mix(in_srgb,var(--slurp-violet)_4%,var(--slurp-surface)))] p-3 shadow-[var(--slurp-shadow)] ring-1 ring-inset ring-[var(--slurp-outline)] md:mt-0 md:p-5 lg:p-6">
+            <div className="mt-4 min-w-0 rounded-xl bg-[linear-gradient(145deg,var(--slurp-surface),color-mix(in_srgb,var(--slurp-violet)_4%,var(--slurp-surface)))] p-3 shadow-[var(--slurp-shadow)] ring-1 ring-inset ring-[var(--slurp-outline)] md:mt-0 md:p-5 lg:p-6">
               {section === "overview" && (
                 <div className="space-y-4">
-                  <section className="relative isolate overflow-hidden rounded-2xl bg-[var(--slurp-hero)] p-4 text-white shadow-[0_30px_70px_-38px_rgba(184,28,102,0.9)] sm:p-5">
+                  <section className="relative isolate overflow-hidden rounded-xl bg-[var(--slurp-hero)] p-4 text-white shadow-[0_30px_70px_-38px_rgba(184,28,102,0.9)] sm:p-5">
                     <span
                       className="pointer-events-none absolute -end-12 -top-20 -z-10 h-64 w-64 rounded-full border-[2rem] border-white/10"
                       aria-hidden="true"
@@ -666,6 +693,36 @@ export function SlurpSettings({
                             ))}
                         </select>
                       </Field>
+                      <Field
+                        label={t("ui.slurp.settings.prompts.spice")}
+                        detail={
+                          guidanceLevel
+                            ? t("ui.slurp.settings.prompts.spiceDetail")
+                            : t("ui.slurp.settings.prompts.spiceCustom")
+                        }
+                      >
+                        <div className="flex flex-wrap gap-2">
+                          {SLURP_GUIDANCE_LEVELS.map((level) => (
+                            <button
+                              key={level}
+                              type="button"
+                              aria-pressed={guidanceLevel === level}
+                              disabled={updateSettings.isPending}
+                              onClick={() =>
+                                void restore(
+                                  { generationGuidance: SLURP_GUIDANCE_PRESETS[level] },
+                                  t("ui.slurp.settings.prompts.spiceApplied", {
+                                    level: t(`ui.slurp.settings.prompts.spice.${level}`),
+                                  }),
+                                )
+                              }
+                              className={`min-h-10 rounded-full px-4 text-sm font-semibold ring-1 ring-inset transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--slurp-focus)] disabled:opacity-50 ${guidanceLevel === level ? "bg-[var(--slurp-nav-active)] text-[var(--slurp-text)] ring-[var(--noodle-accent)]/45" : "bg-[var(--slurp-surface-raised)] text-[var(--slurp-muted)] ring-[var(--slurp-outline)] hover:text-[var(--slurp-text)]"}`}
+                            >
+                              {t(`ui.slurp.settings.prompts.spice.${level}`)}
+                            </button>
+                          ))}
+                        </div>
+                      </Field>
                       <PromptCard
                         title={t("ui.slurp.settings.prompts.generationGuidance")}
                         value={settings.generationGuidance}
@@ -818,7 +875,7 @@ export function SlurpSettings({
                     <button
                       type="button"
                       onClick={onAddCreators}
-                      className="inline-flex min-h-10 items-center gap-2 rounded-md border border-[var(--noodle-accent)]/40 px-3 text-xs font-semibold text-[var(--noodle-accent)] hover:bg-[var(--noodle-accent)]/10"
+                      className="inline-flex min-h-10 items-center gap-2 rounded-lg border border-[var(--noodle-accent)]/40 px-3 text-xs font-semibold text-[var(--noodle-accent)] hover:bg-[var(--noodle-accent)]/10"
                     >
                       <UsersRound size={14} />
                       {t("ui.slurp.settings.creators.add")}
@@ -878,7 +935,7 @@ export function SlurpSettings({
                       </div>
 
                       <section
-                        className="min-w-0 overflow-hidden rounded-2xl bg-[var(--slurp-canvas,var(--background))] shadow-[0_18px_42px_-34px_rgba(0,0,0,0.9)] ring-1 ring-inset ring-[var(--border)]"
+                        className="min-w-0 overflow-hidden rounded-xl bg-[var(--slurp-canvas,var(--background))] shadow-[var(--slurp-shadow-floating)] ring-1 ring-inset ring-[var(--border)]"
                         aria-labelledby="slurp-selected-creator-title"
                       >
                         <div className="relative isolate flex flex-col gap-4 overflow-hidden border-b border-[var(--border)] bg-[linear-gradient(135deg,var(--slurp-surface-raised,var(--background)),color-mix(in_srgb,var(--noodle-accent)_9%,var(--slurp-surface-raised)))] p-4 sm:flex-row sm:items-center sm:p-5">
@@ -1060,7 +1117,7 @@ export function SlurpSettings({
                       </section>
                     </div>
                   ) : (
-                    <div className="rounded-md border border-dashed border-[var(--border)] p-8 text-center text-sm text-[var(--muted-foreground)]">
+                    <div className="rounded-lg border border-dashed border-[var(--border)] p-8 text-center text-sm text-[var(--muted-foreground)]">
                       {t("ui.slurp.settings.creators.none")}
                     </div>
                   )}
@@ -1070,6 +1127,10 @@ export function SlurpSettings({
               {section === "ads" && (
                 <div className="space-y-5">
                   <SectionTitle title={t("ui.slurp.settings.ads.title")} detail={t("ui.slurp.settings.ads.detail")} />
+                  <div className="rounded-xl bg-[var(--slurp-surface-raised)] p-4 text-xs leading-5 text-[var(--slurp-muted)] ring-1 ring-inset ring-[var(--slurp-outline)]">
+                    <p>{t("ui.slurp.settings.ads.explainer")}</p>
+                    <p className="mt-2">{t("ui.slurp.settings.ads.explainerPool")}</p>
+                  </div>
                   <Toggle
                     label={t("ui.slurp.settings.inlinePromotions")}
                     detail={t("ui.slurp.settings.inlinePromotionsDetail")}
@@ -1158,12 +1219,63 @@ export function SlurpSettings({
                   <Field label={t("ui.slurp.settings.ads.world")} detail={t("ui.slurp.settings.ads.worldDetail")}>
                     <textarea
                       rows={3}
-                      value={settings.inlineAdsWorldContext}
-                      disabled={updateSettings.isPending}
+                      value={adsWorldDraft ?? settings.inlineAdsWorldContext}
                       maxLength={1200}
-                      onChange={(event) => void update("inlineAdsWorldContext", event.target.value)}
+                      onChange={(event) => setAdsWorldDraft(event.target.value)}
+                      onBlur={() => {
+                        const next = adsWorldDraft;
+                        setAdsWorldDraft(null);
+                        if (next !== null && next !== settings.inlineAdsWorldContext)
+                          void update("inlineAdsWorldContext", next);
+                      }}
                       className="w-full rounded-lg border border-[var(--slurp-outline)] bg-[var(--slurp-canvas)] p-3 text-base focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--slurp-focus)] disabled:opacity-50 sm:text-sm"
                     />
+                  </Field>
+                  <Toggle
+                    label={t("ui.slurp.settings.ads.images")}
+                    detail={t("ui.slurp.settings.ads.imagesDetail")}
+                    value={settings.inlineAdsImagesEnabled}
+                    onChange={(value) => update("inlineAdsImagesEnabled", value)}
+                  />
+                  <Field label={t("ui.slurp.settings.ads.lorebook")} detail={t("ui.slurp.settings.ads.lorebookDetail")}>
+                    <div className="flex flex-wrap gap-2">
+                      <select
+                        value={settings.inlineAdsLorebookId ?? ""}
+                        disabled={updateSettings.isPending || adLorebooks.isLoading}
+                        onChange={(event) =>
+                          void save({
+                            inlineAdsLorebookId: event.target.value || null,
+                            // Clearing the fingerprint makes the next sync regenerate against
+                            // the newly chosen book instead of treating it as already applied.
+                            inlineAdsLorebookRevision: null,
+                          })
+                        }
+                        className="min-h-11 min-w-0 flex-1 rounded-lg border border-[var(--slurp-outline)] bg-[var(--slurp-canvas)] px-3 text-base focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--slurp-focus)] disabled:opacity-50 sm:text-sm"
+                      >
+                        <option value="">{t("ui.slurp.settings.ads.lorebookNone")}</option>
+                        {(adLorebooks.data?.items ?? []).map((book) => (
+                          <option key={book.id} value={book.id}>
+                            {book.name}
+                          </option>
+                        ))}
+                      </select>
+                      <button
+                        type="button"
+                        disabled={!settings.inlineAdsLorebookId || syncAdLorebook.isPending}
+                        onClick={() =>
+                          syncAdLorebook.mutate(true, {
+                            onSuccess: (result) =>
+                              toast.success(t(`ui.slurp.settings.ads.lorebookSync.${result.outcome}`)),
+                            onError: (error) => toast.error(errorMessage(error)),
+                          })
+                        }
+                        className="min-h-11 rounded-lg border border-[var(--slurp-outline)] px-4 text-sm font-bold hover:bg-[var(--accent)] disabled:opacity-50"
+                      >
+                        {syncAdLorebook.isPending
+                          ? t("ui.slurp.settings.ads.lorebookSyncing")
+                          : t("ui.slurp.settings.ads.lorebookSyncNow")}
+                      </button>
+                    </div>
                   </Field>
                   <div className="rounded-xl border border-[var(--slurp-outline)] p-4">
                     <h2 className="text-sm font-bold">{t("ui.slurp.settings.ads.pool")}</h2>
@@ -1174,8 +1286,20 @@ export function SlurpSettings({
                       <button
                         type="button"
                         disabled={generateAds.isPending}
-                        onClick={() => generateAds.mutate(undefined)}
-                        className="min-h-9 rounded-md bg-[var(--noodle-accent)] px-3 text-xs font-bold text-zinc-950 hover:opacity-90 disabled:opacity-50"
+                        onClick={() =>
+                          generateAds.mutate(undefined, {
+                            onSuccess: (result) =>
+                              toast.success(
+                                t("ui.slurp.settings.ads.generated", {
+                                  count: result.items.length,
+                                  retired: result.retired.length,
+                                  images: result.images,
+                                }),
+                              ),
+                            onError: (error) => toast.error(errorMessage(error)),
+                          })
+                        }
+                        className="min-h-9 rounded-lg bg-[var(--noodle-accent)] px-3 text-xs font-bold text-zinc-950 hover:opacity-90 disabled:opacity-50"
                       >
                         {generateAds.isPending
                           ? t("ui.slurp.settings.ads.generating")
@@ -1184,11 +1308,112 @@ export function SlurpSettings({
                       <button
                         type="button"
                         onClick={() => void api.download("/slurp/noodler/ads/export", "slurp-ads.json")}
-                        className="min-h-9 rounded-md border border-[var(--slurp-outline)] px-3 text-xs font-bold hover:bg-[var(--accent)]"
+                        className="min-h-9 rounded-lg border border-[var(--slurp-outline)] px-3 text-xs font-bold hover:bg-[var(--accent)]"
                       >
                         {t("ui.slurp.settings.ads.export")}
                       </button>
+                      <button
+                        type="button"
+                        disabled={importAds.isPending}
+                        onClick={() => adsImportRef.current?.click()}
+                        className="min-h-9 rounded-lg border border-[var(--slurp-outline)] px-3 text-xs font-bold hover:bg-[var(--accent)] disabled:opacity-50"
+                      >
+                        {importAds.isPending ? t("ui.slurp.settings.ads.importing") : t("ui.slurp.settings.ads.import")}
+                      </button>
+                      <input
+                        ref={adsImportRef}
+                        type="file"
+                        accept="application/json,.json"
+                        className="hidden"
+                        onChange={(event) => {
+                          const file = event.target.files?.[0];
+                          event.target.value = "";
+                          if (!file) return;
+                          void file
+                            .text()
+                            .then((text) => importAds.mutateAsync(JSON.parse(text)))
+                            .then((result) =>
+                              toast.success(t("ui.slurp.settings.ads.imported", { count: result.imported })),
+                            )
+                            .catch((error) => toast.error(errorMessage(error)));
+                        }}
+                      />
                     </div>
+                    {/* The pool used to be a bare count, so a bad generated ad could only be
+                        removed by resetting everything. */}
+                    <ul className="mt-4 space-y-2">
+                      {(adPool.data?.items ?? []).map((ad) => (
+                        <li
+                          key={ad.id}
+                          className="flex items-start gap-3 rounded-lg bg-[var(--slurp-surface-raised)] p-3 ring-1 ring-inset ring-[var(--slurp-outline)]"
+                        >
+                          {ad.imageUrl ? (
+                            <img
+                              src={ad.imageUrl}
+                              alt=""
+                              loading="lazy"
+                              className="h-14 w-20 shrink-0 rounded-lg object-cover"
+                            />
+                          ) : (
+                            <span
+                              aria-hidden="true"
+                              className="flex h-14 w-20 shrink-0 items-center justify-center rounded-lg bg-[var(--slurp-canvas)] text-[var(--slurp-muted)]"
+                            >
+                              <Image size={16} />
+                            </span>
+                          )}
+                          <div className="min-w-0 flex-1">
+                            <p className="truncate text-sm font-bold">{ad.brand}</p>
+                            <p className="truncate text-xs font-semibold text-[var(--slurp-muted)]">{ad.product}</p>
+                            <p className="mt-1 line-clamp-2 text-xs leading-5 text-[var(--slurp-muted)]">{ad.copy}</p>
+                            <p className="mt-1 text-[0.65rem] font-bold uppercase tracking-[0.12em] text-[var(--slurp-muted)]">
+                              {t(
+                                `ui.slurp.settings.ads.ceiling${ad.contentRating === "tame" ? "Tame" : ad.contentRating === "suggestive" ? "Suggestive" : "Explicit"}`,
+                              )}
+                              {ad.retiredAt ? ` · ${t("ui.slurp.settings.ads.retired")}` : ""}
+                            </p>
+                          </div>
+                          <div className="flex shrink-0 flex-col gap-1">
+                            <button
+                              type="button"
+                              disabled={generateAdImage.isPending}
+                              onClick={() =>
+                                generateAdImage.mutate(ad.id, {
+                                  onSuccess: () => toast.success(t("ui.slurp.settings.ads.imageGenerated")),
+                                  onError: (error) => toast.error(errorMessage(error)),
+                                })
+                              }
+                              aria-label={t("ui.slurp.settings.ads.regenerateImage", { brand: ad.brand })}
+                              title={t("ui.slurp.settings.ads.regenerateImage", { brand: ad.brand })}
+                              className="flex h-9 w-9 items-center justify-center rounded-lg text-[var(--slurp-muted)] hover:bg-[var(--accent)] hover:text-[var(--slurp-text)] disabled:opacity-50"
+                            >
+                              <Image size={15} aria-hidden="true" />
+                            </button>
+                            <button
+                              type="button"
+                              disabled={deleteAd.isPending}
+                              onClick={() =>
+                                deleteAd.mutate(ad.id, {
+                                  onSuccess: () =>
+                                    toast.success(t("ui.slurp.settings.ads.deleted", { brand: ad.brand })),
+                                  onError: (error) => toast.error(errorMessage(error)),
+                                })
+                              }
+                              aria-label={t("ui.slurp.settings.ads.deleteAd", { brand: ad.brand })}
+                              title={t("ui.slurp.settings.ads.deleteAd", { brand: ad.brand })}
+                              className="flex h-9 w-9 items-center justify-center rounded-lg text-[var(--slurp-muted)] hover:bg-[var(--accent)] hover:text-red-300 disabled:opacity-50"
+                            >
+                              <Trash2 size={15} aria-hidden="true" />
+                            </button>
+                          </div>
+                        </li>
+                      ))}
+                    </ul>
+                    {(adPool.data?.items.length ?? 0) === 0 && (
+                      <p className="mt-4 text-xs leading-5 text-[var(--slurp-muted)]">
+                        {t("ui.slurp.settings.ads.poolEmpty")}
+                      </p>
+                    )}
                   </div>
                   <div>
                     <h2 className="text-sm font-bold">{t("ui.slurp.settings.ads.themes")}</h2>
@@ -1220,6 +1445,36 @@ export function SlurpSettings({
                       })}
                     </div>
                   </div>
+                  {viewerPersonaId && (adState.data?.hiddenBrands.length ?? 0) > 0 && (
+                    <div>
+                      <h2 className="text-sm font-bold">{t("ui.slurp.settings.ads.hiddenBrands")}</h2>
+                      <p className="mt-1 text-xs leading-5 text-[var(--slurp-muted)]">
+                        {t("ui.slurp.settings.ads.hiddenBrandsDetail")}
+                      </p>
+                      <div className="mt-3 flex flex-wrap gap-2">
+                        {adState.data?.hiddenBrands.map((brand) => (
+                          <button
+                            key={brand}
+                            type="button"
+                            disabled={unhideBrand.isPending}
+                            onClick={() =>
+                              unhideBrand.mutate(
+                                { personaId: viewerPersonaId, brand },
+                                {
+                                  onSuccess: () => toast.success(t("ui.slurp.settings.ads.brandUnhidden", { brand })),
+                                  onError: (error) => toast.error(errorMessage(error)),
+                                },
+                              )
+                            }
+                            className="inline-flex min-h-10 items-center gap-2 rounded-full bg-[var(--slurp-surface-raised)] px-4 text-sm font-semibold text-[var(--slurp-muted)] ring-1 ring-inset ring-[var(--slurp-outline)] transition-colors hover:text-[var(--slurp-text)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--slurp-focus)] disabled:opacity-50"
+                          >
+                            <RotateCcw size={13} aria-hidden="true" />
+                            {t("ui.slurp.settings.ads.unhideBrand", { brand })}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  )}
                   <div className="flex flex-wrap items-center justify-between gap-4 rounded-xl bg-[var(--slurp-surface-raised)] p-4 ring-1 ring-inset ring-[var(--slurp-outline)]">
                     <div>
                       <h2 className="text-sm font-bold">{t("ui.slurp.settings.ads.reset")}</h2>
@@ -1230,7 +1485,13 @@ export function SlurpSettings({
                     <button
                       type="button"
                       disabled={!viewerPersonaId || resetAds.isPending}
-                      onClick={() => viewerPersonaId && resetAds.mutate(viewerPersonaId)}
+                      onClick={() =>
+                        viewerPersonaId &&
+                        resetAds.mutate(viewerPersonaId, {
+                          onSuccess: () => toast.success(t("ui.slurp.settings.ads.resetDone")),
+                          onError: (error) => toast.error(errorMessage(error)),
+                        })
+                      }
                       className="inline-flex min-h-11 items-center gap-2 rounded-lg border border-[var(--slurp-outline)] px-4 text-sm font-bold text-[var(--slurp-text)] transition-colors hover:bg-[var(--accent)] disabled:opacity-50"
                     >
                       <RotateCcw size={15} aria-hidden="true" />
@@ -1246,7 +1507,7 @@ export function SlurpSettings({
                     title={t("ui.slurp.settings.advanced.title")}
                     detail={t("ui.slurp.settings.advanced.detail")}
                   />
-                  <div className="rounded-md border border-[var(--border)] p-4">
+                  <div className="rounded-lg border border-[var(--border)] p-4">
                     <h2 className="text-sm font-semibold">{t("ui.slurp.settings.advanced.setupAgain")}</h2>
                     <p className="mt-1 max-w-2xl text-sm leading-6 text-[var(--muted-foreground)]">
                       {t("ui.slurp.settings.advanced.setupAgainDetail")}
@@ -1254,13 +1515,13 @@ export function SlurpSettings({
                     <button
                       type="button"
                       onClick={onRestartOnboarding}
-                      className="mt-4 inline-flex min-h-10 items-center gap-2 rounded-md border border-[var(--border)] px-3 text-xs font-semibold hover:bg-[var(--accent)]"
+                      className="mt-4 inline-flex min-h-10 items-center gap-2 rounded-lg border border-[var(--border)] px-3 text-xs font-semibold hover:bg-[var(--accent)]"
                     >
                       <RefreshCw size={14} />
                       {t("ui.slurp.settings.advanced.restartSetup")}
                     </button>
                   </div>
-                  <div className="rounded-md border border-red-400/30 p-4">
+                  <div className="rounded-lg border border-red-400/30 p-4">
                     <h2 className="text-sm font-semibold">{t("ui.slurp.settings.advanced.deleteAllTitle")}</h2>
                     <p className="mt-1 max-w-2xl text-sm leading-6 text-[var(--muted-foreground)]">
                       {t("ui.slurp.settings.advanced.deleteAllDetail")}
@@ -1283,13 +1544,13 @@ export function SlurpSettings({
                           })
                           .catch((error) => toast.error(errorMessage(error)))
                       }
-                      className="mt-4 inline-flex min-h-10 items-center gap-2 rounded-md border border-red-400/50 px-3 text-xs font-semibold text-red-300 hover:bg-red-400/10 disabled:opacity-50"
+                      className="mt-4 inline-flex min-h-10 items-center gap-2 rounded-lg border border-red-400/50 px-3 text-xs font-semibold text-red-300 hover:bg-red-400/10 disabled:opacity-50"
                     >
                       <Trash2 size={14} />
                       {t("ui.slurp.settings.advanced.deleteAllButton")}
                     </button>
                   </div>
-                  <div className="rounded-md border border-[var(--border)] p-4">
+                  <div className="rounded-lg border border-[var(--border)] p-4">
                     <h2 className="text-sm font-semibold">{t("ui.slurp.settings.advanced.deleteUnusedTitle")}</h2>
                     <p className="mt-1 max-w-2xl text-sm leading-6 text-[var(--muted-foreground)]">
                       {t("ui.slurp.settings.advanced.deleteUnusedDetail")}
@@ -1312,7 +1573,7 @@ export function SlurpSettings({
                           })
                           .catch((error) => toast.error(errorMessage(error)))
                       }
-                      className="mt-4 inline-flex min-h-10 items-center gap-2 rounded-md border border-[var(--border)] px-3 text-xs font-semibold hover:bg-[var(--accent)] disabled:opacity-50"
+                      className="mt-4 inline-flex min-h-10 items-center gap-2 rounded-lg border border-[var(--border)] px-3 text-xs font-semibold hover:bg-[var(--accent)] disabled:opacity-50"
                     >
                       <Trash2 size={14} />
                       {t("ui.slurp.settings.advanced.deleteUnusedButton")}
@@ -1342,7 +1603,7 @@ export function SlurpSettings({
                         })
                       }
                       disabled={refreshFans.isPending || !settings.fanActivityEnabled}
-                      className="inline-flex min-h-10 items-center gap-2 rounded-md border border-[var(--border)] px-3 text-xs font-semibold hover:bg-[var(--accent)] disabled:opacity-50"
+                      className="inline-flex min-h-10 items-center gap-2 rounded-lg border border-[var(--border)] px-3 text-xs font-semibold hover:bg-[var(--accent)] disabled:opacity-50"
                     >
                       <RefreshCw size={14} className={refreshFans.isPending ? "animate-spin" : ""} />
                       {t("ui.slurp.settings.audience.refresh")}
@@ -1368,7 +1629,7 @@ export function SlurpSettings({
                             onSave={(value) => update("fanActivityRunsPerDay", value)}
                           />
                         </Field>
-                        <div className="rounded-md border border-[var(--border)] p-3 text-xs text-[var(--muted-foreground)]">
+                        <div className="rounded-lg border border-[var(--border)] p-3 text-xs text-[var(--muted-foreground)]">
                           {fanStatusQuery.isError
                             ? t("ui.slurp.settings.audience.statusError")
                             : fanStatusQuery.data
@@ -1474,11 +1735,11 @@ export function SlurpSettings({
         closeDisabled={refreshCreators.isPending}
         panelClassName="noodle-icon-scope"
         panelStyle={getNoodleAccentStyle(NOODLE_PINK, {
-          "--background": "#17121b",
-          "--foreground": "#fff7fc",
-          "--muted-foreground": "#d8c9d4",
-          "--border": "rgba(255, 126, 193, 0.24)",
-          "--accent": "rgba(255, 126, 193, 0.12)",
+          "--background": "var(--slurp-surface)",
+          "--foreground": "var(--slurp-text)",
+          "--muted-foreground": "var(--slurp-muted)",
+          "--border": "color-mix(in srgb, var(--noodle-accent) 24%, transparent)",
+          "--accent": "color-mix(in srgb, var(--noodle-accent) 12%, transparent)",
         })}
       >
         <div className="space-y-5">
@@ -1502,7 +1763,7 @@ export function SlurpSettings({
                 </button>
               </div>
             </div>
-            <div className="mt-2 max-h-64 divide-y divide-[var(--border)] overflow-y-auto rounded-md border border-[var(--border)]">
+            <div className="mt-2 max-h-64 divide-y divide-[var(--border)] overflow-y-auto rounded-lg border border-[var(--border)]">
               {automationCreators.map((creator) => (
                 <label
                   key={creator.id}
@@ -1537,14 +1798,14 @@ export function SlurpSettings({
           </div>
           <fieldset>
             <legend className="text-sm font-semibold">{t("ui.slurp.settings.refresh.postAccess")}</legend>
-            <div className="mt-2 grid grid-cols-2 rounded-md border border-[var(--border)] p-1">
+            <div className="mt-2 grid grid-cols-2 rounded-lg border border-[var(--border)] p-1">
               {(["public", "locked"] as const).map((access) => (
                 <button
                   key={access}
                   type="button"
                   aria-pressed={refreshAccess === access}
                   onClick={() => setRefreshAccess(access)}
-                  className={`min-h-10 rounded-md text-sm font-semibold capitalize ${refreshAccess === access ? "bg-[var(--noodle-accent)] text-zinc-950" : "text-[var(--muted-foreground)] hover:bg-[var(--accent)]"}`}
+                  className={`min-h-10 rounded-lg text-sm font-semibold capitalize ${refreshAccess === access ? "bg-[var(--noodle-accent)] text-zinc-950" : "text-[var(--muted-foreground)] hover:bg-[var(--accent)]"}`}
                 >
                   {access}
                 </button>
@@ -1559,7 +1820,7 @@ export function SlurpSettings({
               type="button"
               disabled={refreshCreators.isPending}
               onClick={() => setRefreshModalOpen(false)}
-              className="min-h-10 rounded-md border border-[var(--border)] px-4 text-xs font-semibold"
+              className="min-h-10 rounded-lg border border-[var(--border)] px-4 text-xs font-semibold"
             >
               {t("ui.slurp.actions.cancel")}
             </button>
@@ -1583,7 +1844,7 @@ export function SlurpSettings({
                   },
                 )
               }
-              className="inline-flex min-h-10 items-center gap-2 rounded-md bg-[var(--noodle-accent)] px-4 text-xs font-bold text-zinc-950 disabled:opacity-50"
+              className="inline-flex min-h-10 items-center gap-2 rounded-lg bg-[var(--noodle-accent)] px-4 text-xs font-bold text-zinc-950 disabled:opacity-50"
             >
               {refreshCreators.isPending ? <Loader2 size={14} className="animate-spin" /> : <Sparkles size={14} />}
               {t("ui.slurp.settings.refresh.generate", { count: refreshAccountIds.size || "" })}
@@ -1606,12 +1867,12 @@ export function SlurpSettings({
               {t("ui.noodle.noodlerschedulemanagermodal.loadingStatus")}
             </div>
           ) : reserveStatusQuery.isError ? (
-            <div className="rounded-md border border-red-400/30 p-5 text-sm">
+            <div className="rounded-lg border border-red-400/30 p-5 text-sm">
               <p>{t("ui.noodle.noodlerschedulemanagermodal.couldNotLoadStatus")}</p>
               <button
                 type="button"
                 onClick={() => void reserveStatusQuery.refetch()}
-                className="mt-3 inline-flex min-h-10 items-center gap-2 rounded-md border border-[var(--border)] px-3 font-semibold"
+                className="mt-3 inline-flex min-h-10 items-center gap-2 rounded-lg border border-[var(--border)] px-3 font-semibold"
               >
                 <RefreshCw size={14} />
                 {t("capabilities.actions.tryAgain")}
@@ -1636,7 +1897,7 @@ export function SlurpSettings({
               ))}
             </div>
           ) : (
-            <p className="rounded-md border border-dashed border-[var(--border)] p-5 text-sm text-[var(--muted-foreground)]">
+            <p className="rounded-lg border border-dashed border-[var(--border)] p-5 text-sm text-[var(--muted-foreground)]">
               {t("ui.slurp.settings.creators.scheduleEmpty")}
             </p>
           )}
@@ -1697,7 +1958,7 @@ function ScheduleSlotEditor({
   const unchanged = !Number.isNaN(parsed) && new Date(parsed).toISOString() === slot.publishAt;
   const valid = !Number.isNaN(parsed) && parsed > Date.now();
   return (
-    <div className="rounded-md border border-[var(--border)] p-3">
+    <div className="rounded-lg border border-[var(--border)] p-3">
       <div className="mb-2 flex items-center justify-between gap-2 text-xs text-[var(--muted-foreground)]">
         <span>
           {slot.state === "prepared"
@@ -1720,7 +1981,7 @@ function ScheduleSlotEditor({
           type="button"
           disabled={pending || unchanged || !valid}
           onClick={() => void onSave(new Date(parsed).toISOString())}
-          className="inline-flex min-h-10 items-center justify-center gap-1.5 rounded-md bg-[var(--noodle-accent)] px-4 text-xs font-bold text-[var(--noodle-accent-foreground)] disabled:opacity-45"
+          className="inline-flex min-h-10 items-center justify-center gap-1.5 rounded-lg bg-[var(--noodle-accent)] px-4 text-xs font-bold text-[var(--noodle-accent-foreground)] disabled:opacity-45"
         >
           {pending ? <Loader2 size={13} className="animate-spin" /> : <Save size={13} />}
           {t("ui.slurp.settings.creators.saveTime")}
@@ -1846,7 +2107,7 @@ function OverviewActivity({
           <button
             type="button"
             onClick={onRetry}
-            className="inline-flex min-h-9 items-center gap-1.5 rounded-md px-2 text-xs font-semibold text-[var(--noodle-accent)] hover:bg-[var(--accent)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--slurp-focus)]"
+            className="inline-flex min-h-9 items-center gap-1.5 rounded-lg px-2 text-xs font-semibold text-[var(--noodle-accent)] hover:bg-[var(--accent)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--slurp-focus)]"
           >
             <RefreshCw size={13} aria-hidden="true" />
             {t("capabilities.actions.tryAgain")}
@@ -1948,7 +2209,7 @@ function SectionTitle({ title, detail }: { title: string; detail: string }) {
 function CreatorDetailGroup({ title, children }: { title: string; children: ReactNode }) {
   return (
     <section
-      className="space-y-4 rounded-xl bg-[var(--slurp-surface-raised,var(--background))] p-4 shadow-[0_12px_28px_-26px_rgba(0,0,0,0.9)] sm:p-5"
+      className="space-y-4 rounded-xl bg-[var(--slurp-surface-raised,var(--background))] p-4 shadow-[var(--slurp-shadow-raised)] sm:p-5"
       aria-label={title}
     >
       <h3 className="text-xs font-bold uppercase tracking-[0.14em] text-[var(--noodle-accent-foreground)]">{title}</h3>
@@ -1990,7 +2251,7 @@ function Toggle({
   return (
     <label
       data-slurp-setting-toggle
-      className={`group flex ${compact ? "min-h-11" : "min-h-16"} cursor-pointer items-center justify-between gap-4 rounded-lg bg-[var(--slurp-surface-raised,var(--background))] px-3 py-2 text-sm shadow-[0_10px_24px_-24px_rgba(0,0,0,0.9)] ring-1 ring-inset ring-transparent transition-[background-color,box-shadow] hover:bg-[var(--accent)]/40 hover:ring-[var(--border)] focus-within:ring-2 focus-within:ring-[var(--noodle-accent)] motion-reduce:transition-none`}
+      className={`group flex ${compact ? "min-h-11" : "min-h-16"} cursor-pointer items-center justify-between gap-4 rounded-lg bg-[var(--slurp-surface-raised,var(--background))] px-3 py-2 text-sm shadow-[var(--slurp-shadow-raised)] ring-1 ring-inset ring-transparent transition-[background-color,box-shadow] hover:bg-[var(--accent)]/40 hover:ring-[var(--border)] focus-within:ring-2 focus-within:ring-[var(--noodle-accent)] motion-reduce:transition-none`}
     >
       <span className="min-w-0">
         <span className="block font-semibold">{label}</span>
@@ -2027,9 +2288,9 @@ function PromptCard({
 }) {
   const { t } = useTranslation();
   return (
-    <div className="space-y-3 rounded-md border border-[var(--border)] p-4">
+    <div className="space-y-3 rounded-lg border border-[var(--border)] p-4">
       <div className="flex items-start gap-3">
-        <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-[var(--noodle-accent)]/10 text-[var(--noodle-accent)]">
+        <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-[var(--noodle-accent)]/10 text-[var(--noodle-accent)]">
           <FileText size={16} />
         </span>
         <div className="min-w-0 flex-1">
@@ -2049,7 +2310,7 @@ function PromptCard({
           type="button"
           onClick={onRestore}
           disabled={isDefault}
-          className="inline-flex min-h-10 items-center gap-1.5 rounded-md border border-[var(--noodle-accent)]/35 px-3 text-xs font-semibold text-[var(--noodle-accent)] hover:bg-[var(--noodle-accent)]/10 disabled:opacity-45"
+          className="inline-flex min-h-10 items-center gap-1.5 rounded-lg border border-[var(--noodle-accent)]/35 px-3 text-xs font-semibold text-[var(--noodle-accent)] hover:bg-[var(--noodle-accent)]/10 disabled:opacity-45"
         >
           <RotateCcw size={13} />
           {t("ui.slurp.settings.prompts.restoreDefault")}
@@ -2057,7 +2318,7 @@ function PromptCard({
         <button
           type="button"
           onClick={onEdit}
-          className="inline-flex min-h-10 items-center gap-2 rounded-md border border-[var(--border)] px-3 text-xs font-semibold hover:bg-[var(--accent)]"
+          className="inline-flex min-h-10 items-center gap-2 rounded-lg border border-[var(--border)] px-3 text-xs font-semibold hover:bg-[var(--accent)]"
         >
           <Pencil size={14} className="text-[var(--noodle-accent)]" />
           {t("ui.slurp.settings.prompts.edit")}
@@ -2095,7 +2356,7 @@ function PromptEditor({
             aria-label={title}
             value={value}
             onChange={(event) => onChange(event.target.value)}
-            className="min-h-[22rem] w-full resize-y rounded-md border border-[var(--border)] bg-transparent p-3 text-sm leading-6"
+            className="min-h-[22rem] w-full resize-y rounded-lg border border-[var(--border)] bg-transparent p-3 text-sm leading-6"
           />
         </label>
         <div className="flex flex-col-reverse gap-2 sm:flex-row sm:items-center sm:justify-between">
@@ -2103,7 +2364,7 @@ function PromptEditor({
             type="button"
             onClick={onRestore}
             disabled={pending}
-            className="inline-flex min-h-10 items-center justify-center gap-1.5 rounded-md border border-[var(--noodle-accent)]/35 px-3 text-xs font-semibold text-[var(--noodle-accent)] disabled:opacity-45"
+            className="inline-flex min-h-10 items-center justify-center gap-1.5 rounded-lg border border-[var(--noodle-accent)]/35 px-3 text-xs font-semibold text-[var(--noodle-accent)] disabled:opacity-45"
           >
             <RotateCcw size={13} />
             {t("ui.slurp.settings.prompts.restoreDefault")}
@@ -2113,7 +2374,7 @@ function PromptEditor({
               type="button"
               onClick={onClose}
               disabled={pending}
-              className="min-h-10 flex-1 rounded-md border border-[var(--border)] px-4 text-xs font-semibold sm:flex-none"
+              className="min-h-10 flex-1 rounded-lg border border-[var(--border)] px-4 text-xs font-semibold sm:flex-none"
             >
               {t("ui.slurp.actions.cancel")}
             </button>
@@ -2121,7 +2382,7 @@ function PromptEditor({
               type="button"
               onClick={() => void onSave()}
               disabled={!value.trim() || pending}
-              className="inline-flex min-h-10 flex-1 items-center justify-center gap-1.5 rounded-md bg-[var(--noodle-accent)] px-4 text-xs font-bold text-zinc-950 disabled:opacity-45"
+              className="inline-flex min-h-10 flex-1 items-center justify-center gap-1.5 rounded-lg bg-[var(--noodle-accent)] px-4 text-xs font-bold text-zinc-950 disabled:opacity-45"
             >
               {pending ? <Loader2 size={13} className="animate-spin" /> : <Save size={13} />}
               {t("ui.slurp.settings.prompts.save")}

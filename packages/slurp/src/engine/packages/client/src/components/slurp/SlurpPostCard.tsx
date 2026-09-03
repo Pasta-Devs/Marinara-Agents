@@ -17,17 +17,7 @@ import {
   Trash2,
   X,
 } from "lucide-react";
-import {
-  Fragment,
-  useEffect,
-  useLayoutEffect,
-  useMemo,
-  useRef,
-  useState,
-  type ChangeEvent,
-  type RefObject,
-} from "react";
-import { createPortal } from "react-dom";
+import { Fragment, useEffect, useMemo, useRef, useState, type ChangeEvent, type RefObject } from "react";
 import {
   canManageNoodleReply,
   findNoodleTextMentions,
@@ -52,17 +42,18 @@ import {
   type ConversationMediaPickerTabId,
 } from "../chat/ConversationMediaPickerPanel";
 import type { ChatImage } from "../../hooks/use-gallery";
-import { Avatar, getNoodleAccentStyle, NOODLE_ICON_SCOPE_CLASS, useNoodleAccent } from "./SlurpShell";
+import { Avatar } from "./SlurpShell";
 import { formatTime } from "./SlurpDateTime";
 import { NoodleImageComposer } from "./SlurpImageComposer";
 import { NoodlePollComposer } from "./SlurpPollComposer";
+import { NoodleAnchoredPopover } from "./NoodleAnchoredPopover";
 import { PostImageCropEditor, PostImageFrame } from "./PostImageCropEditor";
 import { useTranslation as useUiTranslation } from "react-i18next";
 
 export const fieldClass =
-  "mari-chrome-field h-9 w-full min-w-0 rounded-md border border-[var(--marinara-chat-chrome-panel-border)] bg-[var(--background)] px-3 text-xs text-[var(--foreground)] outline-none transition-colors focus:border-[var(--noodle-accent)]";
+  "mari-chrome-field h-9 w-full min-w-0 rounded-lg border border-[var(--marinara-chat-chrome-panel-border)] bg-[var(--background)] px-3 text-xs text-[var(--foreground)] outline-none transition-colors focus:border-[var(--noodle-accent)]";
 export const textareaClass =
-  "mari-chrome-field min-h-24 w-full min-w-0 resize-y rounded-md border border-[var(--marinara-chat-chrome-panel-border)] bg-[var(--background)] p-3 text-xs leading-relaxed text-[var(--foreground)] outline-none transition-colors focus:border-[var(--noodle-accent)]";
+  "mari-chrome-field min-h-24 w-full min-w-0 resize-y rounded-lg border border-[var(--marinara-chat-chrome-panel-border)] bg-[var(--background)] p-3 text-xs leading-relaxed text-[var(--foreground)] outline-none transition-colors focus:border-[var(--noodle-accent)]";
 export const labelClass =
   "text-[0.68rem] font-semibold uppercase tracking-normal text-[var(--marinara-chat-chrome-panel-muted)]";
 export const noodleIconButtonClass =
@@ -228,7 +219,7 @@ function renderNoodleMarkdown(content: string, context: NoodleMarkdownContext): 
       parts.push(
         <pre
           key={`code:${lineIndex}`}
-          className="overflow-x-auto whitespace-pre rounded-md bg-foreground/10 p-3 text-xs leading-5"
+          className="overflow-x-auto whitespace-pre rounded-lg bg-foreground/10 p-3 text-xs leading-5"
         >
           <code>{codeLines.join("\n")}</code>
         </pre>,
@@ -497,7 +488,7 @@ function renderNoodleMentionText(text: string, context: NoodleMarkdownContext, k
           key={`${keyPrefix}:${mention.start}:${mention.handle}`}
           type="button"
           onClick={() => context.onOpenProfile(account)}
-          className="inline font-semibold text-[var(--noodle-accent)] hover:underline focus-visible:rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--noodle-accent)]/70"
+          className="inline font-semibold text-[var(--noodle-accent)] hover:underline focus-visible:rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--noodle-accent)]/70"
           aria-label={context.mentionLabel(account.handle)}
         >
           {label}
@@ -617,7 +608,7 @@ export function NoodlePollCard({
         type="button"
         onClick={() => setShowVoters((visible) => !visible)}
         aria-expanded={showVoters}
-        className="mt-2 rounded-sm text-[0.68rem] text-[var(--muted-foreground)] transition-colors hover:text-[var(--noodle-accent)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--noodle-accent)]/70"
+        className="mt-2 rounded-lg text-[0.68rem] text-[var(--muted-foreground)] transition-colors hover:text-[var(--noodle-accent)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--noodle-accent)]/70"
       >
         {totalVotes}{" "}
         {totalVotes === 1 ? localizeUi("ui.noodle.noodlepollcard.vote") : localizeUi("ui.noodle.noodlepollcard.votes")}
@@ -751,80 +742,6 @@ export function NoodleComposerToolRow({
   );
 }
 
-export function NoodleAnchoredPopover({
-  anchorRef,
-  children,
-  wide,
-  modalOwned = false,
-}: {
-  anchorRef: React.RefObject<HTMLElement | null>;
-  children: React.ReactNode;
-  wide?: boolean;
-  modalOwned?: boolean;
-}) {
-  const panelRef = useRef<HTMLDivElement | null>(null);
-  const [position, setPosition] = useState<{
-    left: number;
-    top: number;
-  } | null>(null);
-  const accent = useNoodleAccent();
-
-  useLayoutEffect(() => {
-    const updatePosition = () => {
-      const anchor = anchorRef.current;
-      if (!anchor) return;
-      const anchorRect = anchor.getBoundingClientRect();
-      const panelWidth = panelRef.current?.offsetWidth ?? (wide ? 384 : 304);
-      const panelHeight = panelRef.current?.offsetHeight ?? 0;
-      const padding = 16;
-      const maxLeft = Math.max(padding, window.innerWidth - panelWidth - padding);
-      const centeredLeft = anchorRect.left + anchorRect.width / 2 - panelWidth / 2;
-      const belowTop = anchorRect.bottom + 12;
-      const aboveTop = anchorRect.top - panelHeight - 12;
-      setPosition({
-        left: Math.min(Math.max(centeredLeft, padding), maxLeft),
-        top:
-          panelHeight > 0 && belowTop + panelHeight + padding > window.innerHeight
-            ? Math.max(padding, aboveTop)
-            : belowTop,
-      });
-    };
-
-    updatePosition();
-    const frame = window.requestAnimationFrame(updatePosition);
-    window.addEventListener("resize", updatePosition);
-    window.addEventListener("scroll", updatePosition, true);
-    return () => {
-      window.cancelAnimationFrame(frame);
-      window.removeEventListener("resize", updatePosition);
-      window.removeEventListener("scroll", updatePosition, true);
-    };
-  }, [anchorRef, wide]);
-
-  if (typeof document === "undefined") return null;
-
-  return createPortal(
-    <div
-      ref={panelRef}
-      data-noodle-compose-focus-portal={modalOwned ? "true" : undefined}
-      className={cn(
-        "fixed max-h-[calc(100dvh-2rem)] max-w-[calc(100vw-2rem)] overflow-y-auto",
-        modalOwned ? "z-[10001]" : "z-[80]",
-        NOODLE_ICON_SCOPE_CLASS,
-        wide ? "w-[18rem] sm:w-[24rem]" : "w-[19rem]",
-      )}
-      style={getNoodleAccentStyle(accent, {
-        left: position?.left ?? -9999,
-        top: position?.top ?? -9999,
-        opacity: position ? 1 : 0,
-      })}
-    >
-      {children}
-    </div>,
-    document.body,
-  );
-}
-
 export function SlurpToolPopover({
   title,
   onClose,
@@ -845,13 +762,13 @@ export function SlurpToolPopover({
     <NoodleAnchoredPopover anchorRef={anchorRef} wide={wide} modalOwned={modalOwned}>
       <div className="marinara-chat-popover flex h-[22rem] max-h-[60vh] flex-col overflow-hidden rounded-xl border border-[var(--marinara-chat-chrome-panel-border)] bg-[var(--background)] text-[var(--foreground)] shadow-2xl shadow-black/35">
         <div className="flex shrink-0 items-center gap-1 border-b border-foreground/10 px-2 py-1.5">
-          <span className="flex-1 rounded-md bg-foreground/10 px-2 py-1 text-center text-xs font-medium text-foreground/80 ring-1 ring-foreground/15">
+          <span className="flex-1 rounded-lg bg-foreground/10 px-2 py-1 text-center text-xs font-medium text-foreground/80 ring-1 ring-foreground/15">
             {title}
           </span>
           <button
             type="button"
             onClick={onClose}
-            className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-[var(--noodle-accent)] transition-colors hover:bg-foreground/10"
+            className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg text-[var(--noodle-accent)] transition-colors hover:bg-foreground/10"
             title={localizeUi("capabilities.actions.close")}
           >
             <X size={14} />
@@ -2188,7 +2105,7 @@ export function NoodlePostCard({ post, ctx }: { post: NoodlePostCardModel; ctx: 
                               <button
                                 type="button"
                                 onClick={() => openProfile(parentActorAccount)}
-                                className="font-medium text-[var(--noodle-accent)] hover:underline focus-visible:rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--noodle-accent)]/70"
+                                className="font-medium text-[var(--noodle-accent)] hover:underline focus-visible:rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--noodle-accent)]/70"
                                 aria-label={localizeUi("ui.noodle.noodletextcontent.viewValue1Profile", {
                                   value1: parentActorAccount.handle,
                                 })}

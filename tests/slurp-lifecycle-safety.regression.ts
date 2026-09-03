@@ -88,13 +88,23 @@ assert.match(shell, /style=\{\{ paddingBottom: BOTTOM_SAFE_INSET \}\}/u);
 assert.doesNotMatch(home, /SlurpMobileHeader/u, "Slurp must not render a duplicate mobile top header");
 assert.match(
   shell,
-  /data-component="NoodleView\.MobileBottomNav"[\s\S]*?onClick=\{onMobileHomeTap\}[\s\S]*?onClick=\{onOpenProfile\}[\s\S]*?onClick=\{onOpenSearch\}[\s\S]*?ref=\{mobileDrawerTriggerRef\}/u,
+  /data-component="NoodleView\.MobileBottomNav"[\s\S]*?onClick=\{onMobileHomeTap\}[\s\S]*?onClick=\{onOpenProfile\}[\s\S]*?onClick=\{onOpenSearch\}[\s\S]*?data-component="NoodleView\.MobileAccountSwitcher"/u,
   "the mobile persona switcher must be the trailing navigation item",
 );
 assert.match(home, /ref=\{setStickyHeader\}[\s\S]*?HIDE_ON_SCROLL_CLASS/u);
 assert.match(shell, /--slurp-canvas/u, "Slurp must own a theme-safe canvas token");
-assert.match(home, /ui\.noodle\.noodleshell\.home/u, "the Home feed must use the compact studio masthead");
-assert.match(home, /ui\.slurp\.home\.tonight/u, "the desktop discovery rail must have a Slurp identity");
+assert.match(
+  home,
+  /data-component="SlurpHome\.HeaderBar"[\s\S]*?<NoodleLogo/u,
+  "the Home masthead must centre the Slurp logo",
+);
+assert.match(
+  home,
+  /data-component="SlurpHome\.HeaderBar"[\s\S]*?ui\.slurp\.wallet\.balance/u,
+  "the Home masthead must carry the wallet balance",
+);
+assert.match(home, /slurp-rail-discover-heading/u, "the desktop discovery rail must name the creators it contains");
+assert.doesNotMatch(home, /ui\.slurp\.home\.tonight/u, "the rail must not carry a heading with no content under it");
 assert.match(home, /SLURP_MOMENT_WINDOW_MS = 24 \* 60 \* 60 \* 1000/u);
 assert.match(home, /data-component="SlurpHome\.Moments"/u, "Home must expose the real 24-hour Moments shelf");
 assert.match(home, /ui\.slurp\.moments\.empty/u, "Home must keep Stories discoverable when the shelf is empty");

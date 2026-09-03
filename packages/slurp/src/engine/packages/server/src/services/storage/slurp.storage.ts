@@ -166,6 +166,11 @@ export const slurpSettingsSchema = z.object({
   inlineAdsTone: z.enum(["corporate", "scammy", "local", "luxury", "unhinged"]),
   inlineAdsEra: z.enum(["present", "nineties", "cyberpunk", "retrofuture"]),
   inlineAdsWorldContext: z.string().trim().max(1200),
+  inlineAdsImagesEnabled: z.boolean(),
+  /** Lorebook whose entries feed the ad generator as world context. */
+  inlineAdsLorebookId: z.string().trim().min(1).nullable(),
+  /** Fingerprint of the synced lorebook, so a changed book can resync itself. */
+  inlineAdsLorebookRevision: z.string().trim().max(64).nullable(),
   refreshesPerDay: z.number().int().min(0).max(24),
   generationGuidance: z.string().max(20_000),
   generationConnectionId: z.string().nullable(),
@@ -673,7 +678,25 @@ export const LEGACY_NOODLER_DEFAULT_GENERATION_GUIDANCE =
   "All NoodleR creators and viewers are adults (18+). This is an adult creator page: flirty, suggestive, teasing, and sensual posts are common, and explicit posts appear regularly when they suit the creator — but they are not required and need not be the majority. Tease the locked posts and answer flirty comments in kind. Keep each creator's personality intact: a shy creator flirts shyly, a blunt one bluntly, a funny one filthily. Ordinary posts — updates, humor, behind the scenes, project news — matter just as much and keep both the page and the character human. Keep low mood or conflict uncommon and character-specific, and do not let recent posts set the default mood.";
 export const LEGACY_SLURP_DEFAULT_GENERATION_GUIDANCE =
   "All Slurp creators and viewers are adults (18+). This is an adult creator page: flirty, suggestive, teasing, and sensual posts are common, and explicit posts appear regularly when they suit the creator — but they are not required and need not be the majority. Tease the locked posts and answer flirty comments in kind. Keep each creator's personality intact: a shy creator flirts shyly, a blunt one bluntly, a funny one filthily. Ordinary posts — updates, humor, behind the scenes, project news — matter just as much and keep both the page and the character human. Keep low mood or conflict uncommon and character-specific, and do not let recent posts set the default mood.";
-export const NOODLER_DEFAULT_GENERATION_GUIDANCE =
+/**
+ * Three shipped spice levels for the generation guidance. The middle level is the default; the
+ * settings surface writes one of these verbatim into `generationGuidance`, and any edit to the
+ * text is preserved as the user's own.
+ */
+export const SLURP_GUIDANCE_PRESETS = {
+  mild: "All Slurp creators and viewers are adults (18+). This is an adult creator page, but a restrained one: posts are flirty, teasing, and suggestive rather than graphic. Innuendo, charm, and anticipation do the work, and locked posts are teased instead of described. Do not write explicit sexual detail. Keep each creator's personality intact: a shy creator flirts shyly, a blunt one flirts bluntly. Ordinary posts about their day, work, and mood stay just as important as the flirty ones.",
+  steamy:
+    "All Slurp creators and viewers are adults (18+). This is an adult creator page. Posts are normally sexually suggestive to outright NSFW. Creators will use Slurp to often excite their readers with their posts. The level of NSFW of a post is dependent on the creator's personality, a shy, innocent person will be suggestive, but still overall tame. On the other end of the spectrum, an outgoing personality who has no problems with sex, will often post very explicit material.",
+  explicit:
+    "All Slurp creators and viewers are adults (18+). This is an explicit adult creator page. Sexual content is the norm here rather than the exception, and creators describe it directly and in detail when it suits them. Tease the locked posts hard and answer flirty comments in kind. Keep each creator's personality intact: a shy creator is explicit shyly, a blunt one is explicit bluntly. Ordinary posts about their day, work, and mood still appear and keep the feed believable.",
+} as const;
+
+export type SlurpGuidanceLevel = keyof typeof SLURP_GUIDANCE_PRESETS;
+
+export const NOODLER_DEFAULT_GENERATION_GUIDANCE: string = SLURP_GUIDANCE_PRESETS.steamy;
+
+/** The middle level shipped with a typo before the levels existed; migrate it forward. */
+export const LEGACY_TYPO_SLURP_DEFAULT_GENERATION_GUIDANCE =
   "All Slurp creators and viewers are adults (18+). This is an adult creator page. Posts are normallly sexually suggestive to outright NSFW. Creators will use Slurp to often excite its readers with their posts. The level of NSFW of a post is dependent on the creator's personality, a shy, innocent person will be suggestive, but still overall tame. On the other end of the spectrum, an outgoing personality who has no problems with sex, will often post very explicit material.";
 export const NOODLER_DEFAULT_IMAGE_GENERATION_PROMPT =
   "Create a polished social-media image for an adult Creator post. Match the creator's identity, personality, body, clothing, and established visual details. Follow the post's mood and subject. Describe the pose, expression, setting, lighting, camera angle, composition, and visible details clearly. Flirty, suggestive, sensual, or explicit imagery is allowed when it fits the post and creator, but do not force sexual content into ordinary updates. Keep the image coherent, intentional, and suitable for a public or locked Creator feed.";
@@ -681,10 +704,10 @@ export const NOODLER_DEFAULT_IMAGE_PROMPT_INTERPRETATION =
   "Edit this image prompt into a provider-ready image prompt. Preserve the original subject, action, setting, composition, and visual style. Preserve any explicit style in the original prompt, character context, image instructions, or style guidance. Do not add realistic, photorealistic, photographic, camera, lens, or natural-lighting language unless the supplied context clearly requests that style. Do not convert an anime, cartoon, game, manga, comic, illustration, painterly, fantasy, or stylized character into a realistic image. When no style is specified, keep the prompt style-neutral. Do not invent an art style. Treat image instructions as guidance, not text to copy into the result. Return only the provider-ready image prompt.";
 
 /**
- * Every previously shipped default, newest first. An install that never edited the guidance
- * stored one of these strings verbatim, so it is migrated to the current default instead of
- * being kept as if the user had chosen it. Comparison is exact: an edited string differs by at
- * least one character and is preserved as the user's own.
+ * The LEGACY_* guidance constants above are every previously shipped default. An install that
+ * never edited the guidance stored one of them verbatim, so it is migrated to the current default
+ * instead of being kept as if the user had chosen it. Comparison is exact: an edited string
+ * differs by at least one character and is preserved as the user's own.
  */
 
 export const DEFAULT_SLURP_SETTINGS: SlurpSettings = {
@@ -696,6 +719,9 @@ export const DEFAULT_SLURP_SETTINGS: SlurpSettings = {
   inlineAdsTone: "corporate",
   inlineAdsEra: "present",
   inlineAdsWorldContext: "",
+  inlineAdsImagesEnabled: false,
+  inlineAdsLorebookId: null,
+  inlineAdsLorebookRevision: null,
   refreshesPerDay: 0,
   generationGuidance: NOODLER_DEFAULT_GENERATION_GUIDANCE,
   generationConnectionId: null,
@@ -752,6 +778,7 @@ export function normalizeSlurpSettings(raw: unknown): SlurpSettings {
   ) as Record<keyof SlurpSettings, unknown>;
   candidate.generationGuidance =
     rawRecord.generationGuidance === LEGACY_NOODLER_DEFAULT_GENERATION_GUIDANCE ||
+    rawRecord.generationGuidance === LEGACY_TYPO_SLURP_DEFAULT_GENERATION_GUIDANCE ||
     rawRecord.generationGuidance === LEGACY_SLURP_DEFAULT_GENERATION_GUIDANCE
       ? NOODLER_DEFAULT_GENERATION_GUIDANCE
       : (rawRecord.generationGuidance ?? NOODLER_DEFAULT_GENERATION_GUIDANCE);

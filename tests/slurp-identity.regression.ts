@@ -45,7 +45,13 @@ assert.match(storage, /viewerActorAccountId: string/u);
 assert.match(replyOperation, /viewerPersonaId: string;[\s\S]*?viewerActorAccountId: string/u);
 assert.match(home, /const viewerActorAccount =[\s\S]*?id: myCreatorProfile\.id/u);
 assert.match(home, /personaAccount: viewerActorAccount/u);
-assert.match(home, /<ViewerHub[\s\S]*?personaAccount=\{shellPersonaAccount\}/u);
+// The shell's persona switcher must show the raw persona account, while post cards act as the
+// persona's Creator profile. The shell prop moved into shellProps, so match it where it lives now.
+assert.match(
+  home,
+  /const shellProps = \{[\s\S]*?personaAccount: shellPersonaAccount/u,
+  "The shell must identify the viewer by their persona account, not their Creator actor",
+);
 assert.match(
   storage,
   /normalizeLegacyNoodlerToggleInteraction[\s\S]*?actorAccountId: input\.actorAccountId/u,

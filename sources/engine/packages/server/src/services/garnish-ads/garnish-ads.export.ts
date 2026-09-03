@@ -57,6 +57,8 @@ export async function exportGarnishAds(pool: GarnishAdsStorage, platform?: Garni
 
 export type GarnishImportMode = "merge" | "replace";
 
+const eventKey = (event: GarnishAdEvent) => `${event.adId}\u0000${event.subjectId}\u0000${event.type}\u0000${event.at}`;
+
 /**
  * Import a pack. `merge` adds and overwrites by id and keeps everything else;
  * `replace` swaps the whole pool for what the file holds. Events only come in
@@ -82,7 +84,11 @@ export async function importGarnishAds(
   await pool.replaceAll([...existing.filter((ad) => !incomingIds.has(ad.id)), ...incoming]);
   if (parsed.events.length) {
     const events = await pool.listEvents();
-    await pool.replaceEvents([...events, ...(parsed.events as GarnishAdEvent[])]);
+    // Events carry no id, so dedupe on their natural key: importing the same backup twice
+    // must not double every impression and skew the quality scores that retire weak ads.
+    const seen = new Set(events.map(eventKey));
+    const fresh = (parsed.events as GarnishAdEvent[]).filter((event) => !seen.has(eventKey(event)));
+    if (fresh.length) await pool.replaceEvents([...events, ...fresh]);
   }
   return { imported: incoming.length, events: parsed.events.length };
 }

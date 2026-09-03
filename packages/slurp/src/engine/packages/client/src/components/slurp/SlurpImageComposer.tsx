@@ -26,7 +26,7 @@ export function NoodleImageComposer({
   const resolvedFileActionLabel = fileActionLabel ?? localizeUi("ui.noodle.noodlehome.uploadFromDevice");
   const resolvedUrlActionLabel = urlActionLabel ?? localizeUi("ui.noodle.noodlehome.attachUrl");
   return (
-    <div className="marinara-chat-popover space-y-3 rounded-2xl border border-[var(--marinara-chat-chrome-panel-border)] bg-[var(--background)] px-4 pb-4 pt-2 text-[var(--marinara-chat-chrome-panel-title)] shadow-2xl shadow-black/35">
+    <div className="marinara-chat-popover space-y-3 rounded-xl border border-[var(--marinara-chat-chrome-panel-border)] bg-[var(--background)] px-4 pb-4 pt-2 text-[var(--marinara-chat-chrome-panel-title)] shadow-2xl shadow-black/35">
       <div className="flex items-center justify-between gap-3">
         <h2 className="text-lg font-bold">
           {hasImage

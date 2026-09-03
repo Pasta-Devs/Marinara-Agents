@@ -205,7 +205,7 @@ export function PostImageCropEditor({
       </div>
 
       <div className="overflow-hidden rounded-lg bg-black/55 p-2">
-        <div className="relative mx-auto w-fit max-w-full overflow-hidden rounded-md">
+        <div className="relative mx-auto w-fit max-w-full overflow-hidden rounded-lg">
           <img
             ref={imageRef}
             alt={localizeUi("ui.noodle.postimagecropeditor.cropPreview")}
@@ -285,7 +285,7 @@ export function PostImageCropEditor({
                 setCenter({ x: 0.5, y: 0.5 });
               }}
               className={cn(
-                "min-h-9 flex-1 rounded-md px-2 text-xs font-bold transition-colors disabled:opacity-50",
+                "min-h-9 flex-1 rounded-lg px-2 text-xs font-bold transition-colors disabled:opacity-50",
                 aspect === option.value
                   ? "bg-[var(--noodle-accent)] text-zinc-950"
                   : "text-[var(--muted-foreground)] hover:text-[var(--foreground)]",

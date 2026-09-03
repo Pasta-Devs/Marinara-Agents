@@ -54,4 +54,27 @@ const postCard = readFileSync(
 );
 assert.match(postCard, /Paid partnership with/u);
 
+// The slot maths decides where ads land in the feed, and an off-by-one here silently wastes the
+// first slot. Run the real expression rather than matching its source text.
+const slotSource = home.match(
+  /const inlineAdForIndex = \(index: number\) => \{[\s\S]*?index % inlineAdEvery !== inlineAdEvery - 1\) return null;\s*return inlineAdsQuery\.data\?\.items\[([^\]]+)\] \?\? null;/u,
+);
+assert.ok(slotSource, "inlineAdForIndex must keep its slot expression in one readable place");
+const adIndexFor = (index: number, inlineAdEvery: number) =>
+  index % inlineAdEvery !== inlineAdEvery - 1
+    ? null
+    : (new Function("index", "inlineAdEvery", `return ${slotSource[1]};`) as (i: number, e: number) => number)(
+        index,
+        inlineAdEvery,
+      );
+for (const every of [2, 4, 8]) {
+  const slots = [...Array(40).keys()].filter((index) => adIndexFor(index, every) !== null);
+  assert.deepEqual(
+    slots.map((index) => adIndexFor(index, every)),
+    slots.map((_value, position) => position),
+    `every=${every}: the nth ad slot must take the nth ad, starting at the first one`,
+  );
+  assert.equal(slots[0], every - 1, `every=${every}: the first ad must follow the first ${every} posts`);
+}
+
 console.log("Slurp promotion regressions passed.");

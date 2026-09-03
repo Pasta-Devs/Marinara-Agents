@@ -9,8 +9,6 @@ import { api } from "../lib/api-client";
 import { useSlurpUIStore } from "../stores/slurp-package.store";
 import type {
   NoodleAccount,
-  NoodleAmbientProfileRerollInput,
-  NoodleAmbientProfileRerollOutcome,
   NoodleAccountFollowUpdateInput,
   NoodleAccountKind,
   NoodleAccountProfileUpdateInput,
@@ -62,6 +60,7 @@ export const noodleKeys = {
   refreshIndicator: () => [...noodleKeys.all, "refresh-indicator"] as const,
   noodlerRoot: () => [...noodleKeys.all, "noodler"] as const,
   noodlerAccounts: () => [...noodleKeys.noodlerRoot(), "accounts"] as const,
+  noodlerConnectionCounts: () => [...noodleKeys.noodlerRoot(), "connection-counts"] as const,
   noodlerEligibleAccountsRoot: () => [...noodleKeys.noodlerRoot(), "eligible"] as const,
   noodlerEligibleAccounts: (search: string, kind: string) =>
     [...noodleKeys.noodlerEligibleAccountsRoot(), search, kind] as const,
@@ -179,7 +178,9 @@ export function useGenerateSlurpAds() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (count?: number) =>
-      api.post<{ items: SlurpPromotion[]; retired: string[] }>(`/slurp/noodler/ads/generate`, { count }),
+      api.post<{ items: SlurpPromotion[]; retired: string[]; images: number }>(`/slurp/noodler/ads/generate`, {
+        count,
+      }),
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: noodleKeys.adPool() });
       void qc.invalidateQueries({ queryKey: noodleKeys.noodlerViewers() });
@@ -191,7 +192,56 @@ export function useDeleteSlurpAd() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (promotionId: string) => api.delete(`/slurp/noodler/ads/pool/${encodeURIComponent(promotionId)}`),
-    onSuccess: () => qc.invalidateQueries({ queryKey: noodleKeys.adPool() }),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: noodleKeys.adPool() });
+      void qc.invalidateQueries({ queryKey: noodleKeys.noodlerViewers() });
+    },
+  });
+}
+
+export function useGenerateSlurpAdImage() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (promotionId: string) =>
+      api.post<{ ad: SlurpPromotion }>(`/slurp/noodler/ads/${encodeURIComponent(promotionId)}/image`, {}),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: noodleKeys.adPool() });
+      void qc.invalidateQueries({ queryKey: noodleKeys.noodlerViewers() });
+    },
+  });
+}
+
+export function useSlurpAdLorebooks(enabled: boolean) {
+  return useQuery({
+    queryKey: [...noodleKeys.adPool(), "lorebooks"],
+    queryFn: () => api.get<{ items: { id: string; name: string }[] }>(`/slurp/noodler/ads/lorebooks`),
+    enabled,
+  });
+}
+
+export function useSyncSlurpAdLorebook() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (force?: boolean) =>
+      api.post<{ outcome: "disabled" | "unchanged" | "missing" | "synced" }>(`/slurp/noodler/ads/lorebook/sync`, {
+        force,
+      }),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: noodleKeys.adPool() });
+      void qc.invalidateQueries({ queryKey: noodleKeys.noodlerViewers() });
+    },
+  });
+}
+
+export function useImportSlurpAds() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (payload: unknown) =>
+      api.post<{ imported: number; events: number }>(`/slurp/noodler/ads/import`, { mode: "merge", payload }),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: noodleKeys.adPool() });
+      void qc.invalidateQueries({ queryKey: noodleKeys.noodlerViewers() });
+    },
   });
 }
 
@@ -212,6 +262,9 @@ export type SlurpSettings = {
   inlineAdsTone: "corporate" | "scammy" | "local" | "luxury" | "unhinged";
   inlineAdsEra: "present" | "nineties" | "cyberpunk" | "retrofuture";
   inlineAdsWorldContext: string;
+  inlineAdsImagesEnabled: boolean;
+  inlineAdsLorebookId: string | null;
+  inlineAdsLorebookRevision: string | null;
   refreshesPerDay: number;
   generationGuidance: string;
   postsPerDay: number;
@@ -379,28 +432,6 @@ function preservePollVotes(current: NoodleBootstrap | undefined, next: NoodleBoo
   return interactions === next.interactions ? next : { ...next, interactions };
 }
 
-export function useRerollAmbientNoodleProfiles() {
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: (input: NoodleAmbientProfileRerollInput) =>
-      api.post<{
-        accounts: NoodleAccount[];
-        outcomes: NoodleAmbientProfileRerollOutcome[];
-      }>("/slurp/ambient-profiles/reroll", input),
-    onSuccess: ({ accounts }) => {
-      qc.setQueryData<NoodleBootstrap | undefined>(noodleKeys.bootstrap(), (current) => {
-        if (!current) return current;
-        const updatedById = new Map(accounts.map((account) => [account.id, account]));
-        return {
-          ...current,
-          accounts: current.accounts.map((account) => updatedById.get(account.id) ?? account),
-        };
-      });
-      return qc.invalidateQueries({ queryKey: noodleKeys.bootstrap() });
-    },
-  });
-}
-
 export function useNoodlerAccounts(enabled = true) {
   return useQuery({
     queryKey: noodleKeys.noodlerAccounts(),
@@ -410,6 +441,18 @@ export function useNoodlerAccounts(enabled = true) {
     // Autonomous reserve work changes operator state without a client mutation.
     refetchInterval: enabled ? 30_000 : false,
     refetchIntervalInBackground: false,
+  });
+}
+
+/** Fan and follower totals keyed by creator account id. */
+export type NoodlerConnectionCounts = Record<string, { fans: number; followers: number }>;
+
+export function useNoodlerConnectionCounts(enabled = true) {
+  return useQuery({
+    queryKey: noodleKeys.noodlerConnectionCounts(),
+    queryFn: () => api.get<NoodlerConnectionCounts>("/slurp/noodler/account-connection-counts"),
+    enabled,
+    staleTime: 30_000,
   });
 }
 
@@ -707,16 +750,6 @@ export type NoodlePostDraftRequest = {
   guidance?: string;
   connectionId?: string;
 };
-
-export function useGenerateNoodlePostDraft() {
-  return useMutation({
-    mutationFn: ({ accountId, ...input }: NoodlePostDraftRequest) =>
-      api.post<NoodlePostDraft>(`/slurp/accounts/${encodeURIComponent(accountId)}/post-draft`, {
-        ...input,
-        debugMode: useSlurpUIStore.getState().debugMode,
-      }),
-  });
-}
 
 export type GeneratedNoodlerNoodlePost = NoodlerManagedPost & {
   imagePromptReview?: ImagePromptReviewItem;
@@ -1324,22 +1357,6 @@ export function useRunNoodlerAutoPostNow() {
     onSuccess: (_post, accountId) =>
       Promise.all([
         qc.invalidateQueries({ queryKey: noodleKeys.noodlerPosts(accountId) }),
-        qc.invalidateQueries({ queryKey: noodleKeys.noodlerViewers() }),
-      ]),
-  });
-}
-
-export function useRefreshAllNoodlerCreatorsNow() {
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: () => api.post<{ outcomes: NoodlerRefreshNowOutcome[] }>("/slurp/noodler/auto-post/refresh-now"),
-    onSuccess: () =>
-      Promise.all([
-        qc.invalidateQueries({ queryKey: noodleKeys.noodlerAccounts() }),
-        qc.invalidateQueries({ queryKey: noodleKeys.noodlerReserveStatus() }),
-        qc.invalidateQueries({
-          queryKey: [...noodleKeys.noodlerRoot(), "posts"],
-        }),
         qc.invalidateQueries({ queryKey: noodleKeys.noodlerViewers() }),
       ]),
   });

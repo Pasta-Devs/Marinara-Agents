@@ -53,7 +53,13 @@ async function main() {
     shell,
     /data-component="NoodleView\.MobileBottomNav"[\s\S]*data-component="NoodleView\.MobileAccountSwitcher"/u,
   );
-  assert.match(shell, /onClick=\{\(\) => onMobileDrawerOpenChange\(true\)\}[\s\S]*NOODLER_LOGO_SRC/u);
+  // The persona avatar is the drawer trigger now; the bottom bar carries no logo.
+  assert.match(
+    shell,
+    /data-component="NoodleView\.MobileAccountSwitcher"[\s\S]*?onClick=\{\(\) => onMobileDrawerOpenChange\(true\)\}/u,
+  );
+  assert.match(shell, /onClick=\{onOpenMessages\}/u, "the bottom bar must reach Messages");
+  assert.match(shell, /onClick=\{onOpenWallet\}/u, "the menu must reach the Wallet");
   assert.doesNotMatch(
     shell.slice(
       shell.indexOf('data-component="NoodleView.MobileDrawer"'),

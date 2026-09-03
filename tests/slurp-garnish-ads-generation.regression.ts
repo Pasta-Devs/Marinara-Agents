@@ -35,6 +35,23 @@ assert.match(service, /Math\.min\(Math\.max\(request\.count \?\? 4, 1\), 10\)/u,
 const routes = readFileSync("packages/slurp/src/engine/packages/server/src/routes/slurp.routes.ts", "utf8");
 assert.match(routes, /app\.post\("\/noodler\/ads\/generate"/u);
 assert.match(routes, /retireWeakGarnishAds/u, "the pool must shed as well as grow");
+
+// These three shipped as free identifiers with no import, so every generate call died with a
+// ReferenceError that the route reported as a bare 502. esbuild bundles undefined globals
+// happily, so nothing caught it until runtime.
+for (const name of ["generateGarnishAds", "retireWeakGarnishAds", "qualityScores"]) {
+  assert.match(
+    routes,
+    new RegExp(`import \\{[^}]*\\b${name}\\b[^}]*\\} from "[^"]+";`, "u"),
+    `${name} is used by the routes and must be imported, not left as a global`,
+  );
+}
+// The Engine's connections storage has no getMainWithKey, so calling it threw a TypeError.
+assert.doesNotMatch(
+  service,
+  /connections\.getMainWithKey\(/u,
+  "ad generation must resolve a connection the Engine actually exposes",
+);
 assert.match(routes, /await ads\.markRecent\(/u, "serving ads must mark them recent or rotation never happens");
 assert.match(routes, /"impression"\)/u, "serving ads must record impressions or quality has no denominator");
 

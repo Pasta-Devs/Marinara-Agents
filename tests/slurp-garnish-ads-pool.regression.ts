@@ -110,6 +110,12 @@ async function main() {
   await importGarnishAds(rated as never, { ...pack, events: [] }, "merge");
   assert.equal(rated.read().events.length, 1, "importing a brand pack must keep existing events");
 
+  // re-importing the same backup must not double the events behind the quality scores
+  const twice = fakePool([]);
+  await importGarnishAds(twice as never, pack, "merge");
+  await importGarnishAds(twice as never, pack, "merge");
+  assert.equal(twice.read().events.length, pack.events.length, "merge must dedupe identical events");
+
   await assert.rejects(() => importGarnishAds(fakePool([]) as never, { version: 99, ads: [] }));
 
   console.log("garnish-ads pool: ok");

@@ -76,9 +76,12 @@ export async function generateGarnishAds(
   request: GarnishGenerationRequest,
 ): Promise<GarnishAd[]> {
   const connections = createConnectionsStorage(db);
-  const connection = request.connectionId
-    ? await connections.getWithKey(request.connectionId)
-    : await connections.getMainWithKey();
+  // getMainWithKey() does not exist on the Engine's connections storage, so this threw a
+  // TypeError on every run and no ad was ever generated. Resolve the same way the rest of
+  // Slurp does, and fall back rather than failing when the chosen connection was deleted.
+  const connection =
+    (request.connectionId ? await connections.getWithKey(request.connectionId) : null) ??
+    (await connections.getDefaultForAgents());
   if (!connection) throw new Error("No usable connection for garnish ad generation.");
 
   const count = Math.min(Math.max(request.count ?? 4, 1), 10);

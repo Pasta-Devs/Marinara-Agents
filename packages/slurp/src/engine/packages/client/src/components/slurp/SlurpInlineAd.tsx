@@ -43,7 +43,7 @@ export function SlurpInlineAd({
           <button
             type="button"
             onClick={onAction}
-            className="mt-3 min-h-9 rounded-md bg-[var(--noodle-accent)] px-3 text-xs font-bold text-zinc-950 hover:opacity-90"
+            className="mt-3 min-h-9 rounded-lg bg-[var(--noodle-accent)] px-3 text-xs font-bold text-zinc-950 hover:opacity-90"
           >
             <ExternalLink size={13} aria-hidden="true" />
             {promotion.actionLabel ?? labels.actionFallback}
@@ -55,7 +55,7 @@ export function SlurpInlineAd({
             onClick={onHide}
             aria-label={labels.hide}
             title={labels.hide}
-            className="flex h-8 w-8 items-center justify-center rounded-md text-[var(--muted-foreground)] hover:bg-[var(--accent)] hover:text-[var(--foreground)]"
+            className="flex h-8 w-8 items-center justify-center rounded-lg text-[var(--muted-foreground)] hover:bg-[var(--accent)] hover:text-[var(--foreground)]"
           >
             <X size={15} aria-hidden="true" />
           </button>
@@ -66,7 +66,7 @@ export function SlurpInlineAd({
               onClick={onHideBrand}
               aria-label={labels.hideBrand}
               title={labels.hideBrand}
-              className="flex h-8 w-8 items-center justify-center rounded-md text-[var(--muted-foreground)] hover:bg-[var(--accent)] hover:text-[var(--foreground)]"
+              className="flex h-8 w-8 items-center justify-center rounded-lg text-[var(--muted-foreground)] hover:bg-[var(--accent)] hover:text-[var(--foreground)]"
             >
               <Ban size={14} aria-hidden="true" />
             </button>

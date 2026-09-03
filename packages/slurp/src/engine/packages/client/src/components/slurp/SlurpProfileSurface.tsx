@@ -7,7 +7,7 @@ import { useTranslation as useUiTranslation } from "react-i18next";
 type SlurpProfileTab = "posts" | "likes" | "media";
 
 const fieldClass =
-  "mari-chrome-field h-9 w-full min-w-0 rounded-md border border-[var(--marinara-chat-chrome-panel-border)] bg-[var(--background)] px-3 text-xs text-[var(--foreground)] outline-none transition-colors focus:border-[var(--noodle-accent)]";
+  "mari-chrome-field h-9 w-full min-w-0 rounded-lg border border-[var(--marinara-chat-chrome-panel-border)] bg-[var(--background)] px-3 text-xs text-[var(--foreground)] outline-none transition-colors focus:border-[var(--noodle-accent)]";
 const labelClass =
   "text-[0.68rem] font-semibold uppercase tracking-normal text-[var(--marinara-chat-chrome-panel-muted)]";
 
@@ -180,7 +180,7 @@ export function SlurpProfileSurface<TTab extends string = SlurpProfileTab>({
             "group relative isolate overflow-hidden bg-[var(--slurp-canvas,var(--background))]",
             spotlight
               ? "shadow-[0_34px_84px_-60px_var(--noodle-accent)] ring-1 ring-inset ring-white/[0.06]"
-              : "rounded-b-2xl shadow-[0_24px_54px_-40px_rgba(0,0,0,0.95)]",
+              : "rounded-b-2xl shadow-[var(--slurp-shadow-modal)]",
           )}
         >
           <button
@@ -223,7 +223,7 @@ export function SlurpProfileSurface<TTab extends string = SlurpProfileTab>({
             )}
             {banner.canEdit && banner.uploadTarget !== "banner" && (
               <span
-                className="absolute end-3 top-3 flex h-11 w-11 items-center justify-center rounded-xl bg-black/60 text-white shadow-[0_12px_30px_-18px_rgba(0,0,0,0.95)] ring-1 ring-white/15 backdrop-blur-md"
+                className="absolute end-3 top-3 flex h-11 w-11 items-center justify-center rounded-xl bg-black/60 text-white shadow-[var(--slurp-shadow-raised)] ring-1 ring-white/15 backdrop-blur-md"
                 aria-hidden="true"
               >
                 <Upload size={13} className="!text-white" />
@@ -234,7 +234,7 @@ export function SlurpProfileSurface<TTab extends string = SlurpProfileTab>({
             <button
               type="button"
               onClick={banner.onGenerate}
-              className="absolute end-[4.25rem] top-3 flex h-11 w-11 items-center justify-center rounded-xl bg-black/60 text-white shadow-[0_12px_30px_-18px_rgba(0,0,0,0.95)] ring-1 ring-white/15 backdrop-blur-md transition-[background-color,transform] hover:bg-black/80 active:scale-[0.96] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white motion-reduce:transition-none motion-reduce:active:scale-100"
+              className="absolute end-[4.25rem] top-3 flex h-11 w-11 items-center justify-center rounded-xl bg-black/60 text-white shadow-[var(--slurp-shadow-raised)] ring-1 ring-white/15 backdrop-blur-md transition-[background-color,transform] hover:bg-black/80 active:scale-[0.96] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white motion-reduce:transition-none motion-reduce:active:scale-100"
               title={localizeUi("ui.slurp.artwork.generateBanner")}
               aria-label={localizeUi("ui.slurp.artwork.generateBanner")}
             >
@@ -259,7 +259,7 @@ export function SlurpProfileSurface<TTab extends string = SlurpProfileTab>({
           "relative px-4 pb-6 @min-[680px]:px-6 @min-[680px]:pb-7 @min-[1040px]:px-8",
           spotlight
             ? "bg-[linear-gradient(110deg,color-mix(in_srgb,var(--slurp-canvas)_96%,transparent),color-mix(in_srgb,var(--noodle-accent)_7%,var(--slurp-canvas))_56%,color-mix(in_srgb,var(--slurp-violet)_5%,var(--slurp-canvas)))] @min-[680px]:grid @min-[680px]:grid-cols-[auto_minmax(0,1fr)] @min-[680px]:items-end @min-[680px]:gap-x-6 @min-[1040px]:gap-x-8"
-            : "rounded-[1.5rem] bg-[color-mix(in_srgb,var(--slurp-surface-raised,var(--background))_96%,transparent)] shadow-[0_28px_62px_-38px_rgba(0,0,0,0.95)] ring-1 ring-inset ring-[var(--noodle-divider)] backdrop-blur-md",
+            : "rounded-xl bg-[color-mix(in_srgb,var(--slurp-surface-raised,var(--background))_96%,transparent)] shadow-[var(--slurp-shadow-modal)] ring-1 ring-inset ring-[var(--noodle-divider)] backdrop-blur-md",
           hasBanner ? "-mt-14 @min-[680px]:-mt-20" : "mt-5",
         )}
         data-slurp-creator-hero
@@ -280,7 +280,7 @@ export function SlurpProfileSurface<TTab extends string = SlurpProfileTab>({
                 }}
                 disabled={!avatarUpload.canEdit || avatarUpload.uploadTarget === "avatar"}
                 className={cn(
-                  "relative rounded-full bg-[var(--background)] p-1 text-left shadow-[0_18px_46px_-24px_rgba(0,0,0,0.95)] ring-1 ring-white/15 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--noodle-accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--slurp-surface-raised,var(--background))] disabled:cursor-default",
+                  "relative rounded-full bg-[var(--background)] p-1 text-left shadow-[var(--slurp-shadow-floating)] ring-1 ring-white/15 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--noodle-accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--slurp-surface-raised,var(--background))] disabled:cursor-default",
                   avatarUpload.uploadTarget === "avatar" && "cursor-wait opacity-80",
                 )}
                 title={avatarUpload.canEdit ? localizeUi("editor.avatar.upload") : undefined}
@@ -440,7 +440,7 @@ export function SlurpProfileSurface<TTab extends string = SlurpProfileTab>({
             "mx-3 overflow-hidden @min-[680px]:mx-5 @min-[1040px]:mx-8",
             spotlight
               ? "mt-2 rounded-xl border-y border-white/[0.055] bg-[linear-gradient(110deg,color-mix(in_srgb,var(--noodle-accent)_6%,transparent),color-mix(in_srgb,var(--slurp-violet)_4%,transparent)_64%,transparent)]"
-              : "mt-4 rounded-2xl shadow-[0_18px_42px_-34px_rgba(0,0,0,0.95)] ring-1 ring-inset ring-[var(--noodle-divider)]",
+              : "mt-4 rounded-xl shadow-[var(--slurp-shadow-floating)] ring-1 ring-inset ring-[var(--noodle-divider)]",
           )}
         >
           {preTabsContent}
@@ -451,7 +451,7 @@ export function SlurpProfileSurface<TTab extends string = SlurpProfileTab>({
           "overflow-hidden @min-[680px]:mx-5 @min-[1040px]:mx-8",
           spotlight
             ? "mt-4 bg-transparent"
-            : "mt-4 shadow-[0_20px_46px_-38px_rgba(0,0,0,0.95)] sm:rounded-2xl sm:ring-1 sm:ring-inset sm:ring-[var(--noodle-divider)]",
+            : "mt-4 shadow-[var(--slurp-shadow-floating)] sm:rounded-xl sm:ring-1 sm:ring-inset sm:ring-[var(--noodle-divider)]",
         )}
       >
         {featuredContent}

@@ -2,7 +2,7 @@ import { Plus, Send, Smile, Trash2, X } from "lucide-react";
 import { type ReactNode, useRef, useState } from "react";
 import { noodlePollInputSchema, type NoodlePollInput } from "@marinara-engine/shared";
 import { ConversationMediaPickerPanel } from "../chat/ConversationMediaPickerPanel";
-import { NoodleAnchoredPopover } from "./SlurpPostCard";
+import { NoodleAnchoredPopover } from "./NoodleAnchoredPopover";
 import { useTranslation as useUiTranslation } from "react-i18next";
 
 const EMPTY_POLL: NoodlePollInput = { question: "", options: ["", ""] };
@@ -83,7 +83,7 @@ export function NoodlePollComposer({
 
   return (
     <>
-      <div className="marinara-chat-popover space-y-3 rounded-2xl border border-[var(--marinara-chat-chrome-panel-border)] bg-[var(--background)] px-4 pb-4 pt-2 text-[var(--foreground)] shadow-2xl shadow-black/35">
+      <div className="marinara-chat-popover space-y-3 rounded-xl border border-[var(--marinara-chat-chrome-panel-border)] bg-[var(--background)] px-4 pb-4 pt-2 text-[var(--foreground)] shadow-2xl shadow-black/35">
         <div className="flex items-center justify-between gap-3">
           <div className="min-w-0">
             <h2 className="text-lg font-bold">{resolvedTitle}</h2>
@@ -140,7 +140,7 @@ export function NoodlePollComposer({
                     emojiAnchorRef.current = event.currentTarget;
                     setEmojiOptionIndex((current) => (current === index ? null : index));
                   }}
-                  className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-[var(--muted-foreground)] transition-colors hover:bg-[var(--noodle-accent)]/10 hover:text-[var(--noodle-accent)]"
+                  className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-[var(--muted-foreground)] transition-colors hover:bg-[var(--noodle-accent)]/10 hover:text-[var(--noodle-accent)]"
                 >
                   {emoji ? <span className="text-base leading-none">{emoji}</span> : <Smile size={18} />}
                 </button>
@@ -164,7 +164,7 @@ export function NoodlePollComposer({
                   type="button"
                   disabled={disabled || (!option && poll.options.length === 2)}
                   onClick={() => removeOption(index)}
-                  className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-[var(--muted-foreground)] transition-colors hover:bg-[var(--destructive)]/10 hover:text-[var(--destructive)] disabled:cursor-not-allowed disabled:opacity-30"
+                  className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-[var(--muted-foreground)] transition-colors hover:bg-[var(--destructive)]/10 hover:text-[var(--destructive)] disabled:cursor-not-allowed disabled:opacity-30"
                   aria-label={localizeUi("ui.noodle.noodlepollcomposer.deleteAnswerValue1", { value1: index + 1 })}
                   title={localizeUi("ui.noodle.noodlepollcomposer.deleteAnswerValue1", { value1: index + 1 })}
                 >

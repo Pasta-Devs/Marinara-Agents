@@ -2,6 +2,8 @@ import type { FastifyInstance } from "fastify";
 import { logger } from "../../lib/logger.js";
 import { createSlurpStorage } from "../storage/slurp.storage.js";
 import { AUTOMATIC_GENERATION_HEADER } from "../generation/connection-admission.js";
+import { createGarnishAds } from "../garnish-ads/garnish-ads.service.js";
+import { syncGarnishAdsWithLorebook } from "./slurp-garnish-sync.service.js";
 import {
   dueNoodleRefreshTimes,
   markNoodleRefreshAttempt,
@@ -111,6 +113,13 @@ export function startNoodleRefreshScheduler(app: FastifyInstance, registerStop?:
     try {
       const now = new Date();
       const settings = await noodle.getSettings();
+      // A lorebook-backed ad pool follows its book. This is a no-op unless the book's content
+      // fingerprint actually changed, so a steady setting costs one cheap read per poll.
+      if (settings.inlineAdsLorebookId) {
+        await syncGarnishAdsWithLorebook(app.db, createGarnishAds(app.db).pool).catch((error) =>
+          logger.warn(error, "[noodle-scheduler] Lorebook ad sync failed"),
+        );
+      }
       let schedule = await noodle.ensureRefreshSchedule(now, settings);
       const retryAt = schedule.nextAttemptAt ? Date.parse(schedule.nextAttemptAt) : Number.NaN;
       if (Number.isFinite(retryAt) && retryAt > now.getTime()) {

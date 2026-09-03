@@ -324,7 +324,7 @@ const features = [
   },
   {
     id: "slurp",
-    version: "1.1.0",
+    version: "1.0.42",
     minEngineVersion: "2.4.3",
     maxEngineExclusive: MAX_ENGINE_EXCLUSIVE,
     name: "Slurp",
@@ -695,6 +695,11 @@ export async function selfCheck() {
         "--external:sharp",
         "--external:pino",
         "--external:pino-pretty",
+        // Bundling undici gives the package a second copy whose dispatcher shape does not match
+        // the Engine's. Handing one to the other's fetch fails with "invalid onRequestStart
+        // method", which broke every outbound request the package made. The runtime provisions
+        // undici alongside the snapshot, so resolving to the Engine's copy is the fix.
+        "--external:undici",
         ...(feature.id === "long-term-memory" || feature.id === "slurp" ? ["--external:zod"] : []),
         `--alias:@marinara-engine/shared=${sharedBundleEntry}`,
         `--metafile=${metafile}`,
