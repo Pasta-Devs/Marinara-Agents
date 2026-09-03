@@ -553,7 +553,7 @@ function DestinationScopePanel({
       aria-labelledby={labelId}
       className="mari-editor-panel flex min-h-0 max-h-[min(42rem,calc(100dvh-8rem))] flex-col gap-3 p-3"
     >
-      <div className="flex items-center gap-2 text-xs font-semibold">
+      <div className="flex shrink-0 items-center gap-2 text-xs font-semibold">
         <span id={labelId}>{localizeUi("ui.longTermMemory.sourcesworkspace.makeMemoriesAvailableIn")}</span>
         <InfoPopover
           label={localizeUi("ui.longTermMemory.sourcesworkspace.makeMemoriesAvailableIn")}
@@ -561,7 +561,7 @@ function DestinationScopePanel({
         />
       </div>
       {selectedTargets.length ? (
-        <div className="space-y-2">
+        <div className="shrink-0 space-y-2">
           <p className="text-xs font-semibold">{localizeUi("ui.longTermMemory.sourcesworkspace.selectedLocations")}</p>
           <div className="flex flex-wrap gap-1.5">
             {selectedTargets.map((target) => (
@@ -590,7 +590,7 @@ function DestinationScopePanel({
           </div>
         </div>
       ) : null}
-      <label className="relative block">
+      <label className="relative block shrink-0">
         <Search
           aria-hidden="true"
           size="0.875rem"
@@ -610,7 +610,7 @@ function DestinationScopePanel({
       <div
         role="tablist"
         aria-label={localizeUi("ui.longTermMemory.sourcesworkspace.makeMemoriesAvailableIn")}
-        className="grid grid-cols-2 gap-1 sm:grid-cols-5"
+        className="grid shrink-0 grid-cols-2 gap-1 sm:grid-cols-5"
       >
         {categories.map(([kind, label], index) => {
           const count =
@@ -639,7 +639,7 @@ function DestinationScopePanel({
         })}
       </div>
       {blockedTargetCount ? (
-        <p role="note" className="text-xs text-[var(--muted-foreground)]">
+        <p role="note" className="shrink-0 text-xs text-[var(--muted-foreground)]">
           {localizeUi("ui.longTermMemory.sourcesworkspace.destinationScopeLimitReached")}
         </p>
       ) : null}
@@ -652,11 +652,11 @@ function DestinationScopePanel({
         {destinationPickerList}
       </div>
       {!selectedTargets.length ? (
-        <span role="alert" className="block text-xs text-[var(--marinara-editor-warning)]">
+        <span role="alert" className="block shrink-0 text-xs text-[var(--marinara-editor-warning)]">
           {localizeUi("ui.longTermMemory.sourcesworkspace.chooseDestinationBeforeImport")}
         </span>
       ) : null}
-      <p className="text-xs text-[var(--muted-foreground)]" data-ltm-import-mode-summary>
+      <p className="shrink-0 text-xs text-[var(--muted-foreground)]" data-ltm-import-mode-summary>
         {mode === "all"
           ? source === "chats"
             ? localizeUi("ui.longTermMemory.sourcesworkspace.automatic")
