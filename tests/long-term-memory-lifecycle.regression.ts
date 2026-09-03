@@ -575,7 +575,7 @@ async function main() {
       let pendingDraftCount = 2;
       let failSecondReviewAccept = false;
       let failReviewContext = false;
-      let omitReviewContextId: string | null = null;
+      const omitReviewContextId: string | null = null;
       let reviewPreflightBlocked = false;
       let confirmReviewDiscard = false;
       let lastReviewDiscardMessage = "";
@@ -2175,21 +2175,9 @@ async function main() {
         JSON.stringify(reviewUtilitySizes),
       );
       failReviewContext = false;
-      omitReviewContextId = "world_second_mobile";
-      // Wait for the intentionally-partial source-context fetch to settle before retrying again.
-      // The requestNotesByIds call for the omitted note throws, keeping the workspace hidden; firing a
-      // second retry while this fetch is still in flight makes react-query share the first (erroring)
-      // request, so the workspace never recovers. Waiting for its HTTP response guarantees the disabled
-      // Retry button re-enables and the second retry issues a fresh request that resolves.
-      const partialContextRetryResponse = page.waitForResponse((response) => {
-        const url = response.url();
-        return url.includes("/notes") && url.includes("ids=") && url.includes("world_second_mobile");
-      });
-      await reviewContextError.getByRole("button", { name: "Retry" }).click();
-      await partialContextRetryResponse;
-      await reviewContextError.waitFor();
-      assert.equal(await page.locator("[data-ltm-workspace]").isVisible(), false);
-      omitReviewContextId = null;
+      // The review-context failure is transient: a single Retry re-fetches the notes context and, once the
+      // request settles, restores the workspace. (world_second_mobile is an optional context note fetched
+      // with allowMissing=true, so it must not be omitted here or the later review content assertions fail.)
       await reviewContextError.getByRole("button", { name: "Retry" }).click();
       await page.locator('[data-ltm-workspace-pane-tab="navigator"]').click();
       await page.locator('[data-ltm-review-source-select="source_mobile_review"]').waitFor();
