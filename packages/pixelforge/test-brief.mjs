@@ -23662,6 +23662,7 @@ const fire = (node, type) => Promise.all((node.listeners[type] ?? []).map((fn) =
       themeSel: nodes.find((node) => node.children.some((option) => option.attrs.value === "sci-fi-colony")),
       launchBtn: nodes.find((node) => node.tagName === "BUTTON" && String(node.textContent).startsWith("Begin in")),
       generateIn: checkboxes[0],
+      generateLabel: nodes.find((node) => String(node.textContent).startsWith("Generate a unique world")),
     };
   };
   try {
@@ -23676,6 +23677,18 @@ const fire = (node, type) => Promise.all((node.listeners[type] ?? []).map((fn) =
     assert.equal(asked.launchBtn.textContent, "Begin in Anchorage Nine", "and the player's own name wins over both");
 
     assert.equal(asked.generateIn.checked, true, "generation is offered checked — it is what the package is for");
+    // HOW MANY CALLS THE TICK COSTS, VERBATIM. The player is the one who pays for
+    // them and the label is what tells them the price, so the count is a shipped
+    // deliverable and not a turn of phrase: it has been TWO since the content
+    // pack landed beside the brief, and the wizard said "one call" for a release
+    // after that. Pinned as the whole string, because that is the only shape in
+    // which a stale count is a red rather than a sentence nobody re-reads.
+    assert.ok(asked.generateLabel, "the generation toggle carries a written label");
+    assert.equal(
+      asked.generateLabel.textContent,
+      "Generate a unique world with your GM connection (two calls)",
+      "…and it quotes the two calls the tick actually spends: the brief, and the pack",
+    );
     await fire(asked.launchBtn, "click");
     assert.equal(asked.launches.length, 1, "the launch went through");
     assert.equal(asked.launches[0].name, "Anchorage Nine", "under the name on the button");
