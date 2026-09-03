@@ -1464,6 +1464,16 @@ async function main() {
       );
       const memoryChatPicker = memoryScope.locator('[data-ltm-memory-scope-picker="chat"]');
       await memoryChatPicker.locator(":scope > summary").click();
+      assert.deepEqual(
+        await memoryChatPicker
+          .locator("[data-ltm-memory-scope-target]")
+          .evaluateAll((targets) => targets.slice(0, 2).map((target) => target.textContent?.trim())),
+        ["Current", "All"],
+      );
+      await memoryChatPicker.locator("input").fill("does-not-match");
+      assert.equal(await memoryChatPicker.locator('[data-ltm-memory-scope-target="chat:desktop-chat"]').count(), 1);
+      assert.equal(await memoryChatPicker.locator('[data-ltm-memory-scope-target="chat:all"]').count(), 1);
+      await memoryChatPicker.locator("input").fill("");
       assert.equal(await memoryChatPicker.locator('[data-ltm-memory-scope-target="group:conversation-a"]').count(), 1);
       await memoryChatPicker.locator('[data-ltm-memory-scope-target="group:conversation-a"]').click();
       const memoryBranchPicker = memoryScope.locator('[data-ltm-memory-scope-picker="branch"]');
@@ -1478,7 +1488,7 @@ async function main() {
       await roleplayMode.uncheck();
       await memoryChatPicker.locator(":scope > summary").click();
       await memoryChatPicker.locator('[data-ltm-memory-scope-target="chat:desktop-chat"]').click();
-      await memoryScope.locator('[data-ltm-memory-scope-picker="character"] > summary').press("Enter");
+      await memoryScope.locator('[data-ltm-memory-scope-picker="character"] > summary').click();
       assert.equal(
         await memoryScope
           .locator('[data-ltm-memory-scope-picker="character"]')
@@ -2746,16 +2756,30 @@ async function main() {
       await page.locator('[data-ltm-source-preview-status="success"]').waitFor();
       const sourceScopePicker = page.locator('[data-ltm-scope-picker="source"]');
       const sourceScopeTrigger = sourceScopePicker.getByRole("combobox");
-      assert.match((await sourceScopeTrigger.innerText()).trim(), /All Available/u);
+      assert.match((await sourceScopeTrigger.innerText()).trim(), /All/u);
       await sourceScopeTrigger.click();
       assert.equal(await sourceScopePicker.locator('[role="listbox"] input').count(), 0);
+      assert.deepEqual(
+        await sourceScopePicker
+          .locator('[role="option"]')
+          .evaluateAll((options) =>
+            options.slice(0, 2).map((option) => option.textContent?.replace(/\s+/gu, " ").trim()),
+          ),
+        ["Current", "All"],
+      );
+      assert.equal(await sourceScopePicker.locator('[data-ltm-scope-option="chat:desktop-chat"]').count(), 1);
+      assert.equal(await sourceScopePicker.locator('[data-ltm-scope-option="all"]').count(), 1);
+      await sourceScopePicker.locator("[data-ltm-scope-picker-popup] input").fill("does-not-match");
+      assert.equal(await sourceScopePicker.locator('[data-ltm-scope-option="chat:desktop-chat"]').count(), 1);
+      assert.equal(await sourceScopePicker.locator('[data-ltm-scope-option="all"]').count(), 1);
+      await sourceScopePicker.locator("[data-ltm-scope-picker-popup] input").fill("");
       assert.equal(
         await sourceScopePicker.locator('[role="option"][data-ltm-scope-option="chat:memory-chat"]').count(),
-        1,
+        0,
       );
       assert.equal(
         await sourceScopePicker.locator('[role="option"][data-ltm-scope-option="branch:memory-chat"]').count(),
-        0,
+        1,
       );
       assert.equal(
         await sourceScopePicker.locator('[role="option"][data-ltm-scope-option="group:conversation-a"]').count(),
@@ -2793,11 +2817,11 @@ async function main() {
       await destinationScopeSearch.fill("");
       assert.equal(
         await destinationScopePicker.locator('[role="option"][data-ltm-scope-option="chat:memory-chat"]').count(),
-        1,
+        0,
       );
       assert.equal(
         await destinationScopePicker.locator('[role="option"][data-ltm-scope-option="branch:memory-chat"]').count(),
-        0,
+        1,
       );
       assert.equal(
         await destinationScopePicker.locator('[role="option"][data-ltm-scope-option="group:conversation-a"]').count(),
@@ -2831,7 +2855,7 @@ async function main() {
       assert.match(await destinationScopeTrigger.innerText(), /Private detective/u);
       await destinationScopeTrigger.click();
       await destinationScopeSearch.fill("Memory chat");
-      await destinationScopePicker.locator('[role="option"][data-ltm-scope-option="chat:memory-chat"]').click();
+      await destinationScopePicker.locator('[role="option"][data-ltm-scope-option="branch:memory-chat"]').click();
       assert.match((await destinationScopeTrigger.innerText()).trim(), /Memory chat/u);
       const addDestination = page.locator("[data-ltm-add-destination]");
       await addDestination.click();
@@ -3081,7 +3105,7 @@ async function main() {
       );
       await destinationScopeTrigger.click();
       await destinationScopeSearch.fill("Memory chat");
-      await destinationScopePicker.locator('[role="option"][data-ltm-scope-option="chat:memory-chat"]').click();
+      await destinationScopePicker.locator('[role="option"][data-ltm-scope-option="branch:memory-chat"]').click();
       await page.locator('[data-ltm-lorebook-id="lorebook_mobile_fixture"]').click();
       assert.equal(await page.locator('[data-ltm-lorebook-workbench="lorebook_mobile_fixture"]').isVisible(), true);
       await page.locator('[data-ltm-lorebook-entry="entry_mobile_harbor"]').waitFor();

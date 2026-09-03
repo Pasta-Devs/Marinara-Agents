@@ -57,7 +57,7 @@ import {
   subscribeLtmSourceTask,
   type LtmSourceTaskContract,
 } from "./source-task";
-import { buildScopeIndexes, type ScopeTargetChat, type ScopeTargets } from "./scope-targets";
+import { buildScopeIndexes, deriveScopeBranchChats, type ScopeTargetChat, type ScopeTargets } from "./scope-targets";
 import {
   normalizeLtmScope,
   withMergedLtmScopeLinks,
@@ -90,6 +90,7 @@ type ScopeTarget = {
   sourceScope?: LtmScope;
   destinationScope?: LtmScope;
   searchText?: string;
+  pinned?: "current" | "all";
 };
 
 function targetDisplayLabel(target: ScopeTarget, destination: boolean) {
@@ -136,10 +137,15 @@ function ScopeTargetPicker({
     `${target.label} ${target.comment ?? ""} ${target.destinationLabel ?? ""} ${target.searchText ?? ""}`
       .toLocaleLowerCase()
       .includes(needle);
+  const pinnedTargets = targets.filter((target) => target.pinned);
   const filteredTargets = targets.filter((target) => matches(target));
+  const regularTargets = filteredTargets.filter((target) => !target.pinned);
+  const selectedRegularTarget =
+    selectedTarget && !selectedTarget.pinned && matches(selectedTarget) ? selectedTarget : null;
   const optionTargets = [
-    ...(selectedTarget && matches(selectedTarget) ? [selectedTarget] : []),
-    ...groups.flatMap(([kind]) => filteredTargets.filter((target) => target.kind === kind && target.id !== value)),
+    ...pinnedTargets,
+    ...(selectedRegularTarget ? [selectedRegularTarget] : []),
+    ...groups.flatMap(([kind]) => regularTargets.filter((target) => target.kind === kind && target.id !== value)),
   ];
   const [highlightedId, setHighlightedId] = useState(value);
   useEffect(() => setHighlightedId(value), [value]);
@@ -292,16 +298,17 @@ function ScopeTargetPicker({
             />
           </label>
           <div id={listId} role="listbox" aria-label={ariaLabel} className="max-h-72 overflow-y-auto">
-            {selectedTarget && matches(selectedTarget) ? (
+            {pinnedTargets.map(option)}
+            {selectedRegularTarget ? (
               <div className="border-b border-[var(--marinara-editor-divider)]">
                 <p className="bg-[var(--secondary)] px-3 py-1 text-xs font-semibold uppercase tracking-wide text-[var(--muted-foreground)]">
                   {localizeUi("ui.longTermMemory.sourcesworkspace.selectedLocation")}
                 </p>
-                {option(selectedTarget)}
+                {option(selectedRegularTarget)}
               </div>
             ) : null}
             {groups.map(([kind, label]) => {
-              const options = filteredTargets.filter((target) => target.kind === kind && target.id !== value);
+              const options = regularTargets.filter((target) => target.kind === kind && target.id !== value);
               return options.length ? (
                 <div key={kind}>
                   <p className="border-b border-[var(--marinara-editor-divider)] bg-[var(--secondary)] px-3 py-1 text-xs font-semibold uppercase tracking-wide text-[var(--muted-foreground)]">
@@ -311,7 +318,7 @@ function ScopeTargetPicker({
                 </div>
               ) : null;
             })}
-            {!filteredTargets.length ? (
+            {!optionTargets.length ? (
               <p className="px-3 py-4 text-xs text-[var(--muted-foreground)]">
                 {localizeUi("ui.longTermMemory.sourcesworkspace.noMatchingScopes")}
               </p>
@@ -1583,23 +1590,26 @@ export default function SourcesWorkspace({
   });
   const scopeIndexes = useMemo(() => buildScopeIndexes(scopeTargets.data?.chats ?? []), [scopeTargets.data?.chats]);
   const scopeTargetOptions = useMemo(() => {
+    const currentChatId = props.chatId ?? scopeTargets.data?.currentScope?.chatId;
     const chatTarget = (chat: ScopeTargetChat, current = false): ScopeTarget => ({
       id: `chat:${chat.id}`,
-      label: current ? (props.chatName ?? localizeUi("ui.longTermMemory.sourcesworkspace.currentChat")) : chat.label,
+      label: current ? localizeUi("ui.longTermMemory.sourcesworkspace.current") : chat.label,
       kind: "chat",
-      sourceScope: {
-        chatId: chat.id,
-        chatIds: [chat.id],
-      },
-      destinationScope: { chatId: chat.id, chatIds: [chat.id] },
+      sourceScope: current
+        ? (scopeTargets.data?.currentScope ?? { chatId: chat.id, chatIds: [chat.id] })
+        : { chatId: chat.id, chatIds: [chat.id] },
+      destinationScope: current
+        ? (scopeTargets.data?.currentScope ?? { chatId: chat.id, chatIds: [chat.id] })
+        : { chatId: chat.id, chatIds: [chat.id] },
       searchText: [chat.mode, chat.groupId, chat.personaId, ...chat.characterIds].filter(Boolean).join(" "),
+      ...(current ? { pinned: "current" as const } : {}),
     });
     return [
-      ...(props.chatId
+      ...(currentChatId
         ? [
             chatTarget(
-              scopeIndexes.chatsById.get(props.chatId) ?? {
-                id: props.chatId,
+              scopeIndexes.chatsById.get(currentChatId) ?? {
+                id: currentChatId,
                 label: props.chatName ?? localizeUi("ui.longTermMemory.sourcesworkspace.currentChat"),
                 mode: "roleplay",
                 groupId: null,
@@ -1610,7 +1620,22 @@ export default function SourcesWorkspace({
             ),
           ]
         : []),
-      ...(scopeTargets.data?.chats ?? []).filter((chat) => chat.id !== props.chatId).map((chat) => chatTarget(chat)),
+      {
+        id: "all",
+        label: localizeUi("ui.longTermMemory.sourcesworkspace.all"),
+        kind: "all" as const,
+        pinned: "all" as const,
+        sourceScope: undefined,
+        destinationScope: undefined,
+      },
+      ...(scopeTargets.data?.chats ?? [])
+        .filter((chat) => chat.id !== currentChatId && !chat.groupId)
+        .map((chat) => chatTarget(chat)),
+      ...deriveScopeBranchChats(scopeTargets.data?.chats ?? []).map((chat) => ({
+        ...chatTarget(chat),
+        id: `branch:${chat.id}`,
+        kind: "branch" as const,
+      })),
       ...(scopeTargets.data?.groups ?? []).map((group) => ({
         id: `group:${group.id}`,
         label: `${localizeUi("ui.longTermMemory.sourcesworkspace.allBranches")}: ${group.label}`,
@@ -1641,13 +1666,6 @@ export default function SourcesWorkspace({
         sourceScope: { personaId: persona.id, personaIds: [persona.id] },
         destinationScope: { personaId: persona.id, personaIds: [persona.id] },
       })),
-      {
-        id: "all",
-        label: localizeUi("ui.longTermMemory.sourcesworkspace.allAvailable"),
-        kind: "all" as const,
-        sourceScope: undefined,
-        destinationScope: undefined,
-      },
     ].filter((target, index, targets) => targets.findIndex((item) => item.id === target.id) === index);
   }, [localizeUi, props.chatId, props.chatName, scopeIndexes.chatsById, scopeTargets.data]);
   const sourceTarget =
