@@ -22322,10 +22322,40 @@ const fire = (node, type) => Promise.all((node.listeners[type] ?? []).map((fn) =
         hud.update();
       }
     };
-    /** Fire a control the way a click does — with the event, so the repeat guard
-     *  is reachable. */
-    const press = (node, ev) => {
-      for (const fn of node.listeners?.click ?? []) fn({ preventDefault() {}, ...ev });
+    /** Fire a control the way a MOUSE does, and that is the whole of it: a click
+     *  listener receives a MouseEvent, and a MouseEvent CARRIES NO KEYBOARD
+     *  PROPERTIES. This helper used to spread a caller-supplied object over the
+     *  event, which let the repeat lane below hand a click a `repeat` field the
+     *  shipped code can never see — so the lane proved a guard that was inert and
+     *  could not have failed. Nothing is spread in any more. */
+    const press = (node) => {
+      for (const fn of node.listeners?.click ?? []) fn({ preventDefault() {} });
+    };
+    /** Fire a control the way a KEYBOARD does, which is the only shape `repeat`
+     *  ever arrives in: the keydown that carries it, and then — ONLY IF that
+     *  keydown was not cancelled — the click the browser synthesizes as the
+     *  keydown's DEFAULT ACTION. Both halves are the browser's own chain for a
+     *  held Enter on a focused `<button>`, and the cancellation half is what makes
+     *  a repeat guard observable at all.
+     *
+     *  `holdKey(node, false)` is a hold's first press, `holdKey(node, true)` its
+     *  echo, `releaseKey(node)` ends the run. Returns whether the activation was
+     *  cancelled. */
+    const holdKey = (node, repeat) => {
+      let cancelled = false;
+      const ev = {
+        key: "Enter",
+        repeat,
+        preventDefault() {
+          cancelled = true;
+        },
+      };
+      for (const fn of node.listeners?.keydown ?? []) fn(ev);
+      if (!cancelled) press(node);
+      return cancelled;
+    };
+    const releaseKey = (node) => {
+      for (const fn of node.listeners?.keyup ?? []) fn({ key: "Enter" });
     };
     const rowLabelled = (prefix) =>
       hud.talkRows.children.find((node) => String(node.textContent).startsWith(prefix)) ?? null;
@@ -22341,6 +22371,8 @@ const fire = (node, type) => Promise.all((node.listeners[type] ?? []).map((fn) =
       steps,
       frames,
       press,
+      holdKey,
+      releaseKey,
       rowLabelled,
       labels,
       accept: (value) => {
@@ -23413,37 +23445,74 @@ const fire = (node, type) => Promise.all((node.listeners[type] ?? []).map((fn) =
 
     // ── KEY REPEAT CANNOT ARM AND SPEND IN ONE HOLD ─────────────────────────
     // `_keyDown` has no repeat guard, and the prologue's confirm returns in WALK
-    // mode without changing it — so a HELD Space on a focused paid control fired
+    // mode without changing it — so a HELD Enter on a focused paid control fired
     // activation twice in one hold: press one arming the story-skip confirm and
     // press two spending it, through a gap the walk fence cannot cover.
+    //
+    // THE EVENTS THIS DRIVES ARE THE EVENTS THE BUTTON SEES, and that is the
+    // point of the lane rather than a detail of it. `repeat` rides the KEYDOWN
+    // and never the click the browser synthesizes from it, so the guard has to be
+    // bound on the key run — and a lane that handed a click a fabricated `repeat`
+    // would go green over a click-path test that is always false.
     {
       const t = stage({ chatId: "chat-repeat" });
       const npc = t.npcs()[0];
       t.host.narrationDone = false;
       t.host.latestAssistant = { id: "m9" };
       t.openOn(npc);
-      const door = t.rowLabelled("Just talk");
-      t.press(door);
+      // The hold's FIRST press: `repeat` false, and it arms like any activation.
+      t.holdKey(t.rowLabelled("Just talk"), false);
       await settle();
       assert.equal(core._talkConfirm?.controlId, "free", "the first activation arms the question");
       t.hud.update();
-      t.press(t.rowLabelled("Skip story & talk?"), { repeat: true });
+      // …and the SAME HOLD's echo, on the control now wearing the question.
+      const asking = t.rowLabelled("Skip story & talk?");
+      const cancelled = t.holdKey(asking, true);
       await settle();
       assert.deepEqual(t.sent, [], "a HELD key cannot arm and spend the confirm in one hold");
+      assert.equal(cancelled, true, "…because the echo's activation is cancelled on the keydown that carries `repeat`");
+      // THE HOLD ENDS, and the deliberate press that follows still spends: the
+      // guard is keyed to the key run, and a mouse press has none.
+      t.releaseKey(asking);
       t.press(t.rowLabelled("Skip story & talk?"));
       await settle();
       assert.equal(t.sent.length, 1, "…while a real second press still answers it");
-      // AND THE WALK FENCE COVERS THE OTHER HALF: with no story pending, a repeat
-      // double-press dies on the mode, because the first one already left walk.
+      // AND THE DOOR THAT NEVER VANISHES, which is the control a hold can
+      // genuinely carry from arm to spend: the row buttons are rebuilt by the
+      // arming repaint, but `talkSendBtn` is a permanent child whose text is
+      // swapped in place, so the hold keeps the node — and with it the focus the
+      // browser synthesizes the second click from.
+      t.host.narrationDone = false;
+      t.host.latestAssistant = { id: "m10" };
+      core.setMode("walk");
+      t.openOn(npc);
+      const said = t.sent.length;
+      t.hud.talkInput.value = "hello";
+      const say = t.hud.talkSendBtn;
+      t.holdKey(say, false);
+      await settle();
+      assert.equal(core._talkConfirm?.controlId, "say", "the say door arms on the hold's first press");
+      t.hud.update();
+      assert.equal(t.hud.talkSendBtn, say, "…and the say door is the SAME node across the arming repaint");
+      const sayCancelled = t.holdKey(say, true);
+      await settle();
+      assert.equal(t.sent.length, said, "…and the held Enter spends no GM call on the door that keeps its node");
+      assert.equal(sayCancelled, true, "…because the echo is cancelled on the node the hold is on");
+      t.releaseKey(say);
+      t.press(say);
+      await settle();
+      assert.equal(t.sent.length, said + 1, "…while the deliberate press answers the question");
+      // AND THE WALK FENCE COVERS THE OTHER HALF: with no story pending, a second
+      // activation dies on the mode, because the first one already left walk.
       t.host.narrationDone = true;
       core.setMode("walk");
       t.openOn(npc);
       const spent = t.sent.length;
       const free = t.rowLabelled("Just talk");
       t.press(free);
-      t.press(free); // the same hold, one frame later — no rAF has run
+      t.press(free); // one frame later — no rAF has run
       await settle();
-      assert.equal(t.sent.length, spent + 1, "a repeat press inside the setMode gap sends exactly once");
+      assert.equal(t.sent.length, spent + 1, "a second activation inside the setMode gap sends exactly once");
     }
 
     // ── A SPLICED ANCHOR CLOSES THE WINDOW, AND A PRESS RACING IT REFUSES ───

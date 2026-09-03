@@ -18733,7 +18733,11 @@ PF.Hud = class {
         "border:1px solid rgba(243,239,226,0.35);border-radius:8px;padding:8px 10px;font:12px/1.3 inherit;",
     });
     this.talkInput.addEventListener("keydown", (ev) => this._talkInputKey(ev));
-    this.talkSendBtn = this._btn("Send (asks the GM)", () => this._talkSay());
+    // THE SAY DOOR IS A PAID CONTROL and takes the same repeat binding the rebuilt
+    // rows take — more urgently, in fact: this node is PERMANENT, its text swapped
+    // in place, so a hold that arms the confirm on it keeps both the node and the
+    // focus the browser would synthesize the spending click from.
+    this.talkSendBtn = this._bindPaidPress(this._btn("Send (asks the GM)"), () => this._talkSay());
     this.talkSayRow = PF.el("div", { style: "flex:0 0 auto;display:flex;gap:6px;align-items:stretch;" }, [
       this.talkInput,
       this.talkSendBtn,
@@ -18854,6 +18858,53 @@ PF.Hud = class {
    *  clipping variant while menu rows inside a bounded panel wear the plain one. */
   _btn(text, onclick, style) {
     return PF.el("button", { type: "button", style: style ?? this.S.btn, text, onclick });
+  }
+
+  /** A PAID CONTROL'S ACTIVATION, and the repeat refusal is BOUND here rather
+   *  than tested inside the press, because `repeat` only exists on the event that
+   *  carries it. `_btn` binds a CLICK listener — 00-prelude's `PF.el` maps an
+   *  `onclick` attr to `addEventListener("click", …)` — and the click a browser
+   *  synthesizes from a held Enter on a focused button is a MouseEvent, on which
+   *  `repeat` is undefined. So an `if (ev.repeat) return` on the click path is
+   *  ALWAYS false: a hold fired activation twice, press one arming the story-skip
+   *  confirm and press two spending a GM call, defeating "the smallest honest
+   *  gate is an affirmative press" through a gap the walk fence cannot cover —
+   *  and defeating it SILENTLY, because the inert test read like the guard.
+   *
+   *  So the node watches its own key run, which is where the fact lives:
+   *   • a keydown carrying `repeat` raises the latch AND cancels the browser's
+   *     synthesized activation, so the echo's click is never generated;
+   *   • the latch is the second half and is kept deliberately — cancellation is a
+   *     browser behaviour, and the refusal should not be the only thing standing
+   *     between a hold and a paid call. Anything that dispatches a click mid-run
+   *     is refused on the latch instead;
+   *   • the keyup that ends the hold lowers it, so the next press is live.
+   *
+   *  A MOUSE PRESS IS UNTOUCHED — it arrives with no key run at all — and so is
+   *  the FIRST key of a hold, which carries `repeat === false`. The latch is
+   *  PER-NODE, which is the right grain: the row controls are rebuilt by the
+   *  arming repaint and the latch that matters is the one on the node the hold is
+   *  actually held on. That node is `talkSendBtn` in the case that bites — it is
+   *  a permanent child whose text is swapped in place, so a hold keeps both the
+   *  node and the focus the second click would come from.
+   *
+   *  This is the discipline `_talkInputKey` already spends on a genuine keydown,
+   *  brought to the controls whose activation only ever arrives as a click. */
+  _bindPaidPress(node, onpress) {
+    let held = false;
+    node.addEventListener("keydown", (ev) => {
+      if (!ev?.repeat) return;
+      held = true;
+      ev.preventDefault?.();
+    });
+    node.addEventListener("keyup", () => {
+      held = false;
+    });
+    node.addEventListener("click", () => {
+      if (held) return;
+      onpress();
+    });
+    return node;
   }
 
   /** A glyph-width topbar opener: a button wearing the chip's styling, boot
@@ -19089,17 +19140,13 @@ PF.Hud = class {
     /** One paid control. Labelled "(asks the GM)" on its face — that suffix IS
      *  the covenant's marker — dimmed with a reason rather than removed, and
      *  re-labelled into the question when the confirm is armed on THIS control.
-     *  `ev.repeat` is ignored: `_keyDown` has no repeat guard, so a HELD Space on
-     *  a focused control fired activation twice in one hold — press one arming
-     *  the story-skip confirm and press two spending it, defeating the "smallest
-     *  honest gate is an affirmative press" contract through a gap the walk fence
-     *  cannot cover. */
+     *  Key repeat is refused by `_bindPaidPress`, which is why the button is
+     *  built with no handler and bound afterwards: `_keyDown` has no repeat guard
+     *  and the prologue's confirm returns in WALK mode without changing it, so
+     *  the refusal has to live on the control's own key run. */
     const paid = (id, label, onpress) => {
       const asking = armed === id && core.talkConfirmArmed?.(id) === true;
-      const node = this._btn(asking ? "Skip story & talk?" : `${label} (asks the GM)`, (ev) => {
-        if (ev?.repeat) return;
-        onpress();
-      });
+      const node = this._bindPaidPress(this._btn(asking ? "Skip story & talk?" : `${label} (asks the GM)`), onpress);
       node.style.textAlign = "left";
       if (note) {
         node.style.opacity = "0.45";
