@@ -34,34 +34,27 @@ export const BOTTOM_SAFE_INSET =
     ? "env(safe-area-inset-bottom)"
     : "0px";
 
-/**
- * Ties a sticky header to the scroll position: it travels with the content instead of
- * snapping between shown and hidden at a threshold, which reads as a jump. The bar
- * moves pixel for pixel with the scroll, so it feels attached to the reader's finger,
- * and once scrolling stops it settles to whichever edge it is nearest — biased open,
- * so any upward movement finishes with the controls on screen.
- *
- * Writes the transform straight to the node rather than through state: a re-render per
- * scroll event is exactly the stutter this is meant to remove. Overscroll past the top
- * always shows the bar, or a rubber-band bounce leaves it stranded half-way.
- *
- * Takes the scrolling element as state, not a ref, and the sticky element the same way
- * through a callback ref: either node can be swapped out while the other stays mounted,
- * and a plain ref would leave this driving a detached node.
- *
- * @returns a callback ref for the sticky element itself.
- */
+// The accent hex that drives `--noodle-accent` for every reused Noodle surface.
+// Provided at the shell root so descendants inherit via CSS var, and read here
+// so portaled popovers/modals (which escape the shell's CSS scope) can re-apply it.
+const NoodleAccentContext = createContext<string>(NOODLE_BLUE);
+export const useNoodleAccent = () => useContext(NoodleAccentContext);
+export const NOODLE_ICON_SCOPE_CLASS = "[&_:where(svg)]:text-[var(--noodle-accent)]";
+export const NOODLE_LOGO_SRC = "/api/capability-packages/noodle/assets/noodle-klusek.png";
+export const NOODLE_PERSONA_SWITCHER_PAGE_SIZE = 5;
+
+/** Hide mobile chrome after deliberate movement and restore it after deliberate upward movement. */
 export function useHideOnScroll(scroller: HTMLElement | null) {
   const [bar, setBar] = useState<HTMLDivElement | null>(null);
   const reduceMotion = useReducedMotion();
+
   useEffect(() => {
     if (!scroller || !bar) return;
-    // Reduced motion asks for no travel at all, not a faster version of it.
     if (reduceMotion) return;
     const SETTLE_MS = 140;
     const EASE = "transform 220ms cubic-bezier(0.22, 1, 0.36, 1)";
-    let tucked = 0;
     let previousTop = scroller.scrollTop;
+    let tucked = 0;
     let rising = false;
     let frame = 0;
     let settleTimer = 0;
@@ -75,8 +68,6 @@ export function useHideOnScroll(scroller: HTMLElement | null) {
     const settle = () => {
       const height = bar.offsetHeight;
       if (!height || tucked <= 0 || tucked >= height) return;
-      // A part-hidden bar is nobody's intent, so finish the movement the reader
-      // started: open if they were coming back up, closed if they were still going.
       move(rising ? 0 : height, true);
     };
 
@@ -95,7 +86,6 @@ export function useHideOnScroll(scroller: HTMLElement | null) {
     };
 
     const onScroll = () => {
-      // One read per frame: scroll fires far more often than the screen redraws.
       if (!frame) frame = window.requestAnimationFrame(read);
     };
 
@@ -108,20 +98,11 @@ export function useHideOnScroll(scroller: HTMLElement | null) {
       bar.style.transform = "";
     };
   }, [scroller, bar, reduceMotion]);
+
   return setBar;
 }
 
-/** Base classes for a sticky bar driven by {@link useHideOnScroll}. */
 export const HIDE_ON_SCROLL_CLASS = "will-change-transform";
-
-// The accent hex that drives `--noodle-accent` for every reused Noodle surface.
-// Provided at the shell root so descendants inherit via CSS var, and read here
-// so portaled popovers/modals (which escape the shell's CSS scope) can re-apply it.
-const NoodleAccentContext = createContext<string>(NOODLE_BLUE);
-export const useNoodleAccent = () => useContext(NoodleAccentContext);
-export const NOODLE_ICON_SCOPE_CLASS = "[&_:where(svg)]:text-[var(--noodle-accent)]";
-export const NOODLE_LOGO_SRC = "/api/capability-packages/noodle/assets/noodle-klusek.png";
-export const NOODLE_PERSONA_SWITCHER_PAGE_SIZE = 5;
 
 export function getNoodleAccentStyle(accent: string, style: CSSProperties = {}): CSSProperties {
   return {
