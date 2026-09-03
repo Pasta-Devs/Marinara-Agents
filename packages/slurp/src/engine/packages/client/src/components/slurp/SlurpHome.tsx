@@ -1413,7 +1413,7 @@ export function SlurpHome({ navigation, onNavigate }: SlurpHomeProps) {
     // shows the line for those personas and leaves the rest without one.
     personaConnectionCounts: Object.fromEntries(
       (accountsQuery.data ?? []).flatMap((profile) => {
-        const counts = profile.sourceAccountId ? connectionCountsQuery.data?.[profile.id] : undefined;
+        const counts = profile.sourceAccountId ? connectionCountsQuery.data?.[profile.sourceAccountId] : undefined;
         return counts ? [[profile.sourceAccountId!, counts] as const] : [];
       }),
     ),
