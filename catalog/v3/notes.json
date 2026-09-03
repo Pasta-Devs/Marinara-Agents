@@ -1,0 +1,15 @@
+{
+  "schemaVersion": 1,
+  "packages": {
+    "noodle": {
+      "versions": [
+        {
+          "version": "1.2.18",
+          "date": "2026-09-03",
+          "notes": "- Test the agent changelog feature with a highlighted patch release. No features were added.",
+          "highlight": true
+        }
+      ]
+    }
+  }
+}
