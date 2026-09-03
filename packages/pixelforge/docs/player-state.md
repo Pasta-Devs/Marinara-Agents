@@ -2882,23 +2882,33 @@ until somebody with the engine side in view answers it.
 **Owed by:** the maintainer. Until the 0.12 playtest happens both of its rulings stay provisional,
 and a reshape after either is a scheduled cost rather than a regression.
 
-### 12.4 Release prep — the 0.14 bake is owed
+### 12.4 Release prep — nothing currently owed
 
-**This section flipped for 0.14 and flips back when the rebuild lands.** The 0.14 arc was
-source-only by convention, exactly as 0.12 and 0.13 were: six slices edited `src/` and
-`build/build-art.mjs` and left the build output for one rebuild at the end. What is therefore owed:
+**This section flipped for 0.14 and has flipped back: the rebuild ran in-cycle rather than being
+deferred.** The 0.14 arc was source-only by convention, exactly as 0.12 and 0.13 were — six slices
+edited `src/` and `build/build-art.mjs` and left the build output for one rebuild at the end — and
+that rebuild is committed. What it moved, and what was checked:
 
-- **`client.js`**, which is behind six slices of source.
-- **Both theme tile sheets and `atlas.json`.** The art generator gained four snow painters, so the
-  sheet grows a fifth row (33 ids over 8 columns, 128×64 → 128×80) and the atlas gains four ids on
-  the end. Until the bake runs, **the shipped atlas does not list them** and snow renders through
-  the per-tile Tier-0 path instead — which is the graceful-degradation arm working, and it is pinned
-  in the harness precisely so it cannot stop being true quietly. **That pin is meant to invert:** the
-  bake makes it assert the ids PRESENT.
-- **`manifest.json`** — the version plus every per-file sha256 and byte count the reshape moves.
-- **The `0.14.0` artifact zip**, which does not exist yet. The `0.13.0` zip stays exactly as
-  shipped.
-- **The `?v=` cache key** every client asset URL carries, which is what pairs the version bump with
-  the reshaped sheets so a returning player does not get a new atlas against a cached sheet.
+- **`client.js`**, at 1,173,739 bytes over eighteen modules, and the figure was **predicted before
+  the build ran** from the blobs git stores rather than the files on disk. The prediction matched
+  byte for byte, which is the check the 0.11.0 CRLF incident is the reason for.
+- **Both theme tile sheets and `atlas.json`.** The sheet grew its fifth row — 33 ids over 8 columns,
+  **128×64 → 128×80** — and the atlas went from 29 ids to 33, the four snow ids **appended** at
+  29-32 with **not one existing index moved**. Pixel-diffed rather than trusted: of the 32 old
+  slots, exactly seven differ, and all seven are accounted for — three that were empty padding and
+  are now painted, and `fence`, `well` and `trunk`, which is the grass-strip change reaching a
+  shipped sheet for the first time (the atlas had not been rebaked since 0.10). **That is the look
+  change §12.2 item 9 asks an eye to confirm**, and it is now in the shipped art rather than only in
+  the source.
+- **The pre-bake atlas pin inverted, which is what it existed to do.** It went red on exactly its
+  own assertion when run against the bake, and it now asserts the four ids present, appended and
+  contiguous. Both new arms were mutation-tested.
+- **`manifest.json`** — nine lines: the version plus the sha256/bytes pairs for `client.js`, both
+  sheets and `atlas.json`.
+- **The `0.14.0` artifact zip**, at 1,185,575 bytes. The `0.13.0` zip is untouched. Three bakes over
+  the same tree produced identical output and the same zip hash, so the artifact is reproducible.
+- **The `?v=` cache key** every client asset URL carries moved with the version, which is what pairs
+  the bump with the reshaped sheets so a returning player never gets a new atlas against a cached
+  sheet.
 
-The `VERSION` constant is already at `0.14.0`; the rebuild is what spends it.
+The header stays so the next release's prep has a place to land.
