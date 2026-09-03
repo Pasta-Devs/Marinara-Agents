@@ -124,10 +124,14 @@ assert.match(navigation, /sourceTaskFailedCountOne[\s\S]*sourceTaskFailedCountOt
 assert.match(navigation, /className=\{item\.id === "sources" && activeSourceTask \? "animate-spin"/u);
 assert.match(workspace, /restoredImportResult\.writeFailures\?\.filter\(\(item\) => item\.retryable\)/u);
 assert.match(workspace, /restoredImportResult\.writeFailures\?\.map\(\(failure\) =>/u);
-assert.match(workspace, /inline\s*\? "mari-editor-panel mari-editor-panel--soft overflow-hidden"/u);
-assert.match(workspace, /data-ltm-bulk-destination-scroll/u);
-assert.match(workspace, /max-h-\[min\(42rem,calc\(100vh-8rem\)\)\]/u);
-assert.match(workspace, /overflow-y-auto overscroll-contain/u);
+assert.match(
+  workspace,
+  /<div\s+id="ltm-destination-scope-control"[^>]*className="mari-editor-panel flex min-h-0 max-h-\[min\(42rem,calc\(100dvh-8rem\)\)\] flex-col gap-3 p-3"[^>]*>/u,
+);
+assert.match(
+  workspace,
+  /<div\s+id="ltm-bulk-destination-list"[^>]*className="min-h-0 flex-1 overflow-y-auto overscroll-contain"[^>]*>/u,
+);
 assert.match(interop, /content: row\.sourceText\.slice\(0, 500_000\)/u);
 assert.match(workspace, /readyForReviewWithRejectedSuggestions/u);
 assert.match(workspace, /extractionDidNotFinish/u);

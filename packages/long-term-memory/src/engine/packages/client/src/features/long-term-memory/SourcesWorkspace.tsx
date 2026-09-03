@@ -20,7 +20,6 @@ import {
   FileInput,
   Loader2,
   ListChecks,
-  Plus,
   RefreshCw,
   Search,
   Send,
@@ -363,87 +362,67 @@ function targetFitsDestinationScope(scope: LtmScope | undefined, target: ScopeTa
   });
 }
 
-function BulkDestinationPicker({
-  primaryTarget,
+type DestinationCategoryKind = "all" | Exclude<ScopeTargetKind, "all">;
+
+function DestinationScopePanel({
   targets,
   selectedIds,
+  currentIds,
   onChange,
+  mode,
+  source,
   disabled = false,
-  renderTrigger = true,
-  renderEditor = true,
-  controlledOpen,
-  onOpenChange,
-  inline = false,
 }: {
-  primaryTarget?: ScopeTarget;
   targets: ScopeTarget[];
   selectedIds: string[];
+  currentIds: { chat?: string; branch?: string; character?: string; persona?: string };
   onChange: (ids: string[]) => void;
+  mode: LtmMode | "all";
+  source: Source;
   disabled?: boolean;
-  renderTrigger?: boolean;
-  renderEditor?: boolean;
-  controlledOpen?: boolean;
-  onOpenChange?: (open: boolean) => void;
-  inline?: boolean;
 }) {
   const { t: localizeUi } = useLtmTranslation();
-  const [internalOpen, setInternalOpen] = useState(false);
-  const open = controlledOpen ?? internalOpen;
-  const setPickerOpen = (next: boolean) => {
-    setInternalOpen(next);
-    onOpenChange?.(next);
-  };
-  const [draftIds, setDraftIds] = useState(selectedIds);
-  const [activeKind, setActiveKind] = useState<"all" | Exclude<ScopeTargetKind, "all">>("all");
+  const labelId = useId();
+  const [activeKind, setActiveKind] = useState<DestinationCategoryKind>("all");
   const [query, setQuery] = useState("");
-  const editorRef = useRef<HTMLDivElement>(null);
-  const triggerRef = useRef<HTMLButtonElement>(null);
-  const wasOpenRef = useRef(false);
-  const availableTargets = useMemo(
-    () =>
-      targets
-        .filter((target) => target.id !== primaryTarget?.id)
-        .sort((left, right) => left.label.localeCompare(right.label)),
-    [primaryTarget?.id, targets],
-  );
-  const categoryLabels: Record<"all" | Exclude<ScopeTargetKind, "all">, string> = {
+  const categoryLabels: Record<DestinationCategoryKind, string> = {
     all: localizeUi("ui.longTermMemory.sourcesworkspace.all"),
     chat: localizeUi("ui.longTermMemory.sourcesworkspace.chats"),
     branch: localizeUi("ui.longTermMemory.sourcesworkspace.branches"),
     character: localizeUi("ui.longTermMemory.sourcesworkspace.characters"),
     persona: localizeUi("ui.longTermMemory.sourcesworkspace.personas"),
   };
-  const categories: Array<["all" | Exclude<ScopeTargetKind, "all">, string]> = [
+  const categories: Array<[DestinationCategoryKind, string]> = [
     ["all", categoryLabels.all],
     ["chat", categoryLabels.chat],
     ["branch", categoryLabels.branch],
     ["character", categoryLabels.character],
     ["persona", categoryLabels.persona],
   ];
+  const sortedTargets = useMemo(
+    () => [...targets].sort((left, right) => left.label.localeCompare(right.label)),
+    [targets],
+  );
   const activeTargets =
-    activeKind === "all" ? availableTargets : availableTargets.filter((target) => target.kind === activeKind);
+    activeKind === "all" ? sortedTargets : sortedTargets.filter((target) => target.kind === activeKind);
   const needle = query.trim().toLocaleLowerCase();
-  const filteredTargets = activeTargets.filter((target) =>
+  const matches = (target: ScopeTarget) =>
     `${target.label} ${target.comment ?? ""} ${target.destinationLabel ?? ""} ${target.searchText ?? ""}`
       .toLocaleLowerCase()
-      .includes(needle),
-  );
-  const selectedTargets = availableTargets.filter((target) => draftIds.includes(target.id));
-  const currentDestinationScope = mergedDestinationScope([
-    ...(primaryTarget ? [primaryTarget] : []),
-    ...selectedTargets,
-  ]);
+      .includes(needle);
+  const filteredTargets = activeTargets.filter(matches);
+  const selectedTargets = sortedTargets.filter((target) => selectedIds.includes(target.id));
+  const currentDestinationScope = mergedDestinationScope(selectedTargets);
   const targetExceedsLimit = (target: ScopeTarget) =>
-    !draftIds.includes(target.id) && !targetFitsDestinationScope(currentDestinationScope, target);
-  const blockedTargetCount = filteredTargets.filter((target) => targetExceedsLimit(target)).length;
+    !selectedIds.includes(target.id) && !targetFitsDestinationScope(currentDestinationScope, target);
+  const blockedTargetCount = filteredTargets.filter(targetExceedsLimit).length;
   const toggle = (id: string) => {
-    if (draftIds.includes(id)) {
-      setDraftIds((current) => current.filter((value) => value !== id));
+    if (selectedIds.includes(id)) {
+      onChange(selectedIds.filter((value) => value !== id));
       return;
     }
-    const target = availableTargets.find((item) => item.id === id);
-    if (target && !targetExceedsLimit(target))
-      setDraftIds((current) => (current.includes(id) ? current : [...current, id]));
+    const target = sortedTargets.find((item) => item.id === id);
+    if (target && !targetExceedsLimit(target)) onChange([...selectedIds, id]);
   };
   const handleCategoryKey = (event: KeyboardEvent<HTMLButtonElement>, index: number) => {
     if (!["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)) return;
@@ -460,324 +439,246 @@ function BulkDestinationPicker({
       document.querySelector<HTMLElement>(`[data-ltm-availability-tab="${nextKind}"]`)?.focus(),
     );
   };
-
-  const restoreTriggerFocus = () =>
-    requestAnimationFrame(() =>
-      (triggerRef.current ?? document.querySelector<HTMLButtonElement>("[data-ltm-add-destination]"))?.focus({
-        preventScroll: true,
-      }),
-    );
-  const closePicker = () => {
-    setPickerOpen(false);
-    restoreTriggerFocus();
+  const currentTargetByKind: Record<Exclude<ScopeTargetKind, "all">, ScopeTarget | undefined> = {
+    chat: currentIds.chat ? sortedTargets.find((target) => target.id === currentIds.chat) : undefined,
+    branch: currentIds.branch ? sortedTargets.find((target) => target.id === currentIds.branch) : undefined,
+    character: currentIds.character ? sortedTargets.find((target) => target.id === currentIds.character) : undefined,
+    persona: currentIds.persona ? sortedTargets.find((target) => target.id === currentIds.persona) : undefined,
   };
-
-  useEffect(() => {
-    const transitionedOpen = open && !wasOpenRef.current;
-    wasOpenRef.current = open;
-    if (transitionedOpen) {
-      setDraftIds(selectedIds);
-      setActiveKind("all");
-      setQuery("");
-      requestAnimationFrame(() => editorRef.current?.querySelector<HTMLElement>("input")?.focus());
-    }
-  }, [open, selectedIds]);
-
-  return (
-    <>
-      {renderTrigger ? (
-        <Button
-          ref={triggerRef}
-          disabled={disabled || !primaryTarget}
-          onClick={() => setPickerOpen(true)}
-          data-ltm-add-destination
-          className="w-full justify-center sm:w-auto"
-        >
-          <Plus aria-hidden="true" size="0.875rem" />
-          {localizeUi("ui.longTermMemory.sourcesworkspace.addMoreLocations")}
-          {selectedIds.length ? ` (${selectedIds.length})` : ""}
-        </Button>
-      ) : null}
-      {renderEditor && open ? (
-        <div
-          ref={editorRef}
-          role="dialog"
-          aria-modal={!inline}
-          data-ltm-bulk-destination
-          aria-labelledby="ltm-bulk-destination-title"
-          onClick={(event) => {
-            if (!inline && event.target === event.currentTarget) closePicker();
-          }}
-          className={
-            inline
-              ? "mari-editor-panel mari-editor-panel--soft overflow-hidden"
-              : "fixed inset-0 z-50 m-0 h-full max-h-none w-full max-w-none bg-black/50 p-0 sm:grid sm:place-items-center sm:p-4"
-          }
-        >
-          <section
-            className={
-              inline
-                ? "flex max-h-[min(42rem,calc(100vh-8rem))] w-full flex-col text-[var(--foreground)]"
-                : "flex h-full w-full flex-col bg-[var(--background)] text-[var(--foreground)] sm:h-auto sm:max-h-[min(42rem,calc(100vh-2rem))] sm:max-w-2xl sm:rounded-md sm:border sm:border-[var(--border)] sm:shadow-xl"
-            }
+  const renderCategoryActionRow = (kind: Exclude<ScopeTargetKind, "all">) => {
+    const currentTarget = currentTargetByKind[kind];
+    const categoryTargets = sortedTargets.filter((target) => target.kind === kind);
+    const allLabel =
+      kind === "chat"
+        ? localizeUi("ui.longTermMemory.sourcesworkspace.allChats")
+        : kind === "branch"
+          ? localizeUi("ui.longTermMemory.sourcesworkspace.allBranches")
+          : kind === "character"
+            ? localizeUi("ui.longTermMemory.sourcesworkspace.allCharacters")
+            : localizeUi("ui.longTermMemory.memoryvault.allPersonas");
+    return (
+      <div className="mb-2 divide-y divide-[var(--border)] rounded-md border border-[var(--border)]">
+        {currentTarget ? (
+          <button
+            type="button"
+            data-ltm-availability-action={`${kind}:current`}
+            aria-pressed={selectedIds.includes(currentTarget.id)}
+            disabled={disabled}
+            className="flex min-h-11 w-full items-center gap-3 px-3 py-2 text-left text-sm hover:bg-[var(--secondary)]/35"
+            onClick={() => toggle(currentTarget.id)}
           >
-            <header className="flex items-start justify-between gap-3 border-b border-[var(--border)] p-4">
-              <div className="min-w-0">
-                <h2 id="ltm-bulk-destination-title" className="text-base font-semibold">
-                  {localizeUi("ui.longTermMemory.sourcesworkspace.addMoreLocations")}
-                </h2>
-                <p className="mt-1 text-xs text-[var(--muted-foreground)]">
-                  {localizeUi("ui.longTermMemory.sourcesworkspace.bulkDestinationHelp")}
-                </p>
-              </div>
-              <IconButton
-                icon={X}
-                label={localizeUi("ui.longTermMemory.sourcesworkspace.closeBulkPicker")}
-                onClick={closePicker}
-              />
-            </header>
-            <div data-ltm-bulk-destination-scroll className="min-h-0 flex-1 overflow-y-auto overscroll-contain">
-              <div className={`${inline ? "" : "sticky top-0 z-10 bg-[var(--background)]"} space-y-3 p-4 pb-3`}>
-                <div className="rounded-md border border-[var(--border)] bg-[var(--secondary)]/35 p-3">
-                  <p className="text-xs font-semibold uppercase tracking-wide text-[var(--muted-foreground)]">
-                    {localizeUi("ui.longTermMemory.sourcesworkspace.primaryLocation")}
-                  </p>
-                  <p className="mt-1 truncate text-sm font-semibold">
-                    {primaryTarget ? targetDisplayLabel(primaryTarget, true) : ""}
-                  </p>
-                </div>
-                {selectedTargets.length ? (
-                  <div className="space-y-2">
-                    <p className="text-xs font-semibold">
-                      {localizeUi("ui.longTermMemory.sourcesworkspace.selectedLocations")}
-                    </p>
-                    <div className="flex flex-wrap gap-1.5">
-                      {selectedTargets.map((target) => (
-                        <span
-                          key={target.id}
-                          className="inline-flex max-w-full items-center gap-1 rounded-md border border-[var(--border)] bg-[var(--secondary)] px-2 py-1 text-xs"
-                        >
-                          <span className="min-w-0">
-                            <span className="block truncate">{targetDisplayLabel(target, true)}</span>
-                            {target.comment ? (
-                              <span className="block truncate text-xs text-[var(--muted-foreground)]">
-                                {target.comment}
-                              </span>
-                            ) : null}
-                          </span>
-                          <button
-                            type="button"
-                            aria-label={localizeUi("ui.longTermMemory.sourcesworkspace.removeLocationValue1", {
-                              value1: targetDisplayLabel(target, true),
-                            })}
-                            className="grid h-11 w-11 shrink-0 place-items-center rounded hover:bg-[var(--accent)]"
-                            onClick={() => setDraftIds((current) => current.filter((id) => id !== target.id))}
-                          >
-                            <X aria-hidden="true" size="0.75rem" />
-                          </button>
-                        </span>
-                      ))}
-                    </div>
-                  </div>
-                ) : null}
-                <label className="relative block">
-                  <Search
-                    aria-hidden="true"
-                    size="0.875rem"
-                    className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-[var(--muted-foreground)]"
-                  />
-                  <input
-                    className={`${inputClass} pl-9`}
-                    value={query}
-                    placeholder={localizeUi("ui.longTermMemory.sourcesworkspace.searchScopes")}
-                    aria-label={localizeUi("ui.longTermMemory.sourcesworkspace.searchScopes")}
-                    data-ltm-availability-search={activeKind}
-                    onChange={(event) => setQuery(event.target.value)}
-                  />
-                </label>
-                {blockedTargetCount ? (
-                  <p role="note" className="text-xs text-[var(--muted-foreground)]">
-                    {localizeUi("ui.longTermMemory.sourcesworkspace.destinationScopeLimitReached")}
-                  </p>
-                ) : null}
-                <div
-                  role="tablist"
-                  aria-label={localizeUi("ui.longTermMemory.sourcesworkspace.additionalLocations")}
-                  className="grid grid-cols-2 gap-1 sm:grid-cols-5"
-                >
-                  {categories.map(([kind, label], index) => {
-                    const count =
-                      kind === "all"
-                        ? draftIds.length
-                        : draftIds.filter((id) =>
-                            availableTargets.some((target) => target.id === id && target.kind === kind),
-                          ).length;
-                    return (
-                      <button
-                        key={kind}
-                        type="button"
-                        role="tab"
-                        aria-selected={activeKind === kind}
-                        aria-controls="ltm-bulk-destination-list"
-                        tabIndex={activeKind === kind ? 0 : -1}
-                        data-ltm-availability-tab={kind}
-                        data-active={activeKind === kind}
-                        className="mari-editor-tab min-h-11 min-w-0 rounded-md border px-2 text-xs font-semibold"
-                        onClick={() => setActiveKind(kind)}
-                        onKeyDown={(event) => handleCategoryKey(event, index)}
-                      >
-                        <span className="block truncate">{label}</span>
-                        <span className="text-xs text-[var(--muted-foreground)]">{count}</span>
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
-              <div
-                id="ltm-bulk-destination-list"
-                role="tabpanel"
-                className="px-4 pb-4"
-                aria-label={categoryLabels[activeKind]}
-              >
-                {filteredTargets.length ? (
-                  <div className="divide-y divide-[var(--border)] rounded-md border border-[var(--border)]">
-                    {filteredTargets.map((target) => (
-                      <label
-                        key={target.id}
-                        data-ltm-availability-target={`${target.kind}:${target.id.split(":").slice(1).join(":")}`}
-                        className="flex min-h-11 cursor-pointer items-center gap-3 px-3 py-2 text-sm hover:bg-[var(--secondary)]/35"
-                      >
-                        <input
-                          type="checkbox"
-                          className={sourceCheckboxClass}
-                          checked={draftIds.includes(target.id)}
-                          disabled={targetExceedsLimit(target)}
-                          title={
-                            targetExceedsLimit(target)
-                              ? localizeUi("ui.longTermMemory.sourcesworkspace.destinationScopeLimitReached")
-                              : undefined
-                          }
-                          onChange={() => toggle(target.id)}
-                          aria-label={targetDisplayLabel(target, true)}
-                        />
-                        <span className="min-w-0 flex-1">
-                          <span className="block truncate font-normal">{target.label}</span>
-                          {target.comment ? (
-                            <span className="block truncate text-xs text-[var(--muted-foreground)]">
-                              {target.comment}
-                            </span>
-                          ) : null}
-                        </span>
-                      </label>
-                    ))}
-                  </div>
-                ) : (
-                  <p className="rounded-md border border-[var(--border)] px-3 py-4 text-xs text-[var(--muted-foreground)]">
-                    {localizeUi("ui.longTermMemory.sourcesworkspace.noMatchingScopes")}
-                  </p>
-                )}
-              </div>
-            </div>
-            <footer className="flex flex-wrap justify-end gap-2 border-t border-[var(--border)] p-4">
-              <Button onClick={closePicker} data-ltm-bulk-cancel>
-                {localizeUi("ui.longTermMemory.sourcesworkspace.cancel")}
-              </Button>
-              <Button
-                primary
-                onClick={() => {
-                  onChange(draftIds);
-                  closePicker();
-                }}
-                data-ltm-bulk-done
-              >
-                {localizeUi("ui.longTermMemory.sourcesworkspace.done")}
-              </Button>
-            </footer>
-          </section>
-        </div>
-      ) : null}
-    </>
+            <span className="min-w-0 flex-1 truncate font-semibold">
+              {localizeUi("ui.longTermMemory.sourcesworkspace.current")}
+            </span>
+            <span className="truncate text-xs text-[var(--muted-foreground)]">{currentTarget.label}</span>
+          </button>
+        ) : null}
+        <button
+          type="button"
+          data-ltm-availability-action={`${kind}:all`}
+          aria-pressed={
+            categoryTargets.length > 0 && categoryTargets.every((target) => selectedIds.includes(target.id))
+          }
+          disabled={disabled}
+          className="flex min-h-11 w-full items-center gap-3 px-3 py-2 text-left text-sm font-semibold hover:bg-[var(--secondary)]/35"
+          onClick={() => {
+            const nextIds = [...selectedIds];
+            const nextTargets = [...selectedTargets];
+            for (const target of categoryTargets) {
+              if (
+                nextIds.includes(target.id) ||
+                !targetFitsDestinationScope(mergedDestinationScope(nextTargets), target)
+              )
+                continue;
+              nextIds.push(target.id);
+              nextTargets.push(target);
+            }
+            onChange(nextIds);
+            setQuery("");
+          }}
+        >
+          <span className="min-w-0 flex-1 truncate">{allLabel}</span>
+        </button>
+      </div>
+    );
+  };
+  const renderTarget = (target: ScopeTarget) => (
+    <label
+      key={target.id}
+      data-ltm-availability-target={`${target.kind}:${target.id.split(":").slice(1).join(":")}`}
+      className="flex min-h-11 cursor-pointer items-center gap-3 px-3 py-2 text-sm hover:bg-[var(--secondary)]/35"
+    >
+      <input
+        type="checkbox"
+        className={sourceCheckboxClass}
+        checked={selectedIds.includes(target.id)}
+        disabled={disabled || targetExceedsLimit(target)}
+        title={
+          targetExceedsLimit(target)
+            ? localizeUi("ui.longTermMemory.sourcesworkspace.destinationScopeLimitReached")
+            : undefined
+        }
+        onChange={() => toggle(target.id)}
+        aria-label={targetDisplayLabel(target, true)}
+      />
+      <span className="min-w-0 flex-1">
+        <span className="block truncate font-normal">{target.label}</span>
+        {target.comment ? (
+          <span className="block truncate text-xs text-[var(--muted-foreground)]">{target.comment}</span>
+        ) : null}
+      </span>
+    </label>
   );
-}
-
-function DestinationScopePanel({
-  targets,
-  value,
-  selectedIds,
-  selectedTarget,
-  additionalTargets,
-  onChange,
-  onAdditionalChange,
-  onOpenEditor,
-  mode,
-  source,
-  disabled = false,
-}: {
-  targets: ScopeTarget[];
-  value: string;
-  selectedIds: string[];
-  selectedTarget?: ScopeTarget;
-  additionalTargets: ScopeTarget[];
-  onChange: (value: string) => void;
-  onAdditionalChange: (ids: string[]) => void;
-  onOpenEditor: () => void;
-  mode: LtmMode | "all";
-  source: Source;
-  disabled?: boolean;
-}) {
-  const { t: localizeUi } = useLtmTranslation();
-  const labelId = useId();
+  const groupedKinds: Array<Exclude<ScopeTargetKind, "all">> = ["chat", "branch", "character", "persona"];
+  const destinationPickerList =
+    activeKind === "all" ? (
+      <div className="space-y-3">
+        {groupedKinds.map((kind) => {
+          const kindTargets = filteredTargets.filter((target) => target.kind === kind);
+          if (!kindTargets.length) return null;
+          return (
+            <section key={kind}>
+              <p className="mb-1 px-1 text-xs font-semibold uppercase tracking-wide text-[var(--muted-foreground)]">
+                {categoryLabels[kind]}
+              </p>
+              <div className="divide-y divide-[var(--border)] rounded-md border border-[var(--border)]">
+                {kindTargets.map(renderTarget)}
+              </div>
+            </section>
+          );
+        })}
+        {!filteredTargets.length ? (
+          <p className="rounded-md border border-[var(--border)] px-3 py-4 text-xs text-[var(--muted-foreground)]">
+            {localizeUi("ui.longTermMemory.sourcesworkspace.noMatchingScopes")}
+          </p>
+        ) : null}
+      </div>
+    ) : (
+      <>
+        {renderCategoryActionRow(activeKind)}
+        {filteredTargets.length ? (
+          <div className="divide-y divide-[var(--border)] rounded-md border border-[var(--border)]">
+            {filteredTargets.map(renderTarget)}
+          </div>
+        ) : (
+          <p className="rounded-md border border-[var(--border)] px-3 py-4 text-xs text-[var(--muted-foreground)]">
+            {localizeUi("ui.longTermMemory.sourcesworkspace.noMatchingScopes")}
+          </p>
+        )}
+      </>
+    );
   return (
     <div
       id="ltm-destination-scope-control"
       role="group"
       aria-labelledby={labelId}
-      className="mari-editor-panel space-y-3 p-3"
+      className="mari-editor-panel flex min-h-0 max-h-[min(42rem,calc(100dvh-8rem))] flex-col gap-3 p-3"
     >
-      <div className="flex items-center gap-2 text-xs font-semibold">
+      <div className="flex shrink-0 items-center gap-2 text-xs font-semibold">
         <span id={labelId}>{localizeUi("ui.longTermMemory.sourcesworkspace.makeMemoriesAvailableIn")}</span>
         <InfoPopover
           label={localizeUi("ui.longTermMemory.sourcesworkspace.makeMemoriesAvailableIn")}
           content={localizeUi("ui.longTermMemory.sourcesworkspace.bulkDestinationHelp")}
         />
       </div>
-      <ScopeTargetPicker
-        targets={targets}
-        value={value}
-        onChange={onChange}
-        ariaLabel={localizeUi("ui.longTermMemory.sourcesworkspace.makeMemoriesAvailableIn")}
-        testId="destination"
-        destination
-        required
-        invalid={!selectedTarget}
-        disabled={disabled}
-      />
-      <div className="flex flex-wrap items-center gap-2">
-        <BulkDestinationPicker
-          primaryTarget={selectedTarget}
-          targets={targets}
-          selectedIds={selectedIds}
-          onChange={onAdditionalChange}
-          disabled={disabled}
-          renderEditor={false}
-          onOpenChange={(open) => {
-            if (open) onOpenEditor();
-          }}
+      {selectedTargets.length ? (
+        <div className="shrink-0 space-y-2">
+          <p className="text-xs font-semibold">{localizeUi("ui.longTermMemory.sourcesworkspace.selectedLocations")}</p>
+          <div className="flex flex-wrap gap-1.5">
+            {selectedTargets.map((target) => (
+              <span
+                key={target.id}
+                className="inline-flex max-w-full items-center gap-1 rounded-md border border-[var(--border)] bg-[var(--secondary)] px-2 py-1 text-xs"
+              >
+                <span className="min-w-0">
+                  <span className="block truncate">{targetDisplayLabel(target, true)}</span>
+                  {target.comment ? (
+                    <span className="block truncate text-xs text-[var(--muted-foreground)]">{target.comment}</span>
+                  ) : null}
+                </span>
+                <button
+                  type="button"
+                  disabled={disabled}
+                  aria-label={localizeUi("ui.longTermMemory.sourcesworkspace.removeLocationValue1", {
+                    value1: targetDisplayLabel(target, true),
+                  })}
+                  className="grid h-11 w-11 shrink-0 place-items-center rounded hover:bg-[var(--accent)]"
+                  onClick={() => onChange(selectedIds.filter((id) => id !== target.id))}
+                >
+                  <X aria-hidden="true" size="0.75rem" />
+                </button>
+              </span>
+            ))}
+          </div>
+        </div>
+      ) : null}
+      <label className="relative block shrink-0">
+        <Search
+          aria-hidden="true"
+          size="0.875rem"
+          className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-[var(--muted-foreground)]"
         />
-        {additionalTargets.length ? (
-          <span className="text-xs text-[var(--muted-foreground)]" data-ltm-additional-destination-summary>
-            {localizeUi("ui.longTermMemory.sourcesworkspace.additionalLocationsCount", {
-              count: additionalTargets.length,
-            })}
-          </span>
-        ) : null}
+        <input
+          className={`${inputClass} pl-9`}
+          value={query}
+          placeholder={localizeUi("ui.longTermMemory.sourcesworkspace.searchScopes")}
+          aria-label={localizeUi("ui.longTermMemory.sourcesworkspace.searchScopes")}
+          aria-controls="ltm-bulk-destination-list"
+          data-ltm-availability-search={activeKind}
+          disabled={disabled}
+          onChange={(event) => setQuery(event.target.value)}
+        />
+      </label>
+      <div
+        role="tablist"
+        aria-label={localizeUi("ui.longTermMemory.sourcesworkspace.makeMemoriesAvailableIn")}
+        className="grid shrink-0 grid-cols-2 gap-1 sm:grid-cols-5"
+      >
+        {categories.map(([kind, label], index) => {
+          const count =
+            kind === "all"
+              ? selectedIds.length
+              : selectedIds.filter((id) => sortedTargets.some((target) => target.id === id && target.kind === kind))
+                  .length;
+          return (
+            <button
+              key={kind}
+              type="button"
+              role="tab"
+              aria-selected={activeKind === kind}
+              aria-controls="ltm-bulk-destination-list"
+              tabIndex={activeKind === kind ? 0 : -1}
+              data-ltm-availability-tab={kind}
+              data-active={activeKind === kind}
+              className="mari-editor-tab min-h-11 min-w-0 rounded-md border px-2 text-xs font-semibold"
+              onClick={() => setActiveKind(kind)}
+              onKeyDown={(event) => handleCategoryKey(event, index)}
+            >
+              <span className="block truncate">{label}</span>
+              <span className="text-xs text-[var(--muted-foreground)]">{count}</span>
+            </button>
+          );
+        })}
       </div>
-      {!selectedTarget ? (
-        <span role="alert" className="block text-xs text-[var(--marinara-editor-warning)]">
+      {blockedTargetCount ? (
+        <p role="note" className="shrink-0 text-xs text-[var(--muted-foreground)]">
+          {localizeUi("ui.longTermMemory.sourcesworkspace.destinationScopeLimitReached")}
+        </p>
+      ) : null}
+      <div
+        id="ltm-bulk-destination-list"
+        role="tabpanel"
+        aria-label={categoryLabels[activeKind]}
+        className="min-h-0 flex-1 overflow-y-auto overscroll-contain"
+      >
+        {destinationPickerList}
+      </div>
+      {!selectedTargets.length ? (
+        <span role="alert" className="block shrink-0 text-xs text-[var(--marinara-editor-warning)]">
           {localizeUi("ui.longTermMemory.sourcesworkspace.chooseDestinationBeforeImport")}
         </span>
       ) : null}
-      <p className="text-xs text-[var(--muted-foreground)]" data-ltm-import-mode-summary>
+      <p className="shrink-0 text-xs text-[var(--muted-foreground)]" data-ltm-import-mode-summary>
         {mode === "all"
           ? source === "chats"
             ? localizeUi("ui.longTermMemory.sourcesworkspace.automatic")
@@ -787,7 +688,6 @@ function DestinationScopePanel({
     </div>
   );
 }
-
 const sourceTabs: Array<{ id: Source; labelKey: string }> = [
   {
     id: "chats",
@@ -1492,10 +1392,10 @@ export default function SourcesWorkspace({
   const [selectedLorebookId, setSelectedLorebookId] = useState<string | null>(null);
   const [requestedSourceNoteId, setRequestedSourceNoteId] = useState<string | null>(null);
   const [workspacePane, setWorkspacePane] = useState<LtmWorkspacePane>("navigator");
-  const [locationEditorOpen, setLocationEditorOpen] = useState(false);
   const [sourceTargetId, setSourceTargetId] = useState(props.chatId ? `chat:${props.chatId}` : "all");
-  const [destinationTargetId, setDestinationTargetId] = useState(props.chatId ? `chat:${props.chatId}` : "");
-  const [additionalDestinationTargetIds, setAdditionalDestinationTargetIds] = useState<string[]>([]);
+  const [selectedDestinationTargetIds, setSelectedDestinationTargetIds] = useState<string[]>(
+    props.chatId ? [`chat:${props.chatId}`] : [],
+  );
   const [modeFilter, setModeFilter] = useState<LtmMode | "all">("all");
   const [sourceQuery, setSourceQuery] = useState("");
   const [sourceStatusFilter, setSourceStatusFilter] = useState<SourceStatusFilter>("all");
@@ -1674,33 +1574,42 @@ export default function SourcesWorkspace({
       ),
     [scopeTargetOptions],
   );
-  const destinationTarget = destinationTargets.find((target) => target.id === destinationTargetId);
-  const primaryDestinationTarget = destinationTarget;
-  const additionalDestinationTargets = additionalDestinationTargetIds.flatMap((id) => {
+  const selectedDestinationTargets = selectedDestinationTargetIds.flatMap((id) => {
     const target = destinationTargets.find((item) => item.id === id);
     return target ? [target] : [];
   });
-  const selectedDestinationTargets = primaryDestinationTarget
-    ? [primaryDestinationTarget, ...additionalDestinationTargets]
-    : [];
   const currentDestinationScope = mergedDestinationScope(selectedDestinationTargets);
-  const currentDestinationLabel = primaryDestinationTarget
-    ? `${targetDisplayLabel(primaryDestinationTarget, true)}${
-        additionalDestinationTargets.length
-          ? ` + ${localizeUi("ui.longTermMemory.sourcesworkspace.additionalLocationsCount", {
-              count: additionalDestinationTargets.length,
-            })}`
-          : ""
-      }`
+  const currentDestinationLabel = selectedDestinationTargets.length
+    ? selectedDestinationTargets.map((target) => targetDisplayLabel(target, true)).join(", ")
     : localizeUi("ui.longTermMemory.sourcesworkspace.chooseDestination");
+  const currentDestinationIds = useMemo(() => {
+    const currentChatId = props.chatId ?? scopeTargets.data?.currentScope?.chatId;
+    const currentChatRecord = currentChatId ? scopeIndexes.chatsById.get(currentChatId) : undefined;
+    const branchId = currentChatRecord?.groupId ?? null;
+    const characterIds = currentChatRecord?.characterIds ?? [];
+    const personaId = currentChatRecord?.personaId ?? null;
+    return {
+      chat: currentChatId ? `chat:${currentChatId}` : undefined,
+      branch:
+        branchId && destinationTargets.some((target) => target.id === `group:${branchId}`)
+          ? `group:${branchId}`
+          : undefined,
+      character:
+        characterIds.length === 1 && destinationTargets.some((target) => target.id === `character:${characterIds[0]}`)
+          ? `character:${characterIds[0]}`
+          : undefined,
+      persona:
+        personaId && destinationTargets.some((target) => target.id === `persona:${personaId}`)
+          ? `persona:${personaId}`
+          : undefined,
+    };
+  }, [destinationTargets, props.chatId, scopeIndexes.chatsById, scopeTargets.data?.currentScope?.chatId]);
   const sourceScope = sourceTarget?.sourceScope;
   const previewScope =
     source === "chats" || source === "lorebooks" || (source === "characters" && sourceTarget?.kind === "character")
       ? sourceScope
       : undefined;
-  const effectiveImportScope = `${sourceTargetId}:${destinationTargetId || "none"}:${[...additionalDestinationTargetIds]
-    .sort()
-    .join(",")}`;
+  const effectiveImportScope = `${sourceTargetId}:${[...selectedDestinationTargetIds].sort().join(",")}`;
   const preview = useQuery({
     queryKey: [...queryKeys.preview, source, previewScope, modeFilter, sourceQuery],
     queryFn: () =>
@@ -1954,7 +1863,6 @@ export default function SourcesWorkspace({
       setFocusedFlatSourceId(focusedSourceByType.current[next]);
       setSelectedLorebookId(focusedLorebookByType.current[next]);
       setOpenLorebookEntryId(openLorebookEntryByType.current[next]);
-      setLocationEditorOpen(false);
       setWorkspacePane("navigator");
       clearImportResult();
       return true;
@@ -1982,17 +1890,14 @@ export default function SourcesWorkspace({
   };
 
   useEffect(() => {
-    if (!destinationTargets.some((target) => target.id === destinationTargetId))
-      setDestinationTargetId(props.chatId ? `chat:${props.chatId}` : "");
-    setAdditionalDestinationTargetIds((current) =>
+    setSelectedDestinationTargetIds((current) =>
       current.filter((id) => destinationTargets.some((target) => target.id === id)),
     );
-  }, [destinationTargetId, destinationTargets, props.chatId]);
+  }, [destinationTargets]);
 
   useEffect(() => {
     setSourceTargetId(props.chatId ? `chat:${props.chatId}` : "all");
-    setDestinationTargetId(props.chatId ? `chat:${props.chatId}` : "");
-    setAdditionalDestinationTargetIds([]);
+    setSelectedDestinationTargetIds(props.chatId ? [`chat:${props.chatId}`] : []);
   }, [props.chatId]);
 
   useEffect(() => {
@@ -2093,21 +1998,8 @@ export default function SourcesWorkspace({
     clearImportResult();
   };
 
-  const changeDestinationScope = (next: string) => {
-    const nextTarget = destinationTargets.find((target) => target.id === next);
-    const retainedAdditionalTargets = additionalDestinationTargetIds.flatMap((id) => {
-      const target = destinationTargets.find((item) => item.id === id);
-      return target && target.id !== next ? [target] : [];
-    });
-    if (
-      nextTarget &&
-      !hasDestinationScopeCapacity(mergedDestinationScope([nextTarget, ...retainedAdditionalTargets]))
-    ) {
-      setImportError(localizeUi("ui.longTermMemory.sourcesworkspace.destinationScopeLimitReached"));
-      return;
-    }
-    setDestinationTargetId(next);
-    setAdditionalDestinationTargetIds((current) => current.filter((id) => id !== next));
+  const changeDestinationIds = (next: string[]) => {
+    setSelectedDestinationTargetIds(next);
     clearImportResult();
   };
 
@@ -2935,11 +2827,7 @@ export default function SourcesWorkspace({
               ),
             }}
             workbench={{
-              label: localizeUi(
-                locationEditorOpen
-                  ? "ui.longTermMemory.sourcesworkspace.chooseAdditionalLocations"
-                  : "ui.longTermMemory.sourcesworkspace.entries",
-              ),
+              label: localizeUi("ui.longTermMemory.sourcesworkspace.entries"),
               content: (
                 <section
                   data-ltm-lorebook-workbench={selectedLorebook?.id ?? "empty"}
@@ -2948,23 +2836,6 @@ export default function SourcesWorkspace({
                   {sourceOperationWorkbench}
                   <div ref={setResultWorkbenchHost} className="contents" data-ltm-source-task-result-workbench />
                   {restoredImportResultPanel}
-                  <BulkDestinationPicker
-                    primaryTarget={primaryDestinationTarget}
-                    targets={destinationTargets}
-                    selectedIds={additionalDestinationTargetIds}
-                    onChange={(ids) => {
-                      setAdditionalDestinationTargetIds(ids);
-                      clearImportResult();
-                    }}
-                    disabled={sourceTask.active?.status === "running"}
-                    renderTrigger={false}
-                    controlledOpen={locationEditorOpen}
-                    onOpenChange={(open) => {
-                      setLocationEditorOpen(open);
-                      if (!open) setWorkspacePane("inspector");
-                    }}
-                    inline
-                  />
                   {activeSourceTask ? (
                     <div className="space-y-3 border-b border-[var(--border)] p-4" data-ltm-source-task-progress>
                       <StatusSurface busy>
@@ -3194,19 +3065,9 @@ export default function SourcesWorkspace({
                 <div className="space-y-3">
                   <DestinationScopePanel
                     targets={destinationTargets}
-                    value={destinationTargetId}
-                    selectedIds={additionalDestinationTargetIds}
-                    selectedTarget={primaryDestinationTarget}
-                    additionalTargets={additionalDestinationTargets}
-                    onChange={changeDestinationScope}
-                    onAdditionalChange={(ids) => {
-                      setAdditionalDestinationTargetIds(ids);
-                      clearImportResult();
-                    }}
-                    onOpenEditor={() => {
-                      setLocationEditorOpen(true);
-                      setWorkspacePane("workbench");
-                    }}
+                    selectedIds={selectedDestinationTargetIds}
+                    currentIds={currentDestinationIds}
+                    onChange={changeDestinationIds}
                     mode={modeFilter}
                     source={source}
                     disabled={sourceTask.active?.status === "running"}
@@ -3488,11 +3349,7 @@ export default function SourcesWorkspace({
               ),
             }}
             workbench={{
-              label: localizeUi(
-                locationEditorOpen
-                  ? "ui.longTermMemory.sourcesworkspace.chooseAdditionalLocations"
-                  : "ui.longTermMemory.sourcesworkspace.sourcePreview",
-              ),
+              label: localizeUi("ui.longTermMemory.sourcesworkspace.sourcePreview"),
               content: (
                 <section
                   className={`mari-editor-panel overflow-hidden ${workbenchModeClass}`}
@@ -3533,23 +3390,6 @@ export default function SourcesWorkspace({
                       })}
                     </section>
                   ) : null}
-                  <BulkDestinationPicker
-                    primaryTarget={primaryDestinationTarget}
-                    targets={destinationTargets}
-                    selectedIds={additionalDestinationTargetIds}
-                    onChange={(ids) => {
-                      setAdditionalDestinationTargetIds(ids);
-                      clearImportResult();
-                    }}
-                    disabled={sourceTask.active?.status === "running"}
-                    renderTrigger={false}
-                    controlledOpen={locationEditorOpen}
-                    onOpenChange={(open) => {
-                      setLocationEditorOpen(open);
-                      if (!open) setWorkspacePane("inspector");
-                    }}
-                    inline
-                  />
                   {activeSourceTask ? (
                     <div className="space-y-3 p-4" data-ltm-source-task-progress>
                       <StatusSurface busy>
@@ -3685,19 +3525,9 @@ export default function SourcesWorkspace({
                 <div className="space-y-3">
                   <DestinationScopePanel
                     targets={destinationTargets}
-                    value={destinationTargetId}
-                    selectedIds={additionalDestinationTargetIds}
-                    selectedTarget={primaryDestinationTarget}
-                    additionalTargets={additionalDestinationTargets}
-                    onChange={changeDestinationScope}
-                    onAdditionalChange={(ids) => {
-                      setAdditionalDestinationTargetIds(ids);
-                      clearImportResult();
-                    }}
-                    onOpenEditor={() => {
-                      setLocationEditorOpen(true);
-                      setWorkspacePane("workbench");
-                    }}
+                    selectedIds={selectedDestinationTargetIds}
+                    currentIds={currentDestinationIds}
+                    onChange={changeDestinationIds}
                     mode={modeFilter}
                     source={source}
                     disabled={sourceTask.active?.status === "running"}

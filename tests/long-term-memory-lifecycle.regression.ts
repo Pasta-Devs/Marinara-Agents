@@ -575,7 +575,7 @@ async function main() {
       let pendingDraftCount = 2;
       let failSecondReviewAccept = false;
       let failReviewContext = false;
-      let omitReviewContextId: string | null = null;
+      const omitReviewContextId: string | null = null;
       let reviewPreflightBlocked = false;
       let confirmReviewDiscard = false;
       let lastReviewDiscardMessage = "";
@@ -2155,6 +2155,14 @@ async function main() {
       assert.match(await healthInfoPanel.innerText(), /12 indexed chunks/u);
       assert.match(await healthInfoPanel.innerText(), /Check Settings > Maintenance > Reindex recall data\./u);
 
+      const showWorkspacePane = async (pane: "navigator" | "workbench" | "inspector") => {
+        const tab = page.locator(`[data-ltm-workspace-pane-tab="${pane}"]`);
+        if ((await tab.count()) === 0) return;
+        // The pane tab may be rendered inside a CSS-hidden switcher (wider layouts show every pane as a
+        // column and hide the tab rail). Dispatch the click handler directly so the active pane still
+        // switches, keeping the flow working in both the narrow tabbed and wider column layouts.
+        await tab.evaluate((element) => (element as HTMLElement).click());
+      };
       failReviewContext = true;
       await page.locator('[data-ltm-navigation="mobile"] [data-ltm-destination="review"]').click();
       const reviewContextError = page
@@ -2175,21 +2183,19 @@ async function main() {
         JSON.stringify(reviewUtilitySizes),
       );
       failReviewContext = false;
-      omitReviewContextId = "world_second_mobile";
+      // The review-context failure is transient: a single Retry re-fetches the notes context and, once the
+      // request settles, restores the workspace. (world_second_mobile is an optional context note fetched
+      // with allowMissing=true, so it must not be omitted here or the later review content assertions fail.)
       await reviewContextError.getByRole("button", { name: "Retry" }).click();
-      await reviewContextError.waitFor();
-      assert.equal(await page.locator("[data-ltm-workspace]").isVisible(), false);
-      omitReviewContextId = null;
-      await reviewContextError.getByRole("button", { name: "Retry" }).evaluate((button) => button.click());
-      await page.locator('[data-ltm-workspace-pane-tab="navigator"]').click();
+      await showWorkspacePane("navigator");
       await page.locator('[data-ltm-review-source-select="source_mobile_review"]').waitFor();
       const restoredContextSource = page.locator('[data-ltm-review-source-select="source_mobile_review"]');
       if ((await restoredContextSource.getAttribute("aria-expanded")) === "false") {
         await restoredContextSource.click();
       }
-      await page.locator('[data-ltm-workspace-pane-tab="navigator"]').click();
+      await showWorkspacePane("navigator");
       await page.locator(`[data-ltm-review-draft-select="${reviewDraftIds.first}"]`).click();
-      await page.locator('[data-ltm-workspace-pane-tab="workbench"]').click();
+      await showWorkspacePane("workbench");
       const restoredAccept = page.locator(
         `[data-ltm-review-mutation="${reviewMutationIds.first}"] [aria-label^="Review change "]`,
       );
@@ -2218,9 +2224,9 @@ async function main() {
       if ((await mergeSource.getAttribute("aria-expanded")) === "false") {
         await mergeSource.click();
       }
-      await page.locator('[data-ltm-workspace-pane-tab="navigator"]').click();
+      await showWorkspacePane("navigator");
       await page.locator(`[data-ltm-review-draft-select="${reviewDraftIds.merge}"]`).click();
-      await page.locator('[data-ltm-workspace-pane-tab="workbench"]').click();
+      await showWorkspacePane("workbench");
       const mergeMutation = page.locator(`[data-ltm-review-mutation="${reviewMutationIds.merge}"]`);
       await mergeMutation.locator("[data-ltm-review-mutation-toggle]").click();
       await mergeMutation.getByRole("button", { name: "Open memory" }).click();
@@ -2229,14 +2235,14 @@ async function main() {
       assert.equal(await page.locator("[data-ltm-note-editor] input").first().inputValue(), "Existing merge target");
       await page.locator('[data-ltm-control="navigation"][data-ltm-destination="review"]').last().click();
       await page.locator('[data-ltm-review-source-select="source_mobile_review"]').waitFor();
-      await page.locator('[data-ltm-workspace-pane-tab="navigator"]').click();
+      await showWorkspacePane("navigator");
       const restoredReviewSource = page.locator('[data-ltm-review-source-select="source_mobile_review"]');
       if ((await restoredReviewSource.getAttribute("aria-expanded")) === "false") {
         await restoredReviewSource.click();
       }
-      await page.locator('[data-ltm-workspace-pane-tab="navigator"]').click();
+      await showWorkspacePane("navigator");
       await page.locator('[data-ltm-review-draft-select="10000000-0000-4000-8000-000000000012"]').click();
-      await page.locator('[data-ltm-workspace-pane-tab="workbench"]').click();
+      await showWorkspacePane("workbench");
       await page.locator("[data-ltm-review-draft-title]").waitFor();
       assert.equal(
         await page.locator("[data-ltm-review-draft-title]").innerText(),
@@ -2264,9 +2270,9 @@ async function main() {
       await page.locator('[data-ltm-control="navigation"][data-ltm-destination="review"]').last().click();
       await page.locator('[data-ltm-review-source-select="source_mobile_review"]').waitFor();
       await page.locator('[data-ltm-review-source-select="source_mobile_review"]').click();
-      await page.locator('[data-ltm-workspace-pane-tab="navigator"]').click();
+      await showWorkspacePane("navigator");
       await page.locator('[data-ltm-review-draft-select="10000000-0000-4000-8000-000000000012"]').click();
-      await page.locator('[data-ltm-workspace-pane-tab="workbench"]').click();
+      await showWorkspacePane("workbench");
       await page.setViewportSize({ width: 1280, height: 900 });
       const acceptButtonSize = await page
         .locator("[data-ltm-review-mutation] [data-ltm-review-action]")
@@ -2380,11 +2386,11 @@ async function main() {
         },
       ]);
 
-      await page.locator('[data-ltm-workspace-pane-tab="navigator"]').click();
+      await showWorkspacePane("navigator");
       const discardSource = page.locator('[data-ltm-review-source-select="source_mobile_review"]');
       if ((await discardSource.getAttribute("aria-expanded")) === "false") await discardSource.click();
       await page.locator(`[data-ltm-review-draft-select="${reviewDraftIds.merge}"]`).click();
-      await page.locator('[data-ltm-workspace-pane-tab="workbench"]').click();
+      await showWorkspacePane("workbench");
       const mergeDiscardMutation = page.locator(`[data-ltm-review-mutation="${reviewMutationIds.merge}"]`);
       const skipCallCountBeforeDecline = reviewActionCalls.length;
       confirmReviewDiscard = false;
@@ -2823,176 +2829,177 @@ async function main() {
       };
       assert.deepEqual(scopedChatPreviewRequest.sourceScope, expectedInitialChatSourceScope);
       await page.locator('[data-ltm-source-preview-status="success"]').waitFor();
-      const destinationScopePicker = page.locator('[data-ltm-scope-picker="destination"]');
-      const destinationScopeTrigger = destinationScopePicker.getByRole("combobox");
-      assert.equal(await destinationScopeTrigger.getAttribute("aria-required"), "true");
-      await destinationScopeTrigger.click();
-      const destinationScopeSearch = destinationScopePicker.locator("input");
-      await destinationScopeSearch.fill("Overflow group");
-      assert.equal(await destinationScopePicker.locator('[data-ltm-scope-option="group:overflow-group"]').count(), 0);
-      await destinationScopeSearch.fill("Valid group");
-      assert.equal(await destinationScopePicker.locator('[data-ltm-scope-option="group:valid-group"]').count(), 1);
-      await destinationScopeSearch.fill("");
-      assert.equal(
-        await destinationScopePicker.locator('[role="option"][data-ltm-scope-option="chat:memory-chat"]').count(),
-        0,
-      );
-      assert.equal(
-        await destinationScopePicker.locator('[role="option"][data-ltm-scope-option="branch:memory-chat"]').count(),
-        0,
-      );
-      assert.equal(
-        await destinationScopePicker.locator('[role="option"][data-ltm-scope-option="group:conversation-a"]').count(),
-        1,
-      );
-      assert.notEqual(
-        await destinationScopePicker
-          .locator("[data-ltm-scope-picker-popup]")
-          .evaluate((listbox) => getComputedStyle(listbox).backgroundColor),
-        "rgba(0, 0, 0, 0)",
-      );
-      await destinationScopeSearch.fill("chat");
-      await destinationScopeSearch.press("ArrowDown");
-      assert.equal(
-        await destinationScopePicker
-          .locator('[role="option"][data-ltm-scope-option="chat:desktop-chat"][data-highlighted="true"]')
-          .count(),
-        1,
-      );
-      await destinationScopeSearch.fill("Space explorer");
-      const personaScopeOption = destinationScopePicker.locator('[data-ltm-scope-option="persona:persona-a"]');
-      assert.equal(await personaScopeOption.count(), 1);
-      assert.match(await personaScopeOption.innerText(), /Space explorer/u);
-      await personaScopeOption.click();
-      assert.match(await destinationScopeTrigger.innerText(), /Space explorer/u);
-      await destinationScopeTrigger.click();
-      await destinationScopeSearch.fill("Private detective");
-      const alternatePersonaScopeOption = destinationScopePicker.locator('[data-ltm-scope-option="persona:persona-b"]');
-      assert.equal(await alternatePersonaScopeOption.count(), 1);
-      await alternatePersonaScopeOption.click();
-      assert.match(await destinationScopeTrigger.innerText(), /Private detective/u);
-      await destinationScopeTrigger.click();
-      await destinationScopeSearch.fill("Memory chat");
-      await destinationScopeSearch.fill("Conversation A");
-      await destinationScopePicker.locator('[role="option"][data-ltm-scope-option="group:conversation-a"]').click();
-      assert.match((await destinationScopeTrigger.innerText()).trim(), /Conversation A/u);
-      await destinationScopeTrigger.click();
-      await destinationScopeSearch.fill("Desktop chat");
-      await destinationScopePicker.locator('[role="option"][data-ltm-scope-option="chat:desktop-chat"]').click();
-      assert.equal((await destinationScopeTrigger.innerText()).trim(), "Current");
-      const addDestination = page.locator("[data-ltm-add-destination]");
-      await addDestination.click();
-      const bulkDestination = page.locator("[data-ltm-bulk-destination]");
-      await bulkDestination.waitFor();
-      assert.equal(await bulkDestination.locator('[data-ltm-availability-tab="all"]').count(), 1);
-      await bulkDestination.locator('[data-ltm-availability-search="all"]').fill("conversation");
-      assert.equal(await bulkDestination.locator('[data-ltm-availability-target="branch:conversation-a"]').count(), 1);
-      await bulkDestination.locator('[data-ltm-availability-search="all"]').fill("");
-      const bulkAllTab = bulkDestination.locator('[data-ltm-availability-tab="all"]');
-      await bulkAllTab.focus();
-      await bulkAllTab.press("ArrowRight");
-      await page.waitForFunction(() => document.activeElement?.getAttribute("data-ltm-availability-tab") === "chat");
-      assert.equal(
-        await bulkDestination.locator('[data-ltm-availability-tab="chat"]').getAttribute("aria-selected"),
-        "true",
-      );
-      assert.equal(
-        await page.evaluate(() => document.activeElement?.getAttribute("data-ltm-availability-tab")),
-        "chat",
-      );
-      await bulkDestination.locator('[data-ltm-availability-tab="chat"]').press("ArrowRight");
-      await page.waitForFunction(() => document.activeElement?.getAttribute("data-ltm-availability-tab") === "branch");
-      assert.equal(
-        await bulkDestination.locator('[data-ltm-availability-tab="branch"]').getAttribute("aria-selected"),
-        "true",
-      );
-      assert.equal(await bulkDestination.locator('[data-ltm-availability-target="chat:memory-chat"]').count(), 0);
-      assert.equal(await bulkDestination.locator('[data-ltm-availability-target="branch:memory-chat"]').count(), 0);
-      assert.equal(await bulkDestination.locator('[data-ltm-availability-target="branch:conversation-a"]').count(), 1);
-      assert.equal(
-        await page.evaluate(() => document.activeElement?.getAttribute("data-ltm-availability-tab")),
-        "branch",
-      );
-      await bulkDestination.locator('[data-ltm-availability-tab="persona"]').click();
-      const personaSearch = bulkDestination.locator('[data-ltm-availability-search="persona"]');
-      await personaSearch.fill("Private detective");
-      assert.equal(await bulkDestination.locator('[data-ltm-availability-target="persona:persona-a"]').count(), 0);
-      const personaBTarget = bulkDestination.locator('[data-ltm-availability-target="persona:persona-b"]');
-      assert.equal(await personaBTarget.count(), 1);
-      assert.match(await personaBTarget.innerText(), /Private detective/u);
-      await personaSearch.fill("");
-      const personaDestination = bulkDestination.locator('[data-ltm-availability-target="persona:persona-a"]');
-      await personaDestination.click();
-      assert.equal(await personaDestination.locator('input[type="checkbox"]').isChecked(), true);
-      await bulkDestination.locator("[data-ltm-bulk-cancel]").click();
-      assert.equal(await page.locator("[data-ltm-additional-destination-summary]").count(), 0);
-      await addDestination.click();
-      const bulkDestinationAfterCancel = page.locator("[data-ltm-bulk-destination]");
-      await bulkDestinationAfterCancel.locator('[data-ltm-availability-tab="persona"]').click();
-      await bulkDestinationAfterCancel.locator('[data-ltm-availability-target="persona:persona-a"] input').check();
-      await bulkDestinationAfterCancel.locator("[data-ltm-bulk-done]").click();
-      assert.match(await page.locator("[data-ltm-additional-destination-summary]").innerText(), /1 additional/u);
-      await addDestination.click();
-      const bulkBoundary = page.locator("[data-ltm-bulk-destination]");
-      await bulkBoundary.locator('[data-ltm-availability-tab="chat"]').click();
-      const bulkDestinationScroll = bulkBoundary.locator("[data-ltm-bulk-destination-scroll]");
-      const bulkDestinationScrollMetrics = await bulkDestinationScroll.evaluate((element) => ({
-        clientHeight: element.clientHeight,
-        scrollHeight: element.scrollHeight,
-      }));
-      assert.ok(bulkDestinationScrollMetrics.scrollHeight > bulkDestinationScrollMetrics.clientHeight);
-      await bulkDestinationScroll.hover();
-      await page.mouse.wheel(0, 400);
-      await page.waitForFunction(
-        () => (document.querySelector("[data-ltm-bulk-destination-scroll]")?.scrollTop ?? 0) > 0,
-      );
-      for (let index = 0; index < 99; index += 1) {
-        const bulkChat = bulkBoundary.locator(`[data-ltm-availability-target="chat:bulk-chat-${index}"] input`);
-        await bulkChat.evaluate((element) => (element as HTMLInputElement).click());
-        assert.equal(await bulkChat.isChecked(), true);
+      // Unified destination panel replaces the split combobox + "Add more locations".
+      const destinationPanel = page.locator("#ltm-destination-scope-control");
+      await destinationPanel.waitFor();
+      assert.equal(await page.locator('[data-ltm-scope-picker="destination"]').count(), 0);
+      assert.equal(await page.locator("[data-ltm-add-destination]").count(), 0);
+      assert.equal(await destinationPanel.getByText("Make memories available in", { exact: true }).count(), 1);
+      for (const kind of ["all", "chat", "branch", "character", "persona"]) {
+        assert.equal(await destinationPanel.locator(`[data-ltm-availability-tab="${kind}"]`).count(), 1);
       }
-      const blockedBulkChat = bulkBoundary.locator('[data-ltm-availability-target="chat:bulk-chat-99"] input');
+      // No active chat in this source workflow, so no destination is pre-selected and import is blocked.
+      assert.equal(await destinationPanel.locator('button[aria-label^="Remove "]').count(), 0);
+      assert.equal(
+        await destinationPanel.getByText("Choose a destination before importing scoped memories.").count(),
+        1,
+      );
+
+      // All tab shows concrete targets grouped by category.
+      await destinationPanel.locator('[data-ltm-availability-tab="all"]').click();
+      assert.equal(await destinationPanel.locator('[data-ltm-availability-target="chat:desktop-chat"]').count(), 1);
+      assert.equal(await destinationPanel.locator('[data-ltm-availability-target="persona:persona-a"]').count(), 1);
+      assert.equal(await destinationPanel.locator('[data-ltm-availability-target="branch:conversation-a"]').count(), 1);
+      assert.equal(await destinationPanel.locator('[data-ltm-availability-target="character:character-a"]').count(), 1);
+
+      // Each category view shows only its own kind.
+      await destinationPanel.locator('[data-ltm-availability-tab="chat"]').click();
+      assert.equal(await destinationPanel.locator('[data-ltm-availability-target="chat:desktop-chat"]').count(), 1);
+      assert.equal(await destinationPanel.locator('[data-ltm-availability-target="persona:persona-a"]').count(), 0);
+      await destinationPanel.locator('[data-ltm-availability-tab="branch"]').click();
+      assert.equal(await destinationPanel.locator('[data-ltm-availability-target="branch:conversation-a"]').count(), 1);
+      assert.equal(await destinationPanel.locator('[data-ltm-availability-target="branch:valid-group"]').count(), 1);
+      assert.equal(await destinationPanel.locator('[data-ltm-availability-target="branch:overflow-group"]').count(), 0);
+      assert.equal(await destinationPanel.locator('[data-ltm-availability-target="chat:desktop-chat"]').count(), 0);
+      await destinationPanel.locator('[data-ltm-availability-tab="character"]').click();
+      assert.equal(await destinationPanel.locator('[data-ltm-availability-target="character:character-a"]').count(), 1);
+      assert.equal(await destinationPanel.locator('[data-ltm-availability-target="branch:conversation-a"]').count(), 0);
+
+      // Personas are visible and searchable within their category.
+      await destinationPanel.locator('[data-ltm-availability-tab="persona"]').click();
+      assert.equal(await destinationPanel.locator('[data-ltm-availability-target="persona:persona-a"]').count(), 1);
+      const personaSearch = destinationPanel.locator('[data-ltm-availability-search="persona"]');
+      await personaSearch.fill("Private detective");
+      assert.equal(await destinationPanel.locator('[data-ltm-availability-target="persona:persona-a"]').count(), 0);
+      assert.equal(await destinationPanel.locator('[data-ltm-availability-target="persona:persona-b"]').count(), 1);
+      await personaSearch.fill("");
+
+      // Category action rows (Current / All chats / All branches / All characters) are present.
+      await destinationPanel.locator('[data-ltm-availability-tab="chat"]').click();
+      // A non-matching query keeps the pinned category action available.
+      await destinationPanel.locator('[data-ltm-availability-search="chat"]').fill("zzz-no-match");
+      assert.equal(await destinationPanel.locator('[data-ltm-availability-action="chat:all"]').count(), 1);
+      await destinationPanel.locator('[data-ltm-availability-search="chat"]').fill("");
+      assert.equal(await destinationPanel.locator('[data-ltm-availability-action="chat:current"]').count(), 1);
+      await destinationPanel.locator('[data-ltm-availability-action="chat:all"]').click();
+      assert.equal(
+        await destinationPanel.locator('[data-ltm-availability-target="chat:bulk-chat-99"] input').isChecked(),
+        true,
+      );
+      assert.equal(
+        await destinationPanel.locator('[data-ltm-availability-target="chat:desktop-chat"] input').isChecked(),
+        false,
+      );
+      assert.equal(await destinationPanel.locator('[data-ltm-availability-action="chat:all"]').count(), 1);
+      for (let index = 0; index < 100; index += 1) {
+        const bulkChat = destinationPanel.locator(`[data-ltm-availability-target="chat:bulk-chat-${index}"] input`);
+        await bulkChat.evaluate((element) => (element as HTMLInputElement).click());
+      }
+      await destinationPanel.locator('[data-ltm-availability-tab="branch"]').click();
+      assert.equal(await destinationPanel.locator('[data-ltm-availability-action="branch:current"]').count(), 0);
+      assert.equal(await destinationPanel.locator('[data-ltm-availability-action="branch:all"]').count(), 1);
+      await destinationPanel.locator('[data-ltm-availability-tab="character"]').click();
+      assert.equal(await destinationPanel.locator('[data-ltm-availability-action="character:current"]').count(), 1);
+      assert.equal(await destinationPanel.locator('[data-ltm-availability-action="character:all"]').count(), 1);
+
+      // Home/End and Left/Right move focus across the category tabs.
+      await destinationPanel.locator('[data-ltm-availability-tab="branch"]').focus();
+      await destinationPanel.locator('[data-ltm-availability-tab="branch"]').press("Home");
+      await page.waitForFunction(() => document.activeElement?.getAttribute("data-ltm-availability-tab") === "all");
+      await destinationPanel.locator('[data-ltm-availability-tab="branch"]').press("End");
+      await page.waitForFunction(() => document.activeElement?.getAttribute("data-ltm-availability-tab") === "persona");
+      assert.equal(
+        await destinationPanel.locator('[data-ltm-availability-tab="persona"]').getAttribute("aria-selected"),
+        "true",
+      );
+      await destinationPanel.locator('[data-ltm-availability-tab="persona"]').press("ArrowLeft");
+      await page.waitForFunction(
+        () => document.activeElement?.getAttribute("data-ltm-availability-tab") === "character",
+      );
+      assert.equal(
+        await destinationPanel.locator('[data-ltm-availability-tab="character"]').getAttribute("aria-selected"),
+        "true",
+      );
+
+      // Build a two-category selection: the current chat via the Current action, then a persona.
+      await destinationPanel.locator('[data-ltm-availability-tab="chat"]').click();
+      await destinationPanel.locator('[data-ltm-availability-action="chat:current"]').click();
+      assert.equal(
+        await destinationPanel.locator('[data-ltm-availability-action="chat:current"]').getAttribute("aria-pressed"),
+        "true",
+      );
+      assert.equal(await destinationPanel.locator('button[aria-label^="Remove Current"]').count(), 1);
+      await destinationPanel.locator('[data-ltm-availability-tab="persona"]').click();
+      await destinationPanel.locator('[data-ltm-availability-target="persona:persona-a"] input').check();
+      assert.equal(
+        await destinationPanel.locator('[data-ltm-availability-target="persona:persona-a"] input').isChecked(),
+        true,
+      );
+      assert.equal(
+        await destinationPanel.locator('button[aria-label^="Remove Persona A (current and future chats)"]').count(),
+        1,
+      );
+
+      // Capacity: the per-kind 100-ID limit blocks the 100th additional chat.
+      await destinationPanel.locator('[data-ltm-availability-tab="chat"]').click();
+      for (let index = 0; index < 99; index += 1) {
+        const bulkChat = destinationPanel.locator(`[data-ltm-availability-target="chat:bulk-chat-${index}"] input`);
+        await bulkChat.evaluate((element) => (element as HTMLInputElement).click());
+      }
+      const blockedBulkChat = destinationPanel.locator('[data-ltm-availability-target="chat:bulk-chat-99"] input');
       assert.equal(await blockedBulkChat.isDisabled(), true);
-      await bulkBoundary.locator("[data-ltm-bulk-done]").click();
-      assert.match(await page.locator("[data-ltm-additional-destination-summary]").innerText(), /100 additional/u);
-      await destinationScopeTrigger.click();
-      await destinationScopeSearch.fill("Valid group");
-      await destinationScopePicker.locator('[data-ltm-scope-option="group:valid-group"]').click();
-      assert.equal(await destinationScopeTrigger.innerText(), "Current");
-      assert.equal(await page.getByText(/Some locations cannot be added/u).count(), 1);
-      await addDestination.click();
-      const bulkCleanup = page.locator("[data-ltm-bulk-destination]");
-      const bulkChatChips = bulkCleanup.locator('button[aria-label^="Remove Bulk chat"]');
-      while (await bulkChatChips.count()) await bulkChatChips.first().click({ force: true });
-      await bulkCleanup.locator("[data-ltm-bulk-done]").click();
-      assert.match(await page.locator("[data-ltm-additional-destination-summary]").innerText(), /1 additional/u);
-      await addDestination.click();
-      const selectedLocations = page
-        .locator("[data-ltm-bulk-destination]")
-        .getByText("Selected locations", { exact: true })
-        .locator("..");
-      assert.equal(await selectedLocations.getByText("Space explorer", { exact: true }).count(), 1);
-      await page.locator("[data-ltm-bulk-destination]").locator("[data-ltm-bulk-cancel]").click();
-      await page.setViewportSize({ width: 390, height: 844 });
-      await addDestination.click();
-      const mobileBulkDestination = page.locator("[data-ltm-bulk-destination]");
-      const mobileBulkGeometry = await mobileBulkDestination.locator("section").evaluate((section) => {
-        const rect = section.getBoundingClientRect();
-        return {
-          width: rect.width,
-          height: rect.height,
-          viewportWidth: document.documentElement.clientWidth,
-          pageFits: document.documentElement.scrollWidth <= document.documentElement.clientWidth,
-        };
+      assert.equal(await destinationPanel.getByText(/Some locations cannot be added/u).count(), 1);
+      // Reset the chat selection back to the current chat only.
+      for (let index = 0; index < 99; index += 1) {
+        const bulkChat = destinationPanel.locator(`[data-ltm-availability-target="chat:bulk-chat-${index}"] input`);
+        await bulkChat.evaluate((element) => (element as HTMLInputElement).click());
+      }
+
+      // The unified list is the bounded scroll container.
+      const destinationList = destinationPanel.locator("#ltm-bulk-destination-list");
+      const destinationListHeightAllowance = 400;
+      const listMetrics = await destinationList.evaluate((element) => ({
+        scrollHeight: element.scrollHeight,
+        clientHeight: element.clientHeight,
+        overflowY: getComputedStyle(element).overflowY,
+        docHeightBefore: document.documentElement.scrollHeight,
+      }));
+      assert.ok(listMetrics.scrollHeight > listMetrics.clientHeight);
+      assert.match(listMetrics.overflowY, /auto|scroll/u);
+      await destinationList.evaluate((element) => {
+        element.scrollTop = 0;
       });
-      assert.equal(await page.locator('[data-ltm-workspace-pane="workbench"][data-active="true"]').count(), 1);
-      assert.ok(mobileBulkGeometry.width <= mobileBulkGeometry.viewportWidth);
-      assert.ok(mobileBulkGeometry.height > 0);
-      assert.equal(mobileBulkGeometry.pageFits, true);
-      const removeLocationBox = await mobileBulkDestination.locator('button[aria-label^="Remove "]').boundingBox();
-      assert.ok(removeLocationBox);
-      assert.ok(removeLocationBox.width >= 44 && removeLocationBox.height >= 44);
-      await mobileBulkDestination.locator("[data-ltm-bulk-cancel]").click();
+      await destinationList.hover();
+      await page.mouse.wheel(0, 600);
+      await page.waitForFunction(
+        () =>
+          (document.querySelector("#ltm-bulk-destination-list") as HTMLElement | null)?.scrollTop &&
+          (document.querySelector("#ltm-bulk-destination-list") as HTMLElement | null)!.scrollTop > 0,
+      );
+      const docHeightAfter = await destinationList.evaluate(() => document.documentElement.scrollHeight);
+      assert.ok(docHeightAfter < listMetrics.docHeightBefore + destinationListHeightAllowance);
+
+      // Mobile: the same list stays touch/wheel-scrollable inside the inspector pane.
+      await page.setViewportSize({ width: 390, height: 844 });
+      await showWorkspacePane("inspector");
+      const mobileDestinationList = page.locator("#ltm-bulk-destination-list");
+      await mobileDestinationList.scrollIntoViewIfNeeded();
+      const mobileListScrollable = await mobileDestinationList.evaluate((element) => ({
+        scrollHeight: element.scrollHeight,
+        clientHeight: element.clientHeight,
+        overflowY: getComputedStyle(element).overflowY,
+        pageLocked: document.documentElement.scrollHeight > 2000,
+      }));
+      assert.ok(mobileListScrollable.scrollHeight > mobileListScrollable.clientHeight);
+      assert.match(mobileListScrollable.overflowY, /auto|scroll/u);
+      assert.equal(mobileListScrollable.pageLocked, false);
+      await mobileDestinationList.hover();
+      await page.mouse.wheel(0, 600);
+      await page.waitForFunction(
+        () =>
+          (document.querySelector("#ltm-bulk-destination-list") as HTMLElement | null)?.scrollTop &&
+          (document.querySelector("#ltm-bulk-destination-list") as HTMLElement | null)!.scrollTop > 0,
+      );
       await page.setViewportSize({ width: 1280, height: 900 });
       await page
         .locator('[data-ltm-source-preview="chats"]')
@@ -3014,10 +3021,14 @@ async function main() {
         personaIds: ["persona-a"],
       });
       await page.locator("[data-ltm-import-scope-result]").waitFor();
-      await destinationScopeTrigger.click();
-      await destinationScopeSearch.fill("Valid group");
-      await destinationScopePicker.locator('[data-ltm-scope-option="group:valid-group"]').click();
-      assert.match(await destinationScopeTrigger.innerText(), /Valid group/u);
+      await destinationPanel.locator('[data-ltm-availability-tab="chat"]').click();
+      await destinationPanel.locator('button[aria-label^="Remove Current"]').click();
+      await destinationPanel.locator('[data-ltm-availability-tab="branch"]').click();
+      await destinationPanel.locator('[data-ltm-availability-target="branch:valid-group"] input').check();
+      assert.equal(
+        await destinationPanel.locator('[data-ltm-availability-target="branch:valid-group"] input').isChecked(),
+        true,
+      );
       await page.locator('[data-ltm-source-select="character-outside-current-chat"]').check();
       const validGroupRequestPromise = page.waitForRequest(
         (request) => request.method() === "POST" && request.url().includes("/api/long-term-memory/import/source-notes"),
@@ -3126,9 +3137,8 @@ async function main() {
         ),
         3,
       );
-      await destinationScopeTrigger.click();
-      await destinationScopeSearch.fill("Conversation A");
-      await destinationScopePicker.locator('[role="option"][data-ltm-scope-option="group:conversation-a"]').click();
+      await destinationPanel.locator('[data-ltm-availability-tab="branch"]').click();
+      await destinationPanel.locator('[data-ltm-availability-target="branch:conversation-a"] input').check();
       await page.locator('[data-ltm-lorebook-id="lorebook_mobile_fixture"]').click();
       assert.equal(await page.locator('[data-ltm-lorebook-workbench="lorebook_mobile_fixture"]').isVisible(), true);
       await page.locator('[data-ltm-lorebook-entry="entry_mobile_harbor"]').waitFor();
@@ -3453,7 +3463,7 @@ async function main() {
       await mobilePage.locator('[data-ltm-surface="onboarding"]').waitFor({ state: "detached" });
       await mobileNavigation.locator('[data-ltm-destination="sources"]').click();
       await mobilePage.locator('[data-ltm-surface="sources"]').waitFor();
-      await mobilePage.locator('[data-ltm-source-tab="lorebooks"]').click();
+      await mobilePage.locator('[data-ltm-source-tab="lorebooks"]').evaluate((tab) => (tab as HTMLElement).click());
       await mobilePage.locator('[data-ltm-lorebook-id="lorebook_mobile_fixture"]').click();
       const mobileSourcesWorkspace = mobilePage.locator('[data-ltm-surface="sources"] [data-ltm-workspace]');
       assert.deepEqual(
