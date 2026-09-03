@@ -23148,10 +23148,20 @@ const fire = (node, type) => Promise.all((node.listeners[type] ?? []).map((fn) =
         "…and only with every reachable line served does the walk start over, from the top",
       );
 
-      // THE SHIPPED DEFAULTS, CELL BY CELL. The invariant is stated over the
-      // branch's REACHABLE pool rather than over any one rung: wherever a branch
-      // can reach two or more lines, two presses must not be the same sentence.
-      // Before the fall-through this was false in half of them.
+      // THE SHIPPED DEFAULTS, CELL BY CELL — and what is per-cell here is the
+      // PRESSING, not the pool. `ask()` is driven twice in every (theme, handle,
+      // daypart, branch) cell and the two answers must differ; before the
+      // fall-through, half of them said one sentence forever.
+      //
+      // `reach` BELOW IS THEME-WIDE ON PURPOSE, and it is NOT a reachability
+      // count for the cell it is read in: it filters on `topic` alone, with no
+      // `at` filter, because ask()'s ladder RELAXES THE PLACE on its third and
+      // fourth rungs (61-pack's interior-handle note — a smith with nothing
+      // workshop-shaped to say answers with something the town says). An
+      // at-filtered pool would be smaller than what the ladder can actually
+      // serve, so it would start skipping cells that answer perfectly well. What
+      // it is, is a floor on the theme's whole branch — "is there anything here
+      // to press twice at all" — and the size the failure message quotes.
       const saveFold = loadedPF.save.packFold;
       let cells = 0;
       for (const theme of loadedPF.art.themeIds()) {
@@ -23184,17 +23194,25 @@ const fire = (node, type) => Promise.all((node.listeners[type] ?? []).map((fn) =
               assert.notEqual(
                 second,
                 first,
-                `${theme}/${at}/${when}/${branch} answers a second press with a different line (pool of ${reach.length})`,
+                `${theme}/${at}/${when}/${branch} answers a second press with a different line (theme-wide ${branch} pool of ${reach.length})`,
               );
             }
           }
         }
       }
-      // BY VALUE, because a slack bound would go green on a pack that lost half
-      // its coverage: the shipped defaults reach two or more lines in exactly 96
-      // (theme, handle, daypart, branch) cells, and every one of them answers a
-      // second press with something new. Forty-eight of these said one sentence
-      // forever before the fall-through.
+      // BY VALUE, AND HERE IS WHAT THE VALUE IS. 96 is 2 themes × 3 handles × 4
+      // dayparts × 4 branches — EVERY cell — so this equality is not a coverage
+      // measurement and should not be read as one. What it says is that neither
+      // skip above ever tripped: every branch in every theme has a pool worth
+      // pressing twice, and every cell answered at all. A pack that went dark in
+      // one cell lands at 95 and names it.
+      //
+      // PER-(HANDLE, TOPIC) COVERAGE IS GUARDED SOMEWHERE ELSE, and by something
+      // stronger than a lane: 61-pack's boot assertion demands two any-weather
+      // stranger lines for each of the three handles × four topics in each theme
+      // and THROWS at load rather than reporting. That is what makes "a legacy
+      // world gets all four branches on day one" a fact; this equality is the
+      // nothing-went-dark pin beside it.
       assert.equal(cells, 96, `…across every cell the shipped defaults can answer twice in (${cells})`);
     }
 
