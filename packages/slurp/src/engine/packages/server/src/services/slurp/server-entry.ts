@@ -1,4 +1,4 @@
-import type { FastifyInstance, FastifyPluginAsync } from "fastify";
+import type { FastifyInstance, FastifyPluginAsync, InjectOptions } from "fastify";
 import { slurpRoutes } from "../../routes/slurp.routes.js";
 import { startNoodleAutoPostScheduler } from "./slurp-autopost-scheduler.service.js";
 import { startNoodlerFanActivityScheduler } from "./slurp-fan-activity-scheduler.service.js";
@@ -19,6 +19,7 @@ export async function activate({
       routes: FastifyPluginAsync,
       options: { prefix: string },
     ): Promise<() => void | Promise<void>>;
+    runInternalRoute?: (options: InjectOptions | string) => ReturnType<FastifyInstance["inject"]>;
   };
 }) {
   return lifecycle.activate(async (addTeardown) => {
@@ -37,7 +38,7 @@ export async function activate({
     );
     startNoodleAutoPostScheduler(app, addTeardown);
     startNoodlerFanActivityScheduler(app, addTeardown);
-    startNoodleRefreshScheduler(app, addTeardown);
+    startNoodleRefreshScheduler(app, addTeardown, api.runInternalRoute);
   });
 }
 
