@@ -22526,26 +22526,69 @@ const fire = (node, type) => Promise.all((node.listeners[type] ?? []).map((fn) =
       assert.equal(heardAfter, 0, "the pointerdown pair is unbound at the close, not left on the document");
     }
 
-    // ── THE RAIL CLEARS THE WINDOW, MEASURED AND NOT ASSUMED ────────────────
+    // ── THE RAIL CLEARS THE WINDOW, MEASURED IN BOTH STATES ─────────────────
     // The window's right inset is a promise about how wide the action column may
     // get, and the old shape lane pinned only that the inset EXISTS (`right:\d+px`)
     // — never that anything honours it. It did not: the census button reads
     // "Leave <cast name> (E)", cast names run to 24 characters, and the fourth
-    // rail button up is level with the conversation. So this lane measures the
-    // corridor with the WORST NAME THE SEAL ALLOWS in it.
+    // rail button up is level with the conversation.
+    //
+    // AND THE CAP THAT ANSWERED THAT WAS A CONSTRUCTION STYLE, so it clipped in
+    // WALKING PLAY too — where there is no window, no corridor and nothing to
+    // clear. The rod button is where that showed: every label it can actually
+    // draw runs 266-295px against a 244px cap, so the PRICE fell off the end of
+    // the one button whose whole job is quoting one, with two hundred pixels of
+    // empty air to its left. The cap is a while-open style now, so this lane
+    // measures the corridor TWICE, with a real armed rod offer and the worst cast
+    // name the seal allows standing in it: closed, the labels are whole and
+    // nothing is capped; open, everything is capped, the long ones ellipsize, and
+    // the corridor is clear.
+    //
+    // WHY THE OLD LANE COULD NOT SEE THE CLIP, written down so it is not
+    // rediscovered: it clamped the drawn width with `Math.min(measured, cap)`
+    // BEFORE asserting clearance, so a clipped label always "fit" — the clamp
+    // turned the clip into the pass — and it never armed a rod offer, so the only
+    // label it ever measured was the census button's, which the cap had been
+    // sized around. There is no clamp below, and the rod button is driven.
     {
       const t = stage({ chatId: "chat-clearance" });
-      const npc = t.npcs()[0];
+      // THE KEEPER IS THE FIXTURE, because the rod offer is the label this lane
+      // exists for and only a keeper quotes one. Found the way the economy's own
+      // cases find one — the person the compiler stamped `lodging` on — and stood
+      // next to, which is that offer's first resolution rung.
+      let keeper = null;
+      let keeperZone = null;
+      for (const zoneId of Object.keys(t.w.zones)) {
+        const found = t.w.zones[zoneId].npcs.find((npc) => typeof npc.lodging === "string" && npc.lodging);
+        if (found) {
+          keeper = found;
+          keeperZone = zoneId;
+          break;
+        }
+      }
+      assert.ok(keeper, "the staged world stands somebody who lets rooms and sells rods");
       // 24 is 18-brief's cap on a cast name, so this is the widest label the
       // census button can ever be asked to draw.
-      npc.name = "Wrenmarshall Ashenbrooke";
-      assert.equal(npc.name.length, 24, "…and the probe name is at the seal's own cap for a cast name");
-      t.openOn(npc);
+      keeper.name = "Wrenmarshall Ashenbrooke";
+      assert.equal(keeper.name.length, 24, "…and the probe name is at the seal's own cap for a cast name");
+      t.sim.zoneId = keeperZone;
+      t.sim.mode = "walk";
+      t.standAt(keeper);
+      t.sim.nearNpc = keeper;
+      loadedPF.player.award(core, { money: 200 });
       t.hud.update();
-      assert.equal(t.hud.talkBtn.textContent, `Leave ${npc.name} (E)`, "the census button is naming the anchor");
+      // THE OFFER IS ARMED AND NOT MERELY DISPLAYED: a real keeper, quoting a
+      // real rung, to a purse that can pay for it. A refusal would render the
+      // same words and would not be the state a player is looking at.
+      const armed = loadedPF.economy.rodOffer(core);
+      assert.equal(armed.keeper, keeper, "the keeper is quoting");
+      assert.equal(armed.tier, "crude", "…the entry rung, to a player who owns no rod");
+      assert.equal(armed.available, true, "…and the purse can take it, so the button is an offer and not a refusal");
+      assert.equal(t.hud.buyRodBtn.style.display, "", "…which is why the rod button is on screen at all");
+
       // The three numbers, all read off the shipped styles rather than restated:
-      // where the column sits, where the window stops, and what each button is
-      // allowed to grow to.
+      // where the column sits, where the window stops, and what a button may grow
+      // to while there is a window there to be cleared.
       const px = (css, prop) => {
         const hit = new RegExp(`${prop}:\\s*(\\d+)px`).exec(String(css));
         return hit ? Number(hit[1]) : null;
@@ -22553,35 +22596,171 @@ const fire = (node, type) => Promise.all((node.listeners[type] ?? []).map((fn) =
       const railInset = px(t.hud.actions.style.cssText, "right");
       const windowRight = px(t.hud.talkEl.style.cssText, "right");
       assert.ok(railInset !== null && windowRight !== null, "both surfaces declare their right inset in pixels");
+      const CORRIDOR = t.hud.RAIL_BTN_MAX;
+      // WHAT WIDTH BOUND IS ON THIS BUTTON, however it was written: the while-open
+      // property the HUD sets, or a construction-time `max-width` sitting in the
+      // style string. BOTH are answered on purpose — the shim does not reflect
+      // `cssText` onto properties, so a cap that moved back into the constructor
+      // would be invisible to a property read and would sail through the CLOSED
+      // assertions below, which are the ones it breaks.
+      const capPx = (node) => {
+        const prop = /^(\d+)px$/.exec(String(node.style.maxWidth ?? ""));
+        return prop ? Number(prop[1]) : px(node.style.cssText, "max-width");
+      };
       // One 12px monospace character, the widest common advance — the same number
       // the HUD sizes the corridor with, restated here so the lane MEASURES the
-      // labels rather than trusting the constant that produced them.
+      // labels rather than trusting the constant that produced them. NO CLAMP:
+      // this is what the text WANTS, and whether it gets it is the question.
       const ADVANCE = 7.2;
       const CHROME = 28;
-      for (const node of t.hud.actions.children) {
-        const label = String(node.textContent ?? "");
-        if (!label) continue; // the four menus, empty until they are opened
-        const cap = px(node.style.cssText, "max-width");
-        assert.ok(cap !== null, `the rail button "${label}" declares a width it may not pass`);
+      const wants = (label) => Math.ceil(String(label).length * ADVANCE + CHROME);
+      // THE LIST THE CAP IS WRITTEN THROUGH IS THE REAL COLUMN. A button added to
+      // the rail without a line in `_railBtns` would never be capped and would
+      // never be measured here either, so the two are cross-checked before
+      // anything is read off them — the census lane's own idiom, one file up.
+      const railButtons = t.hud.actions.children.filter((node) => node.tagName === "BUTTON");
+      assert.equal(
+        t.hud._railBtns.length,
+        railButtons.length,
+        `the capped list covers the whole column (${railButtons.length})`,
+      );
+      for (const node of railButtons)
+        assert.ok(t.hud._railBtns.includes(node), `every button in the column is capped ("${node.textContent}")`);
+
+      // ── CLOSED: NOTHING IS DOCKED, SO NOTHING IS CUT ──────────────────────
+      assert.equal(mounted(t.hud), false, "no conversation is open");
+      const census = String(t.hud.talkBtn.textContent);
+      const rodLabel = String(t.hud.buyRodBtn.textContent);
+      assert.equal(census, `Talk to ${keeper.name} (E)`, "the census button is naming the person in reach");
+      assert.equal(
+        rodLabel,
+        `Buy a ${loadedPF.economy.describe(t.w, { t: "rod", k: armed.tier })} (${loadedPF.economy.money(t.w, armed.price)})`,
+        "…and the rod button is quoting the armed rung with its whole price",
+      );
+      for (const node of t.hud._railBtns)
+        assert.equal(
+          capPx(node),
+          null,
+          `"${node.textContent}" is drawn whole in walking play — nothing is capped with no window up`,
+        );
+      // AND BOTH OF THESE WOULD HAVE BEEN CUT BY A CAP THAT SHIPPED ON THE
+      // BUTTON. This is the number the blocker was: what the labels want is over
+      // the while-open budget, and in walking play there is no corridor for them
+      // to owe anything to. By value, because "wider than the cap" is the claim
+      // and a bound that moved with the label would never say so.
+      assert.equal(wants(rodLabel), 266, `the rod label wants 266px ("${rodLabel}", ${rodLabel.length} chars)`);
+      assert.equal(wants(census), 288, `…and the census label 288px ("${census}", ${census.length} chars)`);
+      assert.equal(CORRIDOR, 244, "…against a while-open budget of 244px, which neither of them fits");
+
+      // ── OPEN: THE WINDOW IS WHAT MAKES THE CORRIDOR, AND IT IS CLEAR ──────
+      t.openOn(keeper);
+      assert.equal(mounted(t.hud), true, "the conversation is up");
+      const censusOpen = String(t.hud.talkBtn.textContent);
+      assert.equal(censusOpen, `Leave ${keeper.name} (E)`, "the census button is naming the anchor now");
+      assert.equal(String(t.hud.buyRodBtn.textContent), rodLabel, "…and the rod is still on offer beside it");
+      for (const node of t.hud._railBtns) {
+        assert.equal(
+          capPx(node),
+          CORRIDOR,
+          `"${node.textContent}" is held to the corridor while the window is up`,
+        );
         assert.match(
           String(node.style.cssText),
           /text-overflow:ellipsis/,
-          `…and "${label}" says so with an ellipsis rather than a silent cut`,
-        );
-        const drawn = Math.min(Math.ceil(label.length * ADVANCE + CHROME), cap);
-        assert.ok(
-          railInset + drawn <= windowRight,
-          `"${label}" is ${drawn}px at ${railInset}px in, which clears the window's ${windowRight}px inset`,
+          `…and "${node.textContent}" says so with an ellipsis rather than a silent cut`,
         );
       }
-      // AND THE UNCLIPPED LABEL REALLY WOULD NOT HAVE. This is the number the
-      // lane exists for: without the cap the census button overruns the corridor,
-      // so the clip is load-bearing and not decoration.
-      const bare = Math.ceil(t.hud.talkBtn.textContent.length * ADVANCE + CHROME);
+      // THE CLEARANCE ITSELF, stated on the CAP THE BUTTONS DECLARE rather than
+      // on any one label: the cap is what bounds the column, and a label short
+      // enough to clear on its own proves nothing about the one stacked above it.
+      // Read back off the button, so a cap that was never applied is a null here
+      // and not a clearance computed from a constant nothing spent.
+      const openCap = capPx(t.hud.talkBtn);
       assert.ok(
-        railInset + bare > windowRight,
-        `…and unclipped it would have been ${bare}px, over the ${windowRight - railInset}px corridor`,
+        openCap !== null && railInset + openCap <= windowRight,
+        `the column at ${railInset}px in, capped at ${openCap}px, clears the window's ${windowRight}px inset`,
       );
+      // …AND THE CAP IS LOAD-BEARING WHILE IT IS ON. Unclipped, these two cross
+      // the corridor, which is what makes the while-open clip a trade and not
+      // decoration.
+      for (const [what, label] of [
+        ["the rod offer", rodLabel],
+        ["the census button", censusOpen],
+      ])
+        assert.ok(
+          railInset + wants(label) > windowRight,
+          `unclipped, ${what} wants ${wants(label)}px and crosses the ${windowRight - railInset}px corridor`,
+        );
+      // AND THE CLIP IS VISUAL ONLY, which is the whole of the accessibility
+      // claim: the price is off the end of the button and still in the name a
+      // screen reader is handed.
+      assert.match(
+        String(t.hud.buyRodBtn.textContent),
+        new RegExp(`\\(${loadedPF.economy.money(t.w, armed.price).replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\)$`),
+        "the clipped label still CARRIES its price",
+      );
+
+      // ── AND THE CAP COMES BACK OFF WHEN THE CONVERSATION ENDS ─────────────
+      core.closeTalk();
+      t.hud.update();
+      assert.equal(mounted(t.hud), false, "the conversation is over");
+      for (const node of t.hud._railBtns)
+        assert.equal(capPx(node), null, `"${node.textContent}" is whole again the moment the window goes`);
+    }
+
+    // ── EVERY ROD LABEL THE BUILD CAN ACTUALLY DRAW, MEASURED ───────────────
+    // The corridor comment names a RANGE — 266 to 295px across both themes and
+    // both rungs — and the derivation it replaced named a label the code cannot
+    // produce ("Buy a angling rig (85 credits)": describe() prefixes the quality
+    // tier, and no rod is priced at 85 in either theme). So the range is walked
+    // rather than asserted from a formula: two themes times two rungs, each one
+    // read off the SHIPPED button after a real offer armed it.
+    {
+      const seen = [];
+      let budget = null;
+      for (const theme of loadedPF.art.themeIds()) {
+        for (const owned of [null, "crude"]) {
+          const t = stage({ theme, chatId: `chat-rod-width-${theme}-${owned ?? "none"}` });
+          let keeper = null;
+          for (const zoneId of Object.keys(t.w.zones)) {
+            const found = t.w.zones[zoneId].npcs.find((npc) => typeof npc.lodging === "string" && npc.lodging);
+            if (found) {
+              t.sim.zoneId = zoneId;
+              keeper = found;
+              break;
+            }
+          }
+          assert.ok(keeper, `${theme}: the staged world stands somebody who sells rods`);
+          t.sim.mode = "walk";
+          t.standAt(keeper);
+          t.sim.nearNpc = keeper;
+          loadedPF.player.award(core, { money: 200 });
+          if (owned) loadedPF.player.grant(core, { t: "rod", k: owned }, 1);
+          t.hud.update();
+          const offer = loadedPF.economy.rodOffer(core);
+          assert.equal(offer.tier, owned === null ? "crude" : "decent", `${theme}: the ladder quotes the next rung`);
+          assert.equal(offer.available, true, `${theme}/${offer.tier}: and it is armed`);
+          const label = String(t.hud.buyRodBtn.textContent);
+          budget = t.hud.RAIL_BTN_MAX;
+          seen.push({ theme, tier: offer.tier, label, px: Math.ceil(label.length * 7.2 + 28) });
+        }
+      }
+      assert.equal(seen.length, 4, "four reachable rod labels, and the build can draw no others");
+      const widths = seen.map((row) => row.px);
+      assert.deepEqual(
+        seen.map((row) => row.label.length),
+        [33, 35, 36, 37],
+        `the four run 33-37 characters (${seen.map((row) => `"${row.label}"`).join(", ")})`,
+      );
+      assert.deepEqual(widths, [266, 280, 288, 295], "…which is the 266-295px the corridor comment names");
+      // THE POINT OF THE WHOLE SWEEP: not one of them fits the while-open budget,
+      // so a cap that shipped on the button clipped a price in normal play on
+      // EVERY theme and EVERY rung — not an edge case, the only case.
+      for (const row of seen)
+        assert.ok(
+          row.px > budget,
+          `${row.theme}/${row.tier} wants ${row.px}px, over the ${budget}px while-open budget`,
+        );
     }
 
     // ── ONE SURFACE AT A TIME, IN BOTH DIRECTIONS ───────────────────────────

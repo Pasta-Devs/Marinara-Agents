@@ -33,24 +33,44 @@ PF.Hud = class {
     // characters — near 270px of 12px monospace against a corridor of 172. Any
     // generated name over about nine characters painted over the window.
     //
-    // ONE NUMBER, DERIVED, AND BOTH SURFACES SPEND IT. The corridor is sized on
-    // the widest label the rail can produce with NOTHING GENERATED in it — "Buy a
-    // angling rig (85 credits)", thirty characters — so no word this package
-    // writes itself is ever cut. What clips is generated text: a cast name on the
-    // census button, a spot name on the fishing one, both off a channel with no
-    // cap this file can trust. The clip is VISUAL ONLY — `textContent` stays
-    // whole, so the accessible name still reads the full label.
+    // ONE NUMBER, DERIVED, AND BOTH SURFACES SPEND IT — BUT ONLY WHILE A WINDOW
+    // IS UP. THE WINDOW IS WHAT CREATES THE CORRIDOR: with nothing docked over
+    // the play field the column has the whole width to grow leftward into and
+    // there is no second surface for a long label to land on. So the cap is a
+    // CONVERSATION-STATE style rather than a construction one — set on the ten
+    // rail buttons when the window mounts, cleared when it unmounts (`_railCap`,
+    // driven off the mounted predicate in `_syncTalk`) — and in normal walking
+    // play every label this package writes is drawn WHOLE.
+    //
+    // WHAT THE THIRTY BUYS AND WHAT IT COSTS. Thirty characters is a BUDGET
+    // struck between the two surfaces, not a measurement of the widest label the
+    // rail can produce: the widest with nothing generated in it is the rod
+    // ladder's top rung — "Buy a decent angling rig (40 credits)", thirty-seven
+    // characters — and reserving for that would put the window's right inset at
+    // 319px, which is most of a phone. So WHILE A WINDOW IS OPEN the long ones
+    // ellipsize, and they are named here rather than left to be discovered: all
+    // four rod offers (thirty-three to thirty-seven characters, both themes and
+    // both rungs), the census button carrying a cast name over twenty, and any
+    // generated spot or board name past the same bound. That is the trade, and
+    // it is paid only in the state that causes it.
+    //
+    // THE CLIP IS VISUAL ONLY in every one of those cases — `textContent` stays
+    // whole, so the accessible name still reads the full label, price included.
     //
     // The window's own title row is deliberately NOT clipped: the window bounds it
     // already, and cutting "<name> — <role>" would lose the role to save a line.
     const RAIL_ADVANCE = 7.2; // one 12px monospace character, the widest common advance
     const RAIL_CHROME = 28; // 13px of padding and a 1px border, on both sides
     const RAIL_INSET = 12; // what the column and the window are both inset by
-    const RAIL_BTN_MAX = Math.ceil(30 * RAIL_ADVANCE + RAIL_CHROME);
+    this.RAIL_BTN_MAX = Math.ceil(30 * RAIL_ADVANCE + RAIL_CHROME);
     // The window's right inset: the column's own inset, the widest button it may
-    // draw, and one inset of clear air between the two.
-    this.RAIL_RESERVE = RAIL_INSET + RAIL_BTN_MAX + RAIL_INSET;
-    S.railBtn = `${S.btn}max-width:${RAIL_BTN_MAX}px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;`;
+    // draw WHILE THE WINDOW IS THERE TO BE CLEARED, and one inset of clear air
+    // between the two.
+    this.RAIL_RESERVE = RAIL_INSET + this.RAIL_BTN_MAX + RAIL_INSET;
+    // The ellipsis clothes ship on the button and the WIDTH does not. With no
+    // max-width beside them these three rules do nothing at all, which is exactly
+    // the closed-window state: nothing to overflow, so nothing to cut.
+    S.railBtn = `${S.btn}overflow:hidden;text-overflow:ellipsis;white-space:nowrap;`;
     this.S = S;
 
     // Cutscene caption: centred, non-interactive, only while a beat runs.
@@ -151,6 +171,25 @@ PF.Hud = class {
     this.waitBtn = this._btn("⏩ Wait…", () => this.toggleWait(), S.railBtn);
     this.keyboardBtn = this._btn("Keyboard", () => core.setMode("dialogue"), S.railBtn);
     this.resumeBtn = this._btn("▶ Resume walking", () => core.resume(), S.railBtn);
+    // THE TEN THE CORRIDOR IS ABOUT, named once so `_railCap` has a list to write
+    // and nothing has to infer one. Written out rather than filtered off
+    // `this.actions.children`, because that container also holds the four action
+    // MENUS — bounded, scrolling panels of their own that never wear the cap —
+    // and a filter that got the distinction wrong would be silent. The harness
+    // cross-checks this list against the container's real buttons, so an
+    // eleventh rail button added without a line here fails there.
+    this._railBtns = [
+      this.talkBtn,
+      this.berthBtn,
+      this.buyRodBtn,
+      this.travelBtn,
+      this.fishBtn,
+      this.sleepBtn,
+      this.boardBtn,
+      this.waitBtn,
+      this.keyboardBtn,
+      this.resumeBtn,
+    ];
     this.waitMenu = PF.el("div", {
       style:
         "display:none;flex-direction:column;gap:6px;align-items:flex-end;max-height:40vh;overflow:auto;pointer-events:auto;",
@@ -518,7 +557,12 @@ PF.Hud = class {
     // same singleton, 90-element). A latch left set on a surviving sim is a world
     // whose clock never runs again, and a listener left bound is a closure over a
     // window nobody can see.
-    this._unbindTalkOutside();
+    //
+    // The first goes through the window's own UNMOUNT rather than the unbind
+    // alone, so a close is a close wherever it comes from: ONE path clears the
+    // listener, the mounted flag, the row memo and the rail's while-open width
+    // cap, and nothing here has to keep a second copy of that list in step.
+    this._talkUnmount();
     if (this.core?.sim) this.core.sim.talkAnchorId = null;
     this.root.remove();
   }
@@ -581,6 +625,7 @@ PF.Hud = class {
     if (!this._talkMounted) {
       this._talkMounted = true;
       this.talkEl.style.display = "flex";
+      this._railCap(true);
     }
     this._talkRender(anchor);
   }
@@ -589,7 +634,22 @@ PF.Hud = class {
     this._talkMounted = false;
     this._talkRowKey = null;
     this.talkEl.style.display = "none";
+    this._railCap(false);
     this._unbindTalkOutside();
+  }
+
+  /** THE CONVERSATION-STATE WIDTH CAP (the corridor block at the top of this
+   *  file). Set when the window mounts, cleared when it unmounts, and written
+   *  from nowhere else — so it is two writes a conversation rather than a style
+   *  the per-frame `update()` has to keep re-asserting.
+   *
+   *  Closed, the rail has the whole width and every label is drawn whole, which
+   *  is the state the player spends nearly all of their time in. Open, the ten
+   *  are held inside the corridor the window's own right inset promised, and the
+   *  labels too long for it ellipsize — visually, `textContent` untouched. */
+  _railCap(on) {
+    const width = on ? `${this.RAIL_BTN_MAX}px` : "";
+    for (const node of this._railBtns) node.style.maxWidth = width;
   }
 
   /** Called by the core when the window OPENS. The panels close from this side of
