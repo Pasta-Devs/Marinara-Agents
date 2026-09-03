@@ -8248,6 +8248,10 @@ const SNOW_IDS = ["grassSnow", "grassSnow2", "cropSnow", "canopySnow"];
   const tiles = {};
   for (let i = 0; i < 33; i++) tiles[`t${i}`] = i;
   let sheetHeight = 64;
+  // The sheet's PIXEL WIDTH, staged the same way the height is: the id map's
+  // column count is what the ATLAS declares, and the sheet is whatever was
+  // actually baked. The two can disagree on either axis.
+  let sheetWidth = 128;
   let fetches = 0;
   const warnings = [];
   globalThis.fetch = async (url) => {
@@ -8265,7 +8269,7 @@ const SNOW_IDS = ["grassSnow", "grassSnow2", "cropSnow", "canopySnow"];
       fetches += 1;
       queueMicrotask(() => {
         this.complete = true;
-        this.naturalWidth = 128;
+        this.naturalWidth = sheetWidth;
         // The pixel height, which is the one the guard has to read: `_image()`
         // resolves on load without decode(), so the attribute-shadowed `height`
         // is not it.
@@ -8277,7 +8281,7 @@ const SNOW_IDS = ["grassSnow", "grassSnow2", "cropSnow", "canopySnow"];
         // is why the shipped one reads `naturalHeight` — and why this lane is
         // the one place that difference can be proven.
         this.height = 640;
-        this._data = new Uint8ClampedArray(128 * sheetHeight * 4).fill(255);
+        this._data = new Uint8ClampedArray(sheetWidth * sheetHeight * 4).fill(255);
         this.onload?.();
       });
     }
@@ -8323,6 +8327,41 @@ const SNOW_IDS = ["grassSnow", "grassSnow2", "cropSnow", "canopySnow"];
     assert.ok(fetches > settled, "a version bump retries");
     assert.equal(A.status, "ready", "…and a sheet that fits its id map loads");
     assert.ok(A.tileCanvas("t0"), "…with the theme's tiles served off the sheet again");
+
+    // ── AND THE OTHER AXIS, WHICH THE GUARD USED TO MISS ENTIRELY ────────────
+    // Capacity was `columns * rows`: the columns the ATLAS DECLARES against the
+    // rows the SHEET actually has, so only a vertical mismatch was ever provable.
+    // A sheet baked NARROWER than its id map claims is the same shipped-artifact
+    // fault on the other axis and it walked straight through — 33 ids over a
+    // declared 8 columns sit inside five rows, so the row arithmetic is content,
+    // while `tileCanvas` goes on slicing at `index % 8` and every id in columns
+    // 6-7 is cut from past the right edge of a 96px sheet. A transparent tile
+    // handed back by a loader still saying "ready" is the see-through world the
+    // guard exists to convert into honest Tier-0 paint, whichever axis lost it.
+    sheetWidth = 96; // six real columns under an id map that declares eight
+    // A settled loader short-circuits on `status === "ready"` and the same
+    // requested theme, so a fresh sheet has to be asked for the way boot asks.
+    Object.assign(A, { status: "idle", _requestedTheme: null, _capacityLatch: null, _failedAt: 0 });
+    A._tileCanvases.clear();
+    core.host.packageVersion = "0.14.2";
+    await A.load(core);
+    assert.notEqual(A.status, "ready", "a sheet narrower than its id map never goes ready either");
+    assert.equal(A.tileCanvas("t6"), null, "…so an id past the right edge falls to Tier-0, not to a blank slot");
+    // …and the check is INDEX-AWARE on this axis exactly as it is on the other:
+    // a narrow sheet whose id map never reaches the missing columns is not a
+    // mismatch, and degrading a working install on one would be the false
+    // positive that makes a guard untrustworthy. Four ids over eight declared
+    // columns all live in columns 0-3, so six real columns hold every one.
+    const narrowFit = {};
+    for (let i = 0; i < 4; i++) narrowFit[`t${i}`] = i;
+    A.atlas = { tileSize: 16, columns: 8, tiles: narrowFit };
+    assert.equal(A._overCapacity({ naturalWidth: 96, naturalHeight: 80 }), false, "…while an id map that fits does not");
+    sheetWidth = 128;
+    Object.assign(A, { status: "idle", _requestedTheme: null, _capacityLatch: null, _failedAt: 0 });
+    A._tileCanvases.clear();
+    core.host.packageVersion = "0.14.3";
+    await A.load(core);
+    assert.equal(A.status, "ready", "…and the full-width sheet loads again");
 
     // ── AND THE STATE THIS RELEASE SHIPS IN, NOW THAT THE BAKE HAS RUN ───────
     // THIS PIN INVERTED, AND INVERTING IS WHAT IT WAS FOR. Through slices 3-5 it
@@ -28541,6 +28580,41 @@ const fire = (node, type) => Promise.all((node.listeners[type] ?? []).map((fn) =
   const fresh = new loadedPF.Sim(plain.world);
   assert.equal(fresh.weatherOverride, null, "the field exists before anything reads it");
   assert.equal(typeof fresh._weatherMetaApplied, "string", "…and so does its comparand");
+
+  // AND THE PLACEMENT THAT FIELD IS FOR, ON THE PATH THAT HAS NO ENVELOPE. The
+  // constructor resolves schedules against a NULL override — `weatherOverride`
+  // is only assigned after it returns — and the restore below re-resolves once
+  // the saved clock lands. A chat carrying a sky in metadata but no valid
+  // envelope reached NEITHER, so the town booted into its fair-weather spots and
+  // stayed in them: `_weatherMetaApplied` is stamped by then, so 90-element's
+  // reconciler reads no change and never repairs it either, and the first
+  // correction is whenever the next daypart happens to roll. Widespread rather
+  // than exotic — 27 of the first 40 seeds move somebody under a storm, and seed
+  // 13 moves 21 of its 25 people indoors.
+  const placed = (s) => {
+    const rows = [];
+    for (const zoneId of Object.keys(s.world.zones).sort())
+      for (const npc of s.world.zones[zoneId].npcs) rows.push(`${npc.id}@${zoneId}:${npc.x},${npc.y}`);
+    return rows.sort().join("|");
+  };
+  const stormBrief = loadedPF.brief.defaults("cozy-village", 13);
+  stormBrief.latitude = "subpolar";
+  stormBrief.precipitation = "wet";
+  // A row with no `v` is not a restore: it never reaches the resolve below.
+  const bare = { seed: 13, theme: "cozy-village" };
+  const stormed = loadedPF.save.simFromSaved(
+    bare,
+    { pixelforgeBrief: stormBrief, pixelforgeWeather: { word: "storm" } },
+    "chat-weather-place",
+  );
+  assert.equal(stormed.weather().word, "storm", "the override is live before anybody is placed");
+  const atBoot = placed(stormed);
+  stormed.resolveSchedules();
+  assert.equal(atBoot, placed(stormed), "…so the town booted under the storm rather than under the default sky");
+  // THE ARM HAS TEETH: the same world under no override places people
+  // differently, so the equality above is a claim and not a tautology.
+  const fairSky = loadedPF.save.simFromSaved(bare, { pixelforgeBrief: stormBrief }, "chat-weather-place-fair");
+  assert.notEqual(placed(fairSky), atBoot, "…and that is a placement the default sky would not have produced");
 
   // NOTHING IS EVER WRITTEN BACK. The row is somebody else's to own.
   const writes = [];

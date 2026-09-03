@@ -1250,6 +1250,17 @@ PF.save = {
     // it is idempotent config, so re-reading it on every rebuild is the feature.
     sim.weatherOverride = PF.weather.foldOverride(meta && typeof meta === "object" ? meta.pixelforgeWeather : null);
     sim._weatherMetaApplied = PF.weather.overrideKey(sim.weatherOverride);
+    // AND THE PATH WITH NO ENVELOPE HAS TO BE PLACED HERE, because nothing below
+    // will do it. The constructor already resolved schedules — against a null
+    // override, since the field is assigned on the line above it — and the
+    // restore's own resolve sits inside the version gate. A chat carrying a sky
+    // in metadata but no valid envelope fell between the two and booted its town
+    // into fair-weather spots under a storm, 21 of 25 people on seed 13. It could
+    // not self-correct either: `_weatherMetaApplied` is stamped one line up, so
+    // 90-element's reconciler compares equal and re-resolves nothing, leaving the
+    // next daypart roll as the first repair. Gated on the override being real so
+    // a world that boots without one keeps the constructor's single pass.
+    if (sim.weatherOverride && !(saved && typeof saved.v === "number" && saved.v >= 1)) sim.resolveSchedules();
     // Additive-only by policy (plan §Q1): keys a NEWER build added ride through
     // this one instead of being erased by the next flush. Collected OUTSIDE the
     // version gate deliberately — a build that cannot even parse `v` is exactly

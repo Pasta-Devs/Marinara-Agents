@@ -64,8 +64,17 @@ PF.assets = {
    *  and it is exactly what a release that appends tile ids ships if the sheet
    *  goes out un-rebaked.
    *
-   *  `naturalHeight`, not `height`: `_image()` resolves on the load event
-   *  without decode(), and the attribute-shadowed `height` is not the pixel one.
+   *  `naturalHeight`/`naturalWidth`, not `height`/`width`: `_image()` resolves on
+   *  the load event without decode(), and the attribute-shadowed pair is not the
+   *  pixel one.
+   *
+   *  BOTH AXES, because the id map declares one of them and the sheet owns the
+   *  other. `columns` is the atlas's claim and `tileCanvas` slices at
+   *  `index % columns` forever after, so a sheet baked NARROWER than that claim
+   *  cuts every id in the missing columns from past its right edge — inside the
+   *  row count, invisible to `columns * rows`, and a see-through tile all the
+   *  same. The row test cannot catch it and the column test cannot catch a short
+   *  sheet, so the guard asks both.
    *
    *  THE HONEST SCOPE, because the guard is narrower than it looks: it catches a
    *  sheet too SMALL for its id map, and that it covers this release at all is
@@ -80,12 +89,22 @@ PF.assets = {
     const columns = this.atlas?.columns;
     if (!tiles || !size || !columns) return false;
     const rows = Math.floor(img.naturalHeight / size);
-    // A height we cannot read is not a mismatch we can prove: leave it alone
+    const sheetColumns = Math.floor(img.naturalWidth / size);
+    // A dimension we cannot read is not a mismatch we can prove: leave it alone
     // rather than degrade a working install on a number that never arrived.
-    if (!Number.isFinite(rows)) return false;
+    if (!Number.isFinite(rows) || !Number.isFinite(sheetColumns)) return false;
     let maxIndex = -1;
-    for (const index of Object.values(tiles)) if (typeof index === "number" && index > maxIndex) maxIndex = index;
-    return maxIndex >= columns * rows;
+    // INDEX-AWARE on the width too, and deliberately not `sheetColumns < columns`:
+    // a narrow sheet whose id map never reaches the missing columns is not a
+    // fault, and degrading a working install on one is the false positive that
+    // teaches everyone to distrust the guard.
+    let pastRightEdge = false;
+    for (const index of Object.values(tiles)) {
+      if (typeof index !== "number") continue;
+      if (index > maxIndex) maxIndex = index;
+      if (index % columns >= sheetColumns) pastRightEdge = true;
+    }
+    return pastRightEdge || maxIndex >= columns * rows;
   },
 
   async load(core) {
