@@ -8,7 +8,6 @@ import {
   ChevronLeft,
   ChevronRight,
   Clock3,
-  Coins,
   Eye,
   Link,
   Loader2,
@@ -69,6 +68,7 @@ import {
   useNoodlerEligibleAccounts,
   useNoodlerPosts,
   useNoodlerConnectionCounts,
+  useNoodlerViewerWallets,
   useNoodlerSubscribers,
   useNoodlerUnseenCount,
   useHideSlurpAd,
@@ -156,7 +156,7 @@ interface SlurpHomeProps {
 }
 
 const NOODLER_FEED_WINDOW_SIZE = 20;
-// Placeholder wallet balance for the header chip until a real currency exists.
+// Starting balance until the wallet earns or spends coins through future transactions.
 const SLURP_PLACEHOLDER_BALANCE = 1111;
 const SLURP_MOMENT_WINDOW_MS = 24 * 60 * 60 * 1000;
 const STAGE_PERSONALITY_MAX_LENGTH = 1000;
@@ -378,6 +378,7 @@ export function SlurpHome({ navigation, onNavigate }: SlurpHomeProps) {
   const { t: localizeUi } = useUiTranslation();
   const accountsQuery = useNoodlerAccounts();
   const connectionCountsQuery = useNoodlerConnectionCounts();
+  const viewerWalletsQuery = useNoodlerViewerWallets();
   const slurpSettingsQuery = useSlurpSettings();
   const updateSlurpSettings = useUpdateSlurpSettings();
   const personasQuery = usePersonas();
@@ -397,6 +398,7 @@ export function SlurpHome({ navigation, onNavigate }: SlurpHomeProps) {
     activePersonaQuery.data?.id ??
     personas[0]?.id ??
     null;
+  const activeWalletCoins = viewerWalletsQuery.data?.[viewerPersonaId ?? ""]?.coins ?? SLURP_PLACEHOLDER_BALANCE;
   const viewerAccounts = personas.map(
     (persona) =>
       ({
@@ -1421,6 +1423,7 @@ export function SlurpHome({ navigation, onNavigate }: SlurpHomeProps) {
         return counts ? [[profile.sourceAccountId!, counts] as const] : [];
       }),
     ),
+    personaWallets: viewerWalletsQuery.data,
     onLoadMorePersonaAccounts: () => setPersonaAccountLimit((current) => current + NOODLE_PERSONA_SWITCHER_PAGE_SIZE),
     onSwitchPersona: switchViewerPersona,
     accountSwitcherOpen,
@@ -1437,7 +1440,7 @@ export function SlurpHome({ navigation, onNavigate }: SlurpHomeProps) {
     onOpenSearch: goToNoodlerSearch,
     onOpenMessages: goToMessages,
     onOpenWallet: goToWallet,
-    walletBalanceLabel: `${SLURP_PLACEHOLDER_BALANCE}`,
+    walletBalanceLabel: `${viewerWalletsQuery.data?.[viewerPersonaId ?? ""]?.coins ?? SLURP_PLACEHOLDER_BALANCE}`,
     personaBannerUrl: myCreatorProfile?.bannerUrl ?? null,
     onBecomeCreator: shellPersonaAccount
       ? () => {
@@ -1907,8 +1910,15 @@ export function SlurpHome({ navigation, onNavigate }: SlurpHomeProps) {
             {wallet && (
               <p className="text-2xl font-black tabular-nums">
                 <span className="inline-flex items-center gap-2">
-                  {localizeUi("ui.slurp.wallet.balance", { amount: SLURP_PLACEHOLDER_BALANCE })}
-                  <Coins size={22} strokeWidth={2.25} aria-hidden="true" />
+                  {localizeUi("ui.slurp.wallet.balance", {
+                    amount: viewerWalletsQuery.data?.[viewerPersonaId ?? ""]?.coins ?? SLURP_PLACEHOLDER_BALANCE,
+                  })}
+                  <span
+                    className="inline-flex h-6 w-6 items-center justify-center rounded-full bg-[var(--noodle-accent)] text-sm font-black leading-none text-[var(--noodle-accent-foreground)]"
+                    aria-hidden="true"
+                  >
+                    C
+                  </span>
                 </span>
               </p>
             )}
@@ -2078,6 +2088,7 @@ export function SlurpHome({ navigation, onNavigate }: SlurpHomeProps) {
         newSinceAt={viewerQuery.data ? (frozenFeedSeenAt[viewerQuery.data.viewer.id] ?? null) : null}
         onFeedShown={markFeedShown}
         onOpenWallet={goToWallet}
+        walletCoins={activeWalletCoins}
         isLoading={viewerQuery.isLoading}
         isError={viewerQuery.isError}
         onRetry={() => void viewerQuery.refetch()}
@@ -4092,6 +4103,7 @@ function ViewerHub({
   newSinceAt,
   onFeedShown,
   onOpenWallet,
+  walletCoins,
 }: {
   personas: Persona[];
   personasLoading: boolean;
@@ -4106,6 +4118,7 @@ function ViewerHub({
   /** Called once the feed is actually on screen — entering NoodleR is not the same as seeing it. */
   onFeedShown: () => void;
   onOpenWallet: () => void;
+  walletCoins: number;
   isLoading: boolean;
   isError: boolean;
   onRetry: () => void;
@@ -4422,11 +4435,16 @@ function ViewerHub({
             type="button"
             onClick={onOpenWallet}
             className="justify-self-end flex h-9 items-center gap-1.5 rounded-full px-3 text-sm font-semibold tabular-nums text-[var(--muted-foreground)] ring-1 ring-inset ring-[var(--noodle-divider)] transition-colors hover:bg-[var(--accent)] hover:text-[var(--foreground)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--noodle-accent)]"
-            aria-label={localizeUi("ui.slurp.wallet.balance", { amount: SLURP_PLACEHOLDER_BALANCE })}
-            title={localizeUi("ui.slurp.wallet.balance", { amount: SLURP_PLACEHOLDER_BALANCE })}
+            aria-label={localizeUi("ui.slurp.wallet.balance", { amount: activeWalletCoins })}
+            title={localizeUi("ui.slurp.wallet.balance", { amount: activeWalletCoins })}
           >
-            {SLURP_PLACEHOLDER_BALANCE}
-            <Coins size={14} strokeWidth={2.25} aria-hidden="true" />
+            {walletCoins}
+            <span
+              className="inline-flex h-4 w-4 items-center justify-center rounded-full bg-[var(--noodle-accent)] text-[0.62rem] font-black leading-none text-[var(--noodle-accent-foreground)]"
+              aria-hidden="true"
+            >
+              C
+            </span>
           </button>
         </div>
         <div className="relative isolate overflow-hidden px-3 @min-[1024px]:px-5" data-slurp-home-masthead>

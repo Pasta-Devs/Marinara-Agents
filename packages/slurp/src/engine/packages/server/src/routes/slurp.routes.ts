@@ -447,6 +447,11 @@ export async function slurpRoutes(app: FastifyInstance) {
     return noodle.listNoodlerStageProfiles();
   });
 
+  app.get("/noodler/viewer-wallets", async (_req, reply) => {
+    const personas = await characters.listPersonas();
+    return noodle.listViewerWallets(personas.map((persona) => persona.id));
+  });
+
   // Fan and follower totals per creator account, so a list of profiles needs one request
   // instead of one per row. Keyed by creator account id.
   // ponytail: counts by scanning; swap for aggregate queries if a player ever keeps

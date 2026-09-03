@@ -6,7 +6,6 @@
 import {
   AtSign,
   ChevronDown,
-  Coins,
   Home,
   MessageCircle,
   Search,
@@ -190,6 +189,20 @@ export function NewSinceLastVisitDivider() {
   );
 }
 
+function CoinBadge({ size = "sm" }: { size?: "sm" | "md" }) {
+  return (
+    <span
+      className={cn(
+        "inline-flex shrink-0 items-center justify-center rounded-full bg-[var(--noodle-accent)] font-black leading-none text-[var(--noodle-accent-foreground)]",
+        size === "md" ? "h-6 w-6 text-sm" : "h-4 w-4 text-[0.62rem]",
+      )}
+      aria-hidden="true"
+    >
+      C
+    </span>
+  );
+}
+
 export function Avatar({
   account,
   size = "md",
@@ -300,6 +313,8 @@ export interface NoodleShellProps {
   linkedNoodleAccountIds?: ReadonlySet<string>;
   /** Fan and follower totals keyed by persona id. Personas without a Creator profile are absent. */
   personaConnectionCounts?: Record<string, { fans: number; followers: number }>;
+  /** Wallet balances keyed by persona id. */
+  personaWallets?: Record<string, { coins: number }>;
   onLoadMorePersonaAccounts: () => void;
   onSwitchPersona: (account: NoodleAccount, mobile: boolean) => void;
   accountSwitcherOpen: boolean;
@@ -414,7 +429,7 @@ function PersonaIdentityCard({
           {balanceLabel && (
             <span className="inline-flex shrink-0 items-center gap-1 text-xs font-bold tabular-nums text-[var(--muted-foreground)]">
               {balanceLabel}
-              <Coins size={13} strokeWidth={2.25} aria-hidden="true" />
+              <CoinBadge />
             </span>
           )}
         </div>
@@ -441,12 +456,14 @@ function PersonaList({
   activeId,
   counts,
   linkedIds,
+  wallets,
   onSwitch,
 }: {
   accounts: NoodleAccount[];
   activeId?: string | null;
   counts?: Record<string, { fans: number; followers: number }>;
   linkedIds?: ReadonlySet<string>;
+  wallets?: Record<string, { coins: number }>;
   onSwitch: (account: NoodleAccount) => void;
 }) {
   const { t: localizeUi } = useUiTranslation();
@@ -477,6 +494,12 @@ function PersonaList({
               <span className="block truncate text-sm font-semibold">{account.displayName}</span>
               <span className="block truncate text-xs text-[var(--muted-foreground)]">@{account.handle}</span>
               <PersonaConnectionCounts counts={counts?.[account.entityId]} />
+              {wallets?.[account.entityId] && (
+                <span className="mt-0.5 inline-flex items-center gap-1 text-[0.68rem] font-semibold tabular-nums text-[var(--muted-foreground)]">
+                  {wallets[account.entityId].coins}
+                  <CoinBadge />
+                </span>
+              )}
               {linkedIds?.has(account.id) && (
                 <span
                   className="mt-0.5 block text-[0.65rem] font-semibold text-[var(--noodle-accent)]"
@@ -517,6 +540,7 @@ export function NoodleShell({
   visiblePersonaAccounts,
   linkedNoodleAccountIds,
   personaConnectionCounts,
+  personaWallets,
   onLoadMorePersonaAccounts,
   onSwitchPersona,
   accountSwitcherOpen,
@@ -702,6 +726,7 @@ export function NoodleShell({
                     activeId={personaAccount?.id}
                     counts={personaConnectionCounts}
                     linkedIds={linkedNoodleAccountIds}
+                    wallets={personaWallets}
                     onSwitch={(account) => onSwitchPersona(account, true)}
                   />
                   {hasMorePersonaAccounts && (
@@ -846,7 +871,7 @@ export function NoodleShell({
                       {walletBalanceLabel && (
                         <span className="inline-flex shrink-0 items-center gap-1 text-xs font-bold tabular-nums text-[var(--muted-foreground)]">
                           {walletBalanceLabel}
-                          <Coins size={13} strokeWidth={2.25} aria-hidden="true" />
+                          <CoinBadge />
                         </span>
                       )}
                     </button>
@@ -903,6 +928,7 @@ export function NoodleShell({
                         activeId={personaAccount?.id}
                         counts={personaConnectionCounts}
                         linkedIds={linkedNoodleAccountIds}
+                        wallets={personaWallets}
                         onSwitch={(account) => onSwitchPersona(account, false)}
                       />
                       {hasMorePersonaAccounts && (

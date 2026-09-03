@@ -444,6 +444,17 @@ export function useNoodlerAccounts(enabled = true) {
   });
 }
 
+export type NoodlerViewerWallets = Record<string, { coins: number }>;
+
+export function useNoodlerViewerWallets(enabled = true) {
+  return useQuery({
+    queryKey: [...noodleKeys.noodlerRoot(), "viewer-wallets"],
+    queryFn: () => api.get<NoodlerViewerWallets>("/slurp/noodler/viewer-wallets"),
+    enabled,
+    staleTime: 30_000,
+  });
+}
+
 /** Fan and follower totals keyed by creator account id. */
 export type NoodlerConnectionCounts = Record<string, { fans: number; followers: number }>;
 

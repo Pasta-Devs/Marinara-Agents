@@ -89,6 +89,9 @@ assert.match(
   /connectionCountsQuery\.data\?\.\[profile\.sourceAccountId\]/u,
   "persona counts must use source account ids",
 );
+assert.match(home, /useNoodlerViewerWallets\(\)/u, "Slurp must load wallets for every persona");
+assert.match(home, /personaWallets: viewerWalletsQuery\.data/u, "persona wallets must reach the switcher");
+assert.match(shell, /function CoinBadge[\s\S]*?>\s*C\s*</u, "balances must use the compact C coin badge");
 assert.match(home, /const accessViewerAccounts = viewerAccounts\.filter/u);
 assert.match(home, /!personaBackedCreator && \([\s\S]*?setAutomationOpen\(true\)/u);
 assert.match(storage, /withoutNoodlerSelfHiddenAccountId\([\s\S]*?row\.sourceEntityId \?\? row\.entityId/u);

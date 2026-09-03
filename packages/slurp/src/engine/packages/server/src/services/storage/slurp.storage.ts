@@ -1473,6 +1473,18 @@ export function createSlurpStorage(db: DB) {
       return mapViewer(personaId, raw ? normalizeNoodleAccountSettings(raw) : emptyNoodleAccountSettings(), persona);
     },
 
+    async listViewerWallets(personaIds: string[]): Promise<Record<string, { coins: number }>> {
+      const wallets = await Promise.all(
+        [...new Set(personaIds)].map(async (personaId) => {
+          const viewer = await this.getViewer(personaId);
+          return viewer ? ([personaId, { coins: viewer.settings.wallet.coins }] as const) : null;
+        }),
+      );
+      return Object.fromEntries(
+        wallets.filter((wallet): wallet is readonly [string, { coins: number }] => wallet !== null),
+      );
+    },
+
     async cleanupRetiredViewer(personaId: string): Promise<void> {
       const authored = await db
         .select()
