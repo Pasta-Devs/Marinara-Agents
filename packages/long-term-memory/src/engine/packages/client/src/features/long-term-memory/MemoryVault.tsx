@@ -1583,6 +1583,18 @@ export default function MemoryVault({
   const characterScopeTargets = (scopeTargets.data?.characters ?? []).map((character) =>
     targets.find((candidate) => candidate.id === `character:${character.id}`)!,
   );
+  const currentCharacterTarget: Target | null =
+    props.chatId && selectedChat?.characterIds.length
+      ? {
+          id: `character:${selectedChat.characterIds[0]}`,
+          label: localizeUi("ui.longTermMemory.memoryvault.current"),
+          scope: { characterIds: [selectedChat.characterIds[0]] },
+        }
+      : null;
+  const pickerCharacterScopeTargets = [
+    ...(currentCharacterTarget ? [currentCharacterTarget] : []),
+    ...characterScopeTargets,
+  ].filter((candidate, index, items) => items.findIndex((item) => item.id === candidate.id) === index);
   const conversationScopeTargets = conversations.map((conversation) => {
     const [kind, id] = conversation.id.split(/:(.+)/, 2);
     return {
@@ -1623,6 +1635,18 @@ export default function MemoryVault({
       ...(selectedCharacterId ? { characterIds: [selectedCharacterId] } : {}),
     },
   }));
+  const currentBranchTarget: Target | null =
+    props.chatId && selectedChat?.groupId
+      ? {
+          id: `chat:${props.chatId}`,
+          label: localizeUi("ui.longTermMemory.memoryvault.current"),
+          scope: scopeTargets.data?.currentScope ?? { chatId: props.chatId, chatIds: [props.chatId] },
+        }
+      : null;
+  const pickerBranchScopeTargets = [
+    ...(currentBranchTarget ? [currentBranchTarget] : []),
+    ...branchScopeTargets,
+  ].filter((candidate, index, items) => items.findIndex((item) => item.id === candidate.id) === index);
   const statusScopeTargets: Target[] = statuses.map((status) => ({
     id: status,
     label: statusLabel(status),
@@ -2756,9 +2780,10 @@ export default function MemoryVault({
                       kind="character"
                       label={localizeUi("ui.longTermMemory.memoryvault.character")}
                       value={selectedCharacter?.label ?? localizeUi("ui.longTermMemory.memoryvault.allCharacters")}
-                      allLabel={localizeUi("ui.longTermMemory.memoryvault.allCharacters")}
+                      allLabel={localizeUi("ui.longTermMemory.memoryvault.all")}
+                      currentTargetId={currentCharacterTarget?.id}
                       searchLabel={localizeUi("ui.longTermMemory.memoryvault.searchCharacters")}
-                      targets={characterScopeTargets}
+                      targets={pickerCharacterScopeTargets}
                       onClear={() => void selectTarget(targets[0]!)}
                       onSelect={(candidate) => void selectTarget(candidate)}
                     />
@@ -2789,9 +2814,10 @@ export default function MemoryVault({
                           ? selectedChat.label
                           : localizeUi("ui.longTermMemory.memoryvault.allBranches")
                       }
-                      allLabel={localizeUi("ui.longTermMemory.memoryvault.allBranches")}
+                      allLabel={localizeUi("ui.longTermMemory.memoryvault.all")}
+                      currentTargetId={currentBranchTarget?.id}
                       searchLabel={localizeUi("ui.longTermMemory.memoryvault.searchBranches")}
-                      targets={branchScopeTargets}
+                      targets={pickerBranchScopeTargets}
                       onClear={() =>
                         void selectTarget(
                           selectedConversation

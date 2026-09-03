@@ -1447,7 +1447,7 @@ async function main() {
       assert.equal(scopeControlStyle.chevronAfterLabel, true);
       assert.equal(
         await memoryScope.locator('[data-ltm-memory-scope-target="character:character-a"]').textContent(),
-        "Character A",
+        "Current",
       );
       assert.equal(
         (await memoryScope.locator('[data-ltm-memory-scope-picker="chat"]').locator(":scope > summary").textContent())
@@ -1474,6 +1474,24 @@ async function main() {
       assert.equal(await memoryChatPicker.locator('[data-ltm-memory-scope-target="chat:desktop-chat"]').count(), 1);
       assert.equal(await memoryChatPicker.locator('[data-ltm-memory-scope-target="chat:all"]').count(), 1);
       await memoryChatPicker.locator("input").fill("");
+      await memoryChatPicker.locator(":scope > summary").click();
+      const memoryCharacterPicker = memoryScope.locator('[data-ltm-memory-scope-picker="character"]');
+      await memoryCharacterPicker.locator(":scope > summary").click();
+      assert.deepEqual(
+        await memoryCharacterPicker
+          .locator("[data-ltm-memory-scope-target]")
+          .evaluateAll((targets) => targets.slice(0, 2).map((target) => target.textContent?.trim())),
+        ["Current", "All"],
+      );
+      await memoryCharacterPicker.locator("input").fill("does-not-match");
+      assert.equal(
+        await memoryCharacterPicker.locator('[data-ltm-memory-scope-target="character:character-a"]').count(),
+        1,
+      );
+      assert.equal(await memoryCharacterPicker.locator('[data-ltm-memory-scope-target="character:all"]').count(), 1);
+      await memoryCharacterPicker.locator("input").fill("");
+      await memoryCharacterPicker.locator(":scope > summary").click();
+      await memoryChatPicker.locator(":scope > summary").click();
       assert.equal(await memoryChatPicker.locator('[data-ltm-memory-scope-target="group:conversation-a"]').count(), 1);
       await memoryChatPicker.locator('[data-ltm-memory-scope-target="group:conversation-a"]').click();
       const memoryBranchPicker = memoryScope.locator('[data-ltm-memory-scope-picker="branch"]');
