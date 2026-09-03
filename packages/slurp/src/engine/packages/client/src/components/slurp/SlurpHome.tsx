@@ -8,6 +8,7 @@ import {
   ChevronLeft,
   ChevronRight,
   Clock3,
+  Coins,
   Eye,
   Link,
   Loader2,
@@ -1436,7 +1437,7 @@ export function SlurpHome({ navigation, onNavigate }: SlurpHomeProps) {
     onOpenSearch: goToNoodlerSearch,
     onOpenMessages: goToMessages,
     onOpenWallet: goToWallet,
-    walletBalanceLabel: `${SLURP_PLACEHOLDER_BALANCE} ⛁`,
+    walletBalanceLabel: `${SLURP_PLACEHOLDER_BALANCE}`,
     personaBannerUrl: myCreatorProfile?.bannerUrl ?? null,
     onBecomeCreator: shellPersonaAccount
       ? () => {
@@ -1905,7 +1906,10 @@ export function SlurpHome({ navigation, onNavigate }: SlurpHomeProps) {
             </p>
             {wallet && (
               <p className="text-2xl font-black tabular-nums">
-                {localizeUi("ui.slurp.wallet.balance", { amount: SLURP_PLACEHOLDER_BALANCE })}
+                <span className="inline-flex items-center gap-2">
+                  {localizeUi("ui.slurp.wallet.balance", { amount: SLURP_PLACEHOLDER_BALANCE })}
+                  <Coins size={22} strokeWidth={2.25} aria-hidden="true" />
+                </span>
               </p>
             )}
             <p className="max-w-sm text-sm text-[var(--muted-foreground)]">
@@ -4422,7 +4426,7 @@ function ViewerHub({
             title={localizeUi("ui.slurp.wallet.balance", { amount: SLURP_PLACEHOLDER_BALANCE })}
           >
             {SLURP_PLACEHOLDER_BALANCE}
-            <span aria-hidden="true">⛁</span>
+            <Coins size={14} strokeWidth={2.25} aria-hidden="true" />
           </button>
         </div>
         <div className="relative isolate overflow-hidden px-3 @min-[1024px]:px-5" data-slurp-home-masthead>

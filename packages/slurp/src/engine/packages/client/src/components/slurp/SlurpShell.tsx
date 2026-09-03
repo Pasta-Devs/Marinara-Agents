@@ -6,6 +6,7 @@
 import {
   AtSign,
   ChevronDown,
+  Coins,
   Home,
   MessageCircle,
   Search,
@@ -411,8 +412,9 @@ function PersonaIdentityCard({
         <div className="mt-2 flex items-center justify-between gap-2">
           <PersonaConnectionCounts counts={counts} />
           {balanceLabel && (
-            <span className="shrink-0 text-xs font-bold tabular-nums text-[var(--muted-foreground)]">
+            <span className="inline-flex shrink-0 items-center gap-1 text-xs font-bold tabular-nums text-[var(--muted-foreground)]">
               {balanceLabel}
+              <Coins size={13} strokeWidth={2.25} aria-hidden="true" />
             </span>
           )}
         </div>
@@ -842,8 +844,9 @@ export function NoodleShell({
                         {localizeUi("ui.slurp.navigation.wallet", { defaultValue: "Wallet" })}
                       </span>
                       {walletBalanceLabel && (
-                        <span className="shrink-0 text-xs font-bold tabular-nums text-[var(--muted-foreground)]">
+                        <span className="inline-flex shrink-0 items-center gap-1 text-xs font-bold tabular-nums text-[var(--muted-foreground)]">
                           {walletBalanceLabel}
+                          <Coins size={13} strokeWidth={2.25} aria-hidden="true" />
                         </span>
                       )}
                     </button>
