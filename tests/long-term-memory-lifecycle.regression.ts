@@ -2779,7 +2779,7 @@ async function main() {
       );
       assert.equal(
         await sourceScopePicker.locator('[role="option"][data-ltm-scope-option="branch:memory-chat"]').count(),
-        1,
+        0,
       );
       assert.equal(
         await sourceScopePicker.locator('[role="option"][data-ltm-scope-option="group:conversation-a"]').count(),
@@ -2821,7 +2821,7 @@ async function main() {
       );
       assert.equal(
         await destinationScopePicker.locator('[role="option"][data-ltm-scope-option="branch:memory-chat"]').count(),
-        1,
+        0,
       );
       assert.equal(
         await destinationScopePicker.locator('[role="option"][data-ltm-scope-option="group:conversation-a"]').count(),
@@ -2855,15 +2855,20 @@ async function main() {
       assert.match(await destinationScopeTrigger.innerText(), /Private detective/u);
       await destinationScopeTrigger.click();
       await destinationScopeSearch.fill("Memory chat");
-      await destinationScopePicker.locator('[role="option"][data-ltm-scope-option="branch:memory-chat"]').click();
-      assert.match((await destinationScopeTrigger.innerText()).trim(), /Memory chat/u);
+      await destinationScopeSearch.fill("Conversation A");
+      await destinationScopePicker.locator('[role="option"][data-ltm-scope-option="group:conversation-a"]').click();
+      assert.match((await destinationScopeTrigger.innerText()).trim(), /Conversation A/u);
+      await destinationScopeTrigger.click();
+      await destinationScopeSearch.fill("Desktop chat");
+      await destinationScopePicker.locator('[role="option"][data-ltm-scope-option="chat:desktop-chat"]').click();
+      assert.equal((await destinationScopeTrigger.innerText()).trim(), "Current");
       const addDestination = page.locator("[data-ltm-add-destination]");
       await addDestination.click();
       const bulkDestination = page.locator("[data-ltm-bulk-destination]");
       await bulkDestination.waitFor();
       assert.equal(await bulkDestination.locator('[data-ltm-availability-tab="all"]').count(), 1);
       await bulkDestination.locator('[data-ltm-availability-search="all"]').fill("conversation");
-      assert.equal(await bulkDestination.locator('[data-ltm-availability-target="chat:desktop-chat"]').count(), 1);
+      assert.equal(await bulkDestination.locator('[data-ltm-availability-target="branch:conversation-a"]').count(), 1);
       await bulkDestination.locator('[data-ltm-availability-search="all"]').fill("");
       const bulkAllTab = bulkDestination.locator('[data-ltm-availability-tab="all"]');
       await bulkAllTab.focus();
@@ -2935,7 +2940,7 @@ async function main() {
       await destinationScopeTrigger.click();
       await destinationScopeSearch.fill("Valid group");
       await destinationScopePicker.locator('[data-ltm-scope-option="group:valid-group"]').click();
-      assert.match(await destinationScopeTrigger.innerText(), /Memory chat/u);
+      assert.equal(await destinationScopeTrigger.innerText(), "Current");
       assert.equal(await page.getByText(/Some locations cannot be added/u).count(), 1);
       await addDestination.click();
       const bulkCleanup = page.locator("[data-ltm-bulk-destination]");
@@ -2985,8 +2990,8 @@ async function main() {
         destinationScope?: unknown;
       };
       assert.deepEqual(mergedDestinationRequest.destinationScope, {
-        chatId: "memory-chat",
-        chatIds: ["memory-chat"],
+        chatId: "desktop-chat",
+        chatIds: ["desktop-chat"],
         personaId: "persona-a",
         personaIds: ["persona-a"],
       });
@@ -3104,8 +3109,8 @@ async function main() {
         3,
       );
       await destinationScopeTrigger.click();
-      await destinationScopeSearch.fill("Memory chat");
-      await destinationScopePicker.locator('[role="option"][data-ltm-scope-option="branch:memory-chat"]').click();
+      await destinationScopeSearch.fill("Conversation A");
+      await destinationScopePicker.locator('[role="option"][data-ltm-scope-option="group:conversation-a"]').click();
       await page.locator('[data-ltm-lorebook-id="lorebook_mobile_fixture"]').click();
       assert.equal(await page.locator('[data-ltm-lorebook-workbench="lorebook_mobile_fixture"]').isVisible(), true);
       await page.locator('[data-ltm-lorebook-entry="entry_mobile_harbor"]').waitFor();

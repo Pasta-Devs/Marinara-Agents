@@ -57,7 +57,7 @@ import {
   subscribeLtmSourceTask,
   type LtmSourceTaskContract,
 } from "./source-task";
-import { buildScopeIndexes, deriveScopeBranchChats, type ScopeTargetChat, type ScopeTargets } from "./scope-targets";
+import { buildScopeIndexes, type ScopeTargetChat, type ScopeTargets } from "./scope-targets";
 import {
   normalizeLtmScope,
   withMergedLtmScopeLinks,
@@ -1631,11 +1631,6 @@ export default function SourcesWorkspace({
       ...(scopeTargets.data?.chats ?? [])
         .filter((chat) => chat.id !== currentChatId && !chat.groupId)
         .map((chat) => chatTarget(chat)),
-      ...deriveScopeBranchChats(scopeTargets.data?.chats ?? []).map((chat) => ({
-        ...chatTarget(chat),
-        id: `branch:${chat.id}`,
-        kind: "branch" as const,
-      })),
       ...(scopeTargets.data?.groups ?? []).map((group) => ({
         id: `group:${group.id}`,
         label: `${localizeUi("ui.longTermMemory.sourcesworkspace.allBranches")}: ${group.label}`,
