@@ -60,7 +60,14 @@ import { showConfirmDialog } from "../../lib/app-dialogs";
 import { Modal } from "../ui/Modal";
 import type { SlurpNavigationState } from "./slurp-navigation.types";
 import type { NoodlerManagedStageProfile } from "@marinara-engine/shared";
-import { Avatar, getNoodleAccentStyle, NOODLE_PINK, SLURP_ROW_ACTIVE_CLASS, SLURP_ROW_CLASS } from "./SlurpShell";
+import {
+  Avatar,
+  getNoodleAccentStyle,
+  NOODLE_PINK,
+  SLURP_ROW_ACTIVE_CLASS,
+  SLURP_ROW_CLASS,
+  SLURP_TOGGLE_ACTIVE_CLASS,
+} from "./SlurpShell";
 import {
   SLURP_ACTIVITY_PRESETS,
   slurpActivityPresetForSettings,

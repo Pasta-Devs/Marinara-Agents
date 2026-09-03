@@ -117,7 +117,11 @@ assert.match(shell, /rounded-full bg-\[var\(--noodle-accent\)\] font-black leadi
 
 // Wide screens: the room and frame must not add a right-edge accent glow.
 assert.match(shell, /"--slurp-outer"/u, "The outer background needs its own token");
-assert.doesNotMatch(shell, /shadow-\[0_0_140px_-40px_color-mix/u, "The app frame must not glow into the outer background");
+assert.doesNotMatch(
+  shell,
+  /shadow-\[0_0_140px_-40px_color-mix/u,
+  "The app frame must not glow into the outer background",
+);
 assert.doesNotMatch(
   shell,
   /@min\[1280px\]:shadow-\[18px_0_54px_-48px_var\(--noodle-accent\)\]/u,
