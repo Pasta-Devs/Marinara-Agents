@@ -74,6 +74,7 @@ export async function generateNoodlerPostImage(input: {
   height?: number;
   compositionGuard?: string;
   negativePromptAdditions?: string;
+  suppressCharacterContext?: boolean;
 }): Promise<{
   metadata: Record<string, unknown>;
   preview: Omit<NoodleImagePromptReviewItem, "id"> | null;
@@ -111,7 +112,9 @@ export async function generateNoodlerPostImage(input: {
   // A HINTED creator also keeps image references: the same body, tattoos, and rooms can show up
   // while the source name and handle stay protected.
   const referenceCharacter =
-    input.disclosureMode !== "secret" && input.linkedPublicAccount?.kind === "character"
+    !input.suppressCharacterContext &&
+    input.disclosureMode !== "secret" &&
+    input.linkedPublicAccount?.kind === "character"
       ? input.linkedPublicAccount
       : null;
   const sourceCharacter =
@@ -129,7 +132,7 @@ export async function generateNoodlerPostImage(input: {
   // approved tokens made them shapeless without hiding anything linkable, since a build and a hair
   // colour identify nobody. Secret withholds the face and one-of-a-kind markers through the
   // composition guard below instead.
-  if (sourceAppearance && input.settings.imageGenerationIncludeDescriptions) {
+  if (!input.suppressCharacterContext && sourceAppearance && input.settings.imageGenerationIncludeDescriptions) {
     characterDescription = sourceAppearance;
   }
   if (referenceCharacter) {

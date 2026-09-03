@@ -755,7 +755,7 @@ export function NoodleShell({
             )}
             data-slurp-desktop-frame={slurpActive ? resolvedContextualRail : undefined}
           >
-            <aside className="hidden w-[14rem] shrink-0 border-r border-[var(--noodle-divider)] bg-[radial-gradient(circle_at_12%_6%,color-mix(in_srgb,var(--noodle-accent)_13%,transparent),transparent_16rem),linear-gradient(180deg,color-mix(in_srgb,var(--slurp-surface-raised,var(--background))_96%,transparent),var(--background)_42%)] shadow-[18px_0_54px_-48px_var(--noodle-accent)] @min-[1024px]:flex @min-[1024px]:flex-col">
+            <aside className="hidden w-[14rem] shrink-0 border-r border-[var(--noodle-divider)] bg-[radial-gradient(circle_at_12%_6%,color-mix(in_srgb,var(--noodle-accent)_13%,transparent),transparent_16rem),linear-gradient(180deg,color-mix(in_srgb,var(--slurp-surface-raised,var(--background))_96%,transparent),var(--background)_42%)] @min-[1024px]:flex @min-[1024px]:flex-col">
               <div className="flex min-h-0 flex-1 flex-col px-4 py-4">
                 <div className="mb-5 flex h-12 items-center gap-3 px-2">
                   <NoodleLogo

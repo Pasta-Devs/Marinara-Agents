@@ -7,6 +7,14 @@ const componentsDir = join(root, "packages/slurp/src/engine/packages/client/src/
 const home = readFileSync(join(componentsDir, "SlurpHome.tsx"), "utf8");
 const settings = readFileSync(join(componentsDir, "SlurpSettings.tsx"), "utf8");
 const shell = readFileSync(join(componentsDir, "SlurpShell.tsx"), "utf8");
+const artwork = readFileSync(
+  join(root, "packages/slurp/src/engine/packages/server/src/services/slurp/slurp-artwork.operation.ts"),
+  "utf8",
+);
+const images = readFileSync(
+  join(root, "packages/slurp/src/engine/packages/server/src/services/slurp/slurp-images.service.ts"),
+  "utf8",
+);
 
 // The feed row must offer both readings of the same feed.
 assert.match(home, /useState<"list" \| "wall">\("list"\)/u, "The feed must default to the list layout");
@@ -127,6 +135,11 @@ assert.doesNotMatch(
   /@min\[1280px\]:shadow-\[18px_0_54px_-48px_var\(--noodle-accent\)\]/u,
   "The main body must not glow on its right edge",
 );
+
+// Banners are environmental covers. They must not receive character avatar references or context.
+assert.match(artwork, /suppressCharacterContext: input\.kind === "banner"/u);
+assert.match(artwork, /suppressCharacterContext: kind === "banner"/u);
+assert.match(images, /!input\.suppressCharacterContext &&[\s\S]*?input\.disclosureMode/u);
 
 // Home order: header, then stories, then the tabs sitting on top of the posts.
 const homeFeed = home.slice(home.indexOf('data-component="SlurpHome.StickyHeader"'), home.indexOf("SlurpFeedSkeleton"));

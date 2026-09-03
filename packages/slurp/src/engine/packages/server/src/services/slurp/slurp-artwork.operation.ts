@@ -84,6 +84,7 @@ export async function generateNoodlerCreatorArtwork(
       height: input.kind === "banner" ? 512 : 1024,
       compositionGuard: artworkCompositionGuard(input.kind),
       negativePromptAdditions: artworkNegativePrompt(input.kind),
+      suppressCharacterContext: input.kind === "banner",
     });
     const mediaPath = image.metadata.noodlerMediaPath;
     if (typeof mediaPath !== "string") {
@@ -173,6 +174,7 @@ export async function backfillNextNoodlerCreatorArtwork(db: DB): Promise<Noodler
       height: kind === "banner" ? 512 : 1024,
       compositionGuard: artworkCompositionGuard(kind),
       negativePromptAdditions: artworkNegativePrompt(kind),
+      suppressCharacterContext: kind === "banner",
     });
     const mediaPath = image.metadata.noodlerMediaPath;
     if (typeof mediaPath !== "string") {
