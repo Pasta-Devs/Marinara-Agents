@@ -677,15 +677,6 @@ export function SlurpHome({ navigation, onNavigate }: SlurpHomeProps) {
   // user chose to keep. Covers both new drafts and changed edits so no surface silently
   // discards work.
   const confirmDiscardProfileDraft = async (): Promise<boolean> => {
-    const hasEditorState = Boolean(
-      profileDraft ||
-      creationStep === "source" ||
-      creationStep === "disclosure" ||
-      creationStep === "draft" ||
-      draftNoodleAccountId ||
-      editingProfileId,
-    );
-    if (!hasEditorState) return true;
     const editing = editingProfileId
       ? (accountsQuery.data?.find((profile) => profile.id === editingProfileId) ?? null)
       : null;
@@ -697,8 +688,27 @@ export function SlurpHome({ navigation, onNavigate }: SlurpHomeProps) {
         stagePersonality: editing.stagePersonality,
         disclosureMode: editing.disclosureMode ?? "hinted",
       };
-      if (JSON.stringify(profileDraft) === JSON.stringify(savedDraft)) return true;
+      const hasChangedDraft = profileDraft
+        ? (Object.keys(savedDraft) as Array<keyof NoodleStageProfileInput>).some(
+            (key) => profileDraft[key] !== savedDraft[key],
+          )
+        : false;
+      if (!hasChangedDraft) return true;
+      return showConfirmDialog({
+        title: localizeUi("ui.noodle.noodlerhome.discardProfileChanges"),
+        message: localizeUi("ui.noodle.noodlerhome.yourUnsavedStageProfileChangesWillBeLost"),
+        confirmLabel: localizeUi("ui.noodle.noodlerhome.discardChanges"),
+        tone: "destructive",
+      });
     }
+    const hasNewDraft = Boolean(
+      profileDraft ||
+      creationStep === "source" ||
+      creationStep === "disclosure" ||
+      creationStep === "draft" ||
+      draftNoodleAccountId,
+    );
+    if (!hasNewDraft) return true;
     return showConfirmDialog({
       title: localizeUi("ui.noodle.noodlerhome.discardProfileChanges"),
       message: localizeUi("ui.noodle.noodlerhome.yourUnsavedStageProfileChangesWillBeLost"),

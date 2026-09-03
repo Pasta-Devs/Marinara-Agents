@@ -135,6 +135,11 @@ assert.doesNotMatch(
   /@min\[1280px\]:shadow-\[18px_0_54px_-48px_var\(--noodle-accent\)\]/u,
   "The main body must not glow on its right edge",
 );
+assert.match(
+  home,
+  /const hasChangedDraft = profileDraft[\s\S]*?if \(!hasChangedDraft\) return true;/u,
+  "Unchanged creator edits must not trigger the discard dialog",
+);
 
 // Banners are environmental covers. They must not receive character avatar references or context.
 assert.match(artwork, /suppressCharacterContext: input\.kind === "banner"/u);
