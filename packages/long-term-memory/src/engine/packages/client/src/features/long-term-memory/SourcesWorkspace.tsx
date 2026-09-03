@@ -463,6 +463,7 @@ function DestinationScopePanel({
             type="button"
             data-ltm-availability-action={`${kind}:current`}
             aria-pressed={selectedIds.includes(currentTarget.id)}
+            disabled={disabled}
             className="flex min-h-11 w-full items-center gap-3 px-3 py-2 text-left text-sm hover:bg-[var(--secondary)]/35"
             onClick={() => toggle(currentTarget.id)}
           >
@@ -478,6 +479,7 @@ function DestinationScopePanel({
           aria-pressed={
             categoryTargets.length > 0 && categoryTargets.every((target) => selectedIds.includes(target.id))
           }
+          disabled={disabled}
           className="flex min-h-11 w-full items-center gap-3 px-3 py-2 text-left text-sm font-semibold hover:bg-[var(--secondary)]/35"
           onClick={() => {
             const nextIds = [...selectedIds];
