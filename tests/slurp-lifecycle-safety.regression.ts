@@ -28,6 +28,11 @@ const serverEntry = read("packages/slurp/src/engine/packages/server/src/services
 const publicGeneration = read(
   "packages/slurp/src/engine/packages/server/src/services/slurp/slurp-public-generation.service.ts",
 );
+assert.match(
+  settings,
+  /const section = navigation\.section \?\? "overview";[\s\S]*?useSlurpAdState\(section/u,
+  "settings must define its section before dependent hooks run",
+);
 
 const multipartReader = routes.slice(
   routes.indexOf("async function readNoodlerMultipart"),
@@ -78,6 +83,12 @@ assert.doesNotMatch(home, /canQuieten|makeQuieter|quieterPending/u);
 assert.match(home, /const viewingOwnCreator = profile\.sourceAccountId === viewerAccount\?\.entityId/u);
 assert.match(home, /const managedCreator = true/u);
 assert.match(home, /const personaBackedCreator = viewerAccounts\.some/u);
+assert.match(home, /avatarUrl: persona\.avatarPath/u, "persona switcher accounts must retain persona avatars");
+assert.match(
+  home,
+  /connectionCountsQuery\.data\?\.\[profile\.sourceAccountId\]/u,
+  "persona counts must use source account ids",
+);
 assert.match(home, /const accessViewerAccounts = viewerAccounts\.filter/u);
 assert.match(home, /!personaBackedCreator && \([\s\S]*?setAutomationOpen\(true\)/u);
 assert.match(storage, /withoutNoodlerSelfHiddenAccountId\([\s\S]*?row\.sourceEntityId \?\? row\.entityId/u);
@@ -90,6 +101,16 @@ assert.match(
   shell,
   /data-component="NoodleView\.MobileBottomNav"[\s\S]*?onClick=\{onMobileHomeTap\}[\s\S]*?onClick=\{onOpenProfile\}[\s\S]*?onClick=\{onOpenSearch\}[\s\S]*?data-component="NoodleView\.MobileAccountSwitcher"/u,
   "the mobile persona switcher must be the trailing navigation item",
+);
+assert.match(
+  shell,
+  /<PersonaList[\s\S]*?accounts=\{visiblePersonaAccounts\.filter\(/u,
+  "persona switching must keep readable named rows",
+);
+assert.doesNotMatch(
+  shell,
+  /function PersonaFacePile/u,
+  "persona switching must not collapse accounts into avatar-only controls",
 );
 assert.match(home, /ref=\{setStickyHeader\}[\s\S]*?HIDE_ON_SCROLL_CLASS/u);
 assert.match(shell, /--slurp-canvas/u, "Slurp must own a theme-safe canvas token");

@@ -165,6 +165,7 @@ export function SlurpSettings({
   const { t, i18n } = useTranslation();
   const settingsQuery = useSlurpSettings();
   const updateSettings = useUpdateSlurpSettings();
+  const section = navigation.section ?? "overview";
   const resetAds = useResetSlurpAds();
   const adPool = useSlurpAdPool();
   const generateAds = useGenerateSlurpAds();
@@ -195,7 +196,6 @@ export function SlurpSettings({
       if (!imagePromptEditorOpen) setImagePromptDraft(settings.imageGenerationPrompt);
     }
   }, [generationGuidanceEditorOpen, imagePromptEditorOpen, settings]);
-  const section = navigation.section ?? "overview";
   const save = async (patch: Partial<SlurpSettings>) => {
     setSaveState("saving");
     try {

@@ -492,54 +492,6 @@ function PersonaList({
   );
 }
 
-/** The other identities as faces. Cheaper to scan than a paged list, and it scales past ten. */
-function PersonaFacePile({
-  accounts,
-  activeId,
-  onSwitch,
-  onShowAll,
-  limit = 6,
-}: {
-  accounts: NoodleAccount[];
-  activeId?: string | null;
-  onSwitch: (account: NoodleAccount) => void;
-  onShowAll: () => void;
-  limit?: number;
-}) {
-  const { t: localizeUi } = useUiTranslation();
-  const others = accounts.filter((account) => account.id !== activeId);
-  if (others.length === 0) return null;
-  const shown = others.slice(0, limit);
-  const overflow = others.length - shown.length;
-  return (
-    <div className="mt-2 flex flex-wrap items-center gap-2">
-      {shown.map((account) => (
-        <button
-          key={account.id}
-          data-noodle-persona-id={account.entityId}
-          type="button"
-          onClick={() => onSwitch(account)}
-          title={account.displayName}
-          aria-label={account.displayName}
-          className="rounded-full ring-1 ring-transparent transition-[opacity,box-shadow] hover:ring-[var(--noodle-accent)]/45 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--noodle-accent)]"
-        >
-          <Avatar account={account} size="sm" />
-        </button>
-      ))}
-      {overflow > 0 && (
-        <button
-          type="button"
-          onClick={onShowAll}
-          className="flex h-8 min-w-8 items-center justify-center rounded-full px-1.5 text-[0.68rem] font-bold tabular-nums text-[var(--muted-foreground)] ring-1 ring-inset ring-[var(--noodle-divider)] transition-colors hover:bg-[var(--accent)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--noodle-accent)]"
-          aria-label={localizeUi("ui.noodle.noodleshell.switchAccount")}
-        >
-          +{overflow}
-        </button>
-      )}
-    </div>
-  );
-}
-
 /** "12 Fans | 8 Followers" under a persona row. Renders nothing without a Creator profile. */
 function PersonaConnectionCounts({ counts }: { counts?: { fans: number; followers: number } }) {
   const { t: localizeUi } = useUiTranslation();
@@ -590,7 +542,6 @@ export function NoodleShell({
   children,
 }: NoodleShellProps) {
   const { t: localizeUi } = useUiTranslation();
-  const [personaListExpanded, setPersonaListExpanded] = useState(false);
   const mobileDrawerRef = useRef<HTMLElement | null>(null);
   const mobileDrawerCloseRef = useRef<HTMLButtonElement | null>(null);
   const prefersReducedMotion = Boolean(useReducedMotion());
@@ -744,21 +695,24 @@ export function NoodleShell({
                   <p className={cn(labelClass, "px-2 pb-1 pt-3")}>
                     {localizeUi("ui.noodle.noodleshell.switchAccount")}
                   </p>
-                  {personaListExpanded ? (
-                    <PersonaList
-                      accounts={sortedPersonaAccounts}
-                      activeId={personaAccount?.id}
-                      counts={personaConnectionCounts}
-                      linkedIds={linkedNoodleAccountIds}
-                      onSwitch={(account) => onSwitchPersona(account, true)}
-                    />
-                  ) : (
-                    <PersonaFacePile
-                      accounts={sortedPersonaAccounts}
-                      activeId={personaAccount?.id}
-                      onSwitch={(account) => onSwitchPersona(account, true)}
-                      onShowAll={() => setPersonaListExpanded(true)}
-                    />
+                  <PersonaList
+                    accounts={visiblePersonaAccounts.filter((account) => account.id !== personaAccount?.id)}
+                    activeId={personaAccount?.id}
+                    counts={personaConnectionCounts}
+                    linkedIds={linkedNoodleAccountIds}
+                    onSwitch={(account) => onSwitchPersona(account, true)}
+                  />
+                  {hasMorePersonaAccounts && (
+                    <button
+                      type="button"
+                      onClick={onLoadMorePersonaAccounts}
+                      className="mt-1 h-9 w-full rounded-lg text-xs font-semibold text-[var(--noodle-accent)] transition-colors hover:bg-[var(--noodle-accent)]/10"
+                    >
+                      {localizeUi("ui.noodle.noodlehome.loadMore", {
+                        visible: visiblePersonaAccounts.length,
+                        total: sortedPersonaAccounts.length,
+                      })}
+                    </button>
                   )}
                 </div>
               </aside>
@@ -941,37 +895,24 @@ export function NoodleShell({
                       <p className={cn(labelClass, "px-2 pb-1 pt-3")}>
                         {localizeUi("ui.noodle.noodleshell.switchAccount")}
                       </p>
-                      {personaListExpanded ? (
-                        <>
-                          <PersonaList
-                            accounts={visiblePersonaAccounts}
-                            activeId={personaAccount?.id}
-                            counts={personaConnectionCounts}
-                            linkedIds={linkedNoodleAccountIds}
-                            onSwitch={(account) => onSwitchPersona(account, false)}
-                          />
-                          {hasMorePersonaAccounts && (
-                            <button
-                              type="button"
-                              onClick={onLoadMorePersonaAccounts}
-                              className="mt-1 h-9 w-full rounded-lg text-xs font-semibold text-[var(--noodle-accent)] transition-colors hover:bg-[var(--noodle-accent)]/10"
-                            >
-                              {localizeUi("ui.noodle.noodlehome.loadMore", {
-                                visible: visiblePersonaAccounts.length,
-                                total: sortedPersonaAccounts.length,
-                              })}
-                            </button>
-                          )}
-                        </>
-                      ) : (
-                        <div className="px-2 pb-1">
-                          <PersonaFacePile
-                            accounts={sortedPersonaAccounts}
-                            activeId={personaAccount?.id}
-                            onSwitch={(account) => onSwitchPersona(account, false)}
-                            onShowAll={() => setPersonaListExpanded(true)}
-                          />
-                        </div>
+                      <PersonaList
+                        accounts={visiblePersonaAccounts.filter((account) => account.id !== personaAccount?.id)}
+                        activeId={personaAccount?.id}
+                        counts={personaConnectionCounts}
+                        linkedIds={linkedNoodleAccountIds}
+                        onSwitch={(account) => onSwitchPersona(account, false)}
+                      />
+                      {hasMorePersonaAccounts && (
+                        <button
+                          type="button"
+                          onClick={onLoadMorePersonaAccounts}
+                          className="mt-1 h-9 w-full rounded-lg text-xs font-semibold text-[var(--noodle-accent)] transition-colors hover:bg-[var(--noodle-accent)]/10"
+                        >
+                          {localizeUi("ui.noodle.noodlehome.loadMore", {
+                            visible: visiblePersonaAccounts.length,
+                            total: sortedPersonaAccounts.length,
+                          })}
+                        </button>
                       )}
                     </div>
                   )}

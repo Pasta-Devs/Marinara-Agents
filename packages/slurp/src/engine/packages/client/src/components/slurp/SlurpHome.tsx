@@ -404,7 +404,8 @@ export function SlurpHome({ navigation, onNavigate }: SlurpHomeProps) {
         kind: "persona" as const,
         handle: persona.name,
         displayName: persona.name,
-        avatarUrl: null,
+        avatarUrl: persona.avatarPath,
+        avatarCrop: persona.avatarCrop,
         settings: { social: {} },
       }) as NoodleAccount,
   );
@@ -1408,7 +1409,9 @@ export function SlurpHome({ navigation, onNavigate }: SlurpHomeProps) {
     personaAccount: shellPersonaAccount,
     sortedPersonaAccounts: viewerAccounts,
     visiblePersonaAccounts,
-    linkedNoodleAccountIds: new Set((accountsQuery.data ?? []).flatMap((profile) => profile.sourceAccountId ?? [])),
+    linkedNoodleAccountIds: new Set(
+      (accountsQuery.data ?? []).flatMap((profile) => (profile.sourceAccountId ? [profile.sourceAccountId] : [])),
+    ),
     // Only a persona that runs a Creator profile has fans and followers, so the switcher
     // shows the line for those personas and leaves the rest without one.
     personaConnectionCounts: Object.fromEntries(
