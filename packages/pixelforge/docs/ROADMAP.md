@@ -714,7 +714,7 @@ What it serves, in the order the item asked for it: **name, occupation and where
 
 **Three things landed differently from the entry as written, each ruled:**
 
-- **Always stranger** (Ruling 4). E1's two registers are both sealed and only one is served. The friend register is written, stored and read by nothing, because rapport is P2's and a stopgap that guessed at it would be a promotion the player never earned. On the first live measured pack that is 5 of 12 lines unserved.
+- **Always stranger** (Ruling 4). E1's two registers are both sealed and only one is served. The friend register is written, stored and read by nothing, because rapport is P2's and a stopgap that guessed at it would be a promotion the player never earned. On the first live measured pack that is 7 of 12 lines unserved — the friend half; the 5 stranger lines are the served ones.
 - **A branch with no line does not render**, which produces an inversion the release ships with knowingly: the enriched default packs render all four topics, and a thin *generated* pack renders one or two — so the world that paid two GM calls meets the thinnest window. The fix is a wider generation, not a merge, and 0.14 widened it; whether it is enough is a live-run question.
 - **The say input is uncapped** (ruled 2026-08-28), which is the one place in the package where composed turn text carries no named limit. The reasoning is that every other capped door is stored data re-entering composition and this is live player input. The residual is honest: a host refusal surfaces as the generic toast and the typed text is not preserved.
 

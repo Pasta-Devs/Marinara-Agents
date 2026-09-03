@@ -1588,7 +1588,7 @@ draw is always made and simply discarded when an override covers the day, and th
 always second. So an override naming the very word the derivation rolled cannot flip the day's
 intensity, and the live path and the ledger's first-of-season scan consume the stream identically.
 
-**On screen:** rain and storm tint (storm harder, heavy rain at double light rain's alpha); snow
+**On screen:** overcast, rain and storm tint (storm hardest, heavy rain at double light rain's alpha); snow
 does not tint at all, because the snow TILES carry it. The ground substitution is a **paint-time
 rename** read by the renderer's zone composite and by nothing else — `grass → grassSnow`,
 `grass2 → grassSnow2`, `crop → cropSnow`, `canopy → canopySnow`. **The zone arrays are never
@@ -1844,7 +1844,7 @@ GM call**: it is a lookup over an artifact already in memory.
 
 **Always stranger, and it is a ruling** (4). The friend register is written, sealed and stored, and
 0.14 serves none of it: friendship is the roadmap's relationship ledger, and a stopgap that guessed
-at it would be a promotion the player never earned. On the live measured pack that is **5 of 12
+at it would be a promotion the player never earned. On the live measured pack that is **7 of 12
 lines** unserved, which is the honest cost of the ruling and the reason the selection ladder relaxes
 as hard as it does. The generation guidance is inverted to match — 0.13 asked for more friend lines;
 0.14 asks for mostly stranger ones and says the friend register is written for a later release.
@@ -2574,7 +2574,7 @@ it is written as a range.
 | what | where it lands | measured |
 | ---- | -------------- | -------- |
 | the header's two new words | the **prompt**, every turn, permanently | **14 to 24 chars per turn.** The paren group went from `(<daypart>)` to `(<daypart>, <weather>, <season>)`, so the growth is 4 chars of separator plus the two words. The weather label runs 4 (`fair`) to 10 (`light rain`, `heavy rain`, `light snow`, `heavy snow`), the season word 6 (`spring`) to 10 (`wet season`). A range and not a number, because the label is intensity-variable |
-| the `pixelforgeWeather` metadata row | **chat metadata**, and only when a writer exists to write it | **38 bytes** for `{"word":"storm"}` with its key name; **52** with a `sinceDay`; **85** at the widest legal row (`word` + `intensity` + `sinceDay` + `untilDay`). Nothing in 0.14 writes it |
+| the `pixelforgeWeather` metadata row | **chat metadata**, and only when a writer exists to write it | **38 bytes** for `{"word":"storm"}` with its key name; **52** with a two-digit `sinceDay`; **85** with `word` + `intensity` + `sinceDay` + `untilDay` at two digits each. Day numbers are not capped — `positiveDay()` takes any safe integer — so the true maximum is **113** at `Number.MAX_SAFE_INTEGER` days. Nothing in 0.14 writes it |
 | the generation digest's climate pair | the **generation request**, once per world | **+2 rows, 21 → 23**, and **136 chars** at their widest (a temperate/moderate world, whose reachable-word list is the longest). The digest's whole worst case is pinned at **2,718 chars** against a `userContent` clamp of 8,000 |
 | a pack line's `w` tag | the **sealed pack**, on new packs only | the widest legal line row is **294 bytes** serialized — a 200-char line carrying both the topic tag and the sky tag, on the widest handle the location vocabulary names (`settlement`, ten characters). Measured and pinned, not rounded |
 | the default packs' enrichment | **nothing stored** — the default pack is a read-time fallback and is never written | cozy-village **5,475 → 8,705 bytes** (+3,230) and sci-fi-colony **5,558 → 8,844** (+3,286), each going from 32 lines to **56** to carry the coverage floor of two any-weather stranger lines per (handle × topic) |
@@ -2658,7 +2658,7 @@ Added by 0.14, and the same rule again — every row is somebody's decision on t
 | **the override does not rewind with the story, and re-arms inside its own range.** `sinceDay` clamps the start, so a rewind to before it was set restores the derived sky; a rewind INTO `[sinceDay, untilDay]` re-arms it — which is that day's own first-pass sky. A cleared range is gone | **accepted trade**: the alternative needs a save field, and weather has none by design |
 | **the override key gets no self-heal.** It inherits the #5076 whole-blob-erase hazard like every package metadata key, and unlike the save and quarantine keys there is nothing to re-derive it from. A vanished row reads as "no override", never as corruption | accepted; a future writer re-writes rather than repairs |
 | **an override files no ledger line.** The notable-sky park fires only on a LIVE day crossing, so a sky summoned mid-day changes the header, the tint, the bias and the bite immediately and records nothing. Same for an expiry | **by design** (the park is mover-only, which is what keeps a reload silent) |
-| **the friend register is sealed and unread.** Ruling 4: 0.14 serves the stranger register only. On the live measured pack that is 5 of 12 lines written and never served | **maintainer ruling**; the relationship ledger (ROADMAP P2) is what reads it |
+| **the friend register is sealed and unread.** Ruling 4: 0.14 serves the stranger register only. On the live measured pack that is 7 of 12 lines written and never served (5 stranger served, 7 friend sealed) | **maintainer ruling**; the relationship ledger (ROADMAP P2) is what reads it |
 | **the overheard pool is still unread.** 0.13 sealed it; 0.14 does not surface it either | by scope |
 | **the window is invisible to the GM.** Every free branch is a zero-call lookup, so the narrator is never told a conversation happened, how long it ran, or what was said. Only the four paid doors reach the model | **by design** — this is the Call-economy pillar's whole point, and it is also the risk the playtest exists to answer |
 | **topic branches are suppressed on a thin generated pack — the paid-path inversion.** The default packs carry a coverage floor and render all four branches; a sealed pack renders only what it can answer, and there is no merge. So a legacy world or a declined generation is the RICHER conversation, and the world that paid two GM calls is the poorer one | **accepted, knowingly**, and named at all four sites. The fix is a wider generation (shipped in 0.14) and a floor at 10, not a merge |
@@ -2895,14 +2895,15 @@ that rebuild is committed. What it moved, and what was checked:
 - **Both theme tile sheets and `atlas.json`.** The sheet grew its fifth row — 33 ids over 8 columns,
   **128×64 → 128×80** — and the atlas went from 29 ids to 33, the four snow ids **appended** at
   29-32 with **not one existing index moved**. Pixel-diffed rather than trusted: of the 32 old
-  slots, exactly seven differ, and all seven are accounted for — three that were empty padding and
+  slots, exactly six differ, and all six are accounted for — three that were empty padding and
   are now painted, and `fence`, `well` and `trunk`, which is the grass-strip change reaching a
   shipped sheet for the first time (the atlas had not been rebaked since 0.10). **That is the look
   change §12.2 item 9 asks an eye to confirm**, and it is now in the shipped art rather than only in
   the source.
 - **The pre-bake atlas pin inverted, which is what it existed to do.** It went red on exactly its
   own assertion when run against the bake, and it now asserts the four ids present, appended and
-  contiguous. Both new arms were mutation-tested.
+  in ascending order (the lane pins the ordering; a gapped-but-ascending map would pass it).
+  Both new arms were mutation-tested.
 - **`manifest.json`** — nine lines: the version plus the sha256/bytes pairs for `client.js`, both
   sheets and `atlas.json`.
 - **The `0.14.0` artifact zip**, at 1,185,575 bytes. The `0.13.0` zip is untouched. Three bakes over

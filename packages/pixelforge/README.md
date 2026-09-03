@@ -180,7 +180,7 @@ a clear one — the ruling of thumb is a bite every ten minutes on a fair day an
 wet one — so waiting for weather is now a real way to spend an afternoon. It never becomes a sure
 thing: a cast can still come up empty in a downpour. Where the world sits matters too: a wet region
 has more water and more in it, an arid one fishes sparse — **fewer bites, never fewer kinds of
-fish**. And a storm is the one sky that changes *what* you catch rather than how often, tilting the
+fish**. And a storm is the one sky that changes *what* you catch as well as how often, tilting the
 odds toward the rare end. Worth knowing before you go looking for one: a polar world never gets
 thunderstorms at all.
 

@@ -1668,8 +1668,10 @@ PF.pack = (() => {
     // THE UNIVERSE IS STRANGER-ONLY (ruling 4). The friend register is written,
     // sealed and stored, and 0.14 serves none of it: friendship is P2's, and a
     // stopgap that guessed at it would be a promotion the player never earned.
-    // On the live measured pack that is 5 of 12 lines, which is the honest cost
-    // of the ruling and the reason the ladder below relaxes as hard as it does.
+    // On the live measured pack that is 7 of 12 lines — the FRIEND half, which
+    // is the unserved one: 5 stranger lines are served and 7 friend lines are
+    // not. That is the honest cost of the ruling and the reason the ladder
+    // below relaxes as hard as it does.
     //
     // THE WEATHER TERM: a line with no `w` is served under any sky, and a line
     // tagged `rain` is served under any RAIN — the axis is the five words and an
