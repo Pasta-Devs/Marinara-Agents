@@ -7942,12 +7942,7 @@ const SNOW_IDS = ["grassSnow", "grassSnow2", "cropSnow", "canopySnow"];
     2,
     "both Tier-1 palettes carry the snow keys (base + the colony override)",
   );
-  assert.equal(
-    (runtimeArt.match(/snow1: "/g) ?? []).length,
-    2,
-    "…and both Tier-0 palettes do too",
-  );
-
+  assert.equal((runtimeArt.match(/snow1: "/g) ?? []).length, 2, "…and both Tier-0 palettes do too");
 }
 
 // ── THE SKY REACHES THE PICTURE (0.14 slice 3) ──────────────────────────────
@@ -7993,7 +7988,12 @@ const SNOW_IDS = ["grassSnow", "grassSnow2", "cropSnow", "canopySnow"];
   // case the composite class has to get right and the only one no compiled world
   // reliably offers. Cloned rather than compiled so the lane cannot drift with
   // the generator's taste in ground cover.
-  const paved = { ...outside, id: "z-paved", ground: outside.ground.map(() => "path"), overhead: outside.overhead.map(() => 0) };
+  const paved = {
+    ...outside,
+    id: "z-paved",
+    ground: outside.ground.map(() => "path"),
+    overhead: outside.overhead.map(() => 0),
+  };
   // …and its opposite: a grove whose ONLY snowable id is in the OVERHEAD layer.
   // `canopy` lives there, so a substitution wired into the ground loop alone
   // leaves green treetops standing over a white field — and every ground-side
@@ -8136,11 +8136,7 @@ const SNOW_IDS = ["grassSnow", "grassSnow2", "cropSnow", "canopySnow"];
       frame(outside, { word: "snow", intensity: "light" }, 900),
       "…and so is snow",
     );
-    assert.equal(
-      frame(outside, FAIR, 0),
-      frame(outside, FAIR, 900),
-      "a fair sky drops nothing, at any instant",
-    );
+    assert.equal(frame(outside, FAIR, 0), frame(outside, FAIR, 900), "a fair sky drops nothing, at any instant");
     // HEAVY AND LIGHT MUST READ AS DIFFERENT WEATHER. The felt half is an eye
     // check; the structural half is that the two rows differ in both count and
     // fall speed, and that the frames they paint are not the same frame.
@@ -8176,14 +8172,7 @@ const SNOW_IDS = ["grassSnow", "grassSnow2", "cropSnow", "canopySnow"];
       loadedPF.hashStr = () => 2000;
       try {
         withClock(0, () =>
-          render._fall(
-            { fillStyle: "", fillRect: (x, y, w, h) => rects.push([x, y, w, h]) },
-            sky,
-            0,
-            0,
-            256,
-            256,
-          ),
+          render._fall({ fillStyle: "", fillRect: (x, y, w, h) => rects.push([x, y, w, h]) }, sky, 0, 0, 256, 256),
         );
       } finally {
         loadedPF.hashStr = realHash;
@@ -8364,7 +8353,11 @@ const SNOW_IDS = ["grassSnow", "grassSnow2", "cropSnow", "canopySnow"];
     loadedPF.art.setTheme("cozy-village");
     const drawnSnow = loadedPF.art.tile("grassSnow");
     assert.equal(drawnSnow._data[3], 255, "…so the Tier-0 painter draws it, opaque, rather than a transparent slot");
-    assert.notEqual(pixelsOf(drawnSnow), pixelsOf(loadedPF.art.tile("grass")), "…and it is snow, not the grass fallback");
+    assert.notEqual(
+      pixelsOf(drawnSnow),
+      pixelsOf(loadedPF.art.tile("grass")),
+      "…and it is snow, not the grass fallback",
+    );
   } finally {
     globalThis.fetch = prevFetch;
     globalThis.Image = prevImage;
@@ -22057,8 +22050,7 @@ const fire = (node, type) => Promise.all((node.listeners[type] ?? []).map((fn) =
       `Leave ${villagers[1].name} (E)`,
       "…and with a window open it is the close verb, against the person the window is anchored to",
     );
-    const doorOf = (label) =>
-      hud.talkRows.children.find((node) => String(node.textContent).startsWith(label)) ?? null;
+    const doorOf = (label) => hud.talkRows.children.find((node) => String(node.textContent).startsWith(label)) ?? null;
     assert.ok(doorOf("Just talk"), "the free-talk door is rendered");
     assert.equal(doorOf("Just talk").textContent, "Just talk (asks the GM)", "…labelled as a paid press");
     core.talkFree();
@@ -22066,11 +22058,7 @@ const fire = (node, type) => Promise.all((node.listeners[type] ?? []).map((fn) =
     hud.update();
     assert.deepEqual(sent, [], "the press asked rather than sent");
     assert.ok(doorOf("Skip story & talk?"), "armed, the PRESSED CONTROL is the question");
-    assert.equal(
-      hud.talkBtn.textContent,
-      `Leave ${villagers[1].name} (E)`,
-      "…and the census button never becomes it",
-    );
+    assert.equal(hud.talkBtn.textContent, `Leave ${villagers[1].name} (E)`, "…and the census button never becomes it");
     host.narrationDone = true;
     hud.update();
     assert.ok(doorOf("Just talk"), "and the control goes back on its own");
@@ -22159,9 +22147,7 @@ const fire = (node, type) => Promise.all((node.listeners[type] ?? []).map((fn) =
       for (const topic of pack.TOPICS) {
         // ANY-WEATHER, deliberately: a topic whose only lines were sky-tagged
         // would be a branch that disappeared on a fair day, which is most days.
-        const servable = strangers.filter(
-          (row) => row.at === at && row.topic === topic && row.w === undefined,
-        ).length;
+        const servable = strangers.filter((row) => row.at === at && row.topic === topic && row.w === undefined).length;
         assert.ok(servable >= 2, `${theme}: ${at}/${topic} has ${servable} any-weather stranger lines, needs two`);
       }
     }
@@ -22278,8 +22264,24 @@ const fire = (node, type) => Promise.all((node.listeners[type] ?? []).map((fn) =
     const rowLabelled = (prefix) =>
       hud.talkRows.children.find((node) => String(node.textContent).startsWith(prefix)) ?? null;
     const labels = () => hud.talkRows.children.map((node) => String(node.textContent));
-    return { w, sim, hud, sent, host, standAt, openOn, steps, frames, press, rowLabelled, labels,
-      accept: (value) => { accept = value; }, npcs: () => sim.zone().npcs };
+    return {
+      w,
+      sim,
+      hud,
+      sent,
+      host,
+      standAt,
+      openOn,
+      steps,
+      frames,
+      press,
+      rowLabelled,
+      labels,
+      accept: (value) => {
+        accept = value;
+      },
+      npcs: () => sim.zone().npcs,
+    };
   };
   const settle = async () => {
     for (let i = 0; i < 8; i++) await Promise.resolve();
@@ -22302,7 +22304,11 @@ const fire = (node, type) => Promise.all((node.listeners[type] ?? []).map((fn) =
       assert.equal(t.sim.talkAnchorId, null, "a fresh sim is born with no conversation live");
       const was = t.sim.clockMin;
       t.steps(MINUTE_STEPS);
-      assert.equal(t.sim.clockMin, was + 1, "latch null ⇒ the clock runs: one game minute of frames is one game minute");
+      assert.equal(
+        t.sim.clockMin,
+        was + 1,
+        "latch null ⇒ the clock runs: one game minute of frames is one game minute",
+      );
       t.steps(MINUTE_STEPS * 2);
       assert.equal(t.sim.clockMin, was + 3, "…and keeps running, minute for minute");
     }
@@ -22659,11 +22665,7 @@ const fire = (node, type) => Promise.all((node.listeners[type] ?? []).map((fn) =
       assert.equal(censusOpen, `Leave ${keeper.name} (E)`, "the census button is naming the anchor now");
       assert.equal(String(t.hud.buyRodBtn.textContent), rodLabel, "…and the rod is still on offer beside it");
       for (const node of t.hud._railBtns) {
-        assert.equal(
-          capPx(node),
-          CORRIDOR,
-          `"${node.textContent}" is held to the corridor while the window is up`,
-        );
+        assert.equal(capPx(node), CORRIDOR, `"${node.textContent}" is held to the corridor while the window is up`);
         assert.match(
           String(node.style.cssText),
           /text-overflow:ellipsis/,
@@ -22777,8 +22779,7 @@ const fire = (node, type) => Promise.all((node.listeners[type] ?? []).map((fn) =
       // full-surface panel: it opens over the window by geometry, which is
       // exactly why its own toggle carries a latch clear — and that clearer went
       // undriven while only the two panels had rows here.
-      const boardFeature =
-        (t.sim.zone().features ?? []).find((f) => f.id === loadedPF.world.BOARD_FEATURE_ID) ?? null;
+      const boardFeature = (t.sim.zone().features ?? []).find((f) => f.id === loadedPF.world.BOARD_FEATURE_ID) ?? null;
       assert.ok(boardFeature, "the staged village stands a board to read");
       for (const [what, arm, open, isOpen] of [
         ["the journal", () => {}, () => t.hud.toggleJournal(), () => t.hud._journal],
@@ -22903,12 +22904,7 @@ const fire = (node, type) => Promise.all((node.listeners[type] ?? []).map((fn) =
       // A LEGACY WORLD GETS ALL FOUR TOPIC BRANCHES, which is what the default
       // pack's enrichment is FOR — and it is the inversion this release ships
       // with: the worlds that paid two GM calls meet the thinnest window.
-      for (const label of [
-        "Ask about the local rumors",
-        "Ask about work",
-        "Ask about this place",
-        "Pass the time",
-      ])
+      for (const label of ["Ask about the local rumors", "Ask about work", "Ask about this place", "Pass the time"])
         assert.ok(t.rowLabelled(label), `a legacy world offers "${label}" (${t.labels().join(" | ")})`);
       assert.ok(t.rowLabelled("What do you do?"), "…and answers for the record it has");
       // THE AT-KEY, which is what decides WHICH lines a branch may serve. A
@@ -22964,7 +22960,7 @@ const fire = (node, type) => Promise.all((node.listeners[type] ?? []).map((fn) =
       folded.pack = {
         ...folded.pack,
         lines: [
-          { at: "settlement", when: "day", r: "stranger", text: "Work's on the board." , topic: "work" },
+          { at: "settlement", when: "day", r: "stranger", text: "Work's on the board.", topic: "work" },
           { at: "settlement", when: "dusk", r: "friend", text: "A friend line nobody may serve.", topic: "rumor" },
         ],
       };
@@ -22984,7 +22980,10 @@ const fire = (node, type) => Promise.all((node.listeners[type] ?? []).map((fn) =
       // where most of a hand-written pack lives, and the smalltalk ladder falls
       // into it. A stranger line tagged for another TOPIC does not — that is the
       // pin two lines up.
-      folded.pack = { ...folded.pack, lines: [...folded.pack.lines, { at: "wilds", when: "night", r: "stranger", text: "Anything at all." }] };
+      folded.pack = {
+        ...folded.pack,
+        lines: [...folded.pack.lines, { at: "wilds", when: "night", r: "stranger", text: "Anything at all." }],
+      };
       folded._askServed = new Map();
       core.closeTalk();
       t.openOn(npc);
@@ -23020,7 +23019,11 @@ const fire = (node, type) => Promise.all((node.listeners[type] ?? []).map((fn) =
       t.sim._weatherMemo = null;
       folded._askServed = new Map();
       assert.equal(t.sim.weather().word, "rain", "…and now it is raining, hard");
-      assert.equal(loadedPF.pack.ask(core, npc, "rumor"), "WET", "the rain line is served — the word, at any intensity");
+      assert.equal(
+        loadedPF.pack.ask(core, npc, "rumor"),
+        "WET",
+        "the rain line is served — the word, at any intensity",
+      );
       t.sim.weatherOverride = null;
       t.sim._weatherMemo = null;
     }
@@ -24652,8 +24655,7 @@ const fire = (node, type) => Promise.all((node.listeners[type] ?? []).map((fn) =
       const briefData = { ...gateBriefData, latitude: pinned, precipitation: "arid" };
       let packBody = null;
       responses.post = async (chatId, body) => {
-        if (!body?.schema?.properties?.templates)
-          return { status: 200, body: { ok: true, data: briefData } };
+        if (!body?.schema?.properties?.templates) return { status: 200, body: { ok: true, data: briefData } };
         packBody = body;
         const giver = briefData.cast[0].name;
         return {
@@ -26347,10 +26349,7 @@ const fire = (node, type) => Promise.all((node.listeners[type] ?? []).map((fn) =
       text.includes(`write mostly ${pack.REGISTERS[0]} lines`),
       "the guidance asks for the register the window actually serves",
     );
-    assert.ok(
-      !/more friend lines than you/.test(text),
-      "…and no longer asks for more of the one it does not",
-    );
+    assert.ok(!/more friend lines than you/.test(text), "…and no longer asks for more of the one it does not");
     // ESCALATION IS NAMED AS E7'S CONVERGENCE POINT — the section the Ask tree
     // will land on, described as a door rather than as what is behind it.
     assert.ok(
@@ -26676,8 +26675,7 @@ const fire = (node, type) => Promise.all((node.listeners[type] ?? []).map((fn) =
     assert.ok(!row.includes("<script>"), "…nor the tag fragment beside it");
     const drawn = loadedPF.weather.axesFor(poisoned, 4242, "cozy-village");
     assert.ok(
-      loadedPF.weather.LATITUDES.includes(drawn.latitude) &&
-        loadedPF.weather.PRECIPS.includes(drawn.precipitation),
+      loadedPF.weather.LATITUDES.includes(drawn.latitude) && loadedPF.weather.PRECIPS.includes(drawn.precipitation),
       "…because the fold drew a real band for both axes",
     );
     assert.equal(row, `Climate: ${drawn.latitude} latitude, ${drawn.precipitation}.`, "…and that is what went out");
@@ -26841,7 +26839,11 @@ const fire = (node, type) => Promise.all((node.listeners[type] ?? []).map((fn) =
       topic: "smalltalk",
       w: "overcast",
     });
-    assert.equal(widest.length, 294, `the widest legal line row is the 294 chars the floor table says (${widest.length})`);
+    assert.equal(
+      widest.length,
+      294,
+      `the widest legal line row is the 294 chars the floor table says (${widest.length})`,
+    );
     assert.ok(
       widest.length > pack.TUNING.floorBasis.lineChars * 2,
       "…which is more than twice what the basis costs a typical one, and that gap IS the residual",
@@ -29567,7 +29569,7 @@ const fire = (node, type) => Promise.all((node.listeners[type] ?? []).map((fn) =
         // the case measures is untouched by it: the seal below reads the STORED
         // pack literal built right here, and never the defaults.
         .replace(
-          "const sky = (at, when, text, topic, w) => line(at, when, \"stranger\", text, topic, w);",
+          'const sky = (at, when, text, topic, w) => line(at, when, "stranger", text, topic, w);',
           'const sky = (at, when, text, topic) => line(at, when, "stranger", text, topic);',
         );
       assert.notEqual(patched, text, "the rewrite still names 61-pack's weather axis");
