@@ -58,6 +58,17 @@ export const NOODLE_ICON_SCOPE_CLASS = "[&_:where(svg)]:text-[var(--noodle-accen
 // NoodleR's mark. Untranslated on purpose — it is branding, not copy — and a constant so the
 // localization audit does not read it as a hardcoded string. Meaning is carried by the adjacent
 // label or tooltip, never by the mark alone.
+// One highlight for every Slurp destination row — the desktop nav, the settings sections, and
+// anything else marking "you are here". Per-row tints are how this started looking like
+// three different apps.
+export const SLURP_ROW_CLASS =
+  "relative flex min-h-11 w-full items-center gap-3 overflow-hidden rounded-lg px-3 text-start text-sm font-semibold transition-[background-color,color,transform] hover:bg-[var(--accent)] active:scale-[0.96] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--noodle-accent)] motion-reduce:transition-none motion-reduce:active:scale-100";
+export const SLURP_ROW_ACTIVE_CLASS =
+  "bg-[color-mix(in_srgb,var(--noodle-accent)_24%,var(--slurp-surface-raised))] text-[var(--foreground)] ring-1 ring-inset ring-[var(--noodle-accent)]/45 before:absolute before:inset-y-2 before:start-0 before:w-0.5 before:rounded-full before:bg-[var(--noodle-accent)]";
+/** Selected state for the small pill toggles (feed layout, filters). Same fill, no left bar. */
+export const SLURP_TOGGLE_ACTIVE_CLASS =
+  "bg-[color-mix(in_srgb,var(--noodle-accent)_28%,var(--slurp-surface-raised))] text-[var(--foreground)] ring-1 ring-inset ring-[var(--noodle-accent)]/50";
+
 export const NOODLER_MARK = "R";
 export const NOODLER_ADD_MARK = "+R";
 export const NOODLE_LOGO_SRC = "/api/capability-packages/slurp/assets/slurp-logo.png";
@@ -71,6 +82,9 @@ export function getNoodleAccentStyle(accent: string, style: CSSProperties = {}):
     "--noodle-accent-foreground": "light-dark(#8d174f, #ff9bd0)",
     "--noodle-divider": "light-dark(rgba(95, 32, 67, 0.18), rgba(255, 187, 222, 0.13))",
     "--slurp-canvas": "light-dark(#fff6fb, #100a12)",
+    // The room the app sits in on a wide screen. Neutral purple, so the canvas gradients
+    // have something to blend into instead of ending at a hard edge.
+    "--slurp-outer": "light-dark(#efe7f4, #15101c)",
     "--slurp-surface": "light-dark(#fffafd, #18101b)",
     "--slurp-surface-raised": "light-dark(#f9eaf3, #211624)",
     "--slurp-glass": "light-dark(rgba(255, 250, 253, 0.88), rgba(31, 18, 33, 0.82))",
@@ -193,7 +207,7 @@ function CoinBadge({ size = "sm" }: { size?: "sm" | "md" }) {
   return (
     <span
       className={cn(
-        "inline-flex shrink-0 items-center justify-center rounded-full bg-[var(--noodle-accent)] font-black leading-none text-[var(--noodle-accent-foreground)]",
+        "inline-flex shrink-0 items-center justify-center rounded-full bg-[var(--noodle-accent)] font-black leading-none text-white",
         size === "md" ? "h-6 w-6 text-sm" : "h-4 w-4 text-[0.62rem]",
       )}
       aria-hidden="true"
@@ -347,10 +361,10 @@ export interface NoodleShellProps {
   personaBannerUrl?: string | null;
   /** Offered on the identity card when the active persona runs no Creator profile. */
   onBecomeCreator?: () => void;
-  /** Creator profile management. Omit on surfaces with no scoped equivalent. */
-  onOpenCreatorStudio?: () => void;
   /** Omit on surfaces with no scoped equivalent. */
   onCompose?: (opener: HTMLElement) => void;
+  /** Replaces the desktop nav below the mark — used by Settings, which takes the column over. */
+  desktopSidebar?: ReactNode;
   /** Optional right-hand rail (search box, suggestions, etc). Omitted entirely on surfaces that don't need one. */
   rightRail?: ReactNode;
   /** Wide-screen Slurp geometry: show a populated rail, reserve an empty rail, or let content span both columns. */
@@ -373,7 +387,6 @@ function PersonaIdentityCard({
   balanceLabel,
   isCreator,
   onOpenProfile,
-  onOpenCreatorStudio,
   onBecomeCreator,
 }: {
   account: NoodleAccount | null;
@@ -382,12 +395,12 @@ function PersonaIdentityCard({
   balanceLabel?: string;
   isCreator: boolean;
   onOpenProfile?: () => void;
-  onOpenCreatorStudio?: () => void;
   onBecomeCreator?: () => void;
 }) {
   const { t: localizeUi } = useUiTranslation();
   const bannerSrc = useSlurpMediaSrc(bannerUrl ?? null, { width: 640 });
-  const action = isCreator ? onOpenCreatorStudio : onBecomeCreator;
+  // A creator reaches their own room through the card itself, so only the invitation stays.
+  const action = isCreator ? undefined : onBecomeCreator;
   return (
     <div className="overflow-hidden rounded-xl bg-[var(--slurp-surface-raised)] shadow-[var(--slurp-shadow-raised)] ring-1 ring-inset ring-[var(--noodle-divider)]">
       <div className="relative h-16">
@@ -440,9 +453,7 @@ function PersonaIdentityCard({
             className="mt-3 flex min-h-9 w-full items-center justify-center gap-1.5 rounded-lg bg-[var(--noodle-accent)]/12 text-xs font-bold text-[var(--noodle-accent-foreground)] ring-1 ring-inset ring-[var(--noodle-accent)]/30 transition-colors hover:bg-[var(--noodle-accent)]/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--noodle-accent)]"
           >
             <Sparkles size={14} />
-            {isCreator
-              ? localizeUi("ui.slurp.navigation.creatorStudio", { defaultValue: "Creator studio" })
-              : localizeUi("ui.slurp.account.becomeCreator", { defaultValue: "Become a creator" })}
+            {localizeUi("ui.slurp.account.becomeCreator", { defaultValue: "Become a creator" })}
           </button>
         )}
       </div>
@@ -560,7 +571,7 @@ export function NoodleShell({
   walletBalanceLabel,
   personaBannerUrl,
   onBecomeCreator,
-  onOpenCreatorStudio,
+  desktopSidebar,
   rightRail,
   contextualRail,
   overlays,
@@ -575,7 +586,6 @@ export function NoodleShell({
   const resolvedAppMode = appMode ?? (activeView === "noodler" ? "noodler" : "noodle");
   const noodlerActive = resolvedAppMode === "noodler";
   const slurpActive = resolvedAppMode === "slurp";
-  const slurpSettingsActive = slurpActive && activeView === "settings";
   const resolvedContextualRail = contextualRail ?? (rightRail ? "populated" : "spanning");
   const reserveContextualRail = slurpActive && resolvedContextualRail !== "spanning";
   const homeLabel = noodlerActive
@@ -597,7 +607,7 @@ export function NoodleShell({
       <div
         className={cn(
           "mari-chrome-token-scope relative flex h-full min-h-0 flex-col bg-[var(--background)] text-[var(--foreground)] antialiased",
-          slurpActive && "bg-[var(--slurp-canvas)] @min-[1024px]:[background-image:var(--slurp-canvas-art)]",
+          slurpActive && "bg-[var(--slurp-canvas)] @min-[1024px]:bg-[var(--slurp-outer)]",
           NOODLE_ICON_SCOPE_CLASS,
         )}
         data-component="NoodleView"
@@ -683,16 +693,6 @@ export function NoodleShell({
                       {localizeUi("ui.slurp.navigation.wallet", { defaultValue: "Wallet" })}
                     </button>
                   )}
-                  {onOpenCreatorStudio && (
-                    <button
-                      type="button"
-                      onClick={onOpenCreatorStudio}
-                      className="flex min-h-12 w-full items-center gap-4 rounded-xl px-2 text-left text-base font-bold transition-colors hover:bg-[var(--accent)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--noodle-accent)]"
-                    >
-                      <Sparkles size={23} />
-                      {localizeUi("ui.slurp.navigation.creatorStudio", { defaultValue: "Creator studio" })}
-                    </button>
-                  )}
                   <button
                     type="button"
                     onClick={onOpenSettings}
@@ -715,7 +715,6 @@ export function NoodleShell({
                     balanceLabel={walletBalanceLabel}
                     isCreator={Boolean(personaAccount && linkedNoodleAccountIds?.has(personaAccount.id))}
                     onOpenProfile={onOpenProfile}
-                    onOpenCreatorStudio={onOpenCreatorStudio}
                     onBecomeCreator={onBecomeCreator}
                   />
                   <p className={cn(labelClass, "px-2 pb-1 pt-3")}>
@@ -748,7 +747,12 @@ export function NoodleShell({
         </AnimatePresence>
         <div className="flex min-h-0 flex-1 justify-center overflow-hidden">
           <div
-            className={cn("flex min-h-0 w-full justify-center", slurpActive ? "max-w-[1680px]" : "max-w-[1360px]")}
+            className={cn(
+              "flex min-h-0 w-full justify-center",
+              slurpActive
+                ? "max-w-[1680px] @min-[1024px]:bg-[var(--slurp-canvas)] @min-[1024px]:[background-image:var(--slurp-canvas-art)]"
+                : "max-w-[1360px]",
+            )}
             data-slurp-desktop-frame={slurpActive ? resolvedContextualRail : undefined}
           >
             <aside className="hidden w-[14rem] shrink-0 border-r border-[var(--noodle-divider)] bg-[radial-gradient(circle_at_12%_6%,color-mix(in_srgb,var(--noodle-accent)_13%,transparent),transparent_16rem),linear-gradient(180deg,color-mix(in_srgb,var(--slurp-surface-raised,var(--background))_96%,transparent),var(--background)_42%)] shadow-[18px_0_54px_-48px_var(--noodle-accent)] @min-[1024px]:flex @min-[1024px]:flex-col">
@@ -760,153 +764,89 @@ export function NoodleShell({
                   />
                   {slurpActive && <span className="text-lg font-black">{SLURP_NAME}</span>}
                 </div>
-                <nav
-                  className="space-y-1"
-                  aria-label={slurpActive ? localizeUi("ui.slurp.navigation.menuNavigation") : undefined}
-                >
-                  <button
-                    type="button"
-                    onClick={onOpenHomeDestination}
-                    aria-current={homeActive ? "page" : undefined}
-                    className={cn(
-                      "relative flex min-h-11 w-full items-center gap-3 overflow-hidden rounded-lg px-3 text-left text-sm font-semibold transition-[background-color,color,transform] hover:bg-[var(--accent)] active:scale-[0.96] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--noodle-accent)] motion-reduce:transition-none motion-reduce:active:scale-100",
-                      homeActive && "bg-[var(--noodle-accent)]/12 text-[var(--foreground)] shadow-sm shadow-black/10",
-                    )}
+                {desktopSidebar ?? (
+                  <nav
+                    className="space-y-1"
+                    aria-label={slurpActive ? localizeUi("ui.slurp.navigation.menuNavigation") : undefined}
                   >
-                    {homeActive && (
-                      <span
-                        className="absolute inset-y-2 start-0 w-0.5 rounded-full bg-[var(--noodle-accent)]"
-                        aria-hidden="true"
-                      />
+                    <button
+                      type="button"
+                      onClick={onOpenHomeDestination}
+                      aria-current={homeActive ? "page" : undefined}
+                      className={cn(SLURP_ROW_CLASS, homeActive && SLURP_ROW_ACTIVE_CLASS)}
+                    >
+                      <Home size={22} className="!text-[var(--noodle-accent)]" />
+                      {desktopHomeLabel}
+                    </button>
+                    {onOpenSearch && (
+                      <button
+                        type="button"
+                        onClick={onOpenSearch}
+                        aria-current={activeView === "search" ? "page" : undefined}
+                        className={cn(SLURP_ROW_CLASS, activeView === "search" && SLURP_ROW_ACTIVE_CLASS)}
+                      >
+                        <Search size={22} className="!text-[var(--noodle-accent)]" />
+                        {noodlerActive
+                          ? localizeUi("ui.noodle.noodleshell.discover")
+                          : slurpActive
+                            ? localizeUi("ui.slurp.navigation.search", { defaultValue: "Discover" })
+                            : localizeUi("ui.noodle.noodlehome.searchNoodle")}
+                      </button>
                     )}
-                    <Home size={22} className="!text-[var(--noodle-accent)]" />
-                    {desktopHomeLabel}
-                  </button>
-                  {onOpenSearch && (
-                    <button
-                      type="button"
-                      onClick={onOpenSearch}
-                      aria-current={activeView === "search" ? "page" : undefined}
-                      className={cn(
-                        "relative flex min-h-11 w-full items-center gap-3 overflow-hidden rounded-lg px-3 text-left text-sm font-semibold transition-[background-color,color,transform] hover:bg-[var(--accent)] active:scale-[0.96] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--noodle-accent)] motion-reduce:transition-none motion-reduce:active:scale-100",
-                        activeView === "search" && "bg-[var(--noodle-accent)]/10 shadow-sm shadow-black/10",
-                      )}
-                    >
-                      {activeView === "search" && (
-                        <span
-                          className="absolute inset-y-2 start-0 w-0.5 rounded-full bg-[var(--noodle-accent)]"
-                          aria-hidden="true"
-                        />
-                      )}
-                      <Search size={22} className="!text-[var(--noodle-accent)]" />
-                      {noodlerActive
-                        ? localizeUi("ui.noodle.noodleshell.discover")
-                        : slurpActive
-                          ? localizeUi("ui.slurp.navigation.search", { defaultValue: "Discover" })
-                          : localizeUi("ui.noodle.noodlehome.searchNoodle")}
-                    </button>
-                  )}
-                  {onOpenMessages && (
-                    <button
-                      type="button"
-                      onClick={onOpenMessages}
-                      aria-current={activeView === "messages" ? "page" : undefined}
-                      className={cn(
-                        "relative flex min-h-11 w-full items-center gap-3 overflow-hidden rounded-lg px-3 text-left text-sm font-semibold transition-[background-color,color,transform] hover:bg-[var(--accent)] active:scale-[0.96] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--noodle-accent)] motion-reduce:transition-none motion-reduce:active:scale-100",
-                        activeView === "messages" && "bg-[var(--noodle-accent)]/10 shadow-sm shadow-black/10",
-                      )}
-                    >
-                      {activeView === "messages" && (
-                        <span
-                          className="absolute inset-y-2 start-0 w-0.5 rounded-full bg-[var(--noodle-accent)]"
-                          aria-hidden="true"
-                        />
-                      )}
-                      <MessageCircle size={22} className="!text-[var(--noodle-accent)]" />
-                      {localizeUi("ui.slurp.navigation.messages", { defaultValue: "Messages" })}
-                    </button>
-                  )}
-                  {onOpenProfile && (
-                    <button
-                      type="button"
-                      onClick={onOpenProfile}
-                      aria-current={activeView === "profile" ? "page" : undefined}
-                      className={cn(
-                        "relative flex min-h-11 w-full items-center gap-3 overflow-hidden rounded-lg px-3 text-left text-sm font-semibold transition-[background-color,color,transform] hover:bg-[var(--accent)] active:scale-[0.96] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--noodle-accent)] motion-reduce:transition-none motion-reduce:active:scale-100",
-                        activeView === "profile" && "bg-[var(--noodle-accent)]/10 shadow-sm shadow-black/10",
-                      )}
-                    >
-                      {activeView === "profile" && (
-                        <span
-                          className="absolute inset-y-2 start-0 w-0.5 rounded-full bg-[var(--noodle-accent)]"
-                          aria-hidden="true"
-                        />
-                      )}
-                      <User size={22} className="!text-[var(--noodle-accent)]" />
-                      {slurpActive
-                        ? localizeUi("ui.slurp.navigation.profile")
-                        : localizeUi("ui.noodle.noodlehome.profile")}
-                    </button>
-                  )}
-                  {onOpenWallet && (
-                    <button
-                      type="button"
-                      onClick={onOpenWallet}
-                      aria-current={activeView === "wallet" ? "page" : undefined}
-                      className={cn(
-                        "relative flex min-h-11 w-full items-center gap-3 overflow-hidden rounded-lg px-3 text-left text-sm font-semibold transition-[background-color,color,transform] hover:bg-[var(--accent)] active:scale-[0.96] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--noodle-accent)] motion-reduce:transition-none motion-reduce:active:scale-100",
-                        activeView === "wallet" && "bg-[var(--noodle-accent)]/10 shadow-sm shadow-black/10",
-                      )}
-                    >
-                      {activeView === "wallet" && (
-                        <span
-                          className="absolute inset-y-2 start-0 w-0.5 rounded-full bg-[var(--noodle-accent)]"
-                          aria-hidden="true"
-                        />
-                      )}
-                      <Wallet size={22} className="!text-[var(--noodle-accent)]" />
-                      <span className="min-w-0 flex-1">
-                        {localizeUi("ui.slurp.navigation.wallet", { defaultValue: "Wallet" })}
-                      </span>
-                      {walletBalanceLabel && (
-                        <span className="inline-flex shrink-0 items-center gap-1 text-xs font-bold tabular-nums text-[var(--muted-foreground)]">
-                          {walletBalanceLabel}
-                          <CoinBadge />
+                    {onOpenMessages && (
+                      <button
+                        type="button"
+                        onClick={onOpenMessages}
+                        aria-current={activeView === "messages" ? "page" : undefined}
+                        className={cn(SLURP_ROW_CLASS, activeView === "messages" && SLURP_ROW_ACTIVE_CLASS)}
+                      >
+                        <MessageCircle size={22} className="!text-[var(--noodle-accent)]" />
+                        {localizeUi("ui.slurp.navigation.messages", { defaultValue: "Messages" })}
+                      </button>
+                    )}
+                    {onOpenProfile && (
+                      <button
+                        type="button"
+                        onClick={onOpenProfile}
+                        aria-current={activeView === "profile" ? "page" : undefined}
+                        className={cn(SLURP_ROW_CLASS, activeView === "profile" && SLURP_ROW_ACTIVE_CLASS)}
+                      >
+                        <User size={22} className="!text-[var(--noodle-accent)]" />
+                        {slurpActive
+                          ? localizeUi("ui.slurp.navigation.profile")
+                          : localizeUi("ui.noodle.noodlehome.profile")}
+                      </button>
+                    )}
+                    {onOpenWallet && (
+                      <button
+                        type="button"
+                        onClick={onOpenWallet}
+                        aria-current={activeView === "wallet" ? "page" : undefined}
+                        className={cn(SLURP_ROW_CLASS, activeView === "wallet" && SLURP_ROW_ACTIVE_CLASS)}
+                      >
+                        <Wallet size={22} className="!text-[var(--noodle-accent)]" />
+                        <span className="min-w-0 flex-1">
+                          {localizeUi("ui.slurp.navigation.wallet", { defaultValue: "Wallet" })}
                         </span>
-                      )}
-                    </button>
-                  )}
-                  {onOpenCreatorStudio && (
+                        {walletBalanceLabel && (
+                          <span className="inline-flex h-7 shrink-0 items-center gap-1.5 rounded-full px-2.5 text-xs font-bold tabular-nums text-[var(--muted-foreground)] ring-1 ring-inset ring-[var(--noodle-divider)]">
+                            {walletBalanceLabel}
+                            <CoinBadge />
+                          </span>
+                        )}
+                      </button>
+                    )}
                     <button
                       type="button"
-                      onClick={onOpenCreatorStudio}
-                      className={cn(
-                        "relative flex min-h-11 w-full items-center gap-3 overflow-hidden rounded-lg px-3 text-left text-sm font-semibold transition-[background-color,color,transform] hover:bg-[var(--accent)] active:scale-[0.96] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--noodle-accent)] motion-reduce:transition-none motion-reduce:active:scale-100",
-                      )}
+                      onClick={onOpenSettings}
+                      aria-current={activeView === "settings" ? "page" : undefined}
+                      className={cn(SLURP_ROW_CLASS, activeView === "settings" && SLURP_ROW_ACTIVE_CLASS)}
                     >
-                      <Sparkles size={22} className="!text-[var(--noodle-accent)]" />
-                      {localizeUi("ui.slurp.navigation.creatorStudio", { defaultValue: "Creator studio" })}
+                      <Settings2 size={22} className="!text-[var(--noodle-accent)]" />
+                      {localizeUi("navigation.topbar.settings")}
                     </button>
-                  )}
-                  <button
-                    type="button"
-                    onClick={onOpenSettings}
-                    aria-current={activeView === "settings" ? "page" : undefined}
-                    className={cn(
-                      "relative flex min-h-11 w-full items-center gap-3 overflow-hidden rounded-lg px-3 text-left text-sm font-semibold transition-[background-color,color,transform] hover:bg-[var(--accent)] active:scale-[0.96] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--noodle-accent)] motion-reduce:transition-none motion-reduce:active:scale-100",
-                      activeView === "settings" && "bg-[var(--noodle-accent)]/10 shadow-sm shadow-black/10",
-                    )}
-                  >
-                    {activeView === "settings" && (
-                      <span
-                        className="absolute inset-y-2 start-0 w-0.5 rounded-full bg-[var(--noodle-accent)]"
-                        aria-hidden="true"
-                      />
-                    )}
-                    <Settings2 size={22} className="!text-[var(--noodle-accent)]" />
-                    {localizeUi("navigation.topbar.settings")}
-                  </button>
-                </nav>
+                  </nav>
+                )}
                 <div ref={accountSwitcherRef} className="relative mt-auto">
                   {accountSwitcherOpen && (
                     <div className="absolute bottom-[calc(100%+0.5rem)] left-0 right-0 z-30 overflow-hidden rounded-xl border border-[var(--noodle-divider)] bg-[var(--background)] p-2 shadow-[var(--slurp-shadow-modal)]">
@@ -917,7 +857,6 @@ export function NoodleShell({
                         balanceLabel={walletBalanceLabel}
                         isCreator={Boolean(personaAccount && linkedNoodleAccountIds?.has(personaAccount.id))}
                         onOpenProfile={onOpenProfile}
-                        onOpenCreatorStudio={onOpenCreatorStudio}
                         onBecomeCreator={onBecomeCreator}
                       />
                       <p className={cn(labelClass, "px-2 pb-1 pt-3")}>
@@ -990,24 +929,32 @@ export function NoodleShell({
                 slurpActive
                   ? cn(
                       "pb-[calc(56px+var(--slurp-bottom-safe-inset))] @min-[1024px]:pb-0",
-                      reserveContextualRail &&
-                        "@min-[1280px]:border-r @min-[1280px]:border-[var(--noodle-divider)] @min-[1280px]:shadow-[18px_0_54px_-48px_var(--noodle-accent)]",
+                      reserveContextualRail && "@min-[1280px]:border-r @min-[1280px]:border-[var(--noodle-divider)]",
                     )
-                  : slurpSettingsActive
-                    ? "pb-0 @min-[1024px]:max-w-[1096px]"
-                    : "pb-[calc(56px+var(--slurp-bottom-safe-inset))] @min-[1024px]:max-w-[680px] @min-[1024px]:border-r @min-[1024px]:border-[var(--noodle-divider)]",
+                  : "pb-[calc(56px+var(--slurp-bottom-safe-inset))] @min-[1024px]:max-w-[680px] @min-[1024px]:border-r @min-[1024px]:border-[var(--noodle-divider)]",
               )}
             >
-              {children}
+              {/* A page swap with no motion reads as a glitch. One short fade, keyed by the
+                  destination, says "this is a different room" without slowing anyone down. */}
+              <AnimatePresence mode="wait" initial={false}>
+                <motion.div
+                  key={activeView}
+                  initial={prefersReducedMotion ? { opacity: 0 } : { opacity: 0, y: 6 }}
+                  animate={prefersReducedMotion ? { opacity: 1 } : { opacity: 1, y: 0 }}
+                  exit={{ opacity: 0 }}
+                  transition={{ duration: prefersReducedMotion ? 0.12 : 0.18, ease: "easeOut" }}
+                  className="flex min-h-0 w-full flex-1 flex-col"
+                >
+                  {children}
+                </motion.div>
+              </AnimatePresence>
             </main>
             {slurpActive && resolvedContextualRail === "blank" ? (
               <aside
                 className="relative hidden w-[20rem] shrink-0 overflow-hidden bg-[linear-gradient(180deg,color-mix(in_srgb,var(--slurp-surface,var(--background))_42%,transparent),transparent_30rem)] @min-[1280px]:block"
                 aria-hidden="true"
                 data-slurp-contextual-rail="blank"
-              >
-                <span className="pointer-events-none absolute -right-28 top-8 h-72 w-72 rounded-full bg-[var(--noodle-accent)]/[0.045] blur-3xl" />
-              </aside>
+              ></aside>
             ) : resolvedContextualRail === "populated" ? (
               rightRail
             ) : null}

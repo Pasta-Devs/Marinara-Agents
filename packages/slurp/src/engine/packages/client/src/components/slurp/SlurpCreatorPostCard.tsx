@@ -12,7 +12,6 @@ import {
   Heart,
   Image as ImageIcon,
   MessageCircle,
-  MoreHorizontal,
   Pencil,
   Repeat2,
   RefreshCw,
@@ -419,8 +418,6 @@ export function SlurpCreatorPostCard({
   const { t: localizeUi, i18n } = useUiTranslation();
   const {
     personaAccount,
-    postMenuId,
-    setPostMenuId,
     editingPostId,
     editingPostContent,
     setEditingPostContent,
@@ -810,7 +807,7 @@ export function SlurpCreatorPostCard({
       className={cn(
         surface === "profile"
           ? "border-b border-[var(--noodle-divider)] px-4 py-5 transition-colors last:border-b-0 hover:bg-[var(--accent)]/20"
-          : "rounded-xl bg-[var(--slurp-surface)] px-4 py-5 shadow-[0_1px_0_var(--noodle-divider),0_20px_42px_-36px_rgba(0,0,0,0.95)] ring-1 ring-inset ring-[var(--noodle-divider)] transition-[background-color,box-shadow,transform] hover:-translate-y-0.5 hover:bg-[var(--slurp-surface-raised)] hover:shadow-[0_1px_0_color-mix(in_srgb,var(--noodle-accent)_30%,transparent),0_24px_46px_-32px_rgba(0,0,0,0.95)] motion-reduce:transition-none motion-reduce:hover:translate-y-0",
+          : "rounded-xl bg-[var(--slurp-surface)] px-4 py-5 shadow-[0_1px_0_var(--noodle-divider),0_20px_42px_-36px_rgba(0,0,0,0.95)] ring-1 ring-inset ring-[var(--noodle-divider)] transition-[background-color,box-shadow] hover:bg-[var(--slurp-surface-raised)] hover:shadow-[0_1px_0_color-mix(in_srgb,var(--noodle-accent)_30%,transparent),0_24px_46px_-32px_rgba(0,0,0,0.95)] motion-reduce:transition-none",
         surface !== "profile" &&
           postKind === "poll" &&
           "bg-[linear-gradient(145deg,var(--slurp-surface),color-mix(in_srgb,var(--noodle-accent)_5%,var(--slurp-surface)))]",
@@ -874,43 +871,43 @@ export function SlurpCreatorPostCard({
             </p>
           )}
           {ctx.postManagement && (
-            <div className="relative shrink-0">
+            /* Three plain buttons instead of a menu: on your own posts these are the only
+               things you ever do, and a menu hides them behind an extra click. */
+            <div className="flex shrink-0 items-center gap-0.5">
               <button
                 type="button"
-                onClick={() => setPostMenuId((current) => (current === post.id ? null : post.id))}
-                className="flex h-11 w-11 items-center justify-center rounded-full text-[var(--noodle-accent)] transition-colors hover:bg-[var(--noodle-accent)]/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--noodle-accent)]"
-                title={localizeUi("ui.noodle.noodlepostcard.postActions")}
-                aria-label={localizeUi("ui.noodle.noodlepostcard.postActions")}
-                aria-haspopup="menu"
-                aria-expanded={postMenuId === post.id}
+                onClick={() => startEditingPost(editablePost)}
+                className="flex h-9 w-9 items-center justify-center rounded-full text-[var(--noodle-accent)] transition-colors hover:bg-[var(--noodle-accent)]/12 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--noodle-accent)]"
+                title={localizeUi("ui.noodle.noodlepostcard.edit")}
+                aria-label={localizeUi("ui.noodle.noodlepostcard.edit")}
               >
-                <MoreHorizontal size={18} />
+                <Pencil size={16} />
               </button>
-              {postMenuId === post.id && (
-                <div
-                  role="menu"
-                  className="absolute right-0 top-[calc(100%+0.25rem)] z-30 min-w-32 overflow-hidden rounded-lg border border-[var(--noodle-divider)] bg-[var(--background)] py-1 text-xs shadow-2xl shadow-black/30"
+              {ctx.generatePostImage && (post.imagePrompt || post.imageUrl) && (
+                <button
+                  type="button"
+                  onClick={() => ctx.generatePostImage?.(post)}
+                  disabled={imageGenerationPending}
+                  className="flex h-9 w-9 items-center justify-center rounded-full text-[var(--noodle-accent)] transition-colors hover:bg-[var(--noodle-accent)]/12 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--noodle-accent)] disabled:opacity-50"
+                  title={localizeUi("ui.slurp.image.generate")}
+                  aria-label={localizeUi("ui.slurp.image.generate")}
+                  aria-busy={imageGenerationPending}
                 >
-                  <button
-                    type="button"
-                    role="menuitem"
-                    onClick={() => startEditingPost(editablePost)}
-                    className="flex w-full items-center gap-2 px-3 py-2 text-left transition-colors hover:bg-[var(--noodle-accent)]/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--noodle-accent)]/70"
-                  >
-                    <Pencil size={14} className="text-[var(--noodle-accent)]" />
-                    {localizeUi("ui.noodle.noodlepostcard.edit")}
-                  </button>
-                  <button
-                    type="button"
-                    role="menuitem"
-                    onClick={() => deleteNoodlePost(post)}
-                    className="flex w-full items-center gap-2 px-3 py-2 text-left transition-colors hover:bg-[var(--noodle-accent)]/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--noodle-accent)]/70"
-                  >
-                    <Trash2 size={14} className="text-[var(--noodle-accent)]" />
-                    {localizeUi("lorebook.editor.batch.delete")}
-                  </button>
-                </div>
+                  <RefreshCw
+                    size={16}
+                    className={imageGenerationPending ? "animate-spin motion-reduce:animate-none" : ""}
+                  />
+                </button>
               )}
+              <button
+                type="button"
+                onClick={() => deleteNoodlePost(post)}
+                className="flex h-9 w-9 items-center justify-center rounded-full text-[var(--slurp-danger)] transition-colors hover:bg-[var(--slurp-danger)]/12 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--slurp-danger)] [&_svg]:!text-[var(--slurp-danger)]"
+                title={localizeUi("lorebook.editor.batch.delete")}
+                aria-label={localizeUi("lorebook.editor.batch.delete")}
+              >
+                <Trash2 size={16} />
+              </button>
             </div>
           )}
         </div>
@@ -921,10 +918,11 @@ export function SlurpCreatorPostCard({
           <button
             ref={observePostImage}
             type="button"
-            onClick={() =>
-              displayedImageUrl &&
-              setImageLightbox(createNoodleLightboxImage(post.id, displayedImageUrl, post.imagePrompt ?? ""))
-            }
+            onClick={() => {
+              if (!displayedImageUrl) return;
+              if (ctx.openPost) ctx.openPost(post.id);
+              else setImageLightbox(createNoodleLightboxImage(post.id, displayedImageUrl, post.imagePrompt ?? ""));
+            }}
             disabled={!displayedImageUrl}
             className={cn(
               "mt-4 flex max-h-[32rem] justify-center overflow-hidden bg-black/20 text-left ring-1 ring-inset ring-white/10 ring-offset-[var(--background)] transition-[opacity,transform] hover:opacity-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--noodle-accent)] focus-visible:ring-offset-2 motion-reduce:transition-none",

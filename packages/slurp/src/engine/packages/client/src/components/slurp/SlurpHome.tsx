@@ -25,7 +25,6 @@ import {
   TriangleAlert,
   Upload,
   UserRound,
-  Wallet as WalletIcon,
   X,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
@@ -115,7 +114,6 @@ import {
 import {
   NoodleComposerShell,
   NoodleComposerToolRow,
-  createNoodleLightboxImage,
   type NoodlePostCardCtx,
   type NoodlePostCardModel,
   type NoodlePostImageUpdate,
@@ -130,6 +128,7 @@ import { SlurpAgeGate } from "./SlurpAgeGate";
 import {
   Avatar,
   getNoodleAccentStyle,
+  SLURP_TOGGLE_ACTIVE_CLASS,
   NewSinceLastVisitDivider,
   HIDE_ON_SCROLL_CLASS,
   NoodleLogo,
@@ -746,11 +745,6 @@ export function SlurpHome({ navigation, onNavigate }: SlurpHomeProps) {
   const goToWallet = async () => {
     if (!(await prepareNavigationAwayFromProfileEditor())) return;
     onNavigate({ mode: "creator", view: "wallet" });
-    setMobileDrawerOpen(false);
-  };
-  const goToCreatorStudio = async () => {
-    if (!(await prepareNavigationAwayFromProfileEditor())) return;
-    onNavigate({ mode: "creator-settings", section: "creators" });
     setMobileDrawerOpen(false);
   };
   const closeNoodlerSearch = () => {
@@ -1401,8 +1395,10 @@ export function SlurpHome({ navigation, onNavigate }: SlurpHomeProps) {
                 ? ("wallet" as const)
                 : ("noodler" as const),
     contextualRail:
+      // Every destination reserves the same rail column, so the content column does not
+      // change width as you move between them.
       navigation.mode === "creator-settings"
-        ? ("spanning" as const)
+        ? ("blank" as const)
         : navigation.mode === "creator" && navigation.view === "profile"
           ? ("blank" as const)
           : navigation.mode === "creator" && (navigation.view === "hub" || navigation.view === "search")
@@ -1450,7 +1446,6 @@ export function SlurpHome({ navigation, onNavigate }: SlurpHomeProps) {
           setMobileDrawerOpen(false);
         }
       : undefined,
-    onOpenCreatorStudio: goToCreatorStudio,
     onOpenProfile: async () => {
       if (!(await prepareNavigationAwayFromProfileEditor())) return;
       setMobileDrawerOpen(false);
@@ -1791,7 +1786,6 @@ export function SlurpHome({ navigation, onNavigate }: SlurpHomeProps) {
             isLoading={postsQuery.isLoading}
             isError={postsQuery.isError}
             onRetry={() => void postsQuery.refetch()}
-            onOpenImage={(url, id) => postCardController.setImageLightbox(createNoodleLightboxImage(id, url))}
             onEdit={() => beginEdit(selectedProfile)}
             onBack={() =>
               navigation.mode === "creator" && navigation.view === "profile" && navigation.returnToSettings
@@ -1855,10 +1849,6 @@ export function SlurpHome({ navigation, onNavigate }: SlurpHomeProps) {
       aria-labelledby="slurp-rail-discover-heading"
       data-slurp-contextual-rail="populated"
     >
-      <span
-        className="pointer-events-none absolute -end-24 -top-28 h-72 w-72 rounded-full bg-[var(--slurp-violet)]/[0.09] blur-3xl"
-        aria-hidden="true"
-      />
       <div className="sticky top-4 space-y-6">
         <label className="flex min-h-11 items-center gap-2 rounded-xl bg-[var(--slurp-glass)] px-3 text-sm shadow-[var(--slurp-shadow-floating)] ring-1 ring-inset ring-white/[0.06] backdrop-blur-xl transition-[background-color,box-shadow] focus-within:bg-[var(--slurp-surface-raised)] focus-within:ring-2 focus-within:ring-[var(--noodle-accent)]">
           <Search size={17} className="shrink-0 !text-[var(--noodle-accent)]" />
@@ -1896,39 +1886,25 @@ export function SlurpHome({ navigation, onNavigate }: SlurpHomeProps) {
 
   // Messages and Wallet are navigation destinations before they are features, so the
   // shell can show them as real pages instead of a dead button.
-  if (navigation.mode === "creator" && (navigation.view === "messages" || navigation.view === "wallet")) {
-    const wallet = navigation.view === "wallet";
+  if (navigation.mode === "creator" && navigation.view === "wallet") {
     return (
       <NoodleShell {...shellProps}>
-        <NoodlerFrame
+        <SlurpWalletView
+          coins={viewerWalletsQuery.data?.[viewerPersonaId ?? ""]?.coins ?? SLURP_PLACEHOLDER_BALANCE}
+          personaName={shellPersonaAccount?.displayName ?? ""}
           onBack={exitToCreatorHub}
-          title={localizeUi(wallet ? "ui.slurp.navigation.wallet" : "ui.slurp.navigation.messages")}
-          action={<span />}
-        >
+        />
+      </NoodleShell>
+    );
+  }
+
+  if (navigation.mode === "creator" && navigation.view === "messages") {
+    return (
+      <NoodleShell {...shellProps}>
+        <NoodlerFrame onBack={exitToCreatorHub} title={localizeUi("ui.slurp.navigation.messages")} action={<span />}>
           <div className="flex min-h-0 flex-1 flex-col items-center justify-center gap-3 px-6 py-16 text-center">
-            {wallet ? (
-              <WalletIcon size={30} className="text-[var(--noodle-accent)]" />
-            ) : (
-              <MessageCircle size={30} className="text-[var(--noodle-accent)]" />
-            )}
-            <p className="text-lg font-black">
-              {localizeUi(wallet ? "ui.slurp.wallet.title" : "ui.slurp.messages.title")}
-            </p>
-            {wallet && (
-              <p className="text-2xl font-black tabular-nums">
-                <span className="inline-flex items-center gap-2">
-                  {localizeUi("ui.slurp.wallet.balance", {
-                    amount: viewerWalletsQuery.data?.[viewerPersonaId ?? ""]?.coins ?? SLURP_PLACEHOLDER_BALANCE,
-                  })}
-                  <span
-                    className="inline-flex h-6 w-6 items-center justify-center rounded-full bg-[var(--noodle-accent)] text-sm font-black leading-none text-[var(--noodle-accent-foreground)]"
-                    aria-hidden="true"
-                  >
-                    C
-                  </span>
-                </span>
-              </p>
-            )}
+            <MessageCircle size={30} className="text-[var(--noodle-accent)]" />
+            <p className="text-lg font-black">{localizeUi("ui.slurp.messages.title")}</p>
             <p className="max-w-sm text-sm text-[var(--muted-foreground)]">
               {localizeUi("ui.slurp.navigation.soon", { defaultValue: "Soon..." })}
             </p>
@@ -3105,12 +3081,12 @@ function SlurpProfileMediaTile({
  */
 function SlurpMediaWall({
   items,
-  onOpenImage,
+  onOpenPost,
   onLoadMore,
   total,
 }: {
   items: { post: NoodlerPostView & { locked?: boolean }; creator: { profile: NoodlerStageProfile } }[];
-  onOpenImage: (url: string, id: string) => void;
+  onOpenPost: (postId: string) => void;
   onLoadMore?: () => void;
   total: number;
 }) {
@@ -3130,7 +3106,7 @@ function SlurpMediaWall({
     <div className="bg-[var(--slurp-canvas)] pb-6">
       <div className="grid grid-cols-2 gap-px bg-[var(--noodle-divider)] @min-[620px]:grid-cols-3">
         {tiles.map((post) => (
-          <SlurpProfileMediaTile key={post.id} post={post} onOpenImage={onOpenImage} />
+          <SlurpProfileMediaTile key={post.id} post={post} onOpenImage={(_url, id) => onOpenPost(id)} />
         ))}
       </div>
       {onLoadMore && <LoadMoreFeedButton visible={items.length} total={total} onLoadMore={onLoadMore} />}
@@ -3178,7 +3154,6 @@ function StageProfileView({
   subscriptionPending,
   accessPending,
   onAccessChange,
-  onOpenImage,
 }: {
   profile: NoodlerManagedStageProfile;
   profileDraft: NoodleStageProfileInput | null;
@@ -3219,7 +3194,6 @@ function StageProfileView({
   subscriptionPending: boolean;
   accessPending: boolean;
   onAccessChange: (access: NoodlerManagedStageProfile["access"]) => void;
-  onOpenImage: (url: string, id: string) => void;
 }) {
   const { t: localizeUi, i18n } = useUiTranslation();
   const bannerSrc = useSlurpMediaSrc(profile.bannerUrl, { width: 1280 });
@@ -3234,6 +3208,7 @@ function StageProfileView({
   const profileAvatarFileRef = useRef<HTMLInputElement | null>(null);
   const profileBannerFileRef = useRef<HTMLInputElement | null>(null);
   const [artworkKind, setArtworkKind] = useState<"avatar" | "banner" | null>(null);
+  const [openImagePostId, setOpenImagePostId] = useState<string | null>(null);
   const [artworkGuidance, setArtworkGuidance] = useState("");
   // Global fan controls require a Creator settings route. Keep per-Creator controls available.
   const globalSettings = slurpSettings
@@ -3308,6 +3283,7 @@ function StageProfileView({
       : [];
   });
   const featuredPost = imagePosts[0] ?? null;
+  const openImagePost = openImagePostId ? (imagePosts.find((post) => post.id === openImagePostId) ?? null) : null;
   const emptyTabTitle =
     activeTab === "media"
       ? localizeUi("ui.slurp.profile.emptyMedia")
@@ -3404,7 +3380,7 @@ function StageProfileView({
         imagePosts.length > 0 ? (
           <div className="grid grid-cols-2 gap-px bg-[var(--noodle-divider)] @min-[620px]:grid-cols-3">
             {imagePosts.map((post) => (
-              <SlurpProfileMediaTile key={post.id} post={post} onOpenImage={onOpenImage} />
+              <SlurpProfileMediaTile key={post.id} post={post} onOpenImage={(_url, id) => setOpenImagePostId(id)} />
             ))}
           </div>
         ) : (
@@ -3503,7 +3479,6 @@ function StageProfileView({
         }
         account={profile}
         displayHandle={editing ? editDraft.handle : profile.handle}
-        identityEyebrow={localizeUi("ui.slurp.profile.creatorRoom")}
         handleMeta={
           <>
             {profile.disclosureMode === "hinted" && profile.publicIdentity ? (
@@ -3684,28 +3659,40 @@ function StageProfileView({
           managedCreator && !editing ? (
             <section
               data-slurp-creator-tools
-              className="bg-[linear-gradient(110deg,color-mix(in_srgb,var(--noodle-accent)_7%,transparent),color-mix(in_srgb,var(--slurp-violet)_4%,transparent)_62%,transparent)]"
+              className="border-b border-[var(--noodle-divider)] bg-[var(--slurp-surface)]"
             >
-              <div className="flex flex-col gap-3 px-3 py-3 @min-[760px]:flex-row @min-[760px]:items-center @min-[760px]:px-4">
-                <div className="flex min-w-0 flex-1 items-center gap-3">
-                  <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-[var(--noodle-accent)]/10 text-[var(--noodle-accent)]">
-                    <Sparkles size={15} aria-hidden="true" />
+              {/* Collapsed, this is one thin line under the header — the tools are the creator's
+                  own business, not the first thing anyone reads on the profile. */}
+              <button
+                type="button"
+                onClick={() => setCreatorToolsOpen((open) => !open)}
+                aria-expanded={creatorToolsOpen}
+                aria-controls="slurp-creator-tools-panel"
+                title={localizeUi("ui.slurp.profile.creatorToolsDetail")}
+                className="flex min-h-10 w-full items-center gap-2 px-3 text-start text-xs font-semibold text-[var(--muted-foreground)] transition-colors hover:bg-[var(--accent)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--noodle-accent)] @min-[760px]:px-4"
+              >
+                <Sparkles size={13} className="shrink-0 text-[var(--noodle-accent)]" aria-hidden="true" />
+                <span className="min-w-0 flex-1 truncate">{localizeUi("ui.slurp.profile.creatorTools")}</span>
+                {viewingOwnCreator && (
+                  <span className="hidden shrink-0 text-[0.68rem] font-semibold text-[var(--noodle-accent)] lg:inline">
+                    {localizeUi("ui.noodle.stageprofileview.yourProfile")}
                   </span>
-                  <span className="min-w-0 flex-1">
-                    <span className="block text-sm font-bold text-[var(--foreground)]">
-                      {localizeUi("ui.slurp.profile.creatorTools")}
-                    </span>
-                    <span className="mt-0.5 block truncate text-xs text-[var(--muted-foreground)]">
-                      {localizeUi("ui.slurp.profile.creatorToolsDetail")}
-                    </span>
-                  </span>
-                  {viewingOwnCreator && (
-                    <span className="hidden shrink-0 text-[0.68rem] font-semibold text-[var(--noodle-accent)] lg:inline">
-                      {localizeUi("ui.noodle.stageprofileview.yourProfile")}
-                    </span>
+                )}
+                <ChevronDown
+                  size={14}
+                  className={cn(
+                    "shrink-0 transition-transform motion-reduce:transition-none",
+                    creatorToolsOpen && "rotate-180",
                   )}
-                </div>
-                <div className="grid grid-cols-2 gap-2 [&>button:first-child]:col-span-2 @min-[760px]:flex @min-[760px]:shrink-0 @min-[760px]:[&>button:first-child]:col-span-1">
+                  aria-hidden="true"
+                />
+              </button>
+              <div
+                id="slurp-creator-tools-panel"
+                hidden={!creatorToolsOpen}
+                className="border-t border-[var(--noodle-divider)] bg-[var(--background)]"
+              >
+                <div className="flex flex-wrap gap-2 px-3 py-2 @min-[760px]:px-4">
                   <button
                     type="button"
                     onClick={onEdit}
@@ -3731,30 +3718,7 @@ function StageProfileView({
                         : localizeUi("ui.noodle.stageprofileview.automation")}
                     </button>
                   )}
-                  <button
-                    type="button"
-                    onClick={() => setCreatorToolsOpen((open) => !open)}
-                    aria-expanded={creatorToolsOpen}
-                    aria-controls="slurp-creator-composer"
-                    className="flex min-h-11 min-w-11 items-center justify-center rounded-lg text-[var(--noodle-accent)] transition-[background-color,transform] hover:bg-[var(--noodle-accent)]/10 active:scale-[0.96] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--noodle-accent)] motion-reduce:transition-none motion-reduce:active:scale-100"
-                    title={localizeUi("ui.slurp.profile.creatorTools")}
-                  >
-                    <ChevronDown
-                      size={16}
-                      className={cn(
-                        "transition-transform motion-reduce:transition-none",
-                        creatorToolsOpen && "rotate-180",
-                      )}
-                      aria-hidden="true"
-                    />
-                  </button>
                 </div>
-              </div>
-              <div
-                id="slurp-creator-composer"
-                hidden={!creatorToolsOpen}
-                className="border-t border-white/[0.055] bg-[var(--background)]"
-              >
                 <NoodlerPostComposer
                   key={profile.id}
                   profile={profile}
@@ -3781,7 +3745,7 @@ function StageProfileView({
                 </span>
                 <span className="text-xs text-[var(--muted-foreground)]">{profile.displayName}</span>
               </div>
-              <SlurpProfileFeaturedImage post={featuredPost} onOpenImage={onOpenImage} />
+              <SlurpProfileFeaturedImage post={featuredPost} onOpenImage={(_url, id) => setOpenImagePostId(id)} />
             </div>
           ) : null
         }
@@ -3789,6 +3753,13 @@ function StageProfileView({
         accent={profileAccent(profile.id)}
         spotlight
       />
+      {openImagePost && (
+        <SlurpPostDialog
+          post={openImagePost}
+          ctx={{ ...postCardCtx, openPost: undefined }}
+          onClose={() => setOpenImagePostId(null)}
+        />
+      )}
       <Modal
         open={artworkKind !== null}
         onClose={() => setArtworkKind(null)}
@@ -4194,6 +4165,7 @@ function ViewerHub({
   const [visibleFeedCount, setVisibleFeedCount] = useState(NOODLER_FEED_WINDOW_SIZE);
   const [activeMomentId, setActiveMomentId] = useState<string | null>(null);
   const [feedLayout, setFeedLayout] = useState<"list" | "wall">("list");
+  const [openPostId, setOpenPostId] = useState<string | null>(null);
   const [momentCutoff] = useState(() => Date.now() - SLURP_MOMENT_WINDOW_MS);
   const inlineAdsQuery = useSlurpInlineAds(scope?.viewer.entityId ?? null, null, [
     tab === "all" ? "discover" : "following",
@@ -4282,6 +4254,10 @@ function ViewerHub({
     )
     .sort((a, b) => new Date(b.post.createdAt).getTime() - new Date(a.post.createdAt).getTime());
   const visibleFeed = feed.slice(0, visibleFeedCount);
+  const openPostItem = openPostId ? (feed.find((item) => item.post.id === openPostId) ?? null) : null;
+  // One place decides what clicking a post image does, so the wall, the feed, and the profile
+  // all open the same dialog.
+  const feedCardCtx = { ...postCardCtx, openPost: setOpenPostId };
   const visibleSearchResults = searchResults.slice(0, visibleFeedCount);
   const discoveredCreators = creators.filter(
     (creator) =>
@@ -4331,7 +4307,7 @@ function ViewerHub({
         key={post.id}
         post={toNoodlePostCardModel(post, creator.profile)}
         ctx={{
-          ...postCardCtx,
+          ...feedCardCtx,
           personaAccount: creator.profile.id === authorProfile?.id ? null : postCardCtx.personaAccount,
         }}
       />
@@ -4381,10 +4357,6 @@ function ViewerHub({
 
         {!searchTerm && (
           <header className="relative isolate overflow-hidden px-4 pb-5 pt-7 sm:px-5">
-            <span
-              className="pointer-events-none absolute -end-12 -top-24 -z-10 h-64 w-64 rounded-full bg-[var(--slurp-violet)]/[0.09] blur-3xl"
-              aria-hidden="true"
-            />
             <p className="text-xs font-bold uppercase tracking-[0.14em] text-[var(--noodle-accent)]">Slurp</p>
             <h1 className="mt-1 text-2xl font-bold text-balance">{localizeUi("ui.slurp.discover.title")}</h1>
             <p className="mt-2 max-w-xl text-sm leading-6 text-[var(--muted-foreground)]">
@@ -4478,98 +4450,27 @@ function ViewerHub({
           </button>
           <NoodleLogo className="mx-auto h-9 w-14" />
           {/* ponytail: placeholder balance, wire to the real wallet when there is one. */}
+          {/* The desktop sidebar carries the same balance, so it only shows where there is no sidebar. */}
           <button
             type="button"
             onClick={onOpenWallet}
-            className="justify-self-end flex h-9 items-center gap-1.5 rounded-full px-3 text-sm font-semibold tabular-nums text-[var(--muted-foreground)] ring-1 ring-inset ring-[var(--noodle-divider)] transition-colors hover:bg-[var(--accent)] hover:text-[var(--foreground)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--noodle-accent)]"
+            className="justify-self-end flex h-9 items-center gap-1.5 rounded-full px-3 text-sm font-semibold tabular-nums text-[var(--muted-foreground)] ring-1 ring-inset ring-[var(--noodle-divider)] transition-colors hover:bg-[var(--accent)] hover:text-[var(--foreground)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--noodle-accent)] @min-[1024px]:hidden"
             aria-label={localizeUi("ui.slurp.wallet.balance", { amount: walletCoins })}
             title={localizeUi("ui.slurp.wallet.balance", { amount: walletCoins })}
           >
             {walletCoins}
             <span
-              className="inline-flex h-4 w-4 items-center justify-center rounded-full bg-[var(--noodle-accent)] text-[0.62rem] font-black leading-none text-[var(--noodle-accent-foreground)]"
+              className="inline-flex h-4 w-4 items-center justify-center rounded-full bg-[var(--noodle-accent)] text-[0.62rem] font-black leading-none text-white"
               aria-hidden="true"
             >
               C
             </span>
           </button>
         </div>
-        <div className="relative isolate overflow-hidden px-3 @min-[1024px]:px-5" data-slurp-home-masthead>
-          <span
-            className="pointer-events-none absolute -end-10 -top-24 -z-10 h-56 w-56 rounded-full bg-[var(--slurp-coral)]/[0.08] blur-3xl"
-            aria-hidden="true"
-          />
-          {/* Flat underline tabs: the accent marks the active feed, nothing else competes with the posts. */}
-          <div className="flex items-center justify-between gap-3">
-            <div
-              className="relative grid flex-1 grid-cols-2 @min-[1024px]:max-w-xs"
-              role="tablist"
-              aria-label={localizeUi("ui.noodle.viewerhub.feedTabs")}
-            >
-              {(
-                [
-                  { id: "following", label: localizeUi("ui.noodle.viewerhub.tabs.following") },
-                  { id: "all", label: localizeUi("ui.noodle.viewerhub.tabs.allCreators") },
-                ] as const
-              ).map((option) => (
-                <button
-                  key={option.id}
-                  type="button"
-                  onClick={() => onTabChange(option.id)}
-                  role="tab"
-                  aria-selected={tab === option.id}
-                  className={cn(
-                    "relative flex min-h-11 items-center justify-center px-3 text-sm font-bold text-[var(--muted-foreground)] transition-colors hover:text-[var(--foreground)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--noodle-accent)]",
-                    tab === option.id && "text-[var(--foreground)]",
-                  )}
-                >
-                  {option.label}
-                </button>
-              ))}
-              {/* One underline that travels, rather than two that blink in and out. Half the row
-                wide so the transform is a plain 0/100%, with the bar centred inside it. */}
-              <span
-                className={cn(
-                  "pointer-events-none absolute bottom-0 left-0 h-0.5 w-1/2 transition-transform duration-200 ease-out motion-reduce:transition-none",
-                  tab === "all" && "translate-x-full",
-                )}
-                aria-hidden="true"
-              >
-                <span className="mx-auto block h-full w-12 rounded-full bg-[var(--noodle-accent)]" />
-              </span>
-            </div>
-            {/* List or media wall. Same feed, two ways to read it. */}
-            <div className="flex shrink-0 items-center gap-1 rounded-full bg-[var(--accent)] p-1 ring-1 ring-inset ring-[var(--noodle-divider)]">
-              {(
-                [
-                  { id: "list", icon: List, label: localizeUi("ui.slurp.home.layout.list", { defaultValue: "List" }) },
-                  {
-                    id: "wall",
-                    icon: LayoutGrid,
-                    label: localizeUi("ui.slurp.home.layout.wall", { defaultValue: "Media wall" }),
-                  },
-                ] as const
-              ).map((option) => (
-                <button
-                  key={option.id}
-                  type="button"
-                  onClick={() => setFeedLayout(option.id)}
-                  aria-pressed={feedLayout === option.id}
-                  title={option.label}
-                  aria-label={option.label}
-                  className={cn(
-                    "flex h-8 w-8 items-center justify-center rounded-full text-[var(--muted-foreground)] transition-colors hover:text-[var(--foreground)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--noodle-accent)]",
-                    feedLayout === option.id && "bg-[var(--slurp-surface-raised)] text-[var(--foreground)] shadow-sm",
-                  )}
-                >
-                  <option.icon size={17} aria-hidden="true" />
-                </button>
-              ))}
-            </div>
-          </div>
-        </div>
-        <SlurpMomentsShelf moments={moments} newSinceAt={newSinceAt} onOpenMoment={setActiveMomentId} embedded />
       </div>
+      {/* Part of the page, not the bar: the strip belongs to Home, so it stays put while the
+          sticky header does its own hide-on-scroll dance above it. */}
+      <SlurpMomentsShelf moments={moments} newSinceAt={newSinceAt} onOpenMoment={setActiveMomentId} embedded />
       <div className="hidden border-b border-[var(--noodle-divider)] py-3 @min-[1024px]:block @min-[1024px]:px-4 @min-[1280px]:hidden">
         <SubscriptionSections
           creators={(scope?.creators ?? []).filter(
@@ -4599,6 +4500,84 @@ function ViewerHub({
           </span>
         </div>
       )}
+      {!isLoading && !isError && scope && (
+        <div className="bg-[var(--slurp-canvas)] pb-2">
+          <div className="relative isolate overflow-hidden px-3 @min-[1024px]:px-5" data-slurp-home-masthead>
+            {/* Flat underline tabs: the accent marks the active feed, nothing else competes with the posts. */}
+            <div className="flex items-center justify-between gap-3">
+              <div
+                className="relative grid flex-1 grid-cols-2 @min-[1024px]:max-w-xs"
+                role="tablist"
+                aria-label={localizeUi("ui.noodle.viewerhub.feedTabs")}
+              >
+                {(
+                  [
+                    { id: "following", label: localizeUi("ui.noodle.viewerhub.tabs.following") },
+                    { id: "all", label: localizeUi("ui.noodle.viewerhub.tabs.allCreators") },
+                  ] as const
+                ).map((option) => (
+                  <button
+                    key={option.id}
+                    type="button"
+                    onClick={() => onTabChange(option.id)}
+                    role="tab"
+                    aria-selected={tab === option.id}
+                    className={cn(
+                      "relative flex min-h-11 items-center justify-center px-3 text-sm font-bold text-[var(--muted-foreground)] transition-colors hover:text-[var(--foreground)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--noodle-accent)]",
+                      tab === option.id && "text-[var(--foreground)]",
+                    )}
+                  >
+                    {option.label}
+                  </button>
+                ))}
+                {/* One underline that travels, rather than two that blink in and out. Half the row
+                  wide so the transform is a plain 0/100%, with the bar centred inside it. */}
+                <span
+                  className={cn(
+                    "pointer-events-none absolute bottom-0 left-0 h-0.5 w-1/2 transition-transform duration-200 ease-out motion-reduce:transition-none",
+                    tab === "all" && "translate-x-full",
+                  )}
+                  aria-hidden="true"
+                >
+                  <span className="mx-auto block h-full w-12 rounded-full bg-[var(--noodle-accent)]" />
+                </span>
+              </div>
+              {/* List or media wall. Same feed, two ways to read it. */}
+              <div className="flex shrink-0 items-center gap-1 rounded-full bg-[var(--accent)] p-1 ring-1 ring-inset ring-[var(--noodle-divider)]">
+                {(
+                  [
+                    {
+                      id: "list",
+                      icon: List,
+                      label: localizeUi("ui.slurp.home.layout.list", { defaultValue: "List" }),
+                    },
+                    {
+                      id: "wall",
+                      icon: LayoutGrid,
+                      label: localizeUi("ui.slurp.home.layout.wall", { defaultValue: "Media wall" }),
+                    },
+                  ] as const
+                ).map((option) => (
+                  <button
+                    key={option.id}
+                    type="button"
+                    onClick={() => setFeedLayout(option.id)}
+                    aria-pressed={feedLayout === option.id}
+                    title={option.label}
+                    aria-label={option.label}
+                    className={cn(
+                      "flex h-8 w-8 items-center justify-center rounded-full text-[var(--muted-foreground)] transition-colors hover:text-[var(--foreground)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--noodle-accent)]",
+                      feedLayout === option.id && SLURP_TOGGLE_ACTIVE_CLASS,
+                    )}
+                  >
+                    <option.icon size={17} aria-hidden="true" />
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
       {isLoading ? (
         <SlurpFeedSkeleton />
       ) : isError ? (
@@ -4620,7 +4599,7 @@ function ViewerHub({
           ) : feedLayout === "wall" ? (
             <SlurpMediaWall
               items={visibleFeed}
-              onOpenImage={(url, id) => postCardCtx.setImageLightbox?.(createNoodleLightboxImage(id, url))}
+              onOpenPost={setOpenPostId}
               onLoadMore={
                 visibleFeed.length < feed.length
                   ? () => setVisibleFeedCount((count) => Math.min(feed.length, count + NOODLER_FEED_WINDOW_SIZE))
@@ -4715,6 +4694,16 @@ function ViewerHub({
           onAction={authorProfile ? onOpenAuthorProfile : undefined}
         />
       )}
+      {openPostItem?.post.imageUrl && (
+        <SlurpPostDialog
+          post={{
+            ...toNoodlePostCardModel(openPostItem.post, openPostItem.creator.profile),
+            imageUrl: openPostItem.post.imageUrl,
+          }}
+          ctx={postCardCtx}
+          onClose={() => setOpenPostId(null)}
+        />
+      )}
       {activeMoment && (
         <SlurpMomentViewer
           moment={activeMoment}
@@ -4767,56 +4756,183 @@ function SlurpInlineSuggestedCreators({
         </h2>
         <Sparkles size={15} className="shrink-0 text-[var(--noodle-accent)]" aria-hidden="true" />
       </div>
-      <div className="mt-2 flex snap-x gap-2 overflow-x-auto pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+      <div className="mt-2 flex snap-x gap-3 overflow-x-auto pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
         {creators.map((creator) => (
-          <div
+          <SlurpCreatorProfileCard
             key={creator.profile.id}
-            className="flex min-w-64 snap-start items-center gap-2 rounded-lg bg-[var(--slurp-canvas)] p-2"
-          >
-            <button
-              type="button"
-              onClick={() => onOpenProfile?.(creator.profile.id)}
-              disabled={!onOpenProfile}
-              className="shrink-0 rounded-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--noodle-accent)] disabled:cursor-default"
-              aria-label={localizeUi("ui.noodle.noodlehome.viewValue1", { value1: creator.profile.displayName })}
-            >
-              <ProfileInitial profile={creator.profile} />
-            </button>
-            <div className="min-w-0 flex-1">
-              <button
-                type="button"
-                onClick={() => onOpenProfile?.(creator.profile.id)}
-                disabled={!onOpenProfile}
-                className="block max-w-full truncate text-left text-xs font-bold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--noodle-accent)] disabled:cursor-default"
-              >
-                {creator.profile.displayName}
-              </button>
-              <p className="truncate text-[0.65rem] text-[var(--muted-foreground)]">@{creator.profile.handle}</p>
-            </div>
-            <div className="flex shrink-0 gap-1">
-              <button
-                type="button"
-                disabled={pending}
-                onClick={() => onToggleFollow(creator.profile.id, creator.followed)}
-                className="min-h-9 rounded-lg border border-[var(--noodle-divider)] px-2 text-[0.65rem] font-bold hover:bg-[var(--accent)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--noodle-accent)] disabled:opacity-50"
-              >
-                {creator.followed ? localizeUi("ui.slurp.profile.following") : localizeUi("ui.slurp.profile.follow")}
-              </button>
-              <button
-                type="button"
-                disabled={pending}
-                onClick={() => onToggleSubscription(creator.profile.id, creator.subscribed)}
-                className="min-h-9 rounded-lg bg-[var(--noodle-accent)] px-2 text-[0.65rem] font-bold text-zinc-950 hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--noodle-accent)] disabled:opacity-50"
-              >
-                {creator.subscribed
-                  ? localizeUi("ui.slurp.profile.subscribed")
-                  : localizeUi("ui.slurp.profile.subscribe")}
-              </button>
-            </div>
-          </div>
+            creator={creator}
+            pending={pending}
+            onOpenProfile={onOpenProfile}
+            onToggleFollow={onToggleFollow}
+            onToggleSubscription={onToggleSubscription}
+            className="w-64 shrink-0 snap-start"
+          />
         ))}
       </div>
     </aside>
+  );
+}
+
+/**
+ * One media dialog for the whole app: the picture takes the room, the words sit beside it.
+ * The post version fills the side with the real post card, so replies, reactions, and the
+ * composer are the ones the feed already uses.
+ */
+/**
+ * The wallet as a place rather than a number: what you hold, what a top-up would cost, and
+ * where it went. Coins are fiction, so nothing here charges anything — the packs are a
+ * shopfront waiting for a real purchase path.
+ */
+function SlurpWalletView({ coins, personaName, onBack }: { coins: number; personaName: string; onBack: () => void }) {
+  const { t: localizeUi } = useUiTranslation();
+  // ponytail: fixed shopfront, replace with server-side packs once coins can be bought.
+  const packs = [
+    { id: "small", coins: 100, price: "$4.99" },
+    { id: "medium", coins: 550, price: "$19.99" },
+    { id: "large", coins: 1200, price: "$39.99" },
+  ] as const;
+  return (
+    <NoodlerFrame onBack={onBack} title={localizeUi("ui.slurp.navigation.wallet")} action={<span />}>
+      <div className="mx-auto flex w-full max-w-2xl flex-col gap-4 p-4 sm:p-5">
+        <section className="relative isolate overflow-hidden rounded-xl bg-[var(--slurp-hero)] p-5 text-white shadow-[var(--slurp-shadow-modal)]">
+          <p className="text-xs font-bold uppercase tracking-[0.16em] text-white/75">
+            {localizeUi("ui.slurp.wallet.title")}
+          </p>
+          <p className="mt-2 flex items-center gap-2 text-4xl font-black tabular-nums">
+            {coins}
+            <span
+              className="inline-flex h-7 w-7 items-center justify-center rounded-full bg-white/20 text-base font-black leading-none"
+              aria-hidden="true"
+            >
+              C
+            </span>
+          </p>
+          {personaName && <p className="mt-1 text-sm text-white/80">{personaName}</p>}
+        </section>
+
+        <section
+          aria-labelledby="slurp-wallet-packs"
+          className="rounded-xl bg-[var(--slurp-surface)] p-4 ring-1 ring-inset ring-[var(--noodle-divider)]"
+        >
+          <h2 id="slurp-wallet-packs" className="text-sm font-bold">
+            {localizeUi("ui.slurp.wallet.topUp", { defaultValue: "Top up" })}
+          </h2>
+          <p className="mt-1 text-xs text-[var(--muted-foreground)]">
+            {localizeUi("ui.slurp.wallet.topUpDetail", {
+              defaultValue: "Coin packs are part of the fiction. Nothing here charges you.",
+            })}
+          </p>
+          <div className="mt-3 grid gap-2 sm:grid-cols-3">
+            {packs.map((pack) => (
+              <div
+                key={pack.id}
+                className="flex flex-col gap-1 rounded-xl bg-[var(--accent)] p-3 ring-1 ring-inset ring-[var(--noodle-divider)]"
+              >
+                <span className="flex items-center gap-1.5 text-lg font-black tabular-nums">
+                  {pack.coins}
+                  <span
+                    className="inline-flex h-4 w-4 items-center justify-center rounded-full bg-[var(--noodle-accent)] text-[0.62rem] font-black leading-none text-[var(--noodle-accent-foreground)]"
+                    aria-hidden="true"
+                  >
+                    C
+                  </span>
+                </span>
+                <span className="text-xs font-semibold text-[var(--muted-foreground)]">{pack.price}</span>
+                <button
+                  type="button"
+                  disabled
+                  className="mt-2 min-h-9 rounded-lg bg-[var(--noodle-accent)]/20 text-xs font-bold text-[var(--noodle-accent-foreground)] ring-1 ring-inset ring-[var(--noodle-accent)]/30 disabled:opacity-60"
+                >
+                  {localizeUi("ui.slurp.navigation.soon", { defaultValue: "Soon..." })}
+                </button>
+              </div>
+            ))}
+          </div>
+        </section>
+
+        <section
+          aria-labelledby="slurp-wallet-activity"
+          className="rounded-xl bg-[var(--slurp-surface)] p-4 ring-1 ring-inset ring-[var(--noodle-divider)]"
+        >
+          <h2 id="slurp-wallet-activity" className="text-sm font-bold">
+            {localizeUi("ui.slurp.wallet.activity", { defaultValue: "Recent activity" })}
+          </h2>
+          <p className="mt-2 text-xs leading-5 text-[var(--muted-foreground)]">
+            {localizeUi("ui.slurp.wallet.activityEmpty", {
+              defaultValue: "Unlocks and subscriptions paid with coins will show up here.",
+            })}
+          </p>
+        </section>
+      </div>
+    </NoodlerFrame>
+  );
+}
+
+function SlurpMediaDialog({
+  title,
+  onClose,
+  media,
+  side,
+}: {
+  title: string;
+  onClose: () => void;
+  media: ReactNode;
+  side: ReactNode;
+}) {
+  return (
+    <Modal
+      open
+      onClose={onClose}
+      title={title}
+      width="max-w-5xl"
+      mobileFullscreen
+      contentClassName="p-0 sm:p-0"
+      panelClassName="noodle-icon-scope"
+      panelStyle={getNoodleAccentStyle(NOODLE_PINK)}
+    >
+      <div className="flex h-full min-h-0 flex-col sm:h-[min(80vh,44rem)] sm:flex-row">
+        <div className="relative flex min-h-[16rem] flex-1 items-center justify-center overflow-hidden bg-black sm:min-h-0">
+          {media}
+        </div>
+        <aside className="flex min-h-0 w-full shrink-0 flex-col overflow-y-auto border-t border-[var(--noodle-divider)] bg-[var(--slurp-surface)] sm:w-[22rem] sm:border-s sm:border-t-0 @min-[1280px]:w-[24rem]">
+          {side}
+        </aside>
+      </div>
+    </Modal>
+  );
+}
+
+function SlurpPostDialog({
+  post,
+  ctx,
+  onClose,
+}: {
+  post: NoodlePostCardModel & { imageUrl: string };
+  ctx: NoodlePostCardCtx;
+  onClose: () => void;
+}) {
+  const { t: localizeUi } = useUiTranslation();
+  const source = useSlurpMediaSrc(post.imageUrl, { width: 1600 });
+  const authorName = post.authorSnapshot?.displayName ?? "";
+  return (
+    <SlurpMediaDialog
+      title={localizeUi("ui.slurp.post.dialogTitle", { name: authorName })}
+      onClose={onClose}
+      media={
+        source ? (
+          <img
+            src={source}
+            alt={localizeUi("ui.noodle.post.imageBy", { name: authorName })}
+            decoding="async"
+            className="max-h-full w-full object-contain"
+          />
+        ) : (
+          <div className="h-full w-full animate-pulse bg-[var(--slurp-surface-raised)] motion-reduce:animate-none" />
+        )
+      }
+      // The dialog owns the picture, so the card must not draw it or offer its prompt again.
+      side={<SlurpCreatorPostCard post={{ ...post, imageUrl: null, imagePrompt: null }} ctx={ctx} surface="profile" />}
+    />
   );
 }
 
@@ -4972,63 +5088,11 @@ function SlurpMomentViewer({
   }, [onNext, onPrevious]);
 
   return (
-    <Modal
-      open
-      onClose={onClose}
+    <SlurpMediaDialog
       title={localizeUi("ui.slurp.moments.fromCreator", { name: moment.creator.profile.displayName })}
-      width="max-w-lg"
-      mobileFullscreen
-      contentClassName="max-sm:p-0 sm:px-3 sm:py-3"
-      panelClassName="max-sm:bg-black"
-      panelStyle={{
-        "--background": "#120f14",
-        "--foreground": "#fff8fc",
-        "--muted-foreground": "#cdbfc8",
-        "--border": "rgba(255, 126, 193, 0.24)",
-      }}
-    >
-      <article
-        data-component="SlurpHome.MomentViewer"
-        className="flex h-full min-h-0 flex-col overflow-hidden bg-black/25 sm:rounded-xl"
-      >
-        <div className="flex items-center gap-3 px-3 py-3">
-          <button
-            type="button"
-            onClick={openProfile}
-            disabled={!onOpenProfile}
-            className="rounded-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--noodle-accent)] disabled:cursor-default"
-          >
-            <ProfileInitial profile={moment.creator.profile} />
-          </button>
-          <button
-            type="button"
-            onClick={openProfile}
-            disabled={!onOpenProfile}
-            className="min-w-0 flex-1 rounded-lg text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--noodle-accent)] disabled:cursor-default"
-          >
-            <span className="block truncate text-sm font-bold">{moment.creator.profile.displayName}</span>
-            <span className="block truncate text-xs text-[var(--muted-foreground)]">
-              @{moment.creator.profile.handle}
-            </span>
-          </button>
-          <span className="text-xs tabular-nums text-[var(--muted-foreground)]">
-            {index + 1}/{total}
-          </span>
-        </div>
-        <div
-          className="h-1 bg-[var(--noodle-divider)]"
-          role="progressbar"
-          aria-label={localizeUi("ui.slurp.moments.progress")}
-          aria-valuemin={1}
-          aria-valuemax={total}
-          aria-valuenow={index + 1}
-        >
-          <div
-            className="h-full bg-[var(--noodle-accent)] transition-[width] motion-reduce:transition-none"
-            style={{ width: `${((index + 1) / total) * 100}%` }}
-          />
-        </div>
-        <div className="relative flex min-h-[26rem] flex-1 items-center justify-center overflow-hidden bg-black sm:min-h-[34rem]">
+      onClose={onClose}
+      media={
+        <>
           {mediaSrc ? (
             <img
               src={mediaSrc}
@@ -5041,10 +5105,7 @@ function SlurpMomentViewer({
                     })
                   : localizeUi("ui.noodle.post.imageBy", { name: moment.creator.profile.displayName })
               }
-              className={cn(
-                "absolute inset-0 h-full w-full object-cover",
-                moment.post.locked && "scale-105 saturate-[0.82]",
-              )}
+              className={cn("max-h-full w-full object-contain", moment.post.locked && "scale-105 saturate-[0.82]")}
             />
           ) : (
             <div
@@ -5053,17 +5114,23 @@ function SlurpMomentViewer({
             />
           )}
           <div
-            className={cn(
-              "pointer-events-none absolute inset-0 bg-gradient-to-t from-black/85 via-transparent to-black/20",
-              moment.post.locked && "from-black/90 via-black/10",
-            )}
-            aria-hidden="true"
-          />
+            className="absolute inset-x-0 top-0 h-1 bg-black/40"
+            role="progressbar"
+            aria-label={localizeUi("ui.slurp.moments.progress")}
+            aria-valuemin={1}
+            aria-valuemax={total}
+            aria-valuenow={index + 1}
+          >
+            <div
+              className="h-full bg-[var(--noodle-accent)] transition-[width] motion-reduce:transition-none"
+              style={{ width: `${((index + 1) / total) * 100}%` }}
+            />
+          </div>
           {onPrevious && (
             <button
               type="button"
               onClick={onPrevious}
-              className="absolute left-2 top-1/2 flex h-11 w-11 -translate-y-1/2 items-center justify-center rounded-full bg-black/45 text-white backdrop-blur-sm ring-1 ring-white/15 hover:bg-black/65 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white"
+              className="absolute left-2 top-1/2 flex h-11 w-11 -translate-y-1/2 items-center justify-center rounded-full bg-black/45 text-white ring-1 ring-white/15 backdrop-blur-sm hover:bg-black/65 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white"
               aria-label={localizeUi("ui.slurp.moments.previous")}
             >
               <ChevronLeft size={22} aria-hidden="true" />
@@ -5073,55 +5140,81 @@ function SlurpMomentViewer({
             <button
               type="button"
               onClick={onNext}
-              className="absolute right-2 top-1/2 flex h-11 w-11 -translate-y-1/2 items-center justify-center rounded-full bg-black/45 text-white backdrop-blur-sm ring-1 ring-white/15 hover:bg-black/65 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white"
+              className="absolute right-2 top-1/2 flex h-11 w-11 -translate-y-1/2 items-center justify-center rounded-full bg-black/45 text-white ring-1 ring-white/15 backdrop-blur-sm hover:bg-black/65 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white"
               aria-label={localizeUi("ui.slurp.moments.next")}
             >
               <ChevronRight size={22} aria-hidden="true" />
             </button>
           )}
-          <div className="absolute inset-x-0 bottom-0 px-5 pb-5 pt-16 text-white sm:px-6">
-            {moment.post.locked && (
-              <span className="mb-3 inline-flex items-center gap-1.5 rounded-full bg-black/50 px-2.5 py-1 text-[0.68rem] font-bold uppercase tracking-[0.12em] ring-1 ring-white/15 backdrop-blur-sm">
-                <Lock size={11} aria-hidden="true" /> {localizeUi("ui.slurp.locked.blurredPreview")}
+        </>
+      }
+      side={
+        <div data-component="SlurpHome.MomentViewer" className="flex flex-col gap-4 p-4">
+          <div className="flex items-center gap-3">
+            <button
+              type="button"
+              onClick={openProfile}
+              disabled={!onOpenProfile}
+              className="rounded-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--noodle-accent)] disabled:cursor-default"
+            >
+              <ProfileInitial profile={moment.creator.profile} />
+            </button>
+            <button
+              type="button"
+              onClick={openProfile}
+              disabled={!onOpenProfile}
+              className="min-w-0 flex-1 rounded-lg text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--noodle-accent)] disabled:cursor-default"
+            >
+              <span className="block truncate text-sm font-bold">{moment.creator.profile.displayName}</span>
+              <span className="block truncate text-xs text-[var(--muted-foreground)]">
+                @{moment.creator.profile.handle}
               </span>
-            )}
-            {moment.post.title && <h3 className="max-w-md text-xl font-bold leading-tight">{moment.post.title}</h3>}
-            {!moment.post.locked && moment.post.content && (
-              <p className="mt-2 line-clamp-3 max-w-md text-sm leading-6 text-white/85">{moment.post.content}</p>
-            )}
-            {linkedPostIdForStory(moment.post) && onOpenProfile && (
+            </button>
+            <span className="text-xs tabular-nums text-[var(--muted-foreground)]">
+              {index + 1}/{total}
+            </span>
+          </div>
+          {moment.post.locked && (
+            <span className="inline-flex w-fit items-center gap-1.5 rounded-full bg-[var(--accent)] px-2.5 py-1 text-[0.68rem] font-bold uppercase tracking-[0.12em] ring-1 ring-inset ring-[var(--noodle-divider)]">
+              <Lock size={11} aria-hidden="true" /> {localizeUi("ui.slurp.locked.blurredPreview")}
+            </span>
+          )}
+          {moment.post.title && <h3 className="text-lg font-bold leading-tight">{moment.post.title}</h3>}
+          {!moment.post.locked && moment.post.content && (
+            <p className="text-sm leading-6 text-[var(--muted-foreground)]">{moment.post.content}</p>
+          )}
+          {linkedPostIdForStory(moment.post) && onOpenProfile && (
+            <button
+              type="button"
+              onClick={openProfile}
+              className="inline-flex min-h-10 w-fit items-center gap-2 rounded-lg bg-[var(--accent)] px-3 text-xs font-bold ring-1 ring-inset ring-[var(--noodle-divider)] hover:bg-[var(--noodle-accent)]/15 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--noodle-accent)]"
+            >
+              <Link size={14} aria-hidden="true" /> {localizeUi("ui.slurp.moments.viewLinkedPost")}
+            </button>
+          )}
+          {moment.post.locked && (
+            <div className="grid gap-2">
               <button
                 type="button"
-                onClick={openProfile}
-                className="mt-4 inline-flex min-h-10 items-center gap-2 rounded-lg bg-white/12 px-3 text-xs font-bold text-white ring-1 ring-inset ring-white/20 hover:bg-white/18 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white"
+                disabled={unlockPending}
+                onClick={() => onUnlock(moment.post.id)}
+                className="inline-flex min-h-11 items-center justify-center gap-2 rounded-lg bg-[var(--noodle-accent)] px-3 text-xs font-bold text-zinc-950 hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--noodle-accent)] disabled:opacity-50 [&_svg]:!text-zinc-950"
               >
-                <Link size={14} aria-hidden="true" /> {localizeUi("ui.slurp.moments.viewLinkedPost")}
+                <Eye size={15} aria-hidden="true" /> {localizeUi("ui.slurp.moments.unlock")}
               </button>
-            )}
-            {moment.post.locked && (
-              <div className="mt-4 grid grid-cols-2 gap-2">
-                <button
-                  type="button"
-                  disabled={unlockPending}
-                  onClick={() => onUnlock(moment.post.id)}
-                  className="inline-flex min-h-11 items-center justify-center gap-2 rounded-lg bg-[var(--noodle-accent)] px-3 text-xs font-bold text-zinc-950 hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white disabled:opacity-50 [&_svg]:!text-zinc-950"
-                >
-                  <Eye size={15} aria-hidden="true" /> {localizeUi("ui.slurp.moments.unlock")}
-                </button>
-                <button
-                  type="button"
-                  disabled={subscriptionPending}
-                  onClick={() => onToggleSubscription(moment.creator.profile.id, moment.creator.subscribed)}
-                  className="min-h-11 rounded-lg bg-white/10 px-3 text-xs font-bold text-white ring-1 ring-inset ring-white/20 hover:bg-white/15 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white disabled:opacity-50"
-                >
-                  {localizeUi("ui.slurp.profile.subscribe")}
-                </button>
-              </div>
-            )}
-          </div>
+              <button
+                type="button"
+                disabled={subscriptionPending}
+                onClick={() => onToggleSubscription(moment.creator.profile.id, moment.creator.subscribed)}
+                className="min-h-11 rounded-lg bg-[var(--accent)] px-3 text-xs font-bold ring-1 ring-inset ring-[var(--noodle-divider)] hover:bg-[var(--noodle-accent)]/15 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--noodle-accent)] disabled:opacity-50"
+              >
+                {localizeUi("ui.slurp.profile.subscribe")}
+              </button>
+            </div>
+          )}
         </div>
-      </article>
-    </Modal>
+      }
+    />
   );
 }
 
@@ -5468,7 +5561,7 @@ function NoodlerPostComposer({
                 className={cn(
                   "min-h-9 rounded-lg px-3 text-xs font-bold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--noodle-accent)] disabled:opacity-50",
                   postType === option
-                    ? "bg-[var(--background)] text-[var(--foreground)] shadow-sm"
+                    ? SLURP_TOGGLE_ACTIVE_CLASS
                     : "text-[var(--muted-foreground)] hover:text-[var(--foreground)]",
                 )}
               >
@@ -5625,7 +5718,7 @@ function NoodlerPostComposer({
                       className={cn(
                         "min-h-8 rounded px-2 text-xs font-bold capitalize",
                         access === option
-                          ? "bg-[var(--background)] text-[var(--foreground)] shadow-sm"
+                          ? SLURP_TOGGLE_ACTIVE_CLASS
                           : "text-[var(--muted-foreground)] hover:text-[var(--foreground)]",
                       )}
                     >
@@ -5830,10 +5923,11 @@ function SubscriptionSections({
               <SlurpCreatorProfileCard
                 key={creator.profile.id}
                 creator={creator}
-                variant="compact"
                 pending={togglePending}
                 onOpenProfile={onOpenProfile}
                 onToggleSubscription={onToggleSubscription}
+                showFollow={false}
+                className="w-64 shrink-0 snap-start"
               />
             ))}
           </div>
@@ -5859,16 +5953,15 @@ function SubscriptionSections({
         </h3>
       </div>
       {creators.length > 0 ? (
-        <div className="max-h-[28rem] space-y-1 overflow-y-auto p-2 pt-1">
+        <div className="max-h-[36rem] space-y-3 overflow-y-auto p-2 pt-1">
           {creators.map((creator) => (
             <SlurpCreatorProfileCard
               key={creator.profile.id}
               creator={creator}
-              variant="compact"
               pending={togglePending}
               onOpenProfile={onOpenProfile}
               onToggleSubscription={onToggleSubscription}
-              className="rounded-xl bg-transparent p-2 hover:bg-[var(--accent)]/45"
+              showFollow={false}
             />
           ))}
         </div>

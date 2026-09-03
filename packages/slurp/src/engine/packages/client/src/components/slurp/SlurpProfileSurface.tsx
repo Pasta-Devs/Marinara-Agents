@@ -190,7 +190,7 @@ export function SlurpProfileSurface<TTab extends string = SlurpProfileTab>({
             }}
             disabled={!banner.canEdit || banner.uploadTarget === "banner"}
             className={cn(
-              "relative block h-52 w-full overflow-hidden bg-[var(--noodle-accent)]/15 text-left outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--noodle-accent)] disabled:cursor-default @min-[540px]:h-64 @min-[760px]:h-72 @min-[1040px]:h-80",
+              "relative block h-64 w-full overflow-hidden bg-[var(--noodle-accent)]/15 text-left outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--noodle-accent)] disabled:cursor-default @min-[540px]:h-80 @min-[760px]:h-[24rem] @min-[1040px]:h-[28rem]",
               banner.uploadTarget === "banner" && "cursor-wait opacity-80",
             )}
             title={banner.canEdit ? localizeUi("ui.noodle.noodleprofilesurface.uploadBanner") : undefined}
@@ -207,8 +207,8 @@ export function SlurpProfileSurface<TTab extends string = SlurpProfileTab>({
               className={cn(
                 "pointer-events-none absolute inset-0",
                 spotlight
-                  ? "bg-[radial-gradient(ellipse_at_82%_18%,color-mix(in_srgb,var(--slurp-coral)_18%,transparent),transparent_48%),linear-gradient(to_top,var(--slurp-canvas,var(--background))_0%,color-mix(in_srgb,var(--slurp-canvas,var(--background))_96%,transparent)_20%,color-mix(in_srgb,var(--slurp-canvas,var(--background))_62%,transparent)_44%,transparent_74%),linear-gradient(to_right,rgba(8,4,10,0.62),transparent_64%)]"
-                  : "bg-[linear-gradient(to_top,var(--slurp-canvas,var(--background))_0%,transparent_46%),linear-gradient(to_right,rgba(8,4,10,0.28),transparent_55%)]",
+                  ? "bg-[radial-gradient(ellipse_at_82%_18%,color-mix(in_srgb,var(--slurp-coral)_18%,transparent),transparent_48%),linear-gradient(to_top,var(--slurp-canvas,var(--background))_0%,color-mix(in_srgb,var(--slurp-canvas,var(--background))_98%,transparent)_26%,color-mix(in_srgb,var(--slurp-canvas,var(--background))_70%,transparent)_52%,transparent_86%),linear-gradient(to_right,rgba(8,4,10,0.62),transparent_64%)]"
+                  : "bg-[linear-gradient(to_top,var(--slurp-canvas,var(--background))_0%,color-mix(in_srgb,var(--slurp-canvas,var(--background))_70%,transparent)_34%,transparent_72%),linear-gradient(to_right,rgba(8,4,10,0.28),transparent_55%)]",
               )}
               aria-hidden="true"
             />
@@ -268,7 +268,7 @@ export function SlurpProfileSurface<TTab extends string = SlurpProfileTab>({
           className={cn(
             "flex items-end",
             spotlight ? "w-auto" : "w-full",
-            hasBanner ? (spotlight ? "pt-0" : "-mt-14") : "pt-5",
+            hasBanner ? (spotlight ? "-mt-10 pt-0 @min-[680px]:-mt-16" : "-mt-14") : "pt-5",
           )}
         >
           {avatarUpload ? (

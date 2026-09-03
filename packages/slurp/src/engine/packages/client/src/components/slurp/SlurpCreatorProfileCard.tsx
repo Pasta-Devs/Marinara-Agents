@@ -1,4 +1,3 @@
-import { Plus } from "lucide-react";
 import { useTranslation as useUiTranslation } from "react-i18next";
 import type { AvatarCrop } from "@marinara-engine/shared";
 import { cn } from "../../lib/utils";
@@ -21,18 +20,16 @@ export type SlurpCreatorProfileCardCreator = {
 
 export function SlurpCreatorProfileCard({
   creator,
-  variant = "regular",
   pending = false,
   onOpenProfile,
   onToggleFollow,
   onToggleSubscription,
-  showFollow = variant === "regular",
+  showFollow = true,
   showSubscription = true,
   showProfileAction = false,
   className,
 }: {
   creator: SlurpCreatorProfileCardCreator;
-  variant?: "regular" | "compact";
   pending?: boolean;
   onOpenProfile?: (accountId: string) => void;
   onToggleFollow?: (creatorAccountId: string, followed: boolean) => void;
@@ -49,53 +46,6 @@ export function SlurpCreatorProfileCard({
   });
   const actions =
     (showFollow && onToggleFollow) || (showSubscription && onToggleSubscription) || (showProfileAction && openProfile);
-
-  if (variant === "compact") {
-    return (
-      <article
-        className={cn(
-          "flex min-w-0 items-center gap-2.5 rounded-xl bg-[var(--accent)]/35 p-2.5 ring-1 ring-inset ring-[var(--noodle-divider)] transition-colors hover:bg-[var(--accent)]/60",
-          className,
-        )}
-      >
-        <button
-          type="button"
-          onClick={openProfile}
-          disabled={!openProfile}
-          className="shrink-0 rounded-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--noodle-accent)] disabled:cursor-default"
-          aria-label={localizeUi("ui.noodle.noodlehome.viewValue1", { value1: creator.profile.handle })}
-        >
-          <ProfileInitial profile={creator.profile} />
-        </button>
-        <div className="min-w-0 flex-1">
-          <button
-            type="button"
-            onClick={openProfile}
-            disabled={!openProfile}
-            className="block w-full truncate text-left text-sm font-bold disabled:cursor-default"
-          >
-            {creator.profile.displayName}
-          </button>
-          <p className="truncate text-xs text-[var(--muted-foreground)]">@{creator.profile.handle}</p>
-          {showSubscription && onToggleSubscription && (
-            <button
-              type="button"
-              disabled={pending}
-              onClick={() => onToggleSubscription(creator.profile.id, creator.subscribed)}
-              className="mt-1 inline-flex min-h-8 items-center gap-1 text-xs font-bold text-[var(--noodle-accent)] disabled:opacity-50"
-            >
-              {creator.subscribed ? (
-                <>{localizeUi("ui.noodle.subscriptionsections.unsubscribe")}</>
-              ) : (
-                <Plus size={13} />
-              )}
-              {creator.subscribed ? null : localizeUi("ui.noodle.lockednoodlerpostcard.subscribe")}
-            </button>
-          )}
-        </div>
-      </article>
-    );
-  }
 
   return (
     <article

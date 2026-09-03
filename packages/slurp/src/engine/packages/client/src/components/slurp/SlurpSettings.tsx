@@ -1,6 +1,7 @@
 import {
   Activity,
   AlertTriangle,
+  ArrowLeft,
   CalendarClock,
   CheckCircle2,
   ChevronRight,
@@ -19,6 +20,7 @@ import {
 } from "lucide-react";
 import type { ReactNode } from "react";
 import { api } from "../../lib/api-client";
+import { cn } from "../../lib/utils";
 import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
@@ -58,7 +60,7 @@ import { showConfirmDialog } from "../../lib/app-dialogs";
 import { Modal } from "../ui/Modal";
 import type { SlurpNavigationState } from "./slurp-navigation.types";
 import type { NoodlerManagedStageProfile } from "@marinara-engine/shared";
-import { Avatar, getNoodleAccentStyle, NOODLE_PINK } from "./SlurpShell";
+import { Avatar, getNoodleAccentStyle, NOODLE_PINK, SLURP_ROW_ACTIVE_CLASS, SLURP_ROW_CLASS } from "./SlurpShell";
 import {
   SLURP_ACTIVITY_PRESETS,
   slurpActivityPresetForSettings,
@@ -149,6 +151,115 @@ function NumberSetting({
       onKeyDown={(event) => event.key === "Enter" && event.currentTarget.blur()}
       className="h-11 w-full rounded-lg border border-[var(--border)] bg-[var(--slurp-canvas,var(--background))] px-3 text-base outline-none transition-colors focus:border-[var(--noodle-accent)] focus-visible:ring-2 focus-visible:ring-[var(--noodle-accent)]/30 sm:text-sm"
     />
+  );
+}
+
+// Same row, same highlight as every other Slurp destination.
+const sectionTabClass = (active: boolean) =>
+  cn(SLURP_ROW_CLASS, active ? SLURP_ROW_ACTIVE_CLASS : "text-[var(--slurp-muted)]");
+
+/**
+ * Settings takes the whole desktop nav column over: the app menu would only compete with the
+ * section list, so the shell swaps it for this and this owns the way back out.
+ */
+export function SlurpSettingsSidebar({
+  navigation,
+  onNavigate,
+  onExit,
+}: {
+  navigation: Extract<SlurpNavigationState, { mode: "creator-settings" }>;
+  onNavigate: (navigation: SlurpNavigationState) => void;
+  onExit: () => void;
+}) {
+  const { t } = useTranslation();
+  const section = navigation.section ?? "overview";
+  return (
+    <>
+      {/* The way out is the one control that must never be hunted for, so it is the loudest
+          thing in the column. */}
+      <button
+        type="button"
+        onClick={onExit}
+        className="mb-4 flex min-h-11 w-full items-center gap-2 rounded-lg bg-[var(--noodle-accent)]/15 px-3 text-start text-sm font-bold text-[var(--noodle-accent-foreground)] ring-1 ring-inset ring-[var(--noodle-accent)]/40 transition-colors hover:bg-[var(--noodle-accent)]/25 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--noodle-accent)]"
+      >
+        <ArrowLeft size={18} />
+        {t("ui.slurp.settings.exit", { defaultValue: "Exit settings" })}
+      </button>
+      <p className="px-3 pb-2 text-xs font-bold uppercase tracking-[0.14em] text-[var(--slurp-muted)]">
+        {t("ui.slurp.settings.title")}
+      </p>
+      <nav className="flex flex-col" aria-label={t("ui.slurp.settings.sectionsLabel")}>
+        {settingsSections.map((item) => (
+          <button
+            key={item}
+            type="button"
+            aria-current={section === item ? "page" : undefined}
+            onClick={() => onNavigate({ ...navigation, section: item })}
+            className={sectionTabClass(section === item)}
+          >
+            {t(`ui.slurp.settings.tabs.${item === "general" ? "publishing" : item}`)}
+          </button>
+        ))}
+      </nav>
+    </>
+  );
+}
+
+/**
+ * Mobile section row. It keeps the active section in view and fades whichever edge still has
+ * sections behind it, so a row that scrolls does not look like a row that ends.
+ */
+function SlurpSettingsSectionRow({
+  navigation,
+  onNavigate,
+}: {
+  navigation: Extract<SlurpNavigationState, { mode: "creator-settings" }>;
+  onNavigate: (navigation: SlurpNavigationState) => void;
+}) {
+  const { t } = useTranslation();
+  const section = navigation.section ?? "overview";
+  const rowRef = useRef<HTMLElement | null>(null);
+  const [edges, setEdges] = useState({ start: false, end: false });
+  useEffect(() => {
+    const row = rowRef.current;
+    if (!row) return;
+    const update = () =>
+      setEdges({
+        start: row.scrollLeft > 4,
+        end: Math.ceil(row.scrollLeft + row.clientWidth) < row.scrollWidth - 4,
+      });
+    update();
+    row.addEventListener("scroll", update, { passive: true });
+    const resize = new ResizeObserver(update);
+    resize.observe(row);
+    return () => {
+      row.removeEventListener("scroll", update);
+      resize.disconnect();
+    };
+  }, []);
+  useEffect(() => {
+    rowRef.current?.querySelector('[aria-current="page"]')?.scrollIntoView({ block: "nearest", inline: "center" });
+  }, [section]);
+  const fade = `linear-gradient(to right, ${edges.start ? "transparent" : "#000"}, #000 2rem, #000 calc(100% - 2rem), ${edges.end ? "transparent" : "#000"})`;
+  return (
+    <nav
+      ref={rowRef}
+      style={{ maskImage: fade, WebkitMaskImage: fade }}
+      className="-mb-4 flex snap-x gap-2 overflow-x-auto rounded-t-xl bg-[var(--slurp-surface)] px-3 py-3 ring-1 ring-inset ring-[var(--slurp-outline)] [scrollbar-width:none] @min-[1024px]:hidden md:hidden [&::-webkit-scrollbar]:hidden"
+      aria-label={t("ui.slurp.settings.sectionsLabel")}
+    >
+      {settingsSections.map((item) => (
+        <button
+          key={item}
+          type="button"
+          aria-current={section === item ? "page" : undefined}
+          onClick={() => onNavigate({ ...navigation, section: item })}
+          className={`min-h-11 flex-none snap-center rounded-xl px-4 text-sm font-semibold transition-[background-color,color,transform] active:scale-[0.96] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--slurp-focus)] motion-reduce:transition-none motion-reduce:active:scale-100 ${section === item ? SLURP_TOGGLE_ACTIVE_CLASS : "text-[var(--slurp-muted)] hover:bg-[var(--slurp-surface-raised)]"}`}
+        >
+          {t(`ui.slurp.settings.tabs.${item === "general" ? "publishing" : item}`)}
+        </button>
+      ))}
+    </nav>
   );
 }
 
@@ -342,14 +453,6 @@ export function SlurpSettings({
       <main className="h-full overflow-y-auto bg-[var(--slurp-canvas)] pb-[calc(5rem+env(safe-area-inset-bottom))] text-[var(--slurp-text)] sm:pb-8">
         <div className="mx-auto flex w-full flex-col gap-4 p-3 sm:p-5 lg:gap-6 lg:p-6" data-slurp-settings-layout>
           <header className="relative isolate flex flex-wrap items-start justify-between gap-3 overflow-hidden rounded-xl bg-[linear-gradient(120deg,color-mix(in_srgb,var(--slurp-surface-raised)_94%,transparent),color-mix(in_srgb,var(--noodle-accent)_17%,var(--slurp-surface-raised))_58%,color-mix(in_srgb,var(--slurp-violet)_13%,var(--slurp-surface-raised)))] p-4 shadow-[var(--slurp-shadow)] ring-1 ring-inset ring-[var(--slurp-outline)] sm:gap-4 sm:p-5">
-            <span
-              className="pointer-events-none absolute -end-12 -top-20 -z-10 h-52 w-52 rounded-full bg-[var(--noodle-accent)]/10 blur-3xl"
-              aria-hidden="true"
-            />
-            <span
-              className="pointer-events-none absolute -bottom-24 start-1/3 -z-10 h-48 w-72 rounded-full bg-[var(--slurp-coral)]/[0.08] blur-3xl"
-              aria-hidden="true"
-            />
             <div className="min-w-0">
               <p className="hidden text-xs font-bold uppercase tracking-[0.18em] text-[var(--noodle-accent)] sm:block">
                 {t("ui.slurp.settings.backstage")}
@@ -382,26 +485,11 @@ export function SlurpSettings({
                     : t("ui.slurp.settings.autoSave")}
             </p>
           </header>
-          <nav
-            className="sticky top-0 z-20 -mx-4 flex snap-x gap-2 overflow-x-auto border-b border-[var(--slurp-outline)] bg-[var(--slurp-glass)] px-4 py-3 pe-10 [scrollbar-width:none] backdrop-blur-xl sm:-mx-6 sm:px-6 md:hidden [&::-webkit-scrollbar]:hidden"
-            aria-label={t("ui.slurp.settings.sectionsLabel")}
-          >
-            {settingsSections.map((item) => (
-              <button
-                key={item}
-                type="button"
-                aria-current={section === item ? "page" : undefined}
-                onClick={() => onNavigate({ ...navigation, section: item })}
-                className={`min-h-11 flex-none snap-start rounded-xl px-4 text-sm font-semibold transition-[background-color,color,transform] active:scale-[0.96] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--slurp-focus)] motion-reduce:transition-none motion-reduce:active:scale-100 ${section === item ? "bg-[var(--slurp-nav-active)] text-[var(--slurp-text)] shadow-sm ring-1 ring-inset ring-[var(--noodle-accent)]/30" : "text-[var(--slurp-muted)] hover:bg-[var(--slurp-surface-raised)]"}`}
-              >
-                {t(`ui.slurp.settings.tabs.${item === "general" ? "publishing" : item}`)}
-              </button>
-            ))}
-          </nav>
+          <SlurpSettingsSectionRow navigation={navigation} onNavigate={onNavigate} />
 
-          <div className="md:grid md:grid-cols-[12rem_minmax(0,1fr)] md:items-start md:gap-6 lg:grid-cols-[13rem_minmax(0,1fr)] lg:gap-8">
+          <div className="md:grid md:grid-cols-[12rem_minmax(0,1fr)] md:items-start md:gap-6 lg:grid-cols-[13rem_minmax(0,1fr)] lg:gap-8 @min-[1024px]:block">
             <nav
-              className="sticky top-4 hidden rounded-xl bg-[linear-gradient(180deg,color-mix(in_srgb,var(--noodle-accent)_7%,var(--slurp-surface)),var(--slurp-surface))] p-2 shadow-[var(--slurp-shadow)] ring-1 ring-inset ring-[var(--slurp-outline)] md:flex md:flex-col"
+              className="sticky top-4 hidden rounded-xl bg-[linear-gradient(180deg,color-mix(in_srgb,var(--noodle-accent)_7%,var(--slurp-surface)),var(--slurp-surface))] p-2 shadow-[var(--slurp-shadow)] ring-1 ring-inset ring-[var(--slurp-outline)] md:flex md:flex-col @min-[1024px]:hidden"
               aria-label={t("ui.slurp.settings.sectionsLabel")}
             >
               {settingsSections.map((item) => (
@@ -410,14 +498,14 @@ export function SlurpSettings({
                   type="button"
                   aria-current={section === item ? "page" : undefined}
                   onClick={() => onNavigate({ ...navigation, section: item })}
-                  className={`relative min-h-11 overflow-hidden rounded-lg px-3 text-start text-sm font-semibold transition-[background-color,color,transform] active:scale-[0.96] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--slurp-focus)] motion-reduce:transition-none motion-reduce:active:scale-100 ${section === item ? "bg-[var(--slurp-nav-active)] text-[var(--slurp-text)] shadow-sm before:absolute before:inset-y-2 before:start-0 before:w-0.5 before:rounded-full before:bg-[var(--noodle-accent)]" : "text-[var(--slurp-muted)] hover:bg-[var(--slurp-surface-raised)] hover:text-[var(--slurp-text)]"}`}
+                  className={sectionTabClass(section === item)}
                 >
                   {t(`ui.slurp.settings.tabs.${item === "general" ? "publishing" : item}`)}
                 </button>
               ))}
             </nav>
 
-            <div className="mt-4 min-w-0 rounded-xl bg-[linear-gradient(145deg,var(--slurp-surface),color-mix(in_srgb,var(--slurp-violet)_4%,var(--slurp-surface)))] p-3 shadow-[var(--slurp-shadow)] ring-1 ring-inset ring-[var(--slurp-outline)] md:mt-0 md:p-5 lg:p-6">
+            <div className="mt-4 min-w-0 rounded-xl rounded-t-none bg-[linear-gradient(145deg,var(--slurp-surface),color-mix(in_srgb,var(--slurp-violet)_4%,var(--slurp-surface)))] p-3 shadow-[var(--slurp-shadow)] ring-1 ring-inset ring-[var(--slurp-outline)] md:mt-0 md:rounded-t-xl md:p-5 lg:p-6">
               {section === "overview" && (
                 <div className="space-y-4">
                   <section className="relative isolate overflow-hidden rounded-xl bg-[var(--slurp-hero)] p-4 text-white shadow-[0_30px_70px_-38px_rgba(184,28,102,0.9)] sm:p-5">

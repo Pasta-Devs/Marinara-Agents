@@ -1085,6 +1085,8 @@ export interface NoodlePostCardCtx {
   openProfile?: (account: NoodleAccount | null) => void;
   /** Navigate by NoodleR author ID when no Noodle account object exists. */
   openAuthorProfile?: (accountId: string) => void;
+  /** Open the whole post in the media dialog. Absent → the image opens a plain lightbox. */
+  openPost?: (postId: string) => void;
   /** Vote in a post's poll. Pollless posts never call it. */
   voteInPoll?: (post: NoodlePostCardModel, optionId: string, selectedOptionId: string | null) => void;
   /** Preserve the public timeline's legacy body/poll duplicate suppression. */

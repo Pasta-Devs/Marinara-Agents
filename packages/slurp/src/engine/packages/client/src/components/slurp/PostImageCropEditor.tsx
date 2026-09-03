@@ -353,12 +353,18 @@ export function PostImageFrame({
   maxHeight?: number;
   onError?: () => void;
 }) {
+  const [naturalRatio, setNaturalRatio] = useState<number | null>(null);
   const validCrop = crop && isValidCrop(crop) ? crop : null;
   if (!validCrop) {
+    // Uncropped posts arrive in whatever shape the image model produced, and the Engine's
+    // defaults are portrait. A fixed 4:3 stage shrinks those to a stamp between two blurred
+    // margins, so the frame takes the picture's own shape, clamped so nothing runs off the
+    // screen: no taller than 4:5, no wider than 16:9, and a portrait gets more height to use.
+    const framed = naturalRatio ? Math.min(16 / 9, Math.max(0.8, naturalRatio)) : 4 / 3;
     return (
       <div
-        className="relative flex aspect-[4/3] w-full items-center justify-center overflow-hidden rounded-xl bg-[var(--slurp-media-stage,#17131a)]"
-        style={{ maxHeight }}
+        className="relative flex w-full items-center justify-center overflow-hidden rounded-xl bg-[var(--slurp-media-stage,#17131a)]"
+        style={{ aspectRatio: framed, maxHeight: framed < 1 ? maxHeight * 1.45 : maxHeight }}
       >
         <ImageWithSource
           source={src}
@@ -370,6 +376,12 @@ export function PostImageFrame({
           source={src}
           alt={alt}
           onError={onError}
+          onLoad={(event) => {
+            const image = event.currentTarget;
+            if (image.naturalWidth && image.naturalHeight) {
+              setNaturalRatio(image.naturalWidth / image.naturalHeight);
+            }
+          }}
           loading="lazy"
           decoding="async"
           className="relative z-10 h-full w-full object-contain"

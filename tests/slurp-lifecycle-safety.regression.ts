@@ -169,8 +169,8 @@ assert.match(
 );
 assert.match(
   home,
-  /data-slurp-creator-tools[\s\S]*?onClick=\{onEdit\}[\s\S]*?setAccessSettingsOpen\(true\)[\s\S]*?setAutomationOpen\(true\)[\s\S]*?hidden=\{!creatorToolsOpen\}[\s\S]*?<NoodlerPostComposer/u,
-  "Creator Tools must keep its management actions visible while disclosing the composer separately",
+  /data-slurp-creator-tools[\s\S]*?aria-expanded=\{creatorToolsOpen\}[\s\S]*?hidden=\{!creatorToolsOpen\}[\s\S]*?onClick=\{onEdit\}[\s\S]*?setAccessSettingsOpen\(true\)[\s\S]*?setAutomationOpen\(true\)[\s\S]*?<NoodlerPostComposer/u,
+  "Collapsed Creator Tools must be one bar: actions and composer both live behind the toggle",
 );
 assert.match(home, /ui\.slurp\.discover\.title/u);
 assert.match(home, /sm:grid-cols-2/u, "Discover must present creators as adaptive cards");
@@ -224,7 +224,7 @@ assert.match(settings, /selectedCreatorId/u, "creator settings must keep an expl
 assert.match(settings, /data-slurp-settings-layout/u, "settings must expose its responsive layout boundary");
 assert.match(
   shell,
-  /slurpActive \? "max-w-\[1680px\]" : "max-w-\[1360px\]"/u,
+  /slurpActive\s*\?\s*"max-w-\[1680px\][\s\S]*?:\s*"max-w-\[1360px\]"/u,
   "every Slurp view must share one wide desktop frame",
 );
 assert.match(
@@ -269,7 +269,11 @@ assert.match(dismissRoute, /listNoodlerStageProfiles/u);
 assert.match(settings, /sourceStatus\.\$\{creator\.sourceStatus\.state\}/u);
 assert.match(settings, /ui\.slurp\.settings\.creators\.acceptChanges/u);
 assert.match(settings, /onRedraftCreator/u);
-assert.match(settings, /import \{ Avatar, getNoodleAccentStyle, NOODLE_PINK \} from "\.\/SlurpShell"/u);
+assert.match(
+  settings,
+  /import \{[\s\S]*?Avatar,[\s\S]*?getNoodleAccentStyle,[\s\S]*?NOODLE_PINK,?[\s\S]*?\} from "\.\/SlurpShell"/u,
+  "Settings must take its shell primitives from the shell",
+);
 assert.match(routes, /app\.post\("\/noodler\/accounts\/:id\/banner"/u);
 assert.match(routes, /postType: slurpPostTypeSchema\.default\("post"\)/u);
 assert.match(routes, /decoded\.data\.postType === "story" && !decoded\.media/u, "Story creation must require media");
@@ -295,13 +299,16 @@ assert.doesNotMatch(
 assert.match(home, /ui\.slurp\.profile\.follow[\s\S]*?ui\.slurp\.profile\.subscribe/u);
 assert.match(home, /management: true/u, "subscriber data must be marked as creator management");
 assert.match(home, /ui\.slurp\.profile\.creatorToolsDetail/u);
-assert.match(home, /ui\.slurp\.profile\.creatorRoom/u);
 assert.match(
   profileSurface,
-  /h-52[\s\S]*?@min-\[760px\]:h-72/u,
+  /h-64[\s\S]*?@min-\[760px\]:h-\[24rem\]/u,
   "Creator Rooms must scale the banner from mobile to desktop",
 );
-assert.match(profileSurface, /@min-\[1040px\]:h-80/u, "wide Creator Rooms must retain the cinematic banner scale");
+assert.match(
+  profileSurface,
+  /@min-\[1040px\]:h-\[28rem\]/u,
+  "wide Creator Rooms must retain the cinematic banner scale",
+);
 assert.match(
   profileSurface,
   /@min-\[860px\]:grid-cols-\[minmax\(0,1fr\)_auto\]/u,
@@ -361,7 +368,10 @@ assert.doesNotMatch(
   "source-account rows must authenticate managed avatar URLs before rendering them",
 );
 assert.match(artwork, /one continuous ultra-wide background scene only/u);
-assert.match(artwork, /Do not include a profile picture, avatar, headshot/u);
+assert.match(artwork, /Do not include a profile picture, avatar, avatar bubble, headshot/u);
+// The page paints its own avatar over the banner, so a banner carrying one shows two.
+assert.match(artwork, /no avatar bubble, no badge, medallion, sticker, or framed headshot/u);
+assert.match(artwork, /negativePromptAdditions: artworkNegativePrompt\(/u);
 assert.match(artwork, /width: kind === "banner" \? 1536 : 1024/u);
 assert.match(artwork, /height: kind === "banner" \? 512 : 1024/u);
 assert.match(settings, /ui\.slurp\.settings\.refresh\.title/u);

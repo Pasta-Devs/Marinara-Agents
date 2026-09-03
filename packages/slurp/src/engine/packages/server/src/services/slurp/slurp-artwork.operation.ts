@@ -26,13 +26,19 @@ function artworkPrompt(
   const voice = [profile.bio, profile.stagePersonality].filter(Boolean).join(" ").slice(0, 400);
   return kind === "avatar"
     ? `Standalone avatar portrait for ${profile.displayName}: one head-and-shoulders subject, looking at the camera, soft flattering light, shallow depth of field, centered composition, plain image with no interface or decorative frame. ${voice}`
-    : `Ultra-wide environmental cover banner for ${profile.displayName}: one continuous location or atmospheric scene that fits the creator, landscape composition, no text, no logos, no interface. If a person appears, keep them small and integrated into the environment rather than presenting a portrait. ${voice}`;
+    : `Ultra-wide environmental cover banner for ${profile.displayName}: one continuous location or atmospheric scene that fits the creator, landscape composition, no text, no logos, no interface. The whole frame is that single scene, edge to edge. Never draw a second image inside it: no circular or rounded portrait, no avatar bubble, no badge, medallion, sticker, or framed headshot anywhere in the frame, and no empty circle waiting for one. If a person appears, keep them small, full-body or turned away, and part of the environment rather than presented as a portrait. ${voice}`;
+}
+
+function artworkNegativePrompt(kind: "avatar" | "banner") {
+  return kind === "banner"
+    ? "profile picture, avatar, avatar bubble, headshot, dominant face, circular portrait, round portrait, badge, medallion, sticker portrait, framed portrait, inset photo, picture-in-picture, profile card, social media interface, UI mockup, collage, text, logo, border"
+    : "banner, cover image, profile page, interface, UI mockup, card, collage, inset image, text, logo, border, circular frame";
 }
 
 function artworkCompositionGuard(kind: "avatar" | "banner") {
   return kind === "avatar"
     ? "COMPOSITION REQUIREMENT: output one standalone square avatar portrait only. Do not create a banner, profile page, card, UI mockup, inset image, collage, text, logo, border, or circular frame."
-    : "COMPOSITION REQUIREMENT: output one continuous ultra-wide background scene only. Do not include a profile picture, avatar, headshot, dominant face, circular crop, framed portrait, inset image, card, collage, social-media UI, text, logo, border, or empty placeholder intended to contain a portrait.";
+    : "COMPOSITION REQUIREMENT: output one continuous ultra-wide background scene only. The profile page draws its own avatar on top of this image, so a second one ruins it. Do not include a profile picture, avatar, avatar bubble, headshot, dominant face, circular or rounded crop, badge, medallion, sticker portrait, framed portrait, inset image, picture-in-picture, card, collage, social-media UI, text, logo, border, or empty placeholder intended to contain a portrait.";
 }
 
 export async function generateNoodlerCreatorArtwork(
@@ -77,10 +83,7 @@ export async function generateNoodlerCreatorArtwork(
       width: input.kind === "banner" ? 1536 : 1024,
       height: input.kind === "banner" ? 512 : 1024,
       compositionGuard: artworkCompositionGuard(input.kind),
-      negativePromptAdditions:
-        input.kind === "banner"
-          ? "profile picture, avatar, headshot, dominant face, circular portrait, framed portrait, inset photo, profile card, social media interface, UI mockup, collage, text, logo, border"
-          : "banner, cover image, profile page, interface, UI mockup, card, collage, inset image, text, logo, border, circular frame",
+      negativePromptAdditions: artworkNegativePrompt(input.kind),
     });
     const mediaPath = image.metadata.noodlerMediaPath;
     if (typeof mediaPath !== "string") {
@@ -169,10 +172,7 @@ export async function backfillNextNoodlerCreatorArtwork(db: DB): Promise<Noodler
       width: kind === "banner" ? 1536 : 1024,
       height: kind === "banner" ? 512 : 1024,
       compositionGuard: artworkCompositionGuard(kind),
-      negativePromptAdditions:
-        kind === "banner"
-          ? "profile picture, avatar, headshot, dominant face, circular portrait, framed portrait, inset photo, profile card, social media interface, UI mockup, collage, text, logo, border"
-          : "banner, cover image, profile page, interface, UI mockup, card, collage, inset image, text, logo, border, circular frame",
+      negativePromptAdditions: artworkNegativePrompt(kind),
     });
     const mediaPath = image.metadata.noodlerMediaPath;
     if (typeof mediaPath !== "string") {
