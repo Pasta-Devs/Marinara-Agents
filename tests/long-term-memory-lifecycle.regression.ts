@@ -2155,6 +2155,10 @@ async function main() {
       assert.match(await healthInfoPanel.innerText(), /12 indexed chunks/u);
       assert.match(await healthInfoPanel.innerText(), /Check Settings > Maintenance > Reindex recall data\./u);
 
+      const showWorkspacePane = async (pane: "navigator" | "workbench" | "inspector") => {
+        const tab = page.locator(`[data-ltm-workspace-pane-tab="${pane}"]`);
+        if (await tab.isVisible().catch(() => false)) await tab.click();
+      };
       failReviewContext = true;
       await page.locator('[data-ltm-navigation="mobile"] [data-ltm-destination="review"]').click();
       const reviewContextError = page
@@ -2179,15 +2183,15 @@ async function main() {
       // request settles, restores the workspace. (world_second_mobile is an optional context note fetched
       // with allowMissing=true, so it must not be omitted here or the later review content assertions fail.)
       await reviewContextError.getByRole("button", { name: "Retry" }).click();
-      await page.locator('[data-ltm-workspace-pane-tab="navigator"]').click();
+      await showWorkspacePane("navigator");
       await page.locator('[data-ltm-review-source-select="source_mobile_review"]').waitFor();
       const restoredContextSource = page.locator('[data-ltm-review-source-select="source_mobile_review"]');
       if ((await restoredContextSource.getAttribute("aria-expanded")) === "false") {
         await restoredContextSource.click();
       }
-      await page.locator('[data-ltm-workspace-pane-tab="navigator"]').click();
+      await showWorkspacePane("navigator");
       await page.locator(`[data-ltm-review-draft-select="${reviewDraftIds.first}"]`).click();
-      await page.locator('[data-ltm-workspace-pane-tab="workbench"]').click();
+      await showWorkspacePane("workbench");
       const restoredAccept = page.locator(
         `[data-ltm-review-mutation="${reviewMutationIds.first}"] [aria-label^="Review change "]`,
       );
@@ -2216,9 +2220,9 @@ async function main() {
       if ((await mergeSource.getAttribute("aria-expanded")) === "false") {
         await mergeSource.click();
       }
-      await page.locator('[data-ltm-workspace-pane-tab="navigator"]').click();
+      await showWorkspacePane("navigator");
       await page.locator(`[data-ltm-review-draft-select="${reviewDraftIds.merge}"]`).click();
-      await page.locator('[data-ltm-workspace-pane-tab="workbench"]').click();
+      await showWorkspacePane("workbench");
       const mergeMutation = page.locator(`[data-ltm-review-mutation="${reviewMutationIds.merge}"]`);
       await mergeMutation.locator("[data-ltm-review-mutation-toggle]").click();
       await mergeMutation.getByRole("button", { name: "Open memory" }).click();
@@ -2227,14 +2231,14 @@ async function main() {
       assert.equal(await page.locator("[data-ltm-note-editor] input").first().inputValue(), "Existing merge target");
       await page.locator('[data-ltm-control="navigation"][data-ltm-destination="review"]').last().click();
       await page.locator('[data-ltm-review-source-select="source_mobile_review"]').waitFor();
-      await page.locator('[data-ltm-workspace-pane-tab="navigator"]').click();
+      await showWorkspacePane("navigator");
       const restoredReviewSource = page.locator('[data-ltm-review-source-select="source_mobile_review"]');
       if ((await restoredReviewSource.getAttribute("aria-expanded")) === "false") {
         await restoredReviewSource.click();
       }
-      await page.locator('[data-ltm-workspace-pane-tab="navigator"]').click();
+      await showWorkspacePane("navigator");
       await page.locator('[data-ltm-review-draft-select="10000000-0000-4000-8000-000000000012"]').click();
-      await page.locator('[data-ltm-workspace-pane-tab="workbench"]').click();
+      await showWorkspacePane("workbench");
       await page.locator("[data-ltm-review-draft-title]").waitFor();
       assert.equal(
         await page.locator("[data-ltm-review-draft-title]").innerText(),
@@ -2262,9 +2266,9 @@ async function main() {
       await page.locator('[data-ltm-control="navigation"][data-ltm-destination="review"]').last().click();
       await page.locator('[data-ltm-review-source-select="source_mobile_review"]').waitFor();
       await page.locator('[data-ltm-review-source-select="source_mobile_review"]').click();
-      await page.locator('[data-ltm-workspace-pane-tab="navigator"]').click();
+      await showWorkspacePane("navigator");
       await page.locator('[data-ltm-review-draft-select="10000000-0000-4000-8000-000000000012"]').click();
-      await page.locator('[data-ltm-workspace-pane-tab="workbench"]').click();
+      await showWorkspacePane("workbench");
       await page.setViewportSize({ width: 1280, height: 900 });
       const acceptButtonSize = await page
         .locator("[data-ltm-review-mutation] [data-ltm-review-action]")
