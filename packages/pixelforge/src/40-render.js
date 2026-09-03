@@ -9,23 +9,60 @@ PF.Render = class {
     this.canvas = canvas;
     this.ctx = canvas.getContext("2d");
     this.ctx.imageSmoothingEnabled = false;
-    this._zoneCache = new Map(); // zoneId → {base, overhead}
+    this._zoneCache = new Map(); // `zoneId|weatherClass` → {base, overhead}
   }
 
+  /** Drop a zone's composites. PREFIX DELETE, because a zone is cached under a
+   *  composite CLASS now (`z1|base`, `z1|snow`): deleting the bare id would take
+   *  nothing at all, and deleting one class would leave the other stale until
+   *  the next world switch — a thaw that never arrives on the one zone that had
+   *  just been repainted. */
   invalidateZone(zoneId) {
-    this._zoneCache.delete(zoneId);
+    const prefix = `${zoneId}|`;
+    for (const key of this._zoneCache.keys()) if (key.startsWith(prefix)) this._zoneCache.delete(key);
   }
 
   /** Drop every zone composite (chat/world switch): the cache is keyed by zone
-   *  id alone, so a new world's zones would otherwise reuse stale composites. */
+   *  id and weather class, neither of which is world-unique, so a new world's
+   *  zones would otherwise reuse stale composites. */
   clearZones() {
     this._zoneCache.clear();
   }
 
-  _composite(z) {
-    let c = this._zoneCache.get(z.id);
+  /** Is there anything in this zone the weather can lie on?
+   *
+   *  Scanned once and remembered ON THE ZONE. A settlement is a couple of
+   *  thousand tiles and the answer cannot change, because the arrays are never
+   *  written — so the alternative is that scan every frame of every snowy day.
+   *  A zone with nothing snowable in it (an interior, a paved square) then never
+   *  pays for a second composite either. */
+  _snowable(z) {
+    if (z._snowable === undefined) {
+      const subs = PF.weather.SUBS.snow;
+      const any = (layer) => layer.some((id) => id && PF.own(subs, id) !== undefined);
+      z._snowable = any(z.ground) || any(z.overhead);
+    }
+    return z._snowable;
+  }
+
+  /** One zone, composited under a weather CLASS.
+   *
+   *  `cls` is either "base" or a weather word with a SUBS row. The substitution
+   *  is a RENAME AT PAINT TIME and nothing else: the id the compiler wrote is
+   *  read, a different painter answers it, and the zone array is never touched.
+   *  That is the paint contract — a renderer that wrote the weather into the
+   *  world would have the save carrying it a moment later, and the thaw would
+   *  never come.
+   *
+   *  Both layers are covered: `canopy` lives in `z.overhead`, so a ground-only
+   *  substitution would leave green treetops over a white field. */
+  _composite(z, cls) {
+    const key = `${z.id}|${cls}`;
+    let c = this._zoneCache.get(key);
     if (c) return c;
     const T = PF.TILE;
+    const subs = cls === "base" ? null : PF.own(PF.weather.SUBS, cls);
+    const paint = (id) => PF.art.tile((subs && PF.own(subs, id)) || id);
     const base = PF.offscreen(z.w * T, z.h * T);
     const over = PF.offscreen(z.w * T, z.h * T);
     const bg = base.getContext("2d");
@@ -35,13 +72,13 @@ PF.Render = class {
     for (let y = 0; y < z.h; y++) {
       for (let x = 0; x < z.w; x++) {
         const i = y * z.w + x;
-        bg.drawImage(PF.art.tile(z.ground[i]), x * T, y * T);
+        bg.drawImage(paint(z.ground[i]), x * T, y * T);
         if (z.object[i]) bg.drawImage(PF.art.tile(z.object[i]), x * T, y * T);
-        if (z.overhead[i]) og.drawImage(PF.art.tile(z.overhead[i]), x * T, y * T);
+        if (z.overhead[i]) og.drawImage(paint(z.overhead[i]), x * T, y * T);
       }
     }
     c = { base, overhead: over };
-    this._zoneCache.set(z.id, c);
+    this._zoneCache.set(key, c);
     return c;
   }
 
@@ -49,7 +86,14 @@ PF.Render = class {
     const { ctx } = this;
     const T = PF.TILE;
     const z = sim.zone();
-    const comp = this._composite(z);
+    // THE SKY, READ ONCE PER FRAME off the sim's day-keyed memo. All three
+    // weather surfaces below — the ground class, the tint, the falling stuff —
+    // spend this one pair, and the intensity reaches only the last two.
+    const sky = sim.weather();
+    // EXTERIOR ONLY, all of it, on the compiler's own word: a settlement and a
+    // place are outdoors, a building is not. It does not rain in the inn.
+    const outdoors = z.mapKind !== "building";
+    const comp = this._composite(z, outdoors && sky.word === "snow" && this._snowable(z) ? "snow" : "base");
     ctx.clearRect(0, 0, PF.VW, PF.VH);
 
     // camera: center player, clamp to zone, snap to whole pixels (pixel-art rule)
@@ -108,6 +152,26 @@ PF.Render = class {
 
     this._blitOverhead(ctx, comp.overhead, z, sim, camX, camY, viewW, viewH, offX, offY);
 
+    // ── WEATHER TINT ─────────────────────────────────────────────────────────
+    // BEFORE the day/night block, with its own composite-op save/restore, and
+    // both halves of that placement are deliberate. `darkness()` returns exactly
+    // 0 from 07:00 to 18:00, so a tint folded into the block below would be
+    // invisible for eleven hours a day — most of the hours anyone plays. And the
+    // ORDER is weather first, night second: a night storm tints the world and
+    // then the dark falls over it, rather than greying out the window glow.
+    //
+    // Rain's tint is a PAIR, one alpha per intensity, which is the second of the
+    // two axes heavy weather is allowed to move (the first is how much is
+    // falling). Snow has no tint at all — the tiles carry it.
+    const tint = outdoors ? PF.weather.WORD_META[sky.word]?.tint : null;
+    const tintColor = typeof tint === "string" ? tint : tint ? (PF.own(tint, sky.intensity) ?? tint.light) : null;
+    if (tintColor) {
+      ctx.globalCompositeOperation = "multiply";
+      ctx.fillStyle = tintColor;
+      ctx.fillRect(offX, offY, viewW, viewH);
+      ctx.globalCompositeOperation = "source-over";
+    }
+
     // day/night multiply tint + warm window glow
     const dark = sim.darkness();
     if (dark > 0.01) {
@@ -129,11 +193,81 @@ PF.Render = class {
       ctx.globalCompositeOperation = "source-over";
     }
 
+    // Falling weather goes on LAST, over the night as well as the day: rain the
+    // dark had already multiplied down to nothing is rain nobody can see, and
+    // the point of the pass is that something is visibly happening.
+    if (outdoors) this._fall(ctx, sky, offX, offY, viewW, viewH);
+
     // letterbox frame line so the world reads as a deliberate viewport over the scene art
     if (opts?.frame !== false) {
       ctx.strokeStyle = "rgba(0,0,0,0.6)";
       ctx.lineWidth = 2;
       ctx.strokeRect(offX + 1, offY + 1, viewW - 2, viewH - 2);
+    }
+  }
+
+  /** WHAT IS FALLING OUT OF THE SKY: a lean screen-space pass over the finished
+   *  frame. No emitter, no particle system, no state — N lanes, each one a fixed
+   *  hash and a phase.
+   *
+   *  THE DETERMINISM EXCEPTION, DECLARED HERE BECAUSE IT IS THE ONLY ONE.
+   *  Everything else in this package is a pure function of the saved clock — the
+   *  sky at a day, a fish roll, where a villager stands at seven in the morning
+   *  — and that is exactly what makes a rewind land on the world it left. This
+   *  pass takes its phase from `performance.now()`, a wall clock, and NOTHING
+   *  SIM-SIDE EVER READS IT. That is what makes the exemption legal rather than
+   *  a hole: no draw here feeds a save field, a roll or a decision, so two
+   *  machines showing the same save at the same moment may have their rain in
+   *  different places and still agree about every fact the game keeps.
+   *
+   *  It is also load-bearing for the time stop. Under an open dialogue window
+   *  `clockMin` and `darkness()` hold still, and this is the one surface left
+   *  moving: rain and snow keep falling while you read, which is the whole of
+   *  "the world stays alive while you talk to someone". A phase taken from the
+   *  game clock would freeze the weather solid along with it.
+   *
+   *  The LANES are still deterministic — each streak's column, length and speed
+   *  come off `hashStr`, so a downpour reads as consistent weather rather than
+   *  as static. Only the phase moves.
+   *
+   *  INTENSITY IS THIS PASS'S LOUDEST AXIS: heavy runs ~2.7x the streaks at
+   *  ~1.7x the fall speed, and storm rides the heavy row with a steeper wind
+   *  angle. Light rain and heavy rain have to read as different weather at a
+   *  glance, which is a promise about this function and not about the tint. */
+  _fall(ctx, sky, offX, offY, viewW, viewH) {
+    const snowing = sky.word === "snow";
+    const storming = sky.word === "storm";
+    if (!snowing && !storming && sky.word !== "rain") return;
+    const row = PF.weather.TUNING.particles[sky.intensity === "light" ? "light" : "heavy"];
+    const t = performance.now() / 1000;
+    // Snow drifts; rain leans; a storm leans hard. Wind is x per y fallen.
+    const slant = snowing ? 0 : storming ? 0.55 : 0.22;
+    const span = viewH + 48; // the lane is taller than the view: streaks enter and leave
+    const len = snowing ? 2 : Math.round(4 * row.fall) + 2;
+    ctx.fillStyle = snowing ? "rgba(246,249,255,0.85)" : storming ? "rgba(188,203,224,0.6)" : "rgba(199,214,235,0.45)";
+    // Clipped to the VIEWPORT, never the canvas: the letterbox bands are where
+    // the host's own scene art shows through, and it is not raining on that.
+    const bar = (x, y, w, h) => {
+      const left = Math.max(x, offX);
+      const right = Math.min(x + w, offX + viewW);
+      const top = Math.max(y, offY);
+      const bottom = Math.min(y + h, offY + viewH);
+      if (right > left && bottom > top) ctx.fillRect(left, top, right - left, bottom - top);
+    };
+    for (let i = 0; i < row.n; i++) {
+      const seed = PF.hashStr(`fall|${i}`);
+      const speed = row.fall * (snowing ? 26 : 260) * (0.7 + ((seed >>> 12) % 64) / 96);
+      const y = ((((seed >>> 6) % span) + t * speed) % span) - 24;
+      const drift = snowing ? Math.sin(t * 0.8 + i) * 7 : -y * slant;
+      const x = (((((seed % 4096) / 4096) * viewW + drift) % viewW) + viewW) % viewW;
+      if (snowing) {
+        bar(offX + Math.round(x), offY + Math.round(y), 2, 2);
+        continue;
+      }
+      // A slanted streak in two or three stacked segments — cheaper than a
+      // stroked line and it stays on the pixel grid, which is the house style.
+      for (let s = 0; s < len; s += 3)
+        bar(offX + Math.round(x - s * slant), offY + Math.round(y + s), 1, Math.min(3, len - s));
     }
   }
 

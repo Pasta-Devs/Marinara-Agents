@@ -68,19 +68,32 @@ PF.pack = (() => {
   // TWO REGISTERS, stranger and friend — the ROADMAP's own words for E1 (iii),
   // and what P2's disposition ladder will switch between.
   const REGISTERS = ["stranger", "friend"];
-  // THE WEATHER AXIS, built and empty. L2 owns the rest of this list; until then
-  // "fair" is the only value there is, and it is OPTIONAL on a line precisely so
-  // the seam costs nothing: a generation that had to spell one constant word on
-  // every line would spend a tenth of its budget saying "fair" (plan §2.2b's byte
-  // diet). Absent reads as fair, here and forever.
-  const WEATHERS = ["fair"];
-  const WEATHER_DEFAULT = "fair";
+  // THE WEATHER AXIS, and 17-weather is its authority — the DAYPARTS idiom one
+  // line up, and legal here for the same reason: 17 loads before 61, so this is
+  // a forward read and a backward one would be a TypeError at load rather than a
+  // second list quietly disagreeing with the sky.
+  //
+  // AN ABSENT `w` READS AS ANY WEATHER, which is the generalization of the
+  // "absent reads as fair" this line used to say while fair was the only value
+  // there was. The first reader defines read semantics, and §2.6's is: a line
+  // with no `w` is served under every sky, a line tagged `rain` is served under
+  // any rain — the axis is the five WORDS and an intensity never enters it.
+  // Optional on purpose, and that is still a byte argument: a generation made to
+  // spell a word on every line would spend a tenth of its budget on it.
+  const WEATHERS = PF.weather.WORDS;
+  // THE SKY WORDS THE GUIDANCE ASKS FOR: the five, less the one an untagged line
+  // already covers. An absent `w` is served under every sky, so a line tagged
+  // `fair` spends four characters buying the generalization it had for free. The
+  // SCHEMA still seals all five — a model that writes one is honoured rather than
+  // repaired — and the foot of this file pairs the two lists so dropping a second
+  // word here is a throw at load and not a vocabulary quietly narrowing.
+  const WEATHERS_ASKED = WEATHERS.filter((word) => word !== "fair");
   // THE E7 TOPIC SEAM (plan §2.2c). Optional per line, defaulting to NONE, and it
-  // exists so the Ask tree has branches to hang lines off when it arrives: rumor
-  // and work are the two E7 is load-bearing for, place and smalltalk are the ones
-  // a tree opens with. `guidance` below confines the tags it ASKS for to rumor
-  // and work — the seam is wider than the diet on purpose, because the schema
-  // seals and the guidance does not.
+  // is the tree's four branches: rumor and work are the two the window is
+  // load-bearing for, place and smalltalk are the ones it opens with. 0.13's
+  // guidance asked for two of them and the schema sealed four; 0.14 is the
+  // release that ends that diet, because every release it waited was a cohort of
+  // worlds sealed thin on exactly the tags the window renders.
   const TOPICS = ["rumor", "work", "place", "smalltalk"];
 
   // ── The quest template vocabulary (plan §2.2c) ──────────────────────────────
@@ -148,25 +161,28 @@ PF.pack = (() => {
     // #5135 output floor: a connection that gives us the minimum cuts the
     // emission's TAIL at 2,048 tokens, `salvageText` closes what is open, and
     // whatever templates-first order the model actually honoured is what
-    // survives. Every line is costed TAGGED — the topic tag is bytes the byte
-    // diet does not have to spend, so costing it in is the safe direction:
+    // survives. Every line is costed TAGGED — and from 0.14 that means costed
+    // with the SKY term too, which is where the extra ten characters a row went:
     //
     //   the truncation wall (#5135, connections may undercut) ....  2,048 tokens
     //   dense punctuation-heavy JSON, at three chars to the token .  6,144 chars
     //   the envelope (`{"templates":[`, `],"lines":[`, the close) .    -40 chars
     //   templates emit FIRST and may fill their own cap: 24 × 150 . -3,600 chars
     //   …so the index is left with ...............................   2,504 chars
-    //   a TAGGED line row costs about 130, which buys ............      19 lines
-    //   less the trailing partial row the salvage trims ..........      18 lines
+    //   a TAGGED line row costs about 140, which buys ............      17 lines
+    //   less the trailing partial row the salvage trims ..........      16 lines
     //
     // THE TWO ROW COSTS ARE MEASURED DENSITY, NOT THE SCHEMA'S MAXIMUM, and
     // that distinction is the whole standing of the sum. Serialized, the default
-    // pack's own rows run 112-137 chars a template (mean 121) and 97-140 chars a
-    // line with every one costed tagged (mean 119), across both themes — so 150
-    // and 130 sit above what a typical emission spends, the template cost above
-    // even the widest row measured. What the schema ALLOWS is far bigger: a
+    // pack's own rows run 112-137 chars a template (mean 121) and 97-151 chars a
+    // line with every one costed tagged (mean 126), across both themes — so 150
+    // sits above even the widest template measured, and 140 sits above the MEAN
+    // line and under the widest, which is what a density figure is: what a
+    // typical row costs, and not a ceiling. What the schema ALLOWS is far bigger: a
     // 32-char slug, a 24-char giver, a 32-char variant and a 48-char title make
-    // a 217-char template, and a 200-char line with a tag is 279. So what the
+    // a 217-char template, and a 200-char line carrying BOTH tags — the topic and
+    // the 0.14 sky term — is 294 serialized on the widest handle LOCATIONS names
+    // ("settlement", ten characters), measured and pinned. So what the
     // sum shows is that the floors CLEAR A TYPICAL TEMPLATES-FIRST CUT, and it
     // is not a worst-case guarantee. It cannot be one and keep these floors:
     // 24 × 217 leaves 896 chars of index, which is two rows, and a floor sized
@@ -184,13 +200,37 @@ PF.pack = (() => {
     // lane in the harness pins it, so it stays a known cost rather than
     // something the next reader rediscovers against a comment that denied it.
     //
-    // Eighteen lines and twenty-four templates against floors of twelve and
-    // three: a typical cut at this wall still seals, and a pack that came back
-    // with a quarter of an index still fails. `floorBasis` carries the inputs so
-    // the lane that re-runs the sum cannot drift from the table.
+    // Sixteen lines and twenty-four templates against floors of ten and three:
+    // a typical cut at this wall still seals, and a pack that came back with a
+    // quarter of an index still fails. `floorBasis` carries the inputs so the
+    // lane that re-runs the sum cannot drift from the table.
+    //
+    // ── WHY TEN AND NOT TWELVE (ruled, and irreversible in one direction) ─────
+    // The floor was twelve, and the live measurement is the reason it moved: a
+    // real floor-connection emission landed ON twelve, and 0.14 makes every line
+    // about eight percent costlier — four topic values instead of two, the sky
+    // term, a wider digest ahead of it. Held at twelve, that eight percent is the
+    // difference between a thin pack and a retry screen the player cannot get
+    // past, on the connections least able to try again.
+    //
+    // IT IS AN ACCEPTANCE BOUNDARY AND NOT A TUNING KNOB, which is why it is
+    // stated here rather than moved quietly. This number decides which
+    // generations become PERMANENT ARTIFACTS: lowering it seals packs that would
+    // have failed, and those packs are stored forever. Nothing already sealed
+    // moves; what moves is the next cohort.
+    //
+    // AND THE INVERSION IT ACCEPTS, said where it bites. A ten-line pack under
+    // the live distribution renders one topic branch at the talk window, maybe
+    // two. The enrichment that gives a legacy world all four cannot reach it —
+    // `fold()` is `sealed ?? defaults`, so a world with its own pack reads its own
+    // pack — so this floor is also the line under which a paid generation talks
+    // less than a world that never generated at all. The trade was taken with
+    // that stated: a thin pack written for THIS settlement beats a rich one
+    // written for nobody, and the way out is a wider generation rather than a
+    // blend.
     floorTemplates: 3,
-    floorLines: 12,
-    floorBasis: { truncTokens: 2_048, charsPerToken: 3, envelopeChars: 40, templateChars: 150, lineChars: 130 },
+    floorLines: 10,
+    floorBasis: { truncTokens: 2_048, charsPerToken: 3, envelopeChars: 40, templateChars: 150, lineChars: 140 },
     // ── The reward derivation (plan §2.6, RULED) ──────────────────────────────
     // MONEY IS DERIVED FROM (verb, n) AND THE PACK NEVER AUTHORS IT — the schema
     // excludes money and xp, the seal drops both, and `rewardFor` below is the
@@ -297,14 +337,15 @@ PF.pack = (() => {
    *
    *    the settlement's name row and the two section headers ............    201
    *    the situation, with its lead-in (18-brief caps the field at 240) .    270
+   *    the two climate rows, at their widest (temperate/moderate) ......    136
    *    the zone list: the root plus 4 places × (name 24 + kind + dashes) .    189
    *    the cast: 10 × (name 24 + role 24 + home 24 + persona 100 + 18) ..  1,900
-   *    the newlines joining the twenty-one rows ........................     20
+   *    the newlines joining the twenty-three rows ......................     22
    *                                                                       ------
-   *                                                                        2,580
+   *                                                                        2,718
    *
-   *  …which is the plan's ~2.5K, and it leaves better than 5,200 chars of the cap
-   *  for the player's own words. 2,580 is MEASURED and not estimated: the harness
+   *  …which is the plan's ~2.5K, and it leaves better than 5,000 chars of the cap
+   *  for the player's own words. 2,718 is MEASURED and not estimated: the harness
    *  searches for the biggest digest a legal brief can produce — every field at
    *  its cap, in tokens with no space near the cut so `capText` clips at the cap
    *  exactly rather than at a word boundary short of it — and pins the number, so
@@ -333,14 +374,52 @@ PF.pack = (() => {
    *  the list teaches the mapping from "The Amber Hearth Inn" to `gathering` in
    *  the same breath that it teaches the inn exists. Without it the model has to
    *  guess which of seven handles a name belongs under, and a guessed handle is a
-   *  line that never renders anywhere. */
-  function digest(brief) {
+   *  line that never renders anywhere.
+   *
+   *  ── THE CLIMATE, AND WHY IT IS A SECOND ARGUMENT ─────────────────────────
+   *  `axes` is `{latitude, precipitation}` and the two rows it renders exist so a
+   *  generation does not solicit snow lines for a jungle. It is an ARGUMENT and
+   *  not a field on the brief because this function receives only the brief, and
+   *  a world's climate is a derivation off (brief hint, seed, theme) that lives in
+   *  17-weather — computing a theme default here would be a second authority for
+   *  the sky, disagreeing with the first on every world whose brief named nothing.
+   *
+   *  ABSENT MEANS OMITTED, both rows, and that is a legal call: it is 0.13's own
+   *  shape, and a caller with no climate to state should say nothing rather than
+   *  make one up. The shipped compose site always resolves one.
+   *
+   *  THE SECOND ROW IS DERIVED AND NOT A TABLE. `wordsFor` walks the same weight
+   *  rows `at()` draws from, so the sentence describes the sky this world will
+   *  actually have — including the honest cases nobody would write down by hand,
+   *  like both two-season structures having no snow at any precipitation.
+   *
+   *  AND THE ROWS ARE A BELT, NOT A FOLD. Everything rendered here goes through
+   *  `capText` exactly as every other row does, because the object handed in is
+   *  the same untrusted channel the brief came off: a nine-thousand-character
+   *  latitude clips to 24 and cannot eat the cast list, and no value can inject a
+   *  second row. What guarantees the words are a REAL climate is the fold at the
+   *  compose site (`axesFor`), one screen up — the belt only guarantees that a
+   *  hostile one cannot damage the request. */
+  function digest(brief, axes) {
     const cast = Array.isArray(brief?.cast) ? brief.cast : [];
     const places = Array.isArray(brief?.places) ? brief.places : [];
     const name = capText(brief?.name, 24) || "the settlement";
     const out = [`The settlement is ${name}.`];
     const situation = capText(brief?.situation, 240);
     if (situation) out.push(`What is unresolved right now: ${situation}`);
+    // THE OPENING BLOCK IS WHERE THEY LAND. It takes plain pushes and has no
+    // separator convention to violate, and — the reason it is not a tail append —
+    // a row parked under the PEOPLE header reads as an eleventh cast member, which
+    // is the mistake this file's own section comment warns about.
+    const latitude = capText(axes?.latitude, 24);
+    const precipitation = capText(axes?.precipitation, 24);
+    if (latitude && precipitation) {
+      out.push(`Climate: ${latitude} latitude, ${precipitation}.`);
+      out.push(
+        `Weather runs to: ${PF.weather.wordsFor(latitude, precipitation).join(", ")}` +
+          ` — write no line for a sky this world never has.`,
+      );
+    }
     out.push("", "PLACES — the second word is the location handle a line is keyed by:", `- ${name} — settlement`);
     for (const place of places) {
       const placeName = capText(place?.name, 24);
@@ -416,13 +495,28 @@ PF.pack = (() => {
    *  The default pack already writes titles this way; this is the sentence that
    *  asks a generated one to.
    *
-   *  TOPIC TAGS ARE CONFINED TO rumor|work HERE, while the SCHEMA seals all four
-   *  (plan §2.2c). That gap is deliberate and it is the byte diet: `place` and
-   *  `smalltalk` are the tags an Ask tree opens with and the two E7 is not
-   *  load-bearing for, so paying four extra characters a line for them now buys
-   *  nothing this release can read. The schema is the thing that seals forever and
-   *  the guidance is the thing that can be rewritten next release, so the wider
-   *  vocabulary belongs in the schema and the diet belongs here. */
+   *  THE BYTE DIET IS OVER, AND THIS IS THE RELEASE THAT ENDED IT (plan §2.7).
+   *  0.13 confined the topic tags it asked for to rumor|work while the schema
+   *  sealed all four, on the argument that `place` and `smalltalk` bought nothing
+   *  a release could read yet — with the note that the schema seals forever and
+   *  the guidance can be rewritten next release. The window is here, it renders
+   *  all four branches, and every release the diet ran was a cohort of worlds
+   *  sealed thin on the two tags the tree opens with. So the guidance now asks for
+   *  the whole vocabulary, and the four characters a tag costs are the cheapest
+   *  thing in this request.
+   *
+   *  THE SKY TAG IS THE ONE THAT STAYS OPTIONAL AND SAYS SO OUT LOUD. `w` is asked
+   *  for as an exception rather than as a field: a town's dialogue is mostly what
+   *  it says whatever the weather, and a generation that tagged every line would
+   *  hand back a pack whose topic branches vanish on the first fair day. The
+   *  guidance asks for a handful; the coverage the window depends on is untagged.
+   *
+   *  AND THE REGISTER ASK IS INVERTED (plan §2.7, ruling 4). 0.13 asked for MORE
+   *  FRIEND LINES because that register was where the settlement stopped sounding
+   *  like a signpost. 0.14 serves the stranger register and only that one, so a
+   *  pack written to the old ask spends its best writing on rows nothing reads.
+   *  Friend lines still seal — they are P2's inheritance — they are just not what
+   *  this call asks the model to spend its budget on. */
   function guidance(theme) {
     return [
       "You are writing an OFFLINE CONTENT PACK for a settlement that already exists: what its people say,",
@@ -448,14 +542,16 @@ PF.pack = (() => {
       "      any place of the kind named finishes a visit, so a title promising a particular one can mislead.",
       "    NEVER write money, pay, a price, a reward or experience. The game decides what work is worth.",
       "- lines: what somebody standing in a place says, keyed so the right line reaches the right moment.",
-      "    Each is {at, when, r, text} plus an optional topic.",
+      "    Each is {at, when, r, text} plus an optional topic and w.",
       `    at: one of ${LOCATIONS.join(" | ")} — the handle beside each place below.`,
       `    when: one of ${DAYPARTS.join(" | ")}.`,
       `    r: ${REGISTERS[0]} (they barely know you) or ${REGISTERS[1]} (they do).`,
-      "    topic (optional): rumor or work. Leave it off for anything else.",
+      `    topic (optional): one of ${TOPICS.join(" | ")} — tag every line that fits one; rumor and work matter most.`,
+      `    w (optional): one of ${WEATHERS_ASKED.join(" | ")} — ONLY for a line that needs that sky;`,
+      "      most lines should work any day, so leave it off unless the weather is what the line is about.",
       "    text: ONE spoken line, <=200 characters. No name tags, no quotation marks, no stage directions.",
-      "    Cover the places and hours somebody would actually be there; write more friend lines than you",
-      "    think you need, because that register is where the settlement stops sounding like a signpost.",
+      `    Cover the places and hours somebody would actually be there, and write mostly ${REGISTERS[0]} lines:`,
+      `    that is the register this game reads, and every ${REGISTERS[1]} line is written for a later one.`,
       "- escalation: ONE line per person, {npc, text}: the thing they say when the player asks properly",
       "    about the unresolved situation above — the door, not what is behind it. Keep it withholding.",
       "- overheard: {at, text} — half of somebody else's conversation, heard in passing. Nobody answers it.",
@@ -509,6 +605,13 @@ PF.pack = (() => {
               r: { type: "string", enum: REGISTERS },
               text: text(CAPS.text),
               topic: { type: "string", enum: TOPICS },
+              // THE SKY TERM, SEALED FROM 0.14 ON. Legal for NEW packs only — a
+              // 0.13 pack carries none and reads as any-weather, which is the
+              // read door's own semantics and why nothing had to migrate. Beside
+              // `topic` because property order is the emission order the guidance
+              // asks for out loud, and these are the two optional tags a line
+              // carries. `required` is untouched: both stay optional forever.
+              w: { type: "string", enum: WEATHERS },
             },
             required: ["at", "when", "r", "text"],
           },
@@ -543,6 +646,7 @@ PF.pack = (() => {
     DAYPARTS,
     REGISTERS,
     WEATHERS,
+    WEATHERS_ASKED,
     TOPICS,
     VERBS,
     MECHANICS,
@@ -919,6 +1023,16 @@ PF.pack = (() => {
           ? stored
           : null;
       const demoted = !!stored && !sealed;
+      // `sealed ?? defaults` IS AN INVERSION AND IT IS ACCEPTED, said here because
+      // this line is where it happens. The default packs carry the 0.14 coverage
+      // floor — two stranger lines per (handle × topic), so all four talk-window
+      // branches render — and a world that SUCCEEDED at generation reads none of
+      // it: a thin sealed pack that only cleared the line floor renders one or two
+      // branches, and no enrichment written here can reach it. So a legacy world
+      // and a declined generation are the RICHER conversation this release, and
+      // the world that paid for a pack is the poorer one. The fix is a wider
+      // generation, not a merge — a fallback blended into sealed content would
+      // put the stock cast's sentences in a stranger town's mouths.
       const pack = sealed ?? this.defaults(theme);
       const known = new Set();
       for (const zoneId of Object.keys(world?.zones ?? {})) {
@@ -1479,8 +1593,14 @@ PF.pack = (() => {
      *  `.then`, after the host has taken the turn.
      *
      *  THE ONE NON-GM-FREE QUEST VERB, stated rather than discovered (Ruling 1 is
-     *  "lean", not "zero"): the handover costs exactly one GM call, which is the
-     *  greeting the player was sending anyway.
+     *  "lean", not "zero"): the handover costs exactly one GM call — and 0.14 says
+     *  WHICH call rather than leaving it implicit in the greeting. The talk window
+     *  draws one LABELLED branch per outstanding errand ("Hand over: <title>"), and
+     *  that press settles that row; the free-talk door still settles every row to
+     *  the name, exactly as 0.13's bare greeting did. So the honest claim is narrow
+     *  and worth making narrowly: no press that is not handover-shaped can settle
+     *  an errand, and every settling press says on its face what it settles. A bare
+     *  `interact()` — which now only OPENS the window — settles nothing at all.
      *
      *  BOTH FENCES ARE THE CALLER'S and both are needed. `gen` is the generation
      *  the turn was composed under — a chat switch under the await would otherwise
@@ -1494,7 +1614,7 @@ PF.pack = (() => {
      *  `name` is captured AT SEND for the same reason: the person the player
      *  walked up to is the person the errand was run to, whoever is standing
      *  there by the time the host answers. */
-    delivered(core, name, gen) {
+    delivered(core, name, gen, rowId) {
       const sim = core?.sim;
       const world = sim?.world;
       if (!world) return [];
@@ -1503,19 +1623,308 @@ PF.pack = (() => {
       if (!to) return [];
       const player = PF.player.get(core);
       const rows = Array.isArray(player?.quests?.active) ? player.quests.active : [];
-      const due = rows.filter((row) => str(row.verb) === "deliver" && str(row.target) === to);
+      // THE OPTIONAL ROW ID, and it is an ID rather than the row OBJECT for
+      // `turnIn`'s stated reason one screen up: the window drew its "Hand over"
+      // branch when it opened and settles it after an await, so it is strictly
+      // staler than the board menu that comment already guards — and `settle`
+      // reads the reward off the object it is handed, so a stale one pays a stale
+      // reward against a live row. Named, the branch RE-FINDS the row here, at
+      // settle time, in the live list; a miss filters to nothing and settles
+      // nothing, which is the refusal. Unnamed, every row to the name settles —
+      // 0.13's implicit handover, preserved verbatim for the "Just talk" door.
+      const wanted = str(rowId);
+      const due = rows.filter(
+        (row) => str(row.verb) === "deliver" && str(row.target) === to && (!wanted || str(row.id) === wanted),
+      );
       const filled = [];
       for (const row of due) {
         // THE GIVER == TARGET CASE IS RECORDED HARMLESS, not defended against: a
         // template whose giver is also its target bumps the same person twice in
         // one turn (once for the conversation in 90-element, once for the errand
         // here), which reads as two encounters on a turn that was two things.
+        //
+        // 0.14 WIDENS THE COUNT AND NOT THE ARGUMENT. The talk window's paid set
+        // is four presses deep — free talk, say something, press them about it,
+        // and one per errand — so one conversation can now bump the same person
+        // up to four times, once per ACCEPTED turn. That is still what the count
+        // says it is: `t` counts encounters, four accepted turns are four of
+        // them, and the only reader is P2's disposition ladder, which does not
+        // exist yet. Restated rather than left saying "twice", because a number
+        // in a comment that has stopped being the number is how the next reader
+        // concludes a fifth bump is a bug.
         const done = this.settle(core, row, gen, (giver, paid) =>
           giver && giver !== to ? `Took ${giver}'s word to ${to} — ${paid}.` : `Took word to ${to} — ${paid}.`,
         );
         if (done) filled.push(done);
       }
       return filled;
+    },
+
+    // ── The Ask ladder: what a person says when you ask (plan §2.6) ──────────
+    // The talk window's free half reads lines out of the folded pack. Four
+    // branches — rumor, work, place, and "Pass the time" — and NONE of them costs
+    // a GM call: this is a lookup over an artifact that is already in memory.
+    //
+    // THE UNIVERSE IS STRANGER-ONLY (ruling 4). The friend register is written,
+    // sealed and stored, and 0.14 serves none of it: friendship is P2's, and a
+    // stopgap that guessed at it would be a promotion the player never earned.
+    // On the live measured pack that is 7 of 12 lines — the FRIEND half, which
+    // is the unserved one: 5 stranger lines are served and 7 friend lines are
+    // not. That is the honest cost of the ruling and the reason the ladder
+    // below relaxes as hard as it does.
+    //
+    // THE WEATHER TERM: a line with no `w` is served under any sky, and a line
+    // tagged `rain` is served under any RAIN — the axis is the five words and an
+    // intensity never enters it (§2.2's consumer rule, spent here).
+    /** The at-key for a zone: its stamped place handle, or the legacy reading —
+     *  an interior is a dwelling, everything else is the settlement. Stamped
+     *  handles win; legacy zones carry both stamps. */
+    askAt(zone) {
+      const stamped = str(zone?.place);
+      if (stamped) return stamped;
+      return zone?.mapKind === "building" ? "dwelling" : "settlement";
+    },
+
+    /** Every stranger line this sky can serve, as {line, index} — the index is
+     *  the line's identity for the served set, stable for a session because the
+     *  fold is rebuilt exactly when the world is. */
+    askUniverse(folded, word) {
+      const out = [];
+      const lines = Array.isArray(folded?.pack?.lines) ? folded.pack.lines : [];
+      lines.forEach((line, index) => {
+        if (line?.r !== "stranger") return;
+        if (line.w && line.w !== word) return;
+        out.push({ line, index });
+      });
+      return out;
+    },
+
+    /** The ladder for one branch, as an ordered list of rungs. Each rung is a
+     *  membership predicate plus the SIGNATURE its seeded order hashes over —
+     *  `at` rides the signature only for at-pinned rungs and `part` only for
+     *  when-pinned ones, so two rungs that select the same set key the same
+     *  order.
+     *
+     *  TOPIC BRANCHES RELAX `at` AND NEVER TOPIC: R3/R4 widen from this place to
+     *  anywhere, because a rumor branch that answered with a work line would be
+     *  a button that lied about what it asks. "Pass the time" is the branch that
+     *  has somewhere to fall — smalltalk first, then the untagged pool, which is
+     *  where most of a hand-written pack lives. */
+    askRungs(branch, at, part) {
+      const has = (topic) => (row) => row.line.topic === topic;
+      const untagged = (row) => row.line.topic === undefined;
+      const here = (row) => row.line.at === at;
+      const now = (row) => row.line.when === part;
+      const rung = (test, pins) => ({ test, pins });
+      if (branch === "smalltalk") {
+        return [
+          rung((r) => here(r) && now(r) && has("smalltalk")(r), "s1|at|part"),
+          rung((r) => here(r) && has("smalltalk")(r), "s2|at"),
+          rung((r) => here(r) && now(r) && untagged(r), "s3|at|part"),
+          rung((r) => here(r) && untagged(r), "s4|at"),
+          rung((r) => has("smalltalk")(r), "s5"),
+          rung(untagged, "s6"),
+        ];
+      }
+      return [
+        rung((r) => here(r) && now(r) && has(branch)(r), "r1|at|part"),
+        rung((r) => here(r) && has(branch)(r), "r2|at"),
+        rung((r) => now(r) && has(branch)(r), "r3|part"),
+        rung(has(branch), "r4"),
+      ];
+    },
+
+    /** CIRCULAR DAYPART ADJACENCY, measured over the START MINUTES of the four
+     *  dayparts and not over their order in the table. The two readings disagree:
+     *  by start minute, night→dusk is 180 minutes and night→dawn is 480, so dusk
+     *  is genuinely nearer the hour; by ordinal position the two are a tie. A
+     *  when-relaxed rung ranks rather than pretends — a dawn line at midday is
+     *  served only when nothing nearer the hour exists. */
+    askDistance(when, part) {
+      const starts = PF.DAYPART_STARTS;
+      const a = PF.own(starts, when) ? starts[when] : null;
+      const b = PF.own(starts, part) ? starts[part] : null;
+      if (a === null || b === null) return 24 * 60;
+      const raw = Math.abs(a - b);
+      return Math.min(raw, 24 * 60 - raw);
+    },
+
+    /** Does this branch have anything at all to say here, right now? The window
+     *  asks before it renders, because a topic branch with no servable line DOES
+     *  NOT RENDER — honest suppression, and the reason a thin generated pack shows
+     *  one or two topic buttons rather than four dead ones. Peeks: it walks the
+     *  same rungs the serve does and consumes nothing. */
+    askHas(core, npc, branch) {
+      return !!this.askPeek(core, npc, branch);
+    },
+
+    /** The shared walk. `consume` false answers "is there a rung with anything in
+     *  it"; `consume` true also picks, records the pick in the branch's served set
+     *  and hands back the line.
+     *
+     *  AN EXHAUSTED RUNG FALLS THROUGH TO THE NEXT ONE rather than starting over
+     *  inside itself, and that one sentence is the whole reason this walk has two
+     *  passes: the default pack's coverage floor counts TWO lines per (at, topic)
+     *  while R1 pins (at, WHEN, topic), so R1 holds exactly one line wherever it
+     *  holds any — and a wrap that restarted inside R1 would answer every press
+     *  after the first with the same sentence, forever, in half the cells the
+     *  enrichment was written for (48 of the 96 (theme, at, daypart, branch) cells
+     *  whose reachable pool has two or more lines, measured on the shipped
+     *  defaults). Falling through costs nothing and stays inside the branch: R2-R4
+     *  are supersets of R1 with the same topic, and the smalltalk rungs are the
+     *  fall the branch is named for.
+     *
+     *  THE SECOND PASS IS THE WRAP, and it only runs when the WHOLE ladder is
+     *  exhausted — every line this branch can reach under this sky has been served
+     *  today. Then the set clears and the walk restarts from the top rung, because
+     *  after exhaustion repeats are the honest state and a branch that went silent
+     *  would be a button that stopped working halfway through an evening. */
+    askPeek(core, npc, branch, consume) {
+      const sim = core?.sim;
+      if (!sim || !npc) return null;
+      const folded = PF.save?.packFold?.(core);
+      if (!folded) return null;
+      const word = sim.weather().word;
+      const universe = this.askUniverse(folded, word);
+      if (!universe.length) return null;
+      const at = this.askAt(sim.zone());
+      const part = sim.daypart();
+      // THE MEMO'S PURGE, and the day is what rotates it. `_askDay` is the purge
+      // field alone — the day also rides every signature, so a new day both keys
+      // fresh orders and starts fresh served sets.
+      if (folded._askDay !== sim.day) {
+        folded._askDay = sim.day;
+        folded._askServed = new Map();
+      }
+      folded._askServed ??= new Map();
+      const rungs = this.askRungs(branch, at, part);
+      if (!consume) {
+        for (const { test } of rungs) {
+          const members = universe.filter(test);
+          if (members.length) return members[0].line.text;
+        }
+        return null;
+      }
+      // THE SERVED SET IS PER (day, BRANCH) and never per rung. The ladder walks
+      // the rungs in order, so a when-pinned rung going empty across a daypart
+      // boundary drops service onto a when-relaxed rung whose pool CONTAINS the
+      // line just served — and a per-rung cursor would serve it straight back.
+      // One set per branch, read by every rung of that branch, closes the
+      // fall-through by construction.
+      const served = folded._askServed.get(branch) ?? new Set();
+      // Pass 0 honours the set; pass 1 is the wrap, and it is reached only when
+      // no rung of the ladder had an unserved member left.
+      for (let pass = 0; pass < 2; pass++) {
+        for (const { test, pins } of rungs) {
+          const members = universe.filter(test);
+          if (!members.length) continue;
+          const pool = members.filter((row) => !served.has(row.index));
+          // The fall-through: this rung has nothing new, so the next rung — the
+          // same branch, one relaxation wider — gets asked instead.
+          if (!pool.length) continue;
+          // The rung's canonical order: a seeded Fisher-Yates over its members in
+          // index order, keyed by the MEMBERSHIP SIGNATURE rather than by anything
+          // positional — deterministic across processes and across a rewind.
+          const signature =
+            `${sim.world.seed >>> 0}|ask|${branch}|${pins}|${sim.day}|${word}` +
+            `${pins.includes("|at") ? `|${at}` : ""}${pins.includes("|part") ? `|${part}` : ""}`;
+          const order = members.slice();
+          const rnd = PF.rng(PF.hashStr(signature));
+          for (let i = order.length - 1; i > 0; i--) {
+            const j = (rnd() * (i + 1)) | 0;
+            [order[i], order[j]] = [order[j], order[i]];
+          }
+          const rank = new Map(order.map((row, position) => [row.index, position]));
+          // The pick: nearest the hour first (D-M9's ranking), a w-tagged line
+          // ahead of an untagged one at equal distance, then the seeded order.
+          let best = null;
+          for (const row of pool) {
+            const key = [this.askDistance(row.line.when, part), row.line.w ? 0 : 1, rank.get(row.index) ?? 0];
+            if (
+              !best ||
+              key[0] < best.key[0] ||
+              (key[0] === best.key[0] && (key[1] < best.key[1] || (key[1] === best.key[1] && key[2] < best.key[2])))
+            )
+              best = { row, key };
+          }
+          served.add(best.row.index);
+          folded._askServed.set(branch, served);
+          return best.row.line.text;
+        }
+        // Every rung walked with nothing unserved in any of them: the branch has
+        // said everything it can say today, so the set clears and pass 1 serves
+        // from the top rung again.
+        served.clear();
+      }
+      return null;
+    },
+
+    /** Serve one line for a branch, or null when nothing in the pack answers it.
+     *  Zero GM calls, no ledger line, no trace in anybody's context. */
+    ask(core, npc, branch) {
+      return this.askPeek(core, npc, branch, true);
+    },
+
+    /** THE COMPILED RECORD, ANSWERED MECHANICALLY (plan §2.5 item 2). Two of the
+     *  window's branches read the WORLD rather than the pack, and what they hand
+     *  back is PACKAGE TEXT built out of compiled facts — never invented prose and
+     *  never the persona, which is the GM's to voice. Either half is null when the
+     *  record does not carry it, and the window suppresses the branch: a legacy
+     *  world has a role and no schedule, so it answers "what do you do" and stays
+     *  honestly quiet about where anybody lives.
+     *
+     *  Returns { work, home }. */
+    askRecord(core, npc) {
+      const out = { work: null, home: null };
+      const sim = core?.sim;
+      if (!sim?.world || !npc) return out;
+      const sched = npc._sched && typeof npc._sched === "object" ? npc._sched : null;
+      const role = str(npc.role);
+      if (role) {
+        const standing = str(sched?.standing) || "resident";
+        out.work =
+          standing === "transient"
+            ? `I'm a ${role}. Passing through, mostly.`
+            : standing === "fringe"
+              ? `I'm a ${role}, when anyone asks. I keep to the edge of the place.`
+              : standing === "destitute"
+                ? `I'm a ${role}. Such work as there is.`
+                : `I'm the ${role} here.`;
+      }
+      const homeId = str(sched?.home?.zoneId);
+      const zone = homeId && PF.own(sim.world.zones, homeId) ? sim.world.zones[homeId] : null;
+      if (zone?.name) out.home = `${zone.name}. That's where you'll find me when the light goes.`;
+      return out;
+    },
+
+    /** The escalation door: the sealed line this person has, if the pack wrote
+     *  one for them. Cast-only by the seal's own fence, so a legacy or default
+     *  world answers for its four stock residents and nobody else. */
+    askEscalation(core, npc) {
+      const folded = PF.save?.packFold?.(core);
+      const name = str(npc?.name);
+      if (!folded || !name) return null;
+      const rows = Array.isArray(folded.pack?.escalation) ? folded.pack.escalation : [];
+      const row = rows.find((entry) => str(entry?.npc) === name);
+      return row ? str(row.text) : null;
+    },
+
+    /** Has this person's paid follow-up already been spent this session? A
+     *  RATCHET rather than a cooldown: once pressed it does not come back until
+     *  the fold is rebuilt (a reload, a rewind, a chat switch), which is the
+     *  `_filled` class of recorded cost. */
+    askBurned(core, npc) {
+      const folded = PF.save?.packFold?.(core);
+      const name = str(npc?.name);
+      return !!(folded?._askBurns && name && folded._askBurns.has(name));
+    },
+
+    askBurn(core, npc) {
+      const folded = PF.save?.packFold?.(core);
+      const name = str(npc?.name);
+      if (!folded || !name) return;
+      folded._askBurns ??= new Set();
+      folded._askBurns.add(name);
     },
 
     // ── generate(): the second generation call ───────────────────────────────
@@ -1561,7 +1970,16 @@ PF.pack = (() => {
         const base = {
           instructions: guidance(theme),
           // THE DIGEST FIRST, the player's own words after (plan §2.2b).
-          userContent: composeUserContent(digest(brief), preferences),
+          //
+          // THE CLIMATE COMES OFF THE SEALED BRIEF AND NEVER OFF THE STANDING
+          // WORLD, and that is the whole of the digest door (plan §2.1). On the
+          // creation path both calls happen before the real world compiles — the
+          // world standing here is boot's placeholder — so reading `world.latitude`
+          // would describe a climate this settlement is not going to have, on
+          // exactly the worlds that pay for a pack. `axesFor` is pure and it is
+          // the same derivation the compile will run: same brief, same seed, same
+          // theme, same answer, whichever of them happens first.
+          userContent: composeUserContent(digest(brief, PF.weather.axesFor(brief, seed, theme)), preferences),
           schema: schema(),
         };
         // ONE DOOR. Everything the route hands back that is an object at all goes
@@ -1677,10 +2095,28 @@ PF.pack = (() => {
 // exactly what `quests_done_board` claims about itself.
 const DEFAULT_PACKS = (() => {
   // Compact writers: the sealed shape is the object below, and the tuple form is
-  // what keeps sixty-odd lines of dialogue readable in a source file. `w` is
-  // omitted deliberately — absent reads as fair, and the axis costs nothing until
-  // L2 fills it.
-  const line = (at, when, r, text, topic) => (topic ? { at, when, r, text, topic } : { at, when, r, text });
+  // what keeps a hundred-odd lines of dialogue readable in a source file.
+  //
+  // `w` IS NOW A PARAMETER AND STILL OMITTED FROM ALMOST EVERY LINE. An absent
+  // `w` reads as ANY weather, so the bulk of this artifact is the lines a town
+  // always has to say, whatever the sky is doing — and the coverage floor below
+  // is asserted over THOSE, because a topic whose only lines were weather-tagged
+  // would be a branch that vanished on a fair day. The handful that do carry one
+  // are extras: a wet square, a wet river, a first fall.
+  const line = (at, when, r, text, topic, w) => {
+    const row = { at, when, r, text };
+    if (topic) row.topic = topic;
+    if (w) row.w = w;
+    return row;
+  };
+  // THE WEATHER-TAGGED EXTRAS GET THEIR OWN WRITER, and the reason is a lane
+  // rather than readability. `w` is a 0.14 word: a synthetic 0.13 stack — which
+  // the byte-stability case builds by narrowing this file's enum to one word —
+  // cannot boot on a built-in artifact tagged with a sky it does not have, and a
+  // real 0.13 client never sees these defaults at all (they are compiled in, not
+  // stored). One writer means that case narrows the pack the way it narrows the
+  // enum, in one replace, instead of grepping a literal.
+  const sky = (at, when, text, topic, w) => line(at, when, "stranger", text, topic, w);
   const cast = (name, text) => ({ npc: name, text });
   const heard = (at, text, topic) => (topic ? { at, text, topic } : { at, text });
 
@@ -1757,6 +2193,112 @@ const DEFAULT_PACKS = (() => {
         line("sanctuary", "day", "friend", "I come here to think and end up not thinking. It works."),
         line("dwelling", "day", "stranger", "This is somebody's house, you know."),
         line("dwelling", "day", "friend", "Door's open. Wipe your feet."),
+        // ── THE 0.14 ENRICHMENT (plan §2.7) ──────────────────────────────────
+        // Every line below is STRANGER, and that is the whole design of it. The
+        // talk window serves the stranger register and only that one this
+        // release, so a pack whose topics live in friend lines has topic buttons
+        // that never render — and the default pack is the artifact a legacy world
+        // and a declined generation both read. The floor is TWO per (handle ×
+        // topic) rather than one: a rung of size one leaves the ladder's first
+        // rung holding a single line, which is why `askPeek` falls through to the
+        // next rung rather than restarting inside an exhausted one. Asserted at
+        // boot, below.
+        //
+        // WHAT IT COST, MEASURED: 24 lines a theme, 32 rows to 56, and the
+        // serialized artifact grows +3,230 chars for the village and +3,286 for
+        // the colony — against `CAPS.lines` of 320, nowhere near anything. It is
+        // COMPILED IN rather than stored, so not one byte of it reaches a save.
+        //
+        // AND IT IS AN INVERSION, said here as well as at the read door: a world
+        // that succeeded at generation gets its own sealed pack and reads none of
+        // this (`fold`'s `sealed ?? defaults`), so the towns with no generation
+        // behind them are the ones that talk best this release.
+        //
+        // THE INTERIOR HANDLES GET NO FLOOR — workshop, hall, sanctuary and
+        // dwelling. The ladder's third and fourth rungs relax the PLACE rather
+        // than the topic, so a smith with nothing workshop-shaped to say answers
+        // with something the town says, which is honest, where answering with
+        // another topic's line would not be.
+        line("settlement", "day", "stranger", "There's talk the miller's shorting people. Talk, mind.", "rumor"),
+        line("settlement", "dusk", "stranger", "You'll hear about the field before you've been here a week.", "rumor"),
+        line(
+          "settlement",
+          "dusk",
+          "stranger",
+          "Anything wants doing, it wants doing before dark. Ask at the board.",
+          "work",
+        ),
+        line("settlement", "day", "stranger", "Well's in the middle, board's by the well. That's most of it.", "place"),
+        line("settlement", "dawn", "stranger", "Cold one. It'll turn by noon. It usually turns by noon.", "smalltalk"),
+        line(
+          "settlement",
+          "night",
+          "stranger",
+          "Quiet, isn't it. I like it better this way, if I'm honest.",
+          "smalltalk",
+        ),
+        line(
+          "gathering",
+          "dusk",
+          "stranger",
+          "Half of what gets said in here is worth hearing. The other half's worth more.",
+          "rumor",
+        ),
+        line(
+          "gathering",
+          "night",
+          "stranger",
+          "Somebody was asking after you. Or after somebody. I wasn't listening.",
+          "rumor",
+        ),
+        line("gathering", "day", "stranger", "If you want paying work, the board outside is the honest list.", "work"),
+        line(
+          "gathering",
+          "dawn",
+          "stranger",
+          "Kitchen always wants hands. Say I sent you; it'll count for nothing.",
+          "work",
+        ),
+        line(
+          "gathering",
+          "night",
+          "stranger",
+          "Fire's the warmest corner. Everything else in here is a draught.",
+          "place",
+        ),
+        line("gathering", "dusk", "stranger", "Long day for everybody, by the look of it.", "smalltalk"),
+        line("gathering", "dawn", "stranger", "Too early to be sensible. Sit down anyway.", "smalltalk"),
+        line(
+          "wilds",
+          "day",
+          "stranger",
+          "People say things about out here. Mostly people who don't come out here.",
+          "rumor",
+        ),
+        line(
+          "wilds",
+          "night",
+          "stranger",
+          "There's a story about the far marker. I'd rather tell it indoors.",
+          "rumor",
+        ),
+        line("wilds", "dawn", "stranger", "Good water down that way, if you've a line and the patience.", "work"),
+        line("wilds", "day", "stranger", "Anything you gather out here, somebody in town will take off you.", "work"),
+        line(
+          "wilds",
+          "dusk",
+          "stranger",
+          "Path forks past the old stone. Left goes home, right goes further.",
+          "place",
+        ),
+        line("wilds", "day", "stranger", "It's bigger than it looks from the gate. Everything out here is.", "place"),
+        line("wilds", "dawn", "stranger", "Nobody out but us and the birds, then.", "smalltalk"),
+        line("wilds", "night", "stranger", "Walking it after dark, are you. Well. So am I.", "smalltalk"),
+        // The weather axis, spent on three lines rather than sprinkled: they are
+        // EXTRAS over the floor, so a fair day loses nothing by not serving them.
+        sky("settlement", "day", "Rain like this and the square turns to soup. Mind the low end.", "place", "rain"),
+        sky("wilds", "day", "Wet day's a good day for the water, if you don't mind being wet.", "work", "rain"),
+        sky("settlement", "day", "First snow always catches somebody out. Usually me.", "smalltalk", "snow"),
       ],
       escalation: [
         cast("Mira", "You heard about the field, then? Ask me again when the room's empty."),
@@ -1821,6 +2363,106 @@ const DEFAULT_PACKS = (() => {
         line("sanctuary", "day", "friend", "I come here to think and end up not thinking. It works."),
         line("dwelling", "day", "stranger", "These are somebody's quarters, you know."),
         line("dwelling", "day", "friend", "Hatch is open. Knock the dust off first."),
+        // ── THE 0.14 ENRICHMENT (plan §2.7) ──────────────────────────────────
+        // The cozy pack's twin, line for line and floor for floor. See the note
+        // over there: stranger register only, two per (handle × topic) across
+        // settlement / gathering / wilds, no floor on the interior handles.
+        line(
+          "settlement",
+          "day",
+          "stranger",
+          "There's talk the recyclers are being run past spec. Talk, mind.",
+          "rumor",
+        ),
+        line("settlement", "dusk", "stranger", "You'll hear about the seals before you've been here a week.", "rumor"),
+        line(
+          "settlement",
+          "dusk",
+          "stranger",
+          "Anything wants doing, it wants doing before amber. Check the terminal.",
+          "work",
+        ),
+        line(
+          "settlement",
+          "day",
+          "stranger",
+          "Recycler's in the middle, terminal's beside it. That's most of it.",
+          "place",
+        ),
+        line(
+          "settlement",
+          "dawn",
+          "stranger",
+          "Cold start. It evens out by mid-cycle. It usually evens out.",
+          "smalltalk",
+        ),
+        line(
+          "settlement",
+          "night",
+          "stranger",
+          "Quiet, isn't it. I like it better this way, if I'm honest.",
+          "smalltalk",
+        ),
+        line(
+          "gathering",
+          "dusk",
+          "stranger",
+          "Half of what gets said in here is worth hearing. The other half's worth more.",
+          "rumor",
+        ),
+        line(
+          "gathering",
+          "night",
+          "stranger",
+          "Somebody was asking after you. Or after somebody. I wasn't listening.",
+          "rumor",
+        ),
+        line("gathering", "day", "stranger", "If you want paid work, the terminal outside is the honest list.", "work"),
+        line(
+          "gathering",
+          "dawn",
+          "stranger",
+          "Galley always wants hands. Say I sent you; it'll count for nothing.",
+          "work",
+        ),
+        line("gathering", "night", "stranger", "Heater's the warmest corner. The rest of it is vent draught.", "place"),
+        line("gathering", "dusk", "stranger", "Long shift for everybody, by the look of it.", "smalltalk"),
+        line("gathering", "dawn", "stranger", "Too early in the cycle to be sensible. Sit down anyway.", "smalltalk"),
+        line(
+          "wilds",
+          "day",
+          "stranger",
+          "People say things about out here. Mostly people who don't come out here.",
+          "rumor",
+        ),
+        line("wilds", "night", "stranger", "There's a story about the far beacon. I'd rather tell it inside.", "rumor"),
+        line("wilds", "dawn", "stranger", "Good pools down that way, if you've a line and the patience.", "work"),
+        line(
+          "wilds",
+          "day",
+          "stranger",
+          "Anything you bring back off the flats, somebody in the base will take.",
+          "work",
+        ),
+        line("wilds", "dusk", "stranger", "Line forks past mast nine. Left goes back, right goes further.", "place"),
+        line("wilds", "day", "stranger", "It's bigger than it looks from the lock. Everything out here is.", "place"),
+        line("wilds", "dawn", "stranger", "Nobody out but us and the dust, then.", "smalltalk"),
+        line(
+          "wilds",
+          "night",
+          "stranger",
+          "Walking the flats on the night cycle, are you. Well. So am I.",
+          "smalltalk",
+        ),
+        sky(
+          "settlement",
+          "day",
+          "Rain on the deck plates and the yard turns slick. Mind the low end.",
+          "place",
+          "rain",
+        ),
+        sky("wilds", "day", "Wet cycle's a good cycle for the pools, if you don't mind being wet.", "work", "rain"),
+        sky("settlement", "day", "First fall always catches somebody out. Usually me.", "smalltalk", "snow"),
       ],
       escalation: [
         cast("Mira", "You heard about the readings, then? Ask me again when the galley's empty."),
@@ -1854,6 +2496,20 @@ const DEFAULT_PACKS = (() => {
   // recovered by asking whether the word is a catch role. A variant slug that was
   // also a role name would make that question unanswerable — every catch of that
   // role would pay a quest for one specific fish, silently and forever.
+  // THE GUIDANCE'S SKY LIST IS THE AXIS LESS EXACTLY ONE WORD, paired here for
+  // the reason every other table in this package is paired at load: the list the
+  // model is TAUGHT and the list the schema SEALS are allowed to differ by the
+  // one word an untagged line already covers, and by nothing else. A rename or a
+  // second exclusion is a throw at the desk rather than a vocabulary that quietly
+  // stopped asking for snow.
+  if (PF.pack.WEATHERS.length - PF.pack.WEATHERS_ASKED.length !== 1)
+    throw new Error(
+      `pixelforge: the guidance asks for ${PF.pack.WEATHERS_ASKED.length} of ${PF.pack.WEATHERS.length} sky words; exactly one is covered by an absent tag`,
+    );
+  for (const word of PF.pack.WEATHERS_ASKED)
+    if (!PF.pack.WEATHERS.includes(word))
+      throw new Error(`pixelforge: the guidance asks for a "${word}" sky, which the schema does not seal`);
+
   const roles = new Set(PF.economy.CATCH_ROLES);
   for (const [theme, byTag] of Object.entries(PF.economy.CATCH_TABLES)) {
     for (const table of Object.values(byTag)) {
@@ -1881,6 +2537,11 @@ const DEFAULT_PACKS = (() => {
     const stock = new Set(PF.brief.defaults(theme, 1).cast.map((member) => member.name));
     if (pack.templates.length < PF.pack.TUNING.floorTemplates)
       throw new Error(`pixelforge: the default pack for "${theme}" is under its own template floor`);
+    // THE DEFAULT PACK IS HELD TO THE SAME FLOOR A GENERATED ONE IS, and it
+    // clears it with room that is worth naming rather than leaving to be
+    // discovered: the enriched literal carries 56 lines against a floor of 10, so
+    // the floor moving between 10 and 12 does not touch this assert either way.
+    // What it protects against is somebody thinning the literal.
     if (pack.lines.length < PF.pack.TUNING.floorLines)
       throw new Error(`pixelforge: the default pack for "${theme}" is under its own line floor`);
     for (const template of pack.templates) {
@@ -1922,6 +2583,25 @@ const DEFAULT_PACKS = (() => {
       if (row.topic !== undefined && !PF.pack.TOPICS.includes(row.topic))
         throw new Error(`pixelforge: a default ${theme} line is tagged "${row.topic}"`);
       if (!row.text) throw new Error(`pixelforge: a default ${theme} line has no text`);
+    }
+    // ── THE COVERAGE FLOOR (plan §2.7, owned by slice 4) ────────────────────
+    // The talk window renders a topic branch only when it has a line to serve,
+    // so this is the assertion that makes "a legacy world gets all four branches
+    // on day one" a fact rather than a hope. Three handles because those are the
+    // three a legacy layout actually stands up; TWO because a rung of one makes
+    // the cycle meaningless; and ANY-WEATHER because a topic whose only lines
+    // were sky-tagged would be a branch that disappeared on a fair day, which is
+    // most days in most worlds.
+    for (const at of ["settlement", "gathering", "wilds"]) {
+      for (const topic of PF.pack.TOPICS) {
+        const servable = pack.lines.filter(
+          (row) => row.r === "stranger" && row.at === at && row.topic === topic && row.w === undefined,
+        ).length;
+        if (servable < 2)
+          throw new Error(
+            `pixelforge: the default pack for "${theme}" has ${servable} any-weather stranger line(s) for ${at}/${topic}; the talk window needs two`,
+          );
+      }
     }
     for (const row of pack.escalation) {
       if (!stock.has(row.npc))

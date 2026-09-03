@@ -46,6 +46,30 @@ through the derivations below.
   prosperity: "modest",     // ENUM struggling|modest|thriving. Consumers: path material, fence
                             // quality, night-light density, ground-fill bias — the only field that
                             // makes two same-scale worlds dress differently.
+
+  // ── The two climate axes (0.14) — OPTIONAL, and absent-preserving ──────────
+  // These fold the OPPOSITE way to every scalar above: an unset axis is NOT
+  // defaulted, it is left out, and the world ROLLS it from the theme's own
+  // distribution on a named side stream. So a brief whose author named no
+  // climate seals byte-for-byte the shape it always did, and every pre-0.14
+  // brief keeps neither field and rolls. A value the enum does not name is
+  // dropped with a `_repairs` line ("the world will roll one") rather than
+  // being coerced to a band nobody wrote.
+  latitude: "temperate",    // OPTIONAL ENUM equatorial|tropical|temperate|subpolar|polar.
+                            // Sets the band's base warmth AND its seasonal swing — nearer the
+                            // equator is hotter and flatter — and picks the SEASON SET: two
+                            // seasons (wet/dry) at equatorial and tropical, four poleward.
+  precipitation: "moderate",// OPTIONAL ENUM arid|moderate|wet. The wet-draw mass, which is what
+                            // makes arid-hot and wet-hot different worlds at one latitude. Also
+                            // the fishing bite's regional abundance input (arid ×0.7, moderate
+                            // ×1.0, wet ×1.3 at current tuning).
+                            // Together the two derive the day's weather odds, the reachable
+                            // weather words, and the calendar's structure. Nothing about them is
+                            // stored in the save: the stamp is re-minted from (brief, seed, theme)
+                            // on every compile. The AUTHORITATIVE enums are PF.weather.LATITUDES
+                            // and PF.weather.PRECIPS in 17-weather.js; this document echoes them.
+                            // Full specification in docs/player-state.md §7.9.
+
   name: "Mossbrook",        // TEXT ≤24 graphemes → settlement name, World Maps root.
   flavor: "…",              // TEXT ≤140, one sentence. Arrival atmosphere. Injected ONCE at setup.
   situation: "…",           // TEXT ≤240, one sentence. "The unresolved thing happening right now —
@@ -456,6 +480,20 @@ player's hand (`70-hud.js`), and each session's ledger line names the spot it wa
 (`59-economy.js` `_logDay`), which is what the journal panel shows and what the GM is told at the
 wrap-up. The planned on-map signage / inspect-text consumer (roadmap S2) is still ahead; this is a
 second consumer of the same field, not a replacement for it.
+
+**And the pattern ran the other way in 0.14, which is worth recording because it is the case the
+section did not have.** `latitude` and `precipitation` are fields whose consumer shipped *in the
+same release as the field* — but the consumer reads them off the **SEALED brief**, never off the
+standing compiled world, and that is a rule and not an implementation detail. The content-pack
+generation's digest resolves the climate with `axesFor(sealedBrief, seed, theme)` at the compose
+site: reading `world.latitude` there would describe the climate of whatever world happened to be
+loaded, which during creation is a placeholder and not the settlement being written for. Because the
+mint is pure, the sealed brief and the compiled world necessarily agree — by construction rather
+than by luck — and a future consumer that wants the climate should take the same door.
+
+The corollary for old briefs is the one this section exists to make: a brief sealed before 0.14
+carries neither field, keeps neither, and rolls its climate from the seed — the same sky every
+load, with no regeneration and no schema change.
 
 Still waiting for a consumer: the root's population phrase (§8).
 

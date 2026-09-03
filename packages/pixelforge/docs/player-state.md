@@ -26,9 +26,19 @@ completion maps had been in the block since S5 with no producer and no renderer;
 §10.2 measures what it did add, and §12 is the new home for the verification this package cannot do
 for itself.
 
-Companion documents: `brief-schema.md` (the world brief, which the block's stamps hash — and,
-since 0.12, the feature register the fishing verb aims at) and `ROADMAP.md` (why S5 led 0.11, what
-it gates, and what 0.12's and 0.13's rulings put on the list).
+**0.14 adds nothing to the wire at all, and that is the number this document leads with.** No key in
+the block, no field in the envelope. The sky is a pure function of `(seed, day, override)` — the same
+trick schedules pull — the climate axes are a runtime stamp re-minted on every compile, the dialogue
+window's latch is runtime-only, and the GM's weather override lives at its own chat-metadata key
+rather than in the save. §7.9 specifies the sky, the calendar, the derivation, the override and the
+schedule bias the town answers with; §7.10 specifies the dialogue window; §7.6 gains the sky's and
+the region's effect on the bite. Both new subsections sit at the end of §7 rather than as a new
+top-level section so that §10, §11 and §12 keep the numbers other documents cite them by.
+
+Companion documents: `brief-schema.md` (the world brief, which the block's stamps hash — the feature
+register the fishing verb aims at since 0.12, and the two optional climate axes since 0.14) and
+`ROADMAP.md` (why S5 led 0.11, what it gates, and what the 0.12, 0.13 and 0.14 rulings put on the
+list).
 
 ---
 
@@ -1009,6 +1019,13 @@ ships no verbs; 30-sim loads before both and can see neither. A verb is content 
 a sequence of mutator calls, which is precisely the shape `rentBerth` already had — so fishing went
 beside it rather than inventing a fourth home.
 
+**Two 0.14 surfaces sit at the end of this section and are not economy** — §7.9, the sky and the
+calendar, and §7.10, the dialogue window. They are here rather than in a new top-level section for
+one reason worth stating instead of leaving a reader to wonder: §10, §11 and §12 are cross-referenced
+by number from the roadmap, from `docs/brief-schema.md` and from this document's own commit history,
+and inserting a section above them would silently move all three. The subsection numbers are cheap;
+the top-level ones are not.
+
 ### 7.1 Items, skins, prices
 
 A pouch row is keyed `(t, k)` — type and **either** quality or variant. **`t` has to mean the same
@@ -1258,6 +1275,58 @@ unconditionally because a jump of any size can cross a daypart.
 window is therefore a **fixed point escaped only by spending different time** — which IS the
 anti-save-scum property, and is stated rather than discovered.
 
+**0.14 rewrites the THRESHOLD that `p` is compared against, and nothing else about the roll**
+(ruling B3-1/B3-2). Two factors compose onto it — the sky over the water and the water itself —
+and both are read before the single `rnd()` the roll has always spent, so the seed, the draw count
+and the stream position are untouched:
+
+`chances = regionBite × (TUNING.biteRate[word] ?? 1)`, then
+`pw = 1 − (1 − min(p, 1))^chances` — a **hazard exponent**, not a straight multiply.
+
+- **The sky.** `TUNING.biteRate` is `{overcast: 2, rain: 2, snow: 2, storm: 2}`. `fair` is absent
+  because a clear day IS the baseline and `?? 1` reads it that way. **Intensity never enters it** —
+  heavy rain bites like light rain. The word is read at the START of each window, so a session that
+  crosses midnight picks up the new day's sky on the next window rather than on the crossing one.
+- **The water.** `_regionBite(world, tag)` derives a base from the world's own precipitation axis,
+  anchored so that a MODERATE world is exactly ×1 by construction:
+  `abundance = max(abundFloor, 1 + abundPerWet × (wetness − moderate.wetness))`. At the shipped
+  `abundPerWet: 0.2` and the three wetness values that is **arid ×0.7, moderate ×1.0, wet ×1.3**.
+  Spot kind is the second input and both shipped kinds are 1.0 today — still versus running water is
+  a content difference now and a rate difference the day a playtest asks for one. It is a pure
+  resolved read with zero stream contact, computed **once per session**, before the loop.
+
+**Ten-to-five is the calibration EXAMPLE, not a constant this code carries.** The ruling's sentence
+was "a fish every ten in-game minutes on a fair day and every five under a grey one", and that is
+the temperate/moderate anchor — the point at which `chances = 2` and the curve is read. Two honest
+consequences of the hazard form, both stated rather than left to be discovered: at the low rungs
+`pw ≈ p × chances`, so the multiplicative reading holds literally; near the top it compresses
+asymptotically toward certainty and never reaches it. The catches-per-window ratio at `chances = 2`
+is exactly `2 − p`, so the real number at the curve floor is **≈1.7×**, not a folk 2× that no
+reachable `p` delivers. A straight multiply would have made every rainy mid-ladder cast a guaranteed
+catch, which is flatly against the ruling's own *"ultimately is still RNG determined"*.
+
+**An arid world fishes SPARSE — fewer bites, never fewer species.** Abundance touches the rate; the
+table stays whole. And the fair-day/moderate-water case is the LITERAL shipped expression it always
+was (`chances === 1` takes its own branch), so it is bit-identical to 0.13 and doubles as the compat
+pin for the whole amendment.
+
+**What the sky does NOT do any more is sort the catch.** Through 0.13 the tables carried four
+weather columns; two of them were provably inert — `_draw` normalizes by the sum it just added up,
+so a row multiplying every rarity by the same number cancels exactly, and overcast (×1.1 across the
+board) and snow (×0.7) left the draw bit-identical to a fair day. The ruling unmade the job rather
+than the decoration, so **overcast, snow AND rain are gone from every row**, rain's live ×1.3/×1.4
+included. **Storm is the only column left**, because it is the only one that ever moved the draw: it
+changes the MIX rather than scaling it — `catch-rare ×1.5` against `×0.6` on everything else, which
+measures as a rare share of 4.5% → 10.5%. It is also the release's one authored "fish the storm"
+hook.
+
+Storm keeps its rarity lean AND takes the same bite of 2 as the other three, and the two levers stay
+orthogonal by construction: the lean is a relative-share fact the draw's normalization preserves at
+any bite count, so there is no frequency term in it to double-count. **Where the storm column
+CANNOT be reached is worth writing down:** the warmth gate (§7.9) makes a storm arithmetically
+impossible at polar latitude in every season and at every precipitation, so a polar world never sees
+that column at all; arid four-season worlds meet it about once a year.
+
 **The tables** are per `(theme, spot-kind)` where spot-kind is the register row's `tag` — a 2×2 set,
 asserted complete. An entry is `{role?, variant, weight, minLevel, daypart?}`. The **role** is the
 shared type and the **variant** is the pouch row's `k`. An entry with **no role IS a bait entry** —
@@ -1363,6 +1432,504 @@ Every refusal is the **nothing-happened** shape that `fish` uses beside it: `rea
 refusal it was and every number carries zero, because nothing moved. The reasons are distinct on
 purpose and the numbers must not be, or a caller reading `day` would learn the kind of refusal by
 accident and read a live clock off a call that spent no minutes.
+
+### 7.9 The sky: two axes, a calendar, a derivation, and one override
+
+**Weather adds ZERO save fields**, exactly as schedules do. The sky at day D is a pure function of
+`(world seed, day, override)`, and the clock is already saved — so a reload, a rebuild and a
+timeline rewind all re-derive the same sky. The one thing that is not derived is the GM's override,
+and it lives in chat metadata, never in the save envelope.
+
+`17-weather.js` sits at position 17, **before** `18-brief`, and the rule that buys the position is
+stated in the module: no module numbered below 17 may read `PF.weather`. The bundle is one IIFE
+concatenated in filename order, so a backward read is a `TypeError` at load and a forward one is
+free.
+
+#### The two axes, and why two
+
+A world is minted with a **latitude** — `equatorial | tropical | temperate | subpolar | polar` — and
+a **precipitation** — `arid | moderate | wet`. One field name per axis everywhere: the brief field,
+the schema property, the fold row, the world stamp and `axesFor`'s return are all spelled
+`latitude` and `precipitation`.
+
+Two axes rather than one climate word because arid-hot and wet-hot are the same latitude read
+through two different numbers, and a single vocabulary cannot say that. Latitude carries `warmth`
+(the band's base temperature) and `swing` (its seasonal amplitude) — nearer the equator is hotter
+AND flatter, the whole gradient as two numbers — plus a `structure` naming the season set.
+Precipitation carries one number, `wetness`, at `0.5 / 2 / 3.5`.
+
+Where the axes come from, per axis and in order: **the brief's hint when it names a real band**,
+otherwise a weighted draw from the theme's own distribution. A cozy village is usually mid-latitude
+and can roll tropical or subpolar; the colony leans cold and dry. An omitted band is the
+distribution speaking rather than a hole — no cozy world is polar — and a boot assert demands a
+positive SUM per axis and nothing narrower.
+
+**Each axis rolls on its OWN named side stream.** That is 20-world's own discipline applied to a new
+mint: the main RNG stream and every existing side stream are untouched, so **every existing seed
+keeps its exact layout and gains a climate**, and a brief that pins one axis never moves the other's
+roll. `axesFor` is pure, which is what lets the compile stamp and the generation digest describe the
+same sky by construction rather than by whichever world happened to be standing.
+
+The stamp itself is runtime-only, like every other derived field on the compiled world: no save row,
+no `briefVersion` bump, re-minted on every load from `(brief, seed, theme)`. A true no-brief legacy
+build takes the fixed middles `temperate / moderate`.
+
+The theme table is a theme-keyed table in a third file, which is exactly the drift the brief's
+`foldStored` refuses to introduce — so a boot assert turns it into a load-time throw on purpose:
+adding a theme to `10-art.js` breaks boot until the distribution table learns it too. A red at the
+desk instead of a world with no climate at somebody's.
+
+**One seam is recorded and deliberately not designed.** A colony world may eventually want a climate
+two temperate axes cannot say — the module calls it the `Extreme` seam. What shape that takes is a
+conversation with the maintainer; what the module owes it is additivity, and it has that by
+construction, because every fold reads the exported array and every table is paired against it at
+boot.
+
+#### The calendar
+
+**365 days, and every world's year has its own phase.** The offset is `hash(seed | "calendar") %
+365` and it runs the FULL year, which subsumes the hemisphere question entirely: "southern" and "day
+1 lands in autumn" are the same fact, and one offset says both.
+
+The season set comes from the latitude's `structure`: **two seasons in the tropics**
+(`wet season / dry season`), **four poleward** (`spring / summer / autumn / winter`). The year
+partitions into `n` equal spans by a floor — four gives 92/91/91/91, two gives 183/182 — and a
+season never straddles the year boundary, so there is no boundary table to keep in step with
+anything.
+
+Two names are honest about what they are. **A two-season world's "wet season" is
+precipitation-RELATIVE**: an arid tropic's wet half is merely its storm-leaning half, not a monsoon.
+And **the season-structure mapping is an INTERPRETATION**, flagged to the maintainer rather than
+presented as settled (ruling B2-2): two flat seasons at the equator and the tropics, four poleward,
+implemented as read and his to amend.
+
+`seasonStartDay()` is the one place a caller may derive a season's first day, and it **floors at day
+1**. The full-year offset lands almost every world's day 1 mid-season — 361 of 365 offsets on a
+four-season world — so an unfloored answer names days before the world existed, up to 182 of them.
+What the floor buys, stated without overclaiming: the returned day is a day somebody could have
+lived, and the ledger's first-of-season scan costs a season rather than a year. It does not change
+the scan's ANSWER, because the day clamp would re-read day 1 anyway; walked across 1,478 snow
+crossings (5 latitudes × 3 precipitations × 6 seeds × 400 days), floored and unfloored differ on
+none. **Callers derive their bound from this function and never by hand** — under a 365-day year a
+hand-derived season length is wrong by up to 182 days.
+
+#### The derivation — not an enum, and not a table
+
+There is **no per-climate weather table**. One derivation turns `(latitude, precipitation, season
+index)` into a weight row over the five words, and the temperature is spent **continuously**, as a
+magnitude through two clamped ramps, not as one bit:
+
+```
+t     = warmth + swing × TEMP_PHASE[structure][index]
+w     = wetness × WET_PHASE[structure][index]          ← the wet MASS, one home, two consumers
+cold  = clamp((freezePoint − t) / mixBand, 0, 1)
+warm  = clamp((t − stormFloor) / stormBand, 0, 1)
+rain  = w × (1 − cold)
+row   = { fair:     fairBase + fairDry × max(0, dryPivot − w),
+          overcast: overcastBase + overcastWet × w,
+          rain,
+          storm:    rain × stormShare × warm,
+          snow:     w × cold }
+```
+
+`cold` is the snow SHARE of the wet mass, so `snow + rain` is identically the wet mass and only the
+storm term lets latitude touch how often the streets empty. `warm` is the **storm gate**: convective
+violence needs real warmth, which is why a polar year cannot produce a thunderstorm at any
+precipitation in any season — polar `t` peaks at 1 against a `stormFloor` of 2. A cold world's
+blizzard is heavy snow and never a thunderstorm.
+
+`freezePoint` is where the snow share reaches zero — the top of a MIX band, not a step — and
+`mixBand` is how wide that band is: full snow below, full rain above, a real sleet mix between.
+
+Two phase tables, **keyed by ordinal index** into the season set rather than by season word,
+deliberately: a word-keyed table would have to agree with two different vocabularies at once, and the
+half that disagreed would compute NaN for every cell of one structure rather than throwing anywhere
+a reader would look. Four-structure worlds run **flat** wetness — the wet/dry alternation IS the
+two-season structure's weather identity. One identity that flatness buys, recorded as a decision
+rather than left to be discovered: with the four-season temperature phase symmetric about the
+shoulders and wetness flat, **spring and autumn are the same sky, byte for byte**, in every
+four-structure band × precipitation pair. Four season names buy three distinct skies per band.
+Nothing breaks — the header and the ledger still print two different words, because the calendar is
+real and the symmetry is the sky's — and if a playtest ever wants autumn wetter than spring, that is
+a one-array retune.
+
+The whole thing is walked at boot: every latitude × precipitation × that latitude's own seasons —
+**48 rows**, and the count itself is asserted, because a walk that quietly stopped covering a band
+would be a green run over an untested sky. Plus a **degeneracy** clause: no two latitudes sharing a
+season structure may produce identical row sets across their whole product. At least one differing
+cell is the correct strength and it must not be tightened — subpolar and polar genuinely share their
+three winter cells, because the winter-heavy edge and the frozen pole are different YEARS, not
+different winters.
+
+`wordsFor(latitude, precipitation)` returns **every sky a climate can produce**: the union of words
+carrying non-zero weight across that latitude's own season set. It lives beside the derivation for a
+reason the generation digest depends on — a hand table saying "the tropics get no snow" is an
+opinion a coefficient retune falsifies silently while every assert stays green. Through the
+derivation it is arithmetic, and it moves when the arithmetic does.
+
+#### Five words, and a second smaller axis
+
+`fair | overcast | rain | storm | snow`. **Intensity is a second dimension taken by rain and snow
+only** — `light | heavy` — and not two more words: the pack's weather axis, the catch tables, the
+schedule bias flag and the snow tile substitution all stay five-valued. Only the header label, the
+rain tint and the particle pass ever read the intensity. **The ledger reads neither** — light snow
+hardening into heavy snow is the same weather to it.
+
+`takesIntensity` is the one home of "does this word carry a light/heavy", and a boot assert reads
+that flag rather than restating the pair in four places: whichever words carry it must carry
+per-intensity wire text, and per-intensity TINT alphas wherever such a word tints at all. A missing
+heavy alpha would ship "heavy rain looks exactly like light rain", which is a promise this release
+makes out loud.
+
+The draw is one weighted pick off the row, then — for a word that takes one — a second draw for the
+intensity, whose heavy share derives from the same wet mass (`min(heavyMax, heavyBase × wetMass)`).
+Wet worlds rain harder; desert rain is almost always light. **Draw order is deliberate:** the word
+draw is always made and simply discarded when an override covers the day, and the intensity draw is
+always second. So an override naming the very word the derivation rolled cannot flip the day's
+intensity, and the live path and the ledger's first-of-season scan consume the stream identically.
+
+**On screen:** overcast, rain and storm tint (storm hardest, heavy rain at double light rain's alpha); snow
+does not tint at all, because the snow TILES carry it. The ground substitution is a **paint-time
+rename** read by the renderer's zone composite and by nothing else — `grass → grassSnow`,
+`grass2 → grassSnow2`, `crop → cropSnow`, `canopy → canopySnow`. **The zone arrays are never
+touched**: a compiled world holds `grass` in January exactly as it does in July, and the
+substitution lives in the picture. What is NOT in that table is the design — paths, roads, stone and
+`dirt` stay bare, because a trodden way is the first thing to clear, and **water stays water**,
+because it is liquid and fishable and a frozen pond is a mechanic nobody has asked for. The
+substitution keys on the WORD, not the intensity: a flurry and a blizzard stand on the same white
+tiles.
+
+The falling pass runs 45 streaks at fall 1.0 for light and 120 at 1.7 for heavy, with storm riding
+the heavy row. It takes its phase from `performance.now()` — **the one declared determinism
+exception in the package**, and it is safe because nothing sim-side ever reads it. It is also
+load-bearing for the time stop: under an open dialogue window the clock and the darkness ramp hold
+still, and the weather is the one surface left moving.
+
+#### The header
+
+The turn prefix carries **three words in the paren group** and each earns its permanent per-turn
+cost: the daypart keeps the GM's light and who-is-about narration consistent with what is rendered;
+the weather word is the whole channel the sky reaches the narrator through, live, every turn; and
+the SEASON is the word that lets the GM make a judgment the daypart cannot — it should not snow in
+summer, unless the world it is snowing in is one where that means something. Measured cost in §10.3.
+
+#### The GM override
+
+**Written by nothing in this release except a browser console**, and that is a verified constraint
+rather than a scope cut: the host dispatches capability events on engine-defined type strings only,
+so there is no surface a real writer could sit on yet. That is the feature request's job. What
+ships is the READ side, whole and verifiable.
+
+**Residency: chat metadata, at the key `pixelforgeWeather`.** Not the save envelope — a grep of the
+serializer for `weather|latitude|precipitation` finds exactly two lines, both reads into the runtime
+sim. There is no registry entry and no serialize/restore row.
+
+**Fold, never throw, and never write back.** The key is per-key shallow-merge PATCH territory, so a
+word from a build that has not shipped yet folds to "no override" FOR THIS RUNTIME ONLY and the
+stored row survives verbatim for the build that understands it. That is the whole forward-compat
+argument and it is the pack key's own. An intensity on a word that takes none is dropped and the row
+survives — a GM who wrote `{word: "storm", intensity: "heavy"}` meant a storm.
+
+**It is a day-RANGE predicate**, `[sinceDay ?? 1, untilDay ?? ∞]`, and the range is what makes the
+rewind behaviour correct rather than merely convenient. The override is chat-scoped configuration,
+like the brief and the content pack: **it does not rewind with the story.** `sinceDay` clamps the
+start, so a rewind to before it was ever set restores the derived sky; a rewind INTO the range
+re-arms it, which is right, because that is the sky that day already had the first time through. A
+cleared range is simply gone. **That is the honest residual, and it is a trade**: the alternative —
+a sky that rewinds with the transcript — would need a save field, and weather has none by design.
+
+**The reconciler and its memo.** The load path folds the key into `sim.weatherOverride` and stamps
+`sim._weatherMetaApplied` with a SERIALIZED WHOLE of the folded row — never the word alone — ahead
+of the boot `resolveSchedules()`, deliberately, because the schedule bias reads the sky and boot
+placement has to happen against the overridden one. Mid-session, each props delivery re-folds the
+key and compares against **the applied memo, never against `sim.weatherOverride`** — which is what
+lets a console write to the runtime slot stand instead of being clawed back by the next delivery.
+When they differ, the sim assigns, re-memoises and calls `resolveSchedules()` exactly once: the town
+answers a mid-day override with no envelope contact at all. The memo is the serialized whole because
+a console change from `{word:"storm"}` to `{word:"storm", intensity:"heavy"}` is this release's
+documented verification incantation, and a word-only key would sit on it until the day rolled.
+
+**A vanished row means "no override", never corruption.** The key inherits the #5076
+whole-blob-erase hazard — roughly forty engine call sites still use the unqueued whole-blob
+metadata writer, which is why `ensurePresent` exists to heal two other keys — and the override key
+gets **no self-heal**, because there is nothing to re-derive it from. A future writer must re-write
+rather than repair. See §11.
+
+The console incantation, which is two lines and not one:
+
+```js
+core.sim.weatherOverride = { word: "storm" };
+core.sim.resolveSchedules();
+```
+
+Any of the five words; rain and snow take an optional `intensity: "heavy"`. The renderer answers on
+the next frame either way — only the schedule bias needs the second line. A console write touches
+the RUNTIME slot only, which is exactly right for a throwaway check.
+
+#### The town answers: the hearth-first bias
+
+**Weather biases NPC schedules, and the bias is the settlement half of the feature.** On a day whose
+word carries `indoors` — rain, storm and snow — the sim hands the schedule policy one closure,
+`indoor(zoneId)`, and that closure is the ONE place "indoors" is defined: **interior-zone
+membership**, the compiler's own `mapKind === "building"`, and not roofedness. A wilds is a `place`
+and stands in the rain like the street does. On a fair or overcast day the bias is null and the
+policy runs exactly as it always has.
+
+**Intensity never reaches it.** Light rain empties the street exactly as heavy rain does — a drizzle
+reads as weather, not as an exception. This is stated in three places in the source on purpose, and
+structurally guaranteed by the read being `WORD_META[word].indoors`.
+
+What it does, in one sentence: **anybody the policy has standing outdoors on a wet day is sent to
+their own fireside instead.** Three rules, in order:
+
+1. **Exempt when the policy names work for this hour** (`post`). The watch keeps the night, a grower
+   works the land in the rain, keepers and named workers hold their posts, a stall merchant tends
+   the stall. The test reads the policy NAME and never an NPC's identity.
+2. **Already indoors → nothing to do.**
+3. **Otherwise substitute the row's own DUSK anchor, then its NIGHT one.** Dusk first because a
+   resident's daylight indoors is their fireside and not their bed: substituting the night name
+   parks the whole town on its own bunks at noon. Both are raw lookups without the usual `?? post`
+   tail — post is outdoors, and outdoors is the thing being escaped.
+
+For an ordinary resident that resolves to the **hearth** handle, which the compiler bakes from the
+BED's zone with the floor suffix stripped (a household sleeps upstairs while the fire is downstairs)
+and boxes one column short of the fire itself — you warm yourself in front of one, not on top of it.
+
+**Capacity-neutral by construction.** Every destination the bias can pick is one the dusk or night
+pass already assigns that same NPC, every evening of the world's life — same zone, same box, same
+spread. No box receives an occupant it does not already hold: the wet 07:00 pass is the dusk
+relocation run early.
+
+**And at night it is a no-op because of where the destinations are**, not because the walk cannot
+happen. Measured over 960 compiled worlds across both themes and all four scales: 244 night
+resolutions reach the loop, and of 50,832 `home` handles minted, **zero are outdoors** — every one
+is a bed box inside a dwelling interior or an inn berth.
+
+**It is a no-op on legacy worlds**, and honestly so: schedule handles are compile-time-only and a
+legacy world's NPCs carry none, so the resolver skips them on any sky.
+
+Three exemption classes are worth naming because they are what a player will see standing in the
+weather, and each is a decision rather than an oversight. **The destitute** have no bed to go to —
+their row is `post` at every daypart and the compiler stands them in the town's public centre, so
+they stand in the storm. **A fallback post** is the compiler's anchor for somebody with no job at
+all, which means the owner-of-nothing stands in the plaza the bias is emptying. And **there is no
+outdoor-job flag in the cast data**, so the test is coarse in both directions: an outdoor-posted
+scholar is exempt exactly like the shepherd. Which side of the line a fallback post belongs on is a
+felt-behaviour question the maintainer meets in play, not one a table can answer.
+
+Hearth-less residents keep standing in the weather too — a lodger in a named place's quarters, a
+wilds resident, anybody sleeping rough. Nowhere to go is answered by standing in the weather and not
+by teleporting nowhere.
+
+#### The notable-weather ledger lines
+
+`TUNING.notable` is `["snow", "storm"]`. When a **live** day-crossing brings one in that the day
+before did not have, a line is parked for a frame to file:
+
+| sky | line |
+| --- | --- |
+| storm | `A storm came in.` |
+| snow, and the season has seen one | `Snow came in.` |
+| snow, and it has not | `First snow.` |
+
+**Called by the three clock movers and by nothing else** — never by `resolveSchedules`, never by the
+constructor, never by the restore path. That is what keeps a reload silent: a rebuild re-derives the
+same sky it always had, and a world reopened on a snowy day has not just had it start snowing.
+
+Both sides of the compare are derived at the moment of the crossing, so the park needs no state of
+its own and is rewind-exact. The compare reads `.word`, because the sky accessor returns a fresh
+object every call and a reference compare would file a line on every midnight of a six-day snowy
+stretch. **Intensity never reaches the ledger** — the ledger says snow, the header says how hard.
+Storms claim no "first": a season's first storm is not a calendar fact the way the first snow is.
+
+**"First" means first of the days the world has LIVED.** The scan walks back to `seasonStartDay()`,
+which floors at day 1, so a world whose calendar opens mid-winter still gets a true "First snow." for
+its genuine first snowfall instead of losing it to months of phantom pre-world time.
+
+The queue holds four rows of `{text, day}` — the day it HAPPENED, so a multi-day fishing session
+files day 12's snow under day 12 and not under the day the drain ran — and a full queue drops the
+NEW line rather than losing one a frame has not filed yet. It is runtime-only and never saved. A
+frame drains it, because the sim holds no core and no generation and cannot file its own.
+
+**The override's blind spot, stated because it will be met in play:** the park fires only on a live
+day CROSSING. A GM (or a console) who sets an override mid-day changes the sky, the header, the
+tint, the schedule bias and the bite rate immediately — and files no ledger line at all, because no
+day crossed. The same is true of an override that expires. The playtest recipe below therefore
+crosses a boundary with a live mover rather than by assigning `sim.day`.
+
+#### Compatibility
+
+| what arrives | what happens |
+| ------------ | ------------ |
+| a brief sealed before 0.14 | carries no axis fields, keeps none, and **rolls per seed** — the same sky every load, because the mint is pure |
+| a content pack sealed before 0.14 | carries no `w` on any line, and a `w`-less line reads as **any weather** |
+| a `THEME_AXES` or coefficient retune | **re-skies unpinned worlds** on their next load, and can strand a sealed pack's weather-tagged lines. The rolling-compat class, and it costs pack content and not only the sky |
+| a `pixelforgeWeather` row this build cannot read | folds to "no override" for this runtime; the stored row survives verbatim |
+
+The retune row is the reason the brief hint exists, and the reason it is worth pinning an axis in a
+world whose climate is part of its identity.
+
+### 7.10 The dialogue window
+
+**The Ask surface IS the interact press** (ruling 3). Pressing `E` beside somebody no longer spends
+a GM turn on "I walk up to X and greet them"; it opens a window of named branches answered
+package-side, at zero call cost, with the doors to the narrator still in it.
+
+#### Opening, and the two proximity numbers
+
+`nearNpc` is a nearest-within-**26px** centre-to-centre read, and that is the open gate. The window
+then survives out to **32px** — `(leaveTiles + 1) × TILE` with `leaveTiles: 1`, tested with `>=`, so
+32px from a tile-aligned rest closes it. The geometry is derived rather than tuned: "within one
+tile" is the adjacency ring (16px orthogonal, ~22.6 diagonal) plus the half-tile of slack continuous
+player coordinates need, and 32 strictly covers the 26px open radius, so **no position a window can
+open at is born closed**.
+
+The six-pixel band between them is real and is the reason `E` re-routes: inside it `nearNpc` is
+already null while the window is still open, so without the close-first branch `E` would be dead
+there — neither opening nor closing. The action rail's label follows the window rather than the
+proximity read for the same reason, and dims to opacity 0.45 (never `disabled`) when there is
+nobody: an in-band press is live and silently no-ops.
+
+#### The time stop
+
+**The window stops the clock and the player stays mobile.** The clock advances only while walking
+WITH NO TALK WINDOW OPEN — a conversation should never burn the afternoon, and a daypart boundary
+crossing mid-dialogue would relocate the very NPC you are talking to.
+
+The accumulator is INSIDE the gate and not beside it: one that kept filling would bank the minutes
+and dump them the instant the window closed. What freezes: the clock, the day, the daypart
+resolution, the day-crossing weather park, and the cutscene stepper. **What does not freeze: the
+town.** NPC wander runs outside the gate, and so does the falling rain (its phase is a wall clock,
+§7.9). The world stays alive while you read. The one exception is your partner, who stands still —
+`nearNpc` is a nearest-within-26px read, which is the wrong question in a crowd, so the person you
+are talking to is pinned by id.
+
+The two clock movers that CAN run — the rest verb and the fixed-window advance — clear the latch
+first. Time cannot pass under an open window, so a mover either ends the conversation or breaks the
+freeze; it ends it, and the window unmounts off the latch on the next frame. That is a **documented**
+side effect, not a silent one.
+
+#### The latch and its lifecycle
+
+`sim.talkAnchorId` is the whole state, and it is **runtime-only: never serialized, never restored.**
+Four readers: the clock gate, the partner freeze, the window's mounted predicate, and the paid
+press's prologue.
+
+It is set at exactly one site (the open) and cleared at: the explicit close, any exit from walk
+mode, both clock movers, HUD teardown, a chat switch, a world rebuild, Escape (from the window or
+from the Say field), Escape's close-all, a pointerdown outside, each of the three panel toggles, and
+a press-time liveness miss. Beyond the latch, the window's own reconciler unmounts when the anchor
+is gone, is a different NPC, **is no longer in the zone's NPC list** — one read that answers a
+splice, a despawn, a zone change and a world replacement, which is also what makes walking through a
+door leave the conversation — when the leave band is crossed, or when the loading gate holds.
+
+One case is a handoff rather than a close: taking a paid door moves the sim to `dialogue` mode,
+which unmounts the window on the mounted predicate's mode term **without clearing the latch** —
+freeze to freeze, so the clock never restarts for the width of a turn.
+
+#### What the window serves
+
+In order: the person's name and role as a title; up to two **record** branches; up to four **topic**
+branches; the escalation pair; one hand-over row per live errand; then the free "Just talk", the
+permanent Say field, and Leave.
+
+**The record branches come from the compiled NPC record, not from the pack** — "What do you do?" and
+"Where do you live?" — and only the halves the record actually carries. A legacy world has a role
+and no schedule, so it answers what somebody does and stays honestly quiet about where they live.
+That is the shape that makes a minted resident askable without a single generated word.
+
+**The four topic branches** are `rumor`, `work`, `place` and `smalltalk` — rendered as "Ask about the
+local rumors", "Ask about work", "Ask about this place" and "Pass the time". **None of them costs a
+GM call**: it is a lookup over an artifact already in memory.
+
+**Always stranger, and it is a ruling** (4). The friend register is written, sealed and stored, and
+0.14 serves none of it: friendship is the roadmap's relationship ledger, and a stopgap that guessed
+at it would be a promotion the player never earned. On the live measured pack that is **7 of 12
+lines** unserved, which is the honest cost of the ruling and the reason the selection ladder relaxes
+as hard as it does. The generation guidance is inverted to match — 0.13 asked for more friend lines;
+0.14 asks for mostly stranger ones and says the friend register is written for a later release.
+
+**Honest suppression: a branch with no servable line does not render.** Four dead buttons that
+answer with somebody else's topic would be worse than two live ones.
+
+**And that produces an inversion this release ships with, knowingly.** The default packs carry a
+0.14 coverage floor — two any-weather stranger lines per (handle × topic), boot-asserted — so all
+four branches render on a legacy world or a declined generation. A world that SUCCEEDED at
+generation reads none of the defaults (`sealed ?? defaults`, never a merge), so a thin sealed pack
+shows one or two branches. **The worlds that paid two GM calls meet the thinnest window.** The fix
+is a wider generation, not a merge; the widening shipped in 0.14 and the floor came down to 10 to
+match, but the inversion is real until a live run says otherwise.
+
+#### The selection ladder
+
+Every branch walks an ordered ladder of RUNGS, each a filter, and takes the first rung that has
+something unserved.
+
+**Topic branches relax the place and never the topic.** Four rungs: `at + when + topic`,
+`at + topic`, `when + topic`, `topic` anywhere. A rumor branch that answered with a work line would
+be a button that lied about what it asks. **Smalltalk gets six**, because it is the branch that may
+also serve untagged lines: `at+when+smalltalk`, `at+smalltalk`, `at+when+untagged`, `at+untagged`,
+`smalltalk` anywhere, `untagged` anywhere.
+
+**The served set is per (day, BRANCH) and never per rung.** The ladder walks rungs in order, so a
+when-pinned rung going empty across a daypart boundary drops service onto a when-relaxed rung whose
+pool CONTAINS the line just served — and a per-rung cursor would serve it straight back. Line
+identity is the index into the folded pack's line array. The set clears at midnight.
+
+**An exhausted rung falls through to the next one** rather than starting over inside itself. The
+default pack's floor counts two lines per (at, topic) while the first rung pins (at, when, topic), so
+that rung holds exactly one line wherever it holds any — a wrap that restarted inside it would answer
+every press after the first with the same sentence, forever, in **48 of the 96** (theme, at, daypart,
+branch) cells whose reachable pool has two or more lines, measured on the shipped defaults.
+
+**Exhaustion wraps once.** If every rung is walked with nothing unserved anywhere, the set clears and
+a second pass serves from the top rung again. After exhaustion, repeats are the honest state: a
+branch that went silent would be a button that stopped working halfway through an evening.
+
+**The pick, inside a rung, is three keys in order:** nearest the hour first, then a weather-tagged
+line ahead of an untagged one at equal distance, then a seeded shuffle. **The adjacency metric** is
+circular over the daypart start minutes — `min(raw, 1440 − raw)` — so "dusk" is near "night" the way
+a clock is, and an unknown word sorts to the far end at 1440. The shuffle is keyed by the rung's own
+membership signature (seed, branch, which axes the rung pins, the day, the sky, and the pinned axis
+values), so two players on the same seed and day hear the same order and a different day re-deals.
+
+**The weather term matches on the WORD only.** A line with no `w` is served under every sky; a line
+tagged `rain` is served under any rain. An intensity never enters it. The generation asks for four
+words (`fair` is omitted — a line tagged fair spends four characters buying the generalization it
+had for free) and the seal accepts all five.
+
+#### Exclusion, and the paid set
+
+The window and the three panels — journal, character sheet, board — are **mutually exclusive in both
+directions, per toggle.** The window's opener closes all three; each of the three toggles closes the
+window, and each of those is a latch clear, so the clock starts again. Escape's close-all counts the
+window as one of the set in both halves. The reason it had to be wired both ways rather than once:
+an unexcluded journal mounts full-bleed above the window, which is a player reading a journal over a
+frozen clock with an invisible window underneath.
+
+**The paid set is four presses deep** — free talk, say something, press them about it, and one per
+errand hand-over — so one conversation can bump the same person up to four times, once per ACCEPTED
+turn. That is still what the encounter count says it is; four accepted turns are four encounters.
+The escalation's paid half is a ratchet: it retires once burned.
+
+**The doors never vanish; they dim, with the title saying why.** A host that is not taking turns, or
+is mid-stream, gets a dimmed door and a sentence, not a missing one.
+
+**The Say field imposes no length cap, and that is the one deliberate exception** in a package that
+caps every other part of a composed turn at a named number (situation 240, place flavor 120, persona
+100, names 24). The difference is what the text IS: every door those caps govern is STORED DATA
+re-entering composition, and this is live player input, typed this second by the person whose turn it
+is. **The honest residual:** if the host refuses the turn, the player gets the generic refusal toast
+and the typed text is not preserved — and the downstream bound is not something this package can
+see. See §11 and §12.
+
+#### The default-pack enrichment
+
+The default packs grew to carry the coverage floor: **24 lines per theme**, taking each from 32 rows
+to 56, at +3,230 serialized chars for the village and +3,286 for the colony, against a line cap of
+320. Interior handles get no floor — the enrichment is for the three handles a stranger is actually
+met on. The floor is boot-asserted per (theme × handle × topic), so a default pack that lost its
+coverage fails at the desk rather than rendering two branches at somebody's.
 
 ---
 
@@ -1988,6 +2555,42 @@ fit, the caps are what `validate()` refuses above, and **a sealed blob never gro
 once and read forever. What a full-cap pack would cost is written down anyway, because a number
 nobody has looked at is how a "no budget" decision turns into a surprise.
 
+### 10.3 What 0.14 added to the wire, measured
+
+**The headline is another subtraction, and a bigger one than 0.13's.** 0.14 added **no key to the
+player block and no field to the save envelope at all.** Weather is a pure function of
+`(seed, day, override)`, the climate axes are a runtime stamp re-minted on every compile, the
+dialogue window's latch is runtime-only, and the GM override lives in chat metadata. The pinned wire
+literal does not move by one byte for any of it.
+
+So everything below is growth somewhere *other* than the block, and the section says which wall each
+number is measured against — because they are different walls and two of the three are not walls at
+all.
+
+**Every figure is measured on one ruler**: `Buffer.byteLength(JSON.stringify(x), "utf8")` for stored
+artifacts, and plain character counts for prompt text. Where a number is a range rather than a value,
+it is written as a range.
+
+| what | where it lands | measured |
+| ---- | -------------- | -------- |
+| the header's two new words | the **prompt**, every turn, permanently | **14 to 24 chars per turn.** The paren group went from `(<daypart>)` to `(<daypart>, <weather>, <season>)`, so the growth is 4 chars of separator plus the two words. The weather label runs 4 (`fair`) to 10 (`light rain`, `heavy rain`, `light snow`, `heavy snow`), the season word 6 (`spring`) to 10 (`wet season`). A range and not a number, because the label is intensity-variable |
+| the `pixelforgeWeather` metadata row | **chat metadata**, and only when a writer exists to write it | **38 bytes** for `{"word":"storm"}` with its key name; **52** with a two-digit `sinceDay`; **85** with `word` + `intensity` + `sinceDay` + `untilDay` at two digits each. Day numbers are not capped — `positiveDay()` takes any safe integer — so the true maximum is **113** at `Number.MAX_SAFE_INTEGER` days. Nothing in 0.14 writes it |
+| the generation digest's climate pair | the **generation request**, once per world | **+2 rows, 21 → 23**, and **136 chars** at their widest (a temperate/moderate world, whose reachable-word list is the longest). The digest's whole worst case is pinned at **2,718 chars** against a `userContent` clamp of 8,000 |
+| a pack line's `w` tag | the **sealed pack**, on new packs only | the widest legal line row is **294 bytes** serialized — a 200-char line carrying both the topic tag and the sky tag, on the widest handle the location vocabulary names (`settlement`, ten characters). Measured and pinned, not rounded |
+| the default packs' enrichment | **nothing stored** — the default pack is a read-time fallback and is never written | cozy-village **5,475 → 8,705 bytes** (+3,230) and sci-fi-colony **5,558 → 8,844** (+3,286), each going from 32 lines to **56** to carry the coverage floor of two any-weather stranger lines per (handle × topic) |
+| the substance floor | which generations become permanent artifacts at all | `floorLines` **12 → 10** (ruled). Not a size; a decision about what seals |
+
+**Three of those five land in the prompt rather than in storage, and that is the release's real
+cost.** The header's two words are the only *permanent per-turn* growth 0.14 adds, and at 14-24
+chars they are the cheapest thing on this page — but they are paid on every turn forever, which is a
+different shape of cost from a blob written once. **The per-session TOKEN total is deliberately not
+in this table**: characters are what this document can measure honestly, tokens are what a live
+connection charges, and the live half is owed on the deferred list (§12.2).
+
+**And the two save walls at the top of this section are untouched.** The block did not grow, the
+envelope did not grow, and the metadata key — like the content pack before it — never enters
+`snapshot()`, so it counts against neither the per-row cap nor the keepalive pair quota.
+
 ---
 
 ## 11. Accepted limitations
@@ -2047,6 +2650,34 @@ Added by 0.13, and the same rule holds: every one of them is a decision somebody
 | a **foreign save's pre-existing skills ladder still renders**, quest-shaped verb rows included. The fence stops this build minting one; it cannot un-mint one that arrived                                                                                                     | pre-existing seam, recorded                                 |
 | **metadata mode**: quest state does not rewind, so money paid, counters incremented and rapport bumped stay where play left them while the story rewinds around them (§9.5)                                                                                                    | mode-qualified; inherited from the store, not new           |
 
+Added by 0.14, and the same rule again — every row is somebody's decision on the record:
+
+| limitation (0.14) | status |
+| ----------------- | ------ |
+| **the GM weather override has no writer.** The read side is whole — fold, range predicate, reconciler, boot placement, the town's answer — and the only thing that can write the key is a browser console. The host dispatches capability events on engine-defined type strings only, so there is no surface a real writer can sit on | **by dependency**; the enumerated Engine FR is what unblocks it |
+| **the override does not rewind with the story, and re-arms inside its own range.** `sinceDay` clamps the start, so a rewind to before it was set restores the derived sky; a rewind INTO `[sinceDay, untilDay]` re-arms it — which is that day's own first-pass sky. A cleared range is gone | **accepted trade**: the alternative needs a save field, and weather has none by design |
+| **the override key gets no self-heal.** It inherits the #5076 whole-blob-erase hazard like every package metadata key, and unlike the save and quarantine keys there is nothing to re-derive it from. A vanished row reads as "no override", never as corruption | accepted; a future writer re-writes rather than repairs |
+| **an override files no ledger line.** The notable-sky park fires only on a LIVE day crossing, so a sky summoned mid-day changes the header, the tint, the bias and the bite immediately and records nothing. Same for an expiry | **by design** (the park is mover-only, which is what keeps a reload silent) |
+| **the friend register is sealed and unread.** Ruling 4: 0.14 serves the stranger register only. On the live measured pack that is 7 of 12 lines written and never served (5 stranger served, 7 friend sealed) | **maintainer ruling**; the relationship ledger (ROADMAP P2) is what reads it |
+| **the overheard pool is still unread.** 0.13 sealed it; 0.14 does not surface it either | by scope |
+| **the window is invisible to the GM.** Every free branch is a zero-call lookup, so the narrator is never told a conversation happened, how long it ran, or what was said. Only the four paid doors reach the model | **by design** — this is the Call-economy pillar's whole point, and it is also the risk the playtest exists to answer |
+| **topic branches are suppressed on a thin generated pack — the paid-path inversion.** The default packs carry a coverage floor and render all four branches; a sealed pack renders only what it can answer, and there is no merge. So a legacy world or a declined generation is the RICHER conversation, and the world that paid two GM calls is the poorer one | **accepted, knowingly**, and named at all four sites. The fix is a wider generation (shipped in 0.14) and a floor at 10, not a merge |
+| **the schema-max thin residual is two lines wide.** A model writing at the schema's cap on every row, truncated at the 2,048-token wall, salvages the whole template list and **eight** lines against a ruled floor of **ten**. That two is the entire margin — a floor at eight would flip this lane from a documented limitation into a silently sealing one | **accepted**, and pinned by value so the margin is a red rather than a discovery |
+| **the Say field is uncapped.** The package imposes no length limit; a host refusal surfaces as the generic refusal toast and **the typed text is not preserved**. The downstream bound is not something this package can see | **ruled** (B2-3c); the honest form, and the revisit is on the roadmap |
+| **no outdoor-job flag exists**, so the schedule bias is coarse in both directions: an outdoor-posted scholar is exempt exactly like the shepherd, because the test reads the schedule policy's NAME and never an NPC's identity | by scope; the trade half of the kind split (ROADMAP E3) is the handle |
+| **fallback posts are exempt too.** `post` is also the compiler's anchor for somebody with no job at all, so the owner-of-nothing stands in the plaza the bias is emptying — and a live-work owner stands on their own doorstep, through the storm | recorded; a felt-behaviour question for the playtest, not one a table can answer |
+| **the destitute stand in the weather.** Their row is `post` at every daypart and the compiler places them in the town's public centre. So does anyone with no fireside to go to — a lodger in a named place's quarters, a wilds resident | **by design**; nowhere to go is answered by standing in the weather, not by teleporting nowhere |
+| **the bias is a no-op on legacy worlds**, whose NPCs carry no schedule handles at all | inherited; schedules have always been compile-time-only |
+| **the bias and every catch consumer are intensity-blind.** Light rain empties the street exactly as heavy rain does, and heavy rain bites like light rain. Intensity reaches the header label, the rain tint and the falling pass, and stops | **by design**; a drizzle reads as weather, not as an exception |
+| **a polar world never reaches the storm catch column.** The warmth gate makes a thunderstorm arithmetically impossible at polar latitude in every season and every precipitation, so the release's one authored "fish the storm" hook is unreachable there. Arid four-season worlds meet it about once a year | recorded content reachability, not a bug |
+| **spring and autumn are the same sky**, byte for byte, in every four-structure band × precipitation pair — the temperature phase is symmetric about the shoulders and four-season wetness is flat. Four season names buy three distinct skies per band | **recorded decision**; a one-array retune if a playtest wants autumn wetter |
+| **a two-season world's "wet season" is precipitation-RELATIVE.** An arid tropic's wet half is its storm-leaning half, not a monsoon | naming honesty, stated rather than renamed |
+| **the season-structure mapping is an INTERPRETATION** — two flat seasons at the equator and the tropics, four poleward — implemented as read from the ruling | **flagged to the maintainer** (B2-2), his to amend; on the deferred list |
+| **"First snow." is scoped to the days the world has LIVED.** A world whose calendar opens mid-winter counts firsts from day 1, not from the season's unlived start | **by design**; the floor is what keeps the scan off phantom pre-world time |
+| **a distribution or coefficient retune re-skies unpinned worlds** on their next load, and can strand a sealed pack's weather-tagged lines. It costs pack content, not only the sky | the rolling-compat class; the brief hint is the opt-out |
+| **mobility under an open window is a couple of steps, not freedom.** The window opens inside 26px and closes at 32px, so the affordance is one tile of slack and not a walk | stated so it is not oversold; the feel is on the deferred list |
+| **the capacity guard's coverage is arithmetic luck of the count.** It catches a tile sheet too SMALL for its id map — 33 ids into 32 slots after the 0.14 bake. Three appended painters instead of four would have landed in bounds and slipped past it | recorded honestly at the guard |
+
 **On the packless row, and it is a posture rather than a debt.** The compatibility window **rolls
 with the game**: legacy grows as the game grows, old-alpha worlds are never re-supported, and at
 full release the floor reaches back at most to late-Beta worlds. So a world-compat row in this
@@ -2079,84 +2710,206 @@ blocking anything:
 
 **This list exists so nothing here is discovered by a player.** Everything above is asserted by the
 harness or read off the source; what follows is the complement — the claims the harness structurally
-cannot reach, gathered in one place instead of scattered across commit messages. **Nothing on this
-list is checked off here.** These are somebody's outstanding items, and the entry says whose.
+cannot reach, gathered in one place instead of scattered across commit messages. **This is the only
+such list in this document.** Nothing on it is checked off here: these are somebody's outstanding
+items, and every entry says whose.
 
-### 12.1 The live generation ladder — nobody has run it against a real connection
+Rebuilt for 0.14. Items the release answered are recorded as answered rather than deleted, because
+"what was owed and how it came out" is the half a reader cannot reconstruct.
 
-**Every generation lane in the harness is a MOCK driven through the shipped path.** The transport is
-stubbed and the model's reply is staged, which is what makes the ladder's branches — the wait-out on
-a 409, the one same-base re-roll, the salvage of the longest truncated raw, the substance floor's
-seal-versus-fail decision, the `"thin"` kind, the storage failure — testable at all. What no lane
-can produce is the thing itself: a real connection, a real model, real tokens, and a real
-`experience-generation` route answering twice in one creation.
+### 12.1 The live generation ladder — PARTLY ANSWERED, and the answer changed the design
 
-**What is therefore unproven, and it is exactly the two-call shape 0.13 introduced:** that a live
-creation makes the brief call and then the pack call under **one** `_generating` hold; that the
-retry after a pack-stage failure re-enters at the pack call rather than re-rolling the brief; that
-the purse is paid once at the pack-success lift and not twice; and — the one only a real model can
-answer — **whether the guidance actually gets a templates-first emission**, which the floor
-arithmetic leans on as best-effort and says so.
+**This section used to say nobody had run the ladder against a real connection. That is no longer
+true, and the correction matters more than the original claim did.** A first live two-call
+generation ran on **2026-08-28**, and it is the data 0.14's dialogue design is built on:
 
-**Owed by:** the maintainer, at the first live 0.13 creation. It is not a code gate; it is the
-first thing a real chat does.
+- **The ladder passed end-to-end.** The brief call and the pack call ran under one hold, the retry
+  behaved, and the purse was paid once.
+- **A real model honors templates-first.** That was the one thing only a real model could answer,
+  and the floor arithmetic's best-effort assumption held.
+- **The LINES side starves under truncation.** One thin attempt came back 12 templates / 4 lines;
+  the attempt that sealed came back 5 templates / **12 lines — exactly at the old floor of 12**,
+  with nothing to spare.
+- **And the shape of those 12 lines is what forced 0.14's fallback layering.** By topic:
+  7 untagged / 2 work / 3 rumor — **zero place, zero smalltalk**. By register:
+  5 stranger / 7 friend, and under ruling 4 the 7 friend lines stay sealed unread. Against 4
+  location handles × 4 dayparts that is a per-(location, daypart) slot density **below 1** at floor
+  size.
+
+That is why the selection ladder relaxes as hard as it does, why suppression is honest rather than
+padded, why the guidance was widened and inverted, and why the floor came down to 10. A single live
+run rewrote a design; it is worth saying so.
+
+**What is still owed, and it is now a 0.14 question rather than a 0.13 one:** a live two-call
+generation **under the widened schema and guidance**, measuring the topic and `w` density the four
+new asks actually get, the stranger share under the inverted register sentence, and the 140-char
+line cost against the ruled floor of 10. The mock lanes prove the machinery; only a model proves the
+guidance.
+
+Beside it, the **per-session token cost of the permanent header words**. The chars-per-turn
+measurement ships in §10.3 (14-24 chars); what a live session is actually billed for two extra words
+on every turn is the half a real connection has to answer.
+
+**Owed by:** the maintainer, at the first live 0.14 creation. Not a code gate — the first thing a
+real chat does.
 
 ### 12.2 The browser pass
 
-The harness DOM shim has no layout, no scroll and no focus. Seven things about the two 0.13 surfaces
-are therefore asserted only as far as the **write** — that the package sets the property — and the
-part that matters to a player is on the other side of that line:
+The harness DOM shim has no layout, no scroll, no focus and no animation frame. Everything below is
+asserted only as far as the **write** — that the package sets the property — and the part that
+matters to a player is on the other side of that line.
 
-1. **The scroll reset on a tab switch.** `journalBody.scrollTop = 0` is pinned; the shim has no
-   `scrollTop` that moves a real surface. What wants seeing is a long ledger scrolled halfway, a
-   switch to the jobs tab, and the list arriving at its top rather than two hundred pixels down.
-2. **The abandon confirm's feel.** Two presses, the word changing to "Set it aside?" between them,
-   and — the half no assertion can carry — whether one press reads as *arming* rather than as a
-   press that did nothing.
-3. **The tab strip at mobile width.** Three rows in the panel with the body the sole scroller, and
-   the strip staying on screen when the list under it is long. The strip is built for a third tab it
-   does not yet have, so it wants looking at with two.
-4. **The receipt line's visibility.** A taken or filled offer stays on the board dimmed at opacity
-   0.45; a set-aside sentence renders in the panel rather than a toast, because the panels are opaque
-   and sit above the toast surface. Both are legibility questions, and both are guesses until seen.
-5. **A long job list scrolling.** Ten active jobs plus two done groups at their tallies is the
-   quest tab's realistic maximum; nothing has drawn it at a real height.
-6. **The tally glyphs.** `×2` beside a title, and the "Only the last 40 kinds of work are kept."
-   line under a full group — the multiplication sign and the em dashes at the panel's font size.
-7. **Tab focus and Escape.** The tabs are buttons and carry no dialog furniture deliberately (which
-   the harness pins); what it cannot pin is keyboard focus moving through the strip, and Escape
-   closing the whole panel from a focused tab rather than only from the body.
+**0.14's own items, and the flagship surface is most of them:**
 
-Beside them, the **retry screen's strings**, which are pinned as strings and never seen at their
-real width: the pack-stage title (_"This world didn't finish opening."_), the waiting body (_"The
-settlement is written. One more call is filling in what its people say and the work they have to
-offer."_), and the failed-state body, which is a `gateReason` sentence and a `gateStageNote`
-sentence printed one after the other — the longest combination is the pack-stage note, and it has
-never been measured against the panel it sits in.
+1. **The dialogue window's shape and placement.** It is a partial panel with constraints the design
+   fixed — clear of the topbar, the action rail and the d-pad — but the look is a browser
+   question. Specifically: **does it occlude the host's narration panel mid-story?** A window that
+   covers the thing you are reading is worse than a menu.
+2. **The window at mobile width.** The row list runs to a title, up to two record branches, up to
+   four topics, an escalation pair, a hand-over per errand, "Just talk", the Say field and Leave.
+   Nothing has drawn that at a phone's width, and the rail reserves 268px beside it while it is
+   open.
+3. **The one-tile band's feel.** The window opens inside 26px and closes at 32px. Does 32 read as
+   *stepped away* or as twitchy — and how does the six-pixel sliver between them feel, where the
+   census label is **dimmed to 0.45 and still live**, so a press in it silently no-ops? The number
+   is the ruling's; the feel is the maintainer's eye.
+4. **The time-stop's feel.** The clock face frozen mid-conversation while the town keeps milling and
+   the rain keeps falling. It reads as intended on paper; nobody has watched it.
+5. **Input focus versus host keys.** Keyboard focus moving through the window's buttons, Escape
+   closing from a focused control rather than only from the body, and specifically **Space on a
+   focused window button while walking** — the one collision the shim cannot stage.
+6. **Heavy versus light, by eye, both themes.** Light rain against heavy rain, light snow against
+   heavy snow. "Visually distinct" is accepted only when an eye says so, and the tint alphas and
+   particle counts (45 at fall 1.0 versus 120 at 1.7) are guesses until then.
+7. **The snow tiles, both themes and both tiers** — including the colony's own `cropSnow` and
+   `canopySnow` shapes, which must not fall through to the cozy painters.
+8. **Tint values by eye at noon and at night**, where the storm tint compounds with the darkness
+   ramp.
+9. **The grass-fill strip on EXISTING worlds — `fence`, `trunk` and `well` on paved ground, on a
+   FAIR day, both themes.** This is the one deliberate look change 0.14 makes to worlds that already
+   exist, and it is everywhere: objects no longer lay their own patch of grass, so the ground under
+   them is whatever they are standing on. Verified by eye rather than discovered — and this is also
+   the maintainer's chance to overrule the strip-versus-repaint call.
+10. **The header's wording** at its real width, with the two new words in the paren group.
+11. **The notable-weather drain, on a real animation frame.** The sim parks `{text, day}` rows and a
+    frame files them; the shim runs no rAF, so the queue's four-deep cap, the day riding with each
+    row, and the drain firing at all are pinned only as far as the splice.
+12. **The retry screen's strings and the window's labels at width** — the pack-stage title, the
+    waiting body, the two-sentence failed-state body, and the window's own row labels, all pinned as
+    strings and never measured against the panel they sit in.
+
+**And the metadata path END-TO-END, once, which the console recipe deliberately does not cover.**
+The documented incantation touches the runtime slot only, by design. What wants proving is the real
+path: patch the chat metadata with
+`{ pixelforgeWeather: { word: "storm", sinceDay: <day> } }`, and watch the props delivery arrive,
+the reconciler assign and re-resolve **exactly once**, the town answer, and a reload restore the same
+sky from the row.
+
+**Still owed from 0.13**, unchanged and not superseded: the journal tab strip at mobile width, the
+scroll reset on a tab switch, the abandon confirm's arming feel, the board receipt line's
+legibility, a long job list at a real height, the tally glyphs, and **tab focus and Escape** through
+the strip.
 
 **Owed by:** whoever runs the browser lane before the release goes out — the maintainer, or a
-contributor doing it on their behalf. This package ships no browser test that covers these.
+contributor doing it on their behalf. This package ships no browser test that covers any of it.
 
-### 12.3 The maintainer's 0.12 playtest, still outstanding
+### 12.3 The maintainer's playtest — 0.12's still outstanding, and 0.14 adds its own
 
-**Two 0.12 rulings are still PROVISIONAL and 0.13 built on both of them, knowingly.** The fishing
+**Two 0.12 rulings are still PROVISIONAL, and now three releases have built on them.** The fishing
 **trigger UX** (M5 — a proximity-gated button rather than a verb menu) and the **journal panel's
-shape** (M11) were ruled provisionally, to be settled at a maintainer playtest that has not yet
-happened. 0.13's board button copies M5's pattern exactly, and 0.13's tab strip lives inside M11's
-panel.
+shape** (M11) were ruled provisionally, to be settled at a playtest that has not yet happened.
+0.13's board button copies M5's pattern; 0.13's tab strip lives inside M11's panel; and 0.14's
+window is a fourth proximity-gated surface in the same family. The exposure stays deliberately
+contained — trigger-only gating, a thin list mechanism, a window whose latch is runtime-only — but
+containment is a claim about the code, not a substitute for the playtest.
 
-The exposure was deliberately contained rather than bet on: the board's trigger is **trigger-only**,
-so a post-playtest reshape moves the census entry and the gating and touches neither the menu nor
-the pack; and the strip is a thin list mechanism, so a reshape moves the shell and not the tabs.
-That containment is a claim about the code, and it is true today — but it is not a substitute for
-the playtest.
+**0.14 ships with artwork IN and a playtest promised** (ruling 5), and these are the felt questions
+it exists to answer:
 
-**Owed by:** the maintainer. Until it happens both rulings stay provisional, and a reshape after it
-is a scheduled cost rather than a regression.
+- **The hearth-first bias.** *A storm morning moves the cast from beds to hearths and keeps them
+  home — the streets empty, the houses lit: does that read as weather?* And the second half: does a
+  gathering keeping only its own people read as right? The stampede worry is answered on paper — the
+  wet 07:00 pass is the dusk pass run early, the same moves the town makes every evening — and paper
+  is not an eye.
+- **E7's whole risk, in the synthesis's own phrasing: did the free branches stop the maintainer
+  reaching for the narrator?** That is the roadmap's question about this item and it is answerable
+  only after play. A tree that swallows the door to the GM would trade the game's best feature for
+  its cheapest one.
+- **Whether honest suppression reads as a broken window** on a thin generated pack — the paid-path
+  inversion, met by a player rather than described in a table.
+- **The four-press window in practice**, and whether four bumps in one conversation feels like four
+  encounters.
+- **The season-structure interpretation, CONFIRMED or amended.** Two flat seasons at the equator and
+  the tropics, four poleward, is an interpretation of the ruling flagged as one. It is implemented
+  as read and it is his to change.
+- **The art verdict** — the snow ground, the tints and the falling pass, at both tiers.
+
+**The playtest recipe, and it is two recipes.** The sky is summonable directly, two lines:
+
+```js
+core.sim.weatherOverride = { word: "snow" }; // any of the five; rain/snow take intensity: "heavy"
+core.sim.resolveSchedules(); // the second line is what moves the town
+```
+
+A **season crossing is a two-step**, and it has to be, for two reasons worth stating so the cost is
+known rather than discovered. First, no hand-derived day offset is legal — spans are 92/91/91/91 and
+183/182, so any constant no-ops from some starting positions and crosses nothing from others.
+Second, **assigning `sim.day` is not a live mover**, so it can never fire the ledger line the
+crossing exists to demonstrate:
+
+```js
+// 1. skip to a boundary EVE through the function, never a constant.
+//    183 is the longest span, so the probe day sits at least one season ahead
+//    whatever the structure; seasonStartDay then snaps to that season's true
+//    first day, and -1 is its eve.
+core.sim.day = PF.weather.seasonStartDay(core.sim.world, core.sim.day + 183) - 1;
+core.sim.resolveSchedules();
+// 2. cross the boundary with a LIVE mover, so the park fires: the rest verb (Wait...).
+```
+
+The skip itself parks nothing, and that is stated in the recipe so the missing ledger line is a
+known cost rather than a mystery. The crossing then both relocates the town under the new season's
+sky and files the notable line. It is a verification tool and not a shipped verb: every derived
+system re-derives, the day-keyed memos purge on inequality, and the wrap-up's tell for the skipped
+span is bounded to stub lines.
+
+**One thing no playtest can settle, recorded here because it belongs to nobody else:** the Say
+field's **downstream bound**. The package imposes no cap and cannot see what the host does with a
+very long line — whether it is truncated, refused, or passed through. A refusal surfaces as the
+generic toast and the typed text is not preserved. **Honestly unverified**, and it stays that way
+until somebody with the engine side in view answers it.
+
+**Owed by:** the maintainer. Until the 0.12 playtest happens both of its rulings stay provisional,
+and a reshape after either is a scheduled cost rather than a regression.
 
 ### 12.4 Release prep — nothing currently owed
 
-Both items this section carried are resolved in-cycle: the build output (`VERSION`,
-`manifest.json`, `client.js`, the artifact zip) was regenerated at 0.13.0 rather than deferred, and
-the shipped-history table's missing 0.12 and 0.13 rows were written with the maintainer's explicit
-authorization (2026-08-28). The header stays so the next release's prep has a place to land.
+**This section flipped for 0.14 and has flipped back: the rebuild ran in-cycle rather than being
+deferred.** The 0.14 arc was source-only by convention, exactly as 0.12 and 0.13 were — six slices
+edited `src/` and `build/build-art.mjs` and left the build output for one rebuild at the end — and
+that rebuild is committed. What it moved, and what was checked:
+
+- **`client.js`**, at 1,173,739 bytes over eighteen modules, and the figure was **predicted before
+  the build ran** from the blobs git stores rather than the files on disk. The prediction matched
+  byte for byte, which is the check the 0.11.0 CRLF incident is the reason for.
+- **Both theme tile sheets and `atlas.json`.** The sheet grew its fifth row — 33 ids over 8 columns,
+  **128×64 → 128×80** — and the atlas went from 29 ids to 33, the four snow ids **appended** at
+  29-32 with **not one existing index moved**. Pixel-diffed rather than trusted: of the 32 old
+  slots, exactly six differ, and all six are accounted for — three that were empty padding and
+  are now painted, and `fence`, `well` and `trunk`, which is the grass-strip change reaching a
+  shipped sheet for the first time (the atlas had not been rebaked since 0.10). **That is the look
+  change §12.2 item 9 asks an eye to confirm**, and it is now in the shipped art rather than only in
+  the source.
+- **The pre-bake atlas pin inverted, which is what it existed to do.** It went red on exactly its
+  own assertion when run against the bake, and it now asserts the four ids present, appended and
+  in ascending order (the lane pins the ordering; a gapped-but-ascending map would pass it).
+  Both new arms were mutation-tested.
+- **`manifest.json`** — nine lines: the version plus the sha256/bytes pairs for `client.js`, both
+  sheets and `atlas.json`.
+- **The `0.14.0` artifact zip**, at 1,185,575 bytes. The `0.13.0` zip is untouched. Three bakes over
+  the same tree produced identical output and the same zip hash, so the artifact is reproducible.
+- **The `?v=` cache key** every client asset URL carries moved with the version, which is what pairs
+  the bump with the reshaped sheets so a returning player never gets a new atlas against a cached
+  sheet.
+
+The header stays so the next release's prep has a place to land.

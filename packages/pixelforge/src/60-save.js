@@ -1227,6 +1227,40 @@ PF.save = {
     // itself. Own-property only, both places.
     const hasZone = (id) => typeof id === "string" && Object.prototype.hasOwnProperty.call(world.zones, id);
     const sim = new PF.Sim(world);
+    // THE GM'S SKY, hydrated from chat metadata — the package's OTHER store, and
+    // the right one for a slot like this. The save ENVELOPE is closed to it: a
+    // registered key that emits only sometimes throws the load-time registry
+    // probe for every user on every boot, and past that assert it is the
+    // "listed but not emitted -> silently deleted" case the registry's own
+    // comment calls the slice-1 bug. Metadata costs zero envelope bytes and zero
+    // pins, and it carries the forward-compat argument the pack key already
+    // states in its own header: an older client never reads or writes this key
+    // at all, so a word this build does not know survives a round trip through
+    // it verbatim.
+    //
+    // FOLD, NEVER WRITE BACK. 0.14 reads the row, folds an unknown word to "no
+    // override" for its own runtime only, and writes nothing — so the raw row is
+    // still there for the build that understands it.
+    //
+    // AHEAD OF THE resolveSchedules() BELOW, deliberately: the schedule bias
+    // reads the sky, so boot placement has to happen against the overridden one.
+    // simFromSaved is also the right home rather than restore(): the quarantine
+    // bag is kept OUT of here because re-reading it would resurrect a slot a
+    // re-adoption had just consumed, and the override has nothing to consume —
+    // it is idempotent config, so re-reading it on every rebuild is the feature.
+    sim.weatherOverride = PF.weather.foldOverride(meta && typeof meta === "object" ? meta.pixelforgeWeather : null);
+    sim._weatherMetaApplied = PF.weather.overrideKey(sim.weatherOverride);
+    // AND THE PATH WITH NO ENVELOPE HAS TO BE PLACED HERE, because nothing below
+    // will do it. The constructor already resolved schedules — against a null
+    // override, since the field is assigned on the line above it — and the
+    // restore's own resolve sits inside the version gate. A chat carrying a sky
+    // in metadata but no valid envelope fell between the two and booted its town
+    // into fair-weather spots under a storm, 21 of 25 people on seed 13. It could
+    // not self-correct either: `_weatherMetaApplied` is stamped one line up, so
+    // 90-element's reconciler compares equal and re-resolves nothing, leaving the
+    // next daypart roll as the first repair. Gated on the override being real so
+    // a world that boots without one keeps the constructor's single pass.
+    if (sim.weatherOverride && !(saved && typeof saved.v === "number" && saved.v >= 1)) sim.resolveSchedules();
     // Additive-only by policy (plan §Q1): keys a NEWER build added ride through
     // this one instead of being erased by the next flush. Collected OUTSIDE the
     // version gate deliberately — a build that cannot even parse `v` is exactly
@@ -2187,6 +2221,14 @@ PF.save = {
     const meta =
       core.host && typeof core.host.chatMeta === "object" && core.host.chatMeta !== null ? core.host.chatMeta : {};
     core.sim = this.simFromSaved(saved, meta, core.chatId);
+    // AN OPEN CONVERSATION DOES NOT SURVIVE THE WORLD BEING REPLACED (plan §2.5).
+    // The anchor it was rendering is an orphan of a destroyed world that nothing
+    // will ever move again, and the load-bearing half of this call is what the
+    // fresh sim's own constructor cannot do: unmount the window's DOM and unbind
+    // the document-level pointerdown pair it left on the page. `_switchChat`
+    // carries the same line for the same reason, and both of them null a
+    // constructor-fresh field rather than the departing sim's — deliberately.
+    core.closeTalk?.();
     this._lastSerialized = JSON.stringify(this.snapshot(core));
     core.render?.clearZones();
     // A rebuild can change the theme; the asset loader is theme-aware and

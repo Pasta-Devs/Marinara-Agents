@@ -1,5 +1,5 @@
-// Pixelforge 0.13.0 — Marinara Engine game-surface Experience (single-file client bundle)
-// Built from packages/pixelforge/src (17 modules) by scripts/build-pixelforge-package.mjs. Do not edit; edit src/ and rebuild.
+// Pixelforge 0.14.0 — Marinara Engine game-surface Experience (single-file client bundle)
+// Built from packages/pixelforge/src (18 modules) by scripts/build-pixelforge-package.mjs. Do not edit; edit src/ and rebuild.
 (() => {
 "use strict";
 // ===== 00-prelude.js =====
@@ -17,7 +17,8 @@ const PF = {
   WALK_SPEED: 70, // px/s
   // Package-local clock (never /game/time/advance — issue #5076). 5s per game
   // minute = 2 real hours of WALKING per in-game day; the clock also freezes
-  // during dialogue, so a played day stretches well past that. Tune here.
+  // during dialogue AND while a talk window is open, so a played day stretches
+  // well past that. Tune here.
   CLOCK_SECONDS_PER_GAME_MINUTE: 5,
 };
 
@@ -275,6 +276,12 @@ PF.art = (() => {
     doorKnob: "#d9c07a",
     well: "#6f6f78",
     counter: "#725539",
+    // Snow: warm white, because the cozy theme's palette override is EMPTY —
+    // whatever is written here is the village's snow, and a cold blue-white
+    // over a warm village reads as a different game rather than a season.
+    snow1: "#eceadf",
+    snow2: "#d5d2c3",
+    snowHi: "#fbfaf2",
     night: "#1a2340",
     windowGlow: "#ffd98a",
     ink: "#22261f",
@@ -402,8 +409,12 @@ PF.art = (() => {
       px(g, 0, 0, T, 3, PAL.path1);
       px(g, 0, 3, T, 1, PAL.beam);
     },
+    /** UNFILLED, like the well below and for the same reason — plus the one
+     *  0.14 found: on a snow day the ground under a fence is SNOW, and a
+     *  painter that brought its own `grass1` with it laid a green square in the
+     *  middle of a snowfield. The invariant was already written here; the fence
+     *  and the tree were simply not honouring it. */
     fence(g) {
-      px(g, 0, 0, T, T, PAL.grass1);
       px(g, 2, 4, 2, 10, PAL.fence);
       px(g, 12, 4, 2, 10, PAL.fence);
       px(g, 0, 6, T, 2, PAL.fence);
@@ -420,8 +431,9 @@ PF.art = (() => {
       px(g, 4, 6, 8, 6, PAL.ink);
       px(g, 2, 2, 12, 2, PAL.beam);
     },
+    // Unfilled, for the fence's reason: a tree stands on whatever is under it,
+    // and in winter that is snow.
     trunk(g) {
-      px(g, 0, 0, T, T, PAL.grass1);
       px(g, 6, 2, 4, 14, PAL.trunk);
       px(g, 5, 12, 6, 2, PAL.leaf);
     },
@@ -599,6 +611,58 @@ PF.art = (() => {
       px(g, 4, 6, 8, 1, PAL.ink);
       px(g, 4, 8, 4, 1, PAL.ink);
     },
+    // ── SNOW GROUND (0.14) ───────────────────────────────────────────────────
+    // The four tiles 17-weather's SUBS table swaps in on a snow day. They are
+    // ordinary painters and nothing about them is conditional: the renderer
+    // decides which name to ask for, and this file only answers.
+    //
+    // DELIBERATELY DITHER-FREE, and the reason is worth the line: every other
+    // ground painter scatters flecks from a theme-seeded rng, so the SAME
+    // painter run under two themes produces two different scatters. Snow reads
+    // flat anyway — and a fixed shape is what lets a test tell a themed snow
+    // tile from a base one that merely got recoloured, which is the miss that
+    // turns a comms mast into a leafy blob every winter.
+    grassSnow(g) {
+      px(g, 0, 0, T, T, PAL.snow1);
+      px(g, 0, 0, T, 1, PAL.snowHi);
+      px(g, 3, 5, 4, 1, PAL.snow2);
+      px(g, 10, 9, 4, 1, PAL.snow2);
+      px(g, 6, 12, 3, 1, PAL.snow2);
+      px(g, 12, 2, 2, 1, PAL.snowHi);
+      px(g, 1, 10, 2, 1, PAL.snowHi);
+    },
+    // The second grass tone under snow: the same white, laid a shade deeper, so
+    // the two-tone ground cover still reads as ground cover in winter.
+    grassSnow2(g) {
+      px(g, 0, 0, T, T, PAL.snow2);
+      px(g, 0, 0, T, 1, PAL.snow1);
+      px(g, 2, 4, 5, 1, PAL.snow1);
+      px(g, 9, 7, 5, 1, PAL.snow1);
+      px(g, 4, 11, 6, 1, PAL.snow1);
+      px(g, 11, 13, 3, 1, PAL.snowHi);
+    },
+    // A field under snow. The furrows still read as ridges — a crop tile has to
+    // stay a crop tile in winter, or the whole field is lawn until spring.
+    cropSnow(g) {
+      px(g, 0, 0, T, T, PAL.snow1);
+      for (let r = 2; r < T; r += 5) {
+        px(g, 1, r - 1, T - 2, 1, PAL.snowHi);
+        px(g, 1, r, T - 2, 1, PAL.snow2);
+      }
+    },
+    // The overhead layer: a treetop carrying snow. Transparent corners like the
+    // canopy it stands in for, so the roof-peek cutout and the ground under it
+    // both still work.
+    canopySnow(g) {
+      g.clearRect(0, 0, T, T);
+      px(g, 2, 2, 12, 12, PAL.snow2);
+      px(g, 1, 4, 14, 8, PAL.snow2);
+      px(g, 4, 1, 8, 14, PAL.snow2);
+      px(g, 3, 2, 10, 4, PAL.snow1);
+      px(g, 4, 1, 8, 2, PAL.snowHi);
+      px(g, 2, 5, 3, 1, PAL.snowHi);
+      px(g, 11, 5, 3, 1, PAL.snowHi);
+    },
   };
 
   // ── Themes ──────────────────────────────────────────────────────────────────
@@ -647,6 +711,11 @@ PF.art = (() => {
         doorKnob: "#8ff0e8",
         well: "#4d545e",
         counter: "#3f4854",
+        // Blue-white where the village is warm-white: the colony's light is
+        // cold, and its snow is lit by it.
+        snow1: "#dde6ef",
+        snow2: "#b9c6d4",
+        snowHi: "#f4f9ff",
         night: "#101726",
         windowGlow: "#8fd4ff",
       },
@@ -686,9 +755,11 @@ PF.art = (() => {
           for (let cx = 0; cx < T; cx += 4) px(g, cx, 0, 1, T, PAL.roof2);
           dither(g, rnd, PAL.roofHi, 3);
         },
-        // comms mast: the "tree" of the colony — steel pylon on regolith
+        // comms mast: the "tree" of the colony — a steel pylon, standing on
+        // whatever the ground under it is. Unfilled like the village tree: the
+        // colony's `grass1` is regolith brown, so the fill it used to bring was
+        // a brown square under every mast on a snow day.
         trunk(g) {
-          px(g, 0, 0, T, T, PAL.grass1);
           px(g, 7, 2, 2, 14, PAL.trunk);
           px(g, 5, 4, 6, 1, PAL.trunk);
           px(g, 6, 12, 4, 2, PAL.wallDark);
@@ -723,9 +794,8 @@ PF.art = (() => {
           px(g, 4, 9, 8, 1, PAL.wallDark);
           px(g, 4, 11, 8, 1, PAL.wallDark);
         },
-        // guard rail instead of a wooden fence
+        // guard rail instead of a wooden fence — unfilled, for the mast's reason
         fence(g) {
-          px(g, 0, 0, T, T, PAL.grass1);
           px(g, 2, 4, 2, 10, PAL.fence);
           px(g, 12, 4, 2, 10, PAL.fence);
           px(g, 0, 6, T, 1, PAL.trunk);
@@ -745,6 +815,39 @@ PF.art = (() => {
           px(g, 4, 4, 5, 1, PAL.doorKnob);
           px(g, 4, 6, 8, 1, PAL.doorKnob);
           px(g, 4, 8, 4, 1, PAL.leafHi);
+        },
+        // ── THE SNOW TWINS OF THE TWO IDS THIS THEME ALREADY OVERRIDES ───────
+        // `crop` and `canopy` are a hydroponics tray and a comms-mast head
+        // here, not a furrow and a treetop — so their snow twins need overrides
+        // too. Without these, a colony snow day falls through to the BASE snow
+        // painters and swaps tile SHAPES: the masts turn into leafy blobs and
+        // the trays into cozy furrows, every snow day, in both tiers, and no
+        // same-theme comparison can see it.
+        //
+        // `grass`/`grass2` are overridden by neither theme, so their snow twins
+        // need no entry here: the palette above recolours them and that is the
+        // whole difference.
+        //
+        // Frost on the tray rails rather than a covered tray: the bay is
+        // pressurised, and what the cold reaches is the frame.
+        cropSnow(g) {
+          px(g, 0, 0, T, T, PAL.floor2);
+          px(g, 1, 2, T - 2, 5, PAL.beam);
+          px(g, 1, 9, T - 2, 5, PAL.beam);
+          px(g, 2, 3, T - 4, 3, PAL.snow1);
+          px(g, 2, 10, T - 4, 3, PAL.snow1);
+          px(g, 1, 2, T - 2, 1, PAL.snowHi);
+          px(g, 1, 9, T - 2, 1, PAL.snowHi);
+        },
+        // Snow banked on the antenna crossarm — the mast silhouette, kept.
+        canopySnow(g) {
+          g.clearRect(0, 0, T, T);
+          px(g, 5, 0, 6, 2, PAL.snowHi);
+          px(g, 7, 2, 2, 3, PAL.trunk);
+          px(g, 3, 4, 10, 2, PAL.trunk);
+          px(g, 3, 3, 10, 1, PAL.snow1);
+          px(g, 2, 5, 2, 1, PAL.snow2);
+          px(g, 12, 5, 2, 1, PAL.snow2);
         },
       },
     },
@@ -901,6 +1004,68 @@ PF.assets = {
     return theme === "cozy-village" ? "tiles.png" : `tiles-${encodeURIComponent(theme)}.png`;
   },
 
+  /** The key a capacity degrade latches under: THIS theme's sheet at THIS
+   *  package version. A shipped-artifact mismatch is identical on every retry,
+   *  so within the pair the latch is permanent — and a real fix arrives as a
+   *  version bump, which is a different key and gets one clean retry. */
+  _capacityKey(core, theme) {
+    const version = typeof core.host?.packageVersion === "string" ? core.host.packageVersion : "";
+    return `${theme}|${version}`;
+  },
+
+  /** Does the id map fit inside the sheet that just loaded?
+   *
+   *  This is the hole in the tier's degradation guarantee, which is per-tile and
+   *  CONDITIONAL: `tileCanvas` returns null — and the Tier-0 painter answers —
+   *  only for an id the atlas does NOT list. An id the atlas DOES list, against
+   *  a sheet too small to hold it, blits an empty in-bounds slot or a no-op
+   *  out-of-bounds rect. That is a see-through world rather than procedural art,
+   *  and it is exactly what a release that appends tile ids ships if the sheet
+   *  goes out un-rebaked.
+   *
+   *  `naturalHeight`/`naturalWidth`, not `height`/`width`: `_image()` resolves on
+   *  the load event without decode(), and the attribute-shadowed pair is not the
+   *  pixel one.
+   *
+   *  BOTH AXES, because the id map declares one of them and the sheet owns the
+   *  other. `columns` is the atlas's claim and `tileCanvas` slices at
+   *  `index % columns` forever after, so a sheet baked NARROWER than that claim
+   *  cuts every id in the missing columns from past its right edge — inside the
+   *  row count, invisible to `columns * rows`, and a see-through tile all the
+   *  same. The row test cannot catch it and the column test cannot catch a short
+   *  sheet, so the guard asks both.
+   *
+   *  THE HONEST SCOPE, because the guard is narrower than it looks: it catches a
+   *  sheet too SMALL for its id map, and that it covers this release at all is
+   *  arithmetic luck of the count — 33 ids into 32 slots. Three appended
+   *  painters instead of four would have landed in bounds and slipped straight
+   *  past it. An aligned-but-stale sheet is busted by the `?v=` cache key
+   *  instead, and ids deliberately absent from the atlas keep the per-tile null
+   *  path they already had. */
+  _overCapacity(img) {
+    const tiles = this.atlas?.tiles;
+    const size = this.atlas?.tileSize;
+    const columns = this.atlas?.columns;
+    if (!tiles || !size || !columns) return false;
+    const rows = Math.floor(img.naturalHeight / size);
+    const sheetColumns = Math.floor(img.naturalWidth / size);
+    // A dimension we cannot read is not a mismatch we can prove: leave it alone
+    // rather than degrade a working install on a number that never arrived.
+    if (!Number.isFinite(rows) || !Number.isFinite(sheetColumns)) return false;
+    let maxIndex = -1;
+    // INDEX-AWARE on the width too, and deliberately not `sheetColumns < columns`:
+    // a narrow sheet whose id map never reaches the missing columns is not a
+    // fault, and degrading a working install on one is the false positive that
+    // teaches everyone to distrust the guard.
+    let pastRightEdge = false;
+    for (const index of Object.values(tiles)) {
+      if (typeof index !== "number") continue;
+      if (index > maxIndex) maxIndex = index;
+      if (index % columns >= sheetColumns) pastRightEdge = true;
+    }
+    return pastRightEdge || maxIndex >= columns * rows;
+  },
+
   async load(core) {
     const theme = PF.art?.theme ?? "cozy-village";
     if (this.status === "loading") {
@@ -919,6 +1084,11 @@ PF.assets = {
     // failures retry, rate-limited, so a transient outage no longer disables
     // Tier-1 for the whole session (0.3.0 regression fix).
     if (this._noPackage) return;
+    // The SECOND terminal, and it is `_noPackage`-shaped for the same reason:
+    // a sheet that cannot hold its own id map is a shipped artifact, identical
+    // on every retry. Sending it to "failed" alone would re-fetch the whole
+    // asset set every 30 seconds, forever, on exactly the broken installs.
+    if (this._capacityLatch === this._capacityKey(core, theme)) return;
     if (this.status === "failed" && Date.now() - (this._failedAt ?? 0) < 30_000) return;
     if (typeof core.host?.packageId !== "string") {
       this._noPackage = true;
@@ -958,6 +1128,24 @@ PF.assets = {
       } catch {
         atlasTheme = "cozy-village";
         atlasImg = await this._image(this._url(core, "tiles.png"));
+      }
+      if (this._overCapacity(atlasImg)) {
+        this._capacityLatch = this._capacityKey(core, theme);
+        this.status = "failed";
+        this._requestedTheme = null;
+        this._queuedTheme = null;
+        this._atlasImg = null;
+        this._tileCanvases.clear();
+        // The ordinary failure path does NOT evict, and this one has to: a guard
+        // firing on the theme-change path would otherwise leave zones already
+        // composited from the previous Tier-1 sheet standing beside fresh Tier-0
+        // paint, which is a world in two art styles at once.
+        core.render?.clearZones?.();
+        // Once, because the latch guarantees once.
+        console.warn(
+          "[pixelforge] the shipped tile sheet is smaller than its own id map; drawing this theme procedurally",
+        );
+        return;
       }
       this._atlasImg = atlasImg;
       this.atlasTheme = atlasTheme;
@@ -1025,6 +1213,747 @@ PF.assets = {
     return true;
   },
 };
+
+// ===== 17-weather.js =====
+// ── Sky, climate and calendar ─────────────────────────────────────────────────
+// The substrate every weather consumer derives from: two climate AXES minted per
+// world, a 365-day calendar whose phase is the world's own, and one continuous
+// derivation that turns (latitude, precipitation, season) into the day's odds.
+//
+// POSITION 17, BEFORE 18-brief, and the rule that buys it: NO MODULE NUMBERED
+// BELOW 17 MAY READ `PF.weather`. The bundle is one IIFE concatenated in filename
+// order, so a backward read is a `TypeError` at load and a forward one is free —
+// 18-brief folds the two axis fields against the enums below, 20-world stamps the
+// mint, 30-sim wraps the draw, and 59/61 read the word list the way 61 already
+// reads 59's daypart list.
+//
+// WEATHER ADDS ZERO SAVE FIELDS, exactly as schedules do: the sky at day D is a
+// pure function of (world seed, day) and the clock is already saved, so a reload,
+// a rebuild and a timeline rewind all re-derive the same sky. The one thing that
+// is not derived is the GM's override, and that lives in chat metadata (60-save),
+// never in the save envelope.
+PF.weather = (() => {
+  // ── The two axes ───────────────────────────────────────────────────────────
+  // Plain arrays, exported, and the single authority every door folds against —
+  // the brief's seal pass, the brief's load pass, and the digest that describes
+  // the world to a generation call all spend THESE, by name, rather than copying
+  // the words into a third file.
+  //
+  // THE `Extreme` SEAM, RECORDED AND NOT DESIGNED: a colony world may eventually
+  // want a climate two temperate axes cannot say. The shape of that — a sixth
+  // band, a third axis, something else — is a conversation with the maintainer
+  // and nothing here anticipates it. What the module owes it is additivity, and
+  // it has it by construction: every fold reads the exported array and every
+  // table below is paired against it at boot, so a new entry is one row in three
+  // literals and not a migration. See the plan's §2.1 before building on this.
+  const LATITUDES = ["equatorial", "tropical", "temperate", "subpolar", "polar"];
+  const PRECIPS = ["arid", "moderate", "wet"];
+
+  // ONE FIELD NAME PER AXIS, everywhere: the brief field, the schema property,
+  // the fold row, the world stamp and axesFor's return are all `latitude` and
+  // `precipitation`. The only short forms in this file are the CONSTANT names
+  // below (which are never read off a brief) and the two side-stream hash tokens
+  // (which are stream ids, permanent once shipped, and not a read surface). A
+  // `brief.precip` written somewhere would fold nothing and pin nothing, silently.
+
+  // `warmth` is the band's base temperature term and `swing` its seasonal
+  // amplitude — nearer the equator is hotter AND flatter, which is the whole
+  // gradient as two numbers. `structure` names the season set: two seasons in the
+  // tropics, four poleward.
+  const LAT_META = {
+    equatorial: { warmth: 3, swing: 0, structure: "two" },
+    tropical: { warmth: 3, swing: 1, structure: "two" },
+    temperate: { warmth: 2, swing: 2, structure: "four" },
+    subpolar: { warmth: 1, swing: 2, structure: "four" },
+    // Warmth 0 with a swing of 1 means what it says: polar summer reaches t = 1,
+    // where flurries and cold drizzle are both possible and a storm is
+    // arithmetically unreachable (the storm gate opens above t = 2). WINTER IS
+    // THE ONLY POLAR SEASON AT OR BELOW THE FULL-SNOW LINE: that line is
+    // `freezePoint - mixBand` = -0.5 and winter sits at t = -1, while spring and
+    // autumn sit at t = 0 — a snow-heavy mix that still falls a quarter rain, and
+    // summer three quarters.
+    polar: { warmth: 0, swing: 1, structure: "four" },
+  };
+
+  // The wet-draw mass term. Arid-hot and wet-hot are the same latitude row read
+  // through two different numbers here, which is the distinction the two-axis
+  // design exists for.
+  const PRECIP_META = {
+    arid: { wetness: 0.5 },
+    moderate: { wetness: 2 },
+    wet: { wetness: 3.5 },
+  };
+
+  // Season NAMES, keyed by structure. The two-season names are
+  // PRECIPITATION-RELATIVE and the honest caveat is stated in player-state: an
+  // arid tropic's "wet season" is merely its storm-leaning half, not a monsoon.
+  const SEASON_SETS = {
+    four: ["spring", "summer", "autumn", "winter"],
+    two: ["wet season", "dry season"],
+  };
+
+  // ── The tuning surface ─────────────────────────────────────────────────────
+  // One file, one retune — the economy's idiom. These are coefficients, not
+  // vocabulary: nothing here is compat-bearing, and moving any of them re-skies
+  // unpinned worlds on their next load (the rolling-compat class, stated in
+  // player-state).
+  const TUNING = {
+    yearDays: 365,
+    // The words worth a ledger line when a day-crossing brings them in.
+    notable: ["snow", "storm"],
+    // THE THREE BAND EDGES. `freezePoint` is the temperature at which the snow
+    // share reaches ZERO — the top of a mix band, not a step — and `mixBand` is
+    // how wide that band is: full snow at freezePoint - mixBand, full rain at
+    // freezePoint, a real sleet mix between. `stormFloor`/`stormBand` gate storm
+    // on genuine warmth, so a cold world's blizzard is heavy snow and never a
+    // thunderstorm.
+    freezePoint: 1.5,
+    mixBand: 2,
+    stormFloor: 2,
+    stormBand: 1.5,
+    stormShare: 0.25,
+    overcastBase: 1,
+    overcastWet: 0.4,
+    fairBase: 4,
+    fairDry: 1.5,
+    dryPivot: 2,
+    // The two-season wet/dry alternation. The wet half must be the wetter one —
+    // the name has to be true of the numbers, and the boot assert says so.
+    wetSeasonFactor: 1.8,
+    drySeasonFactor: 0.3,
+    heavyBase: 0.12,
+    heavyMax: 0.75,
+    // Particle counts and fall speed per intensity (the render pass). Heavy runs
+    // ~2.7x the streaks at ~1.7x the speed; storm rides the heavy row.
+    particles: { light: { n: 45, fall: 1.0 }, heavy: { n: 120, fall: 1.7 } },
+  };
+
+  // ── The two phase tables ───────────────────────────────────────────────────
+  // KEYED BY ORDINAL INDEX INTO `SEASON_SETS[structure]`, deliberately: a table
+  // keyed by season WORD would have to agree with two different vocabularies at
+  // once, and the half that disagreed would compute NaN for every cell of one
+  // structure rather than throwing anywhere a reader would look. Index order is
+  // the season set's own — four = spring/summer/autumn/winter, two = wet/dry.
+  //
+  // Two's +-0.5 amplitude is half of four's +-1 on purpose: the tropics swing
+  // less than the temperate belt, the same gradient LAT_META's `swing` states.
+  const TEMP_PHASE = {
+    four: [0, 1, 0, -1],
+    two: [0.5, -0.5],
+  };
+  // Four-structure worlds run FLAT wetness — the wet/dry alternation IS the
+  // two-season structure's weather identity, and giving four seasons a wetness
+  // curve too would be inventing a season layer nothing has asked for.
+  //
+  // ONE IDENTITY THIS FLATNESS BUYS, recorded as a decision rather than left to
+  // be discovered: with `TEMP_PHASE.four` symmetric about the shoulders and
+  // wetness flat, SPRING AND AUTUMN ARE THE SAME SKY, byte for byte, in every
+  // four-structure (band x precipitation) pair. Four season names buy three
+  // distinct skies per band. Nothing breaks — the header and the ledger still
+  // print two different words, because the calendar is real and the symmetry is
+  // the sky's — and if the playtest ever wants autumn to read wetter than
+  // spring, that is a one-array retune here and not a design hole.
+  const WET_PHASE = {
+    four: [1, 1, 1, 1],
+    two: [TUNING.wetSeasonFactor, TUNING.drySeasonFactor],
+  };
+
+  // ── Per-theme axis distributions ───────────────────────────────────────────
+  // A cozy village is USUALLY mid-latitude and CAN roll tropical or subpolar; the
+  // colony leans cold and dry. An omitted band is the distribution speaking — no
+  // cozy world is polar — and the boot assert below says so rather than treating
+  // a missing key as a hole.
+  //
+  // THE COUPLING, STATED: this is a theme-keyed table in a third file, which is
+  // exactly the drift 18-brief's foldStored refuses to introduce (it asks
+  // `PF.art.themeIds()` instead of copying the list). The boot assert turns that
+  // drift into a load-time throw ON PURPOSE — adding a theme to 10-art now breaks
+  // boot until this table learns it too, which is a red at the desk instead of a
+  // world with no climate at somebody's.
+  const THEME_AXES = {
+    "cozy-village": {
+      latitude: { tropical: 1, temperate: 6, subpolar: 2 },
+      precipitation: { arid: 1, moderate: 6, wet: 3 },
+    },
+    "sci-fi-colony": {
+      latitude: { equatorial: 1, tropical: 1, temperate: 3, subpolar: 4, polar: 2 },
+      precipitation: { arid: 3, moderate: 4, wet: 2 },
+    },
+  };
+
+  // ── The weather vocabulary ─────────────────────────────────────────────────
+  // FIVE WORDS. Intensity is a SECOND, smaller dimension taken by rain and snow
+  // only — not two more words: the pack's weather axis, the catch tables, the
+  // indoors bias flag and the snow tile substitution all stay five-valued, and
+  // only the header label, the rain tint and the particle pass ever read the
+  // intensity. The ledger reads neither — light snow hardening into heavy snow is
+  // the same weather to it.
+  const WORDS = ["fair", "overcast", "rain", "storm", "snow"];
+  const INTENSITIES = ["light", "heavy"];
+
+  // Two names, two jobs: WORDS is the axis, this is what each word DOES. `label`
+  // is the header's wire text (per-intensity where one is taken), `tint` the
+  // render pass's multiply colour (per-intensity for rain — heavy rain has to
+  // read as heavier), `indoors` the schedule bias flag, and `takesIntensity` is
+  // the ONE home of "does this word carry a light/heavy": the draw, the metadata
+  // fold, labelFor and the boot assert all read this flag rather than restating
+  // the pair in four places.
+  const WORD_META = {
+    fair: { label: "fair", tint: null, indoors: false, takesIntensity: false },
+    overcast: { label: "overcast", tint: "rgba(120,125,135,.12)", indoors: false, takesIntensity: false },
+    rain: {
+      label: { light: "light rain", heavy: "heavy rain" },
+      tint: { light: "rgba(70,90,110,.12)", heavy: "rgba(70,90,110,.24)" },
+      // INTENSITY-BLIND on purpose: light rain still empties the street. A
+      // drizzle reads as weather, not as an exception.
+      indoors: true,
+      takesIntensity: true,
+    },
+    storm: { label: "storm", tint: "rgba(50,65,90,.30)", indoors: true, takesIntensity: false },
+    // No tint — the snow TILES carry it. The ground treatment is binary by the
+    // same scoping: a light-snow day and a blizzard stand on the same white
+    // tiles, and what differs is how much is falling.
+    snow: { label: { light: "light snow", heavy: "heavy snow" }, tint: null, indoors: true, takesIntensity: true },
+  };
+
+  // ── The ground substitution ────────────────────────────────────────────────
+  // Snow is the one word that changes what you STAND on rather than the light
+  // over it, and this is the whole mechanism: a paint-time rename, read by the
+  // renderer's zone composite and by nothing else. The zone arrays are never
+  // touched — a compiled world holds `grass` in January exactly as it does in
+  // July, and the substitution lives in the picture.
+  //
+  // KEYED BY WORD, NOT INTENSITY, deliberately: the snow ground is binary. A
+  // flurry and a blizzard stand on the same white tiles, and what tells them
+  // apart is how much is falling and how dark the sky sits — the intensity
+  // reaches the header label, the rain tint and the particle pass, and stops.
+  //
+  // WHAT IS NOT HERE IS THE DESIGN. Paths, roads and stone stay bare because a
+  // trodden way is the first thing to clear; `dirt` stays bare too, and the
+  // snowed-crop-beside-bare-dirt seam at a field edge is the accepted price of
+  // that; water STAYS WATER, because it is liquid and fishable and a frozen
+  // pond is a mechanic nobody has asked for.
+  const SUBS = {
+    snow: { grass: "grassSnow", grass2: "grassSnow2", crop: "cropSnow", canopy: "canopySnow" },
+  };
+
+  // ── Defensive resolution ───────────────────────────────────────────────────
+  /** The world's axes, or the legacy defaults. Every table read in this module
+   *  goes through here or through PF.own: a world object can arrive from a save
+   *  path, a degrade arm or a console, and `LAT_META[undefined]` is the read
+   *  that turns a missing stamp into NaN weather instead of temperate weather. */
+  function axesOf(world) {
+    return {
+      latitude: PF.own(LAT_META, world?.latitude) ? world.latitude : "temperate",
+      precipitation: PF.own(PRECIP_META, world?.precipitation) ? world.precipitation : "moderate",
+    };
+  }
+
+  /** A day the calendar arithmetic is total for. `day` is a plain incrementing
+   *  int minted at 1 and the save path already clamps it, but a console, a
+   *  hostile row or a future caller can hand this anything — and the modulo below
+   *  wants an exact integer, so the ceiling keeps `day - 1 + dayOffset` inside
+   *  safe-integer range rather than trusting the caller's arithmetic. */
+  function dayOf(day) {
+    const n = Math.trunc(Number(day));
+    if (!Number.isFinite(n) || n < 1) return 1;
+    return Math.min(n, Number.MAX_SAFE_INTEGER - TUNING.yearDays);
+  }
+
+  /** Where a day falls in this world's own year. The phase is per-seed and runs
+   *  the FULL year, which subsumes the hemisphere question entirely: "southern"
+   *  and "day 1 lands in autumn" are the same fact, and one offset says both. */
+  function calendarOf(world, day) {
+    const band = LAT_META[axesOf(world).latitude];
+    const names = SEASON_SETS[band.structure];
+    const n = names.length;
+    const d = dayOf(day);
+    const offset = PF.hashStr(`${(world?.seed ?? 0) >>> 0}|calendar`) % TUNING.yearDays;
+    // `doy` is non-negative because `day >= 1` holds above — the unsigned hash
+    // only makes `offset >= 0`, and offset CAN be zero.
+    const doy = (d - 1 + offset) % TUNING.yearDays;
+    return { d, doy, n, names, idx: Math.floor((doy * n) / TUNING.yearDays) };
+  }
+
+  /** The season ORDINAL — the form every table read spends. The floor form
+   *  partitions the year into n spans (four: 92/91/91/91; two: 183/182) and a
+   *  season never straddles the year boundary, so there is no boundary table to
+   *  keep in step with anything. */
+  function seasonIndex(world, day) {
+    return calendarOf(world, day).idx;
+  }
+
+  /** The season WORD — display and pack-facing text only. */
+  function season(world, day) {
+    const c = calendarOf(world, day);
+    return c.names[c.idx];
+  }
+
+  /** The first day of the season `day` falls in, FLOORED AT DAY 1. The full-year
+   *  offset lands almost every world's day 1 mid-season (361 of 365 offsets on a
+   *  four-season world), so an unfloored answer names days before the world
+   *  existed — up to 182 of them, measured.
+   *
+   *  WHAT THE FLOOR BUYS, said honestly rather than overclaimed: the RETURNED
+   *  DAY is a day somebody could have lived, and the ledger's first-of-season
+   *  scan costs the season rather than the year. It does NOT change the scan's
+   *  answer, because dayOf() clamps a sub-1 day to 1 as well — an unfloored scan
+   *  would re-read day 1 up to 182 times over and reach the same verdict. Walked
+   *  across 1478 snow crossings (5 latitudes x 3 precipitations x 6 seeds x 400
+   *  days), floored and unfloored differ on none.
+   *
+   *  So "first" means first OF THE DAYS THE WORLD HAS LIVED, which is the honest
+   *  scope and the one player-state states. Every day the scan feeds back into
+   *  at() is >= 1 again, so the totality argument above holds unchanged. Callers
+   *  derive their bound FROM HERE and never by hand: under a 365-day year a
+   *  hand-derived season length is wrong by up to 182 days. */
+  function seasonStartDay(world, day) {
+    const c = calendarOf(world, day);
+    const firstDoy = Math.ceil((c.idx * TUNING.yearDays) / c.n);
+    return Math.max(1, c.d - (c.doy - firstDoy));
+  }
+
+  // ── The derivation ─────────────────────────────────────────────────────────
+  /** THE WET MASS, and it has exactly ONE HOME. Both `weightsFor` (which splits
+   *  it into snow and rain) and the intensity draw (whose heavy/light threshold
+   *  derives from it) call this function, and neither recomputes the product
+   *  inline. That is the whole point: a `PRECIP_META` or phase retune lands in
+   *  one place and moves both consumers together, where two copies would let a
+   *  monsoon get wetter and softer at the same time with every assert still
+   *  green.
+   *
+   *  PRECONDITION, named so a fourth caller inherits it deliberately:
+   *  `seasonIndex` must be in range for THIS latitude's own structure.
+   *  `TEMP_PHASE.two[3]` is undefined and NaNs the whole row, and the boot assert
+   *  walks only in-range pairs so it cannot see one. All three callers today
+   *  derive the index from the same latitude's season set. */
+  function wetMass(latitude, precipitation, index) {
+    const band = PF.own(LAT_META, latitude) ?? LAT_META.temperate;
+    const wetness = (PF.own(PRECIP_META, precipitation) ?? PRECIP_META.moderate).wetness;
+    return wetness * WET_PHASE[band.structure][index];
+  }
+
+  /** The day's odds as a weight row over WORDS. ONE derivation replaces every
+   *  hand-written per-climate table, and the temperature is spent CONTINUOUSLY —
+   *  as a magnitude through two clamped ramps, not as one bit.
+   *
+   *  `cold` is the snow SHARE of the wet mass, so `snow + rain` is identically
+   *  the wet mass and only the storm term lets latitude touch how often the
+   *  streets empty. `warmHalf` is the storm gate: convective violence needs real
+   *  warmth, which is why a polar year cannot produce a thunderstorm at any
+   *  precipitation and in any season.
+   *
+   *  THE RETURN ROW IS THE ROW. Nothing else rides in it — the boot assert walks
+   *  every key of every row against WORDS, and a convenience field smuggled in
+   *  here would red the whole product at load. */
+  function weightsFor(latitude, precipitation, index) {
+    const band = PF.own(LAT_META, latitude) ?? LAT_META.temperate;
+    const t = band.warmth + band.swing * TEMP_PHASE[band.structure][index];
+    const w = wetMass(latitude, precipitation, index);
+    const cold = PF.clamp((TUNING.freezePoint - t) / TUNING.mixBand, 0, 1);
+    const warmHalf = PF.clamp((t - TUNING.stormFloor) / TUNING.stormBand, 0, 1);
+    const rain = w * (1 - cold);
+    return {
+      fair: TUNING.fairBase + TUNING.fairDry * Math.max(0, TUNING.dryPivot - w),
+      overcast: TUNING.overcastBase + TUNING.overcastWet * w,
+      rain,
+      storm: rain * TUNING.stormShare * warmHalf,
+      snow: w * cold,
+    };
+  }
+
+  /** EVERY SKY A CLIMATE CAN PRODUCE, in WORDS order: the union of the words
+   *  carrying a non-zero weight across this latitude's own season set. It lives
+   *  here, beside the derivation it reads, for `wetMass`'s reason — the digest
+   *  that tells a generation which weather to write lines for has to describe the
+   *  same sky `at()` will draw, and a hand table saying "the tropics get no snow"
+   *  is an opinion a coefficient retune falsifies silently while every assert
+   *  stays green. Through the derivation it is arithmetic, and it moves when the
+   *  arithmetic does.
+   *
+   *  It walks the season set of THIS band's structure, which is the precondition
+   *  `wetMass` states: an index out of range for the band NaNs the whole row. A
+   *  latitude the table does not know folds to temperate, the same fallback
+   *  `axesOf` and `weightsFor` already spend. */
+  function wordsFor(latitude, precipitation) {
+    const band = PF.own(LAT_META, latitude) ?? LAT_META.temperate;
+    const seen = new Set();
+    for (let index = 0; index < SEASON_SETS[band.structure].length; index++) {
+      const row = weightsFor(latitude, precipitation, index);
+      for (const word of WORDS) if (row[word] > 0) seen.add(word);
+    }
+    return WORDS.filter((word) => seen.has(word));
+  }
+
+  /** One weighted pick off a weight row, in WORDS order so the walk is stable. */
+  function drawWord(row, roll) {
+    let sum = 0;
+    for (const word of WORDS) sum += row[word];
+    let cut = roll * sum;
+    for (const word of WORDS) {
+      cut -= row[word];
+      if (cut < 0) return word;
+    }
+    // Unreachable: `roll` is in [0,1) and the sum is at least
+    // fairBase + overcastBase, two independent floors no axis input can zero. If
+    // a retune ever takes both to nothing, fair is the honest answer.
+    return WORDS[0];
+  }
+
+  /** Is this override the authority for `day`? A DAY-RANGE predicate, because the
+   *  live day moves BACKWARD on the rewind path: rewinding INTO an override's
+   *  range must re-arm it (the sky at day D is what it was the first time through
+   *  day D), while rewinding to before it was ever set must not. `sinceDay`
+   *  defaults to 1 and `untilDay` to forever. */
+  function overrideLive(override, day) {
+    if (!override || typeof override !== "object") return false;
+    if (!WORDS.includes(override.word)) return false;
+    return (override.sinceDay ?? 1) <= day && day <= (override.untilDay ?? Infinity);
+  }
+
+  /** THE SKY AT A DAY: `{word, intensity}`, intensity null for words that take
+   *  none. A pure function of (world seed, day, override) — day-grain, zero save
+   *  fields, and rewind-exact for the same reason the quest board is.
+   *
+   *  DRAW ORDER, and it is deliberate: the WORD draw is always made and simply
+   *  discarded when an override covers the day, and the INTENSITY draw is always
+   *  second. So an override naming the very word the derivation rolled cannot
+   *  flip the day's intensity, and the live path and the ledger's first-of-season
+   *  scan consume the stream identically. Words that take no intensity consume no
+   *  second draw — the stream is day-local, so that costs nothing anywhere.
+   *
+   *  A FRESH OBJECT EVERY CALL, which the transition compare depends on: a
+   *  consumer that compared the returned objects by reference would see a change
+   *  every single day. Compare `.word`. */
+  function at(world, day, override) {
+    const { latitude, precipitation } = axesOf(world);
+    const d = dayOf(day);
+    const index = calendarOf(world, d).idx;
+    const rng = PF.rng(PF.hashStr(`${(world?.seed ?? 0) >>> 0}|weather|${d}`));
+    const drawn = drawWord(weightsFor(latitude, precipitation, index), rng());
+    const live = overrideLive(override, d) ? override : null;
+    const word = live ? live.word : drawn;
+    const meta = WORD_META[word];
+    let intensity = null;
+    if (meta.takesIntensity) {
+      if (live && typeof live.intensity === "string" && INTENSITIES.includes(live.intensity)) {
+        // A GM who said "heavy rain" gets exactly that.
+        intensity = live.intensity;
+      } else {
+        // …and a GM who just said "rain" gets a day-stable intensity for free,
+        // off the same axes the odds came from: wet worlds rain harder, and
+        // desert rain is almost always light.
+        const share = Math.min(TUNING.heavyMax, TUNING.heavyBase * wetMass(latitude, precipitation, index));
+        intensity = rng() < share ? "heavy" : "light";
+      }
+    }
+    return { word, intensity };
+  }
+
+  /** The header's wire text for a sky. */
+  function labelFor(word, intensity) {
+    const meta = PF.own(WORD_META, word) ?? WORD_META.fair;
+    if (!meta.takesIntensity) return meta.label;
+    return PF.own(meta.label, intensity) ?? meta.label.light;
+  }
+
+  // ── The GM override slot ───────────────────────────────────────────────────
+  // WRITTEN BY NOTHING IN THIS RELEASE except a console, deliberately: the host
+  // dispatches `onHostEvent` on engine-defined type strings only, so there is no
+  // surface for a real writer to sit on yet (that is the feature request's).
+  // What exists is the READ side, whole and verifiable, and the incantation is
+  // TWO lines — the runtime slot is a sim field, and the town only re-places on
+  // a resolve:
+  //
+  //     core.sim.weatherOverride = { word: "storm" };
+  //     core.sim.resolveSchedules();
+  //
+  // Any of the five words; rain and snow take an optional `intensity: "heavy"`.
+  // The renderer answers on the next frame either way — only the schedule bias
+  // needs the second line. A console write touches the RUNTIME slot only:
+  // metadata stays untouched, which is exactly right for a throwaway check, and
+  // the mid-session reconciler compares metadata against its own applied memo so
+  // no props delivery claws the summoned sky back.
+  /** Fold a raw `pixelforgeWeather` metadata row into an override, or null.
+   *
+   *  FOLD, NEVER THROW, AND NEVER WRITE BACK. The key is chat metadata, which is
+   *  per-key shallow-merge PATCH territory: a word from a build that has not
+   *  shipped yet folds to "no override" FOR THIS RUNTIME ONLY and the stored row
+   *  survives verbatim for the build that understands it. This is the whole
+   *  forward-compat argument, and it is the pack key's own, in its own words.
+   *
+   *  An intensity on a word that takes none is DROPPED and the row survives — a
+   *  GM who wrote `{word: "storm", intensity: "heavy"}` meant a storm. */
+  function foldOverride(raw) {
+    if (!raw || typeof raw !== "object" || Array.isArray(raw)) return null;
+    const word = PF.own(raw, "word");
+    if (typeof word !== "string" || !WORDS.includes(word)) return null;
+    const row = { word };
+    const intensity = PF.own(raw, "intensity");
+    if (WORD_META[word].takesIntensity && typeof intensity === "string" && INTENSITIES.includes(intensity))
+      row.intensity = intensity;
+    const since = positiveDay(PF.own(raw, "sinceDay"));
+    if (since !== null) row.sinceDay = since;
+    const until = positiveDay(PF.own(raw, "untilDay"));
+    if (until !== null) row.untilDay = until;
+    return row;
+  }
+
+  function positiveDay(value) {
+    return typeof value === "number" && Number.isSafeInteger(value) && value >= 1 ? value : null;
+  }
+
+  /** The comparand the mid-session reconciler memoises: the SERIALIZED WHOLE of a
+   *  folded override, never the word alone. A console change from
+   *  `{word:"storm"}` to `{word:"storm", intensity:"heavy"}` is this release's
+   *  documented verification incantation, and a word-only key would sit on it
+   *  until the day rolled. */
+  function overrideKey(override) {
+    if (!override || typeof override !== "object") return "";
+    return `${override.word ?? ""}|${override.intensity ?? ""}|${override.sinceDay ?? ""}|${override.untilDay ?? ""}`;
+  }
+
+  // ── The axis mint ──────────────────────────────────────────────────────────
+  /** One band off one distribution, on one named side stream. */
+  function mintAxis(hint, list, weights, stream) {
+    // The brief's hint wins when it names a real band. A hostile or unknown hint
+    // is not defaulted — it simply is not a hint, and the roll below owns the
+    // axis, which is the richer answer than pinning a word nobody wrote.
+    if (typeof hint === "string" && list.includes(hint)) return hint;
+    const rnd = PF.rng(PF.hashStr(stream));
+    const weightOf = (band) => Math.max(0, PF.own(weights, band) ?? 0);
+    let sum = 0;
+    for (const band of list) sum += weightOf(band);
+    let cut = rnd() * sum;
+    for (const band of list) {
+      cut -= weightOf(band);
+      if (cut < 0) return band;
+    }
+    // Unreachable while the row sums positive, which the boot assert pins.
+    return list.find((band) => weightOf(band) > 0) ?? list[0];
+  }
+
+  /** THE ONE AUTHORITY FOR A WORLD'S CLIMATE. Per axis: the brief's hint when it
+   *  names a real band, else a weighted draw from the theme's distribution on
+   *  THAT AXIS'S OWN SIDE STREAM.
+   *
+   *  TWO NAMED STREAMS, ONE PER AXIS, and the discipline is 20-world's own, in
+   *  its own words: "a side stream, so minting residents does not shift the tile
+   *  RNG under the ground cover and every world that had no minting still lays
+   *  the same grass." The main `PF.rng(seed)` stream and every existing side
+   *  stream are untouched, so EVERY EXISTING SEED KEEPS ITS EXACT LAYOUT and
+   *  gains a climate — and a brief that pins one axis never moves the other's
+   *  roll, because the two rolls do not share a stream.
+   *
+   *  PURE, which is what lets the compile stamp and the digest door describe the
+   *  same sky BY CONSTRUCTION rather than by whichever world happened to be
+   *  standing. It is also why a future distribution retune re-skies existing
+   *  UNPINNED worlds on their next load — the accepted rolling-compat class, and
+   *  one more reason the brief hint exists. */
+  function axesFor(brief, seed, theme) {
+    // Through PF.own so the fallback is REACHABLE — a theme named "constructor"
+    // answers a bare read with a function, and `LAT_META[undefined]` is one line
+    // further on. The same guard 20-world's resident name book already spends.
+    const row = PF.own(THEME_AXES, theme) ?? THEME_AXES["cozy-village"];
+    const key = seed >>> 0;
+    return {
+      latitude: mintAxis(PF.own(brief, "latitude"), LATITUDES, row.latitude, `${key}|climate|lat`),
+      precipitation: mintAxis(PF.own(brief, "precipitation"), PRECIPS, row.precipitation, `${key}|climate|precip`),
+    };
+  }
+
+  return {
+    LATITUDES,
+    PRECIPS,
+    LAT_META,
+    PRECIP_META,
+    SEASON_SETS,
+    TEMP_PHASE,
+    WET_PHASE,
+    THEME_AXES,
+    WORDS,
+    INTENSITIES,
+    WORD_META,
+    SUBS,
+    TUNING,
+    axesFor,
+    axesOf,
+    season,
+    seasonIndex,
+    seasonStartDay,
+    wetMass,
+    weightsFor,
+    wordsFor,
+    at,
+    labelFor,
+    foldOverride,
+    overrideKey,
+    overrideLive,
+  };
+})();
+
+// Vocabulary completeness, in the placers' idiom (20-world PLACERS, 59-economy's
+// catch tables): every table this module ships is paired against the enum it is
+// keyed by, at load, inside the bundle's own IIFE. A pairing that only failed at
+// the read site would fail as `undefined` weather on somebody's world, months
+// later, on the one band nobody plays.
+{
+  const W = PF.weather;
+  const say = (message) => {
+    throw new Error(`pixelforge: ${message}`);
+  };
+  const keys = (map) => Object.keys(map);
+  const finite = (value) => typeof value === "number" && Number.isFinite(value);
+
+  // ── Pairings ───────────────────────────────────────────────────────────────
+  for (const band of W.LATITUDES) if (!PF.own(W.LAT_META, band)) say(`latitude "${band}" has no LAT_META row`);
+  for (const band of keys(W.LAT_META))
+    if (!W.LATITUDES.includes(band)) say(`LAT_META names a latitude "${band}" the axis does not`);
+  for (const band of W.LATITUDES) {
+    const row = W.LAT_META[band];
+    if (!finite(row.warmth) || !finite(row.swing)) say(`latitude "${band}" has no finite warmth/swing`);
+    if (!PF.own(W.SEASON_SETS, row.structure)) say(`latitude "${band}" names a season structure "${row.structure}"`);
+  }
+  for (const band of W.PRECIPS) if (!PF.own(W.PRECIP_META, band)) say(`precipitation "${band}" has no PRECIP_META row`);
+  for (const band of keys(W.PRECIP_META))
+    if (!W.PRECIPS.includes(band)) say(`PRECIP_META names a precipitation "${band}" the axis does not`);
+  for (const band of W.PRECIPS)
+    if (!finite(W.PRECIP_META[band].wetness)) say(`precipitation "${band}" has no finite wetness`);
+
+  // The phase tables, paired against the season sets BY LENGTH. An index-keyed
+  // table that is one entry short computes NaN for the season it is missing and
+  // for nothing else, which is the least findable failure in the module.
+  for (const structure of keys(W.SEASON_SETS)) {
+    const n = W.SEASON_SETS[structure].length;
+    for (const [name, table] of [
+      ["TEMP_PHASE", W.TEMP_PHASE],
+      ["WET_PHASE", W.WET_PHASE],
+    ]) {
+      const row = PF.own(table, structure);
+      if (!Array.isArray(row) || row.length !== n)
+        say(`${name}.${structure} has ${row?.length} entries for ${n} seasons`);
+      if (!row.every(finite)) say(`${name}.${structure} holds a non-finite entry`);
+    }
+  }
+  // The name has to be true of the numbers.
+  if (!(W.WET_PHASE.two[0] > W.WET_PHASE.two[1])) say("the wet season is not wetter than the dry one");
+
+  // ── The weather words ──────────────────────────────────────────────────────
+  for (const word of W.WORDS) if (!PF.own(W.WORD_META, word)) say(`weather "${word}" has no WORD_META row`);
+  for (const word of keys(W.WORD_META))
+    if (!W.WORDS.includes(word)) say(`WORD_META names a weather "${word}" the axis does not`);
+  for (const word of W.WORDS) {
+    const row = W.WORD_META[word];
+    if (typeof row.indoors !== "boolean") say(`weather "${word}" has no indoors flag`);
+    // THE FLAG IS THE AUTHORITY, not a sentence in this assert: whichever words
+    // carry `takesIntensity` are the words that must carry per-intensity wire
+    // text — and per-intensity TINT alphas too, wherever such a word tints at
+    // all. A missing heavy alpha would ship "heavy rain looks exactly like light
+    // rain", which is a promise this release makes out loud.
+    if (!row.takesIntensity) {
+      if (typeof row.label !== "string" || !row.label) say(`weather "${word}" has no label`);
+      continue;
+    }
+    for (const level of W.INTENSITIES) {
+      if (typeof PF.own(row.label, level) !== "string" || !row.label[level])
+        say(`weather "${word}" has no "${level}" label`);
+      if (row.tint != null && typeof PF.own(row.tint, level) !== "string")
+        say(`weather "${word}" tints but has no "${level}" tint`);
+    }
+  }
+
+  // ── The ground substitution ────────────────────────────────────────────────
+  // Both halves of every row are painter ids, and 10-art answers an id it does
+  // not know with the GRASS painter — so a typo here is not a crash, it is a
+  // green square in the middle of a snowfield, on the one kind of day the table
+  // exists for. `painterNames()` is exported for exactly this comparison.
+  {
+    const painters = new Set(PF.art?.painterNames?.() ?? []);
+    for (const [word, map] of Object.entries(W.SUBS)) {
+      if (!W.WORDS.includes(word)) say(`SUBS keys on a weather "${word}" the axis does not name`);
+      for (const [from, to] of Object.entries(map)) {
+        if (!painters.has(from)) say(`SUBS substitutes a tile "${from}" the art module cannot paint`);
+        if (!painters.has(to)) say(`SUBS.${word} names a painter "${to}" the art module does not have`);
+      }
+    }
+  }
+
+  // ── Distributions ──────────────────────────────────────────────────────────
+  // Every theme this build ships must have a climate. A ZERO OR OMITTED BAND IS
+  // DATA, not an error — cozy rolls no polar, and that is the distribution
+  // speaking — so the demand is a positive SUM and nothing narrower.
+  for (const theme of PF.art?.themeIds?.() ?? []) {
+    const entry = PF.own(W.THEME_AXES, theme);
+    if (!entry) say(`theme "${theme}" has no THEME_AXES entry`);
+    for (const [axis, list] of [
+      ["latitude", W.LATITUDES],
+      ["precipitation", W.PRECIPS],
+    ]) {
+      const row = PF.own(entry, axis);
+      if (!row || typeof row !== "object") say(`theme "${theme}" has no ${axis} distribution`);
+      let sum = 0;
+      for (const band of keys(row)) {
+        if (!list.includes(band)) say(`theme "${theme}" weights a ${axis} "${band}" the axis does not name`);
+        if (!finite(row[band]) || row[band] < 0) say(`theme "${theme}" weights ${axis} "${band}" at ${row[band]}`);
+        sum += row[band];
+      }
+      if (!(sum > 0)) say(`theme "${theme}" has no ${axis} band it can ever roll`);
+    }
+  }
+
+  // ── THE DERIVATION, WALKED WHOLE ───────────────────────────────────────────
+  // Every (latitude x precipitation x that latitude's own seasons) — 48 rows: two
+  // two-season bands at 3 x 2, three four-season bands at 3 x 4. The count is
+  // asserted because a walk that quietly stopped covering a band would be a green
+  // run over an untested sky.
+  //
+  // WHAT EACH CLAUSE BUYS, honestly: FINITENESS is the real catch — it is what
+  // turns a phase-table keying mistake into a named boot failure instead of NaN
+  // weather. Key membership catches a typo'd word. The positive-sum clause is
+  // unfalsifiable for any axis input, since fair and overcast both have positive
+  // floors no cell can reach — it guards a coefficient retune that zeroes both
+  // bases, and nothing else.
+  const rowsByBand = new Map();
+  let walked = 0;
+  for (const latitude of W.LATITUDES) {
+    const seasons = W.SEASON_SETS[W.LAT_META[latitude].structure];
+    const serialized = [];
+    for (const precipitation of W.PRECIPS) {
+      for (let index = 0; index < seasons.length; index++) {
+        const row = W.weightsFor(latitude, precipitation, index);
+        const where = `${latitude}/${precipitation}/${seasons[index]}`;
+        let sum = 0;
+        for (const word of keys(row)) {
+          if (!W.WORDS.includes(word)) say(`the ${where} weight row carries a word "${word}"`);
+          if (!finite(row[word]) || row[word] < 0) say(`the ${where} weight row has ${word} at ${row[word]}`);
+          sum += row[word];
+        }
+        if (!(sum > 0)) say(`the ${where} weight row has no sky at all`);
+        serialized.push(W.WORDS.map((word) => `${word}:${row[word].toFixed(6)}`).join(","));
+        walked++;
+      }
+    }
+    rowsByBand.set(latitude, serialized.join(" | "));
+  }
+  if (walked !== 48) say(`the derivation walk covered ${walked} rows, not the axis product's 48`);
+
+  // DEGENERACY. Five bands have to buy five skies: no two latitudes sharing a
+  // season structure may produce IDENTICAL row sets across their whole
+  // (precipitation x season) product. AT LEAST ONE DIFFERING CELL is the correct
+  // strength and it must not be tightened — subpolar and polar genuinely share
+  // their three winter cells (both saturate `cold`, both at the same wet mass),
+  // because the winter-heavy edge and the frozen pole are different YEARS, not
+  // different winters. Covering latitude alone is sound rather than an asymmetry:
+  // overcast is strictly monotone in the wet mass, so a precipitation collapse
+  // would show up as a literally duplicated wetness number in a three-row table,
+  // where latitude reaches the row through two clamps that can hide one.
+  for (const a of W.LATITUDES)
+    for (const b of W.LATITUDES) {
+      if (a >= b) continue;
+      if (W.LAT_META[a].structure !== W.LAT_META[b].structure) continue;
+      if (rowsByBand.get(a) === rowsByBand.get(b)) say(`latitudes "${a}" and "${b}" produce the same sky all year`);
+    }
+}
 
 // ===== 18-brief.js =====
 // ── The World Brief (schema v1) ───────────────────────────────────────────────
@@ -1240,6 +2169,24 @@ PF.brief = (() => {
     };
     const population = Number(src.backgroundPopulation);
     brief.backgroundPopulation = Number.isFinite(population) ? Math.max(0, Math.min(500, Math.round(population))) : 0;
+    // THE TWO CLIMATE AXES, and they fold the OPPOSITE way to every scalar above:
+    // ABSENT-PRESERVING, never defaulted. A brief that names no climate ROLLS one
+    // off the seed (17-weather's axesFor), so "absent" means "the world chooses"
+    // and it is the richer answer — which in turn means a hostile hint must not
+    // be able to PIN an axis the roll owns. Present and a real band is kept;
+    // present and anything else is dropped to absent and the mint answers.
+    //
+    // ASSIGNED CONDITIONALLY so a brief whose author named no climate seals
+    // byte-for-byte the shape it always did: the fields exist only on the briefs
+    // that asked for them.
+    for (const [field, list] of [
+      ["latitude", PF.weather.LATITUDES],
+      ["precipitation", PF.weather.PRECIPS],
+    ]) {
+      const band = foldEnum(src[field], list, null);
+      if (band) brief[field] = band;
+      else if (typeof src[field] === "string" && src[field]) repairs.push(`${field}: dropped, the world will roll one`);
+    }
 
     // Pass 3 — zones. Item-level drop: an unknown tag drops the WHOLE feature.
     // The cap applies to KEPT items (a leading run of junk must not discard
@@ -1617,6 +2564,14 @@ PF.brief = (() => {
     foldAt(brief, "scale", Object.keys(SCALES), "village", "scale");
     foldAt(brief, "surround", SURROUNDS, pick(seed, "surround", SURROUNDS), "surround");
     foldAt(brief, "prosperity", PROSPERITY, "modest", "prosperity");
+    // The two climate axes, folded TO NULL rather than to a band — the same
+    // reading `foldFeatures` gives an unknown tag one screen down, and for the
+    // same reason: null is exactly what the mint already reads a missing axis as,
+    // so a hand-edited `latitude: "constructor"` never reaches a table key and
+    // never pins a climate the brief did not ask for. A brief sealed before these
+    // fields existed carries neither, keeps neither, and rolls.
+    foldAt(brief, "latitude", PF.weather.LATITUDES, null, "latitude");
+    foldAt(brief, "precipitation", PF.weather.PRECIPS, null, "precipitation");
     foldFeatures(brief.features, "features");
     if (Array.isArray(brief.places))
       brief.places.forEach((place, index) => {
@@ -1834,6 +2789,8 @@ PF.brief = (() => {
       `- scale: one of ${Object.keys(SCALES).join(" | ")} — the settlement's size class. Never a number.`,
       `- surround: one of ${SURROUNDS.join(" | ")}.`,
       `- prosperity: one of ${PROSPERITY.join(" | ")}.`,
+      `- latitude (optional): one of ${PF.weather.LATITUDES.join(" | ")} — set it only when the setting's identity demands it; omit to let the world roll its own.`,
+      `- precipitation (optional): one of ${PF.weather.PRECIPS.join(" | ")} — set it only when the setting's identity demands it; omit to let the world roll its own.`,
       "- name: the settlement's name, <=24 characters.",
       "- flavor: ONE sentence of arrival atmosphere, <=140 characters.",
       "- situation: ONE sentence, <=240 characters — the unresolved thing happening right now.",
@@ -1878,6 +2835,8 @@ PF.brief = (() => {
         scale: { type: "string", enum: Object.keys(SCALES) },
         surround: { type: "string", enum: SURROUNDS },
         prosperity: { type: "string", enum: PROSPERITY },
+        latitude: { type: "string", enum: PF.weather.LATITUDES },
+        precipitation: { type: "string", enum: PF.weather.PRECIPS },
         name: text(24),
         flavor: text(140),
         situation: text(240),
@@ -2782,6 +3741,21 @@ PF.world = (() => {
           err,
           folded?._folds ?? [],
         );
+        // THE DEGRADE IS STILL THIS BRIEF'S WORLD. It is not a legacy chat — it
+        // is a sealed brief that failed to compile — so the climate is re-minted
+        // from the SAME brief through the SAME pure function the compile stamp
+        // uses. A brief that pinned `polar` still plays polar, and the digest,
+        // the header and the world can never split one brief into two climates.
+        // Only the true no-brief path below keeps the fixed defaults.
+        //
+        // The RAW sealed brief, not `folded`: the fold may itself have thrown,
+        // and axesFor's own membership test drops a hostile band exactly as the
+        // load door would have, so the two readings agree.
+        const degraded = buildLegacy(seed, theme);
+        const axes = PF.weather.axesFor(sealedBrief, seed, degraded.theme);
+        degraded.latitude = axes.latitude;
+        degraded.precipitation = axes.precipitation;
+        return degraded;
       }
     }
     return buildLegacy(seed, theme);
@@ -2977,6 +3951,13 @@ PF.world = (() => {
     return {
       seed,
       theme: activeTheme,
+      // The legacy layout is a HAND world, not a roll: three zones written out
+      // by literal, with no brief behind them to say what the place is. So it
+      // takes the fixed middle of both axes rather than a mint. (The degrade arm
+      // in build() re-stamps this world from its brief afterwards — that path
+      // has a brief and this one does not.)
+      latitude: "temperate",
+      precipitation: "moderate",
       zones: { village: v, inn: n, forest: f },
       startZone: "village",
       // The exterior binds to the campaign's starting World Maps location once known.
@@ -5886,9 +6867,23 @@ PF.world = (() => {
       if (zone) zone.place = place.kind;
     }
 
+    // THE CLIMATE STAMP. Runtime-only, like every other derived field here: no
+    // save row, no briefVersion bump, re-minted on every load from (brief, seed,
+    // theme). It goes through 17-weather's axesFor and NOT through a local roll,
+    // because the pack's digest door runs the very same call on the very same
+    // inputs — the two describe the same sky BY CONSTRUCTION rather than by
+    // whichever world happens to be standing when the pack is solicited.
+    //
+    // `activeTheme` rather than `brief.theme` reads the theme the world actually
+    // got; the two agree in every case, since setTheme and axesFor both fall back
+    // to cozy-village for a word neither table knows.
+    const axes = PF.weather.axesFor(brief, seed, activeTheme);
+
     return {
       seed,
       theme: activeTheme,
+      latitude: axes.latitude,
+      precipitation: axes.precipitation,
       brieved: true, // marks a compiled world (saves still carry only seed/theme/zone)
       situation: brief.situation,
       zones,
@@ -6016,8 +7011,73 @@ PF.schedule = (() => {
   };
   const DEFAULT = { dawn: "post", day: "post", dusk: "post", night: "post" };
 
-  /** The handle an NPC should occupy at this daypart, or null when unscheduled. */
-  function resolve(sched, daypart) {
+  /** The handle an NPC should occupy at this daypart, or null when unscheduled.
+   *
+   *  `bias` IS THE WEATHER, and it is optional: `{ indoor(zoneId) }`, handed in
+   *  by the sim (which owns zones) only on a day whose word carries
+   *  `WORD_META.indoors` — rain, storm and snow. INTENSITY NEVER REACHES IT:
+   *  light rain empties the street exactly as heavy rain does, because a drizzle
+   *  reads as weather and not as an exception.
+   *
+   *  What it does, in one sentence: anybody the policy has standing OUTDOORS on
+   *  a wet day is sent to their own fireside instead. Three rules, in order:
+   *
+   *  1. EXEMPT WHEN THE POLICY NAMES WORK FOR THIS HOUR (`post`). The watch keeps
+   *     the night, a grower works the land in the rain, keepers and named workers
+   *     hold their posts, a stall merchant tends the stall. The test reads the
+   *     policy NAME and never an NPC's identity — there is no "is this the public
+   *     handle" question anywhere in here. Coarse in BOTH directions, and stated
+   *     rather than papered over: the cast data holds no outdoor-job flag, so an
+   *     outdoor-posted scholar is exempt exactly like the shepherd — and `post`
+   *     is also the compiler's fallback anchor for somebody with no job at all,
+   *     who therefore stands out in the plaza the bias is emptying. Which side of
+   *     the line a fallback post belongs on is a felt-behaviour question the
+   *     maintainer meets in play, not one this table can answer.
+   *  2. ALREADY INDOORS -> there is nothing to do.
+   *  3. ELSE SUBSTITUTE THE ROW'S OWN DUSK ANCHOR, and only then its night one.
+   *     Dusk first because a resident's DAYLIGHT indoors is their fireside and
+   *     not their bed: substituting the night name parks the whole town on its
+   *     own bunks at noon, which is the compiler's own rejected visual (see
+   *     20-world's bedBox comment). Both are RAW lookups, deliberately without
+   *     this function's `?? sched.post` tail — post is outdoors, and outdoors is
+   *     the thing being escaped. A hearth-less lodger's dusk name resolves null
+   *     and they fall to their berth; somebody with neither keeps the handle they
+   *     had, because nowhere to go is answered by standing in the weather and not
+   *     by teleporting nowhere.
+   *
+   *  CAPACITY-NEUTRAL BY CONSTRUCTION. Every destination this can pick is one the
+   *  DUSK or the NIGHT pass already assigns that same NPC, every evening of the
+   *  world's life — same zone, same box, same walkableIn spread. No box receives
+   *  an occupant it does not already hold, so there is no capacity term, no spill
+   *  ladder and no concentration to mitigate: the wet 07:00 pass is the dusk
+   *  relocation run early.
+   *
+   *  AND AT NIGHT IT IS A NO-OP BECAUSE OF WHERE THE DESTINATIONS ARE, not
+   *  because the table walk cannot happen. The reason to state it that way is
+   *  that the walk DOES happen: rule 3 is entered whenever a night name resolves
+   *  to something outdoors, and on real worlds that is somebody with no `home`
+   *  handle at all — a wilds resident, a lodger nobody laid a bed for — whose
+   *  night name falls through to `sched.post` (measured over 960 compiled worlds,
+   *  both themes and all four scales: 244 night resolutions reach the loop). They
+   *  find no indoor anchor either, because a `post` outdoors means the compiler
+   *  resolved no hearth for them, so they keep the handle they had.
+   *
+   *  What makes the pass a no-op is the compiler's own guarantee: IT NEVER MINTS
+   *  AN OUTDOOR `home` HANDLE. Every one is a bed box inside a dwelling interior
+   *  or an inn berth (same 960 worlds: 50,832 home handles, zero outdoors), so
+   *  anybody who HAS one is already indoors at night and rule 2 answers first.
+   *  Hand-force the shape the compiler will not mint — an outdoor `home` beside
+   *  an indoor anchor — and rule 3 fires at night through the DUSK rung exactly
+   *  as it does at noon; the harness does precisely that (case 14j) and watches
+   *  the household head walk into the building they work in. The invariant is
+   *  that the destinations are indoors, and nothing else.
+   *
+   *  ONE COLLISION WORTH KNOWING ABOUT, since those 244 are all of it: when the
+   *  night handle IS the `post` fallback and the row's dusk name is also `post`,
+   *  the loop's first rung re-tests the handle rule 2 has just rejected. Wasted,
+   *  never wrong — `bias.indoor` is pure and the second rung still gets its
+   *  turn — and cheaper to leave than to special-case. */
+  function resolve(sched, daypart, bias) {
     if (!sched) return null;
     // Most specific first. The `:keeper` tier exists so a template can describe
     // someone who actually holds a building without changing how that same cast
@@ -6030,7 +7090,16 @@ PF.schedule = (() => {
       (sched.worker ? TABLE[`*:${sched.standing}:worker`] : null) ??
       TABLE[`*:${sched.standing}`] ??
       DEFAULT;
-    return sched[template[daypart] ?? "post"] ?? sched.post ?? null;
+    const name = template[daypart] ?? "post";
+    const handle = sched[name] ?? sched.post ?? null;
+    if (!bias || name === "post" || !handle || bias.indoor(handle.zoneId)) return handle;
+    for (const key of [template.dusk ?? "post", template.night ?? "post"]) {
+      // Named for what it is and never `shelter`: one release ago `world.shelter`
+      // was a different thing entirely, and it was deleted.
+      const indoorAnchor = sched[key];
+      if (indoorAnchor && bias.indoor(indoorAnchor.zoneId)) return indoorAnchor;
+    }
+    return handle;
   }
 
   /** Can an NPC STAND here? Open ground is not enough: a door tile is
@@ -6157,6 +7226,27 @@ PF.schedule = (() => {
 // session disagreeing about when the evening starts.
 PF.DAYPART_STARTS = { dawn: 5 * 60, day: 7 * 60, dusk: 18 * 60, night: 21 * 60 };
 
+/** THE FOUR TILES A PLAYER IS "AT" — the shared half of the two proximity reads
+ *  below, and only that half. Standing corner-on to a pond is standing NEAR the
+ *  bank rather than at it, and both reads had that decision written out as their
+ *  own four-element literal: one edit to reach eight neighbours, two places to
+ *  make it, and a package where the board and the water disagreed about what
+ *  "at" means.
+ *
+ *  WHAT IS DELIBERATELY NOT SHARED is everything each read does with these
+ *  tiles. `nearFeature` keeps its TWO-SIDED test — the tile is water AND lies in
+ *  a registry rect — and its bounds check; `nearBoard` keeps its reserved-id
+ *  lookup and no water term at all. Merging those would be the bug: the water
+ *  term is what says which pond a bank belongs to, and a board rect holds no
+ *  water tile by construction. The lanes that stand at one and not the other are
+ *  what hold that line. */
+const ORTHOGONAL_NEIGHBOURS = (tx, ty) => [
+  [tx, ty - 1],
+  [tx, ty + 1],
+  [tx - 1, ty],
+  [tx + 1, ty],
+];
+
 PF.Sim = class {
   constructor(world) {
     this.world = world;
@@ -6188,6 +7278,20 @@ PF.Sim = class {
     // names. NEVER SERIALIZED and never restored — a reload starts the day's
     // receipts empty, which is the recorded cost of the rule.
     this._filled = null;
+    // THE CONVERSATION LATCH (plan §2.5): the id of the person a conversation is
+    // live with, or null. ONE FIELD WITH ONE MEANING, and four readers spend it —
+    // the clock gate below (an open talk window stops time), the partner freeze in
+    // `stepNpcs`, the window's mounted predicate (70-hud) and the paid press's
+    // prologue (90-element). Set only by the window opening; cleared by every leave
+    // condition, by `setMode`'s walk entry, by the two clock movers, and by the
+    // teardown seams.
+    //
+    // DECLARED HERE rather than sprung into existence, on `_filled`'s own rule one
+    // line up — and load-bearing rather than tidy: a leaked latch is a world where
+    // time never passes, so a fresh sim must be born with the clock running, and
+    // the gate must read the same shape on a sim that has never seen a window.
+    // RUNTIME-ONLY: never serialized, never restored.
+    this.talkAnchorId = null;
     this._npcTimers = new Map();
     this._rnd = PF.rng((world.seed ^ 0x9e3779b9) >>> 0);
     this.dirty = false; // save-worthy change happened
@@ -6208,6 +7312,30 @@ PF.Sim = class {
     // fold its narration box away so the world has the screen to itself.
     this.cutscene = null;
     this._vistaArmed = true;
+    // THE GM'S SKY, when one has been set. Hydrated from chat metadata by
+    // simFromSaved and re-read on every rebuild; NEVER serialized — it is not an
+    // envelope key and it never will be. DECLARED HERE, above the
+    // resolveSchedules() below, and that placement is load-bearing: the schedule
+    // bias reads the weather, so a field appended after that call would be
+    // `undefined` at the first read on every world at load time. (weather() and
+    // 17-weather's at() both tolerate a nullish override regardless.)
+    this.weatherOverride = null;
+    // The serialized last-APPLIED metadata fold. The mid-session reconciler
+    // compares chat metadata against THIS and never against `weatherOverride`
+    // itself — so a console-written runtime sky is invisible to it, and the
+    // reconciler cannot mistake "the metadata key is still absent" for "the
+    // player's override was just cleared".
+    this._weatherMetaApplied = "";
+    // Day-keyed cache for weather(): the render pass reads the sky every frame
+    // for its tint and particles, and the raw derivation is a template literal, a
+    // string hash and an rng construction. A perf cache and NOT a transition
+    // detector — the ledger park derives both sides of a crossing itself.
+    this._weatherMemo = null;
+    // Notable-sky lines the clock movers parked, waiting for a frame to file
+    // them. `{text, day}` rows, because the day is the day it HAPPENED: a
+    // multi-day fishing session files day 12's snow under day 12 and not under
+    // the day the drain ran. Runtime-only, capped, never saved.
+    this._weatherNotes = [];
     // Place everyone for the starting clock. A restore overwrites clockMin
     // AFTER construction and calls this again (see 60-save simFromSaved).
     this.resolveSchedules();
@@ -6316,17 +7444,12 @@ PF.Sim = class {
       // those by design (the wilds ford lays path straight across its stream,
       // and a compiled pool's well stands inside the anchor rect beside it).
       //
-      // Four neighbours, not eight: standing corner-on to a pond is standing
-      // near the bank, not at it. Skipped whole on a zone with no register,
-      // which is most of them.
+      // Four neighbours, not eight (ORTHOGONAL_NEIGHBOURS, one file up): standing
+      // corner-on to a pond is standing near the bank, not at it. Skipped whole on
+      // a zone with no register, which is most of them.
       this.nearFeature = null;
       if (z.features.length) {
-        for (const [nx, ny] of [
-          [tx, ty - 1],
-          [tx, ty + 1],
-          [tx - 1, ty],
-          [tx + 1, ty],
-        ]) {
+        for (const [nx, ny] of ORTHOGONAL_NEIGHBOURS(tx, ty)) {
           if (nx < 0 || ny < 0 || nx >= z.w || ny >= z.h) continue;
           if (z.ground[ny * z.w + nx] !== "water") continue;
           const row = z.features.find(
@@ -6342,7 +7465,7 @@ PF.Sim = class {
       // recomputed on the same terms: every walking frame, off the feet tile,
       // null the moment they step away.
       //
-      // Four neighbours again, and NO WATER TERM. The two-sided test one block up
+      // The same four neighbours, and NO WATER TERM. The two-sided test one block up
       // cannot serve here: it is water that says which pond a bank belongs to, and
       // a board rect holds no water tile by construction (20-world refuses one).
       // What is left is the rect alone — which is safe here for the reason it is
@@ -6355,12 +7478,7 @@ PF.Sim = class {
       this.nearBoard = null;
       const board = z.features.length ? z.features.find((f) => f.id === PF.world.BOARD_FEATURE_ID) : null;
       if (board) {
-        for (const [nx, ny] of [
-          [tx, ty - 1],
-          [tx, ty + 1],
-          [tx - 1, ty],
-          [tx + 1, ty],
-        ]) {
+        for (const [nx, ny] of ORTHOGONAL_NEIGHBOURS(tx, ty)) {
           if (
             nx >= board.rect.x &&
             nx < board.rect.x + board.rect.w &&
@@ -6374,13 +7492,31 @@ PF.Sim = class {
       }
     }
     // NPCs keep wandering in walk AND dialogue (the world stays alive while you
-    // read), but the CLOCK only advances while walking: a conversation should
-    // never burn the afternoon, and a daypart boundary crossing mid-dialogue
-    // would relocate the very NPC you are talking to. Package-local clock only —
-    // never the host time endpoints (issue #5076).
+    // read), but the CLOCK only advances while walking WITH NO TALK WINDOW OPEN: a
+    // conversation should never burn the afternoon, and a daypart boundary crossing
+    // mid-dialogue would relocate the very NPC you are talking to. Package-local
+    // clock only — never the host time endpoints (issue #5076).
+    //
+    // THE LATCH IS THE SECOND HALF OF THAT SENTENCE (plan §2.5, ruling B2-3b). The
+    // talk window keeps the player in WALK mode on purpose — they stay mobile — so
+    // the mode test alone stops nothing, and the freeze the 0.12 precedent above
+    // describes is extended one latch over. `_clockAcc` is inside the gate and not
+    // beside it: an accumulator that kept filling would bank the minutes and dump
+    // them the instant the window closed, which is the same afternoon burnt with
+    // one frame of delay.
+    //
+    // `stepCutscene` rides the same gate. A beat takes its seconds from `dt` rather
+    // than from the clock, and the vista corner is about two tiles from anywhere a
+    // window can open — so without this a seven-second beat could start over an
+    // open window, ask the host to fold its narration away, and burn `_vistaArmed`
+    // on a beat nobody was looking at. It can only ever block a beat from STARTING:
+    // opening the window clears any beat already running (90-element `openTalk`, on
+    // `setMode`'s own idiom), so no live beat is ever stranded behind this.
     if (this.mode === "walk" || this.mode === "dialogue") {
-      if (this.mode === "walk") {
+      const timePasses = this.mode === "walk" && this.talkAnchorId == null;
+      if (timePasses) {
         let advanced = false;
+        const dayBefore = this.day;
         this._clockAcc += dt;
         while (this._clockAcc >= PF.CLOCK_SECONDS_PER_GAME_MINUTE) {
           this._clockAcc -= PF.CLOCK_SECONDS_PER_GAME_MINUTE;
@@ -6394,8 +7530,13 @@ PF.Sim = class {
         // A fixed 1/60s step advances at most one game minute per ~300 frames,
         // so a boundary can never be skipped between checks.
         if (advanced && this.daypart() !== this._daypart) this.resolveSchedules();
+        // The first of the three movers. Midnight is NOT a daypart boundary, so
+        // this is the only thing that notices a walked-through day change — and
+        // it costs a single integer compare on every other advanced minute,
+        // which is why no per-minute weather() read is spent here.
+        if (advanced) this._parkWeather(dayBefore, this.day);
       }
-      if (this.mode === "walk") this.stepCutscene(dt, z);
+      if (timePasses) this.stepCutscene(dt, z);
       this.stepNpcs(dt, z);
     }
     return { zoneChanged: false };
@@ -6437,19 +7578,98 @@ PF.Sim = class {
     return "night";
   }
 
+  /** THE DAY'S SKY: `{word, intensity}`, memoised per (day, override).
+   *
+   *  The render pass reads this EVERY FRAME — for the tint, the composite class
+   *  and the particles — and the raw derivation underneath is a template
+   *  literal, a string hash and an rng construction, so the uncached version is
+   *  that work sixty times a second. One comparison serves every consumer.
+   *
+   *  The key is the SERIALIZED WHOLE of the override, not its word: a console
+   *  change from `{word:"storm"}` to `{word:"storm", intensity:"heavy"}` is the
+   *  documented verification incantation, and a word-only key would sit on it
+   *  until the day rolled.
+   *
+   *  A PERF CACHE, NOT A TRANSITION DETECTOR. There is no `_weather` field
+   *  anywhere: the ledger park derives both sides of a crossing itself, which is
+   *  what keeps the sky a pure function of the saved clock. */
+  weather() {
+    const overrideKey = PF.weather.overrideKey(this.weatherOverride);
+    const memo = this._weatherMemo;
+    if (memo && memo.day === this.day && memo.overrideKey === overrideKey)
+      return { word: memo.word, intensity: memo.intensity };
+    const sky = PF.weather.at(this.world, this.day, this.weatherOverride);
+    this._weatherMemo = { day: this.day, overrideKey, word: sky.word, intensity: sky.intensity };
+    return sky;
+  }
+
+  /** The season word for the live day, on this world's own 365-day calendar. */
+  season() {
+    return PF.weather.season(this.world, this.day);
+  }
+
+  /** Park a ledger line when a LIVE day-crossing brings a notable sky in.
+   *
+   *  Called by the three clock MOVERS and by nothing else — never by
+   *  resolveSchedules, never by the constructor, never by simFromSaved. That is
+   *  what keeps a restore silent: a rebuild re-derives the same sky it always
+   *  had, and a world reopened on a snowy day has not just had it start snowing.
+   *
+   *  BOTH SIDES ARE DERIVED HERE, so the park needs no state of its own and is
+   *  rewind-exact. The compare reads `.word`: at() returns a fresh object every
+   *  call, so a reference compare would file a line on every midnight of a
+   *  six-day snowy stretch. Intensity never reaches the ledger either — the
+   *  ledger says snow, the header says how hard.
+   *
+   *  "FIRST" MEANS FIRST OF THE DAYS THE WORLD HAS LIVED. The scan walks back to
+   *  seasonStartDay(), which floors at day 1, so a world whose calendar opens
+   *  mid-winter still gets a true "First snow." for its genuine first snowfall
+   *  instead of losing it to months of phantom pre-world time. The bound is that
+   *  function's and never a hand-derived season length — under a 365-day year a
+   *  hand bound is wrong by up to 182 days. */
+  _parkWeather(dayBefore, dayAfter) {
+    if (dayBefore === dayAfter) return;
+    const after = PF.weather.at(this.world, dayAfter, this.weatherOverride).word;
+    if (!PF.weather.TUNING.notable.includes(after)) return;
+    if (PF.weather.at(this.world, dayBefore, this.weatherOverride).word === after) return;
+    let text = "A storm came in.";
+    if (after === "snow") {
+      // Storms claim no first — a season's first storm is not a calendar fact
+      // the way the first snow is.
+      let seen = false;
+      for (let day = PF.weather.seasonStartDay(this.world, dayAfter); day < dayAfter && !seen; day++)
+        seen = PF.weather.at(this.world, day, this.weatherOverride).word === "snow";
+      text = seen ? "Snow came in." : "First snow.";
+    }
+    // Queued without overwrite: a full queue drops the NEW line rather than
+    // losing one a frame has not filed yet.
+    if (this._weatherNotes.length < 4) this._weatherNotes.push({ text, day: dayAfter });
+  }
+
   /** Jump the clock to the next occurrence of a daypart's start (the "wait
    *  until dusk" rest action). A JUMP, not an advance: NPCs re-place in one
-   *  shot. Walk mode only, so it can never collide with the dialogue freeze. */
+   *  shot. Walk mode only, so it can never collide with the dialogue freeze —
+   *  and it ENDS a conversation rather than colliding with the talk window's
+   *  freeze either (plan §2.5): waiting for dusk while standing in front of
+   *  somebody is spending time, and spending time is leaving the conversation.
+   *  The clear is the FIRST thing a wait that is going to happen does; the HUD
+   *  reconciles the window away on the next frame, off the same latch. */
   waitUntil(target) {
     // Own-property, now that the table is shared and reachable from more than one
     // button: `starts["constructor"]` answered with a FUNCTION, which is not
     // undefined, and the guard below would have waved it through onto clockMin.
     const at = Object.prototype.hasOwnProperty.call(PF.DAYPART_STARTS, target) ? PF.DAYPART_STARTS[target] : undefined;
     if (at === undefined || this.mode !== "walk") return false;
+    // AFTER the refusal above and before anything moves: a wait that refuses has
+    // spent no time, and a silent close on a call that did nothing would be the
+    // stuck-clock class inverted — a window that vanished for no visible reason.
+    this.talkAnchorId = null;
+    const dayBefore = this.day;
     if (at <= this.clockMin) this.day++;
     this.clockMin = at;
     this._clockAcc = 0;
     this.resolveSchedules();
+    this._parkWeather(dayBefore, this.day); // the second of the three movers
     return true;
   }
 
@@ -6499,6 +7719,18 @@ PF.Sim = class {
    *  among them, and a second silent gate here would turn one of them into a
    *  no-op nobody could tell from a cast that caught nothing.
    *
+   *  IT DOES CLEAR THE CONVERSATION LATCH, and that paragraph is why the sentence
+   *  above needs this one beside it (plan §2.5). The argument up there is against
+   *  a silent SECOND REFUSAL — a gate that turns a real call into a no-op nobody
+   *  can tell from a cast that caught nothing. This is not that: the call still
+   *  does everything it was asked to do, and the clear is a documented side effect
+   *  of the thing it was asked to do. Time cannot pass under an open talk window,
+   *  so a mover either ends the conversation or breaks the freeze; this ends it,
+   *  after the same guard the refusal above uses, and the HUD unmounts the window
+   *  off the same latch on the next frame. Fishing is the caller that makes this
+   *  safe to state so flatly: `fish()` is synchronous end to end, so no window can
+   *  open between its entry reads and its last advance.
+   *
    *  `_clockAcc` is deliberately left alone. waitUntil clears it because it
    *  JUMPS to a target and a leftover fraction would tick that target's minute
    *  early; an advance lays whole minutes on top of a fraction the player has
@@ -6508,19 +7740,39 @@ PF.Sim = class {
    *  count, so a caller can tell a clock that moved from one that did not. */
   advanceMinutes(n) {
     if (!Number.isInteger(n) || n <= 0) return 0;
+    // The clock's other callable door, and the same first act for the same
+    // reason — after the refusal, before the clock moves (see the docstring).
+    this.talkAnchorId = null;
+    const dayBefore = this.day;
     this.clockMin += n;
     while (this.clockMin >= 24 * 60) {
       this.clockMin -= 24 * 60;
       this.day++;
     }
     this.resolveSchedules();
+    this._parkWeather(dayBefore, this.day); // the third of the three movers
     return n;
   }
 
   /** Re-place every scheduled NPC for the current daypart. Idempotent, O(cast),
-   *  and fires only on a boundary crossing (~4x/day) plus once per rebuild. */
+   *  and fires only on a boundary crossing (~4x/day) plus once per rebuild.
+   *
+   *  THE WEATHER'S BIAS IS ASSEMBLED HERE and the policy that spends it lives in
+   *  25-schedule, which is the same split the rest of this method keeps: the sim
+   *  owns zones, the table owns who-is-where-when. One `weather()` read for the
+   *  whole pass — the memo makes it a field compare on all but the first — and
+   *  the closure is the ONE place "indoors" is defined: INTERIOR-ZONE MEMBERSHIP,
+   *  the compiler's own `mapKind`, and not roofedness. A wilds is a `place` and
+   *  stands in the rain like the street does. */
   resolveSchedules() {
     this._daypart = this.daypart();
+    // Null on a fair or overcast day, so resolve() runs exactly as it always has
+    // and a legacy world (whose NPCs carry no `_sched` at all) is untouched
+    // either way. Rain, storm and snow raise it — the word alone, never the
+    // intensity: light rain still empties the street.
+    const bias = PF.weather.WORD_META[this.weather().word]?.indoors
+      ? { indoor: (zoneId) => this.world.zones[zoneId]?.mapKind === "building" }
+      : null;
     // Flatten first: splicing between zone arrays while iterating them would
     // skip or double-process an NPC.
     const all = [];
@@ -6545,7 +7797,7 @@ PF.Sim = class {
     const unplaced = new Set();
     for (const [fromId, npc] of all) {
       if (!npc._sched || npc._hold) continue; // _hold reserves a GM override seam
-      const handle = PF.schedule.resolve(npc._sched, this._daypart);
+      const handle = PF.schedule.resolve(npc._sched, this._daypart, bias);
       if (!handle) continue;
       const target = this.world.zones[handle.zoneId];
       if (!target) continue;
@@ -6619,10 +7871,22 @@ PF.Sim = class {
 
   stepNpcs(dt, z) {
     for (const npc of z.npcs) {
-      // The person you are talking TO stands still. nearNpc stops updating the
-      // moment dialogue starts, so it still points at whoever was greeted —
-      // drifting away mid-sentence read as if they had stopped listening.
-      if (this.mode === "dialogue" && this.nearNpc && npc.id === this.nearNpc.id) {
+      // THE PERSON YOU ARE TALKING TO STANDS STILL, and the LATCH is what says
+      // who that is — read FIRST, and by IDENTITY (plan §2.5). `nearNpc` is a
+      // nearest-within-26px proximity read, which is the wrong question in a
+      // crowd: it freezes whoever has wandered closest while the person actually
+      // being addressed keeps walking, and between 26 and 32px — where the talk
+      // window is still open — it is null and freezes nobody at all.
+      if (npc.id === this.talkAnchorId) {
+        npc.stepPhase = 0;
+        continue;
+      }
+      // The classic fence, kept for dialogue entered WITHOUT a window (the
+      // Keyboard button, and any future path that does the same). Guarded on the
+      // latch being absent so exactly ONE freeze authority reads at a time: with
+      // a conversation live, the line above has already answered, and this one
+      // must never pick a second, nearer bystander to freeze beside it.
+      if (this.talkAnchorId == null && this.mode === "dialogue" && this.nearNpc && npc.id === this.nearNpc.id) {
         npc.stepPhase = 0;
         continue;
       }
@@ -6710,9 +7974,15 @@ PF.Sim = class {
   header() {
     const z = this.zone();
     const near = this.nearNpc ? `; near: ${this.nearNpc.name} (${this.nearNpc.role})` : "";
-    // The daypart word is one token and keeps the GM's light and "who is about"
-    // narration consistent with what we render and where NPCs actually are.
-    return `[World: ${z.name}; ${this.clockLabel()} (${this.daypart()})${near}]`;
+    // THREE WORDS IN THE PAREN GROUP, and each earns its permanent per-turn cost.
+    // The daypart keeps the GM's light and "who is about" narration consistent
+    // with what we render and where NPCs actually are. The weather word is the
+    // whole channel the sky reaches the narrator through — live, every turn, at
+    // the same tier. And the SEASON is the word that lets the GM make a judgment
+    // the daypart cannot: it should not snow in summer, unless the world it is
+    // snowing in is one where that means something.
+    const sky = this.weather();
+    return `[World: ${z.name}; ${this.clockLabel()} (${this.daypart()}, ${PF.weather.labelFor(sky.word, sky.intensity)}, ${this.season()})${near}]`;
   }
 
   /** The metered turn prefix (docs/brief-schema.md §7): name+role ride the
@@ -6759,6 +8029,13 @@ PF.Sim = class {
     // channel. The one exception is the exception that proves it: a `deliver`
     // errand finishes on a turn the player was sending anyway, and even then
     // what the GM sees is a greeting, not a handover.
+    //
+    // 0.14 MOVES WHERE THAT TURN IS PRESSED AND NOT WHAT THE GM SEES. The talk
+    // window labels the press ("Hand over: <title>") so the PLAYER knows which
+    // errand they are settling; what rides to the narrator is still this prefix
+    // and a sentence about walking up to somebody. And the window's free reads —
+    // the record answers, the pack lines — reach the GM not at all: they compose
+    // nothing, send nothing, and write no ledger line.
     const ledger = this._composeLedger();
     if (ledger) parts.push(ledger.text);
     // The ephemeral half of the flush, handed to the sender rather than stored:
@@ -6862,23 +8139,60 @@ PF.Render = class {
     this.canvas = canvas;
     this.ctx = canvas.getContext("2d");
     this.ctx.imageSmoothingEnabled = false;
-    this._zoneCache = new Map(); // zoneId → {base, overhead}
+    this._zoneCache = new Map(); // `zoneId|weatherClass` → {base, overhead}
   }
 
+  /** Drop a zone's composites. PREFIX DELETE, because a zone is cached under a
+   *  composite CLASS now (`z1|base`, `z1|snow`): deleting the bare id would take
+   *  nothing at all, and deleting one class would leave the other stale until
+   *  the next world switch — a thaw that never arrives on the one zone that had
+   *  just been repainted. */
   invalidateZone(zoneId) {
-    this._zoneCache.delete(zoneId);
+    const prefix = `${zoneId}|`;
+    for (const key of this._zoneCache.keys()) if (key.startsWith(prefix)) this._zoneCache.delete(key);
   }
 
   /** Drop every zone composite (chat/world switch): the cache is keyed by zone
-   *  id alone, so a new world's zones would otherwise reuse stale composites. */
+   *  id and weather class, neither of which is world-unique, so a new world's
+   *  zones would otherwise reuse stale composites. */
   clearZones() {
     this._zoneCache.clear();
   }
 
-  _composite(z) {
-    let c = this._zoneCache.get(z.id);
+  /** Is there anything in this zone the weather can lie on?
+   *
+   *  Scanned once and remembered ON THE ZONE. A settlement is a couple of
+   *  thousand tiles and the answer cannot change, because the arrays are never
+   *  written — so the alternative is that scan every frame of every snowy day.
+   *  A zone with nothing snowable in it (an interior, a paved square) then never
+   *  pays for a second composite either. */
+  _snowable(z) {
+    if (z._snowable === undefined) {
+      const subs = PF.weather.SUBS.snow;
+      const any = (layer) => layer.some((id) => id && PF.own(subs, id) !== undefined);
+      z._snowable = any(z.ground) || any(z.overhead);
+    }
+    return z._snowable;
+  }
+
+  /** One zone, composited under a weather CLASS.
+   *
+   *  `cls` is either "base" or a weather word with a SUBS row. The substitution
+   *  is a RENAME AT PAINT TIME and nothing else: the id the compiler wrote is
+   *  read, a different painter answers it, and the zone array is never touched.
+   *  That is the paint contract — a renderer that wrote the weather into the
+   *  world would have the save carrying it a moment later, and the thaw would
+   *  never come.
+   *
+   *  Both layers are covered: `canopy` lives in `z.overhead`, so a ground-only
+   *  substitution would leave green treetops over a white field. */
+  _composite(z, cls) {
+    const key = `${z.id}|${cls}`;
+    let c = this._zoneCache.get(key);
     if (c) return c;
     const T = PF.TILE;
+    const subs = cls === "base" ? null : PF.own(PF.weather.SUBS, cls);
+    const paint = (id) => PF.art.tile((subs && PF.own(subs, id)) || id);
     const base = PF.offscreen(z.w * T, z.h * T);
     const over = PF.offscreen(z.w * T, z.h * T);
     const bg = base.getContext("2d");
@@ -6888,13 +8202,13 @@ PF.Render = class {
     for (let y = 0; y < z.h; y++) {
       for (let x = 0; x < z.w; x++) {
         const i = y * z.w + x;
-        bg.drawImage(PF.art.tile(z.ground[i]), x * T, y * T);
+        bg.drawImage(paint(z.ground[i]), x * T, y * T);
         if (z.object[i]) bg.drawImage(PF.art.tile(z.object[i]), x * T, y * T);
-        if (z.overhead[i]) og.drawImage(PF.art.tile(z.overhead[i]), x * T, y * T);
+        if (z.overhead[i]) og.drawImage(paint(z.overhead[i]), x * T, y * T);
       }
     }
     c = { base, overhead: over };
-    this._zoneCache.set(z.id, c);
+    this._zoneCache.set(key, c);
     return c;
   }
 
@@ -6902,7 +8216,14 @@ PF.Render = class {
     const { ctx } = this;
     const T = PF.TILE;
     const z = sim.zone();
-    const comp = this._composite(z);
+    // THE SKY, READ ONCE PER FRAME off the sim's day-keyed memo. All three
+    // weather surfaces below — the ground class, the tint, the falling stuff —
+    // spend this one pair, and the intensity reaches only the last two.
+    const sky = sim.weather();
+    // EXTERIOR ONLY, all of it, on the compiler's own word: a settlement and a
+    // place are outdoors, a building is not. It does not rain in the inn.
+    const outdoors = z.mapKind !== "building";
+    const comp = this._composite(z, outdoors && sky.word === "snow" && this._snowable(z) ? "snow" : "base");
     ctx.clearRect(0, 0, PF.VW, PF.VH);
 
     // camera: center player, clamp to zone, snap to whole pixels (pixel-art rule)
@@ -6961,6 +8282,26 @@ PF.Render = class {
 
     this._blitOverhead(ctx, comp.overhead, z, sim, camX, camY, viewW, viewH, offX, offY);
 
+    // ── WEATHER TINT ─────────────────────────────────────────────────────────
+    // BEFORE the day/night block, with its own composite-op save/restore, and
+    // both halves of that placement are deliberate. `darkness()` returns exactly
+    // 0 from 07:00 to 18:00, so a tint folded into the block below would be
+    // invisible for eleven hours a day — most of the hours anyone plays. And the
+    // ORDER is weather first, night second: a night storm tints the world and
+    // then the dark falls over it, rather than greying out the window glow.
+    //
+    // Rain's tint is a PAIR, one alpha per intensity, which is the second of the
+    // two axes heavy weather is allowed to move (the first is how much is
+    // falling). Snow has no tint at all — the tiles carry it.
+    const tint = outdoors ? PF.weather.WORD_META[sky.word]?.tint : null;
+    const tintColor = typeof tint === "string" ? tint : tint ? (PF.own(tint, sky.intensity) ?? tint.light) : null;
+    if (tintColor) {
+      ctx.globalCompositeOperation = "multiply";
+      ctx.fillStyle = tintColor;
+      ctx.fillRect(offX, offY, viewW, viewH);
+      ctx.globalCompositeOperation = "source-over";
+    }
+
     // day/night multiply tint + warm window glow
     const dark = sim.darkness();
     if (dark > 0.01) {
@@ -6982,11 +8323,81 @@ PF.Render = class {
       ctx.globalCompositeOperation = "source-over";
     }
 
+    // Falling weather goes on LAST, over the night as well as the day: rain the
+    // dark had already multiplied down to nothing is rain nobody can see, and
+    // the point of the pass is that something is visibly happening.
+    if (outdoors) this._fall(ctx, sky, offX, offY, viewW, viewH);
+
     // letterbox frame line so the world reads as a deliberate viewport over the scene art
     if (opts?.frame !== false) {
       ctx.strokeStyle = "rgba(0,0,0,0.6)";
       ctx.lineWidth = 2;
       ctx.strokeRect(offX + 1, offY + 1, viewW - 2, viewH - 2);
+    }
+  }
+
+  /** WHAT IS FALLING OUT OF THE SKY: a lean screen-space pass over the finished
+   *  frame. No emitter, no particle system, no state — N lanes, each one a fixed
+   *  hash and a phase.
+   *
+   *  THE DETERMINISM EXCEPTION, DECLARED HERE BECAUSE IT IS THE ONLY ONE.
+   *  Everything else in this package is a pure function of the saved clock — the
+   *  sky at a day, a fish roll, where a villager stands at seven in the morning
+   *  — and that is exactly what makes a rewind land on the world it left. This
+   *  pass takes its phase from `performance.now()`, a wall clock, and NOTHING
+   *  SIM-SIDE EVER READS IT. That is what makes the exemption legal rather than
+   *  a hole: no draw here feeds a save field, a roll or a decision, so two
+   *  machines showing the same save at the same moment may have their rain in
+   *  different places and still agree about every fact the game keeps.
+   *
+   *  It is also load-bearing for the time stop. Under an open dialogue window
+   *  `clockMin` and `darkness()` hold still, and this is the one surface left
+   *  moving: rain and snow keep falling while you read, which is the whole of
+   *  "the world stays alive while you talk to someone". A phase taken from the
+   *  game clock would freeze the weather solid along with it.
+   *
+   *  The LANES are still deterministic — each streak's column, length and speed
+   *  come off `hashStr`, so a downpour reads as consistent weather rather than
+   *  as static. Only the phase moves.
+   *
+   *  INTENSITY IS THIS PASS'S LOUDEST AXIS: heavy runs ~2.7x the streaks at
+   *  ~1.7x the fall speed, and storm rides the heavy row with a steeper wind
+   *  angle. Light rain and heavy rain have to read as different weather at a
+   *  glance, which is a promise about this function and not about the tint. */
+  _fall(ctx, sky, offX, offY, viewW, viewH) {
+    const snowing = sky.word === "snow";
+    const storming = sky.word === "storm";
+    if (!snowing && !storming && sky.word !== "rain") return;
+    const row = PF.weather.TUNING.particles[sky.intensity === "light" ? "light" : "heavy"];
+    const t = performance.now() / 1000;
+    // Snow drifts; rain leans; a storm leans hard. Wind is x per y fallen.
+    const slant = snowing ? 0 : storming ? 0.55 : 0.22;
+    const span = viewH + 48; // the lane is taller than the view: streaks enter and leave
+    const len = snowing ? 2 : Math.round(4 * row.fall) + 2;
+    ctx.fillStyle = snowing ? "rgba(246,249,255,0.85)" : storming ? "rgba(188,203,224,0.6)" : "rgba(199,214,235,0.45)";
+    // Clipped to the VIEWPORT, never the canvas: the letterbox bands are where
+    // the host's own scene art shows through, and it is not raining on that.
+    const bar = (x, y, w, h) => {
+      const left = Math.max(x, offX);
+      const right = Math.min(x + w, offX + viewW);
+      const top = Math.max(y, offY);
+      const bottom = Math.min(y + h, offY + viewH);
+      if (right > left && bottom > top) ctx.fillRect(left, top, right - left, bottom - top);
+    };
+    for (let i = 0; i < row.n; i++) {
+      const seed = PF.hashStr(`fall|${i}`);
+      const speed = row.fall * (snowing ? 26 : 260) * (0.7 + ((seed >>> 12) % 64) / 96);
+      const y = ((((seed >>> 6) % span) + t * speed) % span) - 24;
+      const drift = snowing ? Math.sin(t * 0.8 + i) * 7 : -y * slant;
+      const x = (((((seed % 4096) / 4096) * viewW + drift) % viewW) + viewW) % viewW;
+      if (snowing) {
+        bar(offX + Math.round(x), offY + Math.round(y), 2, 2);
+        continue;
+      }
+      // A slanted streak in two or three stacked segments — cheaper than a
+      // stroked line and it stays on the pixel grid, which is the house style.
+      for (let s = 0; s < len; s += 3)
+        bar(offX + Math.round(x - s * slant), offY + Math.round(y + s), 1, Math.min(3, len - s));
     }
   }
 
@@ -9869,9 +11280,64 @@ const DAYPARTS = ["dawn", "day", "dusk", "night"];
 // is (theme × kind) and both halves are asserted complete at boot.
 const SPOT_TAGS = ["water-feature", "water-crossing"];
 
+// ── How the sky moves the water (plan §2.3) ─────────────────────────────────
+// The weather column, indexed by (weather WORD × entry RARITY) and stamped onto
+// every entry by `withSky` below. Rarity, because "rain brings the ordinary fish
+// up" is a fact about the MIX and not about carp in particular — and one row per
+// rarity is a retune a maintainer can hold in their head, where twenty-two
+// copies is one a retune half-lands on. `fair` is absent from every row on
+// purpose: a clear day IS the baseline, and `?? 1` reads it that way.
+//
+// THE WORD ONLY, never the intensity. The catch tables stay five-valued, exactly
+// as the pack's weather axis and the schedule bias do; blizzard fishing is a
+// playtest-driven retune if it is ever wanted, not a sixth column.
+//
+// STORM IS THE ONLY COLUMN, and the reason is a ruling (B3-1, 2026-08-28). The
+// slice that built this table shipped four columns and its own doc block proved
+// two of them silent: `_draw` normalizes by the sum it just added up, so a row
+// that multiplies EVERY rarity by the same number cancels exactly, and overcast
+// (×1.1 across the board) and snow (×0.7) left the draw bit-identical to a fair
+// day. That finding went to the maintainer rather than into a quiet retune, and
+// the answer was that the grey and wet skies should not be moving the MIX at
+// all: fish under them bite MORE OFTEN, not differently. So the honest fix is
+// REMOVAL and not decoration — overcast, snow AND rain are gone from every row,
+// rain's live ×1.3/×1.4 included, because the ruling unmade its job and not
+// only the two that were already inert. Where they went is `TUNING.biteRate`:
+// the sky now rewrites how often a cast lands anything, and the two levers never
+// share a job.
+//
+// The five per-rarity rows STAY as rows, each carrying only its storm entry, so
+// the both-ways boot assert below keeps its shape and a rarity-mix retune still
+// lands in the one place it always did.
+//
+// STORM CHANGES THE MIX rather than scaling it — rare ×1.5 against ×0.6 on
+// everything else — which is why it is the row that survived: it is the one that
+// ever moved the draw (measured, 4.5% → 10.5% rare share) and the release's only
+// authored "fish the storm" hook. It gains the faster bite too, and the two do
+// not double-count: the lean is a relative-share fact the normalization
+// preserves at any bite count, per-catch QUALITY with no frequency term in it.
+// Where that content CANNOT be reached is worth writing down: 17-weather's
+// warmth gate makes a storm arithmetically impossible at polar latitude, in
+// every season and at every precipitation, so a polar world never sees this
+// column at all — and the arid four-season worlds meet it about once a year.
+// Recorded rather than designed around; a column that never fires is exactly
+// what the `?? 1` default is for, and under the bite lever those worlds now have
+// a sky that moves the water even so.
+const WEATHER_MIX = {
+  [BAIT_TYPE]: { storm: 0.6 },
+  "catch-common": { storm: 0.6 },
+  "catch-uncommon": { storm: 0.6 },
+  "catch-rare": { storm: 1.5 },
+  "catch-prize": { storm: 0.6 },
+};
+/** Stamp each row's rarity column onto it. SPREAD FIRST, so an entry that ever
+ *  wants its own weather row writes a literal and wins — the shared row is a
+ *  default, not a ceiling. */
+const withSky = (rows) => rows.map((row) => ({ weather: WEATHER_MIX[row.role ?? BAIT_TYPE], ...row }));
+
 // ── What comes out of the water (plan §2.2) ──────────────────────────────────
 // One table per (theme, spot kind). An ENTRY is `{role, variant, weight,
-// minLevel, daypart}`:
+// minLevel, daypart, weather}`:
 //   • `role`   — the shared TYPE, one of CATCH_ROLES. ABSENT means bait, which is
 //                a yield in its own right and the only one that is also an input.
 //   • `variant`— the entry's slug, and the pouch row's `k`. Row identity is
@@ -9881,9 +11347,11 @@ const SPOT_TAGS = ["water-feature", "water-crossing"];
 //   • `minLevel` — the level the entry becomes REACHABLE at; below it the entry
 //                is not in the draw at all, which is what makes the ladder feel
 //                like it opens water up rather than merely raising a percentage.
-//   • `daypart`— per-daypart multipliers over `weight`, absent meaning 1. This is
-//                0.12's ONLY live modifier (weather is L2, M9) and it is where a
-//                night spot stops being the same spot as a noon one.
+//   • `daypart`— per-daypart multipliers over `weight`, absent meaning 1. Where
+//                a night spot stops being the same spot as a noon one.
+//   • `weather`— the same shape for the SKY, one multiplier per weather WORD.
+//                Stamped by rarity from WEATHER_MIX above rather than written
+//                per row, so the tables below still read as weights and hours.
 // NO PER-ENTRY XP: TUNING.catchXp is the single authority, keyed by TYPE, so a
 // rebalance happens in one place and cannot half-happen.
 //
@@ -9893,38 +11361,38 @@ const SPOT_TAGS = ["water-feature", "water-crossing"];
 // entries and not consolation prizes.
 const CATCH_TABLES = {
   "cozy-village": {
-    "water-feature": [
+    "water-feature": withSky([
       { variant: "worms", weight: 24, minLevel: 1, daypart: { dawn: 1.2, night: 0.7 } },
       { role: "catch-common", variant: "carp", weight: 34, minLevel: 1, daypart: { night: 0.7 } },
       { role: "catch-uncommon", variant: "bream", weight: 18, minLevel: 3, daypart: { dusk: 1.3 } },
       { role: "catch-rare", variant: "mirror-pike", weight: 6, minLevel: 7, daypart: { day: 0.6, night: 1.6 } },
       { role: "catch-prize", variant: "old-tench", weight: 2, minLevel: 12, daypart: { dawn: 2, day: 0.5 } },
-    ],
-    "water-crossing": [
+    ]),
+    "water-crossing": withSky([
       { variant: "grubs", weight: 22, minLevel: 1 },
       { role: "catch-common", variant: "minnow", weight: 32, minLevel: 1 },
       { role: "catch-uncommon", variant: "trout", weight: 17, minLevel: 4, daypart: { dawn: 1.4, dusk: 1.3 } },
       { role: "catch-rare", variant: "silver-eel", weight: 6, minLevel: 8, daypart: { day: 0.5, night: 1.8 } },
       { role: "catch-prize", variant: "crown-salmon", weight: 2, minLevel: 13, daypart: { dawn: 1.6 } },
-    ],
+    ]),
   },
   "sci-fi-colony": {
-    "water-feature": [
+    "water-feature": withSky([
       { variant: "chum", weight: 24, minLevel: 1 },
       { role: "catch-common", variant: "carp", weight: 28, minLevel: 1, daypart: { night: 0.7 } },
       { role: "catch-common", variant: "culture-kelp", weight: 14, minLevel: 1 },
       { role: "catch-uncommon", variant: "vat-strain", weight: 16, minLevel: 3, daypart: { dusk: 1.3 } },
       { role: "catch-rare", variant: "pressure-eel", weight: 6, minLevel: 7, daypart: { night: 1.6 } },
       { role: "catch-prize", variant: "heritage-koi", weight: 2, minLevel: 12, daypart: { dawn: 1.8, day: 0.5 } },
-    ],
-    "water-crossing": [
+    ]),
+    "water-crossing": withSky([
       { variant: "larvae", weight: 22, minLevel: 1 },
       { role: "catch-common", variant: "minnow", weight: 30, minLevel: 1 },
       { role: "catch-uncommon", variant: "filter-salvage", weight: 12, minLevel: 2 },
       { role: "catch-uncommon", variant: "trout", weight: 16, minLevel: 4, daypart: { dawn: 1.4 } },
       { role: "catch-rare", variant: "deepline-eel", weight: 6, minLevel: 8, daypart: { night: 1.8 } },
       { role: "catch-prize", variant: "ice-run-char", weight: 2, minLevel: 13, daypart: { dawn: 1.6 } },
-    ],
+    ]),
   },
 };
 
@@ -10106,6 +11574,14 @@ const STARTER_BAIT = 8;
 // throughout is the same chain times `baitMult`: p ≈ 0.69, ≈ 50 xp, ≈ 38 days —
 // which is the honest range, since no real session stays on one side of it.
 //
+// THAT 38-TO-48 IS THE FAIR-DAY, MODERATE-WATER BOUND and not the ladder. The
+// bite rows below compose a second factor onto every one of those p values, so a
+// real ladder runs shorter or longer by the sky the day rolled and the water the
+// world did: a wet world fishing a rainy week climbs noticeably faster, an arid
+// world's fair fortnight noticeably slower. Nothing above is wrong; it is the
+// arithmetic at the calibration anchor, which is where a retune should be
+// checked and not where a player stands.
+//
 // THE CATCH TABLE MOVES THAT AS MUCH AS THIS OBJECT DOES, and the BAIT SHARE is
 // the sharpest lever in it: bait pays `catchXp[BAIT_TYPE]`, the floor, and it
 // also refills the stack the bait multiplier rides on — so a high bait weight is
@@ -10145,6 +11621,50 @@ const TUNING = {
   // what a grade of bait is worth (graded mods are L2 content).
   baitMult: 1.25,
   castMinutes: 15, // one cast = one window = this many minutes of clock, and 1440 divides by it
+  // THE BITE, keyed by the sky's WORD (ruling B3-1). A bad sky does not change
+  // what is in the water, it changes how often something takes the hook: the
+  // maintainer's own sentence is a fish biting every ten in-game minutes on a
+  // fair day and every five under overcast, rain or snow. These are CHANCES,
+  // composed onto the success roll as a hazard exponent and not as a straight
+  // multiply — see the roll in fish() for why the literal ×2 cannot be used and
+  // what the ×2 buys instead. `fair` is absent, because a clear day IS the
+  // baseline and `?? 1` reads it that way, exactly as the mix rows do.
+  //
+  // STORM TAKES THE SAME 2 as the other three. It keeps its rarity lean as well,
+  // and the two levers stay orthogonal by construction: the lean is a
+  // relative-share fact the draw's normalization preserves at any bite count, so
+  // there is no frequency term in it to double-count. A storm is also not calmer
+  // water than rain. If the playtest finds storms overrewarding, the retune is
+  // this one number.
+  //
+  // INTENSITY-BLIND like every other catch consumer: heavy rain bites like light
+  // rain, and a blizzard rate would be a playtest retune in this same row rather
+  // than a sixth key.
+  //
+  // GM-TWEAKABILITY, HONESTLY, in three tiers. TODAY this row is the tuner's
+  // handle and the only one. The `pixelforgeWeather` override already tweaks
+  // bites implicitly — summoning rain IS summoning the ×2, with no new machinery
+  // — so a GM who wants faster bites has one. The direct knob, a
+  // `fishBite:<word>:<multiplier>` write over these keys validated against the
+  // closed weather-word enum, is a line in the GM write-back channel's FR: that
+  // channel does not exist yet and this release builds NO read slot for it. The
+  // row exists to tune the multiplier itself, not to get faster bites at all.
+  biteRate: { overcast: 2, rain: 2, snow: 2, storm: 2 },
+  // THE REGION'S WATER (ruling B3-2): the bite's base is DERIVED from the axes
+  // the world already mints, never a hardcoded interval. `abundPerWet` is how
+  // much one point of 17-weather's `wetness` is worth as bite chances, measured
+  // from MODERATE — so the reference world sits at ×1 by construction and a
+  // wetness retune in 17-weather moves the anchor with it rather than stranding
+  // this number. At these starters the three bands land arid ×0.7, moderate
+  // ×1.0, wet ×1.3. `abundFloor` is the guard: a hostile stamp or a future
+  // wetness cannot zero the water out of a world.
+  abundPerWet: 0.2,
+  abundFloor: 0.25,
+  // The second live input to the same derivation, because the tables already
+  // distinguish the kinds. Both 1.0 on purpose: still versus running water is a
+  // CONTENT difference today, and becomes a rate difference in one row the day
+  // the playtest asks for one.
+  spotBite: { "water-feature": 1, "water-crossing": 1 },
   // XP per successful window, keyed by the yield's TYPE — the four roles and
   // bait — and this table is the single xp authority: table entries carry no xp
   // of their own, so a rebalance happens in one place. Asserted complete at boot.
@@ -10782,21 +12302,67 @@ PF.economy = {
     return row;
   },
 
-  /** Draw one entry: weight × this daypart's multiplier, over the entries the
-   *  player's level has opened up. Null when the level has opened nothing, which
-   *  a shipped table never does (every one of them holds a level-1 entry) and a
-   *  hostile one might. */
-  _draw(rnd, table, level, part) {
+  /** How much water this region has, as bite CHANCES (ruling B3-2). The bite's
+   *  base is derived and never a hardcoded interval: "some places have more
+   *  fish, other places don't have many fish to catch" is a fact about the world
+   *  the compiler already minted, so it is read off the axes rather than typed
+   *  in.
+   *
+   *  PRECIPITATION FIRST, anchored to MODERATE, which is what makes the
+   *  reference world exactly ×1 by construction — `1 + abundPerWet × (wetness −
+   *  moderate.wetness)` is 1 when the two agree, and a wetness retune in
+   *  17-weather moves the anchor along with the bands. `abundFloor` keeps a
+   *  hostile stamp or a future wetness from zeroing the water. Spot kind is the
+   *  second live input, both starters 1.0.
+   *
+   *  THE EXTENSION SEAM, NAMED WHERE IT LIVES: future regional traits —
+   *  harvesting and gathering prosperity, crop fertility, the farming territory
+   *  the roadmap's procedural-worldgen direction points at — MULTIPLY IN here,
+   *  one factor each, without reshaping this derivation or the roll that spends
+   *  it.
+   *
+   *  PURE RESOLVED READS, ZERO STREAM CONTACT. The axes go through
+   *  `PF.weather.axesOf`, the guarded read that folds a hostile or absent stamp
+   *  to temperate/moderate — never a raw `world.precipitation` — and nothing
+   *  here touches `rnd()`. A session computes this ONCE, before its loop.
+   *
+   *  The felt outcome, one sentence for the playtest: an arid world fishes
+   *  SPARSE — fewer bites, never fewer species, because abundance touches the
+   *  rate and the table stays whole — its rare rain is a relief you can feel at
+   *  the waterline, and a wet world's drizzle teems. */
+  _regionBite(world, tag) {
+    const { precipitation } = PF.weather.axesOf(world);
+    const wetness = PF.weather.PRECIP_META[precipitation].wetness;
+    const abundance = Math.max(
+      TUNING.abundFloor,
+      1 + TUNING.abundPerWet * (wetness - PF.weather.PRECIP_META.moderate.wetness),
+    );
+    return abundance * (TUNING.spotBite[tag] ?? 1);
+  },
+
+  /** Draw one entry: weight × this daypart's multiplier × this sky's, over the
+   *  entries the player's level has opened up. Null when the level has opened
+   *  nothing, which a shipped table never does (every one of them holds a
+   *  level-1 entry) and a hostile one might.
+   *
+   *  `w` IS A WEATHER WORD and never a `{word, intensity}` row: the tables are
+   *  five-valued and a light shower fishes like a heavy one.
+   *
+   *  REWIND-EXACT WHATEVER THE FACTORS ARE, which is the property the whole
+   *  ladder rests on: exactly one `rnd()` is consumed per draw, before either
+   *  multiplier is looked at. Adding a column moves WHICH entry a roll lands on
+   *  and never where the stream stands afterwards. */
+  _draw(rnd, table, level, part, w) {
     let total = 0;
     for (const entry of table) {
       if (level < entry.minLevel) continue;
-      total += entry.weight * (entry.daypart?.[part] ?? 1);
+      total += entry.weight * (entry.daypart?.[part] ?? 1) * (entry.weather?.[w] ?? 1);
     }
     if (!(total > 0)) return null;
     let roll = rnd() * total;
     for (const entry of table) {
       if (level < entry.minLevel) continue;
-      roll -= entry.weight * (entry.daypart?.[part] ?? 1);
+      roll -= entry.weight * (entry.daypart?.[part] ?? 1) * (entry.weather?.[w] ?? 1);
       if (roll < 0) return entry;
     }
     return null;
@@ -10843,9 +12409,18 @@ PF.economy = {
    *  `hash(seed, day, castWindow, spotId, level, toolTier, modTier)` — every one
    *  of them RESOLVED (58-player's resolvers), never a raw string off the save,
    *  so two clients that disagree about what "legendary" means still pull the
-   *  same fish out of the same water on the same minute. A failed window is a
-   *  fixed point escaped only by spending different time, which IS the
-   *  anti-save-scum property and is stated rather than discovered.
+   *  same fish out of the same water on the same minute.
+   *
+   *  A FAILED WINDOW IS A FIXED POINT OF ITS SKY OVER ITS WATER. Under the same
+   *  weather it is escaped only by spending different time, which IS the whole
+   *  anti-save-scum property — and it survives the bite lever intact, because
+   *  neither factor is a thing a reload re-rolls: `regionBite` is world-constant,
+   *  and the sky derives from the axes and the day plus chat-scoped override
+   *  state that does not rewind with the story. The same window under a
+   *  DIFFERENT sky may land differently — a fair-day failure can be a rainy-day
+   *  catch at the identical seed — and that is the design (more windows bite in
+   *  the rain), not a violation of it. The sky rewrites the THRESHOLD; it never
+   *  touches the seed, the draw count or the stream position.
    *
    *  BAIT PRESENCE IS READ BEFORE IT IS SPENT. The window a bait was consumed on
    *  rolls BAITED; the slot-clear that follows the last one affects the NEXT
@@ -10871,6 +12446,11 @@ PF.economy = {
     const table = this.catchTable(world, spot.tag) ?? [];
     const W = TUNING.castMinutes;
     const modMult = [1, TUNING.baitMult];
+    // ONCE PER SESSION, BEFORE THE LOOP. The region's water does not change
+    // between two windows of the same session — it is a pure read off the axes
+    // and the spot — so it is resolved here and spent, rather than re-derived
+    // forty times inside the loop.
+    const regionBite = this._regionBite(world, spot.tag);
 
     let windows = 1;
     if (target != null) {
@@ -10919,6 +12499,11 @@ PF.economy = {
       const day = sim.day;
       const castWindow = Math.floor(sim.clockMin / W);
       const part = sim.daypart();
+      // READ BESIDE `part` AND BEFORE THE ADVANCE, on exactly its terms: each
+      // window is fished under the sky it BEGAN under, so a session that crosses
+      // midnight picks up the new day's weather on the next window rather than
+      // on the crossing one. The word alone — the tables never see an intensity.
+      const wthr = sim.weather().word;
 
       sim.advanceMinutes(W);
       spent += W;
@@ -10939,8 +12524,45 @@ PF.economy = {
       // fully-equipped ladder is supposed to feel like, and is unreachable in
       // 0.12 anyway (fine and masterwork are not sold).
       const p = base * TUNING.toolMult[toolTier] * modMult[modTier];
-      if (rnd() >= p) continue;
-      const entry = this._draw(rnd, table, level, part);
+      // THE SKY AND THE WATER REWRITE THE THRESHOLD, and nothing else about the
+      // roll (ruling B3-1/B3-2). `chances` is how many times this window's water
+      // offers, against the fair-day moderate-water one; read the exponent as a
+      // HAZARD, which is exactly the quantity the "a fish bites every N minutes"
+      // sentence describes — it scales the window's continuous-time bite rate.
+      // At the low rungs, where a bite genuinely is an every-so-often event,
+      // `pw ≈ p × chances` and the ruling's multiplicative structure holds
+      // literally; near the top it compresses asymptotically toward certainty
+      // without ever reaching it.
+      //
+      // WHY NOT THE LITERAL `p × 2` the ten-minutes-to-five example suggests:
+      // this curve crosses 1 from mid-ladder up (baited mid-curve p ≈ 0.69, so
+      // 1.38 doubled), and a straight multiply would make every rainy mid-ladder
+      // cast a guaranteed catch — flatly against the ruling's own "ultimately is
+      // still RNG determined". The hazard form honours that at every rung, never
+      // fishes worse than fair under a wet word (`pw ≥ p` wherever
+      // `chances ≥ 1`), and tapers exactly where more frequency has no room
+      // left. The catches-per-window ratio at `chances` 2 is `2 − p` exactly, so
+      // the honest number at the curve floor is ≈1.7× and not a folk 2× no
+      // reachable p delivers. Ten-to-five is the CALIBRATION EXAMPLE at the
+      // temperate/moderate anchor, never a constant this code carries.
+      //
+      // The `min(p, 1)` clamp keeps `pow` off a negative base and preserves the
+      // one promise above: a p at or over 1 still ALWAYS lands, whatever the
+      // sky. Equipment can promise a cast; weather and water neither manufacture
+      // that promise nor break it.
+      //
+      // The `chances === 1` branch keeps the anchor's fair day the LITERAL
+      // shipped expression — bit-identical rolls, no float dust from a round
+      // trip through `1 − (1 − p)` — and doubles as the compat pin: a
+      // moderate-water world's fair-day fishing is untouched by the whole
+      // amendment.
+      //
+      // ZERO ADDED DRAWS, ZERO SEED MOVEMENT: this is the same single `rnd()`
+      // the roll always spent, compared against a different number.
+      const chances = regionBite * (TUNING.biteRate[wthr] ?? 1);
+      const pw = chances === 1 ? p : 1 - Math.pow(1 - Math.min(p, 1), chances);
+      if (rnd() >= pw) continue;
+      const entry = this._draw(rnd, table, level, part, wthr);
       if (!entry) continue;
       const type = this.entryType(entry);
       // The PRIOR level, read before the award, because award() returns the new
@@ -11054,6 +12676,16 @@ PF.economy = {
   for (const byTag of Object.values(CATCH_TABLES))
     for (const table of Object.values(byTag)) for (const entry of table) shippedVariants.add(entry.variant);
 
+  // THE WEATHER MIX PAIRS AGAINST THE RARITIES, both ways. A rarity with no row
+  // stamps `undefined` onto every entry of it — a whole tier that quietly stops
+  // caring about the sky — and a row keyed on a rarity nothing has is a tuning
+  // that never applies. Neither shows up anywhere else.
+  for (const rarity of [...CATCH_ROLES, BAIT_TYPE])
+    if (!PF.own(WEATHER_MIX, rarity)) throw new Error(`pixelforge: the weather mix has no row for "${rarity}"`);
+  for (const rarity of Object.keys(WEATHER_MIX))
+    if (!CATCH_ROLES.includes(rarity) && rarity !== BAIT_TYPE)
+      throw new Error(`pixelforge: the weather mix names a rarity "${rarity}" the catch roles do not`);
+
   for (const theme of PF.art?.themeIds?.() ?? []) {
     const skin = ITEM_SKINS[theme];
     if (!skin) throw new Error(`pixelforge: theme "${theme}" ships no item vocabulary`);
@@ -11128,6 +12760,17 @@ PF.economy = {
             throw new Error(`pixelforge: ${theme}/${tag}'s "${entry.variant}" is tuned for a daypart "${part}"`);
           if (!(typeof mult === "number" && Number.isFinite(mult) && mult >= 0))
             throw new Error(`pixelforge: ${theme}/${tag}'s "${entry.variant}" has a ${part} multiplier of ${mult}`);
+        }
+        // THE SAME WALK FOR THE SKY, against 17-weather's own list rather than a
+        // local mirror — the weather module is the enum authority and it loads
+        // first, so this reads it the way 61-pack reads DAYPARTS from here. A
+        // "rainy" or a "heavy rain" column would otherwise be a tuning nobody
+        // could ever see apply.
+        for (const [word, mult] of Object.entries(entry.weather ?? {})) {
+          if (!PF.weather.WORDS.includes(word))
+            throw new Error(`pixelforge: ${theme}/${tag}'s "${entry.variant}" is tuned for a weather "${word}"`);
+          if (!(typeof mult === "number" && Number.isFinite(mult) && mult >= 0))
+            throw new Error(`pixelforge: ${theme}/${tag}'s "${entry.variant}" has a ${word} multiplier of ${mult}`);
         }
       }
     }
@@ -12412,6 +14055,40 @@ PF.save = {
     // itself. Own-property only, both places.
     const hasZone = (id) => typeof id === "string" && Object.prototype.hasOwnProperty.call(world.zones, id);
     const sim = new PF.Sim(world);
+    // THE GM'S SKY, hydrated from chat metadata — the package's OTHER store, and
+    // the right one for a slot like this. The save ENVELOPE is closed to it: a
+    // registered key that emits only sometimes throws the load-time registry
+    // probe for every user on every boot, and past that assert it is the
+    // "listed but not emitted -> silently deleted" case the registry's own
+    // comment calls the slice-1 bug. Metadata costs zero envelope bytes and zero
+    // pins, and it carries the forward-compat argument the pack key already
+    // states in its own header: an older client never reads or writes this key
+    // at all, so a word this build does not know survives a round trip through
+    // it verbatim.
+    //
+    // FOLD, NEVER WRITE BACK. 0.14 reads the row, folds an unknown word to "no
+    // override" for its own runtime only, and writes nothing — so the raw row is
+    // still there for the build that understands it.
+    //
+    // AHEAD OF THE resolveSchedules() BELOW, deliberately: the schedule bias
+    // reads the sky, so boot placement has to happen against the overridden one.
+    // simFromSaved is also the right home rather than restore(): the quarantine
+    // bag is kept OUT of here because re-reading it would resurrect a slot a
+    // re-adoption had just consumed, and the override has nothing to consume —
+    // it is idempotent config, so re-reading it on every rebuild is the feature.
+    sim.weatherOverride = PF.weather.foldOverride(meta && typeof meta === "object" ? meta.pixelforgeWeather : null);
+    sim._weatherMetaApplied = PF.weather.overrideKey(sim.weatherOverride);
+    // AND THE PATH WITH NO ENVELOPE HAS TO BE PLACED HERE, because nothing below
+    // will do it. The constructor already resolved schedules — against a null
+    // override, since the field is assigned on the line above it — and the
+    // restore's own resolve sits inside the version gate. A chat carrying a sky
+    // in metadata but no valid envelope fell between the two and booted its town
+    // into fair-weather spots under a storm, 21 of 25 people on seed 13. It could
+    // not self-correct either: `_weatherMetaApplied` is stamped one line up, so
+    // 90-element's reconciler compares equal and re-resolves nothing, leaving the
+    // next daypart roll as the first repair. Gated on the override being real so
+    // a world that boots without one keeps the constructor's single pass.
+    if (sim.weatherOverride && !(saved && typeof saved.v === "number" && saved.v >= 1)) sim.resolveSchedules();
     // Additive-only by policy (plan §Q1): keys a NEWER build added ride through
     // this one instead of being erased by the next flush. Collected OUTSIDE the
     // version gate deliberately — a build that cannot even parse `v` is exactly
@@ -13372,6 +15049,14 @@ PF.save = {
     const meta =
       core.host && typeof core.host.chatMeta === "object" && core.host.chatMeta !== null ? core.host.chatMeta : {};
     core.sim = this.simFromSaved(saved, meta, core.chatId);
+    // AN OPEN CONVERSATION DOES NOT SURVIVE THE WORLD BEING REPLACED (plan §2.5).
+    // The anchor it was rendering is an orphan of a destroyed world that nothing
+    // will ever move again, and the load-bearing half of this call is what the
+    // fresh sim's own constructor cannot do: unmount the window's DOM and unbind
+    // the document-level pointerdown pair it left on the page. `_switchChat`
+    // carries the same line for the same reason, and both of them null a
+    // constructor-fresh field rather than the departing sim's — deliberately.
+    core.closeTalk?.();
     this._lastSerialized = JSON.stringify(this.snapshot(core));
     core.render?.clearZones();
     // A rebuild can change the theme; the asset loader is theme-aware and
@@ -14076,19 +15761,32 @@ PF.pack = (() => {
   // TWO REGISTERS, stranger and friend — the ROADMAP's own words for E1 (iii),
   // and what P2's disposition ladder will switch between.
   const REGISTERS = ["stranger", "friend"];
-  // THE WEATHER AXIS, built and empty. L2 owns the rest of this list; until then
-  // "fair" is the only value there is, and it is OPTIONAL on a line precisely so
-  // the seam costs nothing: a generation that had to spell one constant word on
-  // every line would spend a tenth of its budget saying "fair" (plan §2.2b's byte
-  // diet). Absent reads as fair, here and forever.
-  const WEATHERS = ["fair"];
-  const WEATHER_DEFAULT = "fair";
+  // THE WEATHER AXIS, and 17-weather is its authority — the DAYPARTS idiom one
+  // line up, and legal here for the same reason: 17 loads before 61, so this is
+  // a forward read and a backward one would be a TypeError at load rather than a
+  // second list quietly disagreeing with the sky.
+  //
+  // AN ABSENT `w` READS AS ANY WEATHER, which is the generalization of the
+  // "absent reads as fair" this line used to say while fair was the only value
+  // there was. The first reader defines read semantics, and §2.6's is: a line
+  // with no `w` is served under every sky, a line tagged `rain` is served under
+  // any rain — the axis is the five WORDS and an intensity never enters it.
+  // Optional on purpose, and that is still a byte argument: a generation made to
+  // spell a word on every line would spend a tenth of its budget on it.
+  const WEATHERS = PF.weather.WORDS;
+  // THE SKY WORDS THE GUIDANCE ASKS FOR: the five, less the one an untagged line
+  // already covers. An absent `w` is served under every sky, so a line tagged
+  // `fair` spends four characters buying the generalization it had for free. The
+  // SCHEMA still seals all five — a model that writes one is honoured rather than
+  // repaired — and the foot of this file pairs the two lists so dropping a second
+  // word here is a throw at load and not a vocabulary quietly narrowing.
+  const WEATHERS_ASKED = WEATHERS.filter((word) => word !== "fair");
   // THE E7 TOPIC SEAM (plan §2.2c). Optional per line, defaulting to NONE, and it
-  // exists so the Ask tree has branches to hang lines off when it arrives: rumor
-  // and work are the two E7 is load-bearing for, place and smalltalk are the ones
-  // a tree opens with. `guidance` below confines the tags it ASKS for to rumor
-  // and work — the seam is wider than the diet on purpose, because the schema
-  // seals and the guidance does not.
+  // is the tree's four branches: rumor and work are the two the window is
+  // load-bearing for, place and smalltalk are the ones it opens with. 0.13's
+  // guidance asked for two of them and the schema sealed four; 0.14 is the
+  // release that ends that diet, because every release it waited was a cohort of
+  // worlds sealed thin on exactly the tags the window renders.
   const TOPICS = ["rumor", "work", "place", "smalltalk"];
 
   // ── The quest template vocabulary (plan §2.2c) ──────────────────────────────
@@ -14156,25 +15854,28 @@ PF.pack = (() => {
     // #5135 output floor: a connection that gives us the minimum cuts the
     // emission's TAIL at 2,048 tokens, `salvageText` closes what is open, and
     // whatever templates-first order the model actually honoured is what
-    // survives. Every line is costed TAGGED — the topic tag is bytes the byte
-    // diet does not have to spend, so costing it in is the safe direction:
+    // survives. Every line is costed TAGGED — and from 0.14 that means costed
+    // with the SKY term too, which is where the extra ten characters a row went:
     //
     //   the truncation wall (#5135, connections may undercut) ....  2,048 tokens
     //   dense punctuation-heavy JSON, at three chars to the token .  6,144 chars
     //   the envelope (`{"templates":[`, `],"lines":[`, the close) .    -40 chars
     //   templates emit FIRST and may fill their own cap: 24 × 150 . -3,600 chars
     //   …so the index is left with ...............................   2,504 chars
-    //   a TAGGED line row costs about 130, which buys ............      19 lines
-    //   less the trailing partial row the salvage trims ..........      18 lines
+    //   a TAGGED line row costs about 140, which buys ............      17 lines
+    //   less the trailing partial row the salvage trims ..........      16 lines
     //
     // THE TWO ROW COSTS ARE MEASURED DENSITY, NOT THE SCHEMA'S MAXIMUM, and
     // that distinction is the whole standing of the sum. Serialized, the default
-    // pack's own rows run 112-137 chars a template (mean 121) and 97-140 chars a
-    // line with every one costed tagged (mean 119), across both themes — so 150
-    // and 130 sit above what a typical emission spends, the template cost above
-    // even the widest row measured. What the schema ALLOWS is far bigger: a
+    // pack's own rows run 112-137 chars a template (mean 121) and 97-151 chars a
+    // line with every one costed tagged (mean 126), across both themes — so 150
+    // sits above even the widest template measured, and 140 sits above the MEAN
+    // line and under the widest, which is what a density figure is: what a
+    // typical row costs, and not a ceiling. What the schema ALLOWS is far bigger: a
     // 32-char slug, a 24-char giver, a 32-char variant and a 48-char title make
-    // a 217-char template, and a 200-char line with a tag is 279. So what the
+    // a 217-char template, and a 200-char line carrying BOTH tags — the topic and
+    // the 0.14 sky term — is 294 serialized on the widest handle LOCATIONS names
+    // ("settlement", ten characters), measured and pinned. So what the
     // sum shows is that the floors CLEAR A TYPICAL TEMPLATES-FIRST CUT, and it
     // is not a worst-case guarantee. It cannot be one and keep these floors:
     // 24 × 217 leaves 896 chars of index, which is two rows, and a floor sized
@@ -14192,13 +15893,37 @@ PF.pack = (() => {
     // lane in the harness pins it, so it stays a known cost rather than
     // something the next reader rediscovers against a comment that denied it.
     //
-    // Eighteen lines and twenty-four templates against floors of twelve and
-    // three: a typical cut at this wall still seals, and a pack that came back
-    // with a quarter of an index still fails. `floorBasis` carries the inputs so
-    // the lane that re-runs the sum cannot drift from the table.
+    // Sixteen lines and twenty-four templates against floors of ten and three:
+    // a typical cut at this wall still seals, and a pack that came back with a
+    // quarter of an index still fails. `floorBasis` carries the inputs so the
+    // lane that re-runs the sum cannot drift from the table.
+    //
+    // ── WHY TEN AND NOT TWELVE (ruled, and irreversible in one direction) ─────
+    // The floor was twelve, and the live measurement is the reason it moved: a
+    // real floor-connection emission landed ON twelve, and 0.14 makes every line
+    // about eight percent costlier — four topic values instead of two, the sky
+    // term, a wider digest ahead of it. Held at twelve, that eight percent is the
+    // difference between a thin pack and a retry screen the player cannot get
+    // past, on the connections least able to try again.
+    //
+    // IT IS AN ACCEPTANCE BOUNDARY AND NOT A TUNING KNOB, which is why it is
+    // stated here rather than moved quietly. This number decides which
+    // generations become PERMANENT ARTIFACTS: lowering it seals packs that would
+    // have failed, and those packs are stored forever. Nothing already sealed
+    // moves; what moves is the next cohort.
+    //
+    // AND THE INVERSION IT ACCEPTS, said where it bites. A ten-line pack under
+    // the live distribution renders one topic branch at the talk window, maybe
+    // two. The enrichment that gives a legacy world all four cannot reach it —
+    // `fold()` is `sealed ?? defaults`, so a world with its own pack reads its own
+    // pack — so this floor is also the line under which a paid generation talks
+    // less than a world that never generated at all. The trade was taken with
+    // that stated: a thin pack written for THIS settlement beats a rich one
+    // written for nobody, and the way out is a wider generation rather than a
+    // blend.
     floorTemplates: 3,
-    floorLines: 12,
-    floorBasis: { truncTokens: 2_048, charsPerToken: 3, envelopeChars: 40, templateChars: 150, lineChars: 130 },
+    floorLines: 10,
+    floorBasis: { truncTokens: 2_048, charsPerToken: 3, envelopeChars: 40, templateChars: 150, lineChars: 140 },
     // ── The reward derivation (plan §2.6, RULED) ──────────────────────────────
     // MONEY IS DERIVED FROM (verb, n) AND THE PACK NEVER AUTHORS IT — the schema
     // excludes money and xp, the seal drops both, and `rewardFor` below is the
@@ -14305,14 +16030,15 @@ PF.pack = (() => {
    *
    *    the settlement's name row and the two section headers ............    201
    *    the situation, with its lead-in (18-brief caps the field at 240) .    270
+   *    the two climate rows, at their widest (temperate/moderate) ......    136
    *    the zone list: the root plus 4 places × (name 24 + kind + dashes) .    189
    *    the cast: 10 × (name 24 + role 24 + home 24 + persona 100 + 18) ..  1,900
-   *    the newlines joining the twenty-one rows ........................     20
+   *    the newlines joining the twenty-three rows ......................     22
    *                                                                       ------
-   *                                                                        2,580
+   *                                                                        2,718
    *
-   *  …which is the plan's ~2.5K, and it leaves better than 5,200 chars of the cap
-   *  for the player's own words. 2,580 is MEASURED and not estimated: the harness
+   *  …which is the plan's ~2.5K, and it leaves better than 5,000 chars of the cap
+   *  for the player's own words. 2,718 is MEASURED and not estimated: the harness
    *  searches for the biggest digest a legal brief can produce — every field at
    *  its cap, in tokens with no space near the cut so `capText` clips at the cap
    *  exactly rather than at a word boundary short of it — and pins the number, so
@@ -14341,14 +16067,52 @@ PF.pack = (() => {
    *  the list teaches the mapping from "The Amber Hearth Inn" to `gathering` in
    *  the same breath that it teaches the inn exists. Without it the model has to
    *  guess which of seven handles a name belongs under, and a guessed handle is a
-   *  line that never renders anywhere. */
-  function digest(brief) {
+   *  line that never renders anywhere.
+   *
+   *  ── THE CLIMATE, AND WHY IT IS A SECOND ARGUMENT ─────────────────────────
+   *  `axes` is `{latitude, precipitation}` and the two rows it renders exist so a
+   *  generation does not solicit snow lines for a jungle. It is an ARGUMENT and
+   *  not a field on the brief because this function receives only the brief, and
+   *  a world's climate is a derivation off (brief hint, seed, theme) that lives in
+   *  17-weather — computing a theme default here would be a second authority for
+   *  the sky, disagreeing with the first on every world whose brief named nothing.
+   *
+   *  ABSENT MEANS OMITTED, both rows, and that is a legal call: it is 0.13's own
+   *  shape, and a caller with no climate to state should say nothing rather than
+   *  make one up. The shipped compose site always resolves one.
+   *
+   *  THE SECOND ROW IS DERIVED AND NOT A TABLE. `wordsFor` walks the same weight
+   *  rows `at()` draws from, so the sentence describes the sky this world will
+   *  actually have — including the honest cases nobody would write down by hand,
+   *  like both two-season structures having no snow at any precipitation.
+   *
+   *  AND THE ROWS ARE A BELT, NOT A FOLD. Everything rendered here goes through
+   *  `capText` exactly as every other row does, because the object handed in is
+   *  the same untrusted channel the brief came off: a nine-thousand-character
+   *  latitude clips to 24 and cannot eat the cast list, and no value can inject a
+   *  second row. What guarantees the words are a REAL climate is the fold at the
+   *  compose site (`axesFor`), one screen up — the belt only guarantees that a
+   *  hostile one cannot damage the request. */
+  function digest(brief, axes) {
     const cast = Array.isArray(brief?.cast) ? brief.cast : [];
     const places = Array.isArray(brief?.places) ? brief.places : [];
     const name = capText(brief?.name, 24) || "the settlement";
     const out = [`The settlement is ${name}.`];
     const situation = capText(brief?.situation, 240);
     if (situation) out.push(`What is unresolved right now: ${situation}`);
+    // THE OPENING BLOCK IS WHERE THEY LAND. It takes plain pushes and has no
+    // separator convention to violate, and — the reason it is not a tail append —
+    // a row parked under the PEOPLE header reads as an eleventh cast member, which
+    // is the mistake this file's own section comment warns about.
+    const latitude = capText(axes?.latitude, 24);
+    const precipitation = capText(axes?.precipitation, 24);
+    if (latitude && precipitation) {
+      out.push(`Climate: ${latitude} latitude, ${precipitation}.`);
+      out.push(
+        `Weather runs to: ${PF.weather.wordsFor(latitude, precipitation).join(", ")}` +
+          ` — write no line for a sky this world never has.`,
+      );
+    }
     out.push("", "PLACES — the second word is the location handle a line is keyed by:", `- ${name} — settlement`);
     for (const place of places) {
       const placeName = capText(place?.name, 24);
@@ -14424,13 +16188,28 @@ PF.pack = (() => {
    *  The default pack already writes titles this way; this is the sentence that
    *  asks a generated one to.
    *
-   *  TOPIC TAGS ARE CONFINED TO rumor|work HERE, while the SCHEMA seals all four
-   *  (plan §2.2c). That gap is deliberate and it is the byte diet: `place` and
-   *  `smalltalk` are the tags an Ask tree opens with and the two E7 is not
-   *  load-bearing for, so paying four extra characters a line for them now buys
-   *  nothing this release can read. The schema is the thing that seals forever and
-   *  the guidance is the thing that can be rewritten next release, so the wider
-   *  vocabulary belongs in the schema and the diet belongs here. */
+   *  THE BYTE DIET IS OVER, AND THIS IS THE RELEASE THAT ENDED IT (plan §2.7).
+   *  0.13 confined the topic tags it asked for to rumor|work while the schema
+   *  sealed all four, on the argument that `place` and `smalltalk` bought nothing
+   *  a release could read yet — with the note that the schema seals forever and
+   *  the guidance can be rewritten next release. The window is here, it renders
+   *  all four branches, and every release the diet ran was a cohort of worlds
+   *  sealed thin on the two tags the tree opens with. So the guidance now asks for
+   *  the whole vocabulary, and the four characters a tag costs are the cheapest
+   *  thing in this request.
+   *
+   *  THE SKY TAG IS THE ONE THAT STAYS OPTIONAL AND SAYS SO OUT LOUD. `w` is asked
+   *  for as an exception rather than as a field: a town's dialogue is mostly what
+   *  it says whatever the weather, and a generation that tagged every line would
+   *  hand back a pack whose topic branches vanish on the first fair day. The
+   *  guidance asks for a handful; the coverage the window depends on is untagged.
+   *
+   *  AND THE REGISTER ASK IS INVERTED (plan §2.7, ruling 4). 0.13 asked for MORE
+   *  FRIEND LINES because that register was where the settlement stopped sounding
+   *  like a signpost. 0.14 serves the stranger register and only that one, so a
+   *  pack written to the old ask spends its best writing on rows nothing reads.
+   *  Friend lines still seal — they are P2's inheritance — they are just not what
+   *  this call asks the model to spend its budget on. */
   function guidance(theme) {
     return [
       "You are writing an OFFLINE CONTENT PACK for a settlement that already exists: what its people say,",
@@ -14456,14 +16235,16 @@ PF.pack = (() => {
       "      any place of the kind named finishes a visit, so a title promising a particular one can mislead.",
       "    NEVER write money, pay, a price, a reward or experience. The game decides what work is worth.",
       "- lines: what somebody standing in a place says, keyed so the right line reaches the right moment.",
-      "    Each is {at, when, r, text} plus an optional topic.",
+      "    Each is {at, when, r, text} plus an optional topic and w.",
       `    at: one of ${LOCATIONS.join(" | ")} — the handle beside each place below.`,
       `    when: one of ${DAYPARTS.join(" | ")}.`,
       `    r: ${REGISTERS[0]} (they barely know you) or ${REGISTERS[1]} (they do).`,
-      "    topic (optional): rumor or work. Leave it off for anything else.",
+      `    topic (optional): one of ${TOPICS.join(" | ")} — tag every line that fits one; rumor and work matter most.`,
+      `    w (optional): one of ${WEATHERS_ASKED.join(" | ")} — ONLY for a line that needs that sky;`,
+      "      most lines should work any day, so leave it off unless the weather is what the line is about.",
       "    text: ONE spoken line, <=200 characters. No name tags, no quotation marks, no stage directions.",
-      "    Cover the places and hours somebody would actually be there; write more friend lines than you",
-      "    think you need, because that register is where the settlement stops sounding like a signpost.",
+      `    Cover the places and hours somebody would actually be there, and write mostly ${REGISTERS[0]} lines:`,
+      `    that is the register this game reads, and every ${REGISTERS[1]} line is written for a later one.`,
       "- escalation: ONE line per person, {npc, text}: the thing they say when the player asks properly",
       "    about the unresolved situation above — the door, not what is behind it. Keep it withholding.",
       "- overheard: {at, text} — half of somebody else's conversation, heard in passing. Nobody answers it.",
@@ -14517,6 +16298,13 @@ PF.pack = (() => {
               r: { type: "string", enum: REGISTERS },
               text: text(CAPS.text),
               topic: { type: "string", enum: TOPICS },
+              // THE SKY TERM, SEALED FROM 0.14 ON. Legal for NEW packs only — a
+              // 0.13 pack carries none and reads as any-weather, which is the
+              // read door's own semantics and why nothing had to migrate. Beside
+              // `topic` because property order is the emission order the guidance
+              // asks for out loud, and these are the two optional tags a line
+              // carries. `required` is untouched: both stay optional forever.
+              w: { type: "string", enum: WEATHERS },
             },
             required: ["at", "when", "r", "text"],
           },
@@ -14551,6 +16339,7 @@ PF.pack = (() => {
     DAYPARTS,
     REGISTERS,
     WEATHERS,
+    WEATHERS_ASKED,
     TOPICS,
     VERBS,
     MECHANICS,
@@ -14927,6 +16716,16 @@ PF.pack = (() => {
           ? stored
           : null;
       const demoted = !!stored && !sealed;
+      // `sealed ?? defaults` IS AN INVERSION AND IT IS ACCEPTED, said here because
+      // this line is where it happens. The default packs carry the 0.14 coverage
+      // floor — two stranger lines per (handle × topic), so all four talk-window
+      // branches render — and a world that SUCCEEDED at generation reads none of
+      // it: a thin sealed pack that only cleared the line floor renders one or two
+      // branches, and no enrichment written here can reach it. So a legacy world
+      // and a declined generation are the RICHER conversation this release, and
+      // the world that paid for a pack is the poorer one. The fix is a wider
+      // generation, not a merge — a fallback blended into sealed content would
+      // put the stock cast's sentences in a stranger town's mouths.
       const pack = sealed ?? this.defaults(theme);
       const known = new Set();
       for (const zoneId of Object.keys(world?.zones ?? {})) {
@@ -15487,8 +17286,14 @@ PF.pack = (() => {
      *  `.then`, after the host has taken the turn.
      *
      *  THE ONE NON-GM-FREE QUEST VERB, stated rather than discovered (Ruling 1 is
-     *  "lean", not "zero"): the handover costs exactly one GM call, which is the
-     *  greeting the player was sending anyway.
+     *  "lean", not "zero"): the handover costs exactly one GM call — and 0.14 says
+     *  WHICH call rather than leaving it implicit in the greeting. The talk window
+     *  draws one LABELLED branch per outstanding errand ("Hand over: <title>"), and
+     *  that press settles that row; the free-talk door still settles every row to
+     *  the name, exactly as 0.13's bare greeting did. So the honest claim is narrow
+     *  and worth making narrowly: no press that is not handover-shaped can settle
+     *  an errand, and every settling press says on its face what it settles. A bare
+     *  `interact()` — which now only OPENS the window — settles nothing at all.
      *
      *  BOTH FENCES ARE THE CALLER'S and both are needed. `gen` is the generation
      *  the turn was composed under — a chat switch under the await would otherwise
@@ -15502,7 +17307,7 @@ PF.pack = (() => {
      *  `name` is captured AT SEND for the same reason: the person the player
      *  walked up to is the person the errand was run to, whoever is standing
      *  there by the time the host answers. */
-    delivered(core, name, gen) {
+    delivered(core, name, gen, rowId) {
       const sim = core?.sim;
       const world = sim?.world;
       if (!world) return [];
@@ -15511,19 +17316,308 @@ PF.pack = (() => {
       if (!to) return [];
       const player = PF.player.get(core);
       const rows = Array.isArray(player?.quests?.active) ? player.quests.active : [];
-      const due = rows.filter((row) => str(row.verb) === "deliver" && str(row.target) === to);
+      // THE OPTIONAL ROW ID, and it is an ID rather than the row OBJECT for
+      // `turnIn`'s stated reason one screen up: the window drew its "Hand over"
+      // branch when it opened and settles it after an await, so it is strictly
+      // staler than the board menu that comment already guards — and `settle`
+      // reads the reward off the object it is handed, so a stale one pays a stale
+      // reward against a live row. Named, the branch RE-FINDS the row here, at
+      // settle time, in the live list; a miss filters to nothing and settles
+      // nothing, which is the refusal. Unnamed, every row to the name settles —
+      // 0.13's implicit handover, preserved verbatim for the "Just talk" door.
+      const wanted = str(rowId);
+      const due = rows.filter(
+        (row) => str(row.verb) === "deliver" && str(row.target) === to && (!wanted || str(row.id) === wanted),
+      );
       const filled = [];
       for (const row of due) {
         // THE GIVER == TARGET CASE IS RECORDED HARMLESS, not defended against: a
         // template whose giver is also its target bumps the same person twice in
         // one turn (once for the conversation in 90-element, once for the errand
         // here), which reads as two encounters on a turn that was two things.
+        //
+        // 0.14 WIDENS THE COUNT AND NOT THE ARGUMENT. The talk window's paid set
+        // is four presses deep — free talk, say something, press them about it,
+        // and one per errand — so one conversation can now bump the same person
+        // up to four times, once per ACCEPTED turn. That is still what the count
+        // says it is: `t` counts encounters, four accepted turns are four of
+        // them, and the only reader is P2's disposition ladder, which does not
+        // exist yet. Restated rather than left saying "twice", because a number
+        // in a comment that has stopped being the number is how the next reader
+        // concludes a fifth bump is a bug.
         const done = this.settle(core, row, gen, (giver, paid) =>
           giver && giver !== to ? `Took ${giver}'s word to ${to} — ${paid}.` : `Took word to ${to} — ${paid}.`,
         );
         if (done) filled.push(done);
       }
       return filled;
+    },
+
+    // ── The Ask ladder: what a person says when you ask (plan §2.6) ──────────
+    // The talk window's free half reads lines out of the folded pack. Four
+    // branches — rumor, work, place, and "Pass the time" — and NONE of them costs
+    // a GM call: this is a lookup over an artifact that is already in memory.
+    //
+    // THE UNIVERSE IS STRANGER-ONLY (ruling 4). The friend register is written,
+    // sealed and stored, and 0.14 serves none of it: friendship is P2's, and a
+    // stopgap that guessed at it would be a promotion the player never earned.
+    // On the live measured pack that is 7 of 12 lines — the FRIEND half, which
+    // is the unserved one: 5 stranger lines are served and 7 friend lines are
+    // not. That is the honest cost of the ruling and the reason the ladder
+    // below relaxes as hard as it does.
+    //
+    // THE WEATHER TERM: a line with no `w` is served under any sky, and a line
+    // tagged `rain` is served under any RAIN — the axis is the five words and an
+    // intensity never enters it (§2.2's consumer rule, spent here).
+    /** The at-key for a zone: its stamped place handle, or the legacy reading —
+     *  an interior is a dwelling, everything else is the settlement. Stamped
+     *  handles win; legacy zones carry both stamps. */
+    askAt(zone) {
+      const stamped = str(zone?.place);
+      if (stamped) return stamped;
+      return zone?.mapKind === "building" ? "dwelling" : "settlement";
+    },
+
+    /** Every stranger line this sky can serve, as {line, index} — the index is
+     *  the line's identity for the served set, stable for a session because the
+     *  fold is rebuilt exactly when the world is. */
+    askUniverse(folded, word) {
+      const out = [];
+      const lines = Array.isArray(folded?.pack?.lines) ? folded.pack.lines : [];
+      lines.forEach((line, index) => {
+        if (line?.r !== "stranger") return;
+        if (line.w && line.w !== word) return;
+        out.push({ line, index });
+      });
+      return out;
+    },
+
+    /** The ladder for one branch, as an ordered list of rungs. Each rung is a
+     *  membership predicate plus the SIGNATURE its seeded order hashes over —
+     *  `at` rides the signature only for at-pinned rungs and `part` only for
+     *  when-pinned ones, so two rungs that select the same set key the same
+     *  order.
+     *
+     *  TOPIC BRANCHES RELAX `at` AND NEVER TOPIC: R3/R4 widen from this place to
+     *  anywhere, because a rumor branch that answered with a work line would be
+     *  a button that lied about what it asks. "Pass the time" is the branch that
+     *  has somewhere to fall — smalltalk first, then the untagged pool, which is
+     *  where most of a hand-written pack lives. */
+    askRungs(branch, at, part) {
+      const has = (topic) => (row) => row.line.topic === topic;
+      const untagged = (row) => row.line.topic === undefined;
+      const here = (row) => row.line.at === at;
+      const now = (row) => row.line.when === part;
+      const rung = (test, pins) => ({ test, pins });
+      if (branch === "smalltalk") {
+        return [
+          rung((r) => here(r) && now(r) && has("smalltalk")(r), "s1|at|part"),
+          rung((r) => here(r) && has("smalltalk")(r), "s2|at"),
+          rung((r) => here(r) && now(r) && untagged(r), "s3|at|part"),
+          rung((r) => here(r) && untagged(r), "s4|at"),
+          rung((r) => has("smalltalk")(r), "s5"),
+          rung(untagged, "s6"),
+        ];
+      }
+      return [
+        rung((r) => here(r) && now(r) && has(branch)(r), "r1|at|part"),
+        rung((r) => here(r) && has(branch)(r), "r2|at"),
+        rung((r) => now(r) && has(branch)(r), "r3|part"),
+        rung(has(branch), "r4"),
+      ];
+    },
+
+    /** CIRCULAR DAYPART ADJACENCY, measured over the START MINUTES of the four
+     *  dayparts and not over their order in the table. The two readings disagree:
+     *  by start minute, night→dusk is 180 minutes and night→dawn is 480, so dusk
+     *  is genuinely nearer the hour; by ordinal position the two are a tie. A
+     *  when-relaxed rung ranks rather than pretends — a dawn line at midday is
+     *  served only when nothing nearer the hour exists. */
+    askDistance(when, part) {
+      const starts = PF.DAYPART_STARTS;
+      const a = PF.own(starts, when) ? starts[when] : null;
+      const b = PF.own(starts, part) ? starts[part] : null;
+      if (a === null || b === null) return 24 * 60;
+      const raw = Math.abs(a - b);
+      return Math.min(raw, 24 * 60 - raw);
+    },
+
+    /** Does this branch have anything at all to say here, right now? The window
+     *  asks before it renders, because a topic branch with no servable line DOES
+     *  NOT RENDER — honest suppression, and the reason a thin generated pack shows
+     *  one or two topic buttons rather than four dead ones. Peeks: it walks the
+     *  same rungs the serve does and consumes nothing. */
+    askHas(core, npc, branch) {
+      return !!this.askPeek(core, npc, branch);
+    },
+
+    /** The shared walk. `consume` false answers "is there a rung with anything in
+     *  it"; `consume` true also picks, records the pick in the branch's served set
+     *  and hands back the line.
+     *
+     *  AN EXHAUSTED RUNG FALLS THROUGH TO THE NEXT ONE rather than starting over
+     *  inside itself, and that one sentence is the whole reason this walk has two
+     *  passes: the default pack's coverage floor counts TWO lines per (at, topic)
+     *  while R1 pins (at, WHEN, topic), so R1 holds exactly one line wherever it
+     *  holds any — and a wrap that restarted inside R1 would answer every press
+     *  after the first with the same sentence, forever, in half the cells the
+     *  enrichment was written for (48 of the 96 (theme, at, daypart, branch) cells
+     *  whose reachable pool has two or more lines, measured on the shipped
+     *  defaults). Falling through costs nothing and stays inside the branch: R2-R4
+     *  are supersets of R1 with the same topic, and the smalltalk rungs are the
+     *  fall the branch is named for.
+     *
+     *  THE SECOND PASS IS THE WRAP, and it only runs when the WHOLE ladder is
+     *  exhausted — every line this branch can reach under this sky has been served
+     *  today. Then the set clears and the walk restarts from the top rung, because
+     *  after exhaustion repeats are the honest state and a branch that went silent
+     *  would be a button that stopped working halfway through an evening. */
+    askPeek(core, npc, branch, consume) {
+      const sim = core?.sim;
+      if (!sim || !npc) return null;
+      const folded = PF.save?.packFold?.(core);
+      if (!folded) return null;
+      const word = sim.weather().word;
+      const universe = this.askUniverse(folded, word);
+      if (!universe.length) return null;
+      const at = this.askAt(sim.zone());
+      const part = sim.daypart();
+      // THE MEMO'S PURGE, and the day is what rotates it. `_askDay` is the purge
+      // field alone — the day also rides every signature, so a new day both keys
+      // fresh orders and starts fresh served sets.
+      if (folded._askDay !== sim.day) {
+        folded._askDay = sim.day;
+        folded._askServed = new Map();
+      }
+      folded._askServed ??= new Map();
+      const rungs = this.askRungs(branch, at, part);
+      if (!consume) {
+        for (const { test } of rungs) {
+          const members = universe.filter(test);
+          if (members.length) return members[0].line.text;
+        }
+        return null;
+      }
+      // THE SERVED SET IS PER (day, BRANCH) and never per rung. The ladder walks
+      // the rungs in order, so a when-pinned rung going empty across a daypart
+      // boundary drops service onto a when-relaxed rung whose pool CONTAINS the
+      // line just served — and a per-rung cursor would serve it straight back.
+      // One set per branch, read by every rung of that branch, closes the
+      // fall-through by construction.
+      const served = folded._askServed.get(branch) ?? new Set();
+      // Pass 0 honours the set; pass 1 is the wrap, and it is reached only when
+      // no rung of the ladder had an unserved member left.
+      for (let pass = 0; pass < 2; pass++) {
+        for (const { test, pins } of rungs) {
+          const members = universe.filter(test);
+          if (!members.length) continue;
+          const pool = members.filter((row) => !served.has(row.index));
+          // The fall-through: this rung has nothing new, so the next rung — the
+          // same branch, one relaxation wider — gets asked instead.
+          if (!pool.length) continue;
+          // The rung's canonical order: a seeded Fisher-Yates over its members in
+          // index order, keyed by the MEMBERSHIP SIGNATURE rather than by anything
+          // positional — deterministic across processes and across a rewind.
+          const signature =
+            `${sim.world.seed >>> 0}|ask|${branch}|${pins}|${sim.day}|${word}` +
+            `${pins.includes("|at") ? `|${at}` : ""}${pins.includes("|part") ? `|${part}` : ""}`;
+          const order = members.slice();
+          const rnd = PF.rng(PF.hashStr(signature));
+          for (let i = order.length - 1; i > 0; i--) {
+            const j = (rnd() * (i + 1)) | 0;
+            [order[i], order[j]] = [order[j], order[i]];
+          }
+          const rank = new Map(order.map((row, position) => [row.index, position]));
+          // The pick: nearest the hour first (D-M9's ranking), a w-tagged line
+          // ahead of an untagged one at equal distance, then the seeded order.
+          let best = null;
+          for (const row of pool) {
+            const key = [this.askDistance(row.line.when, part), row.line.w ? 0 : 1, rank.get(row.index) ?? 0];
+            if (
+              !best ||
+              key[0] < best.key[0] ||
+              (key[0] === best.key[0] && (key[1] < best.key[1] || (key[1] === best.key[1] && key[2] < best.key[2])))
+            )
+              best = { row, key };
+          }
+          served.add(best.row.index);
+          folded._askServed.set(branch, served);
+          return best.row.line.text;
+        }
+        // Every rung walked with nothing unserved in any of them: the branch has
+        // said everything it can say today, so the set clears and pass 1 serves
+        // from the top rung again.
+        served.clear();
+      }
+      return null;
+    },
+
+    /** Serve one line for a branch, or null when nothing in the pack answers it.
+     *  Zero GM calls, no ledger line, no trace in anybody's context. */
+    ask(core, npc, branch) {
+      return this.askPeek(core, npc, branch, true);
+    },
+
+    /** THE COMPILED RECORD, ANSWERED MECHANICALLY (plan §2.5 item 2). Two of the
+     *  window's branches read the WORLD rather than the pack, and what they hand
+     *  back is PACKAGE TEXT built out of compiled facts — never invented prose and
+     *  never the persona, which is the GM's to voice. Either half is null when the
+     *  record does not carry it, and the window suppresses the branch: a legacy
+     *  world has a role and no schedule, so it answers "what do you do" and stays
+     *  honestly quiet about where anybody lives.
+     *
+     *  Returns { work, home }. */
+    askRecord(core, npc) {
+      const out = { work: null, home: null };
+      const sim = core?.sim;
+      if (!sim?.world || !npc) return out;
+      const sched = npc._sched && typeof npc._sched === "object" ? npc._sched : null;
+      const role = str(npc.role);
+      if (role) {
+        const standing = str(sched?.standing) || "resident";
+        out.work =
+          standing === "transient"
+            ? `I'm a ${role}. Passing through, mostly.`
+            : standing === "fringe"
+              ? `I'm a ${role}, when anyone asks. I keep to the edge of the place.`
+              : standing === "destitute"
+                ? `I'm a ${role}. Such work as there is.`
+                : `I'm the ${role} here.`;
+      }
+      const homeId = str(sched?.home?.zoneId);
+      const zone = homeId && PF.own(sim.world.zones, homeId) ? sim.world.zones[homeId] : null;
+      if (zone?.name) out.home = `${zone.name}. That's where you'll find me when the light goes.`;
+      return out;
+    },
+
+    /** The escalation door: the sealed line this person has, if the pack wrote
+     *  one for them. Cast-only by the seal's own fence, so a legacy or default
+     *  world answers for its four stock residents and nobody else. */
+    askEscalation(core, npc) {
+      const folded = PF.save?.packFold?.(core);
+      const name = str(npc?.name);
+      if (!folded || !name) return null;
+      const rows = Array.isArray(folded.pack?.escalation) ? folded.pack.escalation : [];
+      const row = rows.find((entry) => str(entry?.npc) === name);
+      return row ? str(row.text) : null;
+    },
+
+    /** Has this person's paid follow-up already been spent this session? A
+     *  RATCHET rather than a cooldown: once pressed it does not come back until
+     *  the fold is rebuilt (a reload, a rewind, a chat switch), which is the
+     *  `_filled` class of recorded cost. */
+    askBurned(core, npc) {
+      const folded = PF.save?.packFold?.(core);
+      const name = str(npc?.name);
+      return !!(folded?._askBurns && name && folded._askBurns.has(name));
+    },
+
+    askBurn(core, npc) {
+      const folded = PF.save?.packFold?.(core);
+      const name = str(npc?.name);
+      if (!folded || !name) return;
+      folded._askBurns ??= new Set();
+      folded._askBurns.add(name);
     },
 
     // ── generate(): the second generation call ───────────────────────────────
@@ -15569,7 +17663,16 @@ PF.pack = (() => {
         const base = {
           instructions: guidance(theme),
           // THE DIGEST FIRST, the player's own words after (plan §2.2b).
-          userContent: composeUserContent(digest(brief), preferences),
+          //
+          // THE CLIMATE COMES OFF THE SEALED BRIEF AND NEVER OFF THE STANDING
+          // WORLD, and that is the whole of the digest door (plan §2.1). On the
+          // creation path both calls happen before the real world compiles — the
+          // world standing here is boot's placeholder — so reading `world.latitude`
+          // would describe a climate this settlement is not going to have, on
+          // exactly the worlds that pay for a pack. `axesFor` is pure and it is
+          // the same derivation the compile will run: same brief, same seed, same
+          // theme, same answer, whichever of them happens first.
+          userContent: composeUserContent(digest(brief, PF.weather.axesFor(brief, seed, theme)), preferences),
           schema: schema(),
         };
         // ONE DOOR. Everything the route hands back that is an object at all goes
@@ -15685,10 +17788,28 @@ PF.pack = (() => {
 // exactly what `quests_done_board` claims about itself.
 const DEFAULT_PACKS = (() => {
   // Compact writers: the sealed shape is the object below, and the tuple form is
-  // what keeps sixty-odd lines of dialogue readable in a source file. `w` is
-  // omitted deliberately — absent reads as fair, and the axis costs nothing until
-  // L2 fills it.
-  const line = (at, when, r, text, topic) => (topic ? { at, when, r, text, topic } : { at, when, r, text });
+  // what keeps a hundred-odd lines of dialogue readable in a source file.
+  //
+  // `w` IS NOW A PARAMETER AND STILL OMITTED FROM ALMOST EVERY LINE. An absent
+  // `w` reads as ANY weather, so the bulk of this artifact is the lines a town
+  // always has to say, whatever the sky is doing — and the coverage floor below
+  // is asserted over THOSE, because a topic whose only lines were weather-tagged
+  // would be a branch that vanished on a fair day. The handful that do carry one
+  // are extras: a wet square, a wet river, a first fall.
+  const line = (at, when, r, text, topic, w) => {
+    const row = { at, when, r, text };
+    if (topic) row.topic = topic;
+    if (w) row.w = w;
+    return row;
+  };
+  // THE WEATHER-TAGGED EXTRAS GET THEIR OWN WRITER, and the reason is a lane
+  // rather than readability. `w` is a 0.14 word: a synthetic 0.13 stack — which
+  // the byte-stability case builds by narrowing this file's enum to one word —
+  // cannot boot on a built-in artifact tagged with a sky it does not have, and a
+  // real 0.13 client never sees these defaults at all (they are compiled in, not
+  // stored). One writer means that case narrows the pack the way it narrows the
+  // enum, in one replace, instead of grepping a literal.
+  const sky = (at, when, text, topic, w) => line(at, when, "stranger", text, topic, w);
   const cast = (name, text) => ({ npc: name, text });
   const heard = (at, text, topic) => (topic ? { at, text, topic } : { at, text });
 
@@ -15765,6 +17886,112 @@ const DEFAULT_PACKS = (() => {
         line("sanctuary", "day", "friend", "I come here to think and end up not thinking. It works."),
         line("dwelling", "day", "stranger", "This is somebody's house, you know."),
         line("dwelling", "day", "friend", "Door's open. Wipe your feet."),
+        // ── THE 0.14 ENRICHMENT (plan §2.7) ──────────────────────────────────
+        // Every line below is STRANGER, and that is the whole design of it. The
+        // talk window serves the stranger register and only that one this
+        // release, so a pack whose topics live in friend lines has topic buttons
+        // that never render — and the default pack is the artifact a legacy world
+        // and a declined generation both read. The floor is TWO per (handle ×
+        // topic) rather than one: a rung of size one leaves the ladder's first
+        // rung holding a single line, which is why `askPeek` falls through to the
+        // next rung rather than restarting inside an exhausted one. Asserted at
+        // boot, below.
+        //
+        // WHAT IT COST, MEASURED: 24 lines a theme, 32 rows to 56, and the
+        // serialized artifact grows +3,230 chars for the village and +3,286 for
+        // the colony — against `CAPS.lines` of 320, nowhere near anything. It is
+        // COMPILED IN rather than stored, so not one byte of it reaches a save.
+        //
+        // AND IT IS AN INVERSION, said here as well as at the read door: a world
+        // that succeeded at generation gets its own sealed pack and reads none of
+        // this (`fold`'s `sealed ?? defaults`), so the towns with no generation
+        // behind them are the ones that talk best this release.
+        //
+        // THE INTERIOR HANDLES GET NO FLOOR — workshop, hall, sanctuary and
+        // dwelling. The ladder's third and fourth rungs relax the PLACE rather
+        // than the topic, so a smith with nothing workshop-shaped to say answers
+        // with something the town says, which is honest, where answering with
+        // another topic's line would not be.
+        line("settlement", "day", "stranger", "There's talk the miller's shorting people. Talk, mind.", "rumor"),
+        line("settlement", "dusk", "stranger", "You'll hear about the field before you've been here a week.", "rumor"),
+        line(
+          "settlement",
+          "dusk",
+          "stranger",
+          "Anything wants doing, it wants doing before dark. Ask at the board.",
+          "work",
+        ),
+        line("settlement", "day", "stranger", "Well's in the middle, board's by the well. That's most of it.", "place"),
+        line("settlement", "dawn", "stranger", "Cold one. It'll turn by noon. It usually turns by noon.", "smalltalk"),
+        line(
+          "settlement",
+          "night",
+          "stranger",
+          "Quiet, isn't it. I like it better this way, if I'm honest.",
+          "smalltalk",
+        ),
+        line(
+          "gathering",
+          "dusk",
+          "stranger",
+          "Half of what gets said in here is worth hearing. The other half's worth more.",
+          "rumor",
+        ),
+        line(
+          "gathering",
+          "night",
+          "stranger",
+          "Somebody was asking after you. Or after somebody. I wasn't listening.",
+          "rumor",
+        ),
+        line("gathering", "day", "stranger", "If you want paying work, the board outside is the honest list.", "work"),
+        line(
+          "gathering",
+          "dawn",
+          "stranger",
+          "Kitchen always wants hands. Say I sent you; it'll count for nothing.",
+          "work",
+        ),
+        line(
+          "gathering",
+          "night",
+          "stranger",
+          "Fire's the warmest corner. Everything else in here is a draught.",
+          "place",
+        ),
+        line("gathering", "dusk", "stranger", "Long day for everybody, by the look of it.", "smalltalk"),
+        line("gathering", "dawn", "stranger", "Too early to be sensible. Sit down anyway.", "smalltalk"),
+        line(
+          "wilds",
+          "day",
+          "stranger",
+          "People say things about out here. Mostly people who don't come out here.",
+          "rumor",
+        ),
+        line(
+          "wilds",
+          "night",
+          "stranger",
+          "There's a story about the far marker. I'd rather tell it indoors.",
+          "rumor",
+        ),
+        line("wilds", "dawn", "stranger", "Good water down that way, if you've a line and the patience.", "work"),
+        line("wilds", "day", "stranger", "Anything you gather out here, somebody in town will take off you.", "work"),
+        line(
+          "wilds",
+          "dusk",
+          "stranger",
+          "Path forks past the old stone. Left goes home, right goes further.",
+          "place",
+        ),
+        line("wilds", "day", "stranger", "It's bigger than it looks from the gate. Everything out here is.", "place"),
+        line("wilds", "dawn", "stranger", "Nobody out but us and the birds, then.", "smalltalk"),
+        line("wilds", "night", "stranger", "Walking it after dark, are you. Well. So am I.", "smalltalk"),
+        // The weather axis, spent on three lines rather than sprinkled: they are
+        // EXTRAS over the floor, so a fair day loses nothing by not serving them.
+        sky("settlement", "day", "Rain like this and the square turns to soup. Mind the low end.", "place", "rain"),
+        sky("wilds", "day", "Wet day's a good day for the water, if you don't mind being wet.", "work", "rain"),
+        sky("settlement", "day", "First snow always catches somebody out. Usually me.", "smalltalk", "snow"),
       ],
       escalation: [
         cast("Mira", "You heard about the field, then? Ask me again when the room's empty."),
@@ -15829,6 +18056,106 @@ const DEFAULT_PACKS = (() => {
         line("sanctuary", "day", "friend", "I come here to think and end up not thinking. It works."),
         line("dwelling", "day", "stranger", "These are somebody's quarters, you know."),
         line("dwelling", "day", "friend", "Hatch is open. Knock the dust off first."),
+        // ── THE 0.14 ENRICHMENT (plan §2.7) ──────────────────────────────────
+        // The cozy pack's twin, line for line and floor for floor. See the note
+        // over there: stranger register only, two per (handle × topic) across
+        // settlement / gathering / wilds, no floor on the interior handles.
+        line(
+          "settlement",
+          "day",
+          "stranger",
+          "There's talk the recyclers are being run past spec. Talk, mind.",
+          "rumor",
+        ),
+        line("settlement", "dusk", "stranger", "You'll hear about the seals before you've been here a week.", "rumor"),
+        line(
+          "settlement",
+          "dusk",
+          "stranger",
+          "Anything wants doing, it wants doing before amber. Check the terminal.",
+          "work",
+        ),
+        line(
+          "settlement",
+          "day",
+          "stranger",
+          "Recycler's in the middle, terminal's beside it. That's most of it.",
+          "place",
+        ),
+        line(
+          "settlement",
+          "dawn",
+          "stranger",
+          "Cold start. It evens out by mid-cycle. It usually evens out.",
+          "smalltalk",
+        ),
+        line(
+          "settlement",
+          "night",
+          "stranger",
+          "Quiet, isn't it. I like it better this way, if I'm honest.",
+          "smalltalk",
+        ),
+        line(
+          "gathering",
+          "dusk",
+          "stranger",
+          "Half of what gets said in here is worth hearing. The other half's worth more.",
+          "rumor",
+        ),
+        line(
+          "gathering",
+          "night",
+          "stranger",
+          "Somebody was asking after you. Or after somebody. I wasn't listening.",
+          "rumor",
+        ),
+        line("gathering", "day", "stranger", "If you want paid work, the terminal outside is the honest list.", "work"),
+        line(
+          "gathering",
+          "dawn",
+          "stranger",
+          "Galley always wants hands. Say I sent you; it'll count for nothing.",
+          "work",
+        ),
+        line("gathering", "night", "stranger", "Heater's the warmest corner. The rest of it is vent draught.", "place"),
+        line("gathering", "dusk", "stranger", "Long shift for everybody, by the look of it.", "smalltalk"),
+        line("gathering", "dawn", "stranger", "Too early in the cycle to be sensible. Sit down anyway.", "smalltalk"),
+        line(
+          "wilds",
+          "day",
+          "stranger",
+          "People say things about out here. Mostly people who don't come out here.",
+          "rumor",
+        ),
+        line("wilds", "night", "stranger", "There's a story about the far beacon. I'd rather tell it inside.", "rumor"),
+        line("wilds", "dawn", "stranger", "Good pools down that way, if you've a line and the patience.", "work"),
+        line(
+          "wilds",
+          "day",
+          "stranger",
+          "Anything you bring back off the flats, somebody in the base will take.",
+          "work",
+        ),
+        line("wilds", "dusk", "stranger", "Line forks past mast nine. Left goes back, right goes further.", "place"),
+        line("wilds", "day", "stranger", "It's bigger than it looks from the lock. Everything out here is.", "place"),
+        line("wilds", "dawn", "stranger", "Nobody out but us and the dust, then.", "smalltalk"),
+        line(
+          "wilds",
+          "night",
+          "stranger",
+          "Walking the flats on the night cycle, are you. Well. So am I.",
+          "smalltalk",
+        ),
+        sky(
+          "settlement",
+          "day",
+          "Rain on the deck plates and the yard turns slick. Mind the low end.",
+          "place",
+          "rain",
+        ),
+        sky("wilds", "day", "Wet cycle's a good cycle for the pools, if you don't mind being wet.", "work", "rain"),
+        sky("settlement", "day", "First fall always catches somebody out. Usually me.", "smalltalk", "snow"),
       ],
       escalation: [
         cast("Mira", "You heard about the readings, then? Ask me again when the galley's empty."),
@@ -15862,6 +18189,20 @@ const DEFAULT_PACKS = (() => {
   // recovered by asking whether the word is a catch role. A variant slug that was
   // also a role name would make that question unanswerable — every catch of that
   // role would pay a quest for one specific fish, silently and forever.
+  // THE GUIDANCE'S SKY LIST IS THE AXIS LESS EXACTLY ONE WORD, paired here for
+  // the reason every other table in this package is paired at load: the list the
+  // model is TAUGHT and the list the schema SEALS are allowed to differ by the
+  // one word an untagged line already covers, and by nothing else. A rename or a
+  // second exclusion is a throw at the desk rather than a vocabulary that quietly
+  // stopped asking for snow.
+  if (PF.pack.WEATHERS.length - PF.pack.WEATHERS_ASKED.length !== 1)
+    throw new Error(
+      `pixelforge: the guidance asks for ${PF.pack.WEATHERS_ASKED.length} of ${PF.pack.WEATHERS.length} sky words; exactly one is covered by an absent tag`,
+    );
+  for (const word of PF.pack.WEATHERS_ASKED)
+    if (!PF.pack.WEATHERS.includes(word))
+      throw new Error(`pixelforge: the guidance asks for a "${word}" sky, which the schema does not seal`);
+
   const roles = new Set(PF.economy.CATCH_ROLES);
   for (const [theme, byTag] of Object.entries(PF.economy.CATCH_TABLES)) {
     for (const table of Object.values(byTag)) {
@@ -15889,6 +18230,11 @@ const DEFAULT_PACKS = (() => {
     const stock = new Set(PF.brief.defaults(theme, 1).cast.map((member) => member.name));
     if (pack.templates.length < PF.pack.TUNING.floorTemplates)
       throw new Error(`pixelforge: the default pack for "${theme}" is under its own template floor`);
+    // THE DEFAULT PACK IS HELD TO THE SAME FLOOR A GENERATED ONE IS, and it
+    // clears it with room that is worth naming rather than leaving to be
+    // discovered: the enriched literal carries 56 lines against a floor of 10, so
+    // the floor moving between 10 and 12 does not touch this assert either way.
+    // What it protects against is somebody thinning the literal.
     if (pack.lines.length < PF.pack.TUNING.floorLines)
       throw new Error(`pixelforge: the default pack for "${theme}" is under its own line floor`);
     for (const template of pack.templates) {
@@ -15930,6 +18276,25 @@ const DEFAULT_PACKS = (() => {
       if (row.topic !== undefined && !PF.pack.TOPICS.includes(row.topic))
         throw new Error(`pixelforge: a default ${theme} line is tagged "${row.topic}"`);
       if (!row.text) throw new Error(`pixelforge: a default ${theme} line has no text`);
+    }
+    // ── THE COVERAGE FLOOR (plan §2.7, owned by slice 4) ────────────────────
+    // The talk window renders a topic branch only when it has a line to serve,
+    // so this is the assertion that makes "a legacy world gets all four branches
+    // on day one" a fact rather than a hope. Three handles because those are the
+    // three a legacy layout actually stands up; TWO because a rung of one makes
+    // the cycle meaningless; and ANY-WEATHER because a topic whose only lines
+    // were sky-tagged would be a branch that disappeared on a fair day, which is
+    // most days in most worlds.
+    for (const at of ["settlement", "gathering", "wilds"]) {
+      for (const topic of PF.pack.TOPICS) {
+        const servable = pack.lines.filter(
+          (row) => row.r === "stranger" && row.at === at && row.topic === topic && row.w === undefined,
+        ).length;
+        if (servable < 2)
+          throw new Error(
+            `pixelforge: the default pack for "${theme}" has ${servable} any-weather stranger line(s) for ${at}/${topic}; the talk window needs two`,
+          );
+      }
     }
     for (const row of pack.escalation) {
       if (!stock.has(row.npc))
@@ -15981,6 +18346,53 @@ PF.Hud = class {
         "pointer-events:auto;background:rgba(20,24,20,0.88);color:#f3efe2;border:1px solid rgba(243,239,226,0.35);" +
         "border-radius:8px;padding:9px 13px;font:700 12px/1 ui-monospace,Consolas,monospace;cursor:pointer;min-height:40px;",
     };
+    // ── THE RAIL CORRIDOR (plan §2.5, geometry constraint (a)) ───────────────
+    // The action column is anchored 12px from the right and its buttons grow
+    // LEFTWARD, so the talk window's own right inset is a PROMISE about how wide
+    // they are allowed to get — and it was a guess until this block. The window's
+    // bottom clears about three stacked buttons; the fourth and every one above it
+    // sit beside the conversation, and "Leave <24-character cast name> (E)" is 34
+    // characters — near 270px of 12px monospace against a corridor of 172. Any
+    // generated name over about nine characters painted over the window.
+    //
+    // ONE NUMBER, DERIVED, AND BOTH SURFACES SPEND IT — BUT ONLY WHILE A WINDOW
+    // IS UP. THE WINDOW IS WHAT CREATES THE CORRIDOR: with nothing docked over
+    // the play field the column has the whole width to grow leftward into and
+    // there is no second surface for a long label to land on. So the cap is a
+    // CONVERSATION-STATE style rather than a construction one — set on the ten
+    // rail buttons when the window mounts, cleared when it unmounts (`_railCap`,
+    // driven off the mounted predicate in `_syncTalk`) — and in normal walking
+    // play every label this package writes is drawn WHOLE.
+    //
+    // WHAT THE THIRTY BUYS AND WHAT IT COSTS. Thirty characters is a BUDGET
+    // struck between the two surfaces, not a measurement of the widest label the
+    // rail can produce: the widest with nothing generated in it is the rod
+    // ladder's top rung — "Buy a decent angling rig (40 credits)", thirty-seven
+    // characters — and reserving for that would put the window's right inset at
+    // 319px, which is most of a phone. So WHILE A WINDOW IS OPEN the long ones
+    // ellipsize, and they are named here rather than left to be discovered: all
+    // four rod offers (thirty-three to thirty-seven characters, both themes and
+    // both rungs), the census button carrying a cast name over twenty, and any
+    // generated spot or board name past the same bound. That is the trade, and
+    // it is paid only in the state that causes it.
+    //
+    // THE CLIP IS VISUAL ONLY in every one of those cases — `textContent` stays
+    // whole, so the accessible name still reads the full label, price included.
+    //
+    // The window's own title row is deliberately NOT clipped: the window bounds it
+    // already, and cutting "<name> — <role>" would lose the role to save a line.
+    const RAIL_ADVANCE = 7.2; // one 12px monospace character, the widest common advance
+    const RAIL_CHROME = 28; // 13px of padding and a 1px border, on both sides
+    const RAIL_INSET = 12; // what the column and the window are both inset by
+    this.RAIL_BTN_MAX = Math.ceil(30 * RAIL_ADVANCE + RAIL_CHROME);
+    // The window's right inset: the column's own inset, the widest button it may
+    // draw WHILE THE WINDOW IS THERE TO BE CLEARED, and one inset of clear air
+    // between the two.
+    this.RAIL_RESERVE = RAIL_INSET + this.RAIL_BTN_MAX + RAIL_INSET;
+    // The ellipsis clothes ship on the button and the WIDTH does not. With no
+    // max-width beside them these three rules do nothing at all, which is exactly
+    // the closed-window state: nothing to overflow, so nothing to cut.
+    S.railBtn = `${S.btn}overflow:hidden;text-overflow:ellipsis;white-space:nowrap;`;
     this.S = S;
 
     // Cutscene caption: centred, non-interactive, only while a beat runs.
@@ -16017,7 +18429,7 @@ PF.Hud = class {
       [this.locChip, this.clockChip, this.purseChip, this.journalChip, this.sheetChip],
     );
 
-    this.talkBtn = this._btn("Talk (E)", () => core.interact());
+    this.talkBtn = this._btn("Talk (E)", () => core.interact(), S.railBtn);
     // S3's one live transaction (P1's bed). Shown whenever there is a berth to be
     // had where the player is standing — a keeper within reach, or the room they
     // keep with them in it (59-economy berthOffer) — and shown REFUSING rather
@@ -16029,21 +18441,21 @@ PF.Hud = class {
     // button that ships visible is on screen for every frame before the first
     // update — and for the whole of a mount that never reaches one (no sim yet),
     // quoting a room in a world that has not compiled.
-    this.berthBtn = this._btn("Rent a berth", () => this.rentBerth());
+    this.berthBtn = this._btn("Rent a berth", () => this.rentBerth(), S.railBtn);
     this.berthBtn.style.display = "none";
     // The keeper's SECOND trade (M8's amendment: no rod is ever free). Same
     // discipline as the berth beside it — boot hidden, offer-gated per frame,
     // dimmed rather than hidden when the purse is short — with one deliberate
     // divergence: it VANISHES once the ladder is topped out, because rod
     // ownership is global and permanent and a forever-dimmed chip is dead chrome.
-    this.buyRodBtn = this._btn("Buy a rod", () => this.buyRod());
+    this.buyRodBtn = this._btn("Buy a rod", () => this.buyRod(), S.railBtn);
     this.buyRodBtn.style.display = "none";
-    this.travelBtn = this._btn("Travel", () => this.toggleTravel());
+    this.travelBtn = this._btn("Travel", () => this.toggleTravel(), S.railBtn);
     // 0.12's headline verb, on the same gating as the berth: shown whenever the
     // player is standing at a registry spot that holds water — INCLUDING when
     // they have no rod, because the refusal is what points them at the vendor and
     // a button that hides itself teaches nobody the mechanic exists.
-    this.fishBtn = this._btn("🎣 Fish…", () => this.toggleFish());
+    this.fishBtn = this._btn("🎣 Fish…", () => this.toggleFish(), S.railBtn);
     this.fishBtn.style.display = "none";
     this.fishMenu = PF.el("div", {
       style:
@@ -16053,7 +18465,7 @@ PF.Hud = class {
     // you can only do where you have a bed, and the only one that leaves a
     // wrap-up behind. Boot hidden and offer-gated per frame, like the berth that
     // sells the bed in the first place.
-    this.sleepBtn = this._btn("🛏 Sleep…", () => this.toggleSleep());
+    this.sleepBtn = this._btn("🛏 Sleep…", () => this.toggleSleep(), S.railBtn);
     this.sleepBtn.style.display = "none";
     this.sleepMenu = PF.el("div", {
       style:
@@ -16072,15 +18484,34 @@ PF.Hud = class {
     // reached from a button in this column, so a post-playtest reshape — a
     // different trigger, a different surface — moves the entry and the gate and
     // leaves the work untouched.
-    this.boardBtn = this._btn("📋 Board", () => this.toggleBoard());
+    this.boardBtn = this._btn("📋 Board", () => this.toggleBoard(), S.railBtn);
     this.boardBtn.style.display = "none";
     this.boardMenu = PF.el("div", {
       style:
         "display:none;flex-direction:column;gap:6px;align-items:flex-end;max-height:40vh;overflow:auto;pointer-events:auto;",
     });
-    this.waitBtn = this._btn("⏩ Wait…", () => this.toggleWait());
-    this.keyboardBtn = this._btn("Keyboard", () => core.setMode("dialogue"));
-    this.resumeBtn = this._btn("▶ Resume walking", () => core.resume());
+    this.waitBtn = this._btn("⏩ Wait…", () => this.toggleWait(), S.railBtn);
+    this.keyboardBtn = this._btn("Keyboard", () => core.setMode("dialogue"), S.railBtn);
+    this.resumeBtn = this._btn("▶ Resume walking", () => core.resume(), S.railBtn);
+    // THE TEN THE CORRIDOR IS ABOUT, named once so `_railCap` has a list to write
+    // and nothing has to infer one. Written out rather than filtered off
+    // `this.actions.children`, because that container also holds the four action
+    // MENUS — bounded, scrolling panels of their own that never wear the cap —
+    // and a filter that got the distinction wrong would be silent. The harness
+    // cross-checks this list against the container's real buttons, so an
+    // eleventh rail button added without a line here fails there.
+    this._railBtns = [
+      this.talkBtn,
+      this.berthBtn,
+      this.buyRodBtn,
+      this.travelBtn,
+      this.fishBtn,
+      this.sleepBtn,
+      this.boardBtn,
+      this.waitBtn,
+      this.keyboardBtn,
+      this.resumeBtn,
+    ];
     this.waitMenu = PF.el("div", {
       style:
         "display:none;flex-direction:column;gap:6px;align-items:flex-end;max-height:40vh;overflow:auto;pointer-events:auto;",
@@ -16254,6 +18685,78 @@ PF.Hud = class {
     this.journalEl.style.display = "none";
     this.sheetEl.style.display = "none";
 
+    // ── THE TALK WINDOW (plan §2.5) ─────────────────────────────────────────
+    // The release's flagship surface, and the one panel here that is deliberately
+    // NOT `inset:0`. The other three own the screen; this one is docked over the
+    // play field and leaves the topbar, the right-hand action rail and the d-pad
+    // VISIBLE AND INTERACTIVE, because the ruling this is built to says the player
+    // stays mobile while it is open. A full-surface window would make a pointer
+    // player immobile and put the clock movers — the presses that END the
+    // conversation and restart time — behind the very thing they close.
+    //
+    // THE THREE GEOMETRY CONSTRAINTS ARE THE PLAN'S; the exact look is the browser
+    // pass's. (a) nothing of it overlaps topbar, rail or d-pad at any z-index;
+    // (b) it clears the bottom TOAST band, which is the only channel a streaming
+    // refusal has while the window stays mounted — painted over, that refusal is a
+    // press that visibly did nothing; (c) it SCROLLS INSIDE ITSELF on the four
+    // action menus' own idiom (max-height 40vh, overflow auto), because the row
+    // count is variable by construction — name and role, up to two record
+    // branches, up to four topic branches, an escalation pair, one row per live
+    // errand, three doors and Leave. The scroller is the ROW LIST alone, on the
+    // journal's three-row shape: the Leave row and the Say input must never scroll
+    // out of reach.
+    //
+    // AND IT IS NOT AN `aria-modal` DIALOG, for the panels' reason above: it would
+    // make `_hostOwnsKeyboard` true and kill the keys that close it.
+    this.talkWho = PF.el("div", { style: "font:700 12px/1.5 inherit;flex:0 0 auto;" });
+    this.talkSaid = PF.el("div", {
+      style:
+        "flex:0 0 auto;display:none;font:12px/1.6 inherit;opacity:0.92;border-left:2px solid rgba(243,239,226,0.35);padding-left:8px;",
+    });
+    // The spoken line announces itself: it replaces itself in place, and a reader
+    // who cannot see the swap would otherwise never learn the person answered.
+    this.talkSaid.setAttribute("role", "status");
+    this.talkSaid.setAttribute("aria-live", "polite");
+    this.talkRows = PF.el("div", {
+      style: "flex:1 1 auto;overflow:auto;display:flex;flex-direction:column;gap:6px;align-items:stretch;",
+    });
+    // NO AUTOFOCUS, deliberately: the window opens with the walk keys live, and a
+    // focused input would swallow WASD from the first frame. Its own keydown is
+    // bound below — Escape closes, Enter sends, and neither calls preventDefault,
+    // because the host's own handling of those keys is not ours to cancel.
+    this.talkInput = PF.el("input", {
+      type: "text",
+      "aria-label": "say something",
+      placeholder: "Say something…",
+      style:
+        "flex:1 1 auto;min-width:0;pointer-events:auto;background:rgba(20,24,20,0.9);color:#f3efe2;" +
+        "border:1px solid rgba(243,239,226,0.35);border-radius:8px;padding:8px 10px;font:12px/1.3 inherit;",
+    });
+    this.talkInput.addEventListener("keydown", (ev) => this._talkInputKey(ev));
+    // THE SAY DOOR IS A PAID CONTROL and takes the same repeat binding the rebuilt
+    // rows take — more urgently, in fact: this node is PERMANENT, its text swapped
+    // in place, so a hold that arms the confirm on it keeps both the node and the
+    // focus the browser would synthesize the spending click from.
+    this.talkSendBtn = this._bindPaidPress(this._btn("Send (asks the GM)"), () => this._talkSay());
+    this.talkSayRow = PF.el("div", { style: "flex:0 0 auto;display:flex;gap:6px;align-items:stretch;" }, [
+      this.talkInput,
+      this.talkSendBtn,
+    ]);
+    this.talkLeaveBtn = this._btn("Leave", () => this.core.closeTalk());
+    this.talkLeaveBtn.style.flex = "0 0 auto";
+    this.talkEl = PF.el(
+      "div",
+      {
+        "aria-label": "conversation",
+        style:
+          `position:absolute;left:12px;right:${this.RAIL_RESERVE}px;bottom:calc(190px + env(safe-area-inset-bottom,0px));` +
+          "display:none;flex-direction:column;gap:8px;max-height:40vh;z-index:3;pointer-events:auto;" +
+          "padding:10px 12px;box-sizing:border-box;border-radius:10px;background:rgba(12,14,12,0.94);" +
+          "border:1px solid rgba(243,239,226,0.3);color:#f3efe2;font:12px/1.6 ui-monospace,Consolas,monospace;",
+      },
+      [this.talkWho, this.talkSaid, this.talkRows, this.talkSayRow, this.talkLeaveBtn],
+    );
+
     this.root = PF.el(
       "div",
       { style: "position:absolute;inset:0;pointer-events:none;font-family:ui-monospace,Consolas,monospace;" },
@@ -16265,6 +18768,7 @@ PF.Hud = class {
         this.captionEl,
         this.toastEl,
         this.locToastEl,
+        this.talkEl,
         this.journalEl,
         this.sheetEl,
         this.gateEl,
@@ -16336,6 +18840,12 @@ PF.Hud = class {
       },
     ];
     this._journalTab = 0;
+    // The talk window's own state: whether the DOM is up, the memo key its rows
+    // were drawn from, and the latched document-level pointerdown pair (see
+    // `_bindTalkOutside`). All three are cleared by the unmount.
+    this._talkMounted = false;
+    this._talkRowKey = null;
+    this._talkOutside = null;
     // The instance id of the row whose "set aside" has been pressed once, and the
     // sentence the last press left behind (see `_dropQuestPress`).
     this._dropQuestPress();
@@ -16343,8 +18853,58 @@ PF.Hud = class {
     this.refreshChips();
   }
 
-  _btn(text, onclick) {
-    return PF.el("button", { type: "button", style: this.S.btn, text, onclick });
+  /** A button in this HUD's clothes. `style` is the seam the RAIL spends: its
+   *  column shares a corridor with the talk window, so its buttons wear the
+   *  clipping variant while menu rows inside a bounded panel wear the plain one. */
+  _btn(text, onclick, style) {
+    return PF.el("button", { type: "button", style: style ?? this.S.btn, text, onclick });
+  }
+
+  /** A PAID CONTROL'S ACTIVATION, and the repeat refusal is BOUND here rather
+   *  than tested inside the press, because `repeat` only exists on the event that
+   *  carries it. `_btn` binds a CLICK listener — 00-prelude's `PF.el` maps an
+   *  `onclick` attr to `addEventListener("click", …)` — and the click a browser
+   *  synthesizes from a held Enter on a focused button is a MouseEvent, on which
+   *  `repeat` is undefined. So an `if (ev.repeat) return` on the click path is
+   *  ALWAYS false: a hold fired activation twice, press one arming the story-skip
+   *  confirm and press two spending a GM call, defeating "the smallest honest
+   *  gate is an affirmative press" through a gap the walk fence cannot cover —
+   *  and defeating it SILENTLY, because the inert test read like the guard.
+   *
+   *  So the node watches its own key run, which is where the fact lives:
+   *   • a keydown carrying `repeat` raises the latch AND cancels the browser's
+   *     synthesized activation, so the echo's click is never generated;
+   *   • the latch is the second half and is kept deliberately — cancellation is a
+   *     browser behaviour, and the refusal should not be the only thing standing
+   *     between a hold and a paid call. Anything that dispatches a click mid-run
+   *     is refused on the latch instead;
+   *   • the keyup that ends the hold lowers it, so the next press is live.
+   *
+   *  A MOUSE PRESS IS UNTOUCHED — it arrives with no key run at all — and so is
+   *  the FIRST key of a hold, which carries `repeat === false`. The latch is
+   *  PER-NODE, which is the right grain: the row controls are rebuilt by the
+   *  arming repaint and the latch that matters is the one on the node the hold is
+   *  actually held on. That node is `talkSendBtn` in the case that bites — it is
+   *  a permanent child whose text is swapped in place, so a hold keeps both the
+   *  node and the focus the second click would come from.
+   *
+   *  This is the discipline `_talkInputKey` already spends on a genuine keydown,
+   *  brought to the controls whose activation only ever arrives as a click. */
+  _bindPaidPress(node, onpress) {
+    let held = false;
+    node.addEventListener("keydown", (ev) => {
+      if (!ev?.repeat) return;
+      held = true;
+      ev.preventDefault?.();
+    });
+    node.addEventListener("keyup", () => {
+      held = false;
+    });
+    node.addEventListener("click", () => {
+      if (held) return;
+      onpress();
+    });
+    return node;
   }
 
   /** A glyph-width topbar opener: a button wearing the chip's styling, boot
@@ -16361,7 +18921,316 @@ PF.Hud = class {
   destroy() {
     clearTimeout(this._toastTimer);
     clearTimeout(this._locToastTimer);
+    // THE TALK WINDOW'S TWO TEARDOWN DUTIES, and they are here because neither is
+    // covered by the line below. `root.remove()` takes every CHILD of the root
+    // with it — which is the whole teardown story for the gate and the two panels
+    // — but the window owns a DOCUMENT-level pointerdown pair, which is not a
+    // child of anything we remove, and a LATCH on the sim, which SURVIVES this by
+    // design (a version bump or an error retry remounts the element around the
+    // same singleton, 90-element). A latch left set on a surviving sim is a world
+    // whose clock never runs again, and a listener left bound is a closure over a
+    // window nobody can see.
+    //
+    // The first goes through the window's own UNMOUNT rather than the unbind
+    // alone, so a close is a close wherever it comes from: ONE path clears the
+    // listener, the mounted flag, the row memo and the rail's while-open width
+    // cap, and nothing here has to keep a second copy of that list in step.
+    this._talkUnmount();
+    if (this.core?.sim) this.core.sim.talkAnchorId = null;
     this.root.remove();
+  }
+
+  // ── The talk window (plan §2.5) ────────────────────────────────────────────
+
+  /** THE MOUNTED PREDICATE, RECONCILED — the first thing `update()` does, on
+   *  every path it has (gated, replay and stepped alike), which is what lets the
+   *  window close while the sim is not being stepped at all.
+   *
+   *  The window's DOM is up IFF `sim.mode === "walk" && sim.talkAnchorId != null`.
+   *  There is no second source of truth and no "close the window" call that does
+   *  not go through the latch: closing IS clearing it, and the DOM follows here.
+   *  That is what makes the exception story a property rather than a discipline —
+   *  a throw out of any window handler loses at most one frame's reconcile, and
+   *  the next frame renders whatever the latch says.
+   *
+   *  LEAVING WALK UNMOUNTS AND DOES NOT CLEAR. That asymmetry is the handoff: a
+   *  paid press enters dialogue, the window goes, and the latch keeps the partner
+   *  frozen and the clock stopped through the GM's whole answer. It clears at
+   *  `setMode`'s walk ENTRY, which every dialogue exit reaches. */
+  _syncTalk() {
+    const core = this.core;
+    const sim = core?.sim;
+    if (!sim || sim.talkAnchorId == null || sim.mode !== "walk") {
+      if (this._talkMounted) this._talkUnmount();
+      return;
+    }
+    // In walk with the latch set, every leave condition IS a latch clear.
+    const anchor = core._talkAnchor;
+    const leave =
+      // The anchor object and the latch disagreeing is a state nothing should be
+      // able to reach; if it ever is, the conversation is over rather than
+      // rendered against whichever half is stale.
+      !anchor ||
+      anchor.id !== sim.talkAnchorId ||
+      // ANCHOR LIVENESS, evaluated BEFORE the band. NPC coordinates are
+      // zone-local tiles rewritten into the destination frame on a splice, so a
+      // cross-zone distance compare is a category error that can land ~0px
+      // "away" — identity membership in the live zone's array is the question,
+      // and it answers a splice, a despawn, a zone change and a world
+      // replacement in one read.
+      !sim.zone().npcs.includes(anchor) ||
+      // THE ONE-TILE BAND. Two full tiles centre to centre is over the line, and
+      // the predicate says exactly what the prose says: `>=`, not `>`, so 32px
+      // from a tile-aligned rest closes it. The geometry is derived rather than
+      // tuned — "within one tile" is the adjacency ring (16px orthogonal, ~22.6
+      // diagonal) plus the half-tile of slack continuous player coordinates
+      // need, and 32 strictly covers the 26px open radius, so no position a
+      // window can open at is born closed.
+      Math.hypot(anchor.x * PF.TILE + 8 - sim.x, anchor.y * PF.TILE + 8 - sim.y) >= PF.Hud.TUNING.leavePx() ||
+      // THE LOADING GATE, which is orthogonal to mode: under it the tick returns
+      // before `sim.step`, so a window left mounted there is a keyboard-dead
+      // surface over "Writing your world…".
+      PF.save.gateHolds(core);
+    if (leave) {
+      core.closeTalk();
+      return;
+    }
+    if (!this._talkMounted) {
+      this._talkMounted = true;
+      this.talkEl.style.display = "flex";
+      this._railCap(true);
+    }
+    this._talkRender(anchor);
+  }
+
+  _talkUnmount() {
+    this._talkMounted = false;
+    this._talkRowKey = null;
+    this.talkEl.style.display = "none";
+    this._railCap(false);
+    this._unbindTalkOutside();
+  }
+
+  /** THE CONVERSATION-STATE WIDTH CAP (the corridor block at the top of this
+   *  file). Set when the window mounts, cleared when it unmounts, and written
+   *  from nowhere else — so it is two writes a conversation rather than a style
+   *  the per-frame `update()` has to keep re-asserting.
+   *
+   *  Closed, the rail has the whole width and every label is drawn whole, which
+   *  is the state the player spends nearly all of their time in. Open, the ten
+   *  are held inside the corridor the window's own right inset promised, and the
+   *  labels too long for it ellipsize — visually, `textContent` untouched. */
+  _railCap(on) {
+    const width = on ? `${this.RAIL_BTN_MAX}px` : "";
+    for (const node of this._railBtns) node.style.maxWidth = width;
+  }
+
+  /** Called by the core when the window OPENS. The panels close from this side of
+   *  the exclusion — the other three toggles close the window from theirs — and
+   *  the reveal starts empty, because the last thing somebody said is not
+   *  something the next person says. */
+  onTalkOpened() {
+    this.closeJournal();
+    this.closeSheet();
+    this.closeBoard();
+    this._talkRowKey = null;
+    this._talkReveal("");
+    this.talkInput.value = "";
+    this._bindTalkOutside();
+    this.update();
+  }
+
+  /** POINTER-DOWN OUTSIDE CLOSES IT — the mouse exit, and the reason it needs a
+   *  latched pair rather than a child listener: a document-level handler is not a
+   *  child of `this.root`, so `destroy()`'s `root.remove()` does not take it.
+   *  Bound at open, unbound at close AND in `destroy()`.
+   *
+   *  THE EXEMPTION SET IS THE WHOLE DESIGN, and it is THREE SURFACES: the window
+   *  itself, the d-pad, and the action rail. The handler hears every press whose
+   *  surface does not stopPropagation, and the d-pad and rail buttons deliberately
+   *  do not — they `preventDefault` and let the event through. So without these,
+   *  a pointer player's FIRST movement press closed the window at zero tiles,
+   *  against the ruling's own "more than one tile", on exactly the controls the
+   *  window's partial geometry was shaped to keep live. With them, movement leaves
+   *  through the 32px band and a rail press leaves through the mover's own latch
+   *  clear — both honest closes through their own doors. Everything else outside
+   *  still closes.
+   *
+   *  THE CENSUS BUTTON IS NOT A FOURTH ENTRY. It is a child of the rail, so the
+   *  rail's own `contains` already answers for it, and naming it again was a line
+   *  that could never fire — while reading as though the rail did not cover it.
+   *  The harness presses it by name anyway, which is what keeps that true. */
+  _bindTalkOutside() {
+    if (this._talkOutside) return;
+    this._talkOutside = (ev) => {
+      const target = ev?.target;
+      if (!target) return;
+      for (const exempt of [this.talkEl, this.dpad, this.actions]) if (exempt?.contains?.(target)) return;
+      this.core.closeTalk();
+    };
+    document.addEventListener("pointerdown", this._talkOutside);
+  }
+
+  _unbindTalkOutside() {
+    if (!this._talkOutside) return;
+    document.removeEventListener("pointerdown", this._talkOutside);
+    this._talkOutside = null;
+  }
+
+  /** The line the anchor just said, or "" for nothing said yet. */
+  _talkReveal(text) {
+    this.talkSaid.textContent = text;
+    this.talkSaid.style.display = text ? "" : "none";
+  }
+
+  /** Why every paid control is dimmed right now, or null. The covenant is that
+   *  the doors NEVER VANISH — they dim, with the title saying why — so a player
+   *  can always see that talking is a thing this window does. */
+  _talkDoorNote() {
+    const core = this.core;
+    if (typeof core.host?.sendMessage !== "function") return "The story isn't taking turns right now.";
+    if (core.host.isStreaming) return "The story is still being written…";
+    return null;
+  }
+
+  /** What the row list is drawn FROM. The clock is frozen while the window is
+   *  open, so the day, the daypart and the sky cannot move under it — they are in
+   *  the key anyway, because an override write is a props delivery and not a
+   *  clock. What genuinely does move is the errand list (a settle), the
+   *  escalation ratchet, the dim state and which control is holding the confirm. */
+  _talkKeyOf(anchor) {
+    const sim = this.core.sim;
+    const errands = this._talkErrands(anchor)
+      .map((row) => row.id)
+      .join(",");
+    // THE ARMED READ AND NOT THE RAW MEMO. `talkConfirmArmed` is also where the
+    // question goes stale — the narration finishing drops it with no press at all
+    // — so a key built off the memo alone would leave "Skip story & talk?" drawn
+    // on a control whose question no longer exists.
+    const confirm = this.core.talkConfirmArmed?.() === true ? (this.core._talkConfirm?.controlId ?? "") : "";
+    return [
+      anchor.id,
+      sim.day,
+      sim.daypart(),
+      sim.weather().word,
+      errands,
+      PF.pack.askBurned(this.core, anchor) ? "burnt" : "",
+      this._talkDoorNote() ?? "",
+      confirm,
+    ].join("|");
+  }
+
+  /** The live `deliver` rows this person is the target of. Read fresh: the
+   *  window draws one labelled branch per row, and a row settled a press ago is
+   *  a branch that should already be gone. */
+  _talkErrands(anchor) {
+    const player = PF.player.get(this.core);
+    const rows = Array.isArray(player?.quests?.active) ? player.quests.active : [];
+    return rows.filter((row) => String(row?.verb) === "deliver" && String(row?.target) === anchor.name);
+  }
+
+  _talkRender(anchor) {
+    const key = this._talkKeyOf(anchor);
+    if (key === this._talkRowKey) return;
+    this._talkRowKey = key;
+    this.talkWho.textContent = anchor.role ? `${anchor.name} — ${anchor.role}` : anchor.name;
+    const core = this.core;
+    const note = this._talkDoorNote();
+    const armed = core._talkConfirm?.controlId ?? null;
+    /** One paid control. Labelled "(asks the GM)" on its face — that suffix IS
+     *  the covenant's marker — dimmed with a reason rather than removed, and
+     *  re-labelled into the question when the confirm is armed on THIS control.
+     *  Key repeat is refused by `_bindPaidPress`, which is why the button is
+     *  built with no handler and bound afterwards: `_keyDown` has no repeat guard
+     *  and the prologue's confirm returns in WALK mode without changing it, so
+     *  the refusal has to live on the control's own key run. */
+    const paid = (id, label, onpress) => {
+      const asking = armed === id && core.talkConfirmArmed?.(id) === true;
+      const node = this._bindPaidPress(this._btn(asking ? "Skip story & talk?" : `${label} (asks the GM)`), onpress);
+      node.style.textAlign = "left";
+      if (note) {
+        node.style.opacity = "0.45";
+        node.setAttribute("title", note);
+      }
+      return node;
+    };
+    /** One FREE branch: a pack or record read, zero GM calls, and the answer
+     *  lands in the reveal above rather than anywhere the narrator can see. */
+    const free = (label, answer) =>
+      this._btn(label, () => {
+        const said = typeof answer === "function" ? answer() : answer;
+        if (said) this._talkReveal(said);
+      });
+    const rows = [];
+    // 2. THE COMPILED RECORD — only the halves the record actually carries.
+    const record = PF.pack.askRecord(core, anchor);
+    if (record.work) rows.push(free("What do you do?", record.work));
+    if (record.home) rows.push(free("Where do you live?", record.home));
+    // 3. THE PACK'S TOPICS, WITH HONEST SUPPRESSION: a branch with no servable
+    // line does not render. On a thin generated pack that is one or two buttons
+    // rather than four that answer with somebody else's topic — and on the
+    // enriched defaults it is all four, which is the inversion 0.14 ships with:
+    // the worlds that paid two GM calls meet the thinnest window.
+    for (const [branch, label] of [
+      ["rumor", "Ask about the local rumors"],
+      ["work", "Ask about work"],
+      ["place", "Ask about this place"],
+      ["smalltalk", "Pass the time"],
+    ])
+      if (PF.pack.askHas(core, anchor, branch)) rows.push(free(label, () => PF.pack.ask(core, anchor, branch)));
+    // 4. THE ESCALATION PAIR: the sealed door-line is FREE and re-readable
+    // forever; the follow-up behind it is paid and RATCHETED per session.
+    const sealedLine = PF.pack.askEscalation(core, anchor);
+    if (sealedLine) {
+      rows.push(free("Ask what's going on", sealedLine));
+      if (!PF.pack.askBurned(core, anchor))
+        rows.push(paid("press", "Press them about it", () => this.core.talkPress()));
+    }
+    // 5. ONE ROW PER ERRAND, and the label names what the press settles. Two
+    // errands to Bram are two labelled presses: a label is a mechanism only if it
+    // says which row it is about.
+    // The row itself carries no title — a quest row is a closed eight-field
+    // literal and the words live on the TEMPLATE — so the title is resolved the
+    // way `rowText` resolves it, off the fold, with the mechanical phrase behind
+    // it for a row whose template this world no longer offers.
+    const folded = PF.save.packFold(core);
+    for (const row of this._talkErrands(anchor)) {
+      const template = PF.pack.templateOf(row.id);
+      const title = (template ? folded?.byId?.get(template)?.title : "") || `word for ${anchor.name}`;
+      rows.push(paid(`deliver:${row.id}`, `Hand over: ${title}`, () => this.core.talkHandOver(row.id)));
+    }
+    // 6. THE DOOR THAT NEVER VANISHES. (The other one is the Say row below, which
+    // is a permanent child rather than a rebuilt row — rebuilding it would throw
+    // away whatever the player had half-typed.)
+    rows.push(paid("free", "Just talk", () => this.core.talkFree()));
+    this.talkRows.replaceChildren(...rows);
+    // The Say door's own dim state, applied to the permanent node.
+    const sayAsking = armed === "say" && core.talkConfirmArmed?.("say") === true;
+    this.talkSendBtn.textContent = sayAsking ? "Skip story & talk?" : "Send (asks the GM)";
+    this.talkSendBtn.style.opacity = note ? "0.45" : "1";
+    if (note) this.talkSendBtn.setAttribute("title", note);
+    else this.talkSendBtn.removeAttribute?.("title");
+  }
+
+  /** The say door's own keydown. Escape closes the window (a SIM write — a
+   *  DOM-only close would leave the latch set and the mounted predicate would
+   *  put the window straight back on the next frame); Enter sends. Neither calls
+   *  preventDefault, and WASD types text while focus is in here — which is the
+   *  whole reason the d-pad had to stay reachable. */
+  _talkInputKey(ev) {
+    const key = String(ev?.key ?? "").toLowerCase();
+    if (key === "escape") {
+      this.talkInput.blur?.();
+      this.core.closeTalk();
+      return;
+    }
+    if (key === "enter" && !ev.repeat) this._talkSay();
+  }
+
+  _talkSay() {
+    const text = String(this.talkInput.value ?? "").trim();
+    if (!text) return;
+    this.core.talkSay(text);
   }
 
   /** `kind` picks the SURFACE, not the styling: "location" goes to the top strip
@@ -16592,6 +19461,10 @@ PF.Hud = class {
       this.toast(this.boardRefusal(view.reason));
       return;
     }
+    // The window is the one member of the set the board CAN be opened over — the
+    // rail stays live by the window's own geometry — so this is the direction
+    // that had to be wired, and it is a latch clear: the clock starts again.
+    this.core.closeTalk?.();
     this._renderBoard(view);
     this.boardMenu.style.display = "flex";
   }
@@ -16885,7 +19758,17 @@ PF.Hud = class {
    *  press with consequences behind it. It rides the return for the same reason
    *  the panels do: "something was open" is the honest answer either way. */
   closePanels() {
-    const open = this._journal || this._sheet || this.boardMenu.style.display === "flex";
+    // THE TALK WINDOW COUNTS AS ONE OF THEM, in both halves of the exclusion.
+    // This is Escape's close-ALL path; the direction that actually matters is the
+    // other one — each of the three toggles closes the WINDOW before it opens, and
+    // the window's own open closes all three — because the topbar openers stay
+    // interactive over an open window by geometry, and an unexcluded journal
+    // mounts `inset:0` at z-3 over the top of it: a player reading a journal over
+    // a FROZEN CLOCK with an invisible window underneath, whose first Escape
+    // closes a surface they cannot see.
+    const open =
+      this._journal || this._sheet || this.boardMenu.style.display === "flex" || this.core.talkOpen?.() === true;
+    this.core.closeTalk?.();
     this.closeJournal();
     this.closeSheet();
     this.closeBoard();
@@ -16907,6 +19790,9 @@ PF.Hud = class {
     // is that same rule for the other way they leave it.
     this.closeSheet();
     this.closeBoard();
+    // …AND THE TALK WINDOW, which is the one member of the set that also stops
+    // the clock: closing it here is a latch clear, and time starts again.
+    this.core.closeTalk?.();
     this._journal = true;
     // THESE TWO ARE DEFENSIVE SYMMETRY, and saying so is the point: the CLOSE
     // side is the load-bearing one, and every close routes through
@@ -17347,6 +20233,7 @@ PF.Hud = class {
     // that covered only the journal would be a rule waiting for the next tab.
     this.closeJournal();
     this.closeBoard();
+    this.core.closeTalk?.();
     this._sheet = true;
     this._sheetKey = this._sheetValueKey();
     this._renderSheet();
@@ -17604,6 +20491,13 @@ PF.Hud = class {
 
   /** Cheap per-frame sync — writes DOM only on change. */
   update() {
+    // THE TALK WINDOW'S LEAVE CHECK AND MOUNT RECONCILE, FIRST — above the
+    // `if (gate) return` further down, and that placement is the whole point. The
+    // element tick calls this on its GATED and REPLAY branches too, where
+    // `sim.step` is skipped entirely; a check written where it reads naturally,
+    // inside the walk block at the foot of this method, could never fire on the
+    // one condition it was sited for. One site serves every frame.
+    this._syncTalk();
     const sim = this.core.sim;
     if (!sim) return;
     const mode = sim.mode;
@@ -17717,7 +20611,14 @@ PF.Hud = class {
       this.fishMenu.style.display = "none";
       this.sleepMenu.style.display = "none";
       this.boardMenu.style.display = "none";
-      if (mode === "dialogue" && !gate) this.toast("Type in the message box below — Resume to keep walking");
+      // THE DIALOGUE TOAST IS CONDITIONAL NOW. It is an instruction for the
+      // Keyboard button, which hands the turn over with nothing else said. A
+      // dialogue entered through a talk-window door needs no instruction: the
+      // player pressed a control with "(asks the GM)" written on it, and the
+      // sender's own toast names who is answering. The latch still being set is
+      // exactly "this dialogue came out of a conversation".
+      if (mode === "dialogue" && !gate && sim.talkAnchorId == null)
+        this.toast("Type in the message box below — Resume to keep walking");
     }
     // Nothing below the gate means anything: there is no beat to caption, nobody
     // to be standing next to, and the clock is not running.
@@ -17731,20 +20632,25 @@ PF.Hud = class {
       this.captionEl.style.opacity = caption ? "1" : "0";
     }
     if (this._mode === "walk") {
-      const canTalk = !!sim.nearNpc;
-      // The Talk button is ALSO where a skip is confirmed (90-element `interact`):
-      // while the latest GM turn still holds narration the player has not been
-      // shown, the first press asks instead of sending. It has to be part of the
-      // memo key or the question would be asked and never drawn — the old key was
-      // the bare `canTalk` boolean, which does not move when only the label does.
-      const asking = canTalk && this.core.talkConfirmArmed?.() === true;
-      const talkKey = canTalk ? `${asking ? "skip" : "talk"}:${sim.nearNpc.name}` : "";
+      // THE CENSUS CONTROL, DECOUPLED FROM THE CONFIRM (plan §2.5). The skip
+      // question now belongs to the control inside the window that is asking it,
+      // so this button is a plain toggle again — and while a window is MOUNTED it
+      // names the LATCHED ANCHOR, never `nearNpc`. That is not tidiness: the
+      // anchor floats free of proximity by design, so a button reading "Talk to
+      // Bram (E)" whose press closed the WREN window would be exactly the
+      // label/verb disagreement the confirm's own docstring exists to forbid.
+      // Between 26px and the 32px close bound `nearNpc` is already null while the
+      // window is still open, which is precisely where the two would part.
+      const mounted = this.core.talkOpen?.() === true;
+      const anchor = mounted ? this.core._talkAnchor : null;
+      const canTalk = mounted || !!sim.nearNpc;
+      const talkKey = mounted ? `leave:${anchor?.name ?? ""}` : sim.nearNpc ? `talk:${sim.nearNpc.name}` : "";
       if (talkKey !== this._talkKey) {
         this._talkKey = talkKey;
         this.talkBtn.style.opacity = canTalk ? "1" : "0.45";
-        this.talkBtn.textContent = asking
-          ? "Skip story & talk?"
-          : canTalk
+        this.talkBtn.textContent = mounted
+          ? `Leave ${anchor?.name ?? "them"} (E)`
+          : sim.nearNpc
             ? `Talk to ${sim.nearNpc.name} (E)`
             : "Talk (E)";
       }
@@ -17854,6 +20760,28 @@ PF.Hud = class {
       }
     }
   }
+};
+
+// ── The talk window's one tuned number (plan §2.5) ────────────────────────────
+// The economy's TUNING idiom: a number the layer spends is written down once,
+// with the reason it is that number.
+PF.Hud.TUNING = {
+  // How far the player may step from a held conversation partner before the
+  // window closes, in tiles (the dialogue window's band). This is the live one —
+  // a second `leaveTiles` sat in `PF.weather.TUNING` with no reader at all, and
+  // the half of it worth keeping was this sentence.
+  //
+  // "Stepping more than one tile from the partner closes the window" — ruling
+  // B2-3b's own words, turned into a predicate that says the same thing the prose
+  // says. Two full tiles centre to centre is over the line, so the bound is
+  // `(leaveTiles + 1) * TILE` and the test is `>=`: at 32px the window closes.
+  // Both halves of that agreeing matters — an earlier draft said "≥ 2 tiles is
+  // over the line" while its predicate said "exceeds", and the two disagreed at
+  // exactly the distance an axis-aligned step from a tile-aligned rest lands on.
+  leaveTiles: 1,
+  leavePx() {
+    return (this.leaveTiles + 1) * PF.TILE;
+  },
 };
 
 // ===== 80-setup.js =====
@@ -17976,7 +20904,10 @@ PF.mountSetup = (el, props) => {
   const generateRow = PF.el(
     "label",
     { style: "display:flex;gap:8px;align-items:center;font:12px/1.5 inherit;cursor:pointer;margin-top:10px;" },
-    [generateIn, PF.el("span", { text: "Generate a unique world with your GM connection (one call)" })],
+    // TWO CALLS, and the label says so because the player is the one who pays for
+    // them: the brief that describes the settlement, and the content pack that
+    // gives its people something to say. It has been two since the pack landed.
+    [generateIn, PF.el("span", { text: "Generate a unique world with your GM connection (two calls)" })],
   );
   const connSel = select([["", "Loading connections…"]]);
   const partyBox = PF.el("div", {
@@ -18181,10 +21112,17 @@ PF.core = {
   _lastT: 0,
   _acc: 0,
   _narrationDoneWas: true,
-  // The person the Talk button is currently asking to skip unread story for AND
-  // the GM turn it is asking about, or null. See interact() — it is one press of
-  // state and nothing persists it.
+  // The window control currently asking to skip unread story, WHO it is asking
+  // about and WHICH GM turn — `{anchorId, controlId, turn}`, or null. See
+  // `talkSend()` — it is one press of state and nothing persists it.
   _talkConfirm: null,
+  // The NPC OBJECT the open talk window is anchored to, captured at open. The
+  // sim's `talkAnchorId` is the truth about whether a conversation is live; this
+  // is what the window RENDERS from and what press-time liveness is checked
+  // against by identity. Meaningful only while the latch is set — every reader
+  // tests the latch first, and the HUD's reconcile closes the window outright if
+  // the two ever disagree, so a stale object here can never be read.
+  _talkAnchor: null,
   _keysBound: false,
   _resizeObs: null,
   _resumeMode: "walk", // mode to restore when combat/replay ends
@@ -18280,6 +21218,28 @@ PF.core = {
     const meta = p.chatMeta && typeof p.chatMeta === "object" ? p.chatMeta : {};
     PF.save.ensurePresent(this, meta);
 
+    // THE GM'S SKY, RECONCILED. The host hands us the whole metadata blob on
+    // every props delivery, so a future writer patching `pixelforgeWeather`
+    // mid-story is answered here — the town re-places under the new sky the
+    // moment the key lands, without waiting for a boundary.
+    //
+    // COMPARED AGAINST THE APPLIED MEMO, never against `sim.weatherOverride`.
+    // The memo tracks METADATA, which a console never touches, so a summoned
+    // storm is invisible to this and no props delivery claws it back — where a
+    // comparison against the live field would have re-folded the absent key to
+    // null on the first streamed token, called that a change, and undone it. An
+    // unchanged or absent key assigns nothing and re-resolves nothing, which
+    // matters on a surface that runs once per turn and then some.
+    if (this.sim) {
+      const folded = PF.weather.foldOverride(meta.pixelforgeWeather);
+      const applied = PF.weather.overrideKey(folded);
+      if (applied !== this.sim._weatherMetaApplied) {
+        this.sim.weatherOverride = folded;
+        this.sim._weatherMetaApplied = applied;
+        this.sim.resolveSchedules();
+      }
+    }
+
     // Mode arbitration: replay > combat > (walk|dialogue kept as-is).
     // Prefer the real combat signal (Capability API 1.11, #5094): true the
     // instant the combat UI actually mounts. Fallback for older engines is the
@@ -18353,6 +21313,18 @@ PF.core = {
     // question. (talkConfirmArmed drops it on its own too — this is the seam
     // where "the same id in a different world" could otherwise match.)
     this._talkConfirm = null;
+    // AND SO DOES AN OPEN CONVERSATION, for the same reason and with one more
+    // thing to take with it: the window's DOM and the document-level pointerdown
+    // pair it bound, which is not a child of anything a teardown removes.
+    //
+    // ONE SITING HONESTY, so a later fix does not "repair" it: `this.sim` was
+    // reassigned two screens up (`PF.save.restore`), so the latch cleared here is
+    // a CONSTRUCTOR-FRESH null on a brand-new sim, not the departing sim's. That
+    // is harmless by design — the old sim is discarded whole, and the declaration
+    // in the constructor is what actually carries the "a fresh sim cannot inherit
+    // a freeze" guarantee. Do not capture the old sim to make this line "work";
+    // the load-bearing half here is the DOM and the listener.
+    this.closeTalk();
     this._lastPosSave = 0;
     this.hud?.refreshChips();
     void PF.spatial.refresh(this);
@@ -18365,6 +21337,29 @@ PF.core = {
       this._resumeMode = prev; // don't collapse dialogue into walk on exit (review finding)
     }
     this.sim.mode = mode;
+    // THE CONVERSATION LATCH IS CLEARED ON THE WALK ENTRY, and this is the ONE
+    // site that does it (plan §2.5). Not a new discipline — the function's own:
+    // this is already "the one function that changes mode", and it already drops
+    // `_talkConfirm` two lines down under a comment arguing exactly this hazard
+    // class. Every dialogue exit in the tree ends in `setMode("walk")` — the
+    // dialogue-Escape branch, `resume()`, the refusal arm and the `.catch` — so
+    // the four-site clear-set a per-exit repair would create is one line here.
+    //
+    // THE RULE IS "THE WALK ENTRY", NOT "THE RETURN PATH", and that wording is
+    // what makes it cover the fifth exit: combat or replay entered over a live
+    // conversation returns through `setMode(this._resumeMode)`, whose range is
+    // {walk, dialogue} by construction — walk when it interrupted an open window
+    // (cleared here) and dialogue when it interrupted a paid press (where the
+    // latch is SUPPOSED to survive, and the conversation ends at that mode's own
+    // exits, which all end here). Do not bolt a second clear onto that call.
+    //
+    // AND THE EARLY RETURN AT THE TOP OF THIS FUNCTION IS LOAD-BEARING FOR IT:
+    // Escape out of a paid press, open a new window on the next person, and the
+    // original send's stale `.catch` finally fires its `setMode("walk")` — which
+    // the already-in-walk return no-ops, so a stale rejection cannot null a live
+    // latch. A "fix" that hoisted this clear above that return, or hung it off a
+    // mode test outside this function, would kill live conversations.
+    if (mode === "walk") this.sim.talkAnchorId = null;
     // A pending skip-confirm does not survive the mode changing under it. The
     // question is asked in walk mode standing next to somebody, and every way out
     // of that frame — the Keyboard button handing the turn to the host, a cutscene
@@ -18469,50 +21464,173 @@ PF.core = {
    *  the NPC would let ONE press spend B on the permission they gave for A. The
    *  permission was for the narration they had decided to skip; a different one
    *  is asked about in its own right. */
-  talkConfirmArmed() {
+  talkConfirmArmed(controlId) {
     if (!this._talkConfirm) return false;
-    const npc = this.sim?.nearNpc;
+    const anchorId = this.sim?.talkAnchorId ?? null;
     const turn = this.host?.latestAssistant?.id ?? null;
-    if (!this._storyPending() || !npc || npc.id !== this._talkConfirm.id || turn !== this._talkConfirm.turn) {
+    // THE STALENESS HALF, and it is keyed to the ANCHOR rather than to a live
+    // proximity read (plan §2.5). `nearNpc` self-clears the moment anybody
+    // wanders nearer, so in the crowd this window exists for — a plaza, an inn —
+    // the whole paid set was unpressable: press one armed, a neighbour drifted,
+    // press two found the question gone and asked it again. The question belongs
+    // to the person the conversation is WITH, and it goes stale when the
+    // conversation ends, when the story is read, or when a new turn arrives.
+    if (
+      !this._storyPending() ||
+      anchorId == null ||
+      anchorId !== this._talkConfirm.anchorId ||
+      turn !== this._talkConfirm.turn
+    ) {
       this._talkConfirm = null;
       return false;
     }
-    return true;
+    // THE CONTROL HALF, and it deliberately does NOT clear. A per-person memo
+    // leaks permission across controls: arming on "Say something…" must not be
+    // spendable on "Hand over", which settles an errand. Asking about a different
+    // control is how that control comes to arm its own question, so the answer is
+    // false and the memo stands. An argument-less read is the HUD asking "is
+    // anything armed at all", which is a question about the person.
+    return controlId === undefined || controlId === this._talkConfirm.controlId;
   },
 
-  interact() {
+  /** Is the talk window mounted right now? The mounted predicate, in one place,
+   *  so the census button, the panel toggles and `interact()` all read the same
+   *  fact the HUD renders from. */
+  talkOpen() {
+    return !!this.sim && this.sim.mode === "walk" && this.sim.talkAnchorId != null;
+  },
+
+  /** OPEN THE WINDOW on somebody. A zero-call read: nothing is composed, nothing
+   *  is sent, and the GM is not told a conversation started. */
+  openTalk(npc) {
     const sim = this.sim;
+    if (!sim || !npc) return;
+    this._talkAnchor = npc;
+    sim.talkAnchorId = npc.id;
+    // THE CUTSCENE CLEAR AT OPEN, on `setMode`'s own idiom two screens up and for
+    // the same reason it lives there. The clock gate stops a beat from STARTING
+    // over an open window; a beat already RUNNING when E was pressed would be the
+    // symmetric, worse case — `stepCutscene` is the only thing that advances a
+    // beat and the only thing that clears one, and it is now gated off, so the
+    // beat would pin `sim.cutscene` non-null for the window's whole life: the
+    // narration-collapse request stuck asserted and the caption painted dead
+    // centre of the play field, which is where this panel goes. `_vistaArmed`
+    // stays down deliberately: the player who pressed E mid-beat chose the
+    // conversation over the view.
+    sim.cutscene = null;
+    this._cutsceneDeclared = false;
+    this._declareChrome();
+    this.hud?.onTalkOpened();
+  },
+
+  /** CLOSE IT, which is the same thing as ending the conversation: the latch is
+   *  the single close authority, and unfreezing the clock and the partner is what
+   *  closing MEANS. The DOM is reconciled off the same latch. */
+  closeTalk() {
+    if (this.sim) this.sim.talkAnchorId = null;
+    this._talkAnchor = null;
+    this.hud?._talkUnmount?.();
+  },
+
+  /** THE INTERACT PRESS — the E key and the census Talk button, unchanged as a
+   *  surface and completely changed in what it does. It no longer SENDS: it opens
+   *  the talk window on the person within reach, and pressing again closes it.
+   *  Every GM call this used to make now lives behind a labelled control inside
+   *  that window, routed through the one prologue below.
+   *
+   *  THE CLOSE HALF COMES FIRST, and as its own branch ahead of the WHOLE guard
+   *  compound rather than merely ahead of the `nearNpc` term. Opening needs
+   *  `nearNpc` (26px); the window survives out to 32px — so without the reroute,
+   *  E was dead in that six-pixel band, neither opening nor closing. The compound
+   *  below is one statement, so "ahead of the nearNpc guard" necessarily means
+   *  ahead of the mode and null-sim terms too, and saying so is the point: this
+   *  branch runs before all three. (The census button stays visible in dialogue
+   *  mode, harmlessly — no window is mounted there and this branch no-ops.) */
+  interact() {
+    if (this.talkOpen()) {
+      this.closeTalk();
+      return;
+    }
+    const sim = this.sim;
+    // OPENING IS A ZERO-CALL READ, so the guards are the ones that decide whether
+    // there is anybody to talk to at all: walk mode (which is also the same-tick
+    // re-entrancy fence), somebody within reach, and a world that has finished
+    // being written. `sendMessage` and `isStreaming` are NOT among them any more —
+    // those refuse a TURN, and this press no longer takes one; they moved into
+    // the paid prologue, where the doors dim and say why.
     if (!sim || sim.mode !== "walk" || !sim.nearNpc) return;
     if (PF.save.gateHolds(this)) return; // nobody to talk to in a world still being written
-    if (!this.host?.sendMessage) return;
+    this.openTalk(sim.nearNpc);
+  },
+
+  /** THE ONE PAID PRESS (plan §2.5). Every control in the window labelled "(asks
+   *  the GM)" comes through here — the free-talk door, the say door, the
+   *  escalation follow-up, and one per outstanding errand — so the guard block
+   *  that used to live inline in `interact()` is written once and every paid press
+   *  passes all of it.
+   *
+   *  THE SEVEN STEPS, in order, and none of them was dropped in the move:
+   *   (1) WALK MODE — the same-tick re-entrancy fence. A second press inside the
+   *       setMode-to-rAF gap dies here, key repeat included: "the window closes on
+   *       a mode change" is a next-frame RENDERING property, not a same-tick state
+   *       check, and `isStreaming` is a prop that cannot cover the gap.
+   *   (2) PRESS-TIME LIVENESS, AND THE LATCH BESIDE IT. `sentSim` is captured at
+   *       SEND and is blind to a splice or a rebuild that landed BEFORE the press;
+   *       this is that fence's missing front half. The latch check is the other
+   *       half of a one-frame gap: a clock mover clears the latch sim-side, and
+   *       the HUD does not reconcile the DOM away until the next frame — a press
+   *       out of that zombie window must die here rather than compose.
+   *   (3) `gateHolds`, which can ARM AFTER the window opened (`_switchChat` and
+   *       `maybeGenerateBrief` both arm it) — and under the gate the sim is not
+   *       stepped, so no sim-side check would ever run.
+   *   (4) the host can take a turn at all;
+   *   (5) `isStreaming` — a toast and no send. This is the ONE refusal that leaves
+   *       the window MOUNTED, which is why the window's geometry has to leave the
+   *       bottom toast band clear: painted over, it is a press that visibly did
+   *       nothing.
+   *   (6) THE RELOCATED SKIP CONFIRM, keyed {anchorId, controlId, turn} and read
+   *       BEFORE anything is composed — `composePrefix` overwrites `_pendingIntro`,
+   *       so a confirm asked after it would burn a tell for a turn never sent. The
+   *       first press re-labels THE PRESSED CONTROL into the question; the second
+   *       spends it. The 0.11 protection survives whole, translated from
+   *       per-person staleness to per-anchor + per-control staleness: no press can
+   *       spend unread narration without an affirmative press on the same control
+   *       against the same person.
+   *   (7) compose, send, and the single accepted-turn `.then`.
+   *
+   *  `settles` is per branch AND per row: a row id settles THAT errand, `true`
+   *  settles every errand to the name (0.13's implicit handover, preserved
+   *  verbatim for the free-talk door), and anything else settles nothing. */
+  talkSend({ controlId, action, settles, onAccepted }) {
+    const sim = this.sim;
+    const anchor = this._talkAnchor;
+    if (!sim || sim.mode !== "walk") return;
+    if (!anchor || sim.talkAnchorId !== anchor.id || !sim.zone().npcs.includes(anchor)) {
+      this.closeTalk();
+      this.hud?.toast("They're not there any more.");
+      return;
+    }
+    if (PF.save.gateHolds(this)) return;
+    if (typeof this.host?.sendMessage !== "function") return;
     if (this.host.isStreaming) {
       this.hud?.toast("The story is still being written…");
       return;
     }
-    const npc = sim.nearNpc;
-    // UNREAD STORY IS NOT SOMETHING A GREETING GETS TO SPEND (playtest 2).
-    // The maintainer wandered off mid-narration, pressed E on the nearest NPC,
-    // and lost everything from the arrival narration onward: the turn this sends
-    // ends the one being presented, so the segments they had not reached simply
-    // never appeared — survived only in Logs — and they never said to skip them.
+    // UNREAD STORY IS NOT SOMETHING A PRESS GETS TO SPEND (playtest 2). The
+    // maintainer wandered off mid-narration, pressed E on the nearest NPC, and
+    // lost everything from the arrival narration onward: the turn this sends ends
+    // the one being presented, so the segments they had not reached never
+    // appeared — they survived only in Logs — and nobody had said to skip them.
     //
     // WALKING IS NOT BLOCKED and never should be; the world staying live under
     // the narration is the point of it. What is gated is the TURN, and the
-    // smallest honest gate is an affirmative press: the first one turns the
-    // button into the question and sends nothing, the second sends. The keyboard
-    // path is the same button, so `e` asks once too.
+    // smallest honest gate is an affirmative press.
     //
-    // A CONFIRM AND NOT A FAST-FORWARD, deliberately. Fast-forwarding is the
-    // better affordance and the package cannot do it: presentation is advanced by
-    // host-private state (there is no such call on the surface props), so a
-    // package-side "skip" could only ever mean sending anyway and calling it
-    // skipping. The dialogue model that would make this moot is a roadmap item.
-    if (this._storyPending() && !this.talkConfirmArmed()) {
-      // Keyed on the TURN as well as the person: _storyPending() has already
-      // established there is a latest assistant turn, and the permission the
-      // second press gives is permission to spend THAT one.
-      this._talkConfirm = { id: npc.id, turn: this.host?.latestAssistant?.id ?? null };
-      this.hud?.toast("Story still to read — press again to skip ahead and talk.");
+    // A CONFIRM AND NOT A FAST-FORWARD, deliberately: presentation is advanced by
+    // host-private state, so a package-side "skip" could only ever mean sending
+    // anyway and calling it skipping.
+    if (this._storyPending() && !this.talkConfirmArmed(controlId)) {
+      this._talkConfirm = { anchorId: anchor.id, controlId, turn: this.host?.latestAssistant?.id ?? null };
       this.hud?.update();
       return;
     }
@@ -18522,9 +21640,14 @@ PF.core = {
     // which means an unfenced bump would credit the arriving chat's block with the
     // departing chat's conversation.
     const gen = PF.save._gen ?? 0;
+    // THE HANDOFF, FREEZE TO FREEZE. This unmounts the window on the mounted
+    // predicate's mode term and does NOT clear the latch: walk-with-latch froze
+    // the clock and the partner through the gate, dialogue freezes them through
+    // the mode test, and at the transition instant both are true. The latch
+    // clears on the eventual `setMode("walk")`, whichever exit gets there.
     this.setMode("dialogue");
-    this.hud?.toast(`Talking to ${npc.name}`);
-    const text = `${sim.composePrefix(npc)} I walk up to ${npc.name} the ${npc.role} and greet them.`;
+    this.hud?.toast(`Talking to ${anchor.name}`);
+    const text = `${sim.composePrefix(anchor)} ${action}`;
     // THE COMPOSED TURN'S OWN PENDING, captured HERE and closure-local. Two
     // readings of this would be wrong and both are easy: re-reading
     // `sim._pendingIntro` after the await finds the null commitIntro left behind
@@ -18565,31 +21688,18 @@ PF.core = {
           // the one-shot intro flags burn, and for the same reason — a refused
           // or failed send is not a conversation. SETTLEMENT-scoped (plan §2:
           // rel keys are per settlement), so one person is one row wherever in
-          // the world you happen to meet them. Surfacing the disposition in the
-          // turn header is P2's own item and deliberately not here.
-          PF.player.bump(this, sim.world.startZone, npc.name, { t: 1 }, gen);
-          // THE DELIVER VERB'S ONE SITE (0.13 §2.3). An errand is finished by
-          // TALKING — no item moves, because there is no quest-item type and
-          // inventing one for a word would be a format change nothing else asks
-          // for — so the handover is exactly this accepted turn, and it is the
-          // one quest verb that costs a GM call at all (Ruling 1 is lean, not
-          // zero). Gated on the captured generation AND on the sim still being
-          // the one the greeting was composed against; on a mismatch nothing is
-          // settled and the quest is still there to be finished by talking again.
-          //
-          // WHO THE ERRAND WAS RUN TO IS `npc`, the binding this whole method was
-          // composed against, and NOT a live proximity read. This used to copy
-          // `npc.name` into a `sentTo` of its own under a comment about the
-          // schedules walking somebody out of the room — which was two claims and
-          // both were wrong: `npc` is a const binding on the object the player
-          // walked up to, so a copy of its name guards nothing the binding does
-          // not, and the schedules cannot rename anybody. The hazard the closure
-          // really does answer is the OTHER shape this line could have taken —
-          // asking `this.sim.nearNpc` HERE, after the await, which is asking who
-          // is standing there now, after the host has had its whole thinking time
-          // for somebody else to wander in. The delivery was to the person the
-          // player greeted.
-          if (sentSim === this.sim) this.hud?.questFilled(PF.pack.delivered(this, npc.name, gen));
+          // the world you happen to meet them.
+          PF.player.bump(this, sim.world.startZone, anchor.name, { t: 1 }, gen);
+          if (sentSim === this.sim) {
+            onAccepted?.();
+            // WHO THE ERRAND WAS RUN TO IS `anchor`, the binding the window and
+            // this whole send were composed against, and NOT a live proximity
+            // read: the `.then` runs after the host has had its whole thinking
+            // time for somebody else to wander in. The delivery was to the
+            // person the player was talking to.
+            if (settles)
+              this.hud?.questFilled(PF.pack.delivered(this, anchor.name, gen, settles === true ? "" : settles));
+          }
         }
       })
       .catch((err) => {
@@ -18599,6 +21709,64 @@ PF.core = {
         console.warn("[pixelforge] interact send failed", err);
       });
     PF.save.markDirty(this);
+  },
+
+  /** THE FREE-TALK DOOR — the 0.13 greeting, verbatim, relocated into the window.
+   *  It settles EVERY errand to the name, which is 0.13's implicit handover kept
+   *  exactly as it was: the labelled rows are A mechanism for finishing an errand
+   *  on purpose, not the only one. */
+  talkFree() {
+    const npc = this._talkAnchor;
+    if (!npc) return;
+    this.talkSend({
+      controlId: "free",
+      action: `I walk up to ${npc.name} the ${npc.role} and greet them.`,
+      settles: true,
+    });
+  },
+
+  /** THE SAY DOOR. NO LENGTH CAP is imposed here, and that is the one deliberate
+   *  exception in a package that caps every other part of a composed turn at a
+   *  named number (situation 240, place flavor 120, persona 100, names 24). The
+   *  difference is what the text IS: every door those caps govern is STORED DATA
+   *  re-entering composition, and this is live player input, typed this second by
+   *  the person whose turn it is. If the host refuses the turn the player gets the
+   *  generic refusal and the typed text is not preserved — said plainly, because
+   *  the downstream bound is not something this package can see. */
+  talkSay(text) {
+    const npc = this._talkAnchor;
+    const said = String(text ?? "");
+    if (!npc || !said) return;
+    this.talkSend({ controlId: "say", action: `I say to ${npc.name} the ${npc.role}: "${said}"`, settles: false });
+  },
+
+  /** THE ESCALATION FOLLOW-UP, ratcheted per session: it retires on the ACCEPTED
+   *  turn and comes back only when the pack fold is rebuilt (a reload, a rewind, a
+   *  chat switch) — the `_filled` class of recorded cost. */
+  talkPress() {
+    const npc = this._talkAnchor;
+    if (!npc) return;
+    this.talkSend({
+      controlId: "press",
+      action: `I press ${npc.name} the ${npc.role} about what they were hinting at.`,
+      settles: false,
+      onAccepted: () => PF.pack.askBurn(this, npc),
+    });
+  },
+
+  /** ONE ERRAND, BY ROW ID. The id and never the row object: the branch was drawn
+   *  when the window opened and settles after an await, so the object is stale by
+   *  construction and `settle` pays off whatever it is handed. `delivered` re-finds
+   *  the live row at press time and refuses on a miss. */
+  talkHandOver(rowId) {
+    const npc = this._talkAnchor;
+    const id = String(rowId ?? "");
+    if (!npc || !id) return;
+    this.talkSend({
+      controlId: `deliver:${id}`,
+      action: `I hand over what I was asked to bring ${npc.name} the ${npc.role}.`,
+      settles: id,
+    });
   },
 
   /** A ZONE THE PLAYER WALKED INTO — the frame loop's own arrival, and one of the
@@ -18663,9 +21831,28 @@ PF.core = {
     };
     this._keyDown = (ev) => {
       if (!this.sim || !this._mainEl) return;
-      if (PF.save.gateHolds(this)) return; // nothing to walk in yet
+      // ESCAPE CLOSES THE TALK WINDOW, and it is ABOVE the gate return on purpose
+      // (plan §2.5). The gate can ARM while a window is open — `_switchChat` and
+      // `maybeGenerateBrief` both do it — and under it every branch below this
+      // line is dead, so a window mounted at that moment was a keyboard-dead
+      // surface over "Writing your world…" with the clock stopped behind it. The
+      // HUD's per-frame reconcile closes it too; this is the key half of the same
+      // hole, and it is worth having because the two run on different signals.
+      //
+      // AND IT CLOSES THE ONLY WAY A CLOSE IS DEFINED: by CLEARING THE LATCH, a
+      // sim write. A DOM-only close would leave the latch set, and the mounted
+      // predicate would put the window straight back on the next frame — a window
+      // that will not close, with a symptom pointing nowhere near its cause.
       const t = ev.target;
-      if (t && (t.tagName === "INPUT" || t.tagName === "TEXTAREA" || t.isContentEditable)) return;
+      const typing = !!t && (t.tagName === "INPUT" || t.tagName === "TEXTAREA" || t.isContentEditable);
+      if (!typing && this.talkOpen() && String(ev.key).toLowerCase() === "escape") {
+        this.closeTalk();
+        return;
+      }
+      if (PF.save.gateHolds(this)) return; // nothing to walk in yet
+      // Typing goes to whoever is being typed into — the host's message box, or
+      // the window's own Say field, which carries its own Escape and Enter.
+      if (typing) return;
       const k = ev.key.toLowerCase();
       if (this.sim.mode === "dialogue" && k === "escape") {
         this.setMode("walk");
@@ -18776,6 +21963,14 @@ PF.core = {
           this._declareChrome();
         }
         if (res.zoneChanged) this._zoneChanged();
+      }
+      // The notable-sky lines the clock movers parked. The sim holds no core and
+      // no generation, so it cannot file its own — it queues `{text, day}` rows
+      // and a frame spends them. The DAY RIDES: a multi-day fishing session files
+      // day 12's snow under day 12, not under the day the drain happened to run.
+      if (sim._weatherNotes.length) {
+        const gen = PF.save._gen ?? 0;
+        for (const note of sim._weatherNotes.splice(0)) PF.player.log(this, note.text, note.day, gen);
       }
       if (this._underlayEl) this.render?.draw(sim);
       // Positional autosave: at most one save per 30s of movement — the real

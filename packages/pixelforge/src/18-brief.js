@@ -211,6 +211,24 @@ PF.brief = (() => {
     };
     const population = Number(src.backgroundPopulation);
     brief.backgroundPopulation = Number.isFinite(population) ? Math.max(0, Math.min(500, Math.round(population))) : 0;
+    // THE TWO CLIMATE AXES, and they fold the OPPOSITE way to every scalar above:
+    // ABSENT-PRESERVING, never defaulted. A brief that names no climate ROLLS one
+    // off the seed (17-weather's axesFor), so "absent" means "the world chooses"
+    // and it is the richer answer — which in turn means a hostile hint must not
+    // be able to PIN an axis the roll owns. Present and a real band is kept;
+    // present and anything else is dropped to absent and the mint answers.
+    //
+    // ASSIGNED CONDITIONALLY so a brief whose author named no climate seals
+    // byte-for-byte the shape it always did: the fields exist only on the briefs
+    // that asked for them.
+    for (const [field, list] of [
+      ["latitude", PF.weather.LATITUDES],
+      ["precipitation", PF.weather.PRECIPS],
+    ]) {
+      const band = foldEnum(src[field], list, null);
+      if (band) brief[field] = band;
+      else if (typeof src[field] === "string" && src[field]) repairs.push(`${field}: dropped, the world will roll one`);
+    }
 
     // Pass 3 — zones. Item-level drop: an unknown tag drops the WHOLE feature.
     // The cap applies to KEPT items (a leading run of junk must not discard
@@ -588,6 +606,14 @@ PF.brief = (() => {
     foldAt(brief, "scale", Object.keys(SCALES), "village", "scale");
     foldAt(brief, "surround", SURROUNDS, pick(seed, "surround", SURROUNDS), "surround");
     foldAt(brief, "prosperity", PROSPERITY, "modest", "prosperity");
+    // The two climate axes, folded TO NULL rather than to a band — the same
+    // reading `foldFeatures` gives an unknown tag one screen down, and for the
+    // same reason: null is exactly what the mint already reads a missing axis as,
+    // so a hand-edited `latitude: "constructor"` never reaches a table key and
+    // never pins a climate the brief did not ask for. A brief sealed before these
+    // fields existed carries neither, keeps neither, and rolls.
+    foldAt(brief, "latitude", PF.weather.LATITUDES, null, "latitude");
+    foldAt(brief, "precipitation", PF.weather.PRECIPS, null, "precipitation");
     foldFeatures(brief.features, "features");
     if (Array.isArray(brief.places))
       brief.places.forEach((place, index) => {
@@ -805,6 +831,8 @@ PF.brief = (() => {
       `- scale: one of ${Object.keys(SCALES).join(" | ")} — the settlement's size class. Never a number.`,
       `- surround: one of ${SURROUNDS.join(" | ")}.`,
       `- prosperity: one of ${PROSPERITY.join(" | ")}.`,
+      `- latitude (optional): one of ${PF.weather.LATITUDES.join(" | ")} — set it only when the setting's identity demands it; omit to let the world roll its own.`,
+      `- precipitation (optional): one of ${PF.weather.PRECIPS.join(" | ")} — set it only when the setting's identity demands it; omit to let the world roll its own.`,
       "- name: the settlement's name, <=24 characters.",
       "- flavor: ONE sentence of arrival atmosphere, <=140 characters.",
       "- situation: ONE sentence, <=240 characters — the unresolved thing happening right now.",
@@ -849,6 +877,8 @@ PF.brief = (() => {
         scale: { type: "string", enum: Object.keys(SCALES) },
         surround: { type: "string", enum: SURROUNDS },
         prosperity: { type: "string", enum: PROSPERITY },
+        latitude: { type: "string", enum: PF.weather.LATITUDES },
+        precipitation: { type: "string", enum: PF.weather.PRECIPS },
         name: text(24),
         flavor: text(140),
         situation: text(240),

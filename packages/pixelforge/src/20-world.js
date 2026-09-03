@@ -652,6 +652,21 @@ PF.world = (() => {
           err,
           folded?._folds ?? [],
         );
+        // THE DEGRADE IS STILL THIS BRIEF'S WORLD. It is not a legacy chat — it
+        // is a sealed brief that failed to compile — so the climate is re-minted
+        // from the SAME brief through the SAME pure function the compile stamp
+        // uses. A brief that pinned `polar` still plays polar, and the digest,
+        // the header and the world can never split one brief into two climates.
+        // Only the true no-brief path below keeps the fixed defaults.
+        //
+        // The RAW sealed brief, not `folded`: the fold may itself have thrown,
+        // and axesFor's own membership test drops a hostile band exactly as the
+        // load door would have, so the two readings agree.
+        const degraded = buildLegacy(seed, theme);
+        const axes = PF.weather.axesFor(sealedBrief, seed, degraded.theme);
+        degraded.latitude = axes.latitude;
+        degraded.precipitation = axes.precipitation;
+        return degraded;
       }
     }
     return buildLegacy(seed, theme);
@@ -847,6 +862,13 @@ PF.world = (() => {
     return {
       seed,
       theme: activeTheme,
+      // The legacy layout is a HAND world, not a roll: three zones written out
+      // by literal, with no brief behind them to say what the place is. So it
+      // takes the fixed middle of both axes rather than a mint. (The degrade arm
+      // in build() re-stamps this world from its brief afterwards — that path
+      // has a brief and this one does not.)
+      latitude: "temperate",
+      precipitation: "moderate",
       zones: { village: v, inn: n, forest: f },
       startZone: "village",
       // The exterior binds to the campaign's starting World Maps location once known.
@@ -3756,9 +3778,23 @@ PF.world = (() => {
       if (zone) zone.place = place.kind;
     }
 
+    // THE CLIMATE STAMP. Runtime-only, like every other derived field here: no
+    // save row, no briefVersion bump, re-minted on every load from (brief, seed,
+    // theme). It goes through 17-weather's axesFor and NOT through a local roll,
+    // because the pack's digest door runs the very same call on the very same
+    // inputs — the two describe the same sky BY CONSTRUCTION rather than by
+    // whichever world happens to be standing when the pack is solicited.
+    //
+    // `activeTheme` rather than `brief.theme` reads the theme the world actually
+    // got; the two agree in every case, since setTheme and axesFor both fall back
+    // to cozy-village for a word neither table knows.
+    const axes = PF.weather.axesFor(brief, seed, activeTheme);
+
     return {
       seed,
       theme: activeTheme,
+      latitude: axes.latitude,
+      precipitation: axes.precipitation,
       brieved: true, // marks a compiled world (saves still carry only seed/theme/zone)
       situation: brief.situation,
       zones,
