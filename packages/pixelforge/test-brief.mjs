@@ -26809,16 +26809,26 @@ const fire = (node, type) => Promise.all((node.listeners[type] ?? []).map((fn) =
     // THE WIDEST LEGAL LINE ROW, MEASURED — the number the residual paragraph
     // beside `floorBasis` states. It is the whole standing of "the row costs are
     // measured density, not the schema's maximum", so it is pinned rather than
-    // restated: a 200-character line carrying BOTH optional tags.
+    // restated: a 200-character line carrying BOTH optional tags, on the WIDEST
+    // value each enum offers. The handle was the one that was wrong — this row
+    // was built on "sanctuary" and cost 293, while LOCATIONS' widest word is
+    // "settlement" at ten characters, which is 294. Every enum here is asserted
+    // to be that widest value rather than trusted to stay it.
+    const widestOf = (list) => list.reduce((a, b) => (b.length > a.length ? b : a));
+    assert.equal(widestOf(pack.LOCATIONS), "settlement", "the widest handle the schema allows");
+    assert.equal(widestOf(pack.DAYPARTS), "night", "…the widest daypart");
+    assert.equal(widestOf(pack.REGISTERS), "stranger", "…the widest register");
+    assert.equal(widestOf(pack.TOPICS), "smalltalk", "…the widest topic");
+    assert.equal(widestOf(pack.WEATHERS), "overcast", "…and the widest sky word");
     const widest = JSON.stringify({
-      at: "sanctuary",
+      at: "settlement",
       when: "night",
       r: "stranger",
       text: "x".repeat(pack.CAPS.text),
       topic: "smalltalk",
       w: "overcast",
     });
-    assert.equal(widest.length, 293, `the widest legal line row is the 293 chars the floor table says (${widest.length})`);
+    assert.equal(widest.length, 294, `the widest legal line row is the 294 chars the floor table says (${widest.length})`);
     assert.ok(
       widest.length > pack.TUNING.floorBasis.lineChars * 2,
       "…which is more than twice what the basis costs a typical one, and that gap IS the residual",

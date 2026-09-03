@@ -181,7 +181,8 @@ PF.pack = (() => {
     // typical row costs, and not a ceiling. What the schema ALLOWS is far bigger: a
     // 32-char slug, a 24-char giver, a 32-char variant and a 48-char title make
     // a 217-char template, and a 200-char line carrying BOTH tags — the topic and
-    // the 0.14 sky term — is 293 serialized, measured and pinned. So what the
+    // the 0.14 sky term — is 294 serialized on the widest handle LOCATIONS names
+    // ("settlement", ten characters), measured and pinned. So what the
     // sum shows is that the floors CLEAR A TYPICAL TEMPLATES-FIRST CUT, and it
     // is not a worst-case guarantee. It cannot be one and keep these floors:
     // 24 × 217 leaves 896 chars of index, which is two rows, and a floor sized
