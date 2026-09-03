@@ -2881,7 +2881,20 @@ async function main() {
       assert.equal(await destinationPanel.locator('[data-ltm-availability-action="chat:all"]').count(), 1);
       await destinationPanel.locator('[data-ltm-availability-search="chat"]').fill("");
       assert.equal(await destinationPanel.locator('[data-ltm-availability-action="chat:current"]').count(), 1);
+      await destinationPanel.locator('[data-ltm-availability-action="chat:all"]').click();
+      assert.equal(
+        await destinationPanel.locator('[data-ltm-availability-target="chat:bulk-chat-99"] input').isChecked(),
+        true,
+      );
+      assert.equal(
+        await destinationPanel.locator('[data-ltm-availability-target="chat:desktop-chat"] input').isChecked(),
+        false,
+      );
       assert.equal(await destinationPanel.locator('[data-ltm-availability-action="chat:all"]').count(), 1);
+      for (let index = 0; index < 100; index += 1) {
+        const bulkChat = destinationPanel.locator(`[data-ltm-availability-target="chat:bulk-chat-${index}"] input`);
+        await bulkChat.evaluate((element) => (element as HTMLInputElement).click());
+      }
       await destinationPanel.locator('[data-ltm-availability-tab="branch"]').click();
       assert.equal(await destinationPanel.locator('[data-ltm-availability-action="branch:current"]').count(), 0);
       assert.equal(await destinationPanel.locator('[data-ltm-availability-action="branch:all"]').count(), 1);

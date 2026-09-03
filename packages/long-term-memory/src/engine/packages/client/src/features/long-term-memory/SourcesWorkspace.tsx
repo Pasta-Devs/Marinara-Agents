@@ -375,7 +375,7 @@ function DestinationScopePanel({
 }: {
   targets: ScopeTarget[];
   selectedIds: string[];
-  currentIds: { chat?: string; branch?: string; character?: string };
+  currentIds: { chat?: string; branch?: string; character?: string; persona?: string };
   onChange: (ids: string[]) => void;
   mode: LtmMode | "all";
   source: Source;
@@ -443,17 +443,19 @@ function DestinationScopePanel({
     chat: currentIds.chat ? sortedTargets.find((target) => target.id === currentIds.chat) : undefined,
     branch: currentIds.branch ? sortedTargets.find((target) => target.id === currentIds.branch) : undefined,
     character: currentIds.character ? sortedTargets.find((target) => target.id === currentIds.character) : undefined,
-    persona: undefined,
+    persona: currentIds.persona ? sortedTargets.find((target) => target.id === currentIds.persona) : undefined,
   };
   const renderCategoryActionRow = (kind: Exclude<ScopeTargetKind, "all">) => {
-    if (kind === "persona") return null;
     const currentTarget = currentTargetByKind[kind];
+    const categoryTargets = sortedTargets.filter((target) => target.kind === kind);
     const allLabel =
       kind === "chat"
         ? localizeUi("ui.longTermMemory.sourcesworkspace.allChats")
         : kind === "branch"
           ? localizeUi("ui.longTermMemory.sourcesworkspace.allBranches")
-          : localizeUi("ui.longTermMemory.sourcesworkspace.allCharacters");
+          : kind === "character"
+            ? localizeUi("ui.longTermMemory.sourcesworkspace.allCharacters")
+            : localizeUi("ui.longTermMemory.memoryvault.allPersonas");
     return (
       <div className="mb-2 divide-y divide-[var(--border)] rounded-md border border-[var(--border)]">
         {currentTarget ? (
@@ -473,8 +475,25 @@ function DestinationScopePanel({
         <button
           type="button"
           data-ltm-availability-action={`${kind}:all`}
+          aria-pressed={
+            categoryTargets.length > 0 && categoryTargets.every((target) => selectedIds.includes(target.id))
+          }
           className="flex min-h-11 w-full items-center gap-3 px-3 py-2 text-left text-sm font-semibold hover:bg-[var(--secondary)]/35"
-          onClick={() => setQuery("")}
+          onClick={() => {
+            const nextIds = [...selectedIds];
+            const nextTargets = [...selectedTargets];
+            for (const target of categoryTargets) {
+              if (
+                nextIds.includes(target.id) ||
+                !targetFitsDestinationScope(mergedDestinationScope(nextTargets), target)
+              )
+                continue;
+              nextIds.push(target.id);
+              nextTargets.push(target);
+            }
+            onChange(nextIds);
+            setQuery("");
+          }}
         >
           <span className="min-w-0 flex-1 truncate">{allLabel}</span>
         </button>
@@ -577,6 +596,7 @@ function DestinationScopePanel({
                 </span>
                 <button
                   type="button"
+                  disabled={disabled}
                   aria-label={localizeUi("ui.longTermMemory.sourcesworkspace.removeLocationValue1", {
                     value1: targetDisplayLabel(target, true),
                   })}
@@ -1565,6 +1585,7 @@ export default function SourcesWorkspace({
     const currentChatRecord = currentChatId ? scopeIndexes.chatsById.get(currentChatId) : undefined;
     const branchId = currentChatRecord?.groupId ?? null;
     const characterIds = currentChatRecord?.characterIds ?? [];
+    const personaId = currentChatRecord?.personaId ?? null;
     return {
       chat: currentChatId ? `chat:${currentChatId}` : undefined,
       branch:
@@ -1574,6 +1595,10 @@ export default function SourcesWorkspace({
       character:
         characterIds.length === 1 && destinationTargets.some((target) => target.id === `character:${characterIds[0]}`)
           ? `character:${characterIds[0]}`
+          : undefined,
+      persona:
+        personaId && destinationTargets.some((target) => target.id === `persona:${personaId}`)
+          ? `persona:${personaId}`
           : undefined,
     };
   }, [destinationTargets, props.chatId, scopeIndexes.chatsById, scopeTargets.data?.currentScope?.chatId]);
