@@ -8324,31 +8324,58 @@ const SNOW_IDS = ["grassSnow", "grassSnow2", "cropSnow", "canopySnow"];
     assert.equal(A.status, "ready", "…and a sheet that fits its id map loads");
     assert.ok(A.tileCanvas("t0"), "…with the theme's tiles served off the sheet again");
 
-    // ── AND THE STATE THIS RELEASE ACTUALLY SHIPS IN, UNTIL THE BAKE ─────────
-    // The four snow ids are in the painters and in the GENERATOR, but atlas.json
-    // and both PNGs are build outputs and have not been re-baked. So the atlas
-    // does not list them — which is the OTHER arm of the tier's guarantee, the
-    // per-tile one, and the arm that works: an unlisted id returns null and the
-    // Tier-0 painter answers. Procedural snow, not a see-through field. Pinned
-    // because "it degrades gracefully" is exactly the kind of claim that stops
-    // being true quietly.
+    // ── AND THE STATE THIS RELEASE SHIPS IN, NOW THAT THE BAKE HAS RUN ───────
+    // THIS PIN INVERTED, AND INVERTING IS WHAT IT WAS FOR. Through slices 3-5 it
+    // asserted the four snow ids were ABSENT from atlas.json — the honest
+    // description of a tree whose painters and whose generator both knew about
+    // snow while its build outputs did not — and it carried a note saying §6b's
+    // rebuild would have to come back here and flip it. This is that flip: the
+    // sheet grew a fifth row (33 ids over 8 columns, 128×64 → 128×80) and the
+    // atlas lists all four. A pin that only ever stays green never tells anybody
+    // the day the world changed under it.
     //
     // Read off DISK, against the SHIPPED atlas.json. The synthetic map above
-    // lists t0..t32 and would answer null for a misspelling just as readily, so
-    // asking IT about a snow id says nothing about what this package ships —
-    // which is why the four ids could be added to the real file and this block
-    // stay green. This is a PRE-BAKE pin and it is MEANT to invert: §6b's
-    // rebuild lists all four, and the commit that runs the bake has to come back
-    // here and say so. Noticing that is the whole reason it exists.
+    // lists t0..t32 and would answer for a snow id just as readily, so asking IT
+    // says nothing about what this package ships.
     const shippedAtlas = JSON.parse(readFileSync(join(here, "atlas.json"), "utf8"));
     for (const id of SNOW_IDS)
-      assert.ok(
-        !Object.hasOwn(shippedAtlas.tiles, id),
-        `the shipped atlas.json does not list ${id} yet — the bake is still owed`,
-      );
-    // …and the degradation demonstrated against THAT map, not the fixture's.
+      assert.ok(Object.hasOwn(shippedAtlas.tiles, id), `the shipped atlas.json lists ${id} — the bake has run`);
+    // APPENDED, NEVER INSERTED — asked of the FILE this time, not of the
+    // generator's source order, because the index map is what a shipped world's
+    // tiles are actually resolved through. Every id that is not a snow id sits
+    // at a LOWER index than every id that is, so nothing that shipped before
+    // them moved slot; a snow tile dropped in beside `grass` where it reads
+    // nicely would pass the presence check above and repaint the whole map.
+    const snowIndices = SNOW_IDS.map((id) => shippedAtlas.tiles[id]);
+    const otherIndices = Object.entries(shippedAtlas.tiles)
+      .filter(([id]) => !SNOW_IDS.includes(id))
+      .map(([, index]) => index);
+    assert.ok(
+      Math.min(...snowIndices) > Math.max(...otherIndices),
+      "…on the END of the index map, where every id that shipped before them keeps its slot",
+    );
+    assert.deepEqual(
+      snowIndices,
+      [...snowIndices].sort((a, b) => a - b),
+      "…and contiguous in SUBS order rather than scattered through the new row",
+    );
+    // THE PER-TILE DEGRADATION ARM IS STILL REAL and still wants a pin; only its
+    // example moved. An id the shipped atlas does not list gets no Tier-1 answer
+    // and the Tier-0 painter draws it — which is what the NEXT tile shipped
+    // ahead of its own bake will rely on, exactly as snow did for three slices.
     A.atlas = shippedAtlas;
-    assert.equal(A.tileCanvas("grassSnow"), null, "an id the shipped atlas does not list gets no Tier-1 answer");
+    assert.equal(
+      A.tileCanvas("aTileNoBakeHasEverProduced"),
+      null,
+      "an id the shipped atlas does not list gets no Tier-1 answer",
+    );
+    assert.ok(A.tileCanvas("grassSnow"), "…while grassSnow, which took that path for three slices, now resolves");
+    // AND THE TIER-0 SNOW PAINTERS STILL HAVE TO BE SNOW, which the bake does not
+    // retire: an install whose sheet never loads is exactly the case Tier-0
+    // exists for. Driven by pointing the assets at a theme that is not the live
+    // one, so `tile()` takes the procedural branch by the shipped rule rather
+    // than by luck of what the fixture left behind.
+    A.atlasTheme = "not-the-live-theme";
     loadedPF.art.setTheme("sci-fi-colony");
     loadedPF.art.setTheme("cozy-village");
     const drawnSnow = loadedPF.art.tile("grassSnow");
