@@ -2444,6 +2444,11 @@ PF.Hud = class {
 // The economy's TUNING idiom: a number the layer spends is written down once,
 // with the reason it is that number.
 PF.Hud.TUNING = {
+  // How far the player may step from a held conversation partner before the
+  // window closes, in tiles (the dialogue window's band). This is the live one —
+  // a second `leaveTiles` sat in `PF.weather.TUNING` with no reader at all, and
+  // the half of it worth keeping was this sentence.
+  //
   // "Stepping more than one tile from the partner closes the window" — ruling
   // B2-3b's own words, turned into a predicate that says the same thing the prose
   // says. Two full tiles centre to centre is over the line, so the bound is

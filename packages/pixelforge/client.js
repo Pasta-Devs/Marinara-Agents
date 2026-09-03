@@ -1267,8 +1267,11 @@ PF.weather = (() => {
     subpolar: { warmth: 1, swing: 2, structure: "four" },
     // Warmth 0 with a swing of 1 means what it says: polar summer reaches t = 1,
     // where flurries and cold drizzle are both possible and a storm is
-    // arithmetically unreachable (the storm gate opens above t = 2). Every other
-    // polar season sits at or below the full-snow line.
+    // arithmetically unreachable (the storm gate opens above t = 2). WINTER IS
+    // THE ONLY POLAR SEASON AT OR BELOW THE FULL-SNOW LINE: that line is
+    // `freezePoint - mixBand` = -0.5 and winter sits at t = -1, while spring and
+    // autumn sit at t = 0 — a snow-heavy mix that still falls a quarter rain, and
+    // summer three quarters.
     polar: { warmth: 0, swing: 1, structure: "four" },
   };
 
@@ -1296,9 +1299,6 @@ PF.weather = (() => {
   // player-state).
   const TUNING = {
     yearDays: 365,
-    // How far the player may step from a held conversation partner before the
-    // window closes, in tiles (the dialogue window's band).
-    leaveTiles: 1,
     // The words worth a ledger line when a day-crossing brings them in.
     notable: ["snow", "storm"],
     // THE THREE BAND EDGES. `freezePoint` is the temperature at which the snow
@@ -20766,6 +20766,11 @@ PF.Hud = class {
 // The economy's TUNING idiom: a number the layer spends is written down once,
 // with the reason it is that number.
 PF.Hud.TUNING = {
+  // How far the player may step from a held conversation partner before the
+  // window closes, in tiles (the dialogue window's band). This is the live one —
+  // a second `leaveTiles` sat in `PF.weather.TUNING` with no reader at all, and
+  // the half of it worth keeping was this sentence.
+  //
   // "Stepping more than one tile from the partner closes the window" — ruling
   // B2-3b's own words, turned into a predicate that says the same thing the prose
   // says. Two full tiles centre to centre is over the line, so the bound is
