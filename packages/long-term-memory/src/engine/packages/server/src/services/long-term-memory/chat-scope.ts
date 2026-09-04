@@ -43,8 +43,12 @@ export function resolveChatLtmScope(chat: {
   ) satisfies LtmScope;
 }
 
-export function resolveChatLtmWriteScope(chat: { id: string }) {
-  return { chatId: chat.id, chatIds: [chat.id] } satisfies LtmScope;
+export function resolveChatLtmWriteScope(chat: { id: string; groupId?: string | null }) {
+  return {
+    chatId: chat.id,
+    chatIds: [chat.id],
+    ...(chat.groupId ? { groupId: chat.groupId, groupIds: [chat.groupId] } : {}),
+  } satisfies LtmScope;
 }
 
 export function ltmScopeFamilyId(scope: Pick<LtmScope, "chatId" | "chatIds" | "groupId" | "groupIds">) {
@@ -105,17 +109,13 @@ function getScopeIds(primary: string | null | undefined, values: string[] | unde
 }
 
 function normalizeLocalIdentityComponent(value: string, maxLength: number) {
-  const normalized = value
-    .trim()
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, "_")
+  const raw = value.trim().toLowerCase();
+  const normalized = raw
+    .replace(/[^a-z0-9_]+/g, "_")
     .replace(/^_+|_+$/g, "")
     .replace(/_+$/g, "");
-  if (normalized.length <= maxLength && normalized) return normalized;
-  const digest = createHash("sha256")
-    .update(normalized || value.trim().toLowerCase())
-    .digest("hex")
-    .slice(0, 12);
+  if (normalized && normalized.length <= maxLength && normalized === raw) return normalized;
+  const digest = createHash("sha256").update(raw).digest("hex").slice(0, 12);
   const suffix = `_${digest}`;
   return `${(normalized || "x").slice(0, Math.max(1, maxLength - suffix.length))}${suffix}`;
 }

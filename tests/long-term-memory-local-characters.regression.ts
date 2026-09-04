@@ -26,7 +26,9 @@ function unit(input: {
 
 async function main() {
   const { compileLtmEvidenceUnits } = await import(`${source}/evidence-unit-compiler.ts`);
-  const { localCharacterScopeError, localCharacterSubjectForName } = await import(`${source}/chat-scope.ts`);
+  const { localCharacterScopeError, localCharacterSubjectForName, ltmScopeFamilyId } = await import(
+    `${source}/chat-scope.ts`
+  );
   const { buildTrustedLtmSubjectCatalog, prepareLtmSubjectIdentityContext, trustedLtmIdentityNotesForSource } =
     await import(`${source}/subject-identity.ts`);
 
@@ -113,6 +115,11 @@ async function main() {
     localCharacterSubjectForName(scope, longNameA)!.key,
     localCharacterSubjectForName(scope, longNameB)!.key,
   );
+  assert.notEqual(localCharacterSubjectForName(scope, "Mara!")!.key, localCharacterSubjectForName(scope, "Mara?")!.key);
+  assert.notEqual(
+    localCharacterSubjectForName({ groupId: "family-a", groupIds: ["family-a"] }, "Mara")!.key,
+    localCharacterSubjectForName({ groupId: "family_a", groupIds: ["family_a"] }, "Mara")!.key,
+  );
 
   const generic = prepareLtmSubjectIdentityContext({
     units: [
@@ -140,6 +147,7 @@ async function main() {
   });
   assert.notEqual(resolved.units[0]!.subjects?.[0]?.key, otherFamily.units[0]!.subjects?.[0]?.key);
 
+  const familyId = ltmScopeFamilyId(scope);
   const ambiguous = buildTrustedLtmSubjectCatalog({
     roster: [],
     notes: [
@@ -150,8 +158,8 @@ async function main() {
         title: "Mara",
         subjects: [
           {
-            key: "local_character:chat_chat_a:mara-one",
-            ref: { kind: "local_character", id: "chat_chat_a:mara-one" },
+            key: `local_character:${familyId}:mara-one`,
+            ref: { kind: "local_character", id: `${familyId}:mara-one` },
           },
         ],
       } as any,
@@ -162,8 +170,8 @@ async function main() {
         title: "Mara",
         subjects: [
           {
-            key: "local_character:chat_chat_a:mara-two",
-            ref: { kind: "local_character", id: "chat_chat_a:mara-two" },
+            key: `local_character:${familyId}:mara-two`,
+            ref: { kind: "local_character", id: `${familyId}:mara-two` },
           },
         ],
       } as any,
@@ -234,6 +242,21 @@ async function main() {
     gameCatalog.entries.some((entry) => entry.name === "Vela"),
     false,
   );
+  const { evidenceUnitMessages } = await import(`${source}/evidence-unit-extraction.ts`);
+  const messages = evidenceUnitMessages({
+    sourceNote: { ...sourceNote, modes: ["game"] } as any,
+    sourceText: "Mara visits the party.",
+    sourceHash: "a".repeat(64),
+    modes: ["game"],
+    mode: "game",
+    trustedSubjectCatalog: {
+      entries: [{ subject: validSubject, name: "Mara", aliases: [], canonicalSlug: "mara", familyId: "chat_chat_a" }],
+      notes: [],
+    },
+    languageModel: {} as any,
+  });
+  const promptBody = JSON.stringify(messages);
+  assert.equal(promptBody.includes("local_character:"), false);
 
   process.stdout.write(
     "Long-Term Memory local-character regression: scoped identity, review risk, safeguards, and isolation passed\n",

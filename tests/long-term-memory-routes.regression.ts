@@ -988,6 +988,8 @@ async function main() {
       personaId: "persona-fixture",
       personaIds: ["persona-fixture"],
     });
+    const observatoryFamilyId = "group_observatory_branches_37a983fd32de";
+    const archiveChatFamilyId = "chat_chat_b_58689bbec408";
     await storageService.storage.createNote({
       id: "char_local_mara_group",
       title: "Mara",
@@ -1000,8 +1002,8 @@ async function main() {
       links: [],
       subjects: [
         {
-          key: "local_character:group_observatory_branches:mara",
-          ref: { kind: "local_character", id: "group_observatory_branches:mara" },
+          key: `local_character:${observatoryFamilyId}:mara`,
+          ref: { kind: "local_character", id: `${observatoryFamilyId}:mara` },
         },
       ],
       sections: {
@@ -1020,8 +1022,8 @@ async function main() {
       links: [],
       subjects: [
         {
-          key: "local_character:chat_chat_b:mara",
-          ref: { kind: "local_character", id: "chat_chat_b:mara" },
+          key: `local_character:${archiveChatFamilyId}:mara`,
+          ref: { kind: "local_character", id: `${archiveChatFamilyId}:mara` },
         },
       ],
       sections: {
@@ -1044,8 +1046,8 @@ async function main() {
         links: [],
         subjects: [
           {
-            key: "local_character:group_observatory_branches:mara",
-            ref: { kind: "local_character", id: "group_observatory_branches:mara" },
+            key: `local_character:${observatoryFamilyId}:mara`,
+            ref: { kind: "local_character", id: `${observatoryFamilyId}:mara` },
           },
         ],
         sections: {
@@ -1061,8 +1063,8 @@ async function main() {
       payload: {
         subjects: [
           {
-            key: "local_character:chat_chat_b:mara",
-            ref: { kind: "local_character", id: "chat_chat_b:mara" },
+            key: `local_character:${archiveChatFamilyId}:mara`,
+            ref: { kind: "local_character", id: `${archiveChatFamilyId}:mara` },
           },
         ],
       },
@@ -1075,6 +1077,19 @@ async function main() {
       payload: { noteIds: ["char_local_mara_group"], addScope: { groupIds: ["archive-family"] } },
     });
     assert.equal(rejectedBulkFamilyExpansion.statusCode, 400, rejectedBulkFamilyExpansion.body);
+    const rejectedTransferCrossFamily = await app.inject({
+      method: "POST",
+      url: "/api/long-term-memory/notes/transfer",
+      headers,
+      payload: {
+        requestedNoteIds: ["char_local_mara_group"],
+        derivedNoteIds: [],
+        applyNoteIds: ["char_local_mara_group"],
+        mode: "copy",
+        destinationChatId: "chat-b",
+      },
+    });
+    assert.equal(rejectedTransferCrossFamily.statusCode, 400, rejectedTransferCrossFamily.body);
     await storageService.storage.createNote({
       id: "world_professor_mari_group",
       type: "world",
@@ -1125,11 +1140,11 @@ async function main() {
       JSON.stringify(scopeTargets.json().characters),
     );
     assert.equal(
-      scopeTargets.json().localCharacters.some((character: any) => character.id === "group_observatory_branches:mara"),
+      scopeTargets.json().localCharacters.some((character: any) => character.id === `${observatoryFamilyId}:mara`),
       true,
     );
     assert.equal(
-      scopeTargets.json().localCharacters.some((character: any) => character.id === "chat_chat_b:mara"),
+      scopeTargets.json().localCharacters.some((character: any) => character.id === `${archiveChatFamilyId}:mara`),
       false,
     );
     const gameScopeTargets = await app.inject({
@@ -1220,7 +1235,7 @@ async function main() {
       true,
     );
     assert.equal(
-      allScopeTargets.json().localCharacters.some((character: any) => character.id === "chat_chat_b:mara"),
+      allScopeTargets.json().localCharacters.some((character: any) => character.id === `${archiveChatFamilyId}:mara`),
       true,
       JSON.stringify(allScopeTargets.json().localCharacters),
     );
