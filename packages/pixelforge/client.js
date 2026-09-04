@@ -21985,38 +21985,57 @@ PF.core = {
           // The pending carries the notice ROWS as well as the day, so the burn
           // marks the band THIS turn told rather than the live one, which a
           // rebuild can have appended to under the await (plan §2.5).
+          //
+          // AND IT STAYS OUTSIDE THE sentSim FENCE BELOW, deliberately. flush is
+          // idempotent and monotone — a `flushedDay` gate that only ever moves
+          // forward — and REBUILD-DESIGNED: it carries the told-flag notice rows
+          // so a burn landing on a replaced sim marks the band THIS turn told, and
+          // it reads the LIVE sim's own numbers to refuse on them. Fencing it on
+          // object identity would drop the tell on a rebuild and re-say it forever
+          // (§5 lost-flush). gen-guarded is the whole guard flush needs; the
+          // promotion below needs more, which is why the two sit on opposite sides
+          // of the fence.
           if (pend?.ledger) PF.player.flush(this, pend.ledger.throughDay, pend.ledger.notices, gen);
-          // P2's ledger goes live on the cheapest honest signal there is: the
-          // encounter count moves when the host ACCEPTS the turn, exactly where
-          // the one-shot intro flags burn, and for the same reason — a refused
-          // or failed send is not a conversation. SETTLEMENT-scoped (plan §2:
-          // rel keys are per settlement), so one person is one row wherever in
-          // the world you happen to meet them.
-          // CASUAL, and deliberately: this is the talk press, and small talk is
-          // the class that cannot carry anybody past acquainted however long it
-          // goes on (58-player CASUAL_CEILING).
-          const bumped = PF.player.bump(this, sim.world.startZone, anchor.name, { t: 1 }, gen);
-          // A rung earned by TALKING is announced where a rung earned by a job
-          // already is (hud.questFilled) — same phrase, same authority, and only
-          // on the call that crossed the line. HANDED to questFilled rather than
-          // toasted beside it: an accepted turn is ONE event to the player, and
-          // two toasts in a tick is one toast, so a rise said separately erased
-          // the handover receipt standing next to it (70-hud `_said`).
-          const rise = bumped?.rose ? { name: anchor.name, rung: bumped.rose } : null;
-          let done = [];
           if (sentSim === this.sim) {
+            // P2's ledger goes live on the cheapest honest signal there is: the
+            // encounter count moves when the host ACCEPTS the turn, exactly where
+            // the one-shot intro flags burn, and for the same reason — a refused
+            // or failed send is not a conversation. SETTLEMENT-scoped (plan §2:
+            // rel keys are per settlement), so one person is one row wherever in
+            // the world you happen to meet them.
+            // CASUAL, and deliberately: this is the talk press, and small talk is
+            // the class that cannot carry anybody past acquainted however long it
+            // goes on (58-player CASUAL_CEILING).
+            //
+            // INSIDE THE sentSim FENCE, the SAME one `delivered()` below uses and
+            // for the same reason it does: `_gen` moves on a chat switch, but
+            // `_rebuild` (a rewind, a checkpoint load, a swipe) replaces `core.sim`
+            // wholesale WITHOUT touching it, so the gen guard alone would let this
+            // bump promote against the REPLACEMENT sim. A rung earned in a world
+            // that was replaced under the await is not written to its replacement —
+            // object identity catches the seam the generation cannot see.
+            const bumped = PF.player.bump(this, sim.world.startZone, anchor.name, { t: 1 }, gen);
+            // A rung earned by TALKING is announced where a rung earned by a job
+            // already is (hud.questFilled) — same phrase, same authority, and only
+            // on the call that crossed the line. HANDED to questFilled rather than
+            // toasted beside it: an accepted turn is ONE event to the player, and
+            // two toasts in a tick is one toast, so a rise said separately erased
+            // the handover receipt standing next to it (70-hud `_said`).
+            const rise = bumped?.rose ? { name: anchor.name, rung: bumped.rose } : null;
             onAccepted?.();
             // WHO THE ERRAND WAS RUN TO IS `anchor`, the binding the window and
             // this whole send were composed against, and NOT a live proximity
             // read: the `.then` runs after the host has had its whole thinking
             // time for somebody else to wander in. The delivery was to the
             // person the player was talking to.
+            let done = [];
             if (settles) done = PF.pack.delivered(this, anchor.name, gen, settles === true ? "" : settles);
+            // ONE EVENT, ONE SENTENCE: the errands filed and the rung earned on
+            // this accepted turn are handed to the composer together (70-hud
+            // `_said`). A replaced sim reaches none of this — no promotion and no
+            // announcement — which is the whole point of moving it inside.
+            this.hud?.questFilled(done, rise);
           }
-          // Outside the fence on purpose, exactly as the old rise toast was: a
-          // chat switch under the await stops the errands from being filed, not
-          // the rung the player already earned from being said.
-          this.hud?.questFilled(done, rise);
         }
       })
       .catch((err) => {

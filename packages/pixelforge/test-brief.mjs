@@ -23404,6 +23404,84 @@ const fire = (node, type) => Promise.all((node.listeners[type] ?? []).map((fn) =
       assert.deepEqual(seen, [], "…and a turn with nothing to say says nothing");
     }
 
+    // ── A RUNG EARNED IN A WORLD REPLACED UNDER THE AWAIT IS NOT WRITTEN TO
+    //    ITS REPLACEMENT (0.15, the sentSim identity fence) ──────────────────
+    // The generation fence guards `bump` on `_gen`, which moves ONLY on a chat
+    // switch — but `_rebuild` (a rewind, a checkpoint load, a swipe) replaces
+    // `core.sim` wholesale on the SAME chat WITHOUT touching `_gen`. So a talk
+    // turn composed against one sim and resolving after the rebuild slips past
+    // the gen fence with a bump aimed at a REPLACEMENT world the conversation
+    // never happened in: it promotes a stranger there and fires a friendship
+    // toast on a story that did not earn it. `bump` and its rise now sit inside
+    // the same `sentSim === this.sim` identity fence the delivery does, so a
+    // replaced sim is left untouched and `questFilled` has nothing to announce.
+    // (`flush` stays OUTSIDE that fence on purpose — it is idempotent, monotone
+    // and rebuild-designed; the wrap-up cases above are what would regress if it
+    // were fenced. Only the promotion is object-identity sensitive.)
+    {
+      const P = loadedPF.player;
+      const t = stage({ chatId: "chat-sentsim-swap" });
+      const zone = core.sim.world.startZone;
+      const npc = t.npcs()[0];
+
+      const filled = [];
+      const bareFilled = t.hud.questFilled.bind(t.hud);
+      t.hud.questFilled = (done, rise) => {
+        filled.push({ done, rise });
+        return bareFilled(done, rise);
+      };
+      const seen = [];
+      const bareToast = t.hud.toast.bind(t.hud);
+      t.hud.toast = (line) => {
+        seen.push(line);
+        return bareToast(line);
+      };
+
+      // The world the REBUILD lands under the send: a fresh sim object, same
+      // chat and same `_gen`, standing one casual encounter short of acquainted
+      // with THIS very person — so a stray talk bump would tip them over the
+      // line and toast a rung earned in a story that was never told here.
+      const replaced = new loadedPF.Sim(world.build(4242, "cozy-village"));
+      P.bump({ chatId: t.host.chatId, sim: replaced }, zone, npc.name, { t: P.PROMOTION[0] - 1 });
+      const before = P.get({ sim: replaced }).rel[zone][npc.name];
+      assert.deepEqual(
+        [before.d, before.t],
+        [0, P.PROMOTION[0] - 1],
+        "the replacement stands one short of the line before the send resolves",
+      );
+
+      // Open the window and press the greeting on the LIVE sim, then swap the
+      // sim under the send the way `_rebuild` does — wholesale, and WITHOUT
+      // bumping `_gen` (the seam the gen fence is blind to). The swap lands
+      // inside `sendMessage`, before the accepted-turn `.then` reads `this.sim`,
+      // which is exactly the race a real rewind loses.
+      t.openOn(npc);
+      t.host.sendMessage = (text) => {
+        t.sent.push(text);
+        core.sim = replaced; // the rebuild lands under the await
+        return true;
+      };
+      core.talkFree();
+      await settle();
+
+      const after = P.get({ sim: replaced }).rel[zone][npc.name];
+      assert.deepEqual(
+        [after.d, after.t],
+        [0, P.PROMOTION[0] - 1],
+        "the rung did NOT move on the sim the conversation never happened in",
+      );
+      assert.ok(
+        !filled.some((call) => call.rise),
+        `no rise is handed to the composer for a replaced world (${JSON.stringify(filled)})`,
+      );
+      assert.ok(
+        !seen.some((line) => /knows you now/.test(line)),
+        `and no friendship toast fired on a world the turn did not earn it in (${seen.join(" | ")})`,
+      );
+      core.closeTalk();
+      core.sim = t.sim;
+    }
+
     // ── A LINE TAGGED FOR A SKY IS SERVED UNDER THAT SKY AND NO OTHER ───────
     // The weather term is the axis the pack's `w` field spends, and it is the
     // five WORDS: an intensity never enters it, so a line tagged `rain` is served
