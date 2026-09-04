@@ -1091,18 +1091,15 @@ export function NoodleHome({ navigation, onNavigate }: NoodleHomeProps) {
       const envelope = JSON.parse(window.localStorage.getItem("marinara-engine-ui") ?? "null") as {
         state?: Record<string, unknown>;
       } | null;
-      const legacy = handoff ?? envelope?.state;
-      if (
-        !legacy ||
-        (handoff
-          ? legacy.width === undefined && legacy.height === undefined
-          : legacy.imageNoodleWidth === undefined && legacy.imageNoodleHeight === undefined)
-      ) {
+      const legacyState = envelope?.state;
+      const rawWidth = handoff?.width ?? legacyState?.imageNoodleWidth;
+      const rawHeight = handoff?.height ?? legacyState?.imageNoodleHeight;
+      if (rawWidth === undefined && rawHeight === undefined) {
         window.localStorage.setItem(migrationKey, "1");
         return;
       }
-      const width = Number("width" in legacy ? legacy.width : legacy.imageNoodleWidth);
-      const height = Number("height" in legacy ? legacy.height : legacy.imageNoodleHeight);
+      const width = Number(rawWidth);
+      const height = Number(rawHeight);
       imageSizeMigrationStartedRef.current = true;
       void saveSettingsAsync({
         imageWidth: Number.isInteger(width) && width >= 64 && width <= 4096 ? width : 1024,
@@ -1110,9 +1107,9 @@ export function NoodleHome({ navigation, onNavigate }: NoodleHomeProps) {
       })
         .then(() => {
           window.localStorage.removeItem("marinara:noodle:legacy-image-size");
-          if (!handoff && envelope?.state) {
-            delete envelope.state.imageNoodleWidth;
-            delete envelope.state.imageNoodleHeight;
+          if (legacyState) {
+            delete legacyState.imageNoodleWidth;
+            delete legacyState.imageNoodleHeight;
             window.localStorage.setItem("marinara-engine-ui", JSON.stringify(envelope));
           }
           window.localStorage.setItem(migrationKey, "1");
