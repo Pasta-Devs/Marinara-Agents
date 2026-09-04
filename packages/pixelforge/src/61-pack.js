@@ -1437,14 +1437,17 @@ PF.pack = (() => {
      *       world still stands them up (the fold's `known` set), because a line
      *       naming somebody the world cannot resolve is a line the wrap-up would
      *       read out as fact;
-     *    5. `bump({t:3, s})` — the giver remembers, on the same settlement-scoped
-     *       key every other bump uses, and SKIPPED SILENTLY on the same miss.
-     *       THREE, not one (0.15, plan §13): a finished job outweighs a
-     *       greeting on the disposition ladder, which is the reward ruling's
-     *       "money and the giver's rapport" finally paying out as MOVEMENT — one
-     *       hand-in makes a stranger acquainted, and the harness pins exactly
-     *       that. The `s` line is the giver's own memory of it, in the voice the
-     *       economy lines already use (you = the player).
+     *    5. `bump({t:3, s, meaningful})` — the giver remembers, on the same
+     *       settlement-scoped key every other bump uses, and SKIPPED SILENTLY on
+     *       the same miss. THREE, not one (0.15, plan §13): a finished job
+     *       outweighs a greeting on the disposition ladder, which is the reward
+     *       ruling's "money and the giver's rapport" finally paying out as
+     *       MOVEMENT — one hand-in makes a stranger acquainted, and the harness
+     *       pins exactly that. And it is MEANINGFUL, which is the half the weight
+     *       cannot say: doing a job for somebody is what carries a row past
+     *       acquaintance at all, where a hundred greetings never could. The `s`
+     *       line is the giver's own memory of it, in the voice the economy lines
+     *       already use (you = the player).
      *
      *  `say` is the caller's own sentence, and it is a CALLBACK rather than a
      *  string so the guard can decide the shape: it is handed the giver's name or
@@ -1463,7 +1466,7 @@ PF.pack = (() => {
       this.filledToday(core)?.templates.add(template);
       PF.player.log(core, say(stands ? giver : null, PF.economy.money(world, money)), sim.day, gen);
       const bumped = stands
-        ? PF.player.bump(core, world.startZone, giver, { t: 3, s: "You ran a job for me." }, gen)
+        ? PF.player.bump(core, world.startZone, giver, { t: 3, s: "You ran a job for me.", meaningful: true }, gen)
         : null;
       return { money, giver: stands ? giver : null, template, rose: bumped?.rose ?? 0 };
     },

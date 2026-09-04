@@ -724,7 +724,9 @@ PF.economy = {
    *    5. `log()` — the day-ledger line P5 will summarise;
    *    6. `bump()` — the keeper remembers. SETTLEMENT-scoped (plan §2: rel keys
    *       are per settlement, not per room), so renting twice does not create two
-   *       people with one name.
+   *       people with one name. MEANINGFUL (0.15's ruling): taking a room off
+   *       somebody is business between you, and business is what moves the ladder
+   *       past acquaintance, where small talk never does.
    *  Returns { ok, reason, price, zoneId }. */
   rentBerth(core, gen) {
     const offer = this.berthOffer(core);
@@ -739,7 +741,13 @@ PF.economy = {
     PF.player.grant(core, { t: "lodging-key", k: "" }, 1, gen);
     const place = world.zones[offer.zoneId]?.name ?? "the inn";
     PF.player.log(core, `Took a berth at ${place} for ${this.money(world, offer.price)}.`, sim.day, gen);
-    PF.player.bump(core, world.startZone, offer.keeper.name, { t: 1, s: `Let you a berth at ${place}.` }, gen);
+    PF.player.bump(
+      core,
+      world.startZone,
+      offer.keeper.name,
+      { t: 1, s: `Let you a berth at ${place}.`, meaningful: true },
+      gen,
+    );
     return { ok: true, reason: null, price: offer.price, zoneId: offer.zoneId };
   },
 
@@ -916,7 +924,9 @@ PF.economy = {
    *       merges with what the player then fishes up;
    *    4. auto-equip, scoped to tools;
    *    5. `log()` — the day-ledger line the wrap-up will tell;
-   *    6. `bump()` — the keeper remembers, settlement-scoped like every other.
+   *    6. `bump()` — the keeper remembers, settlement-scoped like every
+   *       other, and MEANINGFUL for the berth's reason: buying from somebody is
+   *       business, and business is what carries a row past acquaintance.
    *  Nothing is written to `bought`: that map is world-bound shop DEPLETION and
    *  0.12 ships no shop stock, exactly as rentBerth writes none.
    *
@@ -951,7 +961,13 @@ PF.economy = {
       sim.day,
       gen,
     );
-    PF.player.bump(core, world.startZone, offer.keeper.name, { t: 1, s: `Sold you a ${named}.` }, gen);
+    PF.player.bump(
+      core,
+      world.startZone,
+      offer.keeper.name,
+      { t: 1, s: `Sold you a ${named}.`, meaningful: true },
+      gen,
+    );
     return { ok: true, reason: null, price: offer.price, tier: offer.tier, bait };
   },
 

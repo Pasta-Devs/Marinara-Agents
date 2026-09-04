@@ -257,6 +257,30 @@ const evictNotices = (rows) => {
 // flag beside it, written by nothing package-side yet, and waits for S1.
 const PROMOTION = [3, 10, 25]; // t at which d 1, 2, 3 are earned
 
+// ── THE VERB CLASSES (0.15, the maintainer's ruling) ──────────────────────────
+// Saying good morning and asking after the rumors should not, over enough
+// mornings, make you somebody's best friend. Small interactions raise standing
+// only to a point; doing jobs, running quests, being business partners are what
+// carry it past acquaintance. So every bump has a CLASS, carried by the call and
+// stored nowhere:
+//
+//   CASUAL (the default, and the talk press — plus any ask-menu read that ever
+//   grows one) builds `t` forever and can never leave a row above ACQUAINTED.
+//   Past that ceiling its encounters accumulate and nothing else happens.
+//
+//   MEANINGFUL (`patch.meaningful`) is the job settle and the two commerce sites
+//   — a berth let and a rod sold, which is what "business partner" means in a
+//   package with two shops. It may cross any line, one rung per press.
+//
+// THE PADDING CONSEQUENCE, stated rather than discovered: casual encounters DO
+// count toward the higher thresholds, so a hundred greetings leave a row that
+// one job lifts straight to friendly. What small talk cannot be is the press
+// that CROSSES — and the crossing press still buys one rung and no more.
+//
+// The class is a field of the PATCH, read here and never written to a row: the
+// wire is 0.11's, to the byte, and `meaningful` never reaches it.
+const CASUAL_CEILING = 1; // the highest rung small talk alone can leave a row on
+
 /** The rung the encounter count has EARNED, 0..3. */
 function rungOf(t) {
   let rung = 0;
@@ -1321,6 +1345,11 @@ PF.player = {
    *  (the header note above bump's table says why). An explicit `d` stays the
    *  SETTER it has always been: that arm is S1's, and the harness pins it.
    *
+   *  `patch.meaningful` is the VERB CLASS, not a stored field: without it the
+   *  bump is small talk and can never leave the row above acquainted; with it
+   *  the press may cross any line. Either way a single call moves the row AT
+   *  MOST ONE RUNG. The header note above CASUAL_CEILING has the ruling.
+   *
    *  Returns `{ row, rose }` — `rose` is the new rung when THIS call earned one
    *  and 0 otherwise, so a caller with a toast to show knows without diffing.
    *  Refusal is still `null`, exactly as documented at the cap. */
@@ -1373,11 +1402,30 @@ PF.player = {
     }
     // The crossing. Gated on the ABSENCE of an explicit d — a patch that set the
     // ladder said exactly where it wanted the row, and the heuristic yields.
+    //
+    // TWO RULES, and between them they are the ruling in the header note above:
+    //   1. THE CEILING is the verb class's. Casual tops out at acquainted; only
+    //      a meaningful press reaches the rungs above it.
+    //   2. ONE RUNG PER PRESS, whatever the count has earned. Without it
+    //      `row.d = earned` was a max() in disguise — a row a demotion put on
+    //      the floor at `t` 9 was handed TWO rungs by one good morning, because
+    //      the count was still high and there was still a line under it to cross.
+    //
+    // The crossing is measured on the TRUE count, not on the capped landing: a
+    // casual hello that carries `t` over the friendly line HAS crossed a line,
+    // and lands on the casual ceiling. Casual promotion still requires one,
+    // which is what keeps the heuristic from re-fighting a precise demotion on
+    // every subsequent hello. A meaningful press does not require one, because
+    // a padded row is already past every line it could cross — and freezing the
+    // player out of the ladder for having been friendly is not the ruling.
     if (!(patch && typeof patch === "object" && patch.d !== undefined)) {
-      const earned = rungOf(posInt(row.t, 0));
-      if (earned > rungOf(tBefore) && earned > posInt(row.d, 0)) {
-        row.d = earned;
-        rose = earned;
+      const meaningful = !!(patch && typeof patch === "object" && patch.meaningful);
+      const count = rungOf(posInt(row.t, 0));
+      const held = posInt(row.d, 0);
+      const earned = Math.min(count, meaningful ? PROMOTION.length : CASUAL_CEILING);
+      if ((meaningful || count > rungOf(tBefore)) && earned > held) {
+        row.d = Math.min(earned, held + 1);
+        rose = row.d;
       }
     }
     this._touch(core);

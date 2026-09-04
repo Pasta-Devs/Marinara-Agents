@@ -9226,6 +9226,30 @@ const evictNotices = (rows) => {
 // flag beside it, written by nothing package-side yet, and waits for S1.
 const PROMOTION = [3, 10, 25]; // t at which d 1, 2, 3 are earned
 
+// ── THE VERB CLASSES (0.15, the maintainer's ruling) ──────────────────────────
+// Saying good morning and asking after the rumors should not, over enough
+// mornings, make you somebody's best friend. Small interactions raise standing
+// only to a point; doing jobs, running quests, being business partners are what
+// carry it past acquaintance. So every bump has a CLASS, carried by the call and
+// stored nowhere:
+//
+//   CASUAL (the default, and the talk press — plus any ask-menu read that ever
+//   grows one) builds `t` forever and can never leave a row above ACQUAINTED.
+//   Past that ceiling its encounters accumulate and nothing else happens.
+//
+//   MEANINGFUL (`patch.meaningful`) is the job settle and the two commerce sites
+//   — a berth let and a rod sold, which is what "business partner" means in a
+//   package with two shops. It may cross any line, one rung per press.
+//
+// THE PADDING CONSEQUENCE, stated rather than discovered: casual encounters DO
+// count toward the higher thresholds, so a hundred greetings leave a row that
+// one job lifts straight to friendly. What small talk cannot be is the press
+// that CROSSES — and the crossing press still buys one rung and no more.
+//
+// The class is a field of the PATCH, read here and never written to a row: the
+// wire is 0.11's, to the byte, and `meaningful` never reaches it.
+const CASUAL_CEILING = 1; // the highest rung small talk alone can leave a row on
+
 /** The rung the encounter count has EARNED, 0..3. */
 function rungOf(t) {
   let rung = 0;
@@ -10290,6 +10314,11 @@ PF.player = {
    *  (the header note above bump's table says why). An explicit `d` stays the
    *  SETTER it has always been: that arm is S1's, and the harness pins it.
    *
+   *  `patch.meaningful` is the VERB CLASS, not a stored field: without it the
+   *  bump is small talk and can never leave the row above acquainted; with it
+   *  the press may cross any line. Either way a single call moves the row AT
+   *  MOST ONE RUNG. The header note above CASUAL_CEILING has the ruling.
+   *
    *  Returns `{ row, rose }` — `rose` is the new rung when THIS call earned one
    *  and 0 otherwise, so a caller with a toast to show knows without diffing.
    *  Refusal is still `null`, exactly as documented at the cap. */
@@ -10342,11 +10371,30 @@ PF.player = {
     }
     // The crossing. Gated on the ABSENCE of an explicit d — a patch that set the
     // ladder said exactly where it wanted the row, and the heuristic yields.
+    //
+    // TWO RULES, and between them they are the ruling in the header note above:
+    //   1. THE CEILING is the verb class's. Casual tops out at acquainted; only
+    //      a meaningful press reaches the rungs above it.
+    //   2. ONE RUNG PER PRESS, whatever the count has earned. Without it
+    //      `row.d = earned` was a max() in disguise — a row a demotion put on
+    //      the floor at `t` 9 was handed TWO rungs by one good morning, because
+    //      the count was still high and there was still a line under it to cross.
+    //
+    // The crossing is measured on the TRUE count, not on the capped landing: a
+    // casual hello that carries `t` over the friendly line HAS crossed a line,
+    // and lands on the casual ceiling. Casual promotion still requires one,
+    // which is what keeps the heuristic from re-fighting a precise demotion on
+    // every subsequent hello. A meaningful press does not require one, because
+    // a padded row is already past every line it could cross — and freezing the
+    // player out of the ladder for having been friendly is not the ruling.
     if (!(patch && typeof patch === "object" && patch.d !== undefined)) {
-      const earned = rungOf(posInt(row.t, 0));
-      if (earned > rungOf(tBefore) && earned > posInt(row.d, 0)) {
-        row.d = earned;
-        rose = earned;
+      const meaningful = !!(patch && typeof patch === "object" && patch.meaningful);
+      const count = rungOf(posInt(row.t, 0));
+      const held = posInt(row.d, 0);
+      const earned = Math.min(count, meaningful ? PROMOTION.length : CASUAL_CEILING);
+      if ((meaningful || count > rungOf(tBefore)) && earned > held) {
+        row.d = Math.min(earned, held + 1);
+        rose = row.d;
       }
     }
     this._touch(core);
@@ -12031,7 +12079,9 @@ PF.economy = {
    *    5. `log()` — the day-ledger line P5 will summarise;
    *    6. `bump()` — the keeper remembers. SETTLEMENT-scoped (plan §2: rel keys
    *       are per settlement, not per room), so renting twice does not create two
-   *       people with one name.
+   *       people with one name. MEANINGFUL (0.15's ruling): taking a room off
+   *       somebody is business between you, and business is what moves the ladder
+   *       past acquaintance, where small talk never does.
    *  Returns { ok, reason, price, zoneId }. */
   rentBerth(core, gen) {
     const offer = this.berthOffer(core);
@@ -12046,7 +12096,13 @@ PF.economy = {
     PF.player.grant(core, { t: "lodging-key", k: "" }, 1, gen);
     const place = world.zones[offer.zoneId]?.name ?? "the inn";
     PF.player.log(core, `Took a berth at ${place} for ${this.money(world, offer.price)}.`, sim.day, gen);
-    PF.player.bump(core, world.startZone, offer.keeper.name, { t: 1, s: `Let you a berth at ${place}.` }, gen);
+    PF.player.bump(
+      core,
+      world.startZone,
+      offer.keeper.name,
+      { t: 1, s: `Let you a berth at ${place}.`, meaningful: true },
+      gen,
+    );
     return { ok: true, reason: null, price: offer.price, zoneId: offer.zoneId };
   },
 
@@ -12223,7 +12279,9 @@ PF.economy = {
    *       merges with what the player then fishes up;
    *    4. auto-equip, scoped to tools;
    *    5. `log()` — the day-ledger line the wrap-up will tell;
-   *    6. `bump()` — the keeper remembers, settlement-scoped like every other.
+   *    6. `bump()` — the keeper remembers, settlement-scoped like every
+   *       other, and MEANINGFUL for the berth's reason: buying from somebody is
+   *       business, and business is what carries a row past acquaintance.
    *  Nothing is written to `bought`: that map is world-bound shop DEPLETION and
    *  0.12 ships no shop stock, exactly as rentBerth writes none.
    *
@@ -12258,7 +12316,13 @@ PF.economy = {
       sim.day,
       gen,
     );
-    PF.player.bump(core, world.startZone, offer.keeper.name, { t: 1, s: `Sold you a ${named}.` }, gen);
+    PF.player.bump(
+      core,
+      world.startZone,
+      offer.keeper.name,
+      { t: 1, s: `Sold you a ${named}.`, meaningful: true },
+      gen,
+    );
     return { ok: true, reason: null, price: offer.price, tier: offer.tier, bait };
   },
 
@@ -17221,14 +17285,17 @@ PF.pack = (() => {
      *       world still stands them up (the fold's `known` set), because a line
      *       naming somebody the world cannot resolve is a line the wrap-up would
      *       read out as fact;
-     *    5. `bump({t:3, s})` — the giver remembers, on the same settlement-scoped
-     *       key every other bump uses, and SKIPPED SILENTLY on the same miss.
-     *       THREE, not one (0.15, plan §13): a finished job outweighs a
-     *       greeting on the disposition ladder, which is the reward ruling's
-     *       "money and the giver's rapport" finally paying out as MOVEMENT — one
-     *       hand-in makes a stranger acquainted, and the harness pins exactly
-     *       that. The `s` line is the giver's own memory of it, in the voice the
-     *       economy lines already use (you = the player).
+     *    5. `bump({t:3, s, meaningful})` — the giver remembers, on the same
+     *       settlement-scoped key every other bump uses, and SKIPPED SILENTLY on
+     *       the same miss. THREE, not one (0.15, plan §13): a finished job
+     *       outweighs a greeting on the disposition ladder, which is the reward
+     *       ruling's "money and the giver's rapport" finally paying out as
+     *       MOVEMENT — one hand-in makes a stranger acquainted, and the harness
+     *       pins exactly that. And it is MEANINGFUL, which is the half the weight
+     *       cannot say: doing a job for somebody is what carries a row past
+     *       acquaintance at all, where a hundred greetings never could. The `s`
+     *       line is the giver's own memory of it, in the voice the economy lines
+     *       already use (you = the player).
      *
      *  `say` is the caller's own sentence, and it is a CALLBACK rather than a
      *  string so the guard can decide the shape: it is handed the giver's name or
@@ -17247,7 +17314,7 @@ PF.pack = (() => {
       this.filledToday(core)?.templates.add(template);
       PF.player.log(core, say(stands ? giver : null, PF.economy.money(world, money)), sim.day, gen);
       const bumped = stands
-        ? PF.player.bump(core, world.startZone, giver, { t: 3, s: "You ran a job for me." }, gen)
+        ? PF.player.bump(core, world.startZone, giver, { t: 3, s: "You ran a job for me.", meaningful: true }, gen)
         : null;
       return { money, giver: stands ? giver : null, template, rose: bumped?.rose ?? 0 };
     },
