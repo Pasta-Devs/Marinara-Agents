@@ -859,6 +859,7 @@ export default function MemorySettings({
         role="tablist"
         aria-label={localizeUi("ui.longTermMemory.memorysettings.memorySettingsSections")}
         className="mari-editor-tab-rail grid grid-cols-2 gap-1 rounded-lg border p-1 sm:grid-cols-4"
+        style={{ display: "grid" }}
       >
         {settingsTabs.map((tab, index) => (
           <button

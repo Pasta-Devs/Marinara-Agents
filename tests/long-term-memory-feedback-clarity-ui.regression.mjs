@@ -126,7 +126,7 @@ assert.match(workspace, /restoredImportResult\.writeFailures\?\.filter\(\(item\)
 assert.match(workspace, /restoredImportResult\.writeFailures\?\.map\(\(failure\) =>/u);
 assert.match(
   workspace,
-  /<div\s+id="ltm-destination-scope-control"[^>]*className="mari-editor-panel flex min-h-0 max-h-\[min\(42rem,calc\(100dvh-8rem\)\)\] flex-col gap-3 p-3"[^>]*>/u,
+  /<div\s+id="ltm-destination-scope-control"[^>]*className="mari-editor-panel flex min-h-0 flex-col gap-3 p-3"[^>]*style=\{\{ maxHeight: "calc\(100vh - 12rem\)" \}\}[^>]*>/u,
 );
 assert.match(
   workspace,
