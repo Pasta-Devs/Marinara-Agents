@@ -12,6 +12,7 @@ import {
   createCatalogLanes,
   readCatalogFamily,
 } from "./catalog-lanes.mjs";
+import { buildReleaseNotesDocument, listPackagesWithChangelogs } from "./catalog-release-notes.mjs";
 import { assertHierarchicalMapsPrivateImportBoundary } from "./hierarchical-maps-boundary.mjs";
 import { INCOMPLETE_PACKAGE_IDS, STAGING_ONLY_PACKAGE_IDS } from "./catalog-incomplete.mjs";
 import { assertPackagePrivateImportBoundary } from "./package-engine-boundary.mjs";
@@ -118,6 +119,58 @@ for (const [major, expectedCatalog] of expectedCatalogsByMajor) {
 if (JSON.stringify(legacyCatalog) !== JSON.stringify(catalogsByMajor.get(LEGACY_CATALOG_MAJOR))) {
   throw new Error(`catalog/catalog.json must remain an exact alias of catalog/v${LEGACY_CATALOG_MAJOR}/catalog.json`);
 }
+
+// Release-notes sidecars get the same treatment as the lanes they sit beside: a
+// committed notes.json must be exactly what a rebuild produces, and a lane whose
+// packages publish no notes must carry no sidecar at all. Anything else means a
+// notes.json was hand-edited, or a changelog changed without a rebuild, and the
+// text users read in the update prompt would no longer match the repository.
+async function readCommittedNotes(path) {
+  let raw;
+  try {
+    raw = await readFile(join(repoRoot, path), "utf8");
+  } catch (error) {
+    // Only a missing file counts as "no sidecar". Mapping a parse failure or a
+    // permission error to absent would let a corrupt notes.json pass validation
+    // for any lane that is expected to have none.
+    if (error?.code === "ENOENT") return null;
+    throw error;
+  }
+  try {
+    return JSON.parse(raw);
+  } catch (error) {
+    throw new Error(`${path} is not valid JSON`, { cause: error });
+  }
+}
+
+async function assertNotesSidecar(path, entries) {
+  const expected = await buildReleaseNotesDocument(repoRoot, entries);
+  const committed = await readCommittedNotes(path);
+  const wanted = Object.keys(expected.packages).length > 0 ? expected : null;
+  if (JSON.stringify(committed) !== JSON.stringify(wanted)) {
+    throw new Error(`${path} does not match the committed package changelogs — rebuild the catalog`);
+  }
+}
+
+for (const [major, lane] of expectedCatalogsByMajor) {
+  await assertNotesSidecar(`catalog/v${major}/notes.json`, lane.packages);
+}
+await assertNotesSidecar("catalog/notes.json", expectedCatalogsByMajor.get(LEGACY_CATALOG_MAJOR).packages);
+if (previewCatalog.packages.length > 0) {
+  const expectedPreviewLanes = createCatalogLanes(previewCatalog);
+  for (const [major, lane] of expectedPreviewLanes) {
+    await assertNotesSidecar(`catalog/preview/v${major}/notes.json`, lane.packages);
+  }
+  await assertNotesSidecar("catalog/preview/notes.json", expectedPreviewLanes.get(LEGACY_CATALOG_MAJOR).packages);
+} else if ((await readCommittedNotes("catalog/preview/notes.json")) !== null) {
+  // The overlay directory is removed when nothing is staging-only, so a surviving
+  // sidecar means a stale generated payload that no rebuild would produce.
+  throw new Error("catalog/preview/notes.json exists with no staging-only packages — rebuild the catalog to remove it");
+}
+const packagesWithChangelogs = await listPackagesWithChangelogs(repoRoot);
+console.log(
+  `Release notes: ${packagesWithChangelogs.length}/${publishedCatalog.packages.length} published packages ship a CHANGELOG.md.`,
+);
 const hierarchicalMapsBoundary = await assertHierarchicalMapsPrivateImportBoundary();
 
 const hierarchicalMapsOwnedSourcePaths = [
@@ -161,7 +214,7 @@ const longTermMemoryBoundary = await assertPackagePrivateImportBoundary({
   sourceRoot: longTermMemorySourceRoot,
   boundaryPath: join(repoRoot, "packages/long-term-memory/engine-boundary.json"),
   displayName: "Long-Term Memory",
-  capabilityApi: { major: 1, minor: 15 },
+  capabilityApi: { major: 1, minor: 6 },
 });
 for (const relativePath of [
   "packages/shared/src/features/agents/long-term-memory",

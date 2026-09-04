@@ -914,6 +914,31 @@ export function SlurpSettings({
                     value={settings.autoPostingImagesEnabled}
                     onChange={(value) => update("autoPostingImagesEnabled", value)}
                   />
+                  {/* Output size, from staging's package image settings. */}
+                  <div className="grid gap-3 sm:grid-cols-2">
+                    <Field
+                      label={t("ui.slurp.settings.images.width")}
+                      detail={t("ui.slurp.settings.images.widthDetail")}
+                    >
+                      <NumberSetting
+                        value={settings.imageWidth}
+                        min={64}
+                        max={4096}
+                        onSave={(value) => update("imageWidth", value)}
+                      />
+                    </Field>
+                    <Field
+                      label={t("ui.slurp.settings.images.height")}
+                      detail={t("ui.slurp.settings.images.heightDetail")}
+                    >
+                      <NumberSetting
+                        value={settings.imageHeight}
+                        min={64}
+                        max={4096}
+                        onSave={(value) => update("imageHeight", value)}
+                      />
+                    </Field>
+                  </div>
                   <details className="group rounded-xl bg-[var(--slurp-surface-raised)] ring-1 ring-inset ring-[var(--slurp-outline)]">
                     <summary className="flex min-h-14 cursor-pointer list-none items-center gap-3 px-4 text-sm font-bold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--slurp-focus)] [&::-webkit-details-marker]:hidden">
                       <Image size={17} className="text-[var(--slurp-violet)]" aria-hidden="true" />

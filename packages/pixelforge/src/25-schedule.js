@@ -94,8 +94,73 @@ PF.schedule = (() => {
   };
   const DEFAULT = { dawn: "post", day: "post", dusk: "post", night: "post" };
 
-  /** The handle an NPC should occupy at this daypart, or null when unscheduled. */
-  function resolve(sched, daypart) {
+  /** The handle an NPC should occupy at this daypart, or null when unscheduled.
+   *
+   *  `bias` IS THE WEATHER, and it is optional: `{ indoor(zoneId) }`, handed in
+   *  by the sim (which owns zones) only on a day whose word carries
+   *  `WORD_META.indoors` — rain, storm and snow. INTENSITY NEVER REACHES IT:
+   *  light rain empties the street exactly as heavy rain does, because a drizzle
+   *  reads as weather and not as an exception.
+   *
+   *  What it does, in one sentence: anybody the policy has standing OUTDOORS on
+   *  a wet day is sent to their own fireside instead. Three rules, in order:
+   *
+   *  1. EXEMPT WHEN THE POLICY NAMES WORK FOR THIS HOUR (`post`). The watch keeps
+   *     the night, a grower works the land in the rain, keepers and named workers
+   *     hold their posts, a stall merchant tends the stall. The test reads the
+   *     policy NAME and never an NPC's identity — there is no "is this the public
+   *     handle" question anywhere in here. Coarse in BOTH directions, and stated
+   *     rather than papered over: the cast data holds no outdoor-job flag, so an
+   *     outdoor-posted scholar is exempt exactly like the shepherd — and `post`
+   *     is also the compiler's fallback anchor for somebody with no job at all,
+   *     who therefore stands out in the plaza the bias is emptying. Which side of
+   *     the line a fallback post belongs on is a felt-behaviour question the
+   *     maintainer meets in play, not one this table can answer.
+   *  2. ALREADY INDOORS -> there is nothing to do.
+   *  3. ELSE SUBSTITUTE THE ROW'S OWN DUSK ANCHOR, and only then its night one.
+   *     Dusk first because a resident's DAYLIGHT indoors is their fireside and
+   *     not their bed: substituting the night name parks the whole town on its
+   *     own bunks at noon, which is the compiler's own rejected visual (see
+   *     20-world's bedBox comment). Both are RAW lookups, deliberately without
+   *     this function's `?? sched.post` tail — post is outdoors, and outdoors is
+   *     the thing being escaped. A hearth-less lodger's dusk name resolves null
+   *     and they fall to their berth; somebody with neither keeps the handle they
+   *     had, because nowhere to go is answered by standing in the weather and not
+   *     by teleporting nowhere.
+   *
+   *  CAPACITY-NEUTRAL BY CONSTRUCTION. Every destination this can pick is one the
+   *  DUSK or the NIGHT pass already assigns that same NPC, every evening of the
+   *  world's life — same zone, same box, same walkableIn spread. No box receives
+   *  an occupant it does not already hold, so there is no capacity term, no spill
+   *  ladder and no concentration to mitigate: the wet 07:00 pass is the dusk
+   *  relocation run early.
+   *
+   *  AND AT NIGHT IT IS A NO-OP BECAUSE OF WHERE THE DESTINATIONS ARE, not
+   *  because the table walk cannot happen. The reason to state it that way is
+   *  that the walk DOES happen: rule 3 is entered whenever a night name resolves
+   *  to something outdoors, and on real worlds that is somebody with no `home`
+   *  handle at all — a wilds resident, a lodger nobody laid a bed for — whose
+   *  night name falls through to `sched.post` (measured over 960 compiled worlds,
+   *  both themes and all four scales: 244 night resolutions reach the loop). They
+   *  find no indoor anchor either, because a `post` outdoors means the compiler
+   *  resolved no hearth for them, so they keep the handle they had.
+   *
+   *  What makes the pass a no-op is the compiler's own guarantee: IT NEVER MINTS
+   *  AN OUTDOOR `home` HANDLE. Every one is a bed box inside a dwelling interior
+   *  or an inn berth (same 960 worlds: 50,832 home handles, zero outdoors), so
+   *  anybody who HAS one is already indoors at night and rule 2 answers first.
+   *  Hand-force the shape the compiler will not mint — an outdoor `home` beside
+   *  an indoor anchor — and rule 3 fires at night through the DUSK rung exactly
+   *  as it does at noon; the harness does precisely that (case 14j) and watches
+   *  the household head walk into the building they work in. The invariant is
+   *  that the destinations are indoors, and nothing else.
+   *
+   *  ONE COLLISION WORTH KNOWING ABOUT, since those 244 are all of it: when the
+   *  night handle IS the `post` fallback and the row's dusk name is also `post`,
+   *  the loop's first rung re-tests the handle rule 2 has just rejected. Wasted,
+   *  never wrong — `bias.indoor` is pure and the second rung still gets its
+   *  turn — and cheaper to leave than to special-case. */
+  function resolve(sched, daypart, bias) {
     if (!sched) return null;
     // Most specific first. The `:keeper` tier exists so a template can describe
     // someone who actually holds a building without changing how that same cast
@@ -108,7 +173,16 @@ PF.schedule = (() => {
       (sched.worker ? TABLE[`*:${sched.standing}:worker`] : null) ??
       TABLE[`*:${sched.standing}`] ??
       DEFAULT;
-    return sched[template[daypart] ?? "post"] ?? sched.post ?? null;
+    const name = template[daypart] ?? "post";
+    const handle = sched[name] ?? sched.post ?? null;
+    if (!bias || name === "post" || !handle || bias.indoor(handle.zoneId)) return handle;
+    for (const key of [template.dusk ?? "post", template.night ?? "post"]) {
+      // Named for what it is and never `shelter`: one release ago `world.shelter`
+      // was a different thing entirely, and it was deleted.
+      const indoorAnchor = sched[key];
+      if (indoorAnchor && bias.indoor(indoorAnchor.zoneId)) return indoorAnchor;
+    }
+    return handle;
   }
 
   /** Can an NPC STAND here? Open ground is not enough: a door tile is

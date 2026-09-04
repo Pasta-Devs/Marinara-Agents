@@ -9,6 +9,12 @@ import { readdirSync, readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
+// The Tier-1 generator's painter table. Imported rather than read as text so
+// the baked tiles can be RASTERIZED here — a name regex says a painter exists
+// and nothing about the shape it draws. Importing it runs no build: `buildArt()`
+// is the only thing that touches the disk, and nothing here calls it.
+import { TIER1 } from "./build/build-art.mjs";
+
 // ── THE HARNESS ALWAYS LEAVES (Agents #554) ──────────────────────────────────
 // A red run was once seen to print an error and then sit past a ten-minute
 // timeout; six later attempts could not reproduce it. What those attempts did
@@ -54,6 +60,7 @@ const MODULES = [
   "00-prelude.js",
   "10-art.js",
   "15-assets.js",
+  "17-weather.js",
   "18-brief.js",
   "20-world.js",
   "25-schedule.js",
@@ -1186,11 +1193,22 @@ const wayrestCast = [
     zoneId: "z1",
     nearNpc: null,
     dirty: false,
+    day: 1,
     zone() {
       return this.world.zones[this.zoneId];
     },
     clockLabel: () => "Day 1 · 08:00",
     daypart: () => "day",
+    // The borrowed header reads the sky and the season too, from 0.14 on. The
+    // contract of this stand-in is what its own shape implies — exactly what the
+    // borrowed prototype reads, never a partial Sim API — so the two go in
+    // beside `daypart`, off the real module rather than as canned strings.
+    weather() {
+      return loadedPF.weather.at(this.world, this.day, null);
+    },
+    season() {
+      return loadedPF.weather.season(this.world, this.day);
+    },
   };
   // Borrow the real methods off the shipped Sim prototype.
   sim.header = loadedPF.Sim.prototype.header.bind(sim);
@@ -2546,8 +2564,13 @@ const wayrestCast = [
   delete held._hold;
 
   // The header carries the daypart so the GM narrates the light we render.
+  // RE-PINNED TO THE PREFIX for 0.14's three-word group — `(dusk, light rain,
+  // autumn)` — and deliberately NOT to a literal group: the weather word is a
+  // DRAW off the derivation, so a one-file tuning retune could turn a daypart
+  // assert red without touching a daypart. The prefix is what this pin was
+  // always about.
   dayOf(19 * 60);
-  assert.ok(sim.header().includes("(dusk)"), `the header names the daypart (${sim.header()})`);
+  assert.ok(sim.header().includes("(dusk,"), `the header names the daypart (${sim.header()})`);
 
   // NPCs sharing a destination box must not stack: talk-targeting picks the
   // nearest with a strict <, so anyone underneath the top sprite would be
@@ -2932,6 +2955,17 @@ const wayrestCast = [
     assert.ok(capacity < hearths.length, `seed ${seed}: the home box genuinely overflows (${capacity} tiles for 6)`);
 
     sim.clockMin = 23 * 60; // night: the whole household resolves to one door apron
+    // AND A PINNED FAIR SKY, because this lane is about the overflow ladder and
+    // not about the weather. The apron forced above is outdoors, which is a
+    // hybrid the compiler never mints — and it is not the hearth that would
+    // relocate anybody: measured on every seed here, all six of these souls
+    // resolve `hearth` NULL. It is HEARTH0, the household's head, who owns the
+    // minted workshop and therefore carries an INDOOR `post` (s1). The wet-day
+    // bias reaches its dusk rung at night, that rung's name is literally `post`
+    // for a `maker:resident`, and it would walk exactly one of the six out of the
+    // undersized box this case is measuring — on whichever seeds roll rain on
+    // day 1.
+    sim.weatherOverride = { word: "fair" };
     sim.resolveSchedules();
 
     // The handle was actually selected, and the overflow path actually ran.
@@ -3770,6 +3804,11 @@ const zoneNamed = (w, name) => Object.values(w.zones).find((zone) => zone.name =
     const w = world.build(seed, "cozy-village", sealed);
     checkWorld(w, sealed, `beds seed ${seed}`);
     const sim = new loadedPF.Sim(w);
+    // A PINNED FAIR SKY. This lane is about the room behind the door — bed at
+    // night, street by day — and 0.14's wet-day bias keeps a resident at their
+    // own fireside through the daylight hours instead, on whichever seeds roll
+    // rain on day 1. The bias has its own case; this one predates it.
+    sim.weatherOverride = { word: "fair" };
 
     sim.clockMin = 23 * 60;
     sim.resolveSchedules();
@@ -4815,6 +4854,12 @@ const liveWorkBrief = (overrides = {}) => ({
     assert.ok(forge.object.includes("counter"), `seed ${seed}: it is still a shop — a counter to be served over`);
 
     const sim = new loadedPF.Sim(w);
+    // A PINNED FAIR SKY: the midday half below asserts the child is NOT in the
+    // shop, and on a wet day 0.14's bias legitimately puts them at their own
+    // fireside — which, over a live-work forge, is inside this very building.
+    // The claim under test is that the counter is the OWNER's station, and that
+    // is a fair-weather sentence.
+    sim.weatherOverride = { word: "fair" };
     sim.clockMin = 23 * 60;
     sim.resolveSchedules();
     const taken = new Set();
@@ -6567,7 +6612,15 @@ const cellarBrief = (prosperity) => ({
   assert.equal(keepers[0].name, "Keep", "and it is the first resident in cast order");
 
   // Midday: the head holds the building, the lodgers are out of it.
+  //
+  // A PINNED FAIR SKY, because "out of it" is a fair-weather sentence. These
+  // lodgers are hearth-less by construction — a named place's quarters resolve
+  // no fireside — so 0.14's wet-day bias sends each of them to their own BERTH,
+  // which is in this building. That is the design (the gathering keeps its own
+  // people and gains nobody else) and it has its own case; this one is about who
+  // KEEPS the inn.
   const sim = new loadedPF.Sim(w);
+  sim.weatherOverride = { word: "fair" };
   sim.clockMin = 12 * 60;
   sim.resolveSchedules();
   assert.equal(inn.npcs.length, 1, `at midday only the head is inside (${inn.npcs.map((n) => n.name).join()})`);
@@ -7312,16 +7365,27 @@ const cellarBrief = (prosperity) => ({
 // not render as nothing, it renders as GRASS (10-art's tile() falls back to the
 // grass painter for an unknown id), so a bridge with no painter would have been
 // a lawn laid across a pond and every assertion in this file would have passed.
+//
+// AND THE SUBSTITUTES JOIN IT (0.14 slice 3). A snow day does not place new
+// tiles — it SWAPS ids at paint time through 17-weather's SUBS table, which is
+// the same hole one layer further in: an id the compiler places, a table
+// renames, and no painter answers to draws as GRASS on the one kind of day the
+// swap exists for. So every placed tile is checked under its snow name too.
 {
   const drawable = new Set(loadedPF.art.painterNames());
   assert.ok(drawable.size > 10, `the art module reported its painters (${drawable.size})`);
   const missing = new Map();
+  const substitutes = Object.values(loadedPF.weather.SUBS);
+  const swap = (tile) => substitutes.map((map) => loadedPF.own(map, tile)).filter(Boolean);
   const look = (w, label) => {
     for (const zone of Object.values(w.zones)) {
       for (const layer of ["ground", "object", "overhead"]) {
         for (const tile of zone[layer]) {
-          if (!tile || drawable.has(tile)) continue;
-          if (!missing.has(tile)) missing.set(tile, `${label} ${zone.id}`);
+          if (!tile) continue;
+          for (const name of [tile, ...swap(tile)]) {
+            if (drawable.has(name)) continue;
+            if (!missing.has(name)) missing.set(name, `${label} ${zone.id}`);
+          }
         }
       }
     }
@@ -7392,6 +7456,996 @@ const cellarBrief = (prosperity) => ({
   );
 }
 
+// ── A SOFTWARE CANVAS, the size of what the art actually touches ─────────────
+// 10-art's painters use exactly `fillStyle` + `fillRect` and `clearRect`, and
+// 40-render adds `drawImage`, one composite op and a stroke. That is the whole
+// surface, so this is four bytes a pixel with those calls written on it rather
+// than a canvas emulator.
+//
+// It exists because the one question a painter can get wrong is invisible to
+// every name comparison in this file: `grassSnow` can be REGISTERED, pass the
+// placed-tile sweep, and still paint the same green square as `grass`. Pixels
+// are the only witness, and a headless suite that never rasterizes one is
+// exactly the blind spot the placed-tile sweep above was written for.
+const parseColor = (value) => {
+  if (typeof value !== "string") return null;
+  const text = value.trim();
+  if (text.startsWith("#")) {
+    const body =
+      text.length === 4
+        ? text
+            .slice(1)
+            .split("")
+            .map((c) => c + c)
+            .join("")
+        : text.slice(1);
+    if (body.length !== 6 || !/^[0-9a-f]{6}$/i.test(body)) return null;
+    return [parseInt(body.slice(0, 2), 16), parseInt(body.slice(2, 4), 16), parseInt(body.slice(4, 6), 16), 1];
+  }
+  const call = text.match(/^rgba?\(([^)]+)\)$/);
+  if (!call) return null;
+  const parts = call[1].split(",").map((n) => Number(n));
+  if (parts.length < 3 || parts.some((n) => !Number.isFinite(n))) return null;
+  return [parts[0], parts[1], parts[2], parts.length > 3 ? parts[3] : 1];
+};
+const shimCanvas = (w, h) => {
+  const data = new Uint8ClampedArray(w * h * 4);
+  const put = (i, color, alpha, op) => {
+    const [r, g, b] = color;
+    const dstA = data[i + 3] / 255;
+    if (op === "multiply") {
+      // Only ever spent over an opaque frame here, which is what the tint pass
+      // does: source × destination, mixed in by the source alpha.
+      data[i] = (data[i] * r) / 255 + data[i] * (1 - alpha) * (1 - r / 255);
+      data[i + 1] = (data[i + 1] * g) / 255 + data[i + 1] * (1 - alpha) * (1 - g / 255);
+      data[i + 2] = (data[i + 2] * b) / 255 + data[i + 2] * (1 - alpha) * (1 - b / 255);
+      return;
+    }
+    if (op === "lighter") {
+      data[i] += r * alpha;
+      data[i + 1] += g * alpha;
+      data[i + 2] += b * alpha;
+      data[i + 3] = Math.max(data[i + 3], alpha * 255);
+      return;
+    }
+    const outA = alpha + dstA * (1 - alpha);
+    if (outA <= 0) {
+      data[i] = data[i + 1] = data[i + 2] = data[i + 3] = 0;
+      return;
+    }
+    data[i] = (r * alpha + data[i] * dstA * (1 - alpha)) / outA;
+    data[i + 1] = (g * alpha + data[i + 1] * dstA * (1 - alpha)) / outA;
+    data[i + 2] = (b * alpha + data[i + 2] * dstA * (1 - alpha)) / outA;
+    data[i + 3] = outA * 255;
+  };
+  const span = (x, y, sw, sh, run) => {
+    const x0 = Math.max(0, Math.round(x));
+    const y0 = Math.max(0, Math.round(y));
+    const x1 = Math.min(w, Math.round(x + sw));
+    const y1 = Math.min(h, Math.round(y + sh));
+    for (let yy = y0; yy < y1; yy++) for (let xx = x0; xx < x1; xx++) run((yy * w + xx) * 4, xx, yy);
+  };
+  const ctx = {
+    fillStyle: "#000000",
+    strokeStyle: "#000000",
+    lineWidth: 1,
+    globalCompositeOperation: "source-over",
+    imageSmoothingEnabled: true,
+    createRadialGradient: () => ({ addColorStop() {} }),
+    // The letterbox frame is chrome, not a fact any lane reads.
+    strokeRect() {},
+    save() {},
+    restore() {},
+    clearRect(x, y, sw, sh) {
+      span(x, y, sw, sh, (i) => {
+        data[i] = data[i + 1] = data[i + 2] = data[i + 3] = 0;
+      });
+    },
+    fillRect(x, y, sw, sh) {
+      const color = parseColor(this.fillStyle);
+      if (!color) return; // a gradient fill: not a shape this file measures
+      const op = this.globalCompositeOperation;
+      span(x, y, sw, sh, (i) => put(i, color, color[3], op));
+    },
+    drawImage(src, ...rest) {
+      // The PIXEL size, which for an <img> is not the same thing as `width` /
+      // `height` — those reflect the attributes. A canvas has no natural size
+      // and falls through to its own.
+      const srcW = src.naturalWidth ?? src.width;
+      const srcH = src.naturalHeight ?? src.height;
+      const [sx, sy, sw, sh, dx, dy, dw, dh] =
+        rest.length >= 8 ? rest : [0, 0, srcW, srcH, rest[0], rest[1], srcW, srcH];
+      const op = this.globalCompositeOperation;
+      for (let y = 0; y < dh; y++) {
+        for (let x = 0; x < dw; x++) {
+          const tx = Math.round(dx) + x;
+          const ty = Math.round(dy) + y;
+          if (tx < 0 || ty < 0 || tx >= w || ty >= h) continue;
+          const ux = sx + Math.floor((x * sw) / dw);
+          const uy = sy + Math.floor((y * sh) / dh);
+          if (ux < 0 || uy < 0 || ux >= srcW || uy >= srcH) continue;
+          const j = (uy * srcW + ux) * 4;
+          const alpha = src._data[j + 3] / 255;
+          if (alpha <= 0) continue;
+          put((ty * w + tx) * 4, [src._data[j], src._data[j + 1], src._data[j + 2]], alpha, op);
+        }
+      }
+    },
+  };
+  return { tagName: "CANVAS", width: w, height: h, _data: data, getContext: () => ctx };
+};
+/** Run a body with the software canvas under PF.offscreen, Tier-1 parked so the
+ *  Tier-0 painters are the ones answering, and every tile cache emptied on the
+ *  way in AND out — `tile()` memoizes per theme, and a shim canvas left in that
+ *  map would leak into whatever a later case draws. */
+const withCanvas = (run) => {
+  const realOffscreen = loadedPF.offscreen;
+  const realStatus = loadedPF.assets.status;
+  const realTheme = loadedPF.art.theme;
+  const clearArtCaches = () => {
+    // setTheme is the only public cache eviction, and it no-ops on the theme it
+    // is already standing in — so bounce off the other one.
+    loadedPF.art.setTheme(loadedPF.art.theme === "cozy-village" ? "sci-fi-colony" : "cozy-village");
+    loadedPF.art.setTheme(realTheme);
+  };
+  loadedPF.offscreen = shimCanvas;
+  loadedPF.assets.status = "idle";
+  clearArtCaches();
+  try {
+    run();
+  } finally {
+    loadedPF.offscreen = realOffscreen;
+    loadedPF.assets.status = realStatus;
+    clearArtCaches();
+  }
+};
+/** A tile's SHAPE, with the palette divided out: each distinct colour is
+ *  replaced by the order it is first seen in raster order. Two themes running
+ *  the SAME painter over different palettes produce the same string; a real
+ *  painter override cannot. This is the only comparison that can tell a themed
+ *  snow tile from a base one that merely got recoloured — which is the exact
+ *  miss a same-theme pin stays green over. */
+const shapeOf = (canvas) => {
+  const seen = new Map();
+  const out = [];
+  const d = canvas._data;
+  for (let i = 0; i < d.length; i += 4) {
+    const key = d[i + 3] === 0 ? "-" : `${d[i]},${d[i + 1]},${d[i + 2]},${d[i + 3]}`;
+    if (!seen.has(key)) seen.set(key, seen.size);
+    out.push(seen.get(key));
+  }
+  return out.join(".");
+};
+const pixelsOf = (canvas) => Array.from(canvas._data).join(",");
+/** HOW FLAT A TILE IS: the share of its opaque pixels painted in the single
+ *  commonest tone. A distinct-colour COUNT was the first cut at this and it does
+ *  not measure relief — a flat square with a two-pixel accent on it carries three
+ *  tones and reads as a lawn. The share does: the four snow tiles measure between
+ *  0.44 and 0.87, so the ceiling the lanes below spend sits above every shipped
+ *  tile with room, and a painter reduced to one `rect` plus a garnish is 0.99 and
+ *  fails. */
+const flatnessOf = (canvas) => {
+  const counts = new Map();
+  const d = canvas._data;
+  let opaque = 0;
+  for (let i = 0; i < d.length; i += 4) {
+    if (d[i + 3] === 0) continue;
+    opaque += 1;
+    const key = `${d[i]},${d[i + 1]},${d[i + 2]}`;
+    counts.set(key, (counts.get(key) ?? 0) + 1);
+  }
+  return opaque ? Math.max(...counts.values()) / opaque : 1;
+};
+/** An rng stream that shares nothing with the stream beside it: a painter that
+ *  reads either one paints two different tiles, and a painter that reads
+ *  neither paints one. Both tiers' dither-free pins run off this. */
+const stream = (step) => {
+  let n = 0;
+  return () => ((n += step) % 97) / 97;
+};
+/** The four ids `SUBS` swaps in on a snow day, named once: three separate cases
+ *  below drive them and a list per case is a list that drifts. */
+const SNOW_IDS = ["grassSnow", "grassSnow2", "cropSnow", "canopySnow"];
+
+// ── THE SNOW GROUND, IN BOTH TIERS AND BOTH THEMES (0.14 slice 3) ───────────
+// Snow is the one weather that changes the GROUND rather than the light, and it
+// does it by substitution: `SUBS` renames four ids at paint time and the
+// painters answer. Three things can go wrong and none of them throws — a
+// missing painter draws GRASS in a snowfield (10-art's unknown-id fallback), a
+// missing THEME painter draws the base shape (a comms mast turning into a
+// leafy blob every snow day, on the theme where snow shows most), and a
+// painter that exists but paints the summer tile is a snow day that never
+// arrives. Each gets a lane.
+{
+  const W = loadedPF.weather;
+  const drawable = new Set(loadedPF.art.painterNames());
+
+  // The table pairs against the painters it names, which is also what the
+  // module's own boot assert says — this lane says it where a reader looks.
+  assert.deepEqual(Object.keys(W.SUBS), ["snow"], "snow is the one word that changes the ground");
+  for (const [word, map] of Object.entries(W.SUBS)) {
+    assert.ok(W.WORDS.includes(word), `SUBS keys on the weather word "${word}"`);
+    for (const [from, to] of Object.entries(map)) {
+      assert.ok(drawable.has(from), `SUBS substitutes a real tile id (${from})`);
+      assert.ok(drawable.has(to), `…for one the art module can actually paint (${to})`);
+    }
+  }
+  assert.deepEqual(
+    Object.keys(W.SUBS.snow).sort(),
+    ["canopy", "crop", "grass", "grass2"],
+    "the four snowable ids, and no path, road, stone, dirt or water among them",
+  );
+
+  withCanvas(() => {
+    const drawn = {};
+    for (const theme of ["cozy-village", "sci-fi-colony"]) {
+      loadedPF.art.setTheme(theme);
+      drawn[theme] = {};
+      for (const id of ["grass", "grass2", "crop", "canopy", "grassSnow", "grassSnow2", "cropSnow", "canopySnow"])
+        drawn[theme][id] = loadedPF.art.tile(id);
+      // THE SNOW TILE IS NOT THE SUMMER TILE. Without this the whole slice can
+      // ship as a rename: every id registered, every sweep green, and a
+      // blizzard standing on grass.
+      for (const [from, to] of Object.entries(W.SUBS.snow))
+        assert.notEqual(
+          pixelsOf(drawn[theme][to]),
+          pixelsOf(drawn[theme][from]),
+          `${theme}: ${to} paints different pixels from ${from}`,
+        );
+    }
+
+    // THE THEME DIMENSION. sci-fi overrides `crop` and `canopy` in fair
+    // weather — a hydroponics tray and a comms mast — so their snow twins need
+    // overrides too, or the theme swaps SHAPES on snow days and a same-theme
+    // pin never sees it. Shape, not pixels: a palette recolour moves every
+    // pixel and proves nothing.
+    for (const id of ["cropSnow", "canopySnow"])
+      assert.notEqual(
+        shapeOf(drawn["sci-fi-colony"][id]),
+        shapeOf(drawn["cozy-village"][id]),
+        `${id} is a themed shape, not the base one recoloured`,
+      );
+    // …and the control that keeps the line above honest: `grass` is overridden
+    // by neither theme, so its snow twins must come out shape-IDENTICAL across
+    // the two palettes. If this ever fails the comparison above is measuring
+    // colour and the theme lane is worthless.
+    for (const id of ["grassSnow", "grassSnow2"])
+      assert.equal(
+        shapeOf(drawn["sci-fi-colony"][id]),
+        shapeOf(drawn["cozy-village"][id]),
+        `${id} is one shape both palettes recolour — the shape comparison divides the palette out`,
+      );
+
+    // …and the invariant BOTH of those comparisons quietly rest on, which
+    // nothing was checking. `tile()` seeds each painter off `tile:<theme>:<id>`,
+    // so a snow painter that touched its rng would scatter differently under
+    // each theme — and the themed-shape line above would then read "differs" for
+    // a reason that has nothing to do with an override. That is a COMPOSED
+    // defeat, and it is cheap: dither the base `cropSnow`, delete the sci-fi
+    // override, and every assertion in this case stays green while a
+    // hydroponics tray grows cozy furrows every winter. Two different streams
+    // over the same theme (so the same palette) is the direct question: a
+    // painter that touches the stream at all paints two different tiles.
+    const underStream = (theme, id, step) => {
+      const realRng = loadedPF.rng;
+      loadedPF.rng = () => stream(step);
+      try {
+        // setTheme is the only cache eviction and it no-ops on the theme it
+        // already stands in, so bounce off the other one to force a repaint.
+        loadedPF.art.setTheme(theme === "cozy-village" ? "sci-fi-colony" : "cozy-village");
+        loadedPF.art.setTheme(theme);
+        return pixelsOf(loadedPF.art.tile(id));
+      } finally {
+        loadedPF.rng = realRng;
+      }
+    };
+    for (const theme of ["cozy-village", "sci-fi-colony"])
+      for (const id of SNOW_IDS)
+        assert.equal(
+          underStream(theme, id, 7),
+          underStream(theme, id, 31),
+          `${theme}: ${id} is dither-free — its shape does not move when the rng does`,
+        );
+    // The control that keeps THAT honest: a painter that does dither has to
+    // fail it, or the comparison is measuring nothing.
+    assert.notEqual(
+      underStream("cozy-village", "grass", 7),
+      underStream("cozy-village", "grass", 31),
+      "…and `grass`, which scatters flecks, does move — so the comparison can see a dither",
+    );
+
+    // THE GROUND SHOWS UNDER A FENCE AND A TREE. Object painters used to fill
+    // their own background with `grass1`, which on a snow day is a green square
+    // under every fence and — on sci-fi, whose `grass1` is regolith brown — a
+    // brown one under every guard rail and mast. Stripped at all ten sites; the
+    // renderer draws objects straight over the ground, so transparent is the
+    // whole fix.
+    for (const theme of ["cozy-village", "sci-fi-colony"]) {
+      loadedPF.art.setTheme(theme);
+      for (const id of ["fence", "trunk"]) {
+        const tile = loadedPF.art.tile(id);
+        for (const [x, y] of [
+          [0, 0],
+          [15, 15],
+        ])
+          assert.equal(
+            tile._data[(y * 16 + x) * 4 + 3],
+            0,
+            `${theme}: ${id} leaves the ground it stands on showing at (${x},${y})`,
+          );
+      }
+    }
+  });
+
+  // Tier-0's own source, swept whole for the fill that was stripped: four sites
+  // live in this file (base fence/trunk, sci-fi trunk/fence) and one regex
+  // covers them all, which is what stops the next painter from re-introducing
+  // the class one tile at a time.
+  const runtimeArt = readFileSync(join(here, "src", "10-art.js"), "utf8");
+  assert.equal(
+    (runtimeArt.match(/px\(g, 0, 0, T, T, PAL\.grass1\)/g) ?? []).length,
+    1,
+    "the only Tier-0 painter that lays grass is `grass` — no object declares the ground it stands on",
+  );
+
+  // ── AND THE SAME FOUR IDS IN TIER-1 (the shipped atlas) ───────────────────
+  // Two halves, and they answer different questions. The SOURCE half below is
+  // about the FILE — the append-only key order that is the atlas index map, a
+  // fact no rasterizer can see. The RASTERIZED half here is about the PIXELS,
+  // and it exists because "the generator paints cropSnow" was the whole Tier-1
+  // story: a name regex is green over a painter flattened to a plain square,
+  // over a themed override that stopped being a different shape from the base
+  // one, and over an object painter that fills in the ground it stands on. Every
+  // one of those is a shipped tile that looks wrong, and Tier-1 is the tier
+  // players actually see.
+  //
+  // `buildArt()` writes PNGs and cannot run in this process; the PAINTERS can,
+  // because they only ever call `rect` and `px`.
+  const tier1Tile = () => {
+    const T1 = TIER1.T;
+    const data = new Uint8ClampedArray(T1 * T1 * 4);
+    // build/png.mjs's `Raster`, in the shape `shapeOf`/`pixelsOf` read: clipped
+    // to the tile, hex → opaque, null → cleared.
+    const px = (x, y, hex) => {
+      if (x < 0 || y < 0 || x >= T1 || y >= T1) return;
+      const i = (y * T1 + x) * 4;
+      if (hex === null) {
+        data[i] = data[i + 1] = data[i + 2] = data[i + 3] = 0;
+        return;
+      }
+      data[i] = parseInt(hex.slice(1, 3), 16);
+      data[i + 1] = parseInt(hex.slice(3, 5), 16);
+      data[i + 2] = parseInt(hex.slice(5, 7), 16);
+      data[i + 3] = 255;
+    };
+    return {
+      _data: data,
+      px,
+      rect(x, y, w, h, hex) {
+        for (let yy = y; yy < y + h; yy++) for (let xx = x; xx < x + w; xx++) px(xx, yy, hex);
+      },
+    };
+  };
+  const bake = (theme, id, rnd) => {
+    const tile = tier1Tile();
+    TIER1.paint(theme, id, tile, rnd);
+    return tile;
+  };
+  const baked = {};
+  for (const theme of TIER1.themes()) {
+    baked[theme] = {};
+    for (const id of [...SNOW_IDS, "grass", "grass2", "crop", "canopy", "fence", "well", "trunk"])
+      baked[theme][id] = bake(theme, id);
+    // THE SNOW TILE IS NOT THE SUMMER TILE — the Tier-0 case's first question,
+    // asked of the tiles that actually ship.
+    for (const [from, to] of Object.entries(W.SUBS.snow))
+      assert.notEqual(
+        pixelsOf(baked[theme][to]),
+        pixelsOf(baked[theme][from]),
+        `tier-1 ${theme}: ${to} bakes different pixels from ${from}`,
+      );
+  }
+  // THE THEME DIMENSION, at the tier where the swap is permanent: a colony snow
+  // day falling through to the base painters turns masts into leafy blobs and
+  // trays into cozy furrows, and the atlas keeps it that way until the next bake.
+  for (const id of ["cropSnow", "canopySnow"])
+    assert.notEqual(
+      shapeOf(baked["sci-fi-colony"][id]),
+      shapeOf(baked["cozy-village"][id]),
+      `tier-1 ${id} is a themed shape, not the base one recoloured`,
+    );
+  for (const id of ["grassSnow", "grassSnow2"])
+    assert.equal(
+      shapeOf(baked["sci-fi-colony"][id]),
+      shapeOf(baked["cozy-village"][id]),
+      `tier-1 ${id} is one shape both palettes recolour — the shape comparison divides the palette out`,
+    );
+  // …AND NONE OF THEM IS A FLAT FIELD. Snow reads flat, which is exactly why a
+  // painter can be reduced to one `rect` over the whole tile and still pass
+  // every comparison above — it differs from the summer tile, and it differs
+  // from the other theme's. Measured as a SHARE and not as a colour count:
+  // cropSnow's furrows are what keep a field a field in winter, and a count of
+  // three is satisfied by a two-pixel garnish on a lawn.
+  for (const theme of TIER1.themes())
+    for (const id of SNOW_IDS) {
+      const flat = flatnessOf(baked[theme][id]);
+      assert.ok(
+        flat <= 0.9,
+        `tier-1 ${theme}: ${id} carries relief — its commonest tone covers ${Math.round(flat * 100)}% of it, and a snow tile painted in one flat colour is a lawn with a winter name`,
+      );
+    }
+  // Dither-free at this tier too, for Tier-0's reason: the shape comparisons
+  // above only divide the palette out while the shape holds still.
+  for (const theme of TIER1.themes())
+    for (const id of SNOW_IDS)
+      assert.equal(
+        pixelsOf(bake(theme, id, stream(7))),
+        pixelsOf(bake(theme, id, stream(31))),
+        `tier-1 ${theme}: ${id} is dither-free — its shape does not move when the rng does`,
+      );
+  assert.notEqual(
+    pixelsOf(bake("cozy-village", "grass", stream(7))),
+    pixelsOf(bake("cozy-village", "grass", stream(31))),
+    "…and `grass`, which scatters flecks, does move — so the comparison can see a dither",
+  );
+  // THE GROUND SHOWS UNDER A FENCE, A WELL AND A TREE — HERE TOO, and measured
+  // rather than grepped. The source pin below counts one exact literal, which a
+  // painter can walk around with `rect(0, 0, 16, 16, …)`, a `T`-free spelling or
+  // a different palette key; the corners are the property that actually matters.
+  // ALL FOUR CORNERS AND ONE PIXEL IN FROM THE DIAGONAL — two samples left a
+  // painter free to fill the other two and still read as clear, and the inset
+  // pair catches the fill that only rounds the very corner off.
+  for (const theme of TIER1.themes())
+    for (const id of ["fence", "well", "trunk"])
+      for (const [x, y] of [
+        [0, 0],
+        [15, 0],
+        [0, 15],
+        [15, 15],
+        [1, 1],
+        [14, 14],
+      ])
+        assert.equal(
+          baked[theme][id]._data[(y * 16 + x) * 4 + 3],
+          0,
+          `tier-1 ${theme}: ${id} leaves the ground it stands on showing at (${x},${y})`,
+        );
+
+  // The SOURCE half: the key order that IS the atlas index map, and the palette
+  // keys a painter would otherwise bake as `undefined`.
+  const generator = readFileSync(join(here, "build", "build-art.mjs"), "utf8");
+  const themeArt = generator.slice(0, generator.indexOf("const PAINTERS = {"));
+  for (const id of SNOW_IDS) {
+    assert.ok(new RegExp(`\\n {2}${id}\\(g\\) \\{`).test(generator), `the Tier-1 generator paints ${id}`);
+    // APPENDED, NEVER INSERTED: that table's key order IS the atlas index map,
+    // so a snow tile slotted in beside `grass` where it reads nicely would
+    // shift every shipped index under it and repaint the whole world.
+    assert.ok(
+      generator.indexOf(`\n  ${id}(g) {`) > generator.indexOf("\n  bridge(g, rnd) {"),
+      `…with ${id} on the END of the table, where the atlas index map can take it`,
+    );
+  }
+  for (const id of ["cropSnow", "canopySnow"])
+    assert.ok(themeArt.includes(`${id}(g) {`), `…and the colony overrides ${id}, as it overrides the summer tile`);
+  // A BELT over the measured corners above, not the guard itself: it counts one
+  // exact spelling, and the property is about pixels. Kept because it names the
+  // class at the site a new painter gets written.
+  assert.equal(
+    (generator.match(/g\.rect\(0, 0, T, T, PAL\.grass1\)/g) ?? []).length,
+    1,
+    "…and the only Tier-1 painter that lays grass is `grass`, for the same reason",
+  );
+  // Both palettes learn the snow keys — the base one warm-white for the cozy
+  // look, the colony's blue-white — or a snow tile bakes as `undefined`.
+  assert.equal(
+    (generator.match(/snow1: "/g) ?? []).length,
+    2,
+    "both Tier-1 palettes carry the snow keys (base + the colony override)",
+  );
+  assert.equal((runtimeArt.match(/snow1: "/g) ?? []).length, 2, "…and both Tier-0 palettes do too");
+}
+
+// ── THE SKY REACHES THE PICTURE (0.14 slice 3) ──────────────────────────────
+// 40-render is not in MODULES — a canvas context wants a page — so it is loaded
+// HERE, over the same PF the rest of this file drives, with the software canvas
+// under it. Everything the weather does to the screen lives in that one module
+// and in nothing else, so leaving it unloaded would leave the whole visible half
+// of this release unwatched: the ground substitution, the tint's position
+// relative to the darkness block, and the particle pass.
+{
+  new Function("PF", readFileSync(join(here, "src", "40-render.js"), "utf8"))(loadedPF);
+  const meanLuma = (canvas) => {
+    const d = canvas._data;
+    let sum = 0;
+    for (let i = 0; i < d.length; i += 4) sum += 0.299 * d[i] + 0.587 * d[i + 1] + 0.114 * d[i + 2];
+    return sum / (d.length / 4);
+  };
+  /** The particle pass reads `performance.now()` and nothing else does, so a
+   *  stubbed clock is what turns "is it alive?" into a comparison. defineProperty
+   *  rather than assignment: `performance` is an accessor on the Node global and
+   *  this file is a module, where a bare assignment to one throws. */
+  const withClock = (ms, run) => {
+    const was = Object.getOwnPropertyDescriptor(globalThis, "performance");
+    Object.defineProperty(globalThis, "performance", { value: { now: () => ms }, configurable: true });
+    try {
+      return run();
+    } finally {
+      Object.defineProperty(globalThis, "performance", was);
+    }
+  };
+
+  const built = world.build(424242, "cozy-village", brief.defaults("cozy-village", 424242));
+  const zones = Object.values(built.zones);
+  const outside = built.zones[built.startZone];
+  const inside = zones.find((z) => z.mapKind === "building");
+  assert.equal(outside.mapKind, "settlement", "the world opens outdoors");
+  assert.ok(inside, "…and has somewhere indoors to stand");
+  assert.ok(
+    outside.ground.some((id) => loadedPF.own(loadedPF.weather.SUBS.snow, id)),
+    "the settlement has ground snow can lie on",
+  );
+  // A PAVED zone: an exterior with nothing snowable in it, which is the third
+  // case the composite class has to get right and the only one no compiled world
+  // reliably offers. Cloned rather than compiled so the lane cannot drift with
+  // the generator's taste in ground cover.
+  const paved = {
+    ...outside,
+    id: "z-paved",
+    ground: outside.ground.map(() => "path"),
+    overhead: outside.overhead.map(() => 0),
+  };
+  // …and its opposite: a grove whose ONLY snowable id is in the OVERHEAD layer.
+  // `canopy` lives there, so a substitution wired into the ground loop alone
+  // leaves green treetops standing over a white field — and every ground-side
+  // assertion stays green over it.
+  const grove = {
+    ...outside,
+    id: "z-grove",
+    ground: outside.ground.map(() => "path"),
+    overhead: outside.overhead.map((_, i) => (i % 3 === 0 ? "canopy" : 0)),
+  };
+
+  const stand = (zone, sky) => ({
+    x: zone.w * 8,
+    y: zone.h * 8,
+    facing: 0,
+    phase: 0,
+    moving: false,
+    nearNpc: null,
+    mode: "walk",
+    zone: () => zone,
+    darkness: () => 0, // NOON: the darkness block returns exactly 0 from 07:00 to 18:00
+    weather: () => sky,
+  });
+  const FAIR = { word: "fair", intensity: null };
+
+  withCanvas(() => {
+    const render = new loadedPF.Render(shimCanvas(loadedPF.VW, loadedPF.VH));
+    const frame = (zone, sky, ms = 1000) =>
+      withClock(ms, () => {
+        render.draw(stand(zone, sky), { frame: false });
+        return pixelsOf(render.canvas);
+      });
+    const luma = (zone, sky, ms = 1000) =>
+      withClock(ms, () => {
+        render.draw(stand(zone, sky), { frame: false });
+        return meanLuma(render.canvas);
+      });
+
+    // ── THE PAINT CONTRACT ───────────────────────────────────────────────────
+    // The substitution is a rename at paint time and NOTHING ELSE. A zone array
+    // written in the renderer is the 0.10 bug class: the compiled world would
+    // start carrying the weather, the save would carry it after that, and a
+    // thaw would never come.
+    const groundWas = outside.ground.slice();
+    const overheadWas = outside.overhead.slice();
+    frame(outside, { word: "snow", intensity: "heavy" });
+    assert.deepEqual(outside.ground, groundWas, "a snow day never writes the zone's ground array");
+    assert.deepEqual(outside.overhead, overheadWas, "…nor its overhead array");
+
+    // ── THE COMPOSITE CLASS ──────────────────────────────────────────────────
+    const classesFor = (zone, sky) => {
+      render.clearZones();
+      frame(zone, sky);
+      return [...render._zoneCache.keys()];
+    };
+    assert.deepEqual(
+      classesFor(outside, { word: "snow", intensity: "light" }),
+      [`${outside.id}|snow`],
+      "a snowable exterior composites under the snow class",
+    );
+    assert.deepEqual(
+      classesFor(outside, { word: "rain", intensity: "heavy" }),
+      [`${outside.id}|base`],
+      "…and under the base class for every other sky — only snow moves the ground",
+    );
+    assert.deepEqual(
+      classesFor(inside, { word: "snow", intensity: "heavy" }),
+      [`${inside.id}|base`],
+      "it does not snow in the inn",
+    );
+    assert.deepEqual(
+      classesFor(paved, { word: "snow", intensity: "heavy" }),
+      [`${paved.id}|base`],
+      "…and a zone with nothing snowable in it never pays for a second composite",
+    );
+    // Both classes can be live at once (walk out of a snowy square into a paved
+    // one and back), and invalidating a zone has to take BOTH — a stale
+    // composite under either name is a zone that never repaints.
+    render.clearZones();
+    frame(outside, FAIR);
+    frame(outside, { word: "snow", intensity: "light" });
+    assert.equal(render._zoneCache.size, 2, "the two classes cache side by side");
+    render.invalidateZone(outside.id);
+    assert.equal(render._zoneCache.size, 0, "…and invalidating the zone takes both of them");
+
+    // ── THE SNOW ACTUALLY ARRIVES ────────────────────────────────────────────
+    const fairFrame = frame(outside, FAIR);
+    const snowFrame = frame(outside, { word: "snow", intensity: "light" });
+    assert.notEqual(snowFrame, fairFrame, "a snow day paints a different world");
+    assert.ok(
+      luma(outside, { word: "snow", intensity: "light" }) > luma(outside, FAIR) + 10,
+      "…and a brighter one: the ground went white",
+    );
+    // BOTH LAYERS. `canopy` is overhead, so a grove whose only snowable id sits
+    // there is the case a ground-only substitution renders as green treetops
+    // over a white field — and it is the case no ground assertion can see.
+    assert.ok(
+      luma(grove, { word: "snow", intensity: "light" }) > luma(grove, FAIR) + 5,
+      "the snow reaches the overhead layer too — treetops, not just the ground",
+    );
+
+    // ── THE TINT, AND WHERE IT SITS ──────────────────────────────────────────
+    // At NOON `darkness()` returns exactly 0, so the day/night block never runs.
+    // A tint applied inside it would be invisible for eleven hours a day, which
+    // is most of the hours anyone plays. Overcast is the clean witness: it tints
+    // and carries no particles, so the difference below is the tint and nothing
+    // else.
+    const fairLuma = luma(outside, FAIR);
+    assert.ok(
+      luma(outside, { word: "overcast", intensity: null }) < fairLuma - 5,
+      "an overcast noon is greyer than a fair one — the tint is not behind the darkness gate",
+    );
+    const lightRain = luma(outside, { word: "rain", intensity: "light" });
+    const heavyRain = luma(outside, { word: "rain", intensity: "heavy" });
+    assert.ok(lightRain < fairLuma - 5, "rain tints at noon");
+    assert.ok(heavyRain < lightRain - 5, "…and heavy rain is measurably deeper than light rain");
+    // The structural half of the same promise, at the source: whichever word
+    // takes an intensity and tints at all must carry BOTH alphas, and the heavy
+    // one must be the deeper.
+    const alphaOf = (color) => Number(String(color).match(/,([^,)]+)\)$/)[1]);
+    assert.ok(
+      alphaOf(loadedPF.weather.WORD_META.rain.tint.heavy) > alphaOf(loadedPF.weather.WORD_META.rain.tint.light),
+      "the heavy rain alpha is the deeper of the pair",
+    );
+    assert.equal(loadedPF.weather.WORD_META.snow.tint, null, "snow does not tint — the tiles carry it");
+
+    // ── PARTICLES, AND THE CLOCK THEY RIDE ───────────────────────────────────
+    // The pass is render-only and takes its phase from `performance.now()`, so
+    // the SAME sky at two different instants must paint two different frames —
+    // that is the whole of "the world stays alive". And a sky with nothing
+    // falling out of it must paint the same frame at both, or the pass is
+    // running where it should not.
+    assert.notEqual(
+      frame(outside, { word: "rain", intensity: "heavy" }, 0),
+      frame(outside, { word: "rain", intensity: "heavy" }, 900),
+      "rain is falling: the same sky at two instants is two pictures",
+    );
+    assert.notEqual(
+      frame(outside, { word: "snow", intensity: "light" }, 0),
+      frame(outside, { word: "snow", intensity: "light" }, 900),
+      "…and so is snow",
+    );
+    assert.equal(frame(outside, FAIR, 0), frame(outside, FAIR, 900), "a fair sky drops nothing, at any instant");
+    // HEAVY AND LIGHT MUST READ AS DIFFERENT WEATHER. The felt half is an eye
+    // check; the structural half is that the two rows differ in both count and
+    // fall speed, and that the frames they paint are not the same frame.
+    const rows = loadedPF.weather.TUNING.particles;
+    assert.ok(rows.heavy.n > rows.light.n, "heavy runs more streaks");
+    assert.ok(rows.heavy.fall > rows.light.fall, "…and drops them faster");
+    assert.notEqual(
+      frame(outside, { word: "rain", intensity: "heavy" }, 500),
+      frame(outside, { word: "rain", intensity: "light" }, 500),
+      "heavy rain and light rain are not the same picture at the same instant",
+    );
+
+    // ── STORM RIDES THE HEAVY ROW, AND LEANS FURTHER ─────────────────────────
+    // A storm takes no intensity (`takesIntensity: false`), so `sky.intensity`
+    // is null and the row lookup reaches `heavy` by falling off the "light"
+    // test. The worst weather in the vocabulary therefore gets its downpour from
+    // a ternary's ELSE branch — the shape that flips to `light` under an
+    // innocent-looking edit and paints a thunderstorm as drizzle — and every
+    // comparison above runs on rain, so nothing was watching it. The other half
+    // of the same sentence, the steeper wind angle, was pure prose.
+    //
+    // Each streak's column, speed and phase come off `hashStr`, so pinning that
+    // to ONE value stacks all N of them on one spot and turns the pass into
+    // arithmetic: the mark COUNT is the row's `n` times the row's streak length,
+    // and the horizontal spread across one streak's stacked segments IS the wind
+    // angle. Recorded rather than painted, because N streaks on one spot are one
+    // mark on a canvas and the count is the whole question. Seed 2000 puts the
+    // streak at x ≈ 125 of 256 and y = 7 — clear of every edge, so nothing is
+    // clipped and the counts are exact.
+    const streaksOf = (sky) => {
+      const realHash = loadedPF.hashStr;
+      const rects = [];
+      loadedPF.hashStr = () => 2000;
+      try {
+        withClock(0, () =>
+          render._fall({ fillStyle: "", fillRect: (x, y, w, h) => rects.push([x, y, w, h]) }, sky, 0, 0, 256, 256),
+        );
+      } finally {
+        loadedPF.hashStr = realHash;
+      }
+      return rects;
+    };
+    const stormFall = streaksOf({ word: "storm", intensity: null });
+    const heavyFall = streaksOf({ word: "rain", intensity: "heavy" });
+    const lightFall = streaksOf({ word: "rain", intensity: "light" });
+    assert.equal(stormFall.length, heavyFall.length, "a storm runs the HEAVY row's streaks, mark for mark");
+    assert.ok(heavyFall.length > lightFall.length, "…which is more of them than light rain paints");
+    const rowsOf = (marks) => [...new Set(marks.map((r) => r[1]))].sort((a, b) => a - b);
+    assert.deepEqual(
+      rowsOf(stormFall),
+      rowsOf(heavyFall),
+      "…and the same streak down the same rows: one row means one fall speed and one length",
+    );
+    assert.notDeepEqual(rowsOf(lightFall), rowsOf(heavyFall), "…which the light row is not");
+    // The wind angle, measured where it shows: how far a streak's bottom segment
+    // sits to the west of its top one.
+    const lean = (marks) => Math.max(...marks.map((r) => r[0])) - Math.min(...marks.map((r) => r[0]));
+    assert.ok(
+      lean(stormFall) > lean(heavyFall),
+      `…and a storm leans harder than rain does (${lean(stormFall)}px across a streak against ${lean(heavyFall)}px)`,
+    );
+
+    // ── AND NONE OF IT REACHES INDOORS ───────────────────────────────────────
+    // One assertion covers all three: same interior, worst sky, two instants.
+    // A tint would darken it, a substitution would whiten it, a particle would
+    // move between the two — so identical frames say all three stayed outside.
+    assert.equal(
+      frame(inside, { word: "storm", intensity: null }, 0),
+      frame(inside, FAIR, 900),
+      "the storm stops at the door: no tint, no snow, no rain indoors",
+    );
+  });
+}
+
+// ── A SHEET THAT CANNOT HOLD ITS OWN ID MAP (0.14 slice 3) ──────────────────
+// The degradation guarantee this package leans on everywhere is CONDITIONAL,
+// and the condition is easy to miss: `tileCanvas` returns null — and the Tier-0
+// painter answers — only for an id the atlas does NOT list. An id the atlas DOES
+// list, against a sheet too small to hold it, blits an empty in-bounds slot or a
+// no-op out-of-bounds rect. That is a SEE-THROUGH world, not procedural art, and
+// it is exactly the shape a release that appends four tile ids produces if the
+// sheet ships un-rebaked.
+//
+// So: the whole theme falls to Tier-0, and the terminal it falls into has to be
+// TERMINAL. "failed" is the deliberately transient one (a 30-second refetch of
+// the entire asset set), and a shipped-artifact mismatch is identical on every
+// retry — routing it there re-fetches forever, on exactly the broken installs.
+{
+  const prevFetch = globalThis.fetch;
+  const prevImage = globalThis.Image;
+  const prevWarn = console.warn;
+  const prevOffscreen = loadedPF.offscreen;
+  const A = loadedPF.assets;
+  const was = {
+    status: A.status,
+    atlas: A.atlas,
+    sprites: A.sprites,
+    atlasTheme: A.atlasTheme,
+    img: A._atlasImg,
+    requested: A._requestedTheme,
+    queued: A._queuedTheme,
+    failedAt: A._failedAt,
+    noPackage: A._noPackage,
+    latch: A._capacityLatch,
+    theme: loadedPF.art.theme,
+  };
+  // 33 ids over 8 columns need FIVE rows. The sheet below starts with four —
+  // 0.13's shipped shape, against 0.14's id map.
+  const tiles = {};
+  for (let i = 0; i < 33; i++) tiles[`t${i}`] = i;
+  let sheetHeight = 64;
+  // The sheet's PIXEL WIDTH, staged the same way the height is: the id map's
+  // column count is what the ATLAS declares, and the sheet is whatever was
+  // actually baked. The two can disagree on either axis.
+  let sheetWidth = 128;
+  let fetches = 0;
+  const warnings = [];
+  globalThis.fetch = async (url) => {
+    fetches += 1;
+    return {
+      ok: true,
+      json: async () =>
+        String(url).includes("sprites.json")
+          ? { frameWidth: 12, frameHeight: 16, frames: 4, rows: ["down", "up", "left", "right"], actors: {} }
+          : { tileSize: 16, columns: 8, tiles },
+    };
+  };
+  globalThis.Image = class {
+    set src(value) {
+      fetches += 1;
+      queueMicrotask(() => {
+        this.complete = true;
+        this.naturalWidth = sheetWidth;
+        // The pixel height, which is the one the guard has to read: `_image()`
+        // resolves on load without decode(), so the attribute-shadowed `height`
+        // is not it.
+        this.naturalHeight = sheetHeight;
+        this.width = 128;
+        // …and `height` is STAGED TO DISAGREE, because on a real <img> it can:
+        // it reflects the attribute, not the decoded pixels. A guard that read
+        // this number would measure whatever the markup happened to say, which
+        // is why the shipped one reads `naturalHeight` — and why this lane is
+        // the one place that difference can be proven.
+        this.height = 640;
+        this._data = new Uint8ClampedArray(sheetWidth * sheetHeight * 4).fill(255);
+        this.onload?.();
+      });
+    }
+  };
+  console.warn = (...args) => warnings.push(args.map(String).join(" "));
+  loadedPF.offscreen = shimCanvas;
+  try {
+    let cleared = 0;
+    const core = {
+      host: { packageId: "pixelforge", packageVersion: "0.14.0" },
+      render: { clearZones: () => (cleared += 1) },
+    };
+    Object.assign(A, {
+      status: "idle",
+      atlas: null,
+      _noPackage: false,
+      _failedAt: 0,
+      _requestedTheme: null,
+      _queuedTheme: null,
+      _capacityLatch: null,
+    });
+    loadedPF.art.setTheme("cozy-village");
+    await A.load(core);
+    assert.notEqual(A.status, "ready", "a sheet too small for its id map never goes ready");
+    assert.equal(A.tileCanvas("t0"), null, "…so every tile in the theme falls to Tier-0, not to a see-through slot");
+    // The existing failure path does not evict. This one must: a guard firing on
+    // the theme-change path would otherwise leave zones already composited from
+    // the old Tier-1 sheet standing beside fresh Tier-0 paint.
+    assert.equal(cleared, 1, "…after evicting the zones the old sheet had already composited");
+    assert.equal(warnings.length, 1, "…and it says so once");
+    const settled = fetches;
+    await A.load(core);
+    await A.load(core);
+    assert.equal(fetches, settled, "the latch is ONE-WAY: no 30-second refetch loop on a broken install");
+    assert.equal(warnings.length, 1, "…and no second warning either");
+
+    // A REAL FIX ARRIVES AS A VERSION BUMP, and that is a different key: the
+    // latch is per (theme, packageVersion), so the fixed install retries once
+    // rather than staying dark until somebody reinstalls.
+    sheetHeight = 80;
+    core.host.packageVersion = "0.14.1";
+    await A.load(core);
+    assert.ok(fetches > settled, "a version bump retries");
+    assert.equal(A.status, "ready", "…and a sheet that fits its id map loads");
+    assert.ok(A.tileCanvas("t0"), "…with the theme's tiles served off the sheet again");
+
+    // ── AND THE OTHER AXIS, WHICH THE GUARD USED TO MISS ENTIRELY ────────────
+    // Capacity was `columns * rows`: the columns the ATLAS DECLARES against the
+    // rows the SHEET actually has, so only a vertical mismatch was ever provable.
+    // A sheet baked NARROWER than its id map claims is the same shipped-artifact
+    // fault on the other axis and it walked straight through — 33 ids over a
+    // declared 8 columns sit inside five rows, so the row arithmetic is content,
+    // while `tileCanvas` goes on slicing at `index % 8` and every id in columns
+    // 6-7 is cut from past the right edge of a 96px sheet. A transparent tile
+    // handed back by a loader still saying "ready" is the see-through world the
+    // guard exists to convert into honest Tier-0 paint, whichever axis lost it.
+    sheetWidth = 96; // six real columns under an id map that declares eight
+    // A settled loader short-circuits on `status === "ready"` and the same
+    // requested theme, so a fresh sheet has to be asked for the way boot asks.
+    Object.assign(A, { status: "idle", _requestedTheme: null, _capacityLatch: null, _failedAt: 0 });
+    A._tileCanvases.clear();
+    core.host.packageVersion = "0.14.2";
+    await A.load(core);
+    assert.notEqual(A.status, "ready", "a sheet narrower than its id map never goes ready either");
+    assert.equal(A.tileCanvas("t6"), null, "…so an id past the right edge falls to Tier-0, not to a blank slot");
+    // …and the check is INDEX-AWARE on this axis exactly as it is on the other:
+    // a narrow sheet whose id map never reaches the missing columns is not a
+    // mismatch, and degrading a working install on one would be the false
+    // positive that makes a guard untrustworthy. Four ids over eight declared
+    // columns all live in columns 0-3, so six real columns hold every one.
+    const narrowFit = {};
+    for (let i = 0; i < 4; i++) narrowFit[`t${i}`] = i;
+    A.atlas = { tileSize: 16, columns: 8, tiles: narrowFit };
+    assert.equal(A._overCapacity({ naturalWidth: 96, naturalHeight: 80 }), false, "…while an id map that fits does not");
+    sheetWidth = 128;
+    Object.assign(A, { status: "idle", _requestedTheme: null, _capacityLatch: null, _failedAt: 0 });
+    A._tileCanvases.clear();
+    core.host.packageVersion = "0.14.3";
+    await A.load(core);
+    assert.equal(A.status, "ready", "…and the full-width sheet loads again");
+
+    // ── AND THE STATE THIS RELEASE SHIPS IN, NOW THAT THE BAKE HAS RUN ───────
+    // THIS PIN INVERTED, AND INVERTING IS WHAT IT WAS FOR. Through slices 3-5 it
+    // asserted the four snow ids were ABSENT from atlas.json — the honest
+    // description of a tree whose painters and whose generator both knew about
+    // snow while its build outputs did not — and it carried a note saying §6b's
+    // rebuild would have to come back here and flip it. This is that flip: the
+    // sheet grew a fifth row (33 ids over 8 columns, 128×64 → 128×80) and the
+    // atlas lists all four. A pin that only ever stays green never tells anybody
+    // the day the world changed under it.
+    //
+    // Read off DISK, against the SHIPPED atlas.json. The synthetic map above
+    // lists t0..t32 and would answer for a snow id just as readily, so asking IT
+    // says nothing about what this package ships.
+    const shippedAtlas = JSON.parse(readFileSync(join(here, "atlas.json"), "utf8"));
+    for (const id of SNOW_IDS)
+      assert.ok(Object.hasOwn(shippedAtlas.tiles, id), `the shipped atlas.json lists ${id} — the bake has run`);
+    // APPENDED, NEVER INSERTED — asked of the FILE this time, not of the
+    // generator's source order, because the index map is what a shipped world's
+    // tiles are actually resolved through. Every id that is not a snow id sits
+    // at a LOWER index than every id that is, so nothing that shipped before
+    // them moved slot; a snow tile dropped in beside `grass` where it reads
+    // nicely would pass the presence check above and repaint the whole map.
+    const snowIndices = SNOW_IDS.map((id) => shippedAtlas.tiles[id]);
+    const otherIndices = Object.entries(shippedAtlas.tiles)
+      .filter(([id]) => !SNOW_IDS.includes(id))
+      .map(([, index]) => index);
+    assert.ok(
+      Math.min(...snowIndices) > Math.max(...otherIndices),
+      "…on the END of the index map, where every id that shipped before them keeps its slot",
+    );
+    assert.deepEqual(
+      snowIndices,
+      [...snowIndices].sort((a, b) => a - b),
+      "…and contiguous in SUBS order rather than scattered through the new row",
+    );
+    // THE PER-TILE DEGRADATION ARM IS STILL REAL and still wants a pin; only its
+    // example moved. An id the shipped atlas does not list gets no Tier-1 answer
+    // and the Tier-0 painter draws it — which is what the NEXT tile shipped
+    // ahead of its own bake will rely on, exactly as snow did for three slices.
+    A.atlas = shippedAtlas;
+    assert.equal(
+      A.tileCanvas("aTileNoBakeHasEverProduced"),
+      null,
+      "an id the shipped atlas does not list gets no Tier-1 answer",
+    );
+    assert.ok(A.tileCanvas("grassSnow"), "…while grassSnow, which took that path for three slices, now resolves");
+    // AND THE TIER-0 SNOW PAINTERS STILL HAVE TO BE SNOW, which the bake does not
+    // retire: an install whose sheet never loads is exactly the case Tier-0
+    // exists for. Driven by pointing the assets at a theme that is not the live
+    // one, so `tile()` takes the procedural branch by the shipped rule rather
+    // than by luck of what the fixture left behind.
+    A.atlasTheme = "not-the-live-theme";
+    loadedPF.art.setTheme("sci-fi-colony");
+    loadedPF.art.setTheme("cozy-village");
+    const drawnSnow = loadedPF.art.tile("grassSnow");
+    assert.equal(drawnSnow._data[3], 255, "…so the Tier-0 painter draws it, opaque, rather than a transparent slot");
+    assert.notEqual(
+      pixelsOf(drawnSnow),
+      pixelsOf(loadedPF.art.tile("grass")),
+      "…and it is snow, not the grass fallback",
+    );
+  } finally {
+    globalThis.fetch = prevFetch;
+    globalThis.Image = prevImage;
+    console.warn = prevWarn;
+    loadedPF.offscreen = prevOffscreen;
+    Object.assign(A, {
+      status: was.status,
+      atlas: was.atlas,
+      sprites: was.sprites,
+      atlasTheme: was.atlasTheme,
+      _atlasImg: was.img,
+      _requestedTheme: was.requested,
+      _queuedTheme: was.queued,
+      _failedAt: was.failedAt,
+      _noPackage: was.noPackage,
+      _capacityLatch: was.latch,
+    });
+    A._tileCanvases.clear();
+    loadedPF.art.setTheme(was.theme);
+  }
+}
+
 // ── A DAY HAS A SHAPE (0.10.0) ─────────────────────────────────────────────
 // An ordinary resident's dawn and dusk were both `post`, so a settlement stood
 // at its work anchors from waking until sleeping and the only thing a whole day
@@ -7413,8 +8467,18 @@ const cellarBrief = (prosperity) => ({
     Object.values(w.zones)
       .filter((z) => z.hearth)
       .reduce((n, z) => n + z.npcs.length, 0);
+  // A PINNED FAIR SKY HERE, WHERE NOON IS MEASURED. The shape under test is what
+  // the CLOCK does to a village, and 0.14's wet-day bias holds the noon half of
+  // it indoors on whichever seeds roll rain — which is that feature's whole
+  // point and its own case's business, not this one's. (Seed 7's day 1 IS rain,
+  // so this pin is doing work rather than restating a fair day.) DAWN needs no
+  // such pin and does not carry one below: every soul in this fixture already
+  // resolves somewhere indoors at first light — hearth, bed, or a keeper's own
+  // indoor post — so the bias has nobody to move and all five words place the
+  // village identically.
   const at = (hour) => {
     const sim = new loadedPF.Sim(w);
+    sim.weatherOverride = { word: "fair" };
     sim.clockMin = hour * 60;
     sim.resolveSchedules();
     return { outdoors: w.zones.z1.npcs.length, indoors: fireside() };
@@ -13323,6 +14387,7 @@ await withSavePath(async ({ calls, behavior, makeCore }) => {
     "00-prelude.js",
     "10-art.js",
     "15-assets.js",
+    "17-weather.js",
     "18-brief.js",
     "20-world.js",
     "25-schedule.js",
@@ -14490,7 +15555,7 @@ await withSavePath(async ({ calls, behavior, makeCore }) => {
   // Negative half: the assertion fails the build from either side of the
   // duplication. 20-world loads 18-brief's table at boot, so both files are in
   // the same forced stack and either one can be the thing that moved.
-  const parts = ["00-prelude.js", "10-art.js", "15-assets.js", "18-brief.js", "20-world.js"];
+  const parts = ["00-prelude.js", "10-art.js", "15-assets.js", "17-weather.js", "18-brief.js", "20-world.js"];
   const bootWorld = (file, from, to) => {
     const source = parts
       .map((name) => {
@@ -14789,7 +15854,10 @@ await withSavePath(async ({ calls, behavior, makeCore }) => {
 // 20-world's host resolution — and each rewrite is asserted to have LANDED, so a
 // case cannot pass green because the line it meant to break moved.
 {
-  const stack = ["00-prelude.js", "10-art.js", "58-player.js", "59-economy.js"];
+  // 17-weather rides along because 59's catch-table boot block reads its WORDS
+  // list the way 61-pack reads 59's DAYPARTS — forward, and only ever forward.
+  // The bundle concatenates in filename order, so this stack has to say so too.
+  const stack = ["00-prelude.js", "10-art.js", "17-weather.js", "58-player.js", "59-economy.js"];
   const boot = (file, from, to) => {
     const source = stack
       .map((name) => {
@@ -14937,6 +16005,38 @@ await withSavePath(async ({ calls, behavior, makeCore }) => {
     boot("59-economy.js", `daypart: { dawn: 2, day: 0.5 }`, `daypart: { evening: 2, day: 0.5 }`),
     /cozy-village\/water-feature's "old-tench" is tuned for a daypart "evening"/,
     "a daypart the clock does not have fails the build",
+  );
+  // AND THE SAME WALK FOR THE SKY, against 17-weather's own word list. "stormy"
+  // is the exact shape that would ship as a column nobody could ever see apply.
+  assert.throws(
+    boot("59-economy.js", `"catch-common": { storm: 0.6 }`, `"catch-common": { stormy: 0.6 }`),
+    /cozy-village\/water-feature's "carp" is tuned for a weather "stormy"/,
+    "a weather word the sky does not have fails the build",
+  );
+  assert.throws(
+    boot("59-economy.js", `"catch-uncommon": { storm: 0.6 }`, `"catch-uncommon": { storm: "0.6" }`),
+    /cozy-village\/water-feature's "bream" has a storm multiplier of 0.6/,
+    "…and so does a multiplier that is not a number",
+  );
+  // THE MIX PAIRS AGAINST THE RARITIES BOTH WAYS. A rarity with no row stamps
+  // `undefined` onto every entry of that tier — a whole tier that quietly stops
+  // reading the sky — and a row keyed on a rarity nothing has never applies.
+  // Still worth every line with only storm left in the rows (0.14 slice 2b): the
+  // rows ARE the retune surface, and an empty one is the shape that stops
+  // reading the sky without saying so.
+  assert.throws(
+    boot("59-economy.js", `  "catch-rare": { storm: 1.5 },\n`, ``),
+    /the weather mix has no row for "catch-rare"/,
+    "a rarity the mix forgot fails the build",
+  );
+  assert.throws(
+    boot(
+      "59-economy.js",
+      `  [BAIT_TYPE]: { storm: 0.6 }`,
+      `  "catch-legendary": { storm: 1 },\n  [BAIT_TYPE]: { storm: 0.6 }`,
+    ),
+    /the weather mix names a rarity "catch-legendary" the catch roles do not/,
+    "…and so does a row for a rarity nothing has",
   );
   // AND A THEME WITH NO BAIT IN ITS WATER would sell a rod and hand over an empty
   // tin: the crude purchase's starter stack takes its slug from exactly here.
@@ -17256,6 +18356,30 @@ globalThis.document = {
   querySelectorAll(selector) {
     return this._staged.filter((node) => stagedMatches(node, selector));
   },
+  // (iv) …and the document can be LISTENED TO. The talk window's
+  // pointer-down-outside close is a DOCUMENT-level pair — it has to be, because a
+  // press outside the window lands on a node the window does not own — and it is
+  // the one listener in the package that `destroy()`'s `root.remove()` cannot
+  // take with it. Without these two the bind/unbind discipline that keeps it from
+  // outliving its window would be browser-only, which is where a teardown goes to
+  // stop being watched.
+  _docListeners: {},
+  addEventListener(type, fn) {
+    (this._docListeners[type] ??= []).push(fn);
+  },
+  removeEventListener(type, fn) {
+    const list = this._docListeners[type];
+    if (!list) return;
+    const at = list.indexOf(fn);
+    if (at >= 0) list.splice(at, 1);
+  },
+};
+/** Fire a document-level event at whatever is currently bound. Returns how many
+ *  listeners heard it, which is the half a bind/unbind lane actually asks about. */
+const fireDocument = (type, event) => {
+  const list = globalThis.document._docListeners[type] ?? [];
+  for (const fn of list.slice()) fn(event);
+  return list.length;
 };
 const walkNodes = (node, out = []) => {
   out.push(node);
@@ -18931,6 +20055,11 @@ const fire = (node, type) => Promise.all((node.listeners[type] ?? []).map((fn) =
       toast: (text) => toasts.push(text),
       refreshChips() {},
       update() {},
+      // The talk window's two HUD-side hooks. Stubbed rather than omitted for the
+      // reason `questFilled` is here at all: a stub that does not model the
+      // surface turns a shipped call into a thrown "not a function".
+      onTalkOpened() {},
+      _talkUnmount() {},
       questFilled: (done) => filled.push(...done),
     };
     const active = () => P.get(core).quests.active;
@@ -19211,6 +20340,8 @@ const fire = (node, type) => Promise.all((node.listeners[type] ?? []).map((fn) =
       toast() {},
       refreshChips() {},
       update() {},
+      onTalkOpened() {},
+      _talkUnmount() {},
       questFilled: (done) => filled.push(...done),
     };
     let accept = true;
@@ -19241,10 +20372,23 @@ const fire = (node, type) => Promise.all((node.listeners[type] ?? []).map((fn) =
     const rook = w.zones.village.npcs.find((npc) => npc.name === "Rook");
     const tam = w.zones.village.npcs.find((npc) => npc.name === "Tam");
     assert.ok(rook && tam, "the legacy village stands two people up in the open");
+    // ── `interact()` NO LONGER SENDS (0.14 slice 4) ─────────────────────────
+    // The press OPENS the talk window; the greeting is now a labelled control
+    // INSIDE it — "Just talk (asks the GM)", which settles every errand to the
+    // name exactly as 0.13's bare greeting did. So the two-step below is what a
+    // press used to be, driven through the shipped path: open if it is not
+    // already open (a second `interact()` would TOGGLE it shut), then press the
+    // door. Every case in this block asks the same question it always did — what
+    // one greeting costs and what it settles — of the surface that now asks it.
     const talkTo = (npc) => {
       sim.mode = "walk";
       sim.nearNpc = npc;
-      core.interact();
+      // A conversation with somebody ELSE ends before this one starts, which is
+      // what walking away does. A conversation with the SAME person is the one
+      // being pressed again — which is exactly what the two-press confirm is.
+      if (core.talkOpen() && core._talkAnchor !== npc) core.closeTalk();
+      if (!core.talkOpen()) core.interact();
+      core.talkFree();
     };
 
     // ── THE HANDOVER: ONE TURN, ONE COMPLETION ───────────────────────────────
@@ -20799,7 +21943,15 @@ const fire = (node, type) => Promise.all((node.listeners[type] ?? []).map((fn) =
     // questFilled stands in for the real Hud's own (70-hud): Talk's accepted turn
     // is the deliver verb's completion site, and a stub that did not model the
     // surface would turn a settled errand into a thrown "not a function".
-    core.hud = { toast: (text) => toasts.push(text), refreshChips() {}, update() {}, questFilled() {} };
+    const stubHud = {
+      toast: (text) => toasts.push(text),
+      refreshChips() {},
+      update() {},
+      onTalkOpened() {},
+      _talkUnmount() {},
+      questFilled() {},
+    };
+    core.hud = stubHud;
     const host = {
       chatId: "chat-talk-skip",
       isStreaming: false,
@@ -20812,27 +21964,57 @@ const fire = (node, type) => Promise.all((node.listeners[type] ?? []).map((fn) =
     };
     core.host = host;
     const villagers = w.zones.village.npcs;
+    // ── `interact()` NO LONGER SENDS (0.14 slice 4) ─────────────────────────
+    // The press OPENS the talk window; the greeting is now a labelled control
+    // INSIDE it — "Just talk (asks the GM)", which settles every errand to the
+    // name exactly as 0.13's bare greeting did. So the two-step below is what a
+    // press used to be, driven through the shipped path: open if it is not
+    // already open (a second `interact()` would TOGGLE it shut), then press the
+    // door. Every case in this block asks the same question it always did — what
+    // one greeting costs and what it settles — of the surface that now asks it.
     const talkTo = (npc) => {
       sim.mode = "walk";
       sim.nearNpc = npc;
-      core.interact();
+      // A conversation with somebody ELSE ends before this one starts, which is
+      // what walking away does. A conversation with the SAME person is the one
+      // being pressed again — which is exactly what the two-press confirm is.
+      if (core.talkOpen() && core._talkAnchor !== npc) core.closeTalk();
+      if (!core.talkOpen()) core.interact();
+      core.talkFree();
     };
     const settle = async () => {
       for (let i = 0; i < 8; i++) await Promise.resolve();
     };
 
+    // ── THE 0.11 PROTECTION SURVIVES WHOLE, TRANSLATED (0.14 slice 4) ────────
+    // `interact()` no longer sends, so the press this case is about is a press on
+    // a CONTROL INSIDE the talk window — and the confirm moved with it. It is now
+    // keyed {anchorId, controlId, turn} rather than {npcId, turn}, and the three
+    // deliberate inversions are called out where they bite:
+    //   • the QUESTION IS DRAWN ON THE PRESSED CONTROL, not on the census button
+    //     (which is a plain toggle again — a button that both opens a window and
+    //     asks a question about a turn is a button whose press means two things);
+    //   • NEIGHBOUR DRIFT NO LONGER CLEARS IT. That was the point of the re-key:
+    //     the old read was `sim.nearNpc`, which self-clears the instant anybody
+    //     wanders nearer, so in the crowd this window exists for the whole paid
+    //     set was unpressable. A different ANCHOR clears it; a passer-by does not;
+    //   • ARMING ON ONE CONTROL DOES NOT SPEND ON ANOTHER. Permission given to
+    //     "Say something…" is not permission for "Hand over", which settles an
+    //     errand and pays for it.
+    // What did NOT change is the contract: no press spends unread narration
+    // without an affirmative press on the same control against the same person.
+
     // THE REPORTED PRESS: story still to read, so it asks.
     talkTo(villagers[0]);
     await settle();
     assert.deepEqual(sent, [], "the first press sends nothing while there is narration to read");
-    assert.equal(core.talkConfirmArmed(), true, "…it arms the question on the button instead");
-    assert.ok(
-      toasts.some((text) => /press again/i.test(text)),
-      "…and says so out loud",
-    );
+    assert.equal(core.talkConfirmArmed(), true, "…it arms the question instead");
+    assert.equal(core._talkConfirm.controlId, "free", "…on the control that was pressed");
+    assert.equal(core._talkConfirm.anchorId, villagers[0].id, "…about the person being talked to");
     assert.equal(sim.mode, "walk", "…and does not hand the keyboard away either");
+    assert.equal(core.talkOpen(), true, "…with the window still up, which is where the question is drawn");
 
-    // AND THE SECOND PRESS IS THE AFFIRMATIVE ONE.
+    // AND THE SECOND PRESS ON THE SAME CONTROL IS THE AFFIRMATIVE ONE.
     talkTo(villagers[0]);
     await settle();
     assert.equal(sent.length, 1, "the second press sends, exactly once");
@@ -20840,35 +22022,66 @@ const fire = (node, type) => Promise.all((node.listeners[type] ?? []).map((fn) =
     assert.equal(core.talkConfirmArmed(), false, "and the question is spent with it");
     assert.equal(sim.mode, "dialogue", "…the turn having been taken");
 
+    // A PRESS ON A DIFFERENT CONTROL DOES NOT SPEND THE PERMISSION. Arming on the
+    // free-talk door is not permission for the say door, which is a different
+    // sentence — and not for a handover, which pays.
+    sent.length = 0;
+    core.setMode("walk");
+    core._talkConfirm = null;
+    host.narrationDone = false;
+    host.latestAssistant = { id: "m1b" };
+    talkTo(villagers[0]);
+    await settle();
+    assert.equal(core._talkConfirm?.controlId, "free", "the free-talk door holds the question");
+    core.talkSay("hello");
+    await settle();
+    assert.deepEqual(sent, [], "…and the say door cannot spend it");
+    assert.equal(core._talkConfirm?.controlId, "say", "…it asks in its own right instead");
+    core.talkSay("hello");
+    await settle();
+    assert.equal(sent.length, 1, "…which its own second press then answers");
+    assert.ok(sent[0].includes('"hello"'), "…sending what was typed");
+
     // NO REGRESSION FOR THE ORDINARY PRESS: nothing unread, one press, one turn.
     sent.length = 0;
+    core.setMode("walk");
     host.narrationDone = true;
     talkTo(villagers[0]);
     await settle();
-    assert.equal(sent.length, 1, "with the narration read, Talk still sends on the first press");
+    assert.equal(sent.length, 1, "with the narration read, the door still sends on the first press");
 
     // AND A CHAT WITH NO GM TURN IN IT HAS NO STORY TO LOSE. `narrationDone` is
     // false there too — the host has no message to compare its marker against —
     // so without the second half of the test every greeting in a fresh chat
     // would need two presses.
     sent.length = 0;
+    core.setMode("walk");
     host.narrationDone = false;
     host.latestAssistant = null;
     talkTo(villagers[0]);
     await settle();
     assert.equal(sent.length, 1, "an empty chat skips nothing, so it asks nothing");
 
-    // THE QUESTION IS PER-PERSON, and it goes stale rather than carrying.
+    // THE QUESTION IS PER-PERSON, AND "PERSON" IS THE ANCHOR — the deliberate
+    // inversion. A neighbour drifting inside 26px used to clear it, because the
+    // read was a live proximity one; now it is the person the conversation is
+    // with, and a passer-by is not that person.
     sent.length = 0;
+    core.setMode("walk");
     host.latestAssistant = { id: "m2" };
     talkTo(villagers[0]);
     await settle();
-    assert.equal(core.talkConfirmArmed(), true, "armed for the person you are standing at");
+    assert.equal(core.talkConfirmArmed(), true, "armed for the person you are talking to");
     sim.nearNpc = villagers[1];
-    assert.equal(core.talkConfirmArmed(), false, "…and not for the next person you walk up to");
+    assert.equal(core.talkConfirmArmed(), true, "…and somebody wandering nearer does not take it away");
+    assert.equal(sim.talkAnchorId, villagers[0].id, "…because the conversation is still with the first one");
+    // …AND TALKING TO SOMEBODY ELSE DOES. Opening a window on the next person
+    // ends the conversation the question was asked about, which is what makes it
+    // per-person rather than per-turn-only.
     talkTo(villagers[1]);
     await settle();
     assert.deepEqual(sent, [], "who is asked in their own right");
+    assert.equal(core._talkConfirm.anchorId, villagers[1].id, "…the question having moved with the conversation");
 
     // NARRATION FINISHING DROPS IT WITHOUT A PRESS: the question was only ever
     // about story that was still pending.
@@ -20876,32 +22089,62 @@ const fire = (node, type) => Promise.all((node.listeners[type] ?? []).map((fn) =
     host.narrationDone = true;
     assert.equal(core.talkConfirmArmed(), false, "…and is gone the moment there is nothing left to read");
 
-    // WHAT THE MAINTAINER ACTUALLY SEES: the button carries the question.
+    // WHAT THE MAINTAINER ACTUALLY SEES: the PRESSED CONTROL carries the
+    // question, and the census button stays a plain toggle. Under the real HUD,
+    // because the label is the thing being asserted.
     host.narrationDone = false;
+    host.latestAssistant = { id: "m2b" };
+    core.setMode("walk");
+    core.closeTalk();
+    core._talkConfirm = null;
     const hud = new loadedPF.Hud(new FakeNode("div"), core);
     core.hud = hud;
     sim.mode = "walk";
     sim.nearNpc = villagers[1];
-    core._talkConfirm = null;
+    // STAND WHERE THE PRESS WOULD HAVE BEEN MADE. Everything above drives the
+    // sender, which fences on identity membership; the HUD also fences on the
+    // ONE-TILE BAND, so a case that set `nearNpc` by hand from across the square
+    // would watch the window close on the frame it opened.
+    sim.x = villagers[1].x * loadedPF.TILE + 8;
+    sim.y = villagers[1].y * loadedPF.TILE + 8;
     hud.update();
-    assert.equal(hud.talkBtn.textContent, `Talk to ${villagers[1].name} (E)`, "unarmed, it is the ordinary Talk");
+    assert.equal(hud.talkBtn.textContent, `Talk to ${villagers[1].name} (E)`, "unarmed, the census button offers Talk");
     core.interact();
+    hud.update();
+    assert.equal(
+      hud.talkBtn.textContent,
+      `Leave ${villagers[1].name} (E)`,
+      "…and with a window open it is the close verb, against the person the window is anchored to",
+    );
+    const doorOf = (label) => hud.talkRows.children.find((node) => String(node.textContent).startsWith(label)) ?? null;
+    assert.ok(doorOf("Just talk"), "the free-talk door is rendered");
+    assert.equal(doorOf("Just talk").textContent, "Just talk (asks the GM)", "…labelled as a paid press");
+    core.talkFree();
     await settle();
     hud.update();
-    assert.equal(hud.talkBtn.textContent, "Skip story & talk?", "armed, the button IS the confirm");
+    assert.deepEqual(sent, [], "the press asked rather than sent");
+    assert.ok(doorOf("Skip story & talk?"), "armed, the PRESSED CONTROL is the question");
+    assert.equal(hud.talkBtn.textContent, `Leave ${villagers[1].name} (E)`, "…and the census button never becomes it");
     host.narrationDone = true;
     hud.update();
-    assert.equal(hud.talkBtn.textContent, `Talk to ${villagers[1].name} (E)`, "and it goes back on its own");
+    assert.ok(doorOf("Just talk"), "and the control goes back on its own");
+    // A REAL HUD IS TORN DOWN REALLY. It bound a document-level pointerdown when
+    // the window opened, and that listener is not a child of anything the stub
+    // swap removes — leaving it would be the exact leak `destroy()` exists to
+    // stop, and it would answer the NEXT block's presses.
+    hud.destroy();
+    core.hud = stubHud;
 
     // THE TURN IS HALF THE QUESTION, NOT JUST THE PERSON (round-2 review).
     // `narrationDone` is PER-TURN and goes false again for every new GM turn, so
     // "there is still story to read" is not the same fact from one turn to the
     // next. The player can arm the confirm, type into the host's own message box
     // instead of pressing again, and have a NEW turn land unread — and a confirm
-    // that remembered only the NPC would let ONE press spend the new narration on
-    // the permission they gave for the old one, which is the exact loss the
-    // confirm exists to prevent.
+    // that remembered only the person would let ONE press spend the new narration
+    // on the permission they gave for the old one.
     sent.length = 0;
+    core.setMode("walk");
+    core.closeTalk();
     core._talkConfirm = null;
     host.narrationDone = false;
     host.latestAssistant = { id: "m3" };
@@ -20919,12 +22162,14 @@ const fire = (node, type) => Promise.all((node.listeners[type] ?? []).map((fn) =
     // AND A MODE CHANGE DROPS IT. The question is asked in walk mode standing
     // next to somebody, and every way out of that frame — the Keyboard button
     // handing the turn back to the host, a cutscene beat, combat — is the player
-    // doing something other than what the question was about. Named as a clear
-    // condition when the confirm shipped; pinned here.
+    // doing something other than what the question was about. It now drops for
+    // TWO reasons at once, and both are the same rule: setMode clears the memo,
+    // and its walk entry clears the LATCH the question is keyed to.
     sent.length = 0;
     assert.equal(core.talkConfirmArmed(), true, "armed before the mode changes under it");
     core.setMode("dialogue"); // the Keyboard button
     core.setMode("walk"); // Resume walking
+    assert.equal(sim.talkAnchorId, null, "…and coming back to walk has ended the conversation");
     sim.nearNpc = villagers[1];
     assert.equal(core.talkConfirmArmed(), false, "the question does not survive the mode changing under it");
     talkTo(villagers[1]);
@@ -20939,6 +22184,1554 @@ const fire = (node, type) => Promise.all((node.listeners[type] ?? []).map((fn) =
     core.host = null;
     core._talkConfirm = null;
     loadedPF.save.reset();
+  }
+}
+
+// ── THE DEFAULT PACKS LEARNED TO ANSWER (0.14 slice 4) ───────────────────────
+// The enrichment's whole point, said as arithmetic. The talk window renders a
+// topic branch only when it has a line to serve, and the packs it reads on a
+// legacy world and on a declined generation are these two — so a floor here is
+// the difference between four working branches and one.
+//
+// The boot assert at the foot of 61-pack enforces the same floor and throws on
+// the way in; this is where the numbers are visible, and where the STRANGER
+// clause is pinned in its own right: ruling 4 seals the friend register for this
+// release, so a pack whose topics live in friend lines has topic buttons that
+// never render, whatever the totals say.
+{
+  const pack = loadedPF.pack;
+  const HANDLES = ["settlement", "gathering", "wilds"];
+  const INTERIORS = ["workshop", "hall", "sanctuary", "dwelling"];
+  for (const theme of loadedPF.art.themeIds()) {
+    const lines = pack.defaults(theme).lines;
+    const strangers = lines.filter((row) => row.r === "stranger");
+    assert.ok(
+      strangers.length >= 2 * HANDLES.length * pack.TOPICS.length,
+      `${theme}: the enrichment is stranger-register (${strangers.length} of ${lines.length})`,
+    );
+    for (const at of HANDLES) {
+      for (const topic of pack.TOPICS) {
+        // ANY-WEATHER, deliberately: a topic whose only lines were sky-tagged
+        // would be a branch that disappeared on a fair day, which is most days.
+        const servable = strangers.filter((row) => row.at === at && row.topic === topic && row.w === undefined).length;
+        assert.ok(servable >= 2, `${theme}: ${at}/${topic} has ${servable} any-weather stranger lines, needs two`);
+      }
+    }
+    // …AND THE INTERIOR HANDLES GET NO FLOOR, which is a decision rather than an
+    // omission: the ladder's third and fourth rungs relax the PLACE, so a smith
+    // with nothing workshop-shaped to say answers with something the town says.
+    // Pinned so a later pass does not "complete" the table and bury the design.
+    const interiorTagged = strangers.filter((row) => INTERIORS.includes(row.at) && row.topic !== undefined).length;
+    assert.equal(interiorTagged, 0, `${theme}: the interior handles carry no topic floor, by design`);
+    // The weather axis is SPENT, and spent as extras over the floor.
+    const skies = strangers.filter((row) => row.w !== undefined);
+    assert.ok(skies.length >= 2, `${theme}: the weather axis is actually used (${skies.length} lines)`);
+    for (const row of skies)
+      assert.ok(pack.WEATHERS.includes(row.w), `${theme}: "${row.w}" is a weather word this build knows`);
+  }
+}
+
+// ── THE TALK WINDOW, AND THE CLOCK IT STOPS (0.14 slice 4) ────────────────────
+// The release's flagship surface. Everything below drives the SHIPPED core and
+// the SHIPPED Hud over the FakeNode shim — `core.interact()` to open, the real
+// window controls to press, `sim.step()` to run frames, `hud.update()` to
+// reconcile — because the two halves of this feature are a DOM surface and a
+// stopped clock, and a lane that stubbed either would be watching neither.
+//
+// THE STUCK-CLOCK CLASS IS WHAT THIS BLOCK IS FOR. `talkAnchorId` freezes the
+// world's clock, so a latch that leaks is a world where time never passes again —
+// not a cosmetic bug, a save that can never see another dawn. It has exactly ONE
+// non-null writer (the window opening) and a finite table of clearers, and the
+// lanes below drive every clearer in that table plus the invariant underneath
+// them all: LATCH NULL ⇒ THE CLOCK RUNS.
+{
+  const core = loadedPF.core;
+  const realSetTimeout = globalThis.setTimeout;
+  const realClearTimeout = globalThis.clearTimeout;
+  const realWindow = globalThis.window;
+  globalThis.setTimeout = () => 0;
+  globalThis.clearTimeout = () => {};
+  // `_bindKeys` is what puts `_keyDown` on the core, and it wants a window to
+  // bind to. The keyboard Escape branch is a shipped leave condition, so it is
+  // driven here rather than left to the browser pass.
+  globalThis.window = { addEventListener() {}, removeEventListener() {} };
+  loadedPF.save.reset();
+
+  /** The fixed step the frame loop runs at (90-element), and how many of them a
+   *  game minute takes. `PF.CLOCK_SECONDS_PER_GAME_MINUTE` is 5 and the step is
+   *  1/60, so three hundred is the paper answer — and repeated addition of 1/60
+   *  lands at 4.999999999999938, a hair short, so the honest count is 301: the
+   *  clock crosses on the last of them. Every clock assertion below is that
+   *  arithmetic and not a tolerance, because "the clock did not move much" is
+   *  exactly the shape a banked accumulator sails straight through. */
+  const STEP = 1 / 60;
+  const MINUTE_STEPS = loadedPF.CLOCK_SECONDS_PER_GAME_MINUTE * 60 + 1;
+
+  /** One staged world, wired the way a live mount is. */
+  const stage = ({ seed = 4242, theme = "cozy-village", chatId = "chat-talk-window", sealed = null } = {}) => {
+    // TEAR THE LAST ONE DOWN FIRST, and it is not tidiness: the window binds a
+    // DOCUMENT-level pointerdown, so a fixture that walked away from an open one
+    // would leave a listener closed over a dead Hud on the page — which is the
+    // exact leak `destroy()` exists to stop, and a stale one would answer these
+    // lanes' presses instead of the live window.
+    core.hud?.destroy();
+    core.closeTalk();
+    const w = world.build(seed, theme, sealed);
+    const sim = new loadedPF.Sim(w);
+    const sent = [];
+    core.chatId = chatId;
+    core.sim = sim;
+    core._talkConfirm = null;
+    core._talkAnchor = null;
+    let accept = true;
+    const host = {
+      chatId,
+      chatMeta: {},
+      isStreaming: false,
+      narrationDone: true,
+      latestAssistant: { id: "m1" },
+      sendMessage: (text) => {
+        sent.push(text);
+        return accept;
+      },
+    };
+    core.host = host;
+    const mountEl = new FakeNode("div");
+    core._mainEl = mountEl;
+    const hud = new loadedPF.Hud(mountEl, core);
+    core.hud = hud;
+    core._keysBound = false;
+    core._bindKeys();
+    const standAt = (npc) => {
+      sim.x = npc.x * loadedPF.TILE + 8;
+      sim.y = npc.y * loadedPF.TILE + 8;
+    };
+    const openOn = (npc) => {
+      sim.mode = "walk";
+      standAt(npc);
+      sim.nearNpc = npc;
+      core.interact();
+      hud.update();
+    };
+    const steps = (n) => {
+      for (let i = 0; i < n; i++) sim.step(STEP, core.input);
+    };
+    const frames = (n) => {
+      for (let i = 0; i < n; i++) {
+        sim.step(STEP, core.input);
+        hud.update();
+      }
+    };
+    /** Fire a control the way a MOUSE does, and that is the whole of it: a click
+     *  listener receives a MouseEvent, and a MouseEvent CARRIES NO KEYBOARD
+     *  PROPERTIES. This helper used to spread a caller-supplied object over the
+     *  event, which let the repeat lane below hand a click a `repeat` field the
+     *  shipped code can never see — so the lane proved a guard that was inert and
+     *  could not have failed. Nothing is spread in any more. */
+    const press = (node) => {
+      for (const fn of node.listeners?.click ?? []) fn({ preventDefault() {} });
+    };
+    /** Fire a control the way a KEYBOARD does, which is the only shape `repeat`
+     *  ever arrives in: the keydown that carries it, and then — ONLY IF that
+     *  keydown was not cancelled — the click the browser synthesizes as the
+     *  keydown's DEFAULT ACTION. Both halves are the browser's own chain for a
+     *  held Enter on a focused `<button>`, and the cancellation half is what makes
+     *  a repeat guard observable at all.
+     *
+     *  `holdKey(node, false)` is a hold's first press, `holdKey(node, true)` its
+     *  echo, `releaseKey(node)` ends the run. Returns whether the activation was
+     *  cancelled. */
+    const holdKey = (node, repeat) => {
+      let cancelled = false;
+      const ev = {
+        key: "Enter",
+        repeat,
+        preventDefault() {
+          cancelled = true;
+        },
+      };
+      for (const fn of node.listeners?.keydown ?? []) fn(ev);
+      if (!cancelled) press(node);
+      return cancelled;
+    };
+    const releaseKey = (node) => {
+      for (const fn of node.listeners?.keyup ?? []) fn({ key: "Enter" });
+    };
+    const rowLabelled = (prefix) =>
+      hud.talkRows.children.find((node) => String(node.textContent).startsWith(prefix)) ?? null;
+    const labels = () => hud.talkRows.children.map((node) => String(node.textContent));
+    return {
+      w,
+      sim,
+      hud,
+      sent,
+      host,
+      standAt,
+      openOn,
+      steps,
+      frames,
+      press,
+      holdKey,
+      releaseKey,
+      rowLabelled,
+      labels,
+      accept: (value) => {
+        accept = value;
+      },
+      npcs: () => sim.zone().npcs,
+    };
+  };
+  const settle = async () => {
+    for (let i = 0; i < 8; i++) await Promise.resolve();
+  };
+  const mounted = (hud) => hud.talkEl.style.display === "flex";
+  // NOTHING IS LISTENING BEFORE ANY OF THIS OPENS A WINDOW. Stated as an
+  // assertion rather than assumed, because every pointer-outside lane below
+  // reads "how many handlers heard it", and one left behind by an earlier case
+  // would answer for a window that no longer exists.
+  assert.equal(fireDocument("pointerdown", { target: new FakeNode("div") }), 0, "no window listener is standing yet");
+
+  try {
+    // ── THE INVARIANT, FIRST: LATCH NULL ⇒ THE CLOCK RUNS ────────────────────
+    // Everything else in this block is about the freeze. This one is about the
+    // thaw, and it is the assertion the stuck-clock class actually dies on: with
+    // no conversation live, N stepped walk frames advance the clock, whatever
+    // else is true of the world. Exact arithmetic — 300 steps is one minute.
+    {
+      const t = stage();
+      assert.equal(t.sim.talkAnchorId, null, "a fresh sim is born with no conversation live");
+      const was = t.sim.clockMin;
+      t.steps(MINUTE_STEPS);
+      assert.equal(
+        t.sim.clockMin,
+        was + 1,
+        "latch null ⇒ the clock runs: one game minute of frames is one game minute",
+      );
+      t.steps(MINUTE_STEPS * 2);
+      assert.equal(t.sim.clockMin, was + 3, "…and keeps running, minute for minute");
+    }
+
+    // ── THE WINDOW STOPS TIME, AND BANKS NOTHING ────────────────────────────
+    // 600 steps is two game minutes' worth of real seconds. Not one of them
+    // arrives — and `_clockAcc` does not fill either, which is the half a naive
+    // gate misses: an accumulator left accruing dumps every banked minute the
+    // instant the window closes, which is the same afternoon burnt one frame
+    // later. So the close is checked for EXACTLY +1 and never +2.
+    {
+      const t = stage();
+      const npc = t.npcs()[0];
+      t.openOn(npc);
+      assert.equal(t.sim.talkAnchorId, npc.id, "the press opened a conversation");
+      assert.equal(mounted(t.hud), true, "…and the window is up");
+      const held = t.sim.clockMin;
+      t.frames(MINUTE_STEPS * 2);
+      assert.equal(t.sim.clockMin, held, "the clock does not advance one minute while the window is open");
+      assert.equal(t.sim._clockAcc, 0, "…and the accumulator has not been quietly filling either");
+      assert.equal(mounted(t.hud), true, "…with the window still standing after all of it");
+      // THE UNFREEZE, on the same sim: closing IS the latch clear, and the very
+      // next minute's worth of frames lands one minute and not three.
+      core.closeTalk();
+      t.hud.update();
+      assert.equal(mounted(t.hud), false, "closing takes the window down");
+      assert.equal(t.sim.talkAnchorId, null, "…because closing IS clearing the latch");
+      t.steps(MINUTE_STEPS);
+      assert.equal(t.sim.clockMin, held + 1, "…and time starts again: exactly one minute, never the banked two");
+    }
+
+    // ── NPCS KEEP MOVING WHILE THE CLOCK DOES NOT ───────────────────────────
+    // The town stays alive while you read. What is frozen is the CLOCK and the
+    // person you are talking to — by IDENTITY, not by whoever is nearest, which
+    // is the whole of the crowd case: `nearNpc` freezes the drifter and lets the
+    // addressee walk off, and between 26 and 32px it freezes nobody at all.
+    {
+      const t = stage();
+      const [anchor, drifter] = t.npcs();
+      assert.ok(anchor && drifter, "the legacy village stands two people up in the open");
+      t.openOn(anchor);
+      const anchorWas = `${anchor.x},${anchor.y}`;
+      const drifterWas = `${drifter.x},${drifter.y}`;
+      let drifterMoved = false;
+      for (let i = 0; i < 3000; i++) {
+        t.sim.step(STEP, core.input);
+        if (`${drifter.x},${drifter.y}` !== drifterWas) drifterMoved = true;
+      }
+      assert.equal(`${anchor.x},${anchor.y}`, anchorWas, "the person being talked to stands still");
+      assert.equal(drifterMoved, true, "…and the town does not: the neighbour keeps wandering");
+      assert.equal(t.sim.talkAnchorId, anchor.id, "…with the conversation still live");
+    }
+
+    // ── THE HANDOFF: TIME STOPPED END TO END, THE ANCHOR FROZEN END TO END ──
+    // A paid press unmounts the window on the mode term and KEEPS the latch, so
+    // the freeze passes from the gate to the dialogue mode test with no gap. The
+    // clear lands at the walk entry the dialogue exit reaches.
+    {
+      const t = stage();
+      const [anchor, drifter] = t.npcs();
+      t.openOn(anchor);
+      const held = t.sim.clockMin;
+      const anchorWas = `${anchor.x},${anchor.y}`;
+      const drifterWas = `${drifter.x},${drifter.y}`;
+      core.talkFree();
+      await settle();
+      assert.equal(t.sim.mode, "dialogue", "the press took the turn");
+      assert.equal(t.sim.talkAnchorId, anchor.id, "…and the latch SURVIVED it: the conversation is still with them");
+      t.hud.update();
+      assert.equal(mounted(t.hud), false, "…while the window itself is gone, on the predicate's mode term");
+      // THE CROWD CASE, and this is where the old fence actually broke. In
+      // dialogue `nearNpc` stops being recomputed, so it points at whoever
+      // happened to be nearest at the moment the mode changed — point it at the
+      // NEIGHBOUR and a nearNpc-keyed freeze holds the wrong person still while
+      // the addressee walks off mid-sentence.
+      t.sim.nearNpc = drifter;
+      let drifterMoved = false;
+      for (let i = 0; i < 3000; i++) {
+        t.sim.step(STEP, core.input);
+        if (`${drifter.x},${drifter.y}` !== drifterWas) drifterMoved = true;
+      }
+      assert.equal(t.sim.clockMin, held, "time is still stopped, through the whole of the GM's answer");
+      assert.equal(`${anchor.x},${anchor.y}`, anchorWas, "…and the ANCHOR is the one standing still");
+      assert.equal(drifterMoved, true, "…not whoever `nearNpc` happens to point at");
+      core.setMode("walk"); // Resume walking — the dialogue exit
+      assert.equal(t.sim.talkAnchorId, null, "coming back to walk ends the conversation, at the one choke point");
+      t.steps(MINUTE_STEPS);
+      assert.equal(t.sim.clockMin, held + 1, "…and the clock runs again");
+    }
+
+    // ── EVERY CLEARER IN THE TABLE, DRIVEN ──────────────────────────────────
+    // One writer, a finite list of clearers. Each row below opens a window and
+    // ends it a different way, and each one asserts the same two things: the
+    // latch is null, and the clock is running again on the SAME sim.
+    {
+      const unfreezes = {
+        "the Leave row": (t) => t.press(t.hud.talkLeaveBtn),
+        "Escape at the keyboard": (t) => core._keyDown({ key: "Escape", target: null, preventDefault() {} }),
+        "Escape inside the Say field": (t) =>
+          t.hud.talkInput.listeners.keydown[0]({ key: "Escape", preventDefault() {} }),
+        "pressing E again": (t) => core.interact(),
+        "a press outside the window": () => fireDocument("pointerdown", { target: new FakeNode("div") }),
+        "the wait verb": (t) => t.sim.waitUntil("dusk"),
+        "the fishing verb's advance": (t) => t.sim.advanceMinutes(30),
+        "opening the journal": (t) => t.hud.toggleJournal(),
+        "opening the character sheet": (t) => t.hud.toggleSheet(),
+        "Escape closing every panel": (t) => t.hud.closePanels(),
+        "walking two tiles away": (t) => {
+          t.sim.x += 2 * loadedPF.TILE;
+          t.hud.update();
+        },
+        "the loading gate arming": (t) => {
+          loadedPF.save.gate = { chatId: core.chatId, state: "generating", attempts: 0, stage: "brief" };
+          t.hud.update();
+        },
+        "tearing the HUD down": (t) => t.hud.destroy(),
+      };
+      for (const [how, end] of Object.entries(unfreezes)) {
+        const t = stage({ chatId: `chat-clear-${how.replace(/\W+/g, "-")}` });
+        const npc = t.npcs()[0];
+        t.openOn(npc);
+        assert.equal(t.sim.talkAnchorId, npc.id, `${how}: a conversation is live to end`);
+        const held = t.sim.clockMin;
+        end(t);
+        assert.equal(t.sim.talkAnchorId, null, `${how} ends the conversation`);
+        loadedPF.save.gate = null;
+        // The clock movers move the clock themselves; what every row shares is
+        // that time is RUNNING afterwards, which is the invariant that matters.
+        const after = t.sim.clockMin;
+        t.steps(MINUTE_STEPS);
+        assert.equal(t.sim.clockMin, (after + 1) % (24 * 60), `…and the clock is running again after ${how}`);
+        void held;
+      }
+    }
+
+    // ── THE MOVERS CLEAR FIRST, AND A PRESS THROUGH THE GAP DIES ────────────
+    // A rail press spends time, and spending time is leaving the conversation.
+    // The clear is sim-side and the DOM follows on the next frame — so the honest
+    // assertion is the one the mechanism can make: the window is gone before the
+    // next frame, and a paid press racing that clear refuses at the prologue
+    // rather than composing against a zombie surface.
+    {
+      const t = stage();
+      const npc = t.npcs()[0];
+      t.openOn(npc);
+      const before = t.sim.clockMin;
+      t.sim.advanceMinutes(45);
+      assert.equal(t.sim.talkAnchorId, null, "the mover cleared the latch");
+      assert.notEqual(t.sim.clockMin, before, "…and then moved the clock");
+      const spent = t.sent.length;
+      core.talkFree(); // the press that raced the clear, on a DOM not yet reconciled
+      await settle();
+      assert.equal(t.sent.length, spent, "no paid press lands through a cleared latch");
+      t.hud.update();
+      assert.equal(mounted(t.hud), false, "…and the window is gone on the next frame");
+    }
+
+    // ── THE ONE-TILE BAND, AT THE PIXEL ─────────────────────────────────────
+    // Two full tiles centre to centre is over the line, and the predicate and the
+    // prose say the same thing: 32px closes, 31 does not. 26px is the open radius
+    // and is strictly inside it, so no position a window can open at is born
+    // closed — and closing is the unpause.
+    {
+      const t = stage();
+      const npc = t.npcs()[0];
+      t.openOn(npc);
+      t.sim.x = npc.x * loadedPF.TILE + 8 + 31;
+      t.hud.update();
+      assert.equal(mounted(t.hud), true, "31px away, the conversation is still on");
+      const held = t.sim.clockMin;
+      t.steps(MINUTE_STEPS * 2);
+      assert.equal(t.sim.clockMin, held, "…and time is still stopped");
+      t.sim.x = npc.x * loadedPF.TILE + 8 + 32;
+      t.hud.update();
+      assert.equal(mounted(t.hud), false, "32px is over the line");
+      assert.equal(t.sim.talkAnchorId, null, "…and stepping away IS the close");
+      t.steps(MINUTE_STEPS);
+      assert.equal(t.sim.clockMin, held + 1, "…which is also the unpause");
+    }
+
+    // ── E IN THE SIX-PIXEL BAND CLOSES IT ───────────────────────────────────
+    // Opening needs `nearNpc`, which is 26px; the window survives to 32. Without
+    // the close branch routed ahead of the whole guard compound, E was dead in
+    // between — neither opening nor closing.
+    {
+      const t = stage();
+      const npc = t.npcs()[0];
+      t.openOn(npc);
+      t.sim.x = npc.x * loadedPF.TILE + 8 + 29;
+      t.sim.step(STEP, core.input);
+      assert.equal(t.sim.nearNpc, null, "at 29px nobody is within reach to open on");
+      t.hud.update();
+      assert.equal(mounted(t.hud), true, "…but the window this far out is still open");
+      core.interact();
+      assert.equal(t.sim.talkAnchorId, null, "…and E closes it");
+    }
+
+    // ── THE MOVEMENT SURFACES DO NOT END THE CONVERSATION ───────────────────
+    // The document-level handler hears every press that does not stopPropagation,
+    // and the d-pad and rail buttons deliberately do not. Unexempted, a pointer
+    // player's FIRST step closed the window at zero tiles — against the ruling's
+    // own "more than one tile", on exactly the controls the window's partial
+    // geometry exists to keep live.
+    {
+      const t = stage();
+      const npc = t.npcs()[0];
+      t.openOn(npc);
+      for (const [what, node] of [
+        ["the d-pad", t.hud.dpad.children[0]],
+        ["the action rail", t.hud.waitBtn],
+        ["the census Talk button", t.hud.talkBtn],
+        ["the window's own rows", t.hud.talkRows],
+      ]) {
+        fireDocument("pointerdown", { target: node });
+        assert.equal(t.sim.talkAnchorId, npc.id, `a press on ${what} does not end the conversation`);
+      }
+      fireDocument("pointerdown", { target: new FakeNode("div") });
+      assert.equal(t.sim.talkAnchorId, null, "…and a press on anything else still does");
+      // AND THE PAIR IS UNBOUND with the window, so no listener outlives it.
+      const heardAfter = fireDocument("pointerdown", { target: new FakeNode("div") });
+      assert.equal(heardAfter, 0, "the pointerdown pair is unbound at the close, not left on the document");
+    }
+
+    // ── THE RAIL CLEARS THE WINDOW, MEASURED IN BOTH STATES ─────────────────
+    // The window's right inset is a promise about how wide the action column may
+    // get, and the old shape lane pinned only that the inset EXISTS (`right:\d+px`)
+    // — never that anything honours it. It did not: the census button reads
+    // "Leave <cast name> (E)", cast names run to 24 characters, and the fourth
+    // rail button up is level with the conversation.
+    //
+    // AND THE CAP THAT ANSWERED THAT WAS A CONSTRUCTION STYLE, so it clipped in
+    // WALKING PLAY too — where there is no window, no corridor and nothing to
+    // clear. The rod button is where that showed: every label it can actually
+    // draw runs 266-295px against a 244px cap, so the PRICE fell off the end of
+    // the one button whose whole job is quoting one, with two hundred pixels of
+    // empty air to its left. The cap is a while-open style now, so this lane
+    // measures the corridor TWICE, with a real armed rod offer and the worst cast
+    // name the seal allows standing in it: closed, the labels are whole and
+    // nothing is capped; open, everything is capped, the long ones ellipsize, and
+    // the corridor is clear.
+    //
+    // WHY THE OLD LANE COULD NOT SEE THE CLIP, written down so it is not
+    // rediscovered: it clamped the drawn width with `Math.min(measured, cap)`
+    // BEFORE asserting clearance, so a clipped label always "fit" — the clamp
+    // turned the clip into the pass — and it never armed a rod offer, so the only
+    // label it ever measured was the census button's, which the cap had been
+    // sized around. There is no clamp below, and the rod button is driven.
+    {
+      const t = stage({ chatId: "chat-clearance" });
+      // THE KEEPER IS THE FIXTURE, because the rod offer is the label this lane
+      // exists for and only a keeper quotes one. Found the way the economy's own
+      // cases find one — the person the compiler stamped `lodging` on — and stood
+      // next to, which is that offer's first resolution rung.
+      let keeper = null;
+      let keeperZone = null;
+      for (const zoneId of Object.keys(t.w.zones)) {
+        const found = t.w.zones[zoneId].npcs.find((npc) => typeof npc.lodging === "string" && npc.lodging);
+        if (found) {
+          keeper = found;
+          keeperZone = zoneId;
+          break;
+        }
+      }
+      assert.ok(keeper, "the staged world stands somebody who lets rooms and sells rods");
+      // 24 is 18-brief's cap on a cast name, so this is the widest label the
+      // census button can ever be asked to draw.
+      keeper.name = "Wrenmarshall Ashenbrooke";
+      assert.equal(keeper.name.length, 24, "…and the probe name is at the seal's own cap for a cast name");
+      t.sim.zoneId = keeperZone;
+      t.sim.mode = "walk";
+      t.standAt(keeper);
+      t.sim.nearNpc = keeper;
+      loadedPF.player.award(core, { money: 200 });
+      t.hud.update();
+      // THE OFFER IS ARMED AND NOT MERELY DISPLAYED: a real keeper, quoting a
+      // real rung, to a purse that can pay for it. A refusal would render the
+      // same words and would not be the state a player is looking at.
+      const armed = loadedPF.economy.rodOffer(core);
+      assert.equal(armed.keeper, keeper, "the keeper is quoting");
+      assert.equal(armed.tier, "crude", "…the entry rung, to a player who owns no rod");
+      assert.equal(armed.available, true, "…and the purse can take it, so the button is an offer and not a refusal");
+      assert.equal(t.hud.buyRodBtn.style.display, "", "…which is why the rod button is on screen at all");
+
+      // The three numbers, all read off the shipped styles rather than restated:
+      // where the column sits, where the window stops, and what a button may grow
+      // to while there is a window there to be cleared.
+      const px = (css, prop) => {
+        const hit = new RegExp(`${prop}:\\s*(\\d+)px`).exec(String(css));
+        return hit ? Number(hit[1]) : null;
+      };
+      const railInset = px(t.hud.actions.style.cssText, "right");
+      const windowRight = px(t.hud.talkEl.style.cssText, "right");
+      assert.ok(railInset !== null && windowRight !== null, "both surfaces declare their right inset in pixels");
+      const CORRIDOR = t.hud.RAIL_BTN_MAX;
+      // WHAT WIDTH BOUND IS ON THIS BUTTON, however it was written: the while-open
+      // property the HUD sets, or a construction-time `max-width` sitting in the
+      // style string. BOTH are answered on purpose — the shim does not reflect
+      // `cssText` onto properties, so a cap that moved back into the constructor
+      // would be invisible to a property read and would sail through the CLOSED
+      // assertions below, which are the ones it breaks.
+      const capPx = (node) => {
+        const prop = /^(\d+)px$/.exec(String(node.style.maxWidth ?? ""));
+        return prop ? Number(prop[1]) : px(node.style.cssText, "max-width");
+      };
+      // One 12px monospace character, the widest common advance — the same number
+      // the HUD sizes the corridor with, restated here so the lane MEASURES the
+      // labels rather than trusting the constant that produced them. NO CLAMP:
+      // this is what the text WANTS, and whether it gets it is the question.
+      const ADVANCE = 7.2;
+      const CHROME = 28;
+      const wants = (label) => Math.ceil(String(label).length * ADVANCE + CHROME);
+      // THE LIST THE CAP IS WRITTEN THROUGH IS THE REAL COLUMN. A button added to
+      // the rail without a line in `_railBtns` would never be capped and would
+      // never be measured here either, so the two are cross-checked before
+      // anything is read off them — the census lane's own idiom, one file up.
+      const railButtons = t.hud.actions.children.filter((node) => node.tagName === "BUTTON");
+      assert.equal(
+        t.hud._railBtns.length,
+        railButtons.length,
+        `the capped list covers the whole column (${railButtons.length})`,
+      );
+      for (const node of railButtons)
+        assert.ok(t.hud._railBtns.includes(node), `every button in the column is capped ("${node.textContent}")`);
+
+      // ── CLOSED: NOTHING IS DOCKED, SO NOTHING IS CUT ──────────────────────
+      assert.equal(mounted(t.hud), false, "no conversation is open");
+      const census = String(t.hud.talkBtn.textContent);
+      const rodLabel = String(t.hud.buyRodBtn.textContent);
+      assert.equal(census, `Talk to ${keeper.name} (E)`, "the census button is naming the person in reach");
+      assert.equal(
+        rodLabel,
+        `Buy a ${loadedPF.economy.describe(t.w, { t: "rod", k: armed.tier })} (${loadedPF.economy.money(t.w, armed.price)})`,
+        "…and the rod button is quoting the armed rung with its whole price",
+      );
+      for (const node of t.hud._railBtns)
+        assert.equal(
+          capPx(node),
+          null,
+          `"${node.textContent}" is drawn whole in walking play — nothing is capped with no window up`,
+        );
+      // AND BOTH OF THESE WOULD HAVE BEEN CUT BY A CAP THAT SHIPPED ON THE
+      // BUTTON. This is the number the blocker was: what the labels want is over
+      // the while-open budget, and in walking play there is no corridor for them
+      // to owe anything to. By value, because "wider than the cap" is the claim
+      // and a bound that moved with the label would never say so.
+      assert.equal(wants(rodLabel), 266, `the rod label wants 266px ("${rodLabel}", ${rodLabel.length} chars)`);
+      assert.equal(wants(census), 288, `…and the census label 288px ("${census}", ${census.length} chars)`);
+      assert.equal(CORRIDOR, 244, "…against a while-open budget of 244px, which neither of them fits");
+
+      // ── OPEN: THE WINDOW IS WHAT MAKES THE CORRIDOR, AND IT IS CLEAR ──────
+      t.openOn(keeper);
+      assert.equal(mounted(t.hud), true, "the conversation is up");
+      const censusOpen = String(t.hud.talkBtn.textContent);
+      assert.equal(censusOpen, `Leave ${keeper.name} (E)`, "the census button is naming the anchor now");
+      assert.equal(String(t.hud.buyRodBtn.textContent), rodLabel, "…and the rod is still on offer beside it");
+      for (const node of t.hud._railBtns) {
+        assert.equal(capPx(node), CORRIDOR, `"${node.textContent}" is held to the corridor while the window is up`);
+        assert.match(
+          String(node.style.cssText),
+          /text-overflow:ellipsis/,
+          `…and "${node.textContent}" says so with an ellipsis rather than a silent cut`,
+        );
+      }
+      // THE CLEARANCE ITSELF, stated on the CAP THE BUTTONS DECLARE rather than
+      // on any one label: the cap is what bounds the column, and a label short
+      // enough to clear on its own proves nothing about the one stacked above it.
+      // Read back off the button, so a cap that was never applied is a null here
+      // and not a clearance computed from a constant nothing spent.
+      const openCap = capPx(t.hud.talkBtn);
+      assert.ok(
+        openCap !== null && railInset + openCap <= windowRight,
+        `the column at ${railInset}px in, capped at ${openCap}px, clears the window's ${windowRight}px inset`,
+      );
+      // …AND THE CAP IS LOAD-BEARING WHILE IT IS ON. Unclipped, these two cross
+      // the corridor, which is what makes the while-open clip a trade and not
+      // decoration.
+      for (const [what, label] of [
+        ["the rod offer", rodLabel],
+        ["the census button", censusOpen],
+      ])
+        assert.ok(
+          railInset + wants(label) > windowRight,
+          `unclipped, ${what} wants ${wants(label)}px and crosses the ${windowRight - railInset}px corridor`,
+        );
+      // AND THE CLIP IS VISUAL ONLY, which is the whole of the accessibility
+      // claim: the price is off the end of the button and still in the name a
+      // screen reader is handed.
+      assert.match(
+        String(t.hud.buyRodBtn.textContent),
+        new RegExp(`\\(${loadedPF.economy.money(t.w, armed.price).replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\)$`),
+        "the clipped label still CARRIES its price",
+      );
+
+      // ── AND THE CAP COMES BACK OFF WHEN THE CONVERSATION ENDS ─────────────
+      core.closeTalk();
+      t.hud.update();
+      assert.equal(mounted(t.hud), false, "the conversation is over");
+      for (const node of t.hud._railBtns)
+        assert.equal(capPx(node), null, `"${node.textContent}" is whole again the moment the window goes`);
+    }
+
+    // ── EVERY ROD LABEL THE BUILD CAN ACTUALLY DRAW, MEASURED ───────────────
+    // The corridor comment names a RANGE — 266 to 295px across both themes and
+    // both rungs — and the derivation it replaced named a label the code cannot
+    // produce ("Buy a angling rig (85 credits)": describe() prefixes the quality
+    // tier, and no rod is priced at 85 in either theme). So the range is walked
+    // rather than asserted from a formula: two themes times two rungs, each one
+    // read off the SHIPPED button after a real offer armed it.
+    {
+      const seen = [];
+      let budget = null;
+      for (const theme of loadedPF.art.themeIds()) {
+        for (const owned of [null, "crude"]) {
+          const t = stage({ theme, chatId: `chat-rod-width-${theme}-${owned ?? "none"}` });
+          let keeper = null;
+          for (const zoneId of Object.keys(t.w.zones)) {
+            const found = t.w.zones[zoneId].npcs.find((npc) => typeof npc.lodging === "string" && npc.lodging);
+            if (found) {
+              t.sim.zoneId = zoneId;
+              keeper = found;
+              break;
+            }
+          }
+          assert.ok(keeper, `${theme}: the staged world stands somebody who sells rods`);
+          t.sim.mode = "walk";
+          t.standAt(keeper);
+          t.sim.nearNpc = keeper;
+          loadedPF.player.award(core, { money: 200 });
+          if (owned) loadedPF.player.grant(core, { t: "rod", k: owned }, 1);
+          t.hud.update();
+          const offer = loadedPF.economy.rodOffer(core);
+          assert.equal(offer.tier, owned === null ? "crude" : "decent", `${theme}: the ladder quotes the next rung`);
+          assert.equal(offer.available, true, `${theme}/${offer.tier}: and it is armed`);
+          const label = String(t.hud.buyRodBtn.textContent);
+          budget = t.hud.RAIL_BTN_MAX;
+          seen.push({ theme, tier: offer.tier, label, px: Math.ceil(label.length * 7.2 + 28) });
+        }
+      }
+      assert.equal(seen.length, 4, "four reachable rod labels, and the build can draw no others");
+      const widths = seen.map((row) => row.px);
+      assert.deepEqual(
+        seen.map((row) => row.label.length),
+        [33, 35, 36, 37],
+        `the four run 33-37 characters (${seen.map((row) => `"${row.label}"`).join(", ")})`,
+      );
+      assert.deepEqual(widths, [266, 280, 288, 295], "…which is the 266-295px the corridor comment names");
+      // THE POINT OF THE WHOLE SWEEP: not one of them fits the while-open budget,
+      // so a cap that shipped on the button clipped a price in normal play on
+      // EVERY theme and EVERY rung — not an edge case, the only case.
+      for (const row of seen)
+        assert.ok(
+          row.px > budget,
+          `${row.theme}/${row.tier} wants ${row.px}px, over the ${budget}px while-open budget`,
+        );
+    }
+
+    // ── ONE SURFACE AT A TIME, IN BOTH DIRECTIONS ───────────────────────────
+    // Counting the window in `closePanels` alone gives the set no exclusion in
+    // the direction that matters: the topbar openers stay interactive over an
+    // open window by geometry, and an unexcluded journal mounts inset:0 at z-3
+    // over the top of it — a player reading a journal over a FROZEN CLOCK with an
+    // invisible window underneath, whose first Escape closes a surface they
+    // cannot see.
+    {
+      const t = stage();
+      const npc = t.npcs()[0];
+      // THE BOARD IS THE THIRD MEMBER OF THE SET, and it is the one that is NOT a
+      // full-surface panel: it opens over the window by geometry, which is
+      // exactly why its own toggle carries a latch clear — and that clearer went
+      // undriven while only the two panels had rows here.
+      const boardFeature = (t.sim.zone().features ?? []).find((f) => f.id === loadedPF.world.BOARD_FEATURE_ID) ?? null;
+      assert.ok(boardFeature, "the staged village stands a board to read");
+      for (const [what, arm, open, isOpen] of [
+        ["the journal", () => {}, () => t.hud.toggleJournal(), () => t.hud._journal],
+        ["the character sheet", () => {}, () => t.hud.toggleSheet(), () => t.hud._sheet],
+        [
+          "the work board",
+          () => {
+            t.sim.nearBoard = boardFeature;
+          },
+          () => t.hud.toggleBoard(),
+          () => t.hud.boardMenu.style.display === "flex",
+        ],
+      ]) {
+        t.openOn(npc);
+        arm();
+        const held = t.sim.clockMin;
+        open();
+        assert.equal(t.sim.talkAnchorId, null, `opening ${what} closes the window first`);
+        t.steps(MINUTE_STEPS);
+        assert.equal(t.sim.clockMin, held + 1, `…clock running, which is the point of closing it`);
+        assert.equal(isOpen(), true, `…and ${what} is the one surface up`);
+        // …AND THE OTHER DIRECTION: opening the window puts the panel away.
+        t.openOn(npc);
+        assert.equal(isOpen(), false, `opening the window closes ${what}`);
+        assert.equal(mounted(t.hud), true, "…leaving exactly one surface standing");
+        core.closeTalk();
+      }
+    }
+
+    // ── A BEAT RUNNING AT THE PRESS IS CLEARED, AND NONE STARTS OVER IT ─────
+    // The gate stops a beat from STARTING over an open window. A beat already
+    // RUNNING is the symmetric, worse case: `stepCutscene` is the only thing that
+    // advances a beat and the only thing that clears one, and it is now gated
+    // off — so the beat would pin `sim.cutscene` for the window's whole life,
+    // with the narration-collapse request stuck asserted and the caption painted
+    // dead centre of the play field, which is where this panel goes.
+    {
+      const t = stage();
+      const npc = t.npcs()[0];
+      // Stand somebody IN the vista corner, so the same two tiles are both the
+      // beat's trigger and a place a window can open.
+      npc.x = 2;
+      npc.y = 2;
+      t.sim.mode = "walk";
+      t.sim.x = 2 * loadedPF.TILE + 8;
+      t.sim.y = 2 * loadedPF.TILE + 8;
+      t.sim.step(STEP, core.input);
+      assert.ok(t.sim.cutscene, "the vista corner started a beat");
+      t.openOn(npc);
+      assert.equal(t.sim.cutscene, null, "opening the window clears the beat it interrupted");
+      assert.equal(core._cutsceneDeclared, false, "…and the memo with it, so the request is withdrawn");
+      // …AND NO BEAT STARTS while the conversation is live. The beat is re-armed
+      // by hand because the only thing that re-arms it is `stepCutscene` itself,
+      // which is exactly what the gate is holding off — so the honest staging is
+      // "armed, in the corner, window open" and the question is whether one
+      // starts.
+      t.sim._vistaArmed = true;
+      t.steps(600);
+      assert.equal(t.sim.cutscene, null, "…and no beat starts over an open window");
+      assert.equal(t.sim._vistaArmed, true, "…so the vista is still there to be seen afterwards");
+      assert.equal(t.sim.talkAnchorId, npc.id, "…with the conversation still open");
+      // And the control: end the conversation, and the beat the gate was holding
+      // off arrives on the very next frame.
+      core.closeTalk();
+      t.sim.step(STEP, core.input);
+      assert.ok(t.sim.cutscene, "…and it arrives the moment the conversation ends");
+    }
+
+    // ── THE EXCEPTION BELT IS THE PREDICATE, NOT VIGILANCE ──────────────────
+    // A throw out of a window handler loses at most one frame's reconcile: the
+    // rAF re-arm is the tick's FIRST statement and `hud.update()` its last, and
+    // `(mode, talkAnchorId)` stays the sole truth. So the honest promise is not
+    // "an exception cannot leave a latch set" — it is that the next frame renders
+    // whatever the latch says, and Escape still works.
+    {
+      const t = stage();
+      const npc = t.npcs()[0];
+      t.openOn(npc);
+      assert.throws(() => {
+        throw new Error("a window handler blew up");
+      }, /blew up/);
+      t.hud.update();
+      assert.equal(mounted(t.hud), true, "the window survives a handler that threw");
+      assert.equal(t.sim.talkAnchorId, npc.id, "…latch and all");
+      core._keyDown({ key: "Escape", target: null, preventDefault() {} });
+      assert.equal(t.sim.talkAnchorId, null, "…and Escape still ends it");
+    }
+
+    // ── THE CHAT-SWITCH AND REBUILD SEAMS ───────────────────────────────────
+    // These two REPLACE the sim, so a clock assertion on them would measure a
+    // brand-new sim that was never frozen — green paint under any bug. What they
+    // genuinely have to answer for is the surface: the window DOM is gone and the
+    // document-level pair is unbound, because the HUD and the page outlive both.
+    {
+      const t = stage();
+      const npc = t.npcs()[0];
+      t.openOn(npc);
+      assert.equal(mounted(t.hud), true, "a window is open across the seam");
+      core._switchChat({ chatId: "chat-somewhere-else", chatMeta: {} });
+      assert.equal(mounted(t.hud), false, "a chat switch takes the window down");
+      assert.equal(fireDocument("pointerdown", { target: new FakeNode("div") }), 0, "…and unbinds its listener");
+      assert.equal(core._talkAnchor, null, "…and forgets who it was anchored to");
+      loadedPF.save.reset();
+    }
+    {
+      const t = stage({ chatId: "chat-rebuild" });
+      const npc = t.npcs()[0];
+      t.openOn(npc);
+      loadedPF.save._rebuild(core, null);
+      assert.equal(mounted(t.hud), false, "a rebuild takes the window down");
+      assert.equal(fireDocument("pointerdown", { target: new FakeNode("div") }), 0, "…and unbinds its listener");
+      assert.equal(core.sim.talkAnchorId, null, "…and the world it comes back with has no conversation in it");
+      void t;
+    }
+
+    // ── WHAT THE WINDOW OFFERS, AND WHAT IT COSTS ───────────────────────────
+    {
+      const t = stage({ chatId: "chat-branches" });
+      const npc = t.npcs()[0];
+      t.openOn(npc);
+      assert.equal(t.hud.talkWho.textContent, `${npc.name} — ${npc.role}`, "the window says who it is");
+      // A LEGACY WORLD GETS ALL FOUR TOPIC BRANCHES, which is what the default
+      // pack's enrichment is FOR — and it is the inversion this release ships
+      // with: the worlds that paid two GM calls meet the thinnest window.
+      for (const label of ["Ask about the local rumors", "Ask about work", "Ask about this place", "Pass the time"])
+        assert.ok(t.rowLabelled(label), `a legacy world offers "${label}" (${t.labels().join(" | ")})`);
+      assert.ok(t.rowLabelled("What do you do?"), "…and answers for the record it has");
+      // THE AT-KEY, which is what decides WHICH lines a branch may serve. A
+      // stamped place handle wins; a zone with no stamp reads as a dwelling
+      // indoors and as the settlement everywhere else, so a legacy world — whose
+      // zones carry both stamps today, and whose successors may not — still lands
+      // on a real index cell rather than on `undefined`.
+      assert.equal(loadedPF.pack.askAt({ place: "gathering", mapKind: "building" }), "gathering", "a stamp wins");
+      assert.equal(loadedPF.pack.askAt({ mapKind: "building" }), "dwelling", "…an unstamped interior is a dwelling");
+      assert.equal(loadedPF.pack.askAt({ mapKind: "settlement" }), "settlement", "…and everything else the settlement");
+      assert.equal(loadedPF.pack.askAt(null), "settlement", "…and a zone that is not there at all does not throw");
+      assert.equal(
+        t.rowLabelled("Where do you live?"),
+        null,
+        "…and stays quiet about the one it does not: a legacy NPC carries no schedule",
+      );
+      // ZERO GM CALLS AND NO LEDGER LINE. The free branches are a lookup over an
+      // artifact already in memory; the narrator learns nothing about them.
+      const linesBefore = loadedPF.player.get(core).ledger.lines.length;
+      for (const label of ["Ask about the local rumors", "Ask about work", "What do you do?"]) {
+        t.press(t.rowLabelled(label));
+        assert.ok(t.hud.talkSaid.textContent, `"${label}" answers in the window`);
+        assert.equal(t.hud.talkSaid.style.display, "", "…visibly");
+      }
+      assert.deepEqual(t.sent, [], "…and not one of them asked the GM anything");
+      assert.equal(
+        loadedPF.player.get(core).ledger.lines.length,
+        linesBefore,
+        "…nor wrote a line the wrap-up would read out",
+      );
+      // NO FRIEND-REGISTER LINE IS EVER SERVED (ruling 4). Seven of the live
+      // pack's twelve lines hang on one clause, and this is the lane that pins it.
+      const folded = loadedPF.save.packFold(core);
+      const friends = new Set(folded.pack.lines.filter((row) => row.r === "friend").map((row) => row.text));
+      assert.ok(friends.size > 0, "the default pack really does carry friend lines to keep sealed");
+      for (let i = 0; i < 200; i++) {
+        for (const branch of ["rumor", "work", "place", "smalltalk"]) {
+          const said = loadedPF.pack.ask(core, npc, branch);
+          assert.ok(!said || !friends.has(said), `no friend-register line is ever served (${said})`);
+        }
+      }
+    }
+
+    // ── HONEST SUPPRESSION: A BRANCH WITH NOTHING TO SAY DOES NOT RENDER ────
+    // A thin pack is the generated world's normal state — the live measured one
+    // offers five stranger lines across four handles and four dayparts — so the
+    // window has to be honest about it rather than answering a rumor button with
+    // a work line.
+    {
+      const t = stage({ chatId: "chat-thin" });
+      const npc = t.npcs()[0];
+      const folded = loadedPF.save.packFold(core);
+      folded.pack = {
+        ...folded.pack,
+        lines: [
+          { at: "settlement", when: "day", r: "stranger", text: "Work's on the board.", topic: "work" },
+          { at: "settlement", when: "dusk", r: "friend", text: "A friend line nobody may serve.", topic: "rumor" },
+        ],
+      };
+      folded._askServed = new Map();
+      folded._askDay = -1;
+      t.openOn(npc);
+      assert.ok(t.rowLabelled("Ask about work"), "the one topic the pack can answer renders");
+      assert.equal(t.rowLabelled("Ask about the local rumors"), null, "…and the one it cannot does not");
+      assert.equal(t.rowLabelled("Ask about this place"), null, "…nor that one");
+      assert.equal(
+        t.rowLabelled("Pass the time"),
+        null,
+        "…and with no untagged or smalltalk stranger line, even passing the time is honestly absent",
+      );
+      // …AND ONE UNTAGGED STRANGER LINE ANYWHERE BRINGS IT BACK, which is what
+      // makes it the branch that almost always renders: the untagged pool is
+      // where most of a hand-written pack lives, and the smalltalk ladder falls
+      // into it. A stranger line tagged for another TOPIC does not — that is the
+      // pin two lines up.
+      folded.pack = {
+        ...folded.pack,
+        lines: [...folded.pack.lines, { at: "wilds", when: "night", r: "stranger", text: "Anything at all." }],
+      };
+      folded._askServed = new Map();
+      core.closeTalk();
+      t.openOn(npc);
+      assert.ok(t.rowLabelled("Pass the time"), "one untagged stranger line anywhere keeps the door open");
+      assert.equal(loadedPF.pack.ask(core, npc, "smalltalk"), "Anything at all.", "…and it is what gets served");
+    }
+
+    // ── A LINE TAGGED FOR A SKY IS SERVED UNDER THAT SKY AND NO OTHER ───────
+    // The weather term is the axis the pack's `w` field spends, and it is the
+    // five WORDS: an intensity never enters it, so a line tagged `rain` is served
+    // under heavy rain and light rain alike. An ABSENT `w` reads as ANY weather,
+    // which is the generalization of "absent reads as fair" — and the reason the
+    // enrichment's floor is counted over any-weather lines.
+    {
+      const t = stage({ chatId: "chat-sky-lines" });
+      const npc = t.npcs()[0];
+      const folded = loadedPF.save.packFold(core);
+      folded.pack = {
+        ...folded.pack,
+        lines: [
+          { at: "settlement", when: "day", r: "stranger", text: "WET", topic: "rumor", w: "rain" },
+          { at: "settlement", when: "day", r: "stranger", text: "ANY", topic: "work" },
+        ],
+      };
+      folded._askServed = new Map();
+      folded._askDay = -1;
+      t.sim.weatherOverride = { word: "fair" };
+      t.sim._weatherMemo = null;
+      assert.equal(t.sim.weather().word, "fair", "the sky is fair");
+      assert.equal(loadedPF.pack.askHas(core, npc, "rumor"), false, "…so the rain line is not on offer");
+      assert.equal(loadedPF.pack.ask(core, npc, "work"), "ANY", "…while an untagged line is served under any sky");
+      t.sim.weatherOverride = { word: "rain", intensity: "heavy" };
+      t.sim._weatherMemo = null;
+      folded._askServed = new Map();
+      assert.equal(t.sim.weather().word, "rain", "…and now it is raining, hard");
+      assert.equal(
+        loadedPF.pack.ask(core, npc, "rumor"),
+        "WET",
+        "the rain line is served — the word, at any intensity",
+      );
+      t.sim.weatherOverride = null;
+      t.sim._weatherMemo = null;
+    }
+
+    // ── THE PICK: RANKED BY THE HOUR, AND NOT RE-SERVED ACROSS A BOUNDARY ───
+    // A when-relaxed rung RANKS rather than pretends: circular daypart adjacency
+    // measured over START MINUTES, where night→dusk is 180 minutes and night→dawn
+    // is 480 — the two readings of "adjacent" disagree, and this is the one the
+    // plan picked. And the served set is per (day, BRANCH) rather than per rung,
+    // because the ladder walks its rungs in order and a when-pinned rung going
+    // empty across a boundary drops service onto a rung whose pool contains the
+    // line just served.
+    {
+      const t = stage({ chatId: "chat-pick" });
+      const npc = t.npcs()[0];
+      const folded = loadedPF.save.packFold(core);
+      folded.pack = {
+        ...folded.pack,
+        lines: [
+          { at: "settlement", when: "dawn", r: "stranger", text: "DAWN", topic: "rumor" },
+          { at: "settlement", when: "dusk", r: "stranger", text: "DUSK", topic: "rumor" },
+        ],
+      };
+      folded._askServed = new Map();
+      folded._askDay = -1;
+      t.sim.clockMin = 22 * 60; // night
+      assert.equal(t.sim.daypart(), "night", "the world is at night");
+      // THE METRIC ITSELF, because the two readings of "adjacent" disagree here
+      // and nowhere else: by START MINUTE night→dusk is 180 and night→dawn is
+      // 480; by position in the table they are a tie, and a tie hands the
+      // decision to the shuffle.
+      assert.ok(
+        loadedPF.pack.askDistance("dusk", "night") < loadedPF.pack.askDistance("dawn", "night"),
+        "dusk is nearer to night than dawn is, measured over the dayparts' start minutes",
+      );
+      // …AND THE BEHAVIOUR, ACROSS SEEDS. One seed proves nothing: the seeded
+      // shuffle would put DUSK first about half the time on its own, so the pin
+      // is that it is first EVERY time, which only ranking can buy.
+      for (let seed = 1; seed <= 24; seed++) {
+        t.sim.world.seed = seed;
+        folded._askServed = new Map();
+        assert.equal(
+          loadedPF.pack.ask(core, npc, "rumor"),
+          "DUSK",
+          `at night the dusk line is served first, whatever the shuffle says (seed ${seed})`,
+        );
+        assert.equal(loadedPF.pack.ask(core, npc, "rumor"), "DAWN", `…and the other follows (seed ${seed})`);
+      }
+      t.sim.world.seed = t.w.seed;
+      // AFTER EXHAUSTION, REPEATS ARE THE HONEST STATE. The rung's members are
+      // both served, so the set drops them and the walk restarts — a branch that
+      // went silent instead would be a button that stopped working halfway
+      // through an evening.
+      folded._askServed = new Map();
+      assert.equal(loadedPF.pack.ask(core, npc, "rumor"), "DUSK", "the walk starts");
+      assert.equal(loadedPF.pack.ask(core, npc, "rumor"), "DAWN", "…and covers the rung");
+      assert.equal(loadedPF.pack.ask(core, npc, "rumor"), "DUSK", "…and then goes round again rather than going quiet");
+      // THE MEMO IS BOUNDED BY THE DAY. `_askDay` is the purge field — the
+      // rotation itself comes from the day riding every signature — and without
+      // it the served sets grow for the life of the fold.
+      folded._askServed = new Map();
+      folded._askDay = t.sim.day;
+      loadedPF.pack.ask(core, npc, "rumor");
+      assert.equal(folded._askServed.get("rumor").size, 1, "the day's first read is remembered");
+      t.sim.day += 1;
+      loadedPF.pack.ask(core, npc, "rumor");
+      assert.equal(folded._askServed.get("rumor").size, 1, "…and a new day starts the walk over rather than piling up");
+      assert.equal(folded._askDay, t.sim.day, "…with the purge field moved to the day that did it");
+      // NOT RE-SERVED ACROSS A BOUNDARY. A line served on a when-pinned rung must
+      // not come straight back when the when-pinned rung goes empty and service
+      // falls through to a when-relaxed one.
+      folded._askServed = new Map();
+      folded._askDay = -1;
+      t.sim.clockMin = 5 * 60 + 30; // dawn: the when-pinned rung has DAWN in it
+      assert.equal(t.sim.daypart(), "dawn", "…and now it is dawn");
+      assert.equal(loadedPF.pack.ask(core, npc, "rumor"), "DAWN", "the when-pinned rung serves its own line");
+      t.sim.clockMin = 12 * 60; // day: nothing is when-pinned, the relaxed rung takes over
+      assert.equal(t.sim.daypart(), "day", "…and now it is the middle of the day");
+      assert.equal(
+        loadedPF.pack.ask(core, npc, "rumor"),
+        "DUSK",
+        "…and the line already served is not served again across the boundary",
+      );
+    }
+
+    // ── AN EXHAUSTED RUNG FALLS THROUGH; IT DOES NOT REPEAT ITSELF ──────────
+    // The boot floor counts TWO stranger lines per (at, topic) and R1 pins
+    // (at, WHEN, topic) — so R1 holds exactly one line wherever it holds any, and
+    // a wrap that restarted inside R1 would answer every press after the first
+    // with the same sentence for the rest of the day. The fall-through stays
+    // INSIDE the branch (R2-R4 are supersets with the same topic), so this buys
+    // variety without a topic button ever answering with another topic's line.
+    {
+      const t = stage({ chatId: "chat-fallthrough" });
+      const npc = t.npcs()[0];
+      const folded = loadedPF.save.packFold(core);
+      folded.pack = {
+        ...folded.pack,
+        lines: [
+          { at: "settlement", when: "dawn", r: "stranger", text: "R1-ONLY", topic: "rumor" },
+          { at: "settlement", when: "dusk", r: "stranger", text: "R2-WIDER", topic: "rumor" },
+          { at: "wilds", when: "dawn", r: "stranger", text: "R3-ELSEWHERE", topic: "rumor" },
+        ],
+      };
+      folded._askServed = new Map();
+      folded._askDay = -1;
+      t.sim.clockMin = 5 * 60 + 30; // dawn: R1 = {R1-ONLY}, a rung of exactly one
+      assert.equal(t.sim.daypart(), "dawn", "it is dawn");
+      assert.equal(loadedPF.pack.ask(core, npc, "rumor"), "R1-ONLY", "the pinned rung serves its one line");
+      assert.equal(
+        loadedPF.pack.ask(core, npc, "rumor"),
+        "R2-WIDER",
+        "…and the second press falls through to the next rung rather than saying it again",
+      );
+      assert.equal(
+        loadedPF.pack.ask(core, npc, "rumor"),
+        "R3-ELSEWHERE",
+        "…and the third reaches the at-relaxed rung, still inside the rumor branch",
+      );
+      // ONLY WHEN THE WHOLE LADDER IS SPENT does the walk go round, and it
+      // restarts at the TOP rung rather than wherever it stopped.
+      assert.equal(
+        loadedPF.pack.ask(core, npc, "rumor"),
+        "R1-ONLY",
+        "…and only with every reachable line served does the walk start over, from the top",
+      );
+
+      // THE SHIPPED DEFAULTS, CELL BY CELL — and what is per-cell here is the
+      // PRESSING, not the pool. `ask()` is driven twice in every (theme, handle,
+      // daypart, branch) cell and the two answers must differ; before the
+      // fall-through, half of them said one sentence forever.
+      //
+      // `reach` BELOW IS THEME-WIDE ON PURPOSE, and it is NOT a reachability
+      // count for the cell it is read in: it filters on `topic` alone, with no
+      // `at` filter, because ask()'s ladder RELAXES THE PLACE on its third and
+      // fourth rungs (61-pack's interior-handle note — a smith with nothing
+      // workshop-shaped to say answers with something the town says). An
+      // at-filtered pool would be smaller than what the ladder can actually
+      // serve, so it would start skipping cells that answer perfectly well. What
+      // it is, is a floor on the theme's whole branch — "is there anything here
+      // to press twice at all" — and the size the failure message quotes.
+      const saveFold = loadedPF.save.packFold;
+      let cells = 0;
+      for (const theme of loadedPF.art.themeIds()) {
+        const pack = loadedPF.pack.defaults(theme);
+        const stranger = pack.lines.filter((row) => row.r === "stranger" && !row.w);
+        for (const at of ["settlement", "gathering", "wilds"]) {
+          for (const when of loadedPF.pack.DAYPARTS) {
+            for (const branch of ["rumor", "work", "place", "smalltalk"]) {
+              const reach =
+                branch === "smalltalk"
+                  ? stranger.filter((row) => row.topic === "smalltalk" || row.topic === undefined)
+                  : stranger.filter((row) => row.topic === branch);
+              if (reach.length < 2) continue;
+              const cell = { pack, _askDay: -1, _askServed: new Map() };
+              const probe = {
+                sim: {
+                  day: 3,
+                  world: { seed: 424242 },
+                  weather: () => ({ word: "fair", intensity: null }),
+                  zone: () => ({ place: at, mapKind: "town" }),
+                  daypart: () => when,
+                },
+              };
+              loadedPF.save.packFold = () => cell;
+              const first = loadedPF.pack.ask(probe, npc, branch);
+              const second = loadedPF.pack.ask(probe, npc, branch);
+              loadedPF.save.packFold = saveFold;
+              if (!first) continue;
+              cells += 1;
+              assert.notEqual(
+                second,
+                first,
+                `${theme}/${at}/${when}/${branch} answers a second press with a different line (theme-wide ${branch} pool of ${reach.length})`,
+              );
+            }
+          }
+        }
+      }
+      // BY VALUE, AND HERE IS WHAT THE VALUE IS. 96 is 2 themes × 3 handles × 4
+      // dayparts × 4 branches — EVERY cell — so this equality is not a coverage
+      // measurement and should not be read as one. What it says is that neither
+      // skip above ever tripped: every branch in every theme has a pool worth
+      // pressing twice, and every cell answered at all. A pack that went dark in
+      // one cell lands at 95 and names it.
+      //
+      // PER-(HANDLE, TOPIC) COVERAGE IS GUARDED SOMEWHERE ELSE, and by something
+      // stronger than a lane: 61-pack's boot assertion demands two any-weather
+      // stranger lines for each of the three handles × four topics in each theme
+      // and THROWS at load rather than reporting. That is what makes "a legacy
+      // world gets all four branches on day one" a fact; this equality is the
+      // nothing-went-dark pin beside it.
+      assert.equal(cells, 96, `…across every cell the shipped defaults can answer twice in (${cells})`);
+    }
+
+    // ── THE DOORS DIM, THEY NEVER VANISH ────────────────────────────────────
+    {
+      const t = stage({ chatId: "chat-doors" });
+      const npc = t.npcs()[0];
+      t.openOn(npc);
+      assert.ok(t.rowLabelled("Just talk"), "the free-talk door is there");
+      assert.equal(t.hud.talkSendBtn.style.opacity, "1", "…and the say door is live");
+      t.host.isStreaming = true;
+      t.hud.update();
+      assert.ok(t.rowLabelled("Just talk"), "streaming, the free-talk door is STILL there");
+      assert.equal(t.rowLabelled("Just talk").style.opacity, "0.45", "…dimmed");
+      assert.match(
+        String(t.rowLabelled("Just talk").getAttribute("title")),
+        /still being written/,
+        "…with the reason on it",
+      );
+      assert.equal(t.hud.talkSendBtn.style.opacity, "0.45", "…and so is the say door");
+      // AND THE REFUSAL REACHES THE TOAST BAND, which is the one channel a
+      // streaming refusal has while the window stays mounted.
+      const spent = t.sent.length;
+      t.press(t.rowLabelled("Just talk"));
+      await settle();
+      assert.equal(t.sent.length, spent, "…and a dimmed door sends nothing");
+      assert.match(t.hud.toastEl.textContent, /still being written/, "…saying so where the player can see it");
+      assert.equal(mounted(t.hud), true, "…with the window still up, which is why the band has to stay clear");
+      t.host.isStreaming = false;
+    }
+
+    // ── ONE PRESS PER ERRAND, AND THE LABEL NAMES WHAT IT SETTLES ───────────
+    {
+      const t = stage({ chatId: "chat-handover" });
+      const npc = t.npcs().find((row) => row.name === "Rook") ?? t.npcs()[0];
+      const take = (id) =>
+        loadedPF.player.quest(core, "accept", {
+          id,
+          g: `${t.w.startZone}|Mira`,
+          verb: "deliver",
+          target: npc.name,
+          n: 1,
+          r: { money: 8, xp: 0 },
+          day: t.sim.day,
+        });
+      // A ROW CARRIES NO TITLE — a quest row is a closed eight-field literal and
+      // the words live on the TEMPLATE — so the two ids below drive both arms of
+      // the resolver: one whose template this world still offers, and one whose
+      // does not, which falls back to the mechanical phrase rather than to a
+      // blank button.
+      assert.equal(take("b1.d1.b:deliver-rook"), true, "one errand to them, off a template the pack still has");
+      assert.equal(take("b1.d1.gone"), true, "…and a second whose template this world no longer offers");
+      t.openOn(npc);
+      const rowA = t.rowLabelled("Hand over: A message for the guard");
+      const rowB = t.rowLabelled(`Hand over: word for ${npc.name}`);
+      assert.ok(rowA && rowB, `one labelled branch per errand (${t.labels().join(" | ")})`);
+      assert.match(rowA.textContent, /\(asks the GM\)$/, "…each of them a paid press, and saying so");
+      t.press(rowA);
+      await settle();
+      const left = loadedPF.player.get(core).quests.active.map((row) => row.id);
+      assert.deepEqual(left, ["b1.d1.gone"], `"Hand over: A" settles row A and not row B (${left.join(", ")})`);
+      assert.equal(t.sent.length, 1, "…on exactly one GM call");
+    }
+
+    // ── THE ESCALATION PAIR: FREE DOOR, RATCHETED FOLLOW-UP ─────────────────
+    {
+      const t = stage({ chatId: "chat-escalation" });
+      const npc = t.npcs().find((row) => row.name === "Tam") ?? t.npcs()[0];
+      t.openOn(npc);
+      const reveal = t.rowLabelled("Ask what's going on");
+      assert.ok(reveal, `the pack wrote this person a door-line (${t.labels().join(" | ")})`);
+      t.press(reveal);
+      assert.ok(t.hud.talkSaid.textContent, "…and it is free, and it is read in the window");
+      assert.deepEqual(t.sent, [], "…costing nothing");
+      t.press(reveal);
+      assert.ok(t.hud.talkSaid.textContent, "…and re-readable forever");
+      const follow = t.rowLabelled("Press them about it");
+      assert.ok(follow, "…with a paid follow-up behind it");
+      t.press(follow);
+      await settle();
+      assert.equal(t.sent.length, 1, "the follow-up asks the GM");
+      assert.equal(loadedPF.pack.askBurned(core, npc), true, "…and retires for the session on the accepted turn");
+      core.setMode("walk");
+      t.openOn(npc);
+      assert.equal(t.rowLabelled("Press them about it"), null, "…so it is not offered again");
+      assert.ok(t.rowLabelled("Ask what's going on"), "…while the free door stays");
+    }
+
+    // ── THE SAY DOOR: UNCAPPED, SETTLES NOTHING, AND ESCAPE STILL WORKS ─────
+    {
+      const t = stage({ chatId: "chat-say" });
+      const npc = t.npcs().find((row) => row.name === "Rook") ?? t.npcs()[0];
+      assert.equal(
+        loadedPF.player.quest(core, "accept", {
+          id: "b1.d1.owed",
+          g: `${t.w.startZone}|Mira`,
+          verb: "deliver",
+          target: npc.name,
+          n: 1,
+          r: { money: 8, xp: 0 },
+          day: t.sim.day,
+          title: "Word",
+        }),
+        true,
+        "an errand is outstanding to them",
+      );
+      t.openOn(npc);
+      const long = "x".repeat(4000);
+      t.hud.talkInput.value = long;
+      t.hud.talkInput.listeners.keydown[0]({ key: "Enter", preventDefault() {} });
+      await settle();
+      assert.equal(t.sent.length, 1, "Enter in the say field sends");
+      assert.ok(t.sent[0].includes(long), "…with NO length cap: four thousand characters ride whole");
+      assert.equal(
+        loadedPF.player.get(core).quests.active.length,
+        1,
+        "…and saying something settles nothing — the errand is still owed",
+      );
+      // …AND ESCAPE OUT OF THE FIELD ENDS THE CONVERSATION, which is a SIM write:
+      // a DOM-only close would leave the latch set and the predicate would put the
+      // window straight back on the next frame.
+      core.setMode("walk");
+      t.openOn(npc);
+      t.hud.talkInput.listeners.keydown[0]({ key: "Escape", preventDefault() {} });
+      assert.equal(t.sim.talkAnchorId, null, "Escape in the say field clears the latch");
+      t.hud.update();
+      assert.equal(mounted(t.hud), false, "…so the window stays down rather than re-mounting");
+    }
+
+    // ── KEY REPEAT CANNOT ARM AND SPEND IN ONE HOLD ─────────────────────────
+    // `_keyDown` has no repeat guard, and the prologue's confirm returns in WALK
+    // mode without changing it — so a HELD Enter on a focused paid control fired
+    // activation twice in one hold: press one arming the story-skip confirm and
+    // press two spending it, through a gap the walk fence cannot cover.
+    //
+    // THE EVENTS THIS DRIVES ARE THE EVENTS THE BUTTON SEES, and that is the
+    // point of the lane rather than a detail of it. `repeat` rides the KEYDOWN
+    // and never the click the browser synthesizes from it, so the guard has to be
+    // bound on the key run — and a lane that handed a click a fabricated `repeat`
+    // would go green over a click-path test that is always false.
+    {
+      const t = stage({ chatId: "chat-repeat" });
+      const npc = t.npcs()[0];
+      t.host.narrationDone = false;
+      t.host.latestAssistant = { id: "m9" };
+      t.openOn(npc);
+      // The hold's FIRST press: `repeat` false, and it arms like any activation.
+      t.holdKey(t.rowLabelled("Just talk"), false);
+      await settle();
+      assert.equal(core._talkConfirm?.controlId, "free", "the first activation arms the question");
+      t.hud.update();
+      // …and the SAME HOLD's echo, on the control now wearing the question.
+      const asking = t.rowLabelled("Skip story & talk?");
+      const cancelled = t.holdKey(asking, true);
+      await settle();
+      assert.deepEqual(t.sent, [], "a HELD key cannot arm and spend the confirm in one hold");
+      assert.equal(cancelled, true, "…because the echo's activation is cancelled on the keydown that carries `repeat`");
+      // THE HOLD ENDS, and the deliberate press that follows still spends: the
+      // guard is keyed to the key run, and a mouse press has none.
+      t.releaseKey(asking);
+      t.press(t.rowLabelled("Skip story & talk?"));
+      await settle();
+      assert.equal(t.sent.length, 1, "…while a real second press still answers it");
+      // AND THE DOOR THAT NEVER VANISHES, which is the control a hold can
+      // genuinely carry from arm to spend: the row buttons are rebuilt by the
+      // arming repaint, but `talkSendBtn` is a permanent child whose text is
+      // swapped in place, so the hold keeps the node — and with it the focus the
+      // browser synthesizes the second click from.
+      t.host.narrationDone = false;
+      t.host.latestAssistant = { id: "m10" };
+      core.setMode("walk");
+      t.openOn(npc);
+      const said = t.sent.length;
+      t.hud.talkInput.value = "hello";
+      const say = t.hud.talkSendBtn;
+      t.holdKey(say, false);
+      await settle();
+      assert.equal(core._talkConfirm?.controlId, "say", "the say door arms on the hold's first press");
+      t.hud.update();
+      assert.equal(t.hud.talkSendBtn, say, "…and the say door is the SAME node across the arming repaint");
+      const sayCancelled = t.holdKey(say, true);
+      await settle();
+      assert.equal(t.sent.length, said, "…and the held Enter spends no GM call on the door that keeps its node");
+      assert.equal(sayCancelled, true, "…because the echo is cancelled on the node the hold is on");
+      t.releaseKey(say);
+      t.press(say);
+      await settle();
+      assert.equal(t.sent.length, said + 1, "…while the deliberate press answers the question");
+      // AND THE WALK FENCE COVERS THE OTHER HALF: with no story pending, a second
+      // activation dies on the mode, because the first one already left walk.
+      t.host.narrationDone = true;
+      core.setMode("walk");
+      t.openOn(npc);
+      const spent = t.sent.length;
+      const free = t.rowLabelled("Just talk");
+      t.press(free);
+      t.press(free); // one frame later — no rAF has run
+      await settle();
+      assert.equal(t.sent.length, spent + 1, "a second activation inside the setMode gap sends exactly once");
+    }
+
+    // ── A SPLICED ANCHOR CLOSES THE WINDOW, AND A PRESS RACING IT REFUSES ───
+    // Under the frozen clock a schedule can no longer take the partner
+    // mid-sentence — but a GM or console `resolveSchedules()` on an override
+    // write still can, and that is the path this drives.
+    {
+      const t = stage({ chatId: "chat-splice" });
+      const npc = t.npcs()[0];
+      t.openOn(npc);
+      const zone = t.sim.zone();
+      zone.npcs.splice(zone.npcs.indexOf(npc), 1);
+      const spent = t.sent.length;
+      core.talkFree(); // the press that raced the splice
+      await settle();
+      assert.equal(t.sent.length, spent, "no press composes against a ghost");
+      assert.equal(t.sim.talkAnchorId, null, "…the prologue closed the conversation instead");
+      assert.match(t.hud.toastEl.textContent, /not there any more/, "…and said so");
+      // …AND THE FRAME CHECK CATCHES IT WITH NO PRESS AT ALL.
+      zone.npcs.push(npc);
+      t.openOn(npc);
+      assert.equal(mounted(t.hud), true, "a window is open on them again");
+      zone.npcs.splice(zone.npcs.indexOf(npc), 1);
+      t.hud.update();
+      assert.equal(mounted(t.hud), false, "…and a splice closes it without anybody pressing anything");
+      assert.equal(t.sim.talkAnchorId, null, "…latch cleared, clock running");
+      // …AND WALKING THROUGH A DOOR IS THE SAME QUESTION ASKED THE OTHER WAY.
+      // Identity membership is checked against the LIVE zone's array, so a
+      // player who steps into the inn has left the conversation — no cross-zone
+      // distance compare, which would be a category error: NPC coordinates are
+      // zone-local tiles rewritten into the destination frame on a splice, and
+      // two overlapping zones can put the partner ~0px "away".
+      zone.npcs.push(npc);
+      t.openOn(npc);
+      const held = t.sim.clockMin;
+      const elsewhere = Object.values(t.sim.world.zones).find((z) => z.id !== zone.id);
+      assert.ok(elsewhere, "the world has somewhere else to walk to");
+      t.sim.zoneId = elsewhere.id;
+      t.hud.update();
+      assert.equal(mounted(t.hud), false, "walking into another zone closes the window");
+      assert.equal(t.sim.talkAnchorId, null, "…and ends the conversation");
+      t.steps(MINUTE_STEPS);
+      assert.equal(t.sim.clockMin, held + 1, "…with the clock running again on the other side of the door");
+    }
+
+    // ── A COMPILED WORLD ANSWERS OFF ITS OWN RECORD ─────────────────────────
+    {
+      const sealedBrief = brief.validate(
+        {
+          scale: "village",
+          name: "Recordton",
+          places: [{ kind: "gathering", name: "The Rest" }],
+          cast: [
+            { name: "Wren", role: "reeve", kind: "leader", tint: "blue", home: "Recordton", household: 1 },
+            { name: "Bram", role: "smith", kind: "maker", tint: "red", home: "Recordton", household: 2 },
+          ],
+        },
+        { theme: "cozy-village", seed: 31 },
+      );
+      const t = stage({ seed: 31, chatId: "chat-compiled", sealed: sealedBrief });
+      const npc = t.npcs().find((row) => row._sched?.home?.zoneId) ?? t.npcs()[0];
+      assert.ok(npc?._sched, "a compiled world bakes a schedule onto its cast");
+      t.openOn(npc);
+      const work = t.rowLabelled("What do you do?");
+      const home = t.rowLabelled("Where do you live?");
+      assert.ok(work, "the record answers what they do");
+      assert.ok(home, "…and, on a compiled world, where they live");
+      t.press(work);
+      assert.match(t.hud.talkSaid.textContent, new RegExp(npc.role), "…out of the role the compiler wrote down");
+      t.press(home);
+      const homeZone = t.sim.world.zones[npc._sched.home.zoneId];
+      assert.ok(
+        t.hud.talkSaid.textContent.includes(homeZone.name),
+        `…and the zone NAME the brief named, not the id (${t.hud.talkSaid.textContent})`,
+      );
+    }
+
+    // ── ESCAPE IS LIVE UNDER THE GATE, UNTIL THE FRAME CLOSES IT ────────────
+    // The gate can ARM while a window is open — `_switchChat` and
+    // `maybeGenerateBrief` both do it — and `_keyDown`'s gate return precedes
+    // every other branch, so before the window's Escape was hoisted above it the
+    // player was left with a keyboard-dead surface over "Writing your world…"
+    // and a clock that had stopped.
+    {
+      const t = stage({ chatId: "chat-gate-escape" });
+      const npc = t.npcs()[0];
+      t.openOn(npc);
+      loadedPF.save.gate = { chatId: core.chatId, state: "generating", attempts: 0, stage: "brief" };
+      core._keyDown({ key: "Escape", target: null, preventDefault() {} });
+      assert.equal(t.sim.talkAnchorId, null, "Escape reaches the window even under the gate");
+      loadedPF.save.gate = null;
+      // …and the per-frame reconcile is the belt: arm the gate, run a frame, and
+      // the window is gone without anybody pressing anything.
+      t.openOn(npc);
+      assert.equal(mounted(t.hud), true, "a window is open again");
+      loadedPF.save.gate = { chatId: core.chatId, state: "generating", attempts: 0, stage: "brief" };
+      t.hud.update();
+      assert.equal(mounted(t.hud), false, "…and gate-arming closes it in the same frame");
+      assert.equal(t.sim.talkAnchorId, null, "…latch cleared, on a frame the sim is not even stepped");
+      loadedPF.save.gate = null;
+    }
+
+    // ── PRESSING THEM ABOUT IT SETTLES NOTHING ──────────────────────────────
+    // Only handover-shaped presses settle an errand. The escalation follow-up is
+    // a question, not a delivery, and a press that quietly finished an errand
+    // would make the labelled row a decoration.
+    {
+      const t = stage({ chatId: "chat-press-settles" });
+      const npc = t.npcs().find((row) => row.name === "Tam") ?? t.npcs()[0];
+      assert.equal(
+        loadedPF.player.quest(core, "accept", {
+          id: "b1.d1.owed-press",
+          g: `${t.w.startZone}|Mira`,
+          verb: "deliver",
+          target: npc.name,
+          n: 1,
+          r: { money: 8, xp: 0 },
+          day: t.sim.day,
+        }),
+        true,
+        "an errand is outstanding to them",
+      );
+      t.openOn(npc);
+      const follow = t.rowLabelled("Press them about it");
+      assert.ok(follow, `the escalation follow-up is on offer (${t.labels().join(" | ")})`);
+      t.press(follow);
+      await settle();
+      assert.equal(t.sent.length, 1, "the follow-up asked the GM");
+      assert.equal(
+        loadedPF.player.get(core).quests.active.length,
+        1,
+        "…and settled nothing: pressing somebody about a rumor is not handing them word",
+      );
+    }
+
+    // ── THE WINDOW'S SHAPE, PINNED WHERE IT IS STRUCTURAL ───────────────────
+    // The look is the browser pass's; these four are the plan's, and each of them
+    // is a behaviour rather than a taste.
+    {
+      const t = stage({ chatId: "chat-shape" });
+      const npc = t.npcs()[0];
+      t.openOn(npc);
+      const css = String(t.hud.talkEl.style.cssText);
+      // (1) NEVER an aria-modal dialog: `_hostOwnsKeyboard` treats any visible
+      // one as the host owning the keyboard, which would make the very keys that
+      // close this window inert the moment it opened.
+      assert.equal(t.hud.talkEl.getAttribute("role"), null, "the window is not a role=dialog");
+      assert.equal(t.hud.talkEl.getAttribute("aria-modal"), null, "…nor aria-modal");
+      assert.equal(t.hud.talkEl.getAttribute("aria-label"), "conversation", "…it wears the panels' bare aria-label");
+      // (2) A PARTIAL PANEL, not the exclusion set's `inset:0` shape. Full-screen
+      // would make a pointer player immobile — the ruling's own word — and put the
+      // clock movers, which are the presses that END the conversation, behind the
+      // thing they close.
+      assert.ok(!/inset:\s*0/.test(css), "…and it does not take the whole surface, the way the journal does");
+      assert.ok(/right:\s*\d+px/.test(css), "…it leaves the right-hand action rail its own room");
+      assert.ok(/bottom:calc\(190px/.test(css), "…and clears the d-pad and the toast band under it");
+      // (3) IT SCROLLS INSIDE ITSELF, on the four action menus' stated idiom —
+      // the row count is variable by construction — and the SCROLLER IS THE ROW
+      // LIST ALONE, so the Leave row and the Say field can never scroll out of
+      // reach.
+      assert.ok(/max-height:40vh/.test(css), "the window is height-bounded like its sibling menus");
+      assert.ok(/overflow:auto/.test(String(t.hud.talkRows.style.cssText)), "…with the ROW LIST as the scroller");
+      assert.ok(!/overflow:auto/.test(css), "…and not the window itself");
+      assert.equal(t.hud.talkEl.children.at(-1), t.hud.talkLeaveBtn, "Leave is the last row and never scrolls away");
+      assert.equal(t.hud.talkEl.children.at(-2), t.hud.talkSayRow, "…and the Say field sits above it, also pinned");
+      // (4) NO AUTOFOCUS: the window opens with the walk keys live.
+      assert.equal(document.activeElement, null, "the window does not steal focus when it opens");
+    }
+
+    // ── THE DIALOGUE TOAST IS FOR THE KEYBOARD BUTTON, NOT FOR A DOOR ───────
+    {
+      const t = stage({ chatId: "chat-toast" });
+      const npc = t.npcs()[0];
+      t.openOn(npc);
+      // MEASURED AT THE MODE CHANGE ITSELF, not after the press: the sender
+      // toasts "Talking to X" on the line after `setMode`, so a lane that looked
+      // at the band afterwards would read the sender's toast and be green over
+      // an instruction that fired and was immediately overwritten.
+      t.hud.toastEl.textContent = "";
+      core.setMode("dialogue"); // with the conversation still live: a window door
+      assert.equal(
+        t.hud.toastEl.textContent,
+        "",
+        "a dialogue entered out of a conversation gets no message-box instruction",
+      );
+      core.setMode("walk");
+      assert.equal(t.sim.talkAnchorId, null, "…and coming back to walk ended it");
+      t.hud.toastEl.textContent = "";
+      core.setMode("dialogue"); // the Keyboard button, with no conversation behind it
+      assert.match(
+        t.hud.toastEl.textContent,
+        /message box below/,
+        "…while the Keyboard button, which says nothing else, still gets its instruction",
+      );
+      core.setMode("walk");
+      // AND THE SENDER STILL NAMES WHO IS ANSWERING, which is the sentence the
+      // instruction was crowding out.
+      t.openOn(npc);
+      core.talkFree();
+      await settle();
+      assert.match(t.hud.toastEl.textContent, new RegExp(npc.name), "a window door names who is answering");
+    }
+  } finally {
+    globalThis.setTimeout = realSetTimeout;
+    globalThis.clearTimeout = realClearTimeout;
+    core._unbindKeys();
+    core._mainEl = null;
+    if (realWindow === undefined) delete globalThis.window;
+    else globalThis.window = realWindow;
+    loadedPF.save.gate = null;
+    core.chatId = null;
+    core.sim = null;
+    core.hud = null;
+    core.host = null;
+    core._talkConfirm = null;
+    core._talkAnchor = null;
+    globalThis.document._docListeners = {};
+    loadedPF.save.reset();
+    loadedPF.spatial.reset();
   }
 }
 
@@ -21007,6 +23800,7 @@ const fire = (node, type) => Promise.all((node.listeners[type] ?? []).map((fn) =
       themeSel: nodes.find((node) => node.children.some((option) => option.attrs.value === "sci-fi-colony")),
       launchBtn: nodes.find((node) => node.tagName === "BUTTON" && String(node.textContent).startsWith("Begin in")),
       generateIn: checkboxes[0],
+      generateLabel: nodes.find((node) => String(node.textContent).startsWith("Generate a unique world")),
     };
   };
   try {
@@ -21021,6 +23815,18 @@ const fire = (node, type) => Promise.all((node.listeners[type] ?? []).map((fn) =
     assert.equal(asked.launchBtn.textContent, "Begin in Anchorage Nine", "and the player's own name wins over both");
 
     assert.equal(asked.generateIn.checked, true, "generation is offered checked — it is what the package is for");
+    // HOW MANY CALLS THE TICK COSTS, VERBATIM. The player is the one who pays for
+    // them and the label is what tells them the price, so the count is a shipped
+    // deliverable and not a turn of phrase: it has been TWO since the content
+    // pack landed beside the brief, and the wizard said "one call" for a release
+    // after that. Pinned as the whole string, because that is the only shape in
+    // which a stale count is a red rather than a sentence nobody re-reads.
+    assert.ok(asked.generateLabel, "the generation toggle carries a written label");
+    assert.equal(
+      asked.generateLabel.textContent,
+      "Generate a unique world with your GM connection (two calls)",
+      "…and it quotes the two calls the tick actually spends: the brief, and the pack",
+    );
     await fire(asked.launchBtn, "click");
     assert.equal(asked.launches.length, 1, "the launch went through");
     assert.equal(asked.launches[0].name, "Anchorage Nine", "under the name on the button");
@@ -21928,6 +24734,14 @@ const fire = (node, type) => Promise.all((node.listeners[type] ?? []).map((fn) =
         await tick();
         assert.equal(postCount(), 1, "exactly one brief call");
         assert.equal(packCount(), 1, "…and exactly one pack call");
+        // …WHICH IS TWO, AND THE WIZARD SAYS TWO. The player pays for both, so
+        // the checkbox beside the choice has to count them honestly — it said
+        // "(one call)" from before the pack existed. Pinned off the shipped source
+        // because the wizard's DOM is not reachable from here, and pinned HERE
+        // because this is the case that counts the calls it describes.
+        const wizard = readFileSync(join(here, "src", "80-setup.js"), "utf8");
+        assert.ok(wizard.includes("(two calls)"), "the wizard tells the player it is two calls");
+        assert.ok(!wizard.includes("(one call)"), "…and no longer promises one");
         const patches = calls.filter((c) => c.kind === "patch");
         assert.deepEqual(
           patches.map((c) => Object.keys(c.patch).sort()),
@@ -21943,6 +24757,76 @@ const fire = (node, type) => Promise.all((node.listeners[type] ?? []).map((fn) =
         assert.equal(loadedPF.save.packExpected(settled, "chat-pack-1"), false, "cell 7: nothing is owed any more");
         assert.equal(loadedPF.save.briefExpected(settled, "chat-pack-1"), false, "…on either side");
       });
+    });
+  });
+
+  // ── CELL 1b: THE PACK CALL DESCRIBES THE SEALED BRIEF'S SKY, NOT THE WORLD'S ─
+  // The creation path makes both calls BEFORE the real world compiles, so the
+  // world standing while the pack call is composed is boot's PLACEHOLDER. A digest
+  // that read `world.latitude` would describe a climate this settlement is never
+  // going to have — on exactly the worlds that paid for a pack — so the door
+  // resolves the climate from the SEALED BRIEF, the seed and the theme, which is
+  // the same derivation the compile will run a moment later.
+  //
+  // RED BY VALUE AND NOT BY LUCK: the brief pins a band the placeholder does not
+  // carry, and the two are asserted DIFFERENT before the call goes out. A world
+  // read would print the other word.
+  //
+  // The real `pack.generate` runs here — no `withPack` — because the compose site
+  // IS what is under test.
+  await withSavePath(async ({ behavior, tick, makeCore }) => {
+    await withGeneration(async ({ responses }) => {
+      behavior.get = async () => ({ available: true, status: 200, body: { exists: false } });
+      const meta = wizardConfig();
+      const core = makeCore("chat-pack-climate", 4242);
+      core.host.chatMeta = meta;
+      core.sim = loadedPF.save.restore(meta, "chat-pack-climate");
+      assert.equal(core.sim.world.interim, true, "the world standing at the call is the placeholder");
+      const placeholder = core.sim.world.latitude;
+      // A band the placeholder does not carry — that difference is what makes a
+      // world read visible rather than a coin flip.
+      const pinned = loadedPF.weather.LATITUDES.find((band) => band !== placeholder);
+      assert.ok(pinned, "…and there is another band to pin");
+      const briefData = { ...gateBriefData, latitude: pinned, precipitation: "arid" };
+      let packBody = null;
+      responses.post = async (chatId, body) => {
+        if (!body?.schema?.properties?.templates) return { status: 200, body: { ok: true, data: briefData } };
+        packBody = body;
+        const giver = briefData.cast[0].name;
+        return {
+          status: 200,
+          body: {
+            ok: true,
+            data: {
+              templates: [
+                { giver, verb: "catch", target: { role: "catch-common" }, n: 3, title: "Three for the pot" },
+                { giver, verb: "visit", target: { place: "wilds" }, n: 1, title: "Walk out" },
+                { giver, verb: "deliver", target: { npc: briefData.cast[1].name }, n: 1, title: "Word to the mill" },
+              ],
+              lines: Array.from({ length: loadedPF.pack.TUNING.floorLines }, (_, i) => ({
+                at: "settlement",
+                when: "day",
+                r: "stranger",
+                text: `A line ${i}`,
+              })),
+            },
+          },
+        };
+      };
+      loadedPF.save.armGate(core, meta);
+      await loadedPF.save.maybeGenerateBrief(core);
+      await tick();
+      assert.ok(packBody, "the pack call went out");
+      const row = packBody.userContent.split("\n").find((line) => line.startsWith("Climate: "));
+      assert.equal(row, `Climate: ${pinned} latitude, arid.`, "…describing the sealed brief's own climate");
+      // AND THE PLACEHOLDER REALLY WAS STANDING THERE WITH A DIFFERENT ANSWER,
+      // which is what makes this red by value: the world carries a climate stamp
+      // of its own, the pinned band is not it, and its word is not in the request.
+      assert.ok(loadedPF.weather.LATITUDES.includes(placeholder), "the placeholder world carries a band of its own");
+      assert.ok(
+        !packBody.userContent.includes(`Climate: ${placeholder} latitude`),
+        "…and it is not the one that went out, so a world read would have shown here",
+      );
     });
   });
 
@@ -23213,6 +26097,13 @@ const fire = (node, type) => Promise.all((node.listeners[type] ?? []).map((fn) =
     },
     { theme: "cozy-village", seed: 4242 },
   );
+  // THE CLIMATE THE SHIPPED COMPOSE SITE WOULD RESOLVE for a brief — the same
+  // derivation off the same three inputs (`axesFor(sealed, seed, theme)`), so
+  // every lane below measures the digest the route actually receives rather than
+  // a 0.13-shaped one with no climate in it. A `digest(brief)` with no second
+  // argument is still legal and still omits both rows; the lane for that is at the
+  // foot of this block.
+  const climateOf = (b, seed = 4242, theme = "cozy-village") => loadedPF.weather.axesFor(b, seed, theme);
   assert.equal(maxBrief.cast.length, 10, "the worst-case fixture really is at the cast cap");
   assert.equal(maxBrief.places.length, 4, "…and at the place cap");
   assert.ok(
@@ -23226,7 +26117,7 @@ const fire = (node, type) => Promise.all((node.listeners[type] ?? []).map((fn) =
   // persona is the voice source: a cast list of names and roles writes dialogue
   // that could belong to anybody.
   {
-    const text = pack.digest(maxBrief);
+    const text = pack.digest(maxBrief, climateOf(maxBrief));
     for (const member of maxBrief.cast) {
       assert.ok(text.includes(member.name), `the digest names ${member.name}`);
       assert.ok(text.includes(member.role), "…with their role");
@@ -23240,7 +26131,12 @@ const fire = (node, type) => Promise.all((node.listeners[type] ?? []).map((fn) =
     assert.ok(text.includes("The Amber Hearth Inn — gathering"), "…beside the location handle a line is keyed by");
     assert.ok(text.includes("The Whisperwood Reaches — wilds"), "…for every one of them");
     assert.ok(text.includes(`${maxBrief.name} — settlement`), "…the root included");
-    assert.ok(text.length < 3_000, `the worst-case digest stays about 2.5K (${text.length} chars)`);
+    // THE NEAREST-TO-BREAKING BOUND IN THIS BLOCK, and the climate rows moved it
+    // toward the wall: the biggest legal digest measures 2,718 against this 3,000,
+    // so the headroom is 282 characters and not a comfortable thousand. Stated so
+    // the next thing added to the digest is added knowing what is left.
+    assert.ok(text.length < 3_000, `the worst-case digest stays under 3K (${text.length} chars)`);
+    assert.ok(text.includes("Climate: "), "…with this world's climate in it, which is part of what it now costs");
   }
 
   // ── THE WORST-CASE NUMBER IS MEASURED, NOT ESTIMATED ──────────────────────
@@ -23264,6 +26160,17 @@ const fire = (node, type) => Promise.all((node.listeners[type] ?? []).map((fn) =
         name: solid(24, "Wrenfallowmere"),
         surround: "water",
         prosperity: "thriving",
+        // BOTH AXES PINNED, because this is the fixture that answers "what is the
+        // biggest legal brief" — and a brief whose author named its climate is
+        // strictly bigger than one that let the world roll. THE PAIR IS THE
+        // MEASURED MAXIMUM and not the longest-looking one: walked over all
+        // fifteen legal (latitude, precipitation) pairs, temperate/moderate
+        // renders the biggest climate block at 138 characters. `equatorial` is
+        // the longest word on the first row and loses more than it gains on the
+        // second — a two-season structure reaches no snow at any precipitation —
+        // and subpolar/moderate is one character short of this.
+        latitude: "temperate",
+        precipitation: "moderate",
         situation: solid(240, "Theford"),
         places: ["gathering", "workshop", "workshop", "sanctuary"].map((kind, i) => ({
           kind,
@@ -23301,9 +26208,62 @@ const fire = (node, type) => Promise.all((node.listeners[type] ?? []).map((fn) =
       everyCap.cast.every((m) => m.persona.length === 100),
       "…with personas at the full 100, which a spaced phrase never reaches",
     );
-    const measured = loadedPF.pack.digest(everyCap);
-    assert.equal(measured.length, 2_580, "the biggest legal digest is the 2,580 chars the table beside digest() says");
-    assert.equal(measured.split("\n").length, 21, "…across twenty-one rows, one of them per person");
+    const measured = loadedPF.pack.digest(everyCap, climateOf(everyCap));
+    assert.equal(measured.length, 2_718, "the biggest legal digest is the 2,718 chars the table beside digest() says");
+    // TWENTY-THREE ROWS, WITH THE ANATOMY STATED so the count is auditable rather
+    // than a number that moved: 2 opening + 2 climate + (blank + header + 5 place
+    // rows) + (blank + header + 10 people).
+    const rows = measured.split("\n");
+    assert.equal(rows.length, 23, "…across twenty-three rows, one of them per person");
+    // THE ANATOMY, COUNTED OFF THE ROWS rather than restated as a sum: 2 opening
+    // + 2 climate, then a blank + header + 5 places, then a blank + header + 10
+    // people. Counting the sections is what makes the total auditable — an
+    // arithmetic identity beside it would be true whatever the digest did.
+    const blanks = rows.map((row, i) => (row === "" ? i : -1)).filter((i) => i >= 0);
+    assert.deepEqual(blanks, [4, 11], "the two section breaks fall where the anatomy says");
+    assert.equal(blanks[0], 4, "…4 rows of opening block: the name, the situation and the two climate rows");
+    assert.equal(blanks[1] - blanks[0] - 1, 6, "…a PLACES header and five place rows");
+    assert.equal(rows.length - blanks[1] - 1, 11, "…a PEOPLE header and ten people");
+    // THE CLIMATE ROWS SIT IN THE OPENING BLOCK, under no section header — the one
+    // placement that is both idiomatic (plain pushes, no separator convention to
+    // violate) and safe. Parked at the tail they would read as an eleventh cast
+    // member, which is the mistake digest()'s own section comment warns about.
+    assert.equal(rows[2], "Climate: temperate latitude, moderate.", "the climate row follows the situation");
+    assert.ok(rows[3].startsWith("Weather runs to: "), "…with the reachable sky under it");
+    assert.equal(rows[4], "", "…and the blank that opens PLACES comes after both, not before them");
+    assert.ok(rows.at(-1).startsWith("- Person"), "…so the last row is still a person");
+    // AND THE SECOND ROW IS DERIVED, not a hand table: it lists what `weightsFor`
+    // can actually draw for this band, which is the whole point of the row.
+    assert.equal(
+      rows[3],
+      `Weather runs to: ${loadedPF.weather.wordsFor("temperate", "moderate").join(", ")}` +
+        ` — write no line for a sky this world never has.`,
+      "…spelled from the derivation rather than from a list somebody kept in step",
+    );
+  }
+
+  // ── NO CLIMATE, NO ROWS — THE 0.13 CALL SHAPE IS STILL LEGAL ──────────────
+  // `digest()` receives only the brief, so it cannot compute a theme default
+  // itself without becoming a second authority for the sky. A caller with no
+  // climate to state says nothing: both rows are omitted and the digest is the
+  // 0.13 shape, to the character.
+  {
+    const bare = loadedPF.pack.digest(maxBrief);
+    assert.ok(!bare.includes("Climate:"), "a digest with no axes carries no climate row");
+    assert.ok(!bare.includes("Weather runs to:"), "…nor the sky row under it");
+    const withClimate = loadedPF.pack.digest(maxBrief, climateOf(maxBrief));
+    assert.equal(
+      withClimate.split("\n").length - bare.split("\n").length,
+      2,
+      "…and the two rows are the whole of the difference",
+    );
+    // HALF AN ARGUMENT IS NO ARGUMENT. A partial or empty object states nothing,
+    // so it renders nothing rather than half a climate.
+    for (const partial of [{}, { latitude: "temperate" }, { precipitation: "wet" }, null])
+      assert.ok(
+        !loadedPF.pack.digest(maxBrief, partial).includes("Climate:"),
+        `a ${JSON.stringify(partial)} climate renders no row`,
+      );
   }
 
   // ── AND THE PREFERENCES CLIP AGAINST WHAT IS LEFT ─────────────────────────
@@ -23314,13 +26274,13 @@ const fire = (node, type) => Promise.all((node.listeners[type] ?? []).map((fn) =
   {
     const preferences = `Setting: ${"a long and detailed description of the valley. ".repeat(200)}`.slice(0, 7_800);
     assert.equal(preferences.length, 7_800, "the fixture is the biggest setting the wizard can hand us");
-    const composed = pack.composeUserContent(pack.digest(maxBrief), preferences);
+    const composed = pack.composeUserContent(pack.digest(maxBrief, climateOf(maxBrief)), preferences);
     assert.ok(composed.length <= pack.USER_CONTENT_CAP, `the request is legal (${composed.length} chars)`);
-    assert.ok(composed.startsWith(pack.digest(maxBrief)), "the digest is whole and first");
+    assert.ok(composed.startsWith(pack.digest(maxBrief, climateOf(maxBrief))), "the digest is whole and first");
     assert.ok(composed.includes("a long and detailed description"), "…and the player's own words are in there too");
     assert.ok(composed.endsWith("…"), "it is the SETTING that lost its tail, and it says so");
     // A setting that fits is not clipped at all.
-    const short = pack.composeUserContent(pack.digest(maxBrief), "Setting: a quiet valley.");
+    const short = pack.composeUserContent(pack.digest(maxBrief, climateOf(maxBrief)), "Setting: a quiet valley.");
     assert.ok(short.endsWith("Setting: a quiet valley."), "a setting inside the room left is sent whole");
     // …and no setting at all is just the digest.
     assert.equal(pack.composeUserContent("DIGEST", "   "), "DIGEST", "an empty setting adds nothing to send");
@@ -23358,20 +26318,33 @@ const fire = (node, type) => Promise.all((node.listeners[type] ?? []).map((fn) =
   // are what `capText` exists for; and the newline is the structural one, because
   // the section header promises the model ONE ROW PER PERSON and a raw newline in
   // a persona is a second row with nobody's name on it.
+  //
+  // THIS IS THE BELT AND NOT THE FOLD, and the two are tested apart on purpose.
+  // `digest()` is called DIRECTLY here, so a hostile climate argument exercises
+  // the `capText` on the way through — all it has to guarantee is that no value
+  // can eat the cast list or inject a row. What guarantees the words are a REAL
+  // climate is `axesFor` at the compose site, one screen upstream, and the lane
+  // for that drives a generation instead (see the creation-path case).
   {
-    const hostile = pack.digest({
-      name: `Sharp${String.fromCharCode(7)}town <script>alert(1)</script> and then a great deal more name than this`,
-      situation: `A situation ${"that runs on and on ".repeat(60)}`,
-      places: [{ kind: "gathering", name: `The Inn\nof Two Rows and a name far past the cap it is allowed` }],
-      cast: [
-        {
-          name: `Wren Ash\nSecond Row`,
-          role: `miller${String.fromCharCode(0)} and a role description that is much too long to be one`,
-          home: `The Mill <b>bold</b> and a home address longer than any cap`,
-          persona: `Wants the ford rebuilt.\nAnd hides who let it go. ${"Padding to nine thousand. ".repeat(360)}`,
-        },
-      ],
-    });
+    const hostile = pack.digest(
+      {
+        name: `Sharp${String.fromCharCode(7)}town <script>alert(1)</script> and then a great deal more name than this`,
+        situation: `A situation ${"that runs on and on ".repeat(60)}`,
+        places: [{ kind: "gathering", name: `The Inn\nof Two Rows and a name far past the cap it is allowed` }],
+        cast: [
+          {
+            name: `Wren Ash\nSecond Row`,
+            role: `miller${String.fromCharCode(0)} and a role description that is much too long to be one`,
+            home: `The Mill <b>bold</b> and a home address longer than any cap`,
+            persona: `Wants the ford rebuilt.\nAnd hides who let it go. ${"Padding to nine thousand. ".repeat(360)}`,
+          },
+        ],
+      },
+      {
+        latitude: `subpolar\nSecond Row <b>${"and a band name padded out past every cap there is. ".repeat(200)}`,
+        precipitation: `wet${String.fromCharCode(0)} and a precipitation word nobody wrote`,
+      },
+    );
     const rows = hostile.split("\n");
     // ONE ROW PER PERSON, and counted STRUCTURALLY — everything after the PEOPLE
     // header is the cast section, so a newline that survived any of the four
@@ -23387,8 +26360,19 @@ const fire = (node, type) => Promise.all((node.listeners[type] ?? []).map((fn) =
       `every field on the row is inside its own cap, so the row is inside 190 (${people[0].length})`,
     );
     assert.ok(
-      hostile.length <= 2_580,
+      hostile.length <= 2_718,
       `…and the whole digest is inside the table's bound off a 9,000-char input (${hostile.length} chars)`,
+    );
+    // THE OPENING BLOCK IS FOUR ROWS AND NEVER FIVE, counted STRUCTURALLY for the
+    // cast section's reason: a newline that survived the latitude shows up as a
+    // row too many rather than as text in the wrong place. Name, situation, and
+    // the two climate rows — everything before the blank that opens PLACES.
+    assert.equal(rows.indexOf(""), 4, "the hostile climate is two rows in a four-row opening block, not three");
+    assert.ok(rows[2].startsWith("Climate: "), "…with the climate row where it belongs");
+    assert.ok(rows[3].startsWith("Weather runs to: "), "…and the sky row under it");
+    assert.ok(
+      rows.find((row) => row.startsWith("Climate: ")).length <= "Climate: ".length + 24 + " latitude, ".length + 24 + 1,
+      "…with both axis words clipped at 24, the same cap every other name here gets",
     );
     // NOTHING A TAG OR A CONTROL BYTE CAN BE REASSEMBLED FROM.
     assert.ok(!/[<>]/.test(hostile), "no angle bracket survives, so no tag fragment can");
@@ -23432,24 +26416,75 @@ const fire = (node, type) => Promise.all((node.listeners[type] ?? []).map((fn) =
       ["templates", "lines", "escalation", "overheard"],
       "…and the schema's property order says the same thing a second way",
     );
-    // THE BYTE DIET. The schema seals four topic tags and the guidance names two:
-    // the seam is deliberately wider than the diet, because the schema is the half
-    // that seals forever and the guidance is the half a later release can rewrite.
-    assert.ok(text.includes("topic (optional): rumor or work"), "the guidance confines topic tags to the two E7 needs");
-    // Only `smalltalk` is checked, and the message says only that: "place" is a
-    // legitimate word in these instructions — it is a grain handle and a target
-    // shape — so its absence is not something the guidance can be asked for.
-    assert.ok(!text.includes("smalltalk"), "…and does not spend bytes teaching smalltalk, which it cannot read yet");
+    // THE DIET IS OVER, AND BOTH HALVES OF ITS RETIREMENT ARE PINNED. 0.13 asked
+    // for rumor|work while the schema sealed four, on the promise that the
+    // guidance is the half a later release can rewrite. This is that release: the
+    // window renders all four branches, so the ask is the whole vocabulary and the
+    // old NEGATIVE pin ("no smalltalk in the instructions") is inverted into its
+    // opposite — the lane now asserts every tag is taught.
+    const topicLine = text.split("\n").find((line) => line.includes("topic (optional)"));
+    assert.ok(topicLine, "the guidance has a topic line at all");
+    assert.ok(
+      topicLine.includes(`one of ${pack.TOPICS.join(" | ")}`),
+      "the guidance teaches the whole topic vocabulary",
+    );
+    // ON THE TOPIC LINE and not merely somewhere in the text: `place` is a grain
+    // handle and a target shape, and `work` is what the board posts, so both are
+    // words these instructions carry whatever the tag list says. A search over the
+    // whole string is green on 0.13's two-tag diet for three of the four —
+    // measured, not assumed.
+    for (const topic of pack.TOPICS)
+      assert.ok(topicLine.includes(topic), `…and ${topic} is on the list of tags, not merely a word in the text`);
     assert.deepEqual(
       pack.TOPICS,
       ["rumor", "work", "place", "smalltalk"],
-      "while the sealed vocabulary keeps all four",
+      "…which is the same four the vocabulary has always sealed",
     );
     assert.deepEqual(
       pack.schema().properties.lines.items.properties.topic.enum,
       pack.TOPICS,
       "…and the schema seals all four, because a schema is the thing that cannot be rewritten later",
     );
+    // THE SKY TAG. The guidance asks for four of the five words and the schema
+    // seals all five: the missing one is `fair`, which an untagged line already
+    // covers, so asking for it would spend bytes on a generalization the read door
+    // gives away. The difference is exactly one word, and boot throws if it is not.
+    assert.ok(
+      text.includes(`w (optional): one of ${pack.WEATHERS_ASKED.join(" | ")}`),
+      "the guidance teaches the sky tag as an exception, not as a field",
+    );
+    assert.ok(
+      text.includes("most lines should work any day"),
+      "…and says out loud that most lines carry none, which is what keeps a branch alive on a fair day",
+    );
+    assert.deepEqual(
+      pack.schema().properties.lines.items.properties.w?.enum,
+      pack.WEATHERS,
+      "…while the schema seals all five, so a line tagged for the sky it was asked for is honoured",
+    );
+    assert.deepEqual(
+      pack.WEATHERS.filter((word) => !pack.WEATHERS_ASKED.includes(word)),
+      ["fair"],
+      "…and the one word it does not ask for is the one an absent tag already means",
+    );
+    assert.deepEqual(
+      pack.schema().properties.lines.items.required,
+      ["at", "when", "r", "text"],
+      "neither tag is required: a line with no topic and no sky is still a legal line",
+    );
+    assert.deepEqual(
+      Object.keys(pack.schema().properties.lines.items.properties),
+      ["at", "when", "r", "text", "topic", "w"],
+      "…and `w` sits beside `topic`, because property order is the emission order",
+    );
+    // THE REGISTER ASK IS INVERTED (ruling 4). 0.13 asked for MORE FRIEND LINES;
+    // 0.14 serves the stranger register and only that one, so a pack written to
+    // the old ask spends its best writing on rows nothing reads.
+    assert.ok(
+      text.includes(`write mostly ${pack.REGISTERS[0]} lines`),
+      "the guidance asks for the register the window actually serves",
+    );
+    assert.ok(!/more friend lines than you/.test(text), "…and no longer asks for more of the one it does not");
     // ESCALATION IS NAMED AS E7'S CONVERGENCE POINT — the section the Ask tree
     // will land on, described as a door rather than as what is behind it.
     assert.ok(
@@ -23520,6 +26555,16 @@ const fire = (node, type) => Promise.all((node.listeners[type] ?? []).map((fn) =
     // above nothing and meaningfully below what a whole call returns.
     assert.ok(pack.TUNING.floorTemplates >= 1 && pack.TUNING.floorLines >= 1, "neither floor is zero");
     assert.ok(pack.TUNING.floorLines < pack.CAPS.lines / 4, "…and neither is so high that a thin pack cannot seal");
+    // THE NUMBERS THEMSELVES, BY VALUE. Everything above is symbolic and would
+    // stay green through any floor at all, which is exactly wrong for a value
+    // that decides which generations become permanent artifacts. The ruled floor
+    // is TEN and the basis costs a line at 140 — eight percent more than 0.13's
+    // 130, which is what the four topic values and the sky term cost — and both
+    // are written here so a change to either is a change somebody made on purpose.
+    assert.equal(pack.TUNING.floorLines, 10, "the line floor is the ruled ten");
+    assert.equal(pack.TUNING.floorTemplates, 3, "…and the template floor is three");
+    assert.equal(b.lineChars, 140, "…costed against a 140-char tagged line, the 0.14 row");
+    assert.equal(lines, 16, "…which the wall leaves room for sixteen of, as the table beside the floors says");
   }
 
   // ── THE REWARD DERIVATION (plan §2.6, RULED) ──────────────────────────────
@@ -23591,7 +26636,14 @@ const fire = (node, type) => Promise.all((node.listeners[type] ?? []).map((fn) =
 
   /** The shape a model that read the guidance would send: templates first, then a
    *  tagged index, then the two smaller sections. Sized by argument so the
-   *  truncation lane can build one that does not fit. */
+   *  truncation lane can build one that does not fit.
+   *
+   *  RE-TARGETED AT THE 0.14 ASK. The index carries all FOUR topic tags now,
+   *  because that is what the widened guidance asks for, and every fourth line
+   *  carries a sky term — the "most lines should work any day" proportion the
+   *  instructions state, so a mock emission that seals here is one the window can
+   *  actually serve four buttons off on a fair day. Mostly STRANGER, for the same
+   *  reason: it is the register this release reads. */
   const emission = (templates, lines) => ({
     templates: Array.from({ length: templates }, (_, i) => ({
       slug: `posted-work-${i}`,
@@ -23604,9 +26656,15 @@ const fire = (node, type) => Promise.all((node.listeners[type] ?? []).map((fn) =
     lines: Array.from({ length: lines }, (_, i) => ({
       at: pack.LOCATIONS[i % pack.LOCATIONS.length],
       when: pack.DAYPARTS[i % pack.DAYPARTS.length],
-      r: pack.REGISTERS[i % 2],
+      r: i % 5 === 0 ? pack.REGISTERS[1] : pack.REGISTERS[0],
       text: `Something a person standing there would actually say, number ${i}, and then a little more.`,
-      topic: ["rumor", "work"][i % 2],
+      topic: pack.TOPICS[i % pack.TOPICS.length],
+      // DELIBERATELY OUT OF STEP WITH THE TOPIC CYCLE ABOVE. On the same modulus
+      // every smalltalk line would carry a sky and "Pass the time" would be a
+      // button that vanished on a fair day — which is the failure the guidance's
+      // own "most lines should work any day" exists to prevent, and a fixture
+      // that reproduced it would hide it.
+      ...(i % 6 === 5 ? { w: pack.WEATHERS_ASKED[i % pack.WEATHERS_ASKED.length] } : {}),
     })),
     escalation: cast.map((npc) => ({ npc, text: "Ask me again when the room is empty and I will tell you." })),
     overheard: [{ at: "settlement", text: "…and they said the survey came back fine. Fine!", topic: "rumor" }],
@@ -23635,6 +26693,10 @@ const fire = (node, type) => Promise.all((node.listeners[type] ?? []).map((fn) =
       r: pack.REGISTERS[i % 2],
       text: fill(pack.CAPS.text, `A spoken line written out to the schema's two-hundred-character cap, number ${i}, `),
       topic: pack.TOPICS[i % pack.TOPICS.length],
+      // BOTH OPTIONAL TAGS, because "the schema's own caps" has to mean the
+      // schema this release seals: a fixture still carrying only `topic` would
+      // understate the widest legal row by the whole sky term.
+      w: pack.WEATHERS[i % pack.WEATHERS.length],
     })),
     escalation: [],
     overheard: [],
@@ -23703,7 +26765,17 @@ const fire = (node, type) => Promise.all((node.listeners[type] ?? []).map((fn) =
       ["instructions", "schema", "userContent"],
       "three fields, no more",
     );
-    assert.equal(sent[0].body.userContent.startsWith(pack.digest(sealedBrief)), true, "the digest leads the request");
+    // THE DIGEST LEADS THE REQUEST, and it is the digest WITH this world's
+    // climate in it — resolved from the SEALED BRIEF, the seed and the theme, the
+    // three inputs `axesFor` takes and the only three that exist on the creation
+    // path. There is no world to read yet.
+    const axes = loadedPF.weather.axesFor(sealedBrief, 4242, "cozy-village");
+    assert.equal(
+      sent[0].body.userContent.startsWith(pack.digest(sealedBrief, axes)),
+      true,
+      "the digest leads the request, climate rows and all",
+    );
+    assert.ok(sent[0].body.userContent.includes(`Climate: ${axes.latitude} latitude`), "…naming this world's band");
     assert.ok(sent[0].body.userContent.includes("a valley that floods"), "…and the player's setting follows it");
     assert.ok(sent[0].body.userContent.length <= pack.USER_CONTENT_CAP, "inside the route's character cap");
     assert.equal(
@@ -23712,6 +26784,94 @@ const fire = (node, type) => Promise.all((node.listeners[type] ?? []).map((fn) =
       "strictSchema is never sent: the tolerant parser is the contract",
     );
     assert.ok(sent[0].signal, "…and the call is abortable, because the budget is a real one");
+  });
+
+  // ── THE FOLD, TESTED WHERE THE FOLD IS ────────────────────────────────────
+  // The digest's own hostile lane exercises the `capText` BELT, because it calls
+  // `digest()` directly and there is no fold at that door. The FOLD is here, at
+  // the compose site: the brief a pack is composed from is a round-tripped object
+  // off chat metadata, so its `latitude` is whatever a hand-edited save says it
+  // is, and `axesFor` is what turns that back into a band this build knows. A
+  // hostile hint is not defaulted, it simply stops being a hint — the roll owns
+  // the axis — so what reaches `userContent` is a real climate and never the
+  // stored word.
+  await withPackCall(async ({ sent }) => {
+    const poisoned = {
+      ...sealedBrief,
+      latitude: "constructor",
+      precipitation: `wet <script>alert(1)</script> ${"and a great deal more than a word. ".repeat(40)}`,
+    };
+    const { sealed } = await run({ brief: poisoned });
+    assert.ok(sealed, "the call still goes out and still seals");
+    const body = sent.at(-1).body.userContent;
+    const row = body.split("\n").find((line) => line.startsWith("Climate: "));
+    assert.ok(row, "the request still carries a climate row");
+    assert.ok(!row.includes("constructor"), "…and the hostile band never reaches it");
+    assert.ok(!row.includes("<script>"), "…nor the tag fragment beside it");
+    const drawn = loadedPF.weather.axesFor(poisoned, 4242, "cozy-village");
+    assert.ok(
+      loadedPF.weather.LATITUDES.includes(drawn.latitude) && loadedPF.weather.PRECIPS.includes(drawn.precipitation),
+      "…because the fold drew a real band for both axes",
+    );
+    assert.equal(row, `Climate: ${drawn.latitude} latitude, ${drawn.precipitation}.`, "…and that is what went out");
+    assert.ok(body.length <= pack.USER_CONTENT_CAP, "…inside the route's cap, as everything here must be");
+  });
+
+  // ── THE WIDENED ASK COMES BACK AS FOUR WORKING BUTTONS ───────────────────
+  // The point of widening the guidance, end to end: a model that answers it sends
+  // an index tagged with all four topics and a handful of skies, that index seals
+  // whole, and the talk window renders every branch off it on an ordinary fair
+  // day. 0.13's ask could not produce this pack — it taught two of the four tags —
+  // so a world sealed then shows one or two buttons however good its writing was.
+  await withPackCall(async ({ sent }) => {
+    const { sealed, failure } = await run();
+    assert.equal(failure, "none", "the widened emission is a whole answer");
+    // WHAT WENT OUT taught the whole vocabulary — read off the TAG LINE, because
+    // `place` and `work` are words these instructions carry for other reasons.
+    const asked = sent[0].body.instructions.split("\n").find((line) => line.includes("topic (optional)"));
+    for (const topic of pack.TOPICS) assert.ok(asked.includes(topic), `the request asks for ${topic}`);
+    assert.deepEqual(
+      Object.keys(sent[0].body.schema.properties.lines.items.properties),
+      ["at", "when", "r", "text", "topic", "w"],
+      "…and the schema that went with it seals both optional tags",
+    );
+    // …and what came back kept it through the seal.
+    assert.deepEqual(
+      [...new Set(sealed.lines.map((row) => row.topic))].sort(),
+      [...pack.TOPICS].sort(),
+      "every topic the guidance asks for survives validate()",
+    );
+    const skies = sealed.lines.filter((row) => row.w);
+    assert.ok(skies.length >= 2, `…and the sky terms with them (${skies.length} tagged rows)`);
+    assert.ok(
+      skies.length < sealed.lines.length / 2,
+      "…as the minority the instructions ask for, so a fair day is not a silent town",
+    );
+    // THE WINDOW, DRIVEN OFF IT. Four branches, four answers, on a fair day at the
+    // settlement — which is the claim the whole widening is for.
+    const folded = { pack: sealed, _askDay: -1, _askServed: new Map() };
+    const saveFold = loadedPF.save.packFold;
+    loadedPF.save.packFold = () => folded;
+    try {
+      const probe = {
+        sim: {
+          day: 3,
+          world: { seed: 4242 },
+          weather: () => ({ word: "fair", intensity: null }),
+          zone: () => ({ place: "settlement", mapKind: "town" }),
+          daypart: () => "day",
+        },
+      };
+      const who = { name: "Somebody" };
+      for (const branch of ["rumor", "work", "place", "smalltalk"]) {
+        assert.equal(loadedPF.pack.askHas(probe, who, branch), true, `the ${branch} button renders off a sealed pack`);
+        const said = loadedPF.pack.ask(probe, who, branch);
+        assert.ok(said, `…and answers with something (${branch})`);
+        assert.notEqual(loadedPF.pack.ask(probe, who, branch), said, `…and with something else the second time`);
+      }
+    } finally {
+      loadedPF.save.packFold = saveFold;
+    }
   });
 
   // ── TRUNCATED AT THE WALL: THE SALVAGE SEALS THIN RATHER THAN FAILING ─────
@@ -23792,6 +26952,37 @@ const fire = (node, type) => Promise.all((node.listeners[type] ?? []).map((fn) =
     assert.equal(probe.templates[0].title.length, pack.CAPS.title, "…and its titles");
     assert.equal(probe.lines[0].text.length, pack.CAPS.text, "…and its spoken lines");
     assert.ok(probe.lines[0].topic, "…and every line is tagged, the way the basis costs them");
+    // THE WIDEST LEGAL LINE ROW, MEASURED — the number the residual paragraph
+    // beside `floorBasis` states. It is the whole standing of "the row costs are
+    // measured density, not the schema's maximum", so it is pinned rather than
+    // restated: a 200-character line carrying BOTH optional tags, on the WIDEST
+    // value each enum offers. The handle was the one that was wrong — this row
+    // was built on "sanctuary" and cost 293, while LOCATIONS' widest word is
+    // "settlement" at ten characters, which is 294. Every enum here is asserted
+    // to be that widest value rather than trusted to stay it.
+    const widestOf = (list) => list.reduce((a, b) => (b.length > a.length ? b : a));
+    assert.equal(widestOf(pack.LOCATIONS), "settlement", "the widest handle the schema allows");
+    assert.equal(widestOf(pack.DAYPARTS), "night", "…the widest daypart");
+    assert.equal(widestOf(pack.REGISTERS), "stranger", "…the widest register");
+    assert.equal(widestOf(pack.TOPICS), "smalltalk", "…the widest topic");
+    assert.equal(widestOf(pack.WEATHERS), "overcast", "…and the widest sky word");
+    const widest = JSON.stringify({
+      at: "settlement",
+      when: "night",
+      r: "stranger",
+      text: "x".repeat(pack.CAPS.text),
+      topic: "smalltalk",
+      w: "overcast",
+    });
+    assert.equal(
+      widest.length,
+      294,
+      `the widest legal line row is the 294 chars the floor table says (${widest.length})`,
+    );
+    assert.ok(
+      widest.length > pack.TUNING.floorBasis.lineChars * 2,
+      "…which is more than twice what the basis costs a typical one, and that gap IS the residual",
+    );
 
     const wall = pack.TUNING.floorBasis.truncTokens * pack.TUNING.floorBasis.charsPerToken;
     const cut = JSON.stringify(maxEmission(pack.CAPS.templates, 200)).slice(0, wall);
@@ -23807,6 +26998,20 @@ const fire = (node, type) => Promise.all((node.listeners[type] ?? []).map((fn) =
     assert.ok(
       salvaged.lines.length < pack.TUNING.floorLines,
       `…and the index left under it is short of the floor (${salvaged.lines.length}/${pack.TUNING.floorLines})`,
+    );
+    // HOW SHORT, BY VALUE — and the margin is worth writing down rather than
+    // inferring, because the floor came down from twelve to ten this release and
+    // "short of the floor" is a weaker claim than it was. A schema-max cut leaves
+    // EIGHT lines against a floor of ten: two. That is the honest size of the
+    // residual now, and it is the number that decides whether this lane still
+    // tests anything — a floor at eight would flip it from a documented
+    // limitation into a silently sealing one, and this equality is what makes
+    // that a red rather than a discovery.
+    assert.equal(salvaged.lines.length, 8, `the schema-max cut leaves eight lines (${salvaged.lines.length})`);
+    assert.equal(
+      pack.TUNING.floorLines - salvaged.lines.length,
+      2,
+      "…which is two short of the ruled floor, and that two is the whole margin",
     );
   });
 
@@ -23836,6 +27041,44 @@ const fire = (node, type) => Promise.all((node.listeners[type] ?? []).map((fn) =
     const salvagedThin = await run();
     assert.equal(salvagedThin.sealed, null, "a salvage that comes up short does not seal");
     assert.equal(salvagedThin.failure, "thin", "…and says the content was thin rather than the request refused");
+  });
+
+  // ── THE BOUNDARY ITSELF, DRIVEN AT THE RULED VALUE ────────────────────────
+  // Every floor lane above is written against `TUNING.floorLines` and would stay
+  // green at any number at all. This one is written at TEN, because the floor is
+  // an acceptance boundary rather than a tuning knob: it decides which emissions
+  // become permanent artifacts, and 0.14 moved it down from twelve on a live
+  // measurement — an emission landing ON the old floor, against lines that now
+  // cost about eight percent more.
+  //
+  // Eleven seals and nine does not, and both are asserted with the LITERAL count,
+  // so a floor that drifts back up takes this lane red with it.
+  await withPackCall(async ({ state }) => {
+    for (const [count, expected] of [
+      [11, "seals"],
+      [10, "seals"],
+      [9, "fails"],
+    ]) {
+      state.reply = async () => ({ status: 200, body: { ok: true, data: emission(3, count) } });
+      const { sealed, failure } = await run();
+      if (expected === "seals") {
+        assert.ok(sealed, `an emission of ${count} lines seals`);
+        assert.equal(sealed.lines.length, count, `…with every line of it (${count})`);
+        assert.equal(failure, "none", "…and is not reported as a failure");
+      } else {
+        assert.equal(sealed, null, `an emission of ${count} lines does not seal`);
+        assert.equal(failure, "thin", "…and fails as thin, which is the honest verdict for too little content");
+      }
+    }
+    // AND THE THREE COUNTS REALLY STRADDLE THE FLOOR. Written at literals so a
+    // floor that drifted would take this lane red, and checked against the
+    // constant so a floor that drifted with them cannot leave three counts all on
+    // one side of it, still green and testing nothing.
+    assert.deepEqual(
+      [11, 10, 9].map((count) => count >= pack.TUNING.floorLines),
+      [true, true, false],
+      "…and the three counts drove both sides of the ruled floor",
+    );
   });
 
   // ── A HOSTILE EMISSION IS STRIPPED, FOLDED AND REPAIRED AT THE SEAL ───────
@@ -24361,6 +27604,2191 @@ const fire = (node, type) => Promise.all((node.listeners[type] ?? []).map((fn) =
       }
     });
   });
+}
+
+// 120. THE SIDE-STREAM PIN — existing seeds keep their exact layouts (0.14 §2.1,
+// §0.19). The release mints two climate AXES per world, and the one thing a mint
+// must not do is move the tile RNG: compile runs ONE main stream
+// (`const rnd = PF.rng(seed)`, 20-world) and an insertion into it re-lays every
+// world that ever existed. The tree's own answer is the SIDE STREAM, whose
+// comment states the rule out loud — "a side stream, so minting residents does
+// not shift the tile RNG under the ground cover and every world that had no
+// minting still lays the same grass" — and the axis mint copies it verbatim,
+// one named stream per axis.
+//
+// THE FINGERPRINTS BELOW WERE TAKEN BEFORE 17-weather EXISTED, which is the only
+// reason they are evidence and not a tautology: they are the layouts this
+// build's predecessor laid, frozen as constants in their own commit, and every
+// later slice re-proves its worlds against them.
+//
+// `mintStamp` IS IN THE HASH ON PURPOSE. It rides the `|residents|` stream, so a
+// mint that migrated into the main stream moves it and the failure names which
+// stream broke rather than just saying "a world changed". The two world stamps
+// the release ADDS (`latitude`, `precipitation`) are deliberately OUT of it: a
+// fingerprint that hashed them could never say "identical EXCEPT the stamps".
+{
+  // The harness's own working set of seeds, gathered from the compiler cases
+  // above — small ordinals plus the two large ones the housing and binding
+  // cases lean on.
+  const LAYOUT_SEEDS = [1, 2, 3, 4, 5, 7, 11, 31, 80021, 424242];
+
+  /** Everything about a built world that the tile streams decide, and nothing
+   *  else: geometry, cover, collision, where the cast stands, and the mint
+   *  stamp. Not the theme palette, not prose, not the axis stamps. */
+  const layoutFingerprint = (w) => {
+    const h = createHash("sha256");
+    h.update(`${w.startZone}|${w.mintStamp}`);
+    for (const id of Object.keys(w.zones).sort()) {
+      const z = w.zones[id];
+      h.update(`\nZ ${id}|${z.name}|${z.w}x${z.h}|${z.mapKind ?? ""}|${z.place ?? ""}`);
+      h.update(`\ng ${z.ground.join(",")}`);
+      h.update(`\no ${z.object.join(",")}`);
+      h.update(`\nc ${z.overhead.join(",")}`);
+      h.update(`\ns ${Array.from(z.solid).join(",")}`);
+      for (const npc of z.npcs) h.update(`\nn ${npc.id}|${npc.name}|${npc.x}|${npc.y}`);
+    }
+    return h.digest("hex").slice(0, 16);
+  };
+
+  // Three brief shapes, because the three take three different paths through
+  // build(): no brief at all is the legacy layout, the themed default is the
+  // worked example every compiler case is driven through, and the every-cap
+  // brief is the one that mints the most people and so spends the most of the
+  // resident side stream.
+  const maxShapeBrief = (theme, seed) =>
+    loadedPF.brief.validate(
+      {
+        scale: "city",
+        name: "Wrenfallowmere Crossing".slice(0, 24),
+        surround: "water",
+        prosperity: "thriving",
+        situation: "The ford went in the flood and nobody will say who let the upstream weir go unwatched. "
+          .repeat(3)
+          .slice(0, 240),
+        places: ["The Amber Hearth Inn", "The Long Water Workyard", "The Whisperwood Reaches", "The Chapter Hall"].map(
+          (name, i) => ({ kind: ["gathering", "workshop", "wilds", "hall"][i], name, flavor: "" }),
+        ),
+        cast: Array.from({ length: 10 }, (_, i) => ({
+          name: `Personage Number ${String(i).padStart(2, "0")}`.slice(0, 24),
+          role: `understudy to the ${String(i)}`.slice(0, 24),
+          kind: "folk",
+          tint: "blue",
+          home: "The Amber Hearth Inn",
+          household: i + 1,
+          persona:
+            `Wants the weir rebuilt before the spring and is hiding what the last survey said, number ${i}.`.slice(
+              0,
+              100,
+            ),
+        })),
+      },
+      { theme, seed },
+    );
+
+  const briefFor = (shape, theme, seed) => {
+    if (shape === "legacy") return null;
+    if (shape === "defaults") return loadedPF.brief.defaults(theme, seed);
+    return maxShapeBrief(theme, seed);
+  };
+
+  // Taken against the 0.13.0 tree, one commit before 17-weather.js landed.
+  const LAYOUTS = {
+    "cozy-village|1|legacy": "cf46649ec5c6b349",
+    "cozy-village|1|defaults": "8e666935dc3bc3f1",
+    "cozy-village|1|maxBrief": "1e19c99434a1158f",
+    "cozy-village|2|legacy": "b162a3091ba35899",
+    "cozy-village|2|defaults": "0fc70b0fb89f71fb",
+    "cozy-village|2|maxBrief": "3691d4d124b2cec2",
+    "cozy-village|3|legacy": "6c978a992a9041b3",
+    "cozy-village|3|defaults": "0e0fbfc2b5e3fb42",
+    "cozy-village|3|maxBrief": "02232043dc426847",
+    "cozy-village|4|legacy": "2f823c92752f9cc1",
+    "cozy-village|4|defaults": "f249d2b26380bbfb",
+    "cozy-village|4|maxBrief": "d7bcbcb7ec2561f3",
+    "cozy-village|5|legacy": "4f4d9fbc079dc3d8",
+    "cozy-village|5|defaults": "55aca0213f69e3a4",
+    "cozy-village|5|maxBrief": "e6b0ea3e95aae891",
+    "cozy-village|7|legacy": "26b1bfe2a5e5e541",
+    "cozy-village|7|defaults": "666c649632695d74",
+    "cozy-village|7|maxBrief": "c8797b46e37345fc",
+    "cozy-village|11|legacy": "34c824678792be49",
+    "cozy-village|11|defaults": "3a791f437313b1f2",
+    "cozy-village|11|maxBrief": "5f8918478c32efe8",
+    "cozy-village|31|legacy": "c2d3ffda6eb1cbd7",
+    "cozy-village|31|defaults": "deefc2f185fed000",
+    "cozy-village|31|maxBrief": "9fcf772a8adf364d",
+    "cozy-village|80021|legacy": "eb066c1cfea95532",
+    "cozy-village|80021|defaults": "e6097a7a7a224fc9",
+    "cozy-village|80021|maxBrief": "359e2bd4c85da12b",
+    "cozy-village|424242|legacy": "6292c385ef49fb4b",
+    "cozy-village|424242|defaults": "4e31414de565cb65",
+    "cozy-village|424242|maxBrief": "8c50550c1eff34f0",
+    "sci-fi-colony|1|legacy": "a319fe23cf92a4db",
+    "sci-fi-colony|1|defaults": "28444a2092c52e59",
+    "sci-fi-colony|1|maxBrief": "6e76e78427329da4",
+    "sci-fi-colony|2|legacy": "fb99db68144637bc",
+    "sci-fi-colony|2|defaults": "65a24934bedd2502",
+    "sci-fi-colony|2|maxBrief": "87e85073c89085af",
+    "sci-fi-colony|3|legacy": "fb3a709e55da69c3",
+    "sci-fi-colony|3|defaults": "4cf3662becdaefd3",
+    "sci-fi-colony|3|maxBrief": "8ec80f6d2e981e6e",
+    "sci-fi-colony|4|legacy": "c96a0065a44541a7",
+    "sci-fi-colony|4|defaults": "cc539d32c86d4394",
+    "sci-fi-colony|4|maxBrief": "f133f2aafe4766cd",
+    "sci-fi-colony|5|legacy": "5dbafb5da6ed4b40",
+    "sci-fi-colony|5|defaults": "2231cbd515d7a330",
+    "sci-fi-colony|5|maxBrief": "3aadbf62aa46643d",
+    "sci-fi-colony|7|legacy": "ce85743023c950d9",
+    "sci-fi-colony|7|defaults": "6bc1b62d6193ae37",
+    "sci-fi-colony|7|maxBrief": "47953215276cee1a",
+    "sci-fi-colony|11|legacy": "e4acc2456cf5e425",
+    "sci-fi-colony|11|defaults": "8f9665e3bc23eb69",
+    "sci-fi-colony|11|maxBrief": "4c8f568355c7ca2c",
+    "sci-fi-colony|31|legacy": "5bad5d9f4d0b2eeb",
+    "sci-fi-colony|31|defaults": "893dc7d0f9f48ef7",
+    "sci-fi-colony|31|maxBrief": "679e9cb3200f997d",
+    "sci-fi-colony|80021|legacy": "8eefc91e8551cff7",
+    "sci-fi-colony|80021|defaults": "b381f71e4ade57c6",
+    "sci-fi-colony|80021|maxBrief": "6243e3cb97807224",
+    "sci-fi-colony|424242|legacy": "cc16a560ba4863e0",
+    "sci-fi-colony|424242|defaults": "3dda8c65a3ccfba0",
+    "sci-fi-colony|424242|maxBrief": "2450dd6ccc5b8c3e",
+  };
+
+  const themes = loadedPF.art.themeIds();
+  let checked = 0;
+  for (const theme of themes) {
+    for (const seed of LAYOUT_SEEDS) {
+      for (const shape of ["legacy", "defaults", "maxBrief"]) {
+        const key = `${theme}|${seed}|${shape}`;
+        const got = layoutFingerprint(loadedPF.world.build(seed, theme, briefFor(shape, theme, seed)));
+        assert.equal(got, LAYOUTS[key], `the ${shape} layout at ${theme}/${seed} moved (${got})`);
+        checked++;
+      }
+    }
+  }
+  // The table has to actually be walked. A shrunk theme list or a renamed shape
+  // would otherwise pass this case by checking nothing at all, which is the one
+  // way a frozen-constant lane can go quietly green.
+  assert.equal(checked, Object.keys(LAYOUTS).length, `every frozen layout was checked (${checked})`);
+  assert.equal(checked, themes.length * LAYOUT_SEEDS.length * 3, "…and the table covers the full product");
+
+  // (3) A PIN MEANS NO DRAW. A brief that names both axes spends neither stream,
+  // so it cannot move a fingerprint either — and this is the half that says the
+  // frozen table above is measuring the mint and not just the tile RNG.
+  for (const theme of themes)
+    for (const seed of LAYOUT_SEEDS) {
+      const sealed = loadedPF.brief.defaults(theme, seed);
+      sealed.latitude = "polar";
+      sealed.precipitation = "arid";
+      const w = loadedPF.world.build(seed, theme, sealed);
+      assert.equal(w.latitude, "polar", `the pinned latitude reached the world at ${theme}/${seed}`);
+      assert.equal(w.precipitation, "arid", "…and the pinned precipitation");
+      assert.equal(
+        layoutFingerprint(w),
+        LAYOUTS[`${theme}|${seed}|defaults`],
+        `pinning both axes moved the ${theme}/${seed} layout`,
+      );
+    }
+
+  // (4) TWO STREAMS, DIRECTLY. One stream per axis is what lets a brief pin one
+  // without disturbing the other's roll; one shared stream would let a pinned
+  // latitude silently re-roll the precipitation of every world that named one.
+  for (const theme of themes)
+    for (const seed of LAYOUT_SEEDS) {
+      const open = loadedPF.weather.axesFor({}, seed, theme);
+      assert.equal(
+        loadedPF.weather.axesFor({ latitude: "polar" }, seed, theme).precipitation,
+        open.precipitation,
+        `pinning latitude moved the precipitation roll at ${theme}/${seed}`,
+      );
+      assert.equal(
+        loadedPF.weather.axesFor({ precipitation: "arid" }, seed, theme).latitude,
+        open.latitude,
+        `pinning precipitation moved the latitude roll at ${theme}/${seed}`,
+      );
+    }
+
+  // …AND THE HALF THE PROBE ABOVE CANNOT SEE, which is why it is here. Each mint
+  // constructs its OWN rng from its own hash rather than sharing a live one, so
+  // the two probes above stay green even if BOTH axes are keyed to the SAME
+  // stream name — the pin passes while the axes have silently become one axis
+  // wearing two words. What a shared stream actually costs is the JOINT space:
+  // both bands would then be chosen by the same uniform draw, and cozy's nine
+  // (latitude x precipitation) pairs would collapse to the five its two
+  // cumulative tables happen to line up on — no subpolar desert, ever, on any
+  // seed. So the pin is the product, reached.
+  for (const [theme, expected] of [
+    ["cozy-village", 3 * 3],
+    ["sci-fi-colony", 5 * 3],
+  ]) {
+    const pairs = new Set();
+    for (let seed = 1; seed <= 1200; seed++) {
+      const axes = loadedPF.weather.axesFor({}, seed, theme);
+      pairs.add(`${axes.latitude}/${axes.precipitation}`);
+    }
+    assert.equal(pairs.size, expected, `${theme} reaches every band pair its two rows allow (${pairs.size})`);
+  }
+}
+
+// 121. THE SKY SUBSTRATE'S OWN TABLES (0.14 §2.1). 17-weather ships six paired
+// vocabularies and one continuous derivation over their product, and every
+// pairing is asserted INSIDE the bundle's IIFE at load. The positive half is
+// free — the harness could not have got this far if the module threw — so this
+// case is mostly the negative half, in the placers' idiom (20-world, 59-economy):
+// a rewrite that breaks one pairing has to name itself.
+{
+  const W = loadedPF.weather;
+  const stack = ["00-prelude.js", "10-art.js", "17-weather.js"];
+  const bootIn = (file, from, to) => {
+    const source = stack
+      .map((name) => {
+        const text = readFileSync(join(here, "src", name), "utf8");
+        if (name !== file) return text;
+        const patched = text.replace(from, to);
+        assert.notEqual(patched, text, `the rewrite still names ${file}'s "${from}"`);
+        return patched;
+      })
+      .join("\n");
+    return () => new Function(`"use strict";\n${source}\nreturn PF;`)();
+  };
+  const bootWeather = (from, to) => bootIn("17-weather.js", from, to);
+  // THE BUNDLE-BOOT LANE. `node --check` passes an evaluation-order mistake, and
+  // the shipped artifact is one concatenated IIFE — so what has to be proven is
+  // that the whole thing EVALUATES, which also proves every table below cleared
+  // its own boot assert on the way past.
+  assert.ok(
+    new Function(
+      `"use strict";\n${MODULES.map((name) => readFileSync(join(here, "src", name), "utf8")).join("\n")}\nreturn PF;`,
+    )().weather.WORDS.length,
+    "the whole bundle evaluates — every throw below is a rewrite talking",
+  );
+
+  assert.throws(
+    bootWeather(`polar: { warmth: 0, swing: 1, structure: "four" },`, ``),
+    /latitude "polar" has no LAT_META row/,
+    "a band on the axis with no row fails the build",
+  );
+  assert.throws(
+    bootWeather(
+      `    temperate: { warmth: 2, swing: 2, structure: "four" },`,
+      `    boreal: { warmth: 1, swing: 2, structure: "four" },\n    temperate: { warmth: 2, swing: 2, structure: "four" },`,
+    ),
+    /LAT_META names a latitude "boreal" the axis does not/,
+    "…and a row with no band on the axis fails it from the other side",
+  );
+  assert.throws(
+    bootWeather(
+      `temperate: { warmth: 2, swing: 2, structure: "four" }`,
+      `temperate: { warmth: 2, swing: 2, structure: "six" }`,
+    ),
+    /latitude "temperate" names a season structure "six"/,
+    "a band pointing at a season set that does not exist fails the build",
+  );
+  assert.throws(
+    bootWeather(`arid: { wetness: 0.5 },`, ``),
+    /precipitation "arid" has no PRECIP_META row/,
+    "the precipitation axis is paired the same way",
+  );
+  // THE CLASS THE ORDINAL KEYING WAS CHOSEN TO KILL. An index-keyed table one
+  // entry short computes NaN for exactly one season of exactly one structure —
+  // no throw, no red, just a world whose winter has no sky.
+  assert.throws(
+    bootWeather(`four: [0, 1, 0, -1],`, `four: [0, 1, 0],`),
+    /TEMP_PHASE\.four has 3 entries for 4 seasons/,
+    "a phase table short of its season set fails the build",
+  );
+  assert.throws(
+    bootWeather(`four: [1, 1, 1, 1],`, `four: [1, 1, 1, "wet"],`),
+    /WET_PHASE\.four holds a non-finite entry/,
+    "…and so does one holding something that is not a number",
+  );
+  assert.throws(
+    bootWeather(
+      `two: [TUNING.wetSeasonFactor, TUNING.drySeasonFactor],`,
+      `two: [TUNING.drySeasonFactor, TUNING.wetSeasonFactor],`,
+    ),
+    /the wet season is not wetter than the dry one/,
+    "a wet season drier than the dry one fails the build — the name has to be true",
+  );
+  assert.throws(
+    bootWeather(`label: { light: "light snow", heavy: "heavy snow" }`, `label: { light: "light snow" }`),
+    /weather "snow" has no "heavy" label/,
+    "an intensity-taking word missing half its wire text fails the build",
+  );
+  assert.throws(
+    bootWeather(
+      `tint: { light: "rgba(70,90,110,.12)", heavy: "rgba(70,90,110,.24)" }`,
+      `tint: { light: "rgba(70,90,110,.12)" }`,
+    ),
+    /weather "rain" tints but has no "heavy" tint/,
+    "…and so does one that would make heavy rain look exactly like light rain",
+  );
+  // THE COUPLING, DELIBERATE: a theme added to 10-art breaks boot until this
+  // table learns it, which is a red at the desk instead of a climateless world.
+  assert.throws(
+    bootIn(
+      "10-art.js",
+      `  const THEMES = {\n    "cozy-village": {`,
+      `  const THEMES = {\n    "moor-hamlet": { label: "Moor", palette: {}, painters: {} },\n    "cozy-village": {`,
+    ),
+    /theme "moor-hamlet" has no THEME_AXES entry/,
+    "a theme with art and no climate fails the build",
+  );
+  assert.throws(
+    bootWeather(
+      `precipitation: { arid: 1, moderate: 6, wet: 3 }`,
+      `precipitation: { arid: 1, moderate: 6, monsoon: 3 }`,
+    ),
+    /theme "cozy-village" weights a precipitation "monsoon" the axis does not name/,
+    "a distribution naming a band the axis does not fails the build",
+  );
+  assert.throws(
+    bootWeather(
+      `latitude: { tropical: 1, temperate: 6, subpolar: 2 }`,
+      `latitude: { tropical: 0, temperate: 0, subpolar: 0 }`,
+    ),
+    /theme "cozy-village" has no latitude band it can ever roll/,
+    "…and so does one that sums to nothing",
+  );
+  // A ZERO OR OMITTED BAND IS DATA. Cozy rolls no polar and that is the
+  // distribution speaking, so the assert above must NOT be a per-band demand.
+  assert.equal(loadedPF.weather.THEME_AXES["cozy-village"].latitude.polar, undefined, "cozy names no polar band");
+  assert.doesNotThrow(
+    bootWeather(
+      `latitude: { tropical: 1, temperate: 6, subpolar: 2 }`,
+      `latitude: { tropical: 0, temperate: 6, subpolar: 2 }`,
+    ),
+    "a band weighted zero is a distribution decision, not a build failure",
+  );
+  // DEGENERACY: five bands must buy five skies.
+  assert.throws(
+    bootWeather(
+      `subpolar: { warmth: 1, swing: 2, structure: "four" }`,
+      `subpolar: { warmth: 2, swing: 2, structure: "four" }`,
+    ),
+    /latitudes "subpolar" and "temperate" produce the same sky all year/,
+    "two bands with the same year fail the build",
+  );
+
+  // ── THE GROUND SUBSTITUTION, PAIRED AGAINST THE PAINTERS IT NAMES ──────────
+  // This table and the painters ship together for a reason: 10-art answers an id
+  // it does not know with the GRASS painter, so a broken row here is not a crash
+  // — it is a green square in the middle of a snowfield, on the one kind of day
+  // the table exists for. Both halves of every row are checked, and the word it
+  // keys on too.
+  assert.throws(
+    bootWeather(`crop: "cropSnow"`, `crop: "cropFrost"`),
+    /SUBS\.snow names a painter "cropFrost" the art module does not have/,
+    "a substitution pointing at a painter nobody has fails the build",
+  );
+  assert.throws(
+    bootWeather(`grass2: "grassSnow2"`, `gravel: "grassSnow2"`),
+    /SUBS substitutes a tile "gravel" the art module cannot paint/,
+    "…and so does one substituting FOR a tile nobody paints",
+  );
+  assert.throws(
+    bootWeather(`  const SUBS = {\n    snow:`, `  const SUBS = {\n    sleet:`),
+    /SUBS keys on a weather "sleet" the axis does not name/,
+    "…and so does a row keyed on a word the weather axis has never heard of",
+  );
+  // THE OTHER DIRECTION, which is the reason the table and the painters were cut
+  // into the same slice: rename the painter and the table is left pointing at
+  // nothing. A cut that landed this table one slice earlier would have been a
+  // hundred-percent red run for a slice, self-inflicted.
+  assert.throws(
+    bootIn("10-art.js", `    canopySnow(g) {`, `    canopyFrost(g) {`),
+    /SUBS\.snow names a painter "canopySnow" the art module does not have/,
+    "renaming the painter out from under the table fails the build too",
+  );
+
+  // ── THE DERIVATION, AGAINST THE PLAN'S OWN WORKED ROWS ────────────────────
+  // Ten rows recomputed by hand during the design and pinned here cell for cell.
+  // These ARE the release's weather: every claim about what each band feels like
+  // is a claim about these numbers.
+  // Half-up to two places, because the table is written the way a person rounds
+  // and `toFixed` is not: 5.425 is a hair under 5.425 in binary and renders 5.42.
+  const round = (n, places = 2) => {
+    const scale = 10 ** places;
+    return Math.round(n * scale + 1e-9) / scale;
+  };
+  const WORKED = [
+    ["equatorial", "wet", 0, { snow: 0, rain: 6.3, storm: 1.05, overcast: 3.52, fair: 4 }, 0.75, 49],
+    ["equatorial", "wet", 1, { snow: 0, rain: 1.05, storm: 0.18, overcast: 1.42, fair: 5.43 }, 0.13, 15],
+    ["tropical", "wet", 0, { snow: 0, rain: 6.3, storm: 1.58, overcast: 3.52, fair: 4 }, 0.75, 51],
+    ["tropical", "wet", 1, { snow: 0, rain: 1.05, storm: 0.09, overcast: 1.42, fair: 5.43 }, 0.13, 14],
+    ["temperate", "moderate", 1, { snow: 0, rain: 2, storm: 0.5, overcast: 1.8, fair: 4 }, 0.24, 30],
+    ["temperate", "moderate", 3, { snow: 1.5, rain: 0.5, storm: 0, overcast: 1.8, fair: 4 }, 0.24, 26],
+    ["subpolar", "moderate", 1, { snow: 0, rain: 2, storm: 0.33, overcast: 1.8, fair: 4 }, 0.24, 29],
+    ["subpolar", "moderate", 3, { snow: 2, rain: 0, storm: 0, overcast: 1.8, fair: 4 }, 0.24, 26],
+    ["polar", "arid", 1, { snow: 0.13, rain: 0.38, storm: 0, overcast: 1.2, fair: 6.25 }, 0.06, 6],
+    ["polar", "arid", 3, { snow: 0.5, rain: 0, storm: 0, overcast: 1.2, fair: 6.25 }, 0.06, 6],
+  ];
+  for (const [latitude, precipitation, index, want, heavy, indoors] of WORKED) {
+    const row = W.weightsFor(latitude, precipitation, index);
+    const where = `${latitude}/${precipitation}/${W.SEASON_SETS[W.LAT_META[latitude].structure][index]}`;
+    let sum = 0;
+    for (const word of W.WORDS) {
+      assert.equal(round(row[word]), want[word], `${where}: ${word} weight (${row[word]})`);
+      sum += row[word];
+    }
+    // The two derived columns, which are where the design claims actually live:
+    // `heavy` is the intensity draw's threshold — the same wet mass the row is
+    // built from — and `indoors` is the rate at which the schedule bias fires.
+    const mass = W.wetMass(latitude, precipitation, index);
+    assert.equal(round(Math.min(W.TUNING.heavyMax, W.TUNING.heavyBase * mass)), heavy, `${where}: the heavy threshold`);
+    assert.equal(round(((row.snow + row.rain + row.storm) / sum) * 100, 0), indoors, `${where}: the indoors share`);
+  }
+  // TWO CROSS-ROW FACTS the table's own reading depends on, so nobody has to
+  // take them on trust: `heavyMax` is an inert guard on these coefficients (it
+  // binds in two of the forty-eight rows, and by six thousandths), and the
+  // indoors rate's ceiling sits on the WET two-season halves, not on winter.
+  let binds = 0;
+  let lowest = 1;
+  let highest = 0;
+  for (const latitude of W.LATITUDES)
+    for (const precipitation of W.PRECIPS) {
+      const seasons = W.SEASON_SETS[W.LAT_META[latitude].structure].length;
+      for (let index = 0; index < seasons; index++) {
+        if (W.TUNING.heavyBase * W.wetMass(latitude, precipitation, index) >= W.TUNING.heavyMax) binds++;
+        const row = W.weightsFor(latitude, precipitation, index);
+        const sum = W.WORDS.reduce((total, word) => total + row[word], 0);
+        const share = (row.snow + row.rain + row.storm) / sum;
+        lowest = Math.min(lowest, share);
+        highest = Math.max(highest, share);
+      }
+    }
+  assert.equal(binds, 2, `the heavy ceiling binds in two rows of forty-eight (${binds})`);
+  assert.equal(round(lowest * 100, 1), 2.0, `the quietest sky is 2.0% indoors weather (${lowest})`);
+  assert.equal(round(highest * 100, 1), 51.2, `and the wettest is 51.2% (${highest})`);
+
+  // THE CLAIMS THOSE ROWS ARE MADE OF, said as asserts rather than as prose.
+  const share = (latitude, precipitation, index, word) => {
+    const row = W.weightsFor(latitude, precipitation, index);
+    return row[word] / W.WORDS.reduce((sum, key) => sum + row[key], 0);
+  };
+  // The founding scenario, restored: the pole CAN snow in summer, and can never
+  // thunderstorm — in any season, at any precipitation.
+  assert.ok(share("polar", "arid", 1, "snow") > 0, "the pole can snow in its own summer");
+  for (const precipitation of W.PRECIPS)
+    for (let index = 0; index < 4; index++)
+      assert.equal(W.weightsFor("polar", precipitation, index).storm, 0, "a polar world never storms");
+  // Warm-wet violence only: the monsoon half storms harder than the equator's
+  // steady state, and the same world's dry half is calmer than it.
+  assert.ok(
+    share("tropical", "wet", 0, "storm") > share("equatorial", "wet", 0, "storm"),
+    "the monsoon half storms harder than the steady equator",
+  );
+  assert.ok(
+    share("tropical", "wet", 1, "storm") < share("equatorial", "wet", 1, "storm"),
+    "…and the same world's dry half is calmer",
+  );
+  // Sleet country versus the hard winter: temperate winters still rain, subpolar
+  // winters do not, and subpolar SHOULDERS carry the flurries temperate's do not.
+  assert.ok(W.weightsFor("temperate", "moderate", 3).rain > 0, "a temperate winter still rains");
+  assert.equal(W.weightsFor("subpolar", "moderate", 3).rain, 0, "a subpolar winter does not");
+  assert.equal(W.weightsFor("temperate", "moderate", 0).snow, 0, "a temperate spring never snows");
+  assert.ok(W.weightsFor("subpolar", "moderate", 0).snow > 0, "…and a subpolar one flurries");
+  // `cold` splits the wet mass rather than adding to it, which is why the
+  // indoors RATE is the precipitation axis's and latitude only reaches it
+  // through storm. Stated here so nobody reads the absence as a bug later.
+  for (const latitude of W.LATITUDES)
+    for (const precipitation of W.PRECIPS) {
+      const seasons = W.SEASON_SETS[W.LAT_META[latitude].structure].length;
+      for (let index = 0; index < seasons; index++) {
+        const row = W.weightsFor(latitude, precipitation, index);
+        assert.equal(
+          round(row.snow + row.rain),
+          round(W.wetMass(latitude, precipitation, index)),
+          `${latitude}/${precipitation}/${index}: snow + rain is the wet mass, exactly`,
+        );
+      }
+    }
+  // FOUR SEASON NAMES, THREE SKIES — the flat wetness table's recorded identity.
+  for (const latitude of ["temperate", "subpolar", "polar"])
+    for (const precipitation of W.PRECIPS)
+      assert.deepEqual(
+        W.weightsFor(latitude, precipitation, 0),
+        W.weightsFor(latitude, precipitation, 2),
+        `${latitude}/${precipitation}: spring and autumn are the same sky, by design`,
+      );
+
+  // `wetMass` HAS ONE HOME, and both consumers reach it. The intensity threshold
+  // is derived from the same mass the row is, so a wetness retune cannot make a
+  // monsoon wetter and softer at the same time with every assert still green.
+  assert.equal(typeof W.wetMass, "function", "the wet mass is its own exported function");
+  assert.equal(W.wetMass("tropical", "wet", 0) / W.wetMass("tropical", "wet", 1), 6, "the monsoon swing is 6x");
+  // REACHED THROUGH at(), because that is the consumer the shared home exists
+  // for and a threshold recomputed from the table here would agree with an
+  // inline copy inside at() that had quietly dropped the seasonal phase. What
+  // that copy costs is the monsoon: both halves of the year would draw against
+  // the same flat mass, and the wet season would stop raining harder than the
+  // dry one while every table assert above stayed green.
+  const heavyHalves = (latitude, precipitation, seed) => {
+    const w = { seed, latitude, precipitation };
+    const tally = new Map();
+    for (let day = 1; day <= 3000; day++) {
+      const sky = W.at(w, day, null);
+      if (!sky.intensity) continue;
+      const key = W.season(w, day);
+      const row = tally.get(key) ?? { heavy: 0, all: 0 };
+      row.all++;
+      if (sky.intensity === "heavy") row.heavy++;
+      tally.set(key, row);
+    }
+    return tally;
+  };
+  const monsoon = heavyHalves("equatorial", "wet", 7);
+  const wetHalf = monsoon.get("wet season");
+  const dryHalf = monsoon.get("dry season");
+  assert.ok(wetHalf.all > 200 && dryHalf.all > 50, "both halves of the year drew enough wet days to measure");
+  // The design's own numbers are 0.75 and 0.13; a phase-less inline copy would
+  // put BOTH halves at 0.42, which is why the bands are set on either side of it.
+  assert.ok(
+    wetHalf.heavy / wetHalf.all > 0.6,
+    `the monsoon half rains hard (${(wetHalf.heavy / wetHalf.all).toFixed(3)})`,
+  );
+  assert.ok(
+    dryHalf.heavy / dryHalf.all < 0.25,
+    `…and the dry half almost never does (${(dryHalf.heavy / dryHalf.all).toFixed(3)})`,
+  );
+  for (const word of W.WORDS)
+    assert.ok(
+      Object.prototype.hasOwnProperty.call(W.weightsFor("tropical", "wet", 0), word),
+      `the weight row carries ${word} and nothing else — the wet mass does not ride in it`,
+    );
+  assert.equal(
+    Object.keys(W.weightsFor("tropical", "wet", 0)).length,
+    W.WORDS.length,
+    "…and the row is exactly the words, which is what keeps the product assert green",
+  );
+}
+
+// 122. THE CALENDAR (0.14 §2.1). A 365-day year whose PHASE is the world's own,
+// season spans derived by floor rather than from a boundary table, and a
+// season-start that is FLOORED AT DAY 1.
+{
+  const W = loadedPF.weather;
+  const four = { seed: 7, latitude: "subpolar", precipitation: "wet" };
+  const two = { seed: 7, latitude: "tropical", precipitation: "wet" };
+
+  // A TWO-SEASON WORLD CARRIES ITS OWN NAMES, and its boundaries land where
+  // seasonStartDay says — never where a hand-derived length would put them.
+  assert.equal(W.season(two, 1), "wet season", "a tropical world opens in a season of its own vocabulary");
+  assert.equal(W.season(two, 36), "wet season", "…which runs to its boundary");
+  assert.equal(W.season(two, 37), "dry season", "…and turns over at it");
+  assert.equal(W.seasonStartDay(two, 36), 1, "the opening half starts at the day the world did");
+  assert.equal(W.seasonStartDay(two, 37), 37, "…and the next one at its own first day");
+  assert.equal(W.seasonStartDay(two, 219), 219, "…and the one after that 182 days later");
+  assert.equal(W.season(two, 219), "wet season", "the year comes back around to where it started");
+  assert.equal(W.SEASON_SETS.two.length, 2, "a two-structure world has two seasons and not four");
+  assert.equal(W.SEASON_SETS[W.LAT_META[four.latitude].structure].length, 4, "…and a poleward one has four");
+
+  // THE SPANS PARTITION THE YEAR. Derived, so there is no boundary table to keep
+  // in step with the season set — and a season never straddles the year edge.
+  for (const world of [four, two]) {
+    const n = W.SEASON_SETS[W.LAT_META[world.latitude].structure].length;
+    const seen = new Map();
+    for (let day = 1; day <= W.TUNING.yearDays; day++) {
+      const start = W.seasonStartDay(world, day);
+      const name = W.season(world, day);
+      if (!seen.has(name)) seen.set(name, new Set());
+      seen.get(name).add(start);
+    }
+    assert.equal(seen.size, n, `every one of the ${n} seasons is reached inside one year`);
+  }
+
+  // THE DAY-1 FLOOR. The full-year offset lands almost every world's day 1
+  // mid-season, so the unfloored arithmetic names days before the world existed:
+  // on this seed it answers -50. What the floor buys is that every day this
+  // function hands back is a day somebody could have lived, so the ledger's scan
+  // reads "first" as first SINCE THE WORLD BEGAN and its bound only shrinks.
+  //
+  // Said honestly, because it is worth knowing which half is load-bearing: the
+  // hostile-day fold below clamps a sub-1 day to 1 as well, so an unfloored scan
+  // could not have reported a DIFFERENT answer here — it would have re-read day 1
+  // up to 182 times to reach the same one. The floor is what makes the returned
+  // day true, and what keeps the scan's cost the season's rather than the year's.
+  const deep = { seed: 4, latitude: "subpolar", precipitation: "moderate" };
+  assert.equal(W.season(deep, 1), "winter", "this world opens deep in its own winter");
+  assert.ok(W.seasonStartDay(deep, 8) >= 1, "the season start is a day the world has lived");
+  assert.equal(W.seasonStartDay(deep, 8), 1, "…which for a mid-winter opening is day 1 itself");
+  for (const world of [four, two, deep])
+    for (let day = 1; day <= 400; day++) {
+      const start = W.seasonStartDay(world, day);
+      assert.ok(start >= 1 && start <= day, `seasonStartDay(${day}) = ${start} is a lived day at or before it`);
+    }
+
+  // DAY 300 AND PAST IT. The year multiplies live day values about nine times
+  // past anything 0.13 play produced, and the sweep said no day-consuming site
+  // has a magnitude assumption in it. This is that sweep's pin on the arithmetic
+  // 0.14 actually adds.
+  for (const day of [299, 300, 365, 366, 730, 4000]) {
+    assert.ok(W.SEASON_SETS.four.includes(W.season(four, day)), `day ${day} names a real season`);
+    assert.ok(W.WORDS.includes(W.at(four, day, null).word), `day ${day} draws a real sky`);
+  }
+  assert.equal(W.season(four, 1), W.season(four, 1 + W.TUNING.yearDays), "a year later is the same season");
+  assert.equal(W.seasonIndex(four, 40), W.seasonIndex(four, 40 + W.TUNING.yearDays), "…by ordinal too");
+
+  // TOTAL FOR A HOSTILE DAY. `day` is a plain int the save path already clamps,
+  // but a console, a future caller or a hand-edited row can hand this anything,
+  // and a NaN day would make a NaN season index and an undefined season word.
+  for (const day of [0, -5, -1e9, NaN, Infinity, -Infinity, null, undefined, "12", "abc", {}, [], 2 ** 60]) {
+    const label = JSON.stringify(day) ?? String(day);
+    assert.ok(W.SEASON_SETS.four.includes(W.season(four, day)), `a day of ${label} still names a season`);
+    assert.ok(Number.isInteger(W.seasonIndex(four, day)), `…and a real ordinal`);
+    assert.ok(W.seasonStartDay(four, day) >= 1, `…and a season start of at least 1`);
+    const sky = W.at(four, day, null);
+    assert.ok(W.WORDS.includes(sky.word), `…and a real weather word`);
+  }
+}
+
+// 123. THE MINT AND THE TWO BRIEF DOORS (0.14 §2.1). The axes are the world's,
+// not the save's: minted per (seed, theme, distributions), stamped at runtime,
+// and hintable from a brief that knows what its setting is.
+{
+  const W = loadedPF.weather;
+  const theme = "cozy-village";
+
+  // THE HINT WINS, on either axis, independently.
+  assert.equal(W.axesFor({ latitude: "polar" }, 424242, theme).latitude, "polar", "a named band is taken as named");
+  assert.equal(W.axesFor({ precipitation: "arid" }, 424242, theme).precipitation, "arid", "…on the other axis too");
+  // A HOSTILE HINT IS NOT A HINT, and it is not a default either: the roll owns
+  // the axis, and a word off Object.prototype must never reach a table key.
+  for (const hostile of ["constructor", "__proto__", "toString", "", "POLAR", 7, null, {}])
+    for (const field of ["latitude", "precipitation"]) {
+      const rolled = W.axesFor({ [field]: hostile }, 424242, theme);
+      assert.deepEqual(rolled, W.axesFor({}, 424242, theme), `a ${field} of ${String(hostile)} rolls like no hint`);
+      assert.ok(W.LATITUDES.includes(rolled.latitude) && W.PRECIPS.includes(rolled.precipitation), "…to real bands");
+    }
+  // THE THEME IS RESOLVED THE SAME WAY, for the same reason.
+  for (const hostile of ["constructor", "__proto__", "moor-hamlet", 7, null, undefined])
+    assert.deepEqual(
+      W.axesFor({}, 424242, hostile),
+      W.axesFor({}, 424242, "cozy-village"),
+      `a theme of ${String(hostile)} falls to the default distribution`,
+    );
+  // A DISTRIBUTION IS A DISTRIBUTION: cozy never rolls a band it does not name.
+  const rolls = new Set();
+  for (let seed = 1; seed <= 600; seed++) rolls.add(W.axesFor({}, seed, theme).latitude);
+  assert.ok(!rolls.has("polar") && !rolls.has("equatorial"), "cozy rolls neither pole nor equator");
+  assert.equal(rolls.size, 3, "…and reaches all three bands it does name");
+
+  // BOTH DOORS FOLD, AND BOTH FOLD TO ABSENT. A hostile band must not pin an
+  // axis the roll owns — at the seal, where the brief is written, and at the
+  // load, where a hand-edited one arrives.
+  for (const field of ["latitude", "precipitation"]) {
+    const sealed = loadedPF.brief.validate(
+      { scale: "village", name: "Foldwick", [field]: "constructor", cast: [] },
+      { theme, seed: 909 },
+    );
+    assert.equal(sealed[field], undefined, `the seal door drops a hostile ${field} to absent`);
+    assert.ok(
+      sealed._repairs.some((line) => line.startsWith(`${field}:`)),
+      "…and says so, rather than dropping it silently",
+    );
+    const stored = { ...loadedPF.brief.defaults(theme, 909), [field]: "constructor" };
+    const folded = loadedPF.brief.foldStored(stored, 909);
+    assert.equal(folded[field], null, `the load door folds a hostile ${field} away from any table key`);
+    assert.equal(stored[field], "constructor", "…on its own copy — the stored brief is the identity and never moves");
+    const world = loadedPF.world.build(909, theme, stored);
+    assert.deepEqual(
+      { latitude: world.latitude, precipitation: world.precipitation },
+      W.axesFor({}, 909, theme),
+      "…and the world rolls exactly as an unhinted one would",
+    );
+  }
+  // A BRIEF SEALED BEFORE THE FIELDS EXISTED carries neither and keeps neither.
+  const legacyBrief = loadedPF.brief.defaults(theme, 909);
+  assert.equal("latitude" in legacyBrief, false, "a brief nobody pinned seals without the field at all");
+  assert.equal("precipitation" in legacyBrief, false, "…either of them");
+  assert.equal("latitude" in loadedPF.brief.foldStored(legacyBrief, 909), false, "…and the load door adds nothing");
+  // A PINNED ONE KEEPS BOTH, through both doors and into the world.
+  const pinned = loadedPF.brief.validate(
+    { scale: "village", name: "Pinwick", latitude: "polar", precipitation: "arid", cast: [] },
+    { theme, seed: 909 },
+  );
+  assert.equal(pinned.latitude, "polar", "a brief that named its climate seals with it");
+  assert.equal(loadedPF.world.build(909, theme, pinned).latitude, "polar", "…and the world plays it");
+
+  // SCHEMA AND GUIDANCE both carry the fields, since the model can only write
+  // what it is told about.
+  const schemaText = JSON.stringify(loadedPF.brief.schema());
+  assert.ok(schemaText.includes(`"latitude"`) && schemaText.includes("subpolar"), "the schema exposes the axis");
+  assert.ok(schemaText.includes(`"precipitation"`) && schemaText.includes("moderate"), "…and its partner");
+  const guidanceText = loadedPF.brief.guidance(theme);
+  assert.ok(guidanceText.includes("latitude (optional)"), "the guidance teaches the axis as optional");
+  assert.ok(guidanceText.includes("omit to let the world roll its own"), "…and says what omitting means");
+
+  // THE LEGACY WORLD IS A HAND WORLD, so it takes the fixed middle rather than a
+  // roll — and the DEGRADE arm is not that: a sealed brief that failed to
+  // compile is still this brief's world, and re-stamps from it.
+  const legacyWorld = loadedPF.world.build(4242, theme, null);
+  assert.equal(legacyWorld.brieved, undefined, "the no-brief path really is the legacy layout");
+  assert.equal(legacyWorld.latitude, "temperate", "…and it takes the fixed middle of the latitude axis");
+  assert.equal(legacyWorld.precipitation, "moderate", "…and of the other one");
+  const degraded = loadedPF.world.build(4242, theme, {
+    ...pinned,
+    // Passes build()'s shape gate and then blows up inside the fold, which is
+    // the shape of every real "sealed but will not compile" arrival.
+    cast: [
+      {
+        get name() {
+          throw new Error("this cast member will not serialize");
+        },
+      },
+    ],
+  });
+  assert.equal(degraded.brieved, undefined, "the brief did fail to compile");
+  assert.equal(degraded.latitude, "polar", "…and the degraded world still plays the climate the brief pinned");
+  assert.equal(degraded.precipitation, "arid", "…on both axes");
+}
+
+// 124. THE SKY AT A DAY (0.14 §2.2): a pure function of (seed, day, override),
+// day-stable in BOTH halves of the pair, and rewind-exact for the same reason
+// the quest board is.
+{
+  const W = loadedPF.weather;
+  const world = { seed: 7, latitude: "subpolar", precipitation: "wet" };
+
+  // DETERMINISM ACROSS A REBUILD. Nothing about the sky is saved, so "the same"
+  // has to mean re-derived identically from a fresh world object.
+  for (let day = 1; day <= 40; day++) {
+    const again = W.at({ seed: 7, latitude: "subpolar", precipitation: "wet" }, day, null);
+    assert.deepEqual(again, W.at(world, day, null), `day ${day} re-derives identically`);
+  }
+  // …AND ACROSS A REWIND, which is the same fact walked backwards.
+  const forward = [];
+  for (let day = 1; day <= 20; day++) forward.push(JSON.stringify(W.at(world, day, null)));
+  for (let day = 20; day >= 1; day--)
+    assert.equal(JSON.stringify(W.at(world, day, null)), forward[day - 1], `day ${day} is the same on the way back`);
+
+  // A FRESH OBJECT EVERY CALL — the transition compare depends on it, because a
+  // reference compare would report a change on every midnight forever.
+  assert.notEqual(W.at(world, 5, null), W.at(world, 5, null), "at() hands back a new object each time");
+  assert.deepEqual(W.at(world, 5, null), W.at(world, 5, null), "…carrying the same answer");
+
+  // INTENSITY RIDES ONLY THE TWO WORDS THAT TAKE ONE, and it is day-stable.
+  let sawHeavy = false;
+  let sawLight = false;
+  for (let day = 1; day <= 400; day++) {
+    const sky = W.at(world, day, null);
+    const takes = W.WORD_META[sky.word].takesIntensity;
+    assert.equal(takes ? W.INTENSITIES.includes(sky.intensity) : sky.intensity === null, true, `day ${day} intensity`);
+    if (sky.intensity === "heavy") sawHeavy = true;
+    if (sky.intensity === "light") sawLight = true;
+  }
+  assert.ok(sawHeavy && sawLight, "a wet subpolar year reaches both intensities");
+  // Desert rain is almost always light; wet-world rain is often not. The
+  // threshold derives from the same mass the odds do.
+  const heavyRate = (latitude, precipitation) => {
+    const w = { seed: 7, latitude, precipitation };
+    let heavy = 0;
+    let wet = 0;
+    for (let day = 1; day <= 2000; day++) {
+      const sky = W.at(w, day, null);
+      if (!sky.intensity) continue;
+      wet++;
+      if (sky.intensity === "heavy") heavy++;
+    }
+    return heavy / wet;
+  };
+  assert.ok(heavyRate("subpolar", "wet") > heavyRate("subpolar", "arid"), "wet worlds rain and snow harder");
+
+  // THE OVERRIDE BEATS THE DERIVATION — inside its own day range and nowhere
+  // else. The range is a predicate and not a latch, because the live day moves
+  // BOTH ways: rewinding into an override's range re-arms it (correct — the sky
+  // at day D is what it was the first time through day D), and rewinding to
+  // before it was ever set must not.
+  const summoned = { word: "storm", sinceDay: 10, untilDay: 12 };
+  assert.equal(W.at(world, 9, summoned).word, W.at(world, 9, null).word, "before sinceDay the derivation stands");
+  for (const day of [10, 11, 12]) assert.equal(W.at(world, day, summoned).word, "storm", `day ${day} is the GM's`);
+  assert.equal(
+    W.at(world, 13, summoned).word,
+    W.at(world, 13, null).word,
+    "after untilDay the derivation stands again",
+  );
+  assert.equal(W.at(world, 1, { word: "storm" }).word, "storm", "an unbounded override runs from day 1");
+  assert.equal(W.at(world, 9000, { word: "storm" }).word, "storm", "…and forever");
+
+  // DRAW ORDER: the word draw is always made and discarded, the intensity draw
+  // always second. So an override naming the very word the derivation rolled
+  // cannot flip the day's intensity.
+  const cozy = { seed: 424242, latitude: "temperate", precipitation: "wet" };
+  assert.equal(W.at(cozy, 6, null).word, "rain", "this world's day 6 rains on its own");
+  assert.equal(W.at(cozy, 6, null).intensity, "heavy", "…heavily");
+  assert.deepEqual(W.at(cozy, 6, { word: "rain" }), W.at(cozy, 6, null), "a GM asking for rain gets that same rain");
+  assert.equal(
+    W.at(cozy, 6, { word: "rain", intensity: "light" }).intensity,
+    "light",
+    "…and one asking for light gets it",
+  );
+
+  // THE FOLD: word must be real, intensity must be legal FOR THAT WORD, days
+  // must be positive ints — and a bad intensity drops while the ROW survives,
+  // because a GM who wrote "heavy storm" meant a storm.
+  assert.equal(W.foldOverride({ word: "blizzard" }), null, "a word this build does not know is no override");
+  assert.equal(W.foldOverride({ word: "constructor" }), null, "…including the words every object answers to");
+  assert.equal(W.foldOverride(null), null, "…and neither is nothing");
+  assert.equal(W.foldOverride("storm"), null, "…or a bare string");
+  assert.deepEqual(
+    W.foldOverride({ word: "storm", intensity: "heavy" }),
+    { word: "storm" },
+    "storm takes no intensity",
+  );
+  assert.deepEqual(
+    W.foldOverride({ word: "rain", intensity: "heavy" }),
+    { word: "rain", intensity: "heavy" },
+    "rain does",
+  );
+  assert.deepEqual(W.foldOverride({ word: "rain", intensity: "torrential" }), { word: "rain" }, "…but only a real one");
+  assert.deepEqual(
+    W.foldOverride({ word: "snow", sinceDay: 4, untilDay: 9, note: "hi" }),
+    { word: "snow", sinceDay: 4, untilDay: 9 },
+    "the range rides and nothing else does",
+  );
+  for (const bad of [0, -3, 1.5, "4", NaN, Infinity, null])
+    assert.equal("sinceDay" in W.foldOverride({ word: "snow", sinceDay: bad }), false, `sinceDay ${String(bad)} drops`);
+  // A FORWARD WORD folds to "no override" for this runtime and nothing else —
+  // the raw row is metadata, and metadata is never written back.
+  const forwardRow = { word: "fog", intensity: "heavy", sinceDay: 3 };
+  assert.equal(W.foldOverride(forwardRow), null, "a 0.15 word is simply unread here");
+  assert.deepEqual(forwardRow, { word: "fog", intensity: "heavy", sinceDay: 3 }, "…and the row itself is untouched");
+
+  // THE MEMO COMPARAND is the whole override and not its word, because changing
+  // only the intensity is the documented verification incantation.
+  assert.notEqual(
+    W.overrideKey({ word: "storm" }),
+    W.overrideKey({ word: "storm", intensity: "heavy" }),
+    "the comparand sees an intensity change",
+  );
+  assert.notEqual(W.overrideKey({ word: "storm" }), W.overrideKey({ word: "storm", untilDay: 4 }), "…and a range one");
+  assert.equal(W.overrideKey(null), W.overrideKey(undefined), "…and reads absent and cleared alike");
+
+  // THE HEADER LABELS, all seven of them, off the one table four readers share.
+  assert.equal(W.labelFor("fair", null), "fair");
+  assert.equal(W.labelFor("overcast", null), "overcast");
+  assert.equal(W.labelFor("storm", null), "storm");
+  assert.equal(W.labelFor("rain", "light"), "light rain");
+  assert.equal(W.labelFor("rain", "heavy"), "heavy rain");
+  assert.equal(W.labelFor("snow", "light"), "light snow");
+  assert.equal(W.labelFor("snow", "heavy"), "heavy snow");
+  assert.equal(W.labelFor("constructor", "heavy"), "fair", "an unknown word cannot reach a table through the label");
+}
+
+// 125. THE HEADER GROUP AND THE LEDGER PARK (0.14 §2.3). The header is the sky's
+// whole channel to the GM; the park is the ledger's, and it holds no state.
+{
+  const W = loadedPF.weather;
+  const build = (seed, latitude, precipitation) => {
+    const sealed = loadedPF.brief.defaults("cozy-village", seed);
+    sealed.latitude = latitude;
+    sealed.precipitation = precipitation;
+    const built = loadedPF.world.build(seed, "cozy-village", sealed);
+    assert.equal(built.latitude, latitude, "the pinned world got its climate");
+    assert.equal(built.precipitation, precipitation, "…on both axes");
+    return built;
+  };
+  const snowy = build(7, "subpolar", "wet");
+
+  // THE THREE-WORD GROUP. Daypart, weather, season — the daypart so the light
+  // and "who is about" stay consistent with what we render, the weather because
+  // this is the only channel it has, and the season because "it should not snow
+  // in summer, unless" is a judgment only the season lets the GM make.
+  const sim = new loadedPF.Sim(snowy);
+  sim.day = 58;
+  const header = sim.header();
+  assert.ok(header.startsWith("[World:"), "the header still opens the way the wrap-up pin says it does");
+  assert.ok(header.includes("(day, light snow, autumn)"), `the three words ride the paren group (${header})`);
+  sim.day = 7;
+  assert.ok(sim.header().includes("(day, storm, summer)"), `and they follow the world (${sim.header()})`);
+  // The memo is a perf cache keyed on the whole override, and it must not answer
+  // for a day or an override it was not taken under.
+  sim.day = 58;
+  assert.equal(sim.weather().word, "snow", "the memo re-derives when the day moves");
+  sim.weatherOverride = { word: "fair" };
+  assert.equal(sim.weather().word, "fair", "…and when the override does");
+  sim.weatherOverride = { word: "rain" };
+  assert.equal(sim.weather().intensity !== null, true, "…including a change that only moves the intensity");
+  sim.weatherOverride = null;
+  assert.equal(sim.weather().word, "snow", "…and back");
+  assert.notEqual(sim.weather(), sim.weather(), "the memo hands back a copy, never its own row");
+
+  // NOTHING PARKS ON A RESTORE. A world reopened on a notable day has not just
+  // had that sky blow in, and a rebuild must say nothing at all.
+  //
+  // THE DAY BELONGS TO THE WORLD THE RESTORE ACTUALLY BUILDS, which is the whole
+  // load the fixture carries: the metadata below is EMPTY, so this is the legacy
+  // temperate/moderate world and not the subpolar one above, and day 7 is its
+  // first notable crossing (overcast -> storm). Restored onto a day whose
+  // crossing is not notable — day 58 there is fair -> rain — the assert would
+  // hold for a build that parked on the restore path too, and say nothing.
+  assert.deepEqual(new loadedPF.Sim(snowy)._weatherNotes, [], "construction files nothing");
+  const restored = loadedPF.save.simFromSaved(
+    { v: 1, seed: 7, theme: "cozy-village", zone: snowy.startZone, day: 7, clockMin: 8 * 60 },
+    {},
+    "chat-weather-restore",
+  );
+  assert.deepEqual(restored._weatherNotes, [], "a restore straight onto a storm files nothing either");
+  const resolver = new loadedPF.Sim(snowy);
+  resolver.day = 58;
+  resolver.resolveSchedules();
+  assert.deepEqual(resolver._weatherNotes, [], "…and neither does a re-resolve");
+
+  // THE THREE MOVERS, and only them. Each compares the sky ACROSS ITS OWN MOVE.
+  const parkOf = (world, from, to, override) => {
+    const s = new loadedPF.Sim(world);
+    s.weatherOverride = override ?? null;
+    s.day = from;
+    s.clockMin = 8 * 60;
+    s._weatherNotes.length = 0;
+    s.advanceMinutes((to - from) * 24 * 60);
+    return s._weatherNotes;
+  };
+  assert.deepEqual(parkOf(snowy, 57, 58), [{ text: "First snow.", day: 58 }], "the season's first snow says so");
+  assert.deepEqual(
+    parkOf(snowy, 304, 305),
+    [{ text: "Snow came in.", day: 305 }],
+    "a later one in the same season does not",
+  );
+  assert.deepEqual(parkOf(snowy, 310, 311), [{ text: "A storm came in.", day: 311 }], "a storm claims no first");
+  assert.deepEqual(parkOf(snowy, 6, 7), [{ text: "A storm came in.", day: 7 }], "…in any season");
+  assert.deepEqual(parkOf(snowy, 1, 2), [], "an ordinary day crossing files nothing");
+  assert.deepEqual(parkOf(snowy, 58, 304), [], "…and neither does a jump that lands on a quiet day");
+  // THE DAY IS THE DAY IT HAPPENED, which is what the `{text, day}` row is for.
+  assert.equal(parkOf(snowy, 304, 305)[0].day, 305, "the line is filed under the crossing's own day, not the drain's");
+  // PAST DAY 300, where the year arithmetic is nine times anything 0.13 saw.
+  assert.ok(parkOf(snowy, 310, 311)[0].day > 300, "the park works in the fourth digit of the calendar");
+
+  // THE DAY-1 FLOOR'S OUTCOME: a world that opens deep in its own winter still
+  // gets a true "First snow." for its genuine first snowfall.
+  const deep = build(4, "subpolar", "moderate");
+  assert.equal(W.season(deep, 1), "winter", "this world's day 1 is mid-winter");
+  assert.deepEqual(parkOf(deep, 7, 8), [{ text: "First snow.", day: 8 }], "…and its first snowfall is a first");
+
+  // THE PARK SEES THE OVERRIDE, exactly as at() does — three arguments at both
+  // sites. A GM-summoned storm is a storm the ledger tells, and the recipes lean
+  // on the tell firing.
+  const quiet = build(424242, "temperate", "wet");
+  assert.equal(W.at(quiet, 2, null).word, "fair", "day 2 of this world is fair on its own");
+  assert.deepEqual(parkOf(quiet, 1, 2), [], "…so an ordinary crossing files nothing");
+  assert.deepEqual(
+    parkOf(quiet, 1, 2, { word: "storm", sinceDay: 2 }),
+    [{ text: "A storm came in.", day: 2 }],
+    "a GM-summoned storm parks the line the recipe expects",
+  );
+
+  // A CAP OF FOUR, AND NO OVERWRITE. A full queue drops the NEW line rather than
+  // losing one a frame has not filed yet.
+  const busy = new loadedPF.Sim(snowy);
+  busy.day = 310;
+  busy.clockMin = 8 * 60;
+  busy._weatherNotes.length = 0;
+  for (let step = 0; step < 36; step++) busy.advanceMinutes(24 * 60);
+  assert.equal(busy.day, 346, "the walk crossed thirty-six days");
+  assert.deepEqual(
+    busy._weatherNotes.map((note) => note.day),
+    [311, 314, 328, 334],
+    "the queue holds the four earliest notable crossings and drops the fifth",
+  );
+
+  // WAIT AND STEP ARE MOVERS TOO. Wait is a button; step is the walked minute.
+  const waiter = new loadedPF.Sim(snowy);
+  waiter.day = 57;
+  waiter.clockMin = 23 * 60;
+  waiter._weatherNotes.length = 0;
+  assert.equal(waiter.waitUntil("day"), true, "the rest action lands on the boundary");
+  assert.equal(waiter.day, 58, "…on the next day");
+  assert.deepEqual(waiter._weatherNotes, [{ text: "First snow.", day: 58 }], "…and the wait files the crossing");
+  const walker = new loadedPF.Sim(snowy);
+  walker.day = 57;
+  walker.clockMin = 24 * 60 - 1;
+  walker._weatherNotes.length = 0;
+  for (let frame = 0; frame < 400 && walker.day === 57; frame++) walker.step(1 / 60, {});
+  assert.equal(walker.day, 58, "a walked midnight crosses the day");
+  assert.deepEqual(walker._weatherNotes, [{ text: "First snow.", day: 58 }], "…and files it too");
+}
+
+// 126. THE OVERRIDE'S RESIDENCY (0.14 §2.2). Chat metadata, never the save
+// envelope — and the envelope's four pins are asserted UNMOVED by this release.
+{
+  const W = loadedPF.weather;
+  const seed = 7;
+  const sealed = loadedPF.brief.defaults("cozy-village", seed);
+  sealed.latitude = "subpolar";
+  sealed.precipitation = "wet";
+  const meta = (row) => ({ pixelforgeBrief: sealed, ...(row ? { pixelforgeWeather: row } : {}) });
+  const saved = { v: 1, seed, theme: "cozy-village", zone: "z1", clockMin: 8 * 60 };
+
+  // HYDRATED AT THE LOAD DOOR, and folded there.
+  const plain = loadedPF.save.simFromSaved({ ...saved, day: 58 }, meta(), "chat-weather-a");
+  assert.equal(plain.weatherOverride, null, "no key means no override");
+  assert.equal(plain.weather().word, "snow", "…and the derivation stands");
+  const held = loadedPF.save.simFromSaved({ ...saved, day: 58 }, meta({ word: "fair" }), "chat-weather-b");
+  assert.deepEqual(held.weatherOverride, { word: "fair" }, "a real row hydrates");
+  assert.equal(held.weather().word, "fair", "…and the GM's sky stands over the derivation");
+  assert.equal(held.header().includes("(day, fair,"), true, `…all the way to the wire (${held.header()})`);
+  const hostile = loadedPF.save.simFromSaved({ ...saved, day: 58 }, meta({ word: "constructor" }), "chat-weather-c");
+  assert.equal(hostile.weatherOverride, null, "a hostile row folds to no override");
+  assert.equal(hostile.weather().word, "snow", "…and the world keeps its own weather");
+  // THE DAY RANGE SURVIVES A REBUILD, which is the rewind case: the row is
+  // re-read every time, so liveness is evaluated against the day being lived.
+  const ranged = meta({ word: "storm", sinceDay: 20, untilDay: 22 });
+  for (const [day, want] of [
+    [19, "the derivation"],
+    [20, "storm"],
+    [22, "storm"],
+    [23, "the derivation"],
+  ]) {
+    const at = loadedPF.save.simFromSaved({ ...saved, day }, ranged, `chat-weather-r${day}`);
+    const derived = W.at(at.world, day, null).word;
+    assert.equal(at.weather().word, want === "storm" ? "storm" : derived, `a rebuild at day ${day} gets ${want}`);
+  }
+  // THE FIELD IS DECLARED ABOVE THE CONSTRUCTOR'S OWN resolveSchedules, so the
+  // first read of the sky on any world at load time is never `undefined`.
+  const fresh = new loadedPF.Sim(plain.world);
+  assert.equal(fresh.weatherOverride, null, "the field exists before anything reads it");
+  assert.equal(typeof fresh._weatherMetaApplied, "string", "…and so does its comparand");
+
+  // AND THE PLACEMENT THAT FIELD IS FOR, ON THE PATH THAT HAS NO ENVELOPE. The
+  // constructor resolves schedules against a NULL override — `weatherOverride`
+  // is only assigned after it returns — and the restore below re-resolves once
+  // the saved clock lands. A chat carrying a sky in metadata but no valid
+  // envelope reached NEITHER, so the town booted into its fair-weather spots and
+  // stayed in them: `_weatherMetaApplied` is stamped by then, so 90-element's
+  // reconciler reads no change and never repairs it either, and the first
+  // correction is whenever the next daypart happens to roll. Widespread rather
+  // than exotic — 27 of the first 40 seeds move somebody under a storm, and seed
+  // 13 moves 21 of its 25 people indoors.
+  const placed = (s) => {
+    const rows = [];
+    for (const zoneId of Object.keys(s.world.zones).sort())
+      for (const npc of s.world.zones[zoneId].npcs) rows.push(`${npc.id}@${zoneId}:${npc.x},${npc.y}`);
+    return rows.sort().join("|");
+  };
+  const stormBrief = loadedPF.brief.defaults("cozy-village", 13);
+  stormBrief.latitude = "subpolar";
+  stormBrief.precipitation = "wet";
+  // A row with no `v` is not a restore: it never reaches the resolve below.
+  const bare = { seed: 13, theme: "cozy-village" };
+  const stormed = loadedPF.save.simFromSaved(
+    bare,
+    { pixelforgeBrief: stormBrief, pixelforgeWeather: { word: "storm" } },
+    "chat-weather-place",
+  );
+  assert.equal(stormed.weather().word, "storm", "the override is live before anybody is placed");
+  const atBoot = placed(stormed);
+  stormed.resolveSchedules();
+  assert.equal(atBoot, placed(stormed), "…so the town booted under the storm rather than under the default sky");
+  // THE ARM HAS TEETH: the same world under no override places people
+  // differently, so the equality above is a claim and not a tautology.
+  const fairSky = loadedPF.save.simFromSaved(bare, { pixelforgeBrief: stormBrief }, "chat-weather-place-fair");
+  assert.notEqual(placed(fairSky), atBoot, "…and that is a placement the default sky would not have produced");
+
+  // NOTHING IS EVER WRITTEN BACK. The row is somebody else's to own.
+  const writes = [];
+  const realPatch = loadedPF.api.patchMetadata;
+  loadedPF.api.patchMetadata = async (chatId, patch) => void writes.push([chatId, patch]);
+  try {
+    const row = { word: "fog", intensity: "heavy", sinceDay: 3 };
+    const carrier = meta(row);
+    const forward = loadedPF.save.simFromSaved({ ...saved, day: 5 }, carrier, "chat-weather-fwd");
+    assert.equal(forward.weatherOverride, null, "a word from a later build is simply unread");
+    assert.deepEqual(carrier.pixelforgeWeather, row, "…and the row survives the round trip verbatim");
+    assert.deepEqual(writes, [], "reading the slot writes nothing, ever");
+  } finally {
+    loadedPF.api.patchMetadata = realPatch;
+  }
+
+  // THE SAVE ENVELOPE DOES NOT MOVE — not conditionally, not at all. A weather
+  // key in the registry would have thrown the load-time probe for every user on
+  // every boot, and a conditionally-emitted one is the registry's own named bug.
+  const snapshot = loadedPF.save.snapshot({ sim: plain, chatId: "chat-weather-a" });
+  for (const key of Object.keys(snapshot))
+    assert.ok(!/weather|latitude|precipitation|season/i.test(key), `the envelope grew a "${key}" key`);
+  assert.equal("weatherOverride" in snapshot, false, "the runtime override is not in the envelope");
+  const before = JSON.stringify(loadedPF.save.snapshot({ sim: plain, chatId: "chat-weather-a" }));
+  plain.weatherOverride = { word: "storm" };
+  plain._weatherNotes.push({ text: "A storm came in.", day: 58 });
+  assert.equal(
+    JSON.stringify(loadedPF.save.snapshot({ sim: plain, chatId: "chat-weather-a" })),
+    before,
+    "setting an override and parking a line move ZERO save bytes",
+  );
+
+  // ── THE MID-SESSION RECONCILER (90-element) ──────────────────────────────
+  // The host hands us the whole metadata blob every props delivery, so a future
+  // writer patching the key is answered without waiting for a boundary. The
+  // comparand is the APPLIED MEMO, which is what keeps a console-summoned sky
+  // alive across the many deliveries a single turn makes.
+  const core = loadedPF.core;
+  const wasChatId = core.chatId;
+  const wasSim = core.sim;
+  const wasHost = core.host;
+  const wasNoPackage = loadedPF.assets._noPackage;
+  try {
+    loadedPF.assets._noPackage = true;
+    core.chatId = "chat-weather-props";
+    core.sim = loadedPF.save.simFromSaved({ ...saved, day: 58 }, meta(), "chat-weather-props");
+    let resolves = 0;
+    const realResolve = core.sim.resolveSchedules.bind(core.sim);
+    core.sim.resolveSchedules = () => {
+      resolves++;
+      realResolve();
+    };
+    const deliver = (row) =>
+      core.onMainProps({ chatId: "chat-weather-props", narrationDone: false, chatMeta: meta(row) });
+
+    deliver(null);
+    assert.equal(resolves, 0, "a delivery with no key re-resolves nothing");
+    assert.equal(core.sim.weatherOverride, null, "…and assigns nothing");
+
+    // A CONSOLE-SET SKY IS INVISIBLE TO THIS. Without the applied memo, the very
+    // first streamed token re-folded the absent key to null, called that a
+    // change, and erased the storm the verification incantation had just made.
+    core.sim.weatherOverride = { word: "storm" };
+    deliver(null);
+    deliver(null);
+    assert.deepEqual(core.sim.weatherOverride, { word: "storm" }, "no delivery claws back a summoned sky");
+    assert.equal(resolves, 0, "…and none of them re-resolve");
+
+    // A KEY APPEARING MID-SESSION ASSIGNS AND RE-RESOLVES EXACTLY ONCE.
+    deliver({ word: "snow", intensity: "heavy" });
+    assert.deepEqual(core.sim.weatherOverride, { word: "snow", intensity: "heavy" }, "the written key wins");
+    assert.equal(resolves, 1, "…and the town answers once");
+    deliver({ word: "snow", intensity: "heavy" });
+    deliver({ word: "snow", intensity: "heavy" });
+    assert.equal(resolves, 1, "an unchanged key re-resolves nothing, however many turns go by");
+    // …and a change that only moves the intensity IS a change.
+    deliver({ word: "snow", intensity: "light" });
+    assert.equal(resolves, 2, "the comparand sees an intensity-only edit");
+    assert.deepEqual(core.sim.weatherOverride, { word: "snow", intensity: "light" }, "…and applies it");
+    // A CLEARED KEY clears the override, once.
+    deliver(null);
+    assert.equal(core.sim.weatherOverride, null, "clearing the row clears the sky");
+    assert.equal(resolves, 3, "…once");
+    deliver(null);
+    assert.equal(resolves, 3, "…and stays quiet after");
+  } finally {
+    core.chatId = wasChatId;
+    core.sim = wasSim;
+    core.host = wasHost;
+    loadedPF.assets._noPackage = wasNoPackage;
+  }
+}
+
+// 127. THE TOWN ANSWERS (0.14 §2.3): the HEARTH-FIRST wet-day bias. Bad weather
+// sends people to their own firesides — the streets empty, the houses lit. The
+// bed stays the NIGHT's box (v3 substituted the night handle and parked the town
+// on its own bunks at noon, which is this case's named dead tableau), the
+// gathering keeps only its own people, and nobody is sent anywhere that has not
+// already held them.
+{
+  const sealed = brief.validate(
+    {
+      scale: "village",
+      name: "Hearthvale",
+      places: [
+        { kind: "gathering", name: "The Amber Hearth Inn" },
+        { kind: "wilds", name: "The Whisperwood" },
+      ],
+      cast: [
+        { name: "Mira", role: "innkeeper", kind: "host", tint: "rose", home: "The Amber Hearth Inn", household: 1 },
+        { name: "Tam", role: "farmer", kind: "grower", tint: "green", home: "Hearthvale", household: 2 },
+        { name: "Rook", role: "guard", kind: "guard", tint: "blue", home: "Hearthvale", household: 3 },
+        { name: "Fen", role: "forager", kind: "wanderer", tint: "teal", home: "The Whisperwood", household: 4 },
+        { name: "Lodge", role: "lodger", kind: "folk", tint: "amber", home: "The Amber Hearth Inn", household: 5 },
+        { name: "Sol", role: "pedlar", kind: "merchant", tint: "violet", standing: "transient" },
+        { name: "Edge", role: "hermit", kind: "wanderer", tint: "grey", standing: "fringe" },
+        { name: "Ash", role: "beggar", kind: "folk", tint: "red", standing: "destitute" },
+      ],
+    },
+    ctx,
+  );
+  // A PINNED CLIMATE so the fixture's own sky is never the variable — every
+  // placement below is summoned through the override slot, which is the one
+  // surface a console can reach and the one the recipes use.
+  sealed.latitude = "temperate";
+  sealed.precipitation = "wet";
+  const w = world.build(424242, "cozy-village", sealed);
+  assert.equal(w.latitude, "temperate", "the fixture world took its pinned climate");
+  const cast = Object.values(w.zones).flatMap((zone) => zone.npcs);
+  const zoneOf = (npc) => Object.keys(w.zones).find((id) => w.zones[id].npcs.includes(npc));
+  const spot = (npc) => `${zoneOf(npc)}:${npc.x},${npc.y}`;
+  const named = (name) => cast.find((npc) => npc.name === name);
+  const inBox = (npc, handle) =>
+    zoneOf(npc) === handle.zoneId &&
+    npc.x >= handle.wander.x0 &&
+    npc.x <= handle.wander.x1 &&
+    npc.y >= handle.wander.y0 &&
+    npc.y <= handle.wander.y1;
+  // The same closure the sim builds, so the resolve-level assertions below argue
+  // about the shipped mechanism and not about a twin.
+  const bias = { indoor: (zoneId) => w.zones[zoneId]?.mapKind === "building" };
+  const resolve = loadedPF.schedule.resolve;
+  const place = (hour, word, intensity) => {
+    const sim = new loadedPF.Sim(w);
+    sim.weatherOverride = intensity ? { word, intensity } : { word };
+    sim.clockMin = hour * 60;
+    sim.resolveSchedules();
+    return sim;
+  };
+
+  // ── THE ROW THE BIAS EXISTS FOR ────────────────────────────────────────────
+  // An ordinary householder: the policy sends them to the plaza by day and they
+  // have a fireside of their own to be sent to instead.
+  const displaced = cast.filter((npc) => resolve(npc._sched, "day") === npc._sched.public && npc._sched.hearth);
+  assert.ok(displaced.length >= 20, `the fixture has a settlement of householders in it (${displaced.length})`);
+  place(12, "fair");
+  for (const npc of displaced) assert.equal(zoneOf(npc), "z1", `${npc.name} stands in the square at fair noon`);
+  place(12, "rain");
+  for (const npc of displaced) {
+    assert.ok(inBox(npc, npc._sched.hearth), `${npc.name} is at THEIR OWN fireside box at wet noon`);
+    assert.equal(w.zones[zoneOf(npc)].mapKind, "building", `…which is an interior (${npc.name})`);
+  }
+
+  // THE BUNK TABLEAU, PINNED DEAD BY NAME. v3 substituted the NIGHT handle, so
+  // at 07:00 the displaced day handle resolved to the one-tile bed box the cast
+  // was already lying in and the town spent eleven daylight hours standing on
+  // its own bunks. Every one-tile home box in the world is checked, at noon,
+  // under a storm.
+  const bunks = cast.filter((npc) => {
+    const b = npc._sched.home?.wander;
+    return b && b.x0 === b.x1 && b.y0 === b.y1;
+  });
+  assert.ok(bunks.length >= 20, `the world lays real one-tile beds (${bunks.length})`);
+  const onBunk = () =>
+    bunks.filter(
+      (npc) => spot(npc) === `${npc._sched.home.zoneId}:${npc._sched.home.wander.x0},${npc._sched.home.wander.y0}`,
+    );
+  place(23, "storm");
+  assert.ok(onBunk().length >= 20, `at night a stormy town IS in its beds (${onBunk().length} of ${bunks.length})`);
+  place(12, "storm");
+  // ONE NAMED EXCEPTION, and it is the design's own: a lodger in a named place's
+  // quarters has no fireside to be sent to, so the night berth is the only
+  // indoors they have. Everybody with a hearth is at it.
+  assert.deepEqual(
+    onBunk().map((npc) => npc.name),
+    ["Lodge"],
+    "at stormy noon nobody with a fireside stands on their own bunk — only the hearth-less lodger, at their berth",
+  );
+  assert.equal(named("Lodge")._sched.hearth, null, "…and that lodger really has no hearth to have gone to");
+
+  // AT NIGHT THE BIAS IS A NO-OP BY TABLE WALK, not by self-reference: every row
+  // whose night name is not `post` names a bed, and a bed is indoors, so nothing
+  // is ever displaced after dark. It is a daylight mechanism by construction.
+  place(23, "fair");
+  const clearNight = cast.map(spot).join("|");
+  place(23, "storm");
+  assert.equal(cast.map(spot).join("|"), clearNight, "a stormy night moves nobody");
+
+  // ── CAPACITY-NEUTRAL BY CONSTRUCTION ──────────────────────────────────────
+  // The freeze class dies here rather than being mitigated: every destination
+  // the bias can pick is one the DUSK or the NIGHT pass already assigns that
+  // same NPC, so no box ever receives an occupant it does not already hold.
+  for (const npc of cast) {
+    const s = npc._sched;
+    const wet = resolve(s, "day", bias);
+    assert.ok(
+      wet === resolve(s, "day") || wet === resolve(s, "dusk") || wet === resolve(s, "night"),
+      `${npc.name}'s wet-day destination is one the town already sends them to`,
+    );
+  }
+
+  // ── THE WET 07:00 BOUNDARY MOVES THE CAST, bed -> hearth ──────────────────
+  // Real assignments, not a no-op: v3's substitution resolved to the box the
+  // cast was standing in and moved NOBODY, which is the failure this lane is
+  // here to catch.
+  const morning = new loadedPF.Sim(w);
+  morning.weatherOverride = { word: "storm" };
+  morning.clockMin = 23 * 60;
+  morning.resolveSchedules();
+  const abed = new Map(displaced.map((npc) => [npc, spot(npc)]));
+  for (const npc of displaced) assert.ok(inBox(npc, npc._sched.home), `${npc.name} is in bed at 23:00`);
+  assert.equal(morning.waitUntil("day"), true, "the rest verb jumps to the next 07:00");
+  assert.equal(morning.clockMin, 7 * 60, "…and lands on the boundary");
+  const moved = displaced.filter((npc) => abed.get(npc) !== spot(npc));
+  assert.equal(moved.length, displaced.length, `the wet 07:00 pass moves the whole displaced cast (${moved.length})`);
+  for (const npc of displaced) assert.ok(inBox(npc, npc._sched.hearth), `${npc.name} woke to their own fireside`);
+
+  // ── THE ROWS THAT DO NOT MOVE ─────────────────────────────────────────────
+  // Every one of these reads the POLICY NAME off the template. There is no "is
+  // this the public handle" test and no NPC identity anywhere in the mechanism.
+  const sameUnderWeather = (name, hour, word) => {
+    const s = named(name)._sched;
+    assert.equal(
+      resolve(s, hour, bias),
+      resolve(s, hour),
+      `${name} answers the same ${hour} handle under ${word} as under a clear sky`,
+    );
+  };
+  // A grower works the land in the rain; the watch keeps a stormy night; the
+  // stall is tended; the fringe and the destitute are out in it, because the
+  // world has no roof for them and this package does not invent one.
+  sameUnderWeather("Tam", "day", "rain");
+  sameUnderWeather("Rook", "night", "storm");
+  sameUnderWeather("Sol", "day", "snow");
+  sameUnderWeather("Edge", "day", "storm");
+  sameUnderWeather("Ash", "day", "storm");
+  place(12, "storm");
+  for (const name of ["Tam", "Rook", "Sol", "Edge", "Ash", "Fen"])
+    assert.notEqual(w.zones[zoneOf(named(name))].mapKind, "building", `${name} is out in the storm at noon, honestly`);
+  // THE FRINGE AND THE DESTITUTE, STATED STRUCTURALLY, because for a row whose
+  // every anchor is `post` "unmoved" is true however the bias is written and a
+  // placement check alone would pin nothing. The real content is that there is
+  // no indoors anywhere in their schedule to be sent to: the world has no roof
+  // for them and this package does not invent one. This reds the day somebody
+  // gives them one — which is the change worth noticing.
+  for (const name of ["Edge", "Ash"]) {
+    const s = named(name)._sched;
+    for (const key of ["post", "home", "hearth", "public"])
+      assert.ok(
+        !s[key] || w.zones[s[key].zoneId].mapKind !== "building",
+        `${name} has no indoors anywhere in their schedule (${key})`,
+      );
+  }
+  // …and the exemption is doing the work rather than the geometry: Tam's night
+  // handle IS indoors, so without the policy-name test the bias would take him
+  // off his own land.
+  assert.equal(
+    w.zones[named("Tam")._sched.home.zoneId].mapKind,
+    "building",
+    "the grower has an indoors to be taken to",
+  );
+  // A NULL-HOME RESIDENT keeps their spot: no bed means no fireside either, and
+  // nowhere to go is answered by standing in the weather.
+  assert.equal(named("Fen")._sched.home, null, "the wilds sleeper has no bed");
+  assert.equal(named("Fen")._sched.hearth, null, "…and so no hearth");
+  assert.equal(resolve(named("Fen")._sched, "day", bias), named("Fen")._sched.public, "…and keeps the square");
+
+  // ── THE HEARTH-LESS LODGER FALLS TO THEIR BERTH ───────────────────────────
+  // The dusk name resolves null, so the night name answers — and the lookup is
+  // RAW, without resolve()'s own `?? sched.post` tail. With the tail this would
+  // hand back the inn's whole-room work post instead of the berth.
+  const lodge = named("Lodge")._sched;
+  assert.equal(lodge.hearth, null, "a named place's quarters resolve no fireside");
+  assert.equal(resolve(lodge, "day", bias), lodge.home, "so the lodger goes to their own berth, not to a post");
+  assert.notEqual(lodge.home, lodge.post, "…and those are genuinely different handles");
+
+  // ── THE GATHERING KEEPS ITS OWN PEOPLE AND GAINS NOBODY ELSE ──────────────
+  const inn = findZone(w, "The Amber Hearth Inn");
+  place(12, "fair");
+  const fairInn = new Set(inn.npcs.map((npc) => npc.name));
+  place(12, "rain");
+  const wetInn = inn.npcs.map((npc) => npc.name);
+  assert.deepEqual(wetInn.slice().sort(), ["Lodge", "Mira"], `the wet inn holds its keeper and its lodger (${wetInn})`);
+  assert.deepEqual([...fairInn], ["Mira"], "…where a fair noon holds only the keeper");
+  for (const name of wetInn)
+    assert.ok(
+      fairInn.has(name) || named(name)._sched.home?.zoneId === inn.id,
+      `${name} is one of the inn's own people, not somebody the weather concentrated into it`,
+    );
+
+  // ── INTENSITY-BLIND ───────────────────────────────────────────────────────
+  // Light rain empties the street exactly as heavy rain does. A drizzle reads as
+  // weather, not as an exception.
+  place(12, "rain", "light");
+  const light = cast.map(spot).join("|");
+  place(12, "rain", "heavy");
+  assert.equal(cast.map(spot).join("|"), light, "the bias never reads the intensity");
+  place(12, "fair");
+  assert.notEqual(cast.map(spot).join("|"), light, "…and the lane is not comparing two identical fair days");
+
+  // ── RULING 7: INTERIOR-ZONE MEMBERSHIP, NOT ROOFEDNESS ────────────────────
+  // The wilds is a `place`, so it is outdoors however dense the canopy. A hearth
+  // handle pointing at one is refused and the night name answers instead.
+  // Driven through a real Sim, so the closure under test is the one 30-sim
+  // builds and not a twin written here.
+  {
+    const mut = world.build(424242, "cozy-village", sealed);
+    const mutCast = Object.values(mut.zones).flatMap((zone) => zone.npcs);
+    const mutWhere = (npc) => Object.keys(mut.zones).find((id) => mut.zones[id].npcs.includes(npc));
+    const wilds = findZone(mut, "The Whisperwood");
+    assert.equal(wilds.mapKind, "place", "the wilds is a place and never a building");
+    const soul = mutCast.find((npc) => resolve(npc._sched, "day") === npc._sched.public && npc._sched.hearth);
+    const bed = soul._sched.home;
+    assert.equal(mut.zones[bed.zoneId].mapKind, "building", "the soul under test has a real bed indoors");
+    soul._sched.hearth = { zoneId: wilds.id, wander: { x0: 2, y0: 2, x1: 5, y1: 5 } };
+    const wet = new loadedPF.Sim(mut);
+    wet.weatherOverride = { word: "storm" };
+    wet.clockMin = 12 * 60;
+    wet.resolveSchedules();
+    assert.equal(mutWhere(soul), bed.zoneId, "a fireside out in the woods is not an indoors — the night name answers");
+    // A DOOR-APRON HOME is outdoors too, and with no fireside behind it both
+    // rungs fail and the resident honestly stays in the weather — even when
+    // their POST is indoors, which is the sharpest form of the rule: post is the
+    // outdoors being escaped, so neither rung may fall back to it. This is the
+    // live-work owner whose household never claimed a lot: a lit room they work
+    // in, and a doorstep they call home.
+    soul._sched.hearth = null;
+    soul._sched.home = { zoneId: "z1", wander: { x0: 4, y0: 4, x1: 6, y1: 5 } };
+    soul._sched.post = { zoneId: bed.zoneId, wander: bed.wander };
+    assert.equal(mut.zones[soul._sched.post.zoneId].mapKind, "building", "…and that post really is a room");
+    wet.resolveSchedules();
+    assert.equal(mutWhere(soul), "z1", "an apron home with no fireside leaves them out in the square");
+  }
+
+  // ── A LEGACY WORLD IS UNTOUCHED ───────────────────────────────────────────
+  // Structural, not incidental: legacy NPCs carry no `_sched` at all, and
+  // resolveSchedules skips them before the bias is ever consulted.
+  {
+    const legacy = world.build(11, "cozy-village");
+    const folk = Object.values(legacy.zones).flatMap((zone) => zone.npcs);
+    assert.ok(folk.length > 0, "the legacy world stands a cast up");
+    assert.equal(folk.filter((npc) => npc._sched).length, 0, "…carrying no schedules for a bias to read");
+    // Doubly structural, and worth saying which two guards: resolveSchedules
+    // skips a schedule-less NPC before the bias is consulted, and resolve()
+    // answers null for one anyway, under every sky.
+    assert.equal(resolve(undefined, "day", bias), null, "no schedule, no handle — bias or no bias");
+    const snap = (word) => {
+      const sim = new loadedPF.Sim(legacy);
+      sim.weatherOverride = { word };
+      sim.clockMin = 12 * 60;
+      sim.resolveSchedules();
+      return Object.values(legacy.zones)
+        .flatMap((zone) => zone.npcs.map((npc) => `${npc.name}@${npc.x},${npc.y}`))
+        .join("|");
+    };
+    assert.equal(snap("storm"), snap("fair"), "a legacy town is unmoved by weather");
+  }
+
+  // ── THE STORM MORNING, END TO END, ON A DERIVED SKY ───────────────────────
+  // No override anywhere: a thriving city, its own calendar, and the day the
+  // derivation rolls a storm. This is the felt outcome the release promises.
+  {
+    const city = brief.validate(
+      {
+        scale: "city",
+        prosperity: "thriving",
+        name: "Bastion",
+        backgroundPopulation: 120,
+        places: [
+          { kind: "gathering", name: "The Anchor" },
+          { kind: "wilds", name: "The Reach" },
+        ],
+        cast: [
+          { name: "Mira", role: "innkeeper", kind: "host", tint: "rose", home: "The Anchor", household: 1 },
+          { name: "Tam", role: "farmer", kind: "grower", tint: "green", home: "Bastion", household: 2 },
+          { name: "Rook", role: "guard", kind: "guard", tint: "blue", home: "Bastion", household: 3 },
+        ],
+      },
+      ctx,
+    );
+    city.latitude = "temperate";
+    city.precipitation = "wet";
+    const big = world.build(424242, "cozy-village", city);
+    const souls = Object.values(big.zones).flatMap((zone) => zone.npcs);
+    assert.ok(souls.length >= 90, `a thriving city stands up a real crowd (${souls.length})`);
+    assert.equal(loadedPF.weather.at(big, 49, null).word, "storm", "day 49 of this world storms on its own");
+    // The night before is wet too, and the bias sleeps straight through it —
+    // which is the daylight-mechanism claim arriving from the other side.
+    assert.equal(loadedPF.weather.at(big, 48, null).word, "rain", "…after a rainy day 48");
+
+    const sim = new loadedPF.Sim(big);
+    sim.day = 48;
+    sim.clockMin = 23 * 60;
+    sim.resolveSchedules();
+    const abedInCity = new Map(souls.map((npc) => [npc, `${npc.x},${npc.y}`]));
+    assert.equal(sim.waitUntil("day"), true, "the town sleeps through to 07:00");
+    assert.equal(sim.day, 49, "…waking into the storm");
+    assert.equal(sim.weather().word, "storm", "…which the sim reads off the derivation, with no override set");
+    assert.equal(sim.weatherOverride, null, "…there being none");
+
+    const street = big.zones.z1.npcs.length;
+    const lit = Object.values(big.zones).filter((zone) => zone.mapKind === "building" && zone.npcs.length).length;
+    assert.equal(street, 2, `the streets empty (${big.zones.z1.npcs.map((npc) => npc.name)})`);
+    assert.ok(lit >= 30, `and the houses are lit (${lit} interiors holding somebody)`);
+    // THE SAME MORNING UNDER A CLEAR SKY, so the numbers above are the weather's
+    // doing and not the hour's.
+    const clear = new loadedPF.Sim(big);
+    clear.weatherOverride = { word: "fair" };
+    clear.day = 49;
+    clear.clockMin = 7 * 60;
+    clear.resolveSchedules();
+    assert.ok(
+      big.zones.z1.npcs.length > 90,
+      `a fair 07:00 puts the same town in the square (${big.zones.z1.npcs.length})`,
+    );
+
+    // THE FREEZE CLASS, PINNED DEAD. Everyone is inside the box they were
+    // assigned — nobody was spilled outside their own wander box, which is what
+    // used to freeze an NPC permanently (stepNpcs' bounds test).
+    sim.resolveSchedules();
+    let outside = 0;
+    for (const zone of Object.values(big.zones))
+      for (const npc of zone.npcs) {
+        const b = npc.wander;
+        if (!(npc.x >= b.x0 && npc.x <= b.x1 && npc.y >= b.y0 && npc.y <= b.y1)) outside++;
+      }
+    assert.equal(outside, 0, `no NPC is stranded outside its own wander box after the wet crossing (${outside})`);
+    assert.ok(
+      souls.filter((npc) => abedInCity.get(npc) !== `${npc.x},${npc.y}`).length > 90,
+      "and the crossing really did move the town",
+    );
+  }
+}
+
+// 128. THE CATCH TABLE'S WEATHER COLUMN COMES ALIVE (0.14 §2.3). The column was
+// built and empty since 0.12 ("weather is L2, M9"); it now multiplies beside the
+// daypart factor, keyed on the WORD alone, and it costs the roll stream nothing.
+{
+  const E = loadedPF.economy;
+  const table = E.CATCH_TABLES["cozy-village"]["water-feature"];
+  const rarityOf = (entry) => entry.role ?? "bait";
+  // Every entry carries a column, stamped from its rarity. Non-vacuous the other
+  // way too: `fair` is in nobody's row, because a clear day IS the baseline.
+  for (const byTag of Object.values(E.CATCH_TABLES))
+    for (const rows of Object.values(byTag))
+      for (const entry of rows) {
+        assert.ok(entry.weather, `${entry.variant} carries a weather column`);
+        assert.equal("fair" in entry.weather, false, `…and no fair multiplier (${entry.variant})`);
+        for (const word of Object.keys(entry.weather))
+          assert.ok(loadedPF.weather.WORDS.includes(word), `…keyed on a real weather word (${word})`);
+      }
+
+  // THE MIX, MEASURED. One fixed roll stream, twenty thousand draws, at a level
+  // that has opened every entry.
+  const mix = (word) => {
+    const counts = new Map();
+    for (let i = 0; i < 20000; i++) {
+      const rnd = loadedPF.rng(loadedPF.hashStr(`catch-column|${i}`));
+      const drawn = E._draw(rnd, table, 15, "day", word);
+      // A draw that answers NOTHING is the half-applied-factor shape: a total
+      // summed one way and walked another leaves the roll unspent past the last
+      // entry. Named here so it reads as a finding and not as a crash.
+      assert.ok(drawn, `every ${word} draw answers with an entry`);
+      const rarity = rarityOf(drawn);
+      counts.set(rarity, (counts.get(rarity) ?? 0) + 1);
+    }
+    const total = [...counts.values()].reduce((a, b) => a + b, 0);
+    return (rarity) => (counts.get(rarity) ?? 0) / total;
+  };
+  const fair = mix("fair");
+  const storm = mix("storm");
+  // STORM IS THE RARITY HOOK, and since slice 2b it is the ONLY one: rare ×1.5
+  // while everything else takes ×0.6, so the one thing worth fishing a storm for
+  // is more than twice as likely.
+  assert.ok(
+    storm("catch-rare") > fair("catch-rare") * 2,
+    `a storm more than doubles the rare share (${fair("catch-rare")} -> ${storm("catch-rare")})`,
+  );
+  assert.ok(storm("catch-common") < fair("catch-common"), "…and the ordinary fish go down with it");
+  // OVERCAST, RAIN AND SNOW MOVE NO SHARE — AND THIS LANE'S MEANING CHANGED WITH
+  // THE RULING. It used to say "inert BY ARITHMETIC": overcast and snow were
+  // uniform scales, `_draw` normalizes, so they cancelled exactly and it was
+  // worth pinning in case somebody made one of them non-uniform. Under B3-1
+  // those three skies are BITE-RATE-ONLY by DESIGN — their entries are deleted
+  // from every rarity row, rain's live ×1.3/×1.4 included — so a draw under them
+  // IS a fair draw, and the thing this lane now refuses is a resurrected mix
+  // column of any shape, uniform or not. Where those skies went is
+  // `TUNING.biteRate`, and case 128c is where the going is measured.
+  for (const word of ["overcast", "rain", "snow"]) {
+    const quiet = mix(word);
+    for (const rarity of [...E.CATCH_ROLES, "bait"])
+      assert.equal(quiet(rarity), fair(rarity), `${word} draws exactly the fair mix, by design (${rarity})`);
+  }
+  // AND THE ROWS SAY SO IN THE TABLE, not only in the measurement: storm is the
+  // only key any entry carries. Non-vacuous the other way too — the three walks
+  // above would pass just as happily over a table whose columns were ALL empty,
+  // and this refuses that as well as it refuses a resurrected rain row.
+  for (const row of Object.values(E.CATCH_TABLES).flatMap((byTag) => Object.values(byTag).flat()))
+    assert.deepEqual(Object.keys(row.weather), ["storm"], `${row.variant}'s only sky column is the storm`);
+
+  // THE ROLL STREAM POSITION IS UNMOVED. Exactly one rnd() per draw whatever the
+  // factors are, which is what makes a rewind through a 0.13 fishing turn land
+  // in the same place in the stream — it can draw a different variant, and it
+  // cannot desynchronise everything after it.
+  for (const word of loadedPF.weather.WORDS) {
+    const a = loadedPF.rng(loadedPF.hashStr("stream-pin"));
+    const b = loadedPF.rng(loadedPF.hashStr("stream-pin"));
+    E._draw(a, table, 15, "day", word);
+    E._draw(b, table, 15, "day", "fair");
+    assert.equal(a(), b(), `a ${word} draw leaves the stream exactly where a fair one does`);
+  }
+
+  // THE WORD ONLY. `_draw` is handed `sim.weather().word`, so a label can never
+  // reach a column — and an unknown key is simply no modifier, which is what
+  // lets a 0.15 word ride through this build's tables untouched.
+  const labelled = mix("heavy rain");
+  for (const rarity of [...E.CATCH_ROLES, "bait"])
+    assert.equal(labelled(rarity), fair(rarity), `an intensity label is no column at all (${rarity})`);
+
+  // AND THE CALL SITE READS IT BESIDE `part`, BEFORE THE ADVANCE — the cadence
+  // that makes each window fished under the sky it BEGAN under. Asserted on the
+  // source, in the idiom this file already uses for the tile generator's
+  // append-only table, because the ordering is the whole claim and a runtime
+  // check would need a whole session to say it.
+  {
+    const economySource = readFileSync(join(here, "src", "59-economy.js"), "utf8");
+    const loop = economySource.slice(economySource.indexOf("const part = sim.daypart();"));
+    const read = loop.indexOf("sim.weather().word");
+    const advance = loop.indexOf("sim.advanceMinutes(W)");
+    assert.ok(read >= 0 && advance >= 0, "the window loop still reads the sky and still advances the clock");
+    assert.ok(read < advance, "the sky is read BEFORE the window is spent, exactly as the daypart is");
+  }
+
+  // AND THE STAMP IS A DEFAULT, NOT A CEILING. `withSky` spreads the row AFTER
+  // the shared column on purpose, so an entry that ever writes its own `weather`
+  // literal wins. Nothing shipped writes one — which is exactly why the contract
+  // needs a lane rather than an audience: flip the two and every shipped table
+  // still reads identically, and the first entry that wants its own sky would
+  // silently get its rarity's instead. Proven by handing the module a table that
+  // DOES write one and rebuilding the stack over it, the case-129 idiom.
+  {
+    const carp = `{ role: "catch-common", variant: "carp", weight: 34, minLevel: 1, daypart: { night: 0.7 } }`;
+    const source = MODULES.map((name) => {
+      const text = readFileSync(join(here, "src", name), "utf8");
+      if (name !== "59-economy.js") return text;
+      const patched = text.replace(carp, `${carp.slice(0, -2)}, weather: { rain: 9 } }`);
+      assert.notEqual(patched, text, "the fixture still finds the entry it writes a literal onto");
+      return patched;
+    }).join("\n");
+    const litPF = new Function(`"use strict";\n${source}\nreturn PF;`)();
+    const lit = litPF.economy.CATCH_TABLES["cozy-village"]["water-feature"];
+    const own = lit.find((entry) => entry.variant === "carp");
+    assert.deepEqual(own.weather, { rain: 9 }, "an entry's own weather row survives the stamp");
+    // Non-vacuous: the stamp is still stamping. The neighbour with no literal
+    // carries its rarity's shared row exactly as it does in the real build.
+    const bream = lit.find((entry) => entry.variant === "bream");
+    assert.deepEqual(
+      bream.weather,
+      table.find((entry) => entry.variant === "bream").weather,
+      "…while the entry beside it still takes the shared row",
+    );
+    assert.notDeepEqual(own.weather, bream.weather, "…and the two are genuinely different columns");
+  }
+}
+
+// 128b. THE CALL SITE IS WIRED, PROVEN THROUGH A REAL SESSION. Case 128 pins
+// `_draw` against a word handed to it directly, which is one assertion short of
+// the thing a player experiences: it stays green if the window loop hands the
+// draw a literal instead of the sky it just read. So this fishes a real pond,
+// same world, same day, same windows, once under a pinned fair sky and once
+// under a pinned storm, and holds the two mixes apart. Replace
+// `sim.weather().word` with `"fair"` and the two runs come back identical.
+{
+  const E = loadedPF.economy;
+  const P = loadedPF.player;
+  /** The bank of a registry row — the fishing block's own helper, re-declared
+   *  because that block scopes it and this lane is not inside it. */
+  const standAt = (sim, zoneId, row) => {
+    const z = sim.world.zones[zoneId];
+    for (let y = row.rect.y - 1; y <= row.rect.y + row.rect.h; y++) {
+      for (let x = row.rect.x - 1; x <= row.rect.x + row.rect.w; x++) {
+        if (x < 0 || y < 0 || x >= z.w || y >= z.h) continue;
+        if (z.ground[y * z.w + x] === "water" || z.solid[y * z.w + x]) continue;
+        sim.teleport(zoneId, x, y);
+        sim.step(0, {});
+        if (sim.nearFeature?.id === row.id) return true;
+      }
+    }
+    return false;
+  };
+  let chats = 0;
+  try {
+    // LEVEL 15, which is the level that has opened the rare rung (mirror-pike is
+    // minLevel 7) and is far enough from the next one that no session here can
+    // level out from under its own hash: leaving 15 costs 150 xp and a dawn-to-
+    // night day pays about 40.
+    const session = (word, seed) => {
+      const w = world.build(seed, "cozy-village", null);
+      const sim = new loadedPF.Sim(w);
+      sim.clockMin = 6 * 60;
+      sim.day = 3;
+      sim.resolveSchedules();
+      const core = { chatId: `chat-skywire-${++chats}`, sim, hud: { toast() {}, refreshChips() {} }, markDirty() {} };
+      assert.ok(standAt(sim, "village", w.zones.village.features[0]), `seed ${seed}: the fixture stands at the pond`);
+      P.grant(core, { t: "rod", k: "crude" }, 1);
+      P.equip(core, "fishing", "tool", { t: "rod", k: "crude" });
+      P.award(core, { xp: 5 * 15 * 14, verb: "fishing" });
+      sim.weatherOverride = { word };
+      // The override really took, which is the one way this lane could go
+      // vacuous without saying so.
+      assert.equal(sim.weather().word, word, `seed ${seed}: the session really fishes a ${word} day`);
+      const out = E.fish(core, "night");
+      assert.equal(out.ok, true, `seed ${seed}: the ${word} session ran`);
+      assert.equal(
+        P.resolvedLevel(P.get(core).skills?.verbs?.fishing),
+        15,
+        `seed ${seed}: …without levelling out from under its own hash`,
+      );
+      return out;
+    };
+    const day = (word) => {
+      const counts = new Map();
+      let landed = 0;
+      let windows = 0;
+      for (let seed = 1; seed <= 20; seed++) {
+        const out = session(word, seed);
+        windows += out.windows;
+        landed += out.caught.length;
+        for (const row of out.caught) counts.set(row.t, (counts.get(row.t) ?? 0) + 1);
+      }
+      return { windows, landed, share: (t) => (counts.get(t) ?? 0) / landed };
+    };
+    const fair = day("fair");
+    const storm = day("storm");
+    // Non-vacuous by size: a share out of a handful of fish says nothing.
+    assert.ok(fair.landed > 300, `the fair day landed enough fish to have a mix (${fair.landed})`);
+    assert.ok(storm.landed > 300, `and so did the storm (${storm.landed})`);
+    // THE OUTCOME A FAIR SESSION CANNOT PRODUCE. Storm is the one surviving mix
+    // column — rare ×1.5 against ×0.6 on everything else — so a stormy day's
+    // catch is more than twice as likely to be the rare one. Measured 4.99% ->
+    // 12.32% on these fixtures (11.40% once slice 2b's ×2 bite widened the
+    // storm's sample); pinned at the doubling so a retune of the coefficient
+    // does not have to come back through this file.
+    assert.ok(
+      storm.share("catch-rare") > fair.share("catch-rare") * 2,
+      `a storm SESSION more than doubles the rare share (${fair.share("catch-rare")} -> ${storm.share("catch-rare")})`,
+    );
+    assert.ok(
+      storm.share("catch-common") < fair.share("catch-common"),
+      `…and the ordinary fish go down with it (${fair.share("catch-common")} -> ${storm.share("catch-common")})`,
+    );
+  } finally {
+    loadedPF.save.reset(); // the mutators self-dirty, and a dirty block arms a timer
+  }
+}
+
+// 128c. THE BITE RATE (0.14 slice 2b, rulings B3-1 and B3-2). The grey and wet
+// skies stopped moving the mix and started moving the BITE: how often a cast
+// lands anything at all, composed with the region's own water. Nothing here
+// touches the seed, the draw count or the stream position — only the number the
+// one existing draw is compared against.
+{
+  const E = loadedPF.economy;
+  const P = loadedPF.player;
+  const T = E.TUNING;
+  const PRECIP = loadedPF.weather.PRECIP_META;
+  const standAt = (sim, zoneId, row) => {
+    const z = sim.world.zones[zoneId];
+    for (let y = row.rect.y - 1; y <= row.rect.y + row.rect.h; y++) {
+      for (let x = row.rect.x - 1; x <= row.rect.x + row.rect.w; x++) {
+        if (x < 0 || y < 0 || x >= z.w || y >= z.h) continue;
+        if (z.ground[y * z.w + x] === "water" || z.solid[y * z.w + x]) continue;
+        sim.teleport(zoneId, x, y);
+        sim.step(0, {});
+        if (sim.nearFeature?.id === row.id) return true;
+      }
+    }
+    return false;
+  };
+  let chats = 0;
+  /** A dawn-to-night session at the legacy pond. `precipitation` is stamped onto
+   *  the built world because the axes are what the derivation reads, and the sky
+   *  is pinned by override so the two levers can be moved one at a time. */
+  const session = (stack, { word, seed, precipitation, level = 15, tier = "crude", bait = 0 }) => {
+    const w = stack.world.build(seed, "cozy-village", null);
+    if (precipitation) w.precipitation = precipitation;
+    const sim = new stack.Sim(w);
+    sim.clockMin = 6 * 60;
+    sim.day = 3;
+    sim.resolveSchedules();
+    const core = { chatId: `chat-bite-${++chats}`, sim, hud: { toast() {}, refreshChips() {} }, markDirty() {} };
+    assert.ok(standAt(sim, "village", w.zones.village.features[0]), `seed ${seed}: the fixture stands at the pond`);
+    stack.player.grant(core, { t: "rod", k: tier }, 1);
+    stack.player.equip(core, "fishing", "tool", { t: "rod", k: tier });
+    if (level > 1) stack.player.award(core, { xp: 5 * level * (level - 1), verb: "fishing" });
+    if (bait) stack.player.grant(core, { t: "bait", k: "worms" }, bait);
+    sim.weatherOverride = { word };
+    const out = stack.economy.fish(core, "night");
+    assert.equal(out.ok, true, `seed ${seed}: the ${word} session ran`);
+    return out;
+  };
+  const pool = (opts, stack = loadedPF) => {
+    let windows = 0;
+    let landed = 0;
+    const per = [];
+    const species = new Set();
+    for (let seed = 1; seed <= 20; seed++) {
+      const out = session(stack, { ...opts, seed });
+      windows += out.windows;
+      landed += out.caught.length;
+      per.push(out.caught.length / out.windows);
+      for (const row of out.caught) species.add(`${row.t}:${row.k}`);
+    }
+    return { windows, landed, rate: landed / windows, per, species: [...species].sort() };
+  };
+  try {
+    // ── THE ROWS, PAIRED AGAINST THE ENUMS THEY ARE KEYED ON ────────────────
+    // The same discipline the mix rows get: a plausible-looking key that no
+    // caller can ever produce is a tuning that never applies.
+    for (const word of Object.keys(T.biteRate))
+      assert.ok(loadedPF.weather.WORDS.includes(word), `biteRate is keyed on a real weather word (${word})`);
+    assert.equal("fair" in T.biteRate, false, "…and fair is absent, because a clear day IS the baseline");
+    assert.deepEqual(Object.keys(T.spotBite).sort(), [...E.SPOT_TAGS].sort(), "spotBite names the fishable tags");
+
+    // ── THE REGION'S WATER (B3-2) ───────────────────────────────────────────
+    // MODERATE is the anchor by construction, not by a number somebody typed:
+    // the derivation measures wetness FROM `PRECIP_META.moderate.wetness`, so
+    // the reference world is exactly 1 whatever that table says next.
+    assert.equal(E._regionBite({ precipitation: "moderate" }, "water-feature"), 1, "the reference world sits at x1");
+    assert.equal(E._regionBite({ precipitation: "arid" }, "water-feature"), 0.7, "an arid world's water is thinner");
+    assert.equal(E._regionBite({ precipitation: "wet" }, "water-feature"), 1.3, "…and a wet world's is fuller");
+    // Non-vacuous against the anchor being a coincidence: the bands ARE the
+    // wetness gaps times the coefficient.
+    for (const precipitation of loadedPF.weather.PRECIPS)
+      assert.ok(
+        Math.abs(
+          E._regionBite({ precipitation }, "water-feature") -
+            (1 + T.abundPerWet * (PRECIP[precipitation].wetness - PRECIP.moderate.wetness)),
+        ) < 1e-12,
+        `${precipitation} is the wetness gap, not a literal (${E._regionBite({ precipitation }, "water-feature")})`,
+      );
+    // Both spot kinds are 1.0 today, so the two are equal ON PURPOSE and the
+    // lane says which fact it is holding: still water and running water are a
+    // content difference now and a rate difference in one row later.
+    for (const precipitation of loadedPF.weather.PRECIPS)
+      assert.equal(
+        E._regionBite({ precipitation }, "water-crossing"),
+        E._regionBite({ precipitation }, "water-feature"),
+        `${precipitation}: the two spot kinds bite alike at the starters`,
+      );
+    // WHICH IS EXACTLY WHY THE SEAM NEEDS ITS OWN LANE. Equal starters make the
+    // spot factor invisible: delete it from the derivation and everything above
+    // stays green. So the row is moved off 1.0 in a rebuilt stack and the
+    // multiply is watched to happen — the "one row later" the comment promises,
+    // proven to be one row.
+    {
+      const source = MODULES.map((name) => {
+        const text = readFileSync(join(here, "src", name), "utf8");
+        if (name !== "59-economy.js") return text;
+        const patched = text.replace(
+          `spotBite: { "water-feature": 1, "water-crossing": 1 }`,
+          `spotBite: { "water-feature": 1, "water-crossing": 3 }`,
+        );
+        assert.notEqual(patched, text, "the rewrite still names the spot row it retunes");
+        return patched;
+      }).join("\n");
+      const tuned = new Function(`"use strict";\n${source}\nreturn PF;`)();
+      assert.equal(
+        tuned.economy._regionBite({ precipitation: "wet" }, "water-crossing"),
+        tuned.economy._regionBite({ precipitation: "wet" }, "water-feature") * 3,
+        "the spot factor multiplies into the same derivation, over the top of the water",
+      );
+    }
+    // A WORLD THAT NAMES NOTHING, or names nonsense, folds to the anchor rather
+    // than to NaN — the guarded axes read doing its job on the fishing path.
+    assert.equal(E._regionBite({ precipitation: "swamp" }, "water-feature"), 1, "a hostile axis folds to the anchor");
+    assert.equal(E._regionBite(undefined, "water-feature"), 1, "…and so does no world at all");
+    // `abundFloor` is an INERT guard on these coefficients — the thinnest
+    // shipped band is 0.7, well clear of 0.25 — and is here for a future wetness
+    // table, not for a value this build can reach. Said rather than pinned,
+    // because a lane over an unreachable branch is a lane that tests nothing.
+
+    // ── THE MEASURED BITE RATE, AGAINST `2 − p` ─────────────────────────────
+    // Same world, same seed, same spot, moderate water: N windows fair against N
+    // windows rain. The success probability at this fixture is exactly the
+    // curve's own arithmetic, and the hazard form's catches-per-window ratio at
+    // `chances` 2 is `2 − p` EXACTLY — which at this rung is 1.42 and not the
+    // folk "2×" the ten-minutes-to-five sentence sounds like. That sentence is
+    // the calibration example at the anchor; this is the number.
+    const level = 15;
+    const p = Math.min(T.baseCeil, T.baseAt1 + T.basePerLevel * (level - 1)) * T.toolMult[P.resolvedToolTier("crude")];
+    const fair = pool({ word: "fair", precipitation: "moderate", level });
+    const rain = pool({ word: "rain", precipitation: "moderate", level });
+    assert.ok(fair.windows > 1000, `the pool is big enough to measure a rate (${fair.windows} windows)`);
+    assert.equal(rain.windows, fair.windows, "the two skies fish exactly the same windows");
+    const ratio = rain.rate / fair.rate;
+    assert.ok(
+      Math.abs(ratio - (2 - p)) / (2 - p) < 0.05,
+      `a wet sky lands 2 − p times as many casts (predicted ${2 - p}, measured ${ratio})`,
+    );
+    assert.ok(ratio < 1.6, `…which is NOT the folk 2x, and the lane says so out loud (${ratio})`);
+    // AND THE RATE ITSELF, both sides, against the hazard the code is supposed
+    // to be computing. This is what reds if `chances` stops reaching the
+    // threshold at all: the fair side would be unchanged and the wet side would
+    // fall back onto it.
+    const hazard = (chances) => 1 - Math.pow(1 - Math.min(p, 1), chances);
+    assert.ok(Math.abs(fair.rate - p) / p < 0.05, `a fair day lands at p (${p} vs ${fair.rate})`);
+    assert.ok(Math.abs(rain.rate - hazard(2)) / hazard(2) < 0.05, `a rainy one at pw (${hazard(2)} vs ${rain.rate})`);
+    // NEVER WORSE THAN FAIR, fixture by fixture rather than in the aggregate:
+    // `pw >= p` wherever `chances >= 1`, which is the promise the hazard form
+    // makes at every rung of the ladder.
+    assert.ok(
+      fair.per.every((rate, i) => rain.per[i] >= rate),
+      "no fixture fishes worse in the rain than it does under a clear sky",
+    );
+    // AND ALL FOUR BAD SKIES BITE ALIKE, because they share the starter — storm
+    // included, which is the half of B3-1 that is easy to forget: the storm
+    // keeps its rarity lean AND gains the faster bite, and the two do not
+    // double-count. Landing is a threshold fact and the mix is a share fact.
+    for (const word of ["overcast", "snow", "storm"]) {
+      const wet = pool({ word, precipitation: "moderate", level });
+      assert.equal(wet.landed, rain.landed, `${word} bites at rain's rate — one starter, four skies`);
+    }
+
+    // ── THE EQUIPMENT PROMISE, KEPT UNDER EVERY SKY ─────────────────────────
+    // `min(p, 1)` keeps `pow` off a negative base, and with it a p at or over 1
+    // still ALWAYS lands: weather and water never manufacture that promise and
+    // never break it. Drop the clamp and a masterwork-and-bait cast starts
+    // missing in the rain, which is the one thing the ladder's top may not do.
+    for (const word of loadedPF.weather.WORDS) {
+      const out = session(loadedPF, {
+        word,
+        seed: 3,
+        precipitation: "moderate",
+        level: 20,
+        tier: "masterwork",
+        bait: 200,
+      });
+      assert.equal(out.caught.length, out.windows, `a p >= 1 cast lands every window under ${word}`);
+    }
+
+    // ── FEWER BITES, NEVER FEWER SPECIES ────────────────────────────────────
+    // The felt outcome of B3-2, and the exact line between the two levers:
+    // abundance touches the RATE, and the table stays whole. An arid world
+    // fishes sparse and a wet one teems, on the very same fair day — and both
+    // pull the same species out of the same water.
+    const arid = pool({ word: "fair", precipitation: "arid", level });
+    const wetWorld = pool({ word: "fair", precipitation: "wet", level });
+    assert.ok(arid.rate < fair.rate, `an arid world fishes sparse (${arid.rate} vs ${fair.rate})`);
+    assert.ok(wetWorld.rate > fair.rate, `…and a wet world teems (${wetWorld.rate} vs ${fair.rate})`);
+    assert.ok(
+      Math.abs(arid.rate - hazard(0.7)) / hazard(0.7) < 0.05,
+      `the arid rate is the water's own hazard (${hazard(0.7)} vs ${arid.rate})`,
+    );
+    assert.ok(
+      Math.abs(wetWorld.rate - hazard(1.3)) / hazard(1.3) < 0.05,
+      `and so is the wet one (${hazard(1.3)} vs ${wetWorld.rate})`,
+    );
+    assert.deepEqual(arid.species, wetWorld.species, "…out of the same species, every one of them");
+    assert.equal(
+      E.catchTable({ theme: "cozy-village", precipitation: "arid" }, "water-feature"),
+      E.catchTable({ theme: "cozy-village", precipitation: "wet" }, "water-feature"),
+      "…because the table itself never reads the axis",
+    );
+
+    // ── THE ANCHOR IS THE COMPAT PIN ────────────────────────────────────────
+    // A moderate-water world's FAIR day is untouched by the whole amendment,
+    // and that is what the `chances === 1` branch is for — the literal shipped
+    // expression, no round trip through `1 − (1 − p)` and the float dust it
+    // carries. Proven the only way that is not an argument: rebuild the stack
+    // with slice 2's roll in place of this one and compare the sessions.
+    {
+      const roll = `      const chances = regionBite * (TUNING.biteRate[wthr] ?? 1);
+      const pw = chances === 1 ? p : 1 - Math.pow(1 - Math.min(p, 1), chances);
+      if (rnd() >= pw) continue;`;
+      const source = MODULES.map((name) => {
+        const text = readFileSync(join(here, "src", name), "utf8");
+        if (name !== "59-economy.js") return text;
+        const patched = text.replace(roll, `      if (rnd() >= p) continue;`);
+        assert.notEqual(patched, text, "the rewrite still names the roll it is reverting");
+        return patched;
+      }).join("\n");
+      const slice2 = new Function(`"use strict";\n${source}\nreturn PF;`)();
+      slice2.api.postSpatialLocations = async () => ({ ok: false, status: 404, body: null });
+      slice2.api.patchMetadata = async () => {};
+      const before = session(slice2, { word: "fair", seed: 5, precipitation: "moderate", level });
+      const after = session(loadedPF, { word: "fair", seed: 5, precipitation: "moderate", level });
+      assert.ok(after.caught.length > 20, `the pinned session is a real one (${after.caught.length} fish)`);
+      assert.deepEqual(after.caught, before.caught, "a moderate world's fair day fishes exactly as it did in slice 2");
+      // Non-vacuous the other way: the amendment IS observable the moment the
+      // sky is not fair, which is the whole point of it.
+      assert.notDeepEqual(
+        session(loadedPF, { word: "rain", seed: 5, precipitation: "moderate", level }).caught,
+        session(slice2, { word: "rain", seed: 5, precipitation: "moderate", level }).caught,
+        "…and a rainy one does not",
+      );
+      // AND THE BRANCH IS NOT DECORATION. Its whole job is the last bit: the
+      // round trip through `1 − (1 − p)` is NOT the identity on this curve's own
+      // p values. Held here because the flip is real but sub-observable — the
+      // window it would move is one whose roll lands inside a 1e-16 sliver, so
+      // no finite session can be counted on to show it, and the honest pin is
+      // the arithmetic rather than a sample that will always come back equal.
+      const moved = [];
+      for (let l = 1; l <= P.CAPS.skillLevel; l++)
+        for (const tool of T.toolMult)
+          for (const mod of [1, T.baitMult]) {
+            const q = Math.min(T.baseCeil, T.baseAt1 + T.basePerLevel * (l - 1)) * tool * mod;
+            if (1 - Math.pow(1 - Math.min(q, 1), 1) !== q) moved.push(q);
+          }
+      assert.ok(moved.length > 0, `the round trip really does move p on this ladder (${moved.length} rungs)`);
+    }
+
+    // ── ZERO ADDED DRAWS ────────────────────────────────────────────────────
+    // The roll spends exactly the one `rnd()` it always spent, so the stream
+    // stands where it always stood after a failed window and `_draw` enters
+    // where it always entered. Asserted on the source in this file's own idiom,
+    // because a second draw hidden behind a threshold is invisible from outside
+    // a session and would desynchronise every rewind through a fishing turn.
+    {
+      const economySource = readFileSync(join(here, "src", "59-economy.js"), "utf8");
+      const start = economySource.indexOf("const rnd = PF.rng(PF.hashStr(");
+      const end = economySource.indexOf("const entry = this._draw(", start);
+      assert.ok(start >= 0 && end > start, "the window loop still seeds its stream and still draws from it");
+      // CODE ONLY: that stretch is mostly the comment explaining the threshold,
+      // and it quotes `rnd()` several times.
+      const code = economySource
+        .slice(start, end)
+        .split("\n")
+        .filter((line) => !/^\s*\/\//.test(line))
+        .join("\n");
+      const rolls = code.match(/rnd\(\)/g) ?? [];
+      assert.equal(rolls.length, 1, `exactly one draw stands between the stream and the table (${rolls.length})`);
+      // And the water is a pure read: the derivation never touches the stream.
+      const derivation = economySource.slice(
+        economySource.indexOf("_regionBite(world, tag) {"),
+        economySource.indexOf("/** Draw one entry"),
+      );
+      assert.ok(derivation.length > 0, "the derivation is where this lane thinks it is");
+      assert.equal(/rnd|PF\.rng/.test(derivation), false, "and it spends no randomness at all");
+    }
+
+    // ── THE SAME WINDOW, THE SAME FISH ──────────────────────────────────────
+    // A window that lands under BOTH fair and rain yields the IDENTICAL variant
+    // now, because rain's draw IS the fair draw — the mix rows are gone and the
+    // stream position is shared. Only storm's surviving column moves it.
+    for (let i = 0; i < 200; i++) {
+      const table = E.CATCH_TABLES["cozy-village"]["water-feature"];
+      const drawn = (word) => E._draw(loadedPF.rng(loadedPF.hashStr(`same-fish|${i}`)), table, 15, "day", word);
+      const base = drawn("fair");
+      for (const word of ["overcast", "rain", "snow"])
+        assert.equal(drawn(word), base, `a ${word} window lands the fish its fair twin would (${i})`);
+    }
+  } finally {
+    loadedPF.save.reset(); // the mutators self-dirty, and a dirty block arms a timer
+  }
+}
+
+// 129. THE PACK'S WEATHER AXIS RE-POINTS AT 17-WEATHER (0.14 §2.7). The enum
+// authority moves; the seal, the schema and the stored bytes do not.
+{
+  const pack = loadedPF.pack;
+  assert.equal(pack.VERSION, 1, "the widening costs no packVersion bump");
+
+  const sealedBrief = loadedPF.brief.validate(
+    {
+      scale: "village",
+      name: "Packton",
+      cast: ["Alder Vance", "Marla", "Wren Ash", "Perrin Quill"].map((name, index) => ({
+        name,
+        kind: "folk",
+        tint: "blue",
+        home: "Packton",
+        household: index + 1,
+      })),
+    },
+    { theme: "cozy-village", seed: 77 },
+  );
+  // A raw pack whose lines are 0.13-SHAPED: the only `w` values that build could
+  // ever have sealed are absent and "fair", because "fair" was the whole enum.
+  const rawPack = (weathers) => ({
+    templates: Array.from({ length: pack.TUNING.floorTemplates }, (_, i) => ({
+      slug: `w-ballast-${i}`,
+      giver: "Perrin Quill",
+      verb: "visit",
+      target: { place: "hall" },
+      n: 1,
+      title: `Ballast ${i}`,
+    })),
+    lines: Array.from({ length: pack.TUNING.floorLines }, (_, i) => ({
+      at: "settlement",
+      when: "day",
+      r: "stranger",
+      text: `line ${i}`,
+      ...(weathers[i % weathers.length] ? { w: weathers[i % weathers.length] } : {}),
+    })),
+  });
+  const seal = (raw, sealer = pack) => sealer.validate(raw, { theme: "cozy-village", seed: 77, brief: sealedBrief });
+
+  // THE FIVE WORDS SEAL NOW, and a word the sky does not have still does not.
+  {
+    const sealed = seal(rawPack(["fair", "overcast", "rain", "storm", "snow"]));
+    assert.deepEqual(
+      [...new Set(sealed.lines.map((row) => row.w))].sort(),
+      ["fair", "overcast", "rain", "snow", "storm"],
+      "every weather word survives the seal",
+    );
+    const refused = seal(rawPack(["fog"]));
+    assert.equal(refused.lines.length, pack.TUNING.floorLines, "a forward word drops the WORD and not the line");
+    assert.equal(
+      refused.lines.every((row) => row.w === undefined),
+      true,
+      "…and folds to absent rather than riding through",
+    );
+  }
+  // AN ABSENT `w` STAYS ABSENT, which is the byte diet and now also the read
+  // rule: a line with no weather is served under every sky.
+  {
+    const bare = seal(rawPack([null]));
+    assert.equal(bare.lines.length, pack.TUNING.floorLines, "the untagged lines are all there to be checked");
+    assert.equal(
+      bare.lines.every((row) => !("w" in row)),
+      true,
+      "absent stays absent through the seal",
+    );
+  }
+
+  // ZERO SEALED BYTES MOVE. Proven the only way that is not an argument: seal
+  // the same 0.13-shaped pack under a stack whose 61-pack still declares the
+  // one-word enum, and compare the two artifacts byte for byte.
+  {
+    const source = MODULES.map((name) => {
+      const text = readFileSync(join(here, "src", name), "utf8");
+      if (name !== "61-pack.js") return text;
+      const patched = text
+        .replace("const WEATHERS = PF.weather.WORDS;", `const WEATHERS = ["fair"];`)
+        // …AND THE BUILT-IN DEFAULT PACK IS NARROWED WITH IT, because a stack
+        // cannot boot on its OWN artifact when its enum rejects it: 0.14's
+        // enrichment tags three default lines per theme with a sky the one-word
+        // enum has never heard of, and the boot assert at the foot of 61-pack
+        // throws before this case gets to seal anything. A real 0.13 client never
+        // met these lines — the defaults are compiled in, not stored — so this is
+        // reconstructing the 0.13 stack rather than working around a check. What
+        // the case measures is untouched by it: the seal below reads the STORED
+        // pack literal built right here, and never the defaults.
+        .replace(
+          'const sky = (at, when, text, topic, w) => line(at, when, "stranger", text, topic, w);',
+          'const sky = (at, when, text, topic) => line(at, when, "stranger", text, topic);',
+        );
+      assert.notEqual(patched, text, "the rewrite still names 61-pack's weather axis");
+      assert.ok(!patched.includes("PF.weather.WORDS"), "…and really did narrow it");
+      assert.ok(
+        patched.includes("const sky = (at, when, text, topic) =>"),
+        "…and the default pack's weather writer with it",
+      );
+      return patched;
+    }).join("\n");
+    const oldPF = new Function(`"use strict";\n${source}\nreturn PF;`)();
+    oldPF.api.postSpatialLocations = async () => ({ ok: false, status: 404, body: null });
+    oldPF.api.patchMetadata = async () => {};
+    assert.deepEqual(oldPF.pack.WEATHERS, ["fair"], "the 0.13 stack under test really is one-worded");
+    const oldBrief = oldPF.brief.validate(
+      {
+        scale: "village",
+        name: "Packton",
+        cast: ["Alder Vance", "Marla", "Wren Ash", "Perrin Quill"].map((name, index) => ({
+          name,
+          kind: "folk",
+          tint: "blue",
+          home: "Packton",
+          household: index + 1,
+        })),
+      },
+      { theme: "cozy-village", seed: 77 },
+    );
+    const raw = rawPack(["fair", null]);
+    const then = oldPF.pack.validate(raw, { theme: "cozy-village", seed: 77, brief: oldBrief });
+    const now = seal(raw);
+    assert.ok(then && now, "both builds seal it");
+    assert.equal(JSON.stringify(now), JSON.stringify(then), "a 0.13-shaped pack seals to the same bytes under 0.14");
+    // Non-vacuous the other way: the widening IS observable on a pack that uses
+    // it, so the identity above is about 0.13's OWN values and not about a seal
+    // that ignores the axis.
+    const wide = rawPack(["storm"]);
+    assert.notEqual(
+      JSON.stringify(seal(wide)),
+      JSON.stringify(oldPF.pack.validate(wide, { theme: "cozy-village", seed: 77, brief: oldBrief })),
+      "…and a pack that names a 0.14 word does NOT seal the same, which is the widening working",
+    );
+  }
+
+  // AND THE AXIS IS THE SKY'S OWN ARRAY, not a copy of it — the DAYPARTS idiom,
+  // asserted last so the behaviour above is what a reverted re-point reds on.
+  // A copy is a second list that a sixth weather word would leave behind.
+  assert.equal(pack.WEATHERS, loadedPF.weather.WORDS, "the pack's axis IS the sky's list, not a copy of it");
+  assert.deepEqual(pack.WEATHERS, ["fair", "overcast", "rain", "storm", "snow"], "…all five words of it");
 }
 
 console.log("brief validator + compiler: all cases passed");

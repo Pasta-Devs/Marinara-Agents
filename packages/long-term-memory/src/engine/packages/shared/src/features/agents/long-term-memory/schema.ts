@@ -2358,6 +2358,11 @@ export const ltmExtractSourceNoteResponseSchema = z
 
 export const ltmInteropSourceSchema = z.enum(["characters", "lorebooks", "chats"]);
 
+const ltmPreviewQuerySchema = z.preprocess(
+  (value) => (typeof value === "string" ? value.trim() || undefined : value),
+  z.string().max(200).optional(),
+);
+
 export const ltmInteropPreviewRequestSchema = z
   .object({
     source: ltmInteropSourceSchema,
@@ -2366,6 +2371,7 @@ export const ltmInteropPreviewRequestSchema = z
     // Kept for clients built against the Phase 1 request contract.
     scope: ltmScopeSchema.optional(),
     mode: ltmModeSchema.optional(),
+    query: ltmPreviewQuerySchema,
   })
   .strict();
 
@@ -2410,6 +2416,14 @@ export const ltmInteropPreviewResponseSchema = z
     draftable: z.number().int().min(0).max(100),
     importedCount: z.number().int().min(0).max(100),
     samples: z.array(ltmInteropPreviewSampleSchema).max(100),
+    totals: z
+      .object({
+        matches: z.number().int().min(0).max(1_000_000),
+        ready: z.number().int().min(0).max(1_000_000),
+        imported: z.number().int().min(0).max(1_000_000),
+      })
+      .strict(),
+    truncated: z.boolean(),
   })
   .strict()
   .superRefine((response, ctx) => {
@@ -2437,6 +2451,7 @@ export const ltmLorebookPreviewRequestSchema = z
     // Kept for clients built against the Phase 1 request contract.
     scope: ltmScopeSchema.optional(),
     mode: ltmModeSchema.optional(),
+    query: ltmPreviewQuerySchema,
   })
   .strict();
 
@@ -2496,6 +2511,7 @@ export const ltmLorebookPreviewBookSchema = z
     tags: z.array(z.string().min(1).max(120)).max(100),
     scope: ltmScopeSchema,
     counts: ltmLorebookPreviewCountsSchema,
+    totals: ltmLorebookPreviewCountsSchema,
     entries: z.array(ltmLorebookPreviewEntrySchema).max(10_000),
   })
   .strict()
@@ -2519,6 +2535,10 @@ export const ltmLorebookPreviewResponseSchema = z
       books: z.number().int().min(0).max(100),
     }),
     books: z.array(ltmLorebookPreviewBookSchema).max(100),
+    totals: ltmLorebookPreviewCountsSchema.extend({
+      books: z.number().int().min(0).max(1_000_000),
+    }),
+    truncated: z.boolean(),
   })
   .strict()
   .superRefine((response, ctx) => {
@@ -2539,6 +2559,51 @@ export const ltmLorebookPreviewResponseSchema = z
         message: "books does not match the returned lorebooks.",
       });
   });
+
+export const ltmSourceDetailsRequestSchema = z
+  .object({
+    source: ltmInteropSourceSchema,
+    sourceIds: z
+      .array(z.string().min(1).max(120))
+      .min(1)
+      .max(100)
+      .refine((sourceIds) => new Set(sourceIds).size === sourceIds.length, "Source ids must be unique."),
+    sourceScope: ltmScopeSchema.optional(),
+    // Kept for clients built against the Phase 1 request contract.
+    scope: ltmScopeSchema.optional(),
+    mode: ltmModeSchema.optional(),
+    chatId: z.string().min(1).max(120).optional(),
+  })
+  .strict();
+
+const ltmSourceDetailContentSchema = z.object({ content: z.string().min(1).max(500_000) }).strict();
+
+export const ltmSourceDetailSchema = z.discriminatedUnion("status", [
+  ltmInteropPreviewSampleBaseSchema
+    .extend({
+      status: z.literal("pending"),
+      freshness: z.literal("new"),
+      ...ltmSourceDetailContentSchema.shape,
+    })
+    .strict(),
+  ltmInteropPreviewSampleBaseSchema
+    .extend({
+      status: z.literal("imported"),
+      freshness: ltmInteropPreviewFreshnessSchema.exclude(["new"]),
+      existingNoteId: ltmNoteIdSchema,
+      existingNoteTitle: z.string().min(1).max(240),
+      ...ltmSourceDetailContentSchema.shape,
+    })
+    .strict(),
+]);
+
+export const ltmSourceDetailsResponseSchema = z
+  .object({
+    source: ltmInteropSourceSchema,
+    details: z.array(ltmSourceDetailSchema).max(100),
+    missingSourceIds: z.array(z.string().min(1).max(120)).max(100),
+  })
+  .strict();
 
 export const ltmImportSourceNotesRequestSchema = z
   .object({
@@ -2880,6 +2945,9 @@ export type LtmLorebookPreviewRequest = z.infer<typeof ltmLorebookPreviewRequest
 export type LtmLorebookPreviewEntry = z.infer<typeof ltmLorebookPreviewEntrySchema>;
 export type LtmLorebookPreviewBook = z.infer<typeof ltmLorebookPreviewBookSchema>;
 export type LtmLorebookPreviewResponse = z.infer<typeof ltmLorebookPreviewResponseSchema>;
+export type LtmSourceDetailsRequest = z.infer<typeof ltmSourceDetailsRequestSchema>;
+export type LtmSourceDetail = z.infer<typeof ltmSourceDetailSchema>;
+export type LtmSourceDetailsResponse = z.infer<typeof ltmSourceDetailsResponseSchema>;
 export type LtmImportSourceNotesRequest = z.infer<typeof ltmImportSourceNotesRequestSchema>;
 export type LtmImportedSourceResult = z.infer<typeof ltmImportedSourceResultSchema>;
 export type LtmImportSourceWriteFailure = z.infer<typeof ltmImportSourceWriteFailureSchema>;

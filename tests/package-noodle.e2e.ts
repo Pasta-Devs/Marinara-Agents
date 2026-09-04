@@ -1683,8 +1683,13 @@ test.describe("package-owned Noodle interface", () => {
     // The home timeline's own sticky bar stands in for the old header when a step
     // needs to prove the reader landed back on the timeline.
     const homeHeader = noodle.locator('[data-component="NoodleView.MobileHeader"]');
+    const timelineTabs = noodle.locator('[data-component="NoodleView.TimelineTabs"]');
+    const mobileMenuTrigger = homeHeader.locator('[data-component="NoodleView.MobileMenuTrigger"]');
     await expect(homeButton).toBeVisible();
     await expect(homeButton).toHaveAttribute("aria-current", "page");
+    await expect(mobileMenuTrigger).toBeVisible();
+    await expect(mobileMenuTrigger.locator("svg.lucide-menu")).toBeVisible();
+    await expect(mobileMenuTrigger.locator("[data-noodle-avatar-fallback], img")).toHaveCount(0);
     const bottomNavIconColors = await bottomNav
       .locator("svg:visible")
       .evaluateAll((icons) => Array.from(new Set(icons.map((icon) => getComputedStyle(icon).color))));
@@ -1798,6 +1803,11 @@ test.describe("package-owned Noodle interface", () => {
       element.scrollTo({ top: element.scrollHeight });
     });
     expect(await timelineScroller.evaluate((element) => element.scrollTop)).toBeGreaterThan(0);
+    const headerTopAfterScroll = await homeHeader.evaluate((element) => element.getBoundingClientRect().bottom);
+    const scrollerTop = await timelineScroller.evaluate((element) => element.getBoundingClientRect().top);
+    expect(headerTopAfterScroll).toBeLessThanOrEqual(scrollerTop + 1);
+    const tabsTopAfterScroll = await timelineTabs.evaluate((element) => element.getBoundingClientRect().top);
+    expect(tabsTopAfterScroll).toBeLessThan(scrollerTop);
     await bottomNav.getByRole("button", { name: "Noodle home" }).click();
     await expect(homeHeader).toBeVisible();
     await expect.poll(() => timelineScroller.evaluate((element) => element.scrollTop)).toBe(0);

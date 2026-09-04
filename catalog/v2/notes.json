@@ -1,0 +1,37 @@
+{
+  "schemaVersion": 1,
+  "packages": {
+    "long-term-memory": {
+      "versions": [
+        {
+          "version": "1.2.19",
+          "date": "2026-09-04",
+          "notes": "- Bound the Sources destination panel and restored page scrolling when its list is hovered.\n- Restricted Already imported counts and rows to the selected source scope.",
+          "highlight": false
+        }
+      ]
+    },
+    "noodle": {
+      "versions": [
+        {
+          "version": "1.2.20",
+          "date": "2026-09-03",
+          "notes": "- Added independent image width and height settings to Noodle settings.",
+          "highlight": false
+        },
+        {
+          "version": "1.2.19",
+          "date": "2026-09-03",
+          "notes": "- Fixed automatic timeline refresh when Marinara requires an admin secret on loopback.",
+          "highlight": false
+        },
+        {
+          "version": "1.2.18",
+          "date": "2026-09-03",
+          "notes": "- Test the agent changelog feature with a highlighted patch release. No features were added.",
+          "highlight": true
+        }
+      ]
+    }
+  }
+}

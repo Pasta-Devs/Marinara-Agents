@@ -186,6 +186,8 @@ export const slurpSettingsSchema = z.object({
   inlineAdsLorebookId: z.string().trim().min(1).nullable(),
   /** Fingerprint of the synced lorebook, so a changed book can resync itself. */
   inlineAdsLorebookRevision: z.string().trim().max(64).nullable(),
+  imageWidth: z.number().int().min(64).max(4096),
+  imageHeight: z.number().int().min(64).max(4096),
   refreshesPerDay: z.number().int().min(0).max(24),
   generationGuidance: z.string().max(20_000),
   generationConnectionId: z.string().nullable(),
@@ -761,6 +763,8 @@ export const DEFAULT_SLURP_SETTINGS: SlurpSettings = {
   walletCreatorRevenueSharePercent: SLURP_DEFAULT_ECONOMY.creatorRevenueSharePercent,
   inlineAdsLorebookId: null,
   inlineAdsLorebookRevision: null,
+  imageWidth: 1024,
+  imageHeight: 1536,
   refreshesPerDay: 0,
   generationGuidance: NOODLER_DEFAULT_GENERATION_GUIDANCE,
   generationConnectionId: null,

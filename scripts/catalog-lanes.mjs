@@ -1,6 +1,7 @@
 import { mkdir, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { basename, dirname, join } from "node:path";
 import { INCOMPLETE_PACKAGE_IDS, STAGING_ONLY_PACKAGE_IDS } from "./catalog-incomplete.mjs";
+import { assertReleaseNotesForFeatureBumps, buildReleaseNotesDocument } from "./catalog-release-notes.mjs";
 
 export const LEGACY_CATALOG_MAJOR = 2;
 
@@ -256,6 +257,33 @@ async function writePreviewOverlay(repoRoot, previewCatalog) {
   return lanes;
 }
 
+/** Write (or remove) the notes sidecar beside one catalog.json.
+ *
+ *  Removed rather than written empty: the Engine treats an absent document and an
+ *  empty one identically, and an empty file in the tree only invites someone to
+ *  wonder which lane it belongs to. */
+async function writeNotesSidecar(directory, notes) {
+  const path = join(directory, "notes.json");
+  if (Object.keys(notes.packages).length === 0) {
+    await rm(path, { force: true });
+    return;
+  }
+  await mkdir(directory, { recursive: true });
+  await writeFile(path, `${JSON.stringify(notes, null, 2)}\n`);
+}
+
+/** Notes for exactly the packages in one lane, so a sidecar never describes a
+ *  package the Engine reading it cannot see. */
+async function writeLaneNotes(repoRoot, directory, lanes) {
+  for (const [major, lane] of lanes) {
+    await writeNotesSidecar(join(directory, `v${major}`), await buildReleaseNotesDocument(repoRoot, lane.packages));
+  }
+  const legacyLane = lanes.get(LEGACY_CATALOG_MAJOR);
+  if (legacyLane) {
+    await writeNotesSidecar(directory, await buildReleaseNotesDocument(repoRoot, legacyLane.packages));
+  }
+}
+
 export async function writeCatalogFamily(repoRoot, catalog) {
   const catalogDirectory = join(repoRoot, "catalog");
   catalog.generatedAt = await resolveCatalogGeneratedAt(catalogDirectory);
@@ -290,8 +318,21 @@ export async function writeCatalogFamily(repoRoot, catalog) {
   }
   const published = { ...catalog, packages: publishedPackages };
   const catalogsByMajor = createCatalogLanes(published);
+
+  // A minor or major bump owes the user a sentence; a patch may stay silent.
+  // The committed catalog is still on disk at this point, so "what version did
+  // we publish last time" needs no git access and no retroactive changelog for
+  // the packages already out there.
+  const committed = await readCatalogFamily(repoRoot);
+  const previousVersions = new Map(
+    committed.catalog.packages.map((entry) => [entry.manifest.id, entry.manifest.version]),
+  );
+  const allNotes = await buildReleaseNotesDocument(repoRoot, catalog.packages);
+  assertReleaseNotesForFeatureBumps(catalog.packages, allNotes, previousVersions);
+
   await mkdir(catalogDirectory, { recursive: true });
-  await writePreviewOverlay(repoRoot, { ...catalog, packages: previewPackages });
+  const previewLanes = await writePreviewOverlay(repoRoot, { ...catalog, packages: previewPackages });
+  await writeLaneNotes(repoRoot, previewCatalogDirectory(repoRoot), previewLanes);
 
   const entries = await readdir(catalogDirectory, { withFileTypes: true });
   const expectedDirectories = new Set([...catalogsByMajor.keys()].map((major) => `v${major}`));
@@ -313,5 +354,6 @@ export async function writeCatalogFamily(repoRoot, catalog) {
   const legacyCatalog = catalogsByMajor.get(LEGACY_CATALOG_MAJOR);
   if (!legacyCatalog) throw new Error(`Missing legacy v${LEGACY_CATALOG_MAJOR} catalog lane`);
   await writeFile(join(catalogDirectory, "catalog.json"), `${JSON.stringify(legacyCatalog, null, 2)}\n`);
+  await writeLaneNotes(repoRoot, catalogDirectory, catalogsByMajor);
   return catalogsByMajor;
 }

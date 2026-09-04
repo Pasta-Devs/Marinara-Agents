@@ -2,6 +2,8 @@ import { createHash, randomUUID } from "node:crypto";
 import {
   type LtmImportSourceNotesRequest,
   type LtmImportSourceNotesResponse,
+  type LtmSourceDetailsRequest,
+  type LtmSourceDetailsResponse,
   type LtmInteropPreviewRequest,
   type LtmInteropPreviewFreshness,
   type LtmInteropPreviewResponse,
@@ -319,6 +321,10 @@ function matchesScope(candidate: Candidate, scope?: LtmScope) {
   return matchesImportScope(candidate.scope, scope);
 }
 
+function candidateVisibleInScope(candidate: Candidate, scope: LtmScope | undefined) {
+  return matchesScope(candidate, scope);
+}
+
 function matchesChatSummaryScope(candidateScope: LtmScope, scope?: LtmScope) {
   if (!scope) return true;
   const scopeGroupIds = new Set(getLtmScopeGroupIds(scope));
@@ -432,10 +438,11 @@ function normalizeLorebooks(books: Array<{ id: string; data: unknown; entries: u
 async function candidates(
   request: {
     source: "characters" | "lorebooks" | "chats";
-    limit: number;
     sourceScope?: LtmScope;
     mode?: LtmMode;
     chatId?: string;
+    query?: string;
+    includeOutOfScope?: boolean;
   },
   selected?: Set<string>,
 ) {
@@ -474,8 +481,10 @@ async function candidates(
     const broaderScope = scopeGroupIds.size > 0 || scopeIds.size > 1;
     for (const chat of await getPackagePersistence().listChats()) {
       if (normalizeLtmChatCharacterIds(chat.characterIds).includes(PROFESSOR_MARI_CHARACTER_ID)) continue;
-      if (!request.sourceScope && request.chatId && !broaderScope && chat.id !== request.chatId) continue;
-      if (scopeGroupIds.size ? !scopeGroupIds.has(chat.groupId) : scopeIds.size && !scopeIds.has(chat.id)) continue;
+      if (!request.includeOutOfScope) {
+        if (!request.sourceScope && request.chatId && !broaderScope && chat.id !== request.chatId) continue;
+        if (scopeGroupIds.size ? !scopeGroupIds.has(chat.groupId) : scopeIds.size && !scopeIds.has(chat.id)) continue;
+      }
       const metadata = object(chat.metadata),
         chatMode = ltmModeForChatMode(chat.mode);
       for (const entry of summaries(metadata, chatMode)) {
@@ -521,14 +530,29 @@ async function candidates(
   }
   const filtered = result.filter(
       (item) =>
-        matchesScope(item, request.sourceScope) &&
+        (request.includeOutOfScope || matchesScope(item, request.sourceScope)) &&
         (!request.mode || item.modes.includes(request.mode)) &&
+        matchesQuery(item, request.query) &&
         (!selected || selected.has(item.sourceId)),
     ),
     ordered = selected ? [...selected].flatMap((id) => filtered.filter((item) => item.sourceId === id)) : filtered;
-  return ordered
-    .slice(0, Math.max(request.limit, selected?.size ?? 0))
-    .map((item) => mode(item, importedSourceMode(item.provenance.kind, request.mode)));
+  return ordered.map((item) => mode(item, importedSourceMode(item.provenance.kind, request.mode)));
+}
+
+function normalizedSearchText(value: string) {
+  return value.normalize("NFKC").replace(/\s+/gu, " ").trim().toLocaleLowerCase();
+}
+
+function matchesQuery(
+  candidate: Pick<Candidate, "sourceId" | "title" | "summary" | "sourceText" | "lorebookEntryName">,
+  query?: string,
+) {
+  if (!query) return true;
+  const needle = normalizedSearchText(query);
+  if (!needle) return true;
+  return [candidate.sourceId, candidate.title, candidate.summary, candidate.sourceText, candidate.lorebookEntryName]
+    .filter((value): value is string => Boolean(value))
+    .some((value) => normalizedSearchText(value).includes(needle));
 }
 
 function provenanceKey(provenance: LtmSourceProvenance) {
@@ -585,16 +609,27 @@ export async function previewPackageInterop(
   request: LtmInteropPreviewRequest,
   root: string,
 ): Promise<LtmInteropPreviewResponse> {
-  const rows = await candidates({ ...request, sourceScope: requestedSourceScope(request) }),
+  const sourceScope = requestedSourceScope(request),
+    rows = await candidates({ ...request, sourceScope, includeOutOfScope: sourceScope !== undefined }),
     storage = new LongTermMemoryStorage(root),
     matchExisting = await existingMatcher(storage),
-    samples = rows.map((row) => previewSample(row, matchExisting(row)));
+    allSamples = rows.flatMap((row) => {
+      const existing = matchExisting(row);
+      return candidateVisibleInScope(row, sourceScope) ? [previewSample(row, existing)] : [];
+    }),
+    samples = allSamples.slice(0, request.limit);
   return {
     source: request.source,
     scanned: samples.length,
     draftable: samples.filter((item) => item.status === "pending").length,
     importedCount: samples.filter((item) => item.status === "imported").length,
     samples,
+    totals: {
+      matches: allSamples.length,
+      ready: allSamples.filter((item) => item.status === "pending").length,
+      imported: allSamples.filter((item) => item.status === "imported").length,
+    },
+    truncated: allSamples.length > samples.length,
   };
 }
 
@@ -605,56 +640,111 @@ export async function previewPackageLorebooks(
   const sourceScope = requestedSourceScope(request),
     storage = new LongTermMemoryStorage(root),
     matchExisting = await existingMatcher(storage),
-    resources = (await getPackageResources().listLorebooks())
-      .filter((book) => matchesImportScope(lorebookScope(object(book.data)), sourceScope))
-      .slice(0, request.limit),
-    books = normalizeLorebooks(resources).map((book) => {
-      const rows = book.candidates
-          .filter((row) => (!request.mode || row.modes.includes(request.mode)) && matchesScope(row, sourceScope))
-          .map((row) => mode(row, importedSourceMode(row.provenance.kind, request.mode))),
-        grouped = new Map<
-          string,
-          {
-            id: string;
-            name: string;
-            candidates: ReturnType<typeof previewSample>[];
-          }
-        >();
-      for (const row of rows) {
-        const id = row.lorebookEntryId!,
-          entry = grouped.get(id) ?? {
-            id,
-            name: row.lorebookEntryName!,
-            candidates: [],
-          };
-        entry.candidates.push(previewSample(row, matchExisting(row)));
-        grouped.set(id, entry);
-      }
-      const entries = [...grouped.values()].map((entry) => ({
-          ...entry,
-          candidateCount: entry.candidates.length,
-        })),
-        samples = entries.flatMap((entry) => entry.candidates),
-        imported = samples.filter((sample) => sample.status === "imported").length;
+    resources = await getPackageResources().listLorebooks(),
+    matchingBooks = normalizeLorebooks(resources)
+      .map((book) => {
+        const bookMatches = matchesQuery(
+            {
+              sourceId: book.id,
+              title: book.name,
+              sourceText: [book.description, book.category, ...book.tags].join("\n"),
+              summary: book.description,
+            },
+            request.query,
+          ),
+          rows = book.candidates
+            .filter((row) => {
+              return (
+                (!request.mode || row.modes.includes(request.mode)) &&
+                candidateVisibleInScope(row, sourceScope) &&
+                (bookMatches || matchesQuery(row, request.query))
+              );
+            })
+            .map((row) => mode(row, importedSourceMode(row.provenance.kind, request.mode))),
+          grouped = new Map<
+            string,
+            {
+              id: string;
+              name: string;
+              candidates: ReturnType<typeof previewSample>[];
+            }
+          >();
+        for (const row of rows) {
+          const id = row.lorebookEntryId!,
+            entry = grouped.get(id) ?? {
+              id,
+              name: row.lorebookEntryName!,
+              candidates: [],
+            };
+          entry.candidates.push(previewSample(row, matchExisting(row)));
+          grouped.set(id, entry);
+        }
+        const entries = [...grouped.values()].map((entry) => ({
+            ...entry,
+            candidateCount: entry.candidates.length,
+          })),
+          samples = entries.flatMap((entry) => entry.candidates),
+          imported = samples.filter((sample) => sample.status === "imported").length;
+        return {
+          id: book.id,
+          name: book.name,
+          description: book.description.length > 600 ? `${book.description.slice(0, 597)}...` : book.description,
+          category: book.category,
+          tags: book.tags,
+          scope: book.scope,
+          counts: {
+            entries: entries.length,
+            candidates: samples.length,
+            pending: samples.length - imported,
+            imported,
+          },
+          entries,
+        };
+      })
+      .filter(
+        (book) =>
+          (matchesImportScope(book.scope, sourceScope) || book.counts.candidates > 0) &&
+          (!request.query || book.counts.candidates > 0),
+      ),
+    totalEntries = matchingBooks.reduce((count, book) => count + book.counts.entries, 0),
+    totalCandidates = matchingBooks.reduce((count, book) => count + book.counts.candidates, 0),
+    totalImported = matchingBooks.reduce((count, book) => count + book.counts.imported, 0);
+  let remaining = request.limit;
+  const visibleBooks = matchingBooks.slice(0, 100);
+  let candidateBooksRemaining = visibleBooks.filter((book) => book.counts.candidates > 0).length;
+  const books = visibleBooks.map((book) => {
+      let allocation =
+        book.counts.candidates === 0 || remaining === 0
+          ? 0
+          : candidateBooksRemaining <= remaining
+            ? Math.min(book.counts.candidates, Math.max(1, remaining - candidateBooksRemaining + 1))
+            : 1;
+      if (book.counts.candidates > 0) candidateBooksRemaining -= 1;
+      const entries = book.entries.flatMap((entry) => {
+          if (!allocation) return [];
+          const candidates = entry.candidates.slice(0, allocation);
+          allocation -= candidates.length;
+          return candidates.length ? [{ ...entry, candidateCount: candidates.length, candidates }] : [];
+        }),
+        candidates = entries.flatMap((entry) => entry.candidates),
+        imported = candidates.filter((candidate) => candidate.status === "imported").length;
+      remaining -= candidates.length;
       return {
-        id: book.id,
-        name: book.name,
-        description: book.description.length > 600 ? `${book.description.slice(0, 597)}...` : book.description,
-        category: book.category,
-        tags: book.tags,
-        scope: book.scope,
+        ...book,
         counts: {
           entries: entries.length,
-          candidates: samples.length,
-          pending: samples.length - imported,
+          candidates: candidates.length,
+          pending: candidates.length - imported,
           imported,
         },
+        totals: book.counts,
         entries,
       };
     }),
-    entries = books.reduce((count, book) => count + book.counts.entries, 0),
-    candidatesCount = books.reduce((count, book) => count + book.counts.candidates, 0),
-    imported = books.reduce((count, book) => count + book.counts.imported, 0);
+    entries = books.reduce((count, book) => count + book.entries.length, 0),
+    samples = books.flatMap((book) => book.entries.flatMap((entry) => entry.candidates)),
+    candidatesCount = samples.length,
+    imported = samples.filter((sample) => sample.status === "imported").length;
   return {
     counts: {
       books: books.length,
@@ -664,6 +754,45 @@ export async function previewPackageLorebooks(
       imported,
     },
     books,
+    totals: {
+      books: matchingBooks.length,
+      entries: totalEntries,
+      candidates: totalCandidates,
+      pending: totalCandidates - totalImported,
+      imported: totalImported,
+    },
+    truncated: matchingBooks.length > books.length || totalCandidates > candidatesCount,
+  };
+}
+
+export async function sourcePackageDetails(
+  request: LtmSourceDetailsRequest,
+  root: string,
+): Promise<LtmSourceDetailsResponse> {
+  const sourceScope = requestedSourceScope(request),
+    rows = await candidates(
+      {
+        source: request.source,
+        sourceScope,
+        mode: request.mode,
+        chatId: request.chatId,
+        includeOutOfScope: sourceScope !== undefined,
+      },
+      new Set(request.sourceIds),
+    ),
+    storage = new LongTermMemoryStorage(root),
+    matchExisting = await existingMatcher(storage),
+    details = rows.flatMap((row) => {
+      const existing = matchExisting(row);
+      return candidateVisibleInScope(row, sourceScope)
+        ? [{ ...previewSample(row, existing), content: row.sourceText.slice(0, 500_000) }]
+        : [];
+    }),
+    resolvedIds = new Set(details.map((detail) => detail.sourceId));
+  return {
+    source: request.source,
+    details,
+    missingSourceIds: request.sourceIds.filter((sourceId) => !resolvedIds.has(sourceId)),
   };
 }
 export async function importPackageInterop(
@@ -688,7 +817,13 @@ export async function importPackageInterop(
       (legacyScopeRequest ? legacyDestinationScope : chat ? resolveChatLtmWriteScope(chat) : undefined),
     operationId = randomUUID(),
     selected = new Set(request.sourceIds),
-    rows = await candidates({ ...request, sourceScope }, selected),
+    storage = new LongTermMemoryStorage(root),
+    matchExisting = await existingMatcher(storage),
+    candidateRows = await candidates(
+      { ...request, sourceScope, includeOutOfScope: sourceScope !== undefined },
+      selected,
+    ),
+    rows = candidateRows.filter((row) => candidateVisibleInScope(row, sourceScope)),
     resolvedIds = new Set(rows.map((item) => item.sourceId)),
     missingSourceIds = request.sourceIds.filter((id) => !resolvedIds.has(id));
   throwIfAborted(signal);
@@ -723,9 +858,7 @@ export async function importPackageInterop(
     }
   }
   throwIfAborted(signal);
-  const storage = new LongTermMemoryStorage(root),
-    matchExisting = await existingMatcher(storage),
-    written: Array<{
+  const written: Array<{
       sourceId: string;
       title: string;
       note: LtmNote;

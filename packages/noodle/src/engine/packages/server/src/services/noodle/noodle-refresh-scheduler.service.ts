@@ -1,4 +1,4 @@
-import type { FastifyInstance } from "fastify";
+import type { FastifyInstance, InjectOptions } from "fastify";
 import { logger } from "../../lib/logger.js";
 import { createNoodleStorage } from "../storage/noodle.storage.js";
 import { AUTOMATIC_GENERATION_HEADER } from "../generation/connection-admission.js";
@@ -51,7 +51,10 @@ export function nextNoodleSchedulerPollDelayMs(schedule: PersistedNoodleRefreshS
   return Math.max(1_000, Math.min(NOODLE_SCHEDULER_MAX_POLL_MS, Date.parse(nextRefreshAt) - now));
 }
 
-export function startNoodleRefreshScheduler(app: FastifyInstance) {
+export function startNoodleRefreshScheduler(
+  app: FastifyInstance,
+  runInternalRoute?: (options: InjectOptions | string) => ReturnType<FastifyInstance["inject"]>,
+) {
   const noodle = createNoodleStorage(app.db);
   let stopped = false;
   let polling = false;
@@ -127,12 +130,13 @@ export function startNoodleRefreshScheduler(app: FastifyInstance) {
         return;
       }
 
-      const response = await app.inject({
+      const request = {
         method: "POST",
         url: "/api/noodle/refresh",
         headers: { [AUTOMATIC_GENERATION_HEADER]: "1" },
         payload: { mode: "public" },
-      });
+      } satisfies InjectOptions;
+      const response = await (runInternalRoute ? runInternalRoute(request) : app.inject(request));
       const completedAt = new Date();
       const latest = await noodle.ensureRefreshSchedule(completedAt);
       if (response.statusCode >= 200 && response.statusCode < 300) {

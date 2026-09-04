@@ -66,6 +66,9 @@ jobs:
       - name: Test catalog generatedAt determinism
         run: node scripts/tests/catalog-generatedat-determinism.regression.mjs
 
+      - name: Test package release notes
+        run: node scripts/tests/catalog-release-notes.regression.mjs
+
       - name: Test World Maps UI contracts
         run: node tests/world-maps-ui-contract.regression.mjs
 

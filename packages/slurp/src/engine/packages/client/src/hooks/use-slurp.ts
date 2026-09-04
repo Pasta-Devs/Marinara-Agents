@@ -265,6 +265,17 @@ export type SlurpSettings = {
   inlineAdsImagesEnabled: boolean;
   inlineAdsLorebookId: string | null;
   inlineAdsLorebookRevision: string | null;
+  walletEnabled: boolean;
+  walletUnlockCost: number;
+  walletSubscriptionCost: number;
+  walletStipendFloor: number;
+  walletAdReward: number;
+  walletAdDailyCap: number;
+  walletEngagementReward: number;
+  walletEngagementDailyCap: number;
+  walletCreatorRevenueSharePercent: number;
+  imageWidth: number;
+  imageHeight: number;
   refreshesPerDay: number;
   generationGuidance: string;
   postsPerDay: number;

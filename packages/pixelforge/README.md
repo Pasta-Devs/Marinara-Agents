@@ -156,6 +156,54 @@ generation get a hand-written stock set of jobs instead, posted by the four peop
 village stands up. Jobs you have already taken are never affected by any of this: they stay on your
 list and finish normally, whatever the board is offering.
 
+## Weather, seasons and talk (0.14.0)
+
+**Every world now has a climate and a year of its own.** When a world is made it is given a place on
+the map — somewhere between the equator and the pole — and how wet that place is, and everything
+else follows from those two facts. A temperate valley gets four seasons and a proper winter; the
+tropics get a wet half of the year and a dry one; a desert gets rain that hardly ever comes and is
+almost always light when it does. Days are fair, overcast, rainy, stormy or snowy, and rain and snow
+come light or heavy. **The sky is the same every time you load** — it is worked out from the world's
+seed and the day, so it costs nothing, saves nothing, and a rewind puts back the weather that was
+actually there.
+
+**The town notices.** On a wet or snowy morning the people who would have been out in it go home to
+their own firesides instead — the streets empty and the windows light up — while anyone whose work
+is outdoors stays at it: the watch keeps the night, the grower works the land in the rain, the
+keeper keeps the inn. Snow lies on the grass and the crops and the treetops, and not on the paths,
+because a trodden way is the first thing to clear. Your journal notes the first snow of the season
+and a storm rolling in. And the GM is told the weather and the season in the same breath as the time
+of day, so the story you are told matches the world you are standing in.
+
+**Fishing has a good day and a bad one.** Fish bite roughly twice as often under a grey sky as under
+a clear one — the ruling of thumb is a bite every ten minutes on a fair day and every five on a
+wet one — so waiting for weather is now a real way to spend an afternoon. It never becomes a sure
+thing: a cast can still come up empty in a downpour. Where the world sits matters too: a wet region
+has more water and more in it, an arid one fishes sparse — **fewer bites, never fewer kinds of
+fish**. And a storm is the one sky that changes *what* you catch as well as how often, tilting the
+odds toward the rare end. Worth knowing before you go looking for one: a polar world never gets
+thunderstorms at all.
+
+**Press E and somebody actually says something back.** Talking to a townsperson no longer spends a
+GM turn on "I walk up and say hello". It opens a small window with things you can actually ask —
+what they do, where they live, the local rumors, whether there is work, what they make of the place,
+or just passing the time — all answered instantly and free. **The clock stops while the window is
+open**, because a conversation should never cost you the afternoon, and the town carries on moving
+around you while you read. Walk more than a step away and the conversation ends by itself.
+
+**The two doors to the story are always there.** "Just talk" hands the moment to the GM as it always
+did, and there is a box you can type your own line into, which cues the narrator to answer *as that
+person*. Everything else in the window is free — so a hundred and twenty people in a city are
+finally worth walking up to, whether or not the model ever wrote a word about them.
+
+**What you will see if your world is older.** Worlds made before 0.14 get a climate too, rolled from
+their own seed — the same sky every time, and their layout is untouched. Worlds made before 0.13
+still have no written dialogue of their own, so they use the hand-written stock lines, which
+actually means they have *more* to say at the moment, not less. And one small thing changed
+everywhere: fences, wells and tree trunks no longer bring their own patch of grass with them, so
+they stand on whatever ground is actually under them — which is what lets snow lie around them
+properly.
+
 ## Art
 
 Two tiers, resolved at runtime with graceful degradation:
@@ -178,7 +226,7 @@ Two tiers, resolved at runtime with graceful degradation:
 packages/pixelforge/
 ├── src/                  # plain-JS modules, concatenated in filename order into client.js
 ├── docs/brief-schema.md  # the World Brief schema v1 spec (sealed; amendments inline)
-├── docs/player-state.md  # the player block + the verbs: wire contract, stamps, quarantine, ladder, gate, fishing, the wrap-up, the quest layer and its content pack
+├── docs/player-state.md  # the player block + the verbs: wire contract, stamps, quarantine, ladder, gate, fishing, the wrap-up, the quest layer and its content pack, the sky and calendar, the dialogue window
 ├── test-brief.mjs        # standalone validator/compiler/spatial regression harness
 ├── build/
 │   ├── build-art.mjs     # deterministic Tier-1 art generator (writes build/assets/, untracked)

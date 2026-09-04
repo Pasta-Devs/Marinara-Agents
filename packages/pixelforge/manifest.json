@@ -10,7 +10,7 @@
   },
   "id": "pixelforge",
   "name": "Pixelforge",
-  "version": "0.13.0",
+  "version": "0.14.0",
   "description": "A walkable pixel-art RPG Experience for Game Mode: your setup preferences generate the world — a cozy village or a sci-fi colony — then explore it, talk to NPCs to drive the story, and let the GM narrate, with World Maps integration and the engine's own combat. Install it, then choose Pixelforge as the Experience when creating a Game Mode chat.",
   "engine": {
     "min": "2.4.3",
@@ -52,23 +52,23 @@
     },
     {
       "path": "client.js",
-      "sha256": "c72018c374ae116c64c3e445e115986f682d59604e0102e2076313aaa33734b3",
-      "bytes": 996101
+      "sha256": "99a8214cab09bdba934e3f0bd29e31b9c6f0599a049eb9de92cf097e72bcd762",
+      "bytes": 1178967
     },
     {
       "path": "tiles.png",
-      "sha256": "fa43cc6bed271ab2fad23103c0d334b3bb2e2bc29e8bb892e972939dbe85d8c0",
-      "bytes": 1749
+      "sha256": "5de85c28500b374553a41d93ebd1a0eac50b6d1242db175bd1970c4e435fcf0b",
+      "bytes": 1903
     },
     {
       "path": "tiles-sci-fi-colony.png",
-      "sha256": "026aa1323d029ce2c830bac17f86c45fa0cbf66a765237a43e8c598647ff0f17",
-      "bytes": 1723
+      "sha256": "a7b2ac362097a90c8176f0408863763bed4c244365c1dbe1821d5d92b3c3c87c",
+      "bytes": 1874
     },
     {
       "path": "atlas.json",
-      "sha256": "b65d92ce09639e9a59f3c344637b5f39e915240e3c546d6ccb2277b44c8b4fd0",
-      "bytes": 544
+      "sha256": "733d8078229f7e7a543f8073a62eb85b3fad77ec9334b1a70f0dc2d342bd5d7e",
+      "bytes": 629
     },
     {
       "path": "sprites.json",

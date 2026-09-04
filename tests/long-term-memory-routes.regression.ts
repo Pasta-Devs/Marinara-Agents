@@ -1060,6 +1060,30 @@ async function main() {
       false,
       "an active chat scope must not include another chat that only shares its character",
     );
+    assert.deepEqual(activeChatScopePreview.json().totals, { matches: 1, ready: 1, imported: 0 });
+    const searchedChatPreview = await app.inject({
+      method: "POST",
+      url: "/api/long-term-memory/import/preview",
+      headers,
+      payload: { source: "chats", limit: 10, query: "observatory" },
+    });
+    assert.equal(searchedChatPreview.statusCode, 200, searchedChatPreview.body);
+    assert.equal(searchedChatPreview.json().totals.matches, 2, searchedChatPreview.body);
+    assert.equal(searchedChatPreview.json().truncated, false);
+    const sourceDetails = await app.inject({
+      method: "POST",
+      url: "/api/long-term-memory/import/source-details",
+      headers,
+      payload: {
+        source: "chats",
+        sourceIds: ["chat-a:summary-a", "missing-summary"],
+        sourceScope: { chatId: "chat-a" },
+        mode: "roleplay",
+      },
+    });
+    assert.equal(sourceDetails.statusCode, 200, sourceDetails.body);
+    assert.match(sourceDetails.json().details[0].content, /Mara seals the observatory gate/u);
+    assert.deepEqual(sourceDetails.json().missingSourceIds, ["missing-summary"]);
     assert.equal(
       scopeTargets.json().characters.some((character: any) => character.id === "character-nyra"),
       false,
@@ -2492,7 +2516,7 @@ async function main() {
         source: "chats",
         sourceIds: ["chat-a:summary-a", "missing:summary"],
         importConcurrency: 2,
-        destinationScope: { chatId: "chat-b", chatIds: ["chat-b"] },
+        destinationScope: { chatIds: ["chat-a", "chat-b"] },
       },
     });
     assert.equal(importedChat.statusCode, 200, importedChat.body);
@@ -2524,8 +2548,54 @@ async function main() {
       .json()
       .samples.find((sample: any) => sample.sourceId === "chat-a:summary-a");
     assert.equal(currentChatSample.status, "imported");
+    assert.ok(currentChatPreview.json().totals.imported > 0);
     assert.equal(currentChatSample.freshness, "extraction_incomplete");
     assert.equal(currentChatSample.existingNoteId, importedChatNote.id);
+    const destinationChatPreview = await app.inject({
+      method: "POST",
+      url: "/api/long-term-memory/import/preview",
+      headers,
+      payload: {
+        source: "chats",
+        limit: 100,
+        sourceScope: { chatId: "chat-b", chatIds: ["chat-b"] },
+      },
+    });
+    assert.equal(destinationChatPreview.statusCode, 200, destinationChatPreview.body);
+    assert.equal(
+      destinationChatPreview
+        .json()
+        .samples.some((sample: any) => sample.sourceId === "chat-a:summary-a" && sample.status === "imported"),
+      false,
+    );
+    assert.equal(destinationChatPreview.json().totals.imported, 0);
+    const destinationChatDetails = await app.inject({
+      method: "POST",
+      url: "/api/long-term-memory/import/source-details",
+      headers,
+      payload: {
+        source: "chats",
+        sourceIds: ["chat-a:summary-a"],
+        sourceScope: { chatId: "chat-a", chatIds: ["chat-a"] },
+      },
+    });
+    assert.equal(destinationChatDetails.statusCode, 200, destinationChatDetails.body);
+    assert.deepEqual(destinationChatDetails.json().missingSourceIds, []);
+    assert.equal(destinationChatDetails.json().details[0]?.existingNoteId, importedChatNote.id);
+    const refreshedDestinationChat = await app.inject({
+      method: "POST",
+      url: "/api/long-term-memory/import/source-notes",
+      headers,
+      payload: {
+        source: "chats",
+        sourceIds: ["chat-a:summary-a"],
+        sourceScope: { chatId: "chat-a", chatIds: ["chat-a"] },
+        destinationScope: { chatIds: ["chat-a", "chat-b"] },
+        extract: false,
+      },
+    });
+    assert.equal(refreshedDestinationChat.statusCode, 200, refreshedDestinationChat.body);
+    assert.deepEqual(refreshedDestinationChat.json().missingSourceIds, []);
     chats[0].metadata.summaryEntries.push({
       id: "summary-provenance-fallback",
       content: "A provenance fallback source remains imported.",
@@ -2612,7 +2682,7 @@ async function main() {
         source: "chats",
         sourceIds: ["chat-a:summary-a"],
         extract: false,
-        destinationScope: { chatId: "chat-b", chatIds: ["chat-b"] },
+        destinationScope: { chatIds: ["chat-a", "chat-b"] },
       },
     });
     assert.equal(refreshedChat.statusCode, 200, refreshedChat.body);

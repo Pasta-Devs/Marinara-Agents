@@ -45,6 +45,68 @@ PF.assets = {
     return theme === "cozy-village" ? "tiles.png" : `tiles-${encodeURIComponent(theme)}.png`;
   },
 
+  /** The key a capacity degrade latches under: THIS theme's sheet at THIS
+   *  package version. A shipped-artifact mismatch is identical on every retry,
+   *  so within the pair the latch is permanent — and a real fix arrives as a
+   *  version bump, which is a different key and gets one clean retry. */
+  _capacityKey(core, theme) {
+    const version = typeof core.host?.packageVersion === "string" ? core.host.packageVersion : "";
+    return `${theme}|${version}`;
+  },
+
+  /** Does the id map fit inside the sheet that just loaded?
+   *
+   *  This is the hole in the tier's degradation guarantee, which is per-tile and
+   *  CONDITIONAL: `tileCanvas` returns null — and the Tier-0 painter answers —
+   *  only for an id the atlas does NOT list. An id the atlas DOES list, against
+   *  a sheet too small to hold it, blits an empty in-bounds slot or a no-op
+   *  out-of-bounds rect. That is a see-through world rather than procedural art,
+   *  and it is exactly what a release that appends tile ids ships if the sheet
+   *  goes out un-rebaked.
+   *
+   *  `naturalHeight`/`naturalWidth`, not `height`/`width`: `_image()` resolves on
+   *  the load event without decode(), and the attribute-shadowed pair is not the
+   *  pixel one.
+   *
+   *  BOTH AXES, because the id map declares one of them and the sheet owns the
+   *  other. `columns` is the atlas's claim and `tileCanvas` slices at
+   *  `index % columns` forever after, so a sheet baked NARROWER than that claim
+   *  cuts every id in the missing columns from past its right edge — inside the
+   *  row count, invisible to `columns * rows`, and a see-through tile all the
+   *  same. The row test cannot catch it and the column test cannot catch a short
+   *  sheet, so the guard asks both.
+   *
+   *  THE HONEST SCOPE, because the guard is narrower than it looks: it catches a
+   *  sheet too SMALL for its id map, and that it covers this release at all is
+   *  arithmetic luck of the count — 33 ids into 32 slots. Three appended
+   *  painters instead of four would have landed in bounds and slipped straight
+   *  past it. An aligned-but-stale sheet is busted by the `?v=` cache key
+   *  instead, and ids deliberately absent from the atlas keep the per-tile null
+   *  path they already had. */
+  _overCapacity(img) {
+    const tiles = this.atlas?.tiles;
+    const size = this.atlas?.tileSize;
+    const columns = this.atlas?.columns;
+    if (!tiles || !size || !columns) return false;
+    const rows = Math.floor(img.naturalHeight / size);
+    const sheetColumns = Math.floor(img.naturalWidth / size);
+    // A dimension we cannot read is not a mismatch we can prove: leave it alone
+    // rather than degrade a working install on a number that never arrived.
+    if (!Number.isFinite(rows) || !Number.isFinite(sheetColumns)) return false;
+    let maxIndex = -1;
+    // INDEX-AWARE on the width too, and deliberately not `sheetColumns < columns`:
+    // a narrow sheet whose id map never reaches the missing columns is not a
+    // fault, and degrading a working install on one is the false positive that
+    // teaches everyone to distrust the guard.
+    let pastRightEdge = false;
+    for (const index of Object.values(tiles)) {
+      if (typeof index !== "number") continue;
+      if (index > maxIndex) maxIndex = index;
+      if (index % columns >= sheetColumns) pastRightEdge = true;
+    }
+    return pastRightEdge || maxIndex >= columns * rows;
+  },
+
   async load(core) {
     const theme = PF.art?.theme ?? "cozy-village";
     if (this.status === "loading") {
@@ -63,6 +125,11 @@ PF.assets = {
     // failures retry, rate-limited, so a transient outage no longer disables
     // Tier-1 for the whole session (0.3.0 regression fix).
     if (this._noPackage) return;
+    // The SECOND terminal, and it is `_noPackage`-shaped for the same reason:
+    // a sheet that cannot hold its own id map is a shipped artifact, identical
+    // on every retry. Sending it to "failed" alone would re-fetch the whole
+    // asset set every 30 seconds, forever, on exactly the broken installs.
+    if (this._capacityLatch === this._capacityKey(core, theme)) return;
     if (this.status === "failed" && Date.now() - (this._failedAt ?? 0) < 30_000) return;
     if (typeof core.host?.packageId !== "string") {
       this._noPackage = true;
@@ -102,6 +169,24 @@ PF.assets = {
       } catch {
         atlasTheme = "cozy-village";
         atlasImg = await this._image(this._url(core, "tiles.png"));
+      }
+      if (this._overCapacity(atlasImg)) {
+        this._capacityLatch = this._capacityKey(core, theme);
+        this.status = "failed";
+        this._requestedTheme = null;
+        this._queuedTheme = null;
+        this._atlasImg = null;
+        this._tileCanvases.clear();
+        // The ordinary failure path does NOT evict, and this one has to: a guard
+        // firing on the theme-change path would otherwise leave zones already
+        // composited from the previous Tier-1 sheet standing beside fresh Tier-0
+        // paint, which is a world in two art styles at once.
+        core.render?.clearZones?.();
+        // Once, because the latch guarantees once.
+        console.warn(
+          "[pixelforge] the shipped tile sheet is smaller than its own id map; drawing this theme procedurally",
+        );
+        return;
       }
       this._atlasImg = atlasImg;
       this.atlasTheme = atlasTheme;

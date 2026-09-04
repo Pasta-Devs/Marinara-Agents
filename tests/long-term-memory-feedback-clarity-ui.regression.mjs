@@ -10,6 +10,20 @@ const workspace = readFileSync(
   ),
   "utf8",
 );
+const navigation = readFileSync(
+  new URL(
+    "../packages/long-term-memory/src/engine/packages/client/src/features/long-term-memory/LongTermMemoryNavigation.tsx",
+    import.meta.url,
+  ),
+  "utf8",
+);
+const interop = readFileSync(
+  new URL(
+    "../packages/long-term-memory/src/engine/packages/server/src/services/long-term-memory/interop.ts",
+    import.meta.url,
+  ),
+  "utf8",
+);
 const detail = readFileSync(
   new URL(
     "../packages/long-term-memory/src/engine/packages/client/src/features/long-term-memory/LongTermMemoryDetail.tsx",
@@ -103,6 +117,22 @@ assert.match(workspace, /retry-cancelled/u);
 assert.match(workspace, /cancelledImport\.sourceIds[\s\S]*"import"[\s\S]*cancelledImport/u);
 assert.match(workspace, /retry-failed/u);
 assert.match(workspace, /retryableIds[\s\S]*"import"[\s\S]*importResultContract/u);
+assert.match(navigation, /latestSourceTask\.status === "cancelled"[\s\S]*\? 0/u);
+assert.match(navigation, /sourceTaskCancelled/u);
+assert.match(navigation, /selectLtmPluralForm\(locale, failureCount\)/u);
+assert.match(navigation, /sourceTaskFailedCountOne[\s\S]*sourceTaskFailedCountOther/u);
+assert.match(navigation, /className=\{item\.id === "sources" && activeSourceTask \? "animate-spin"/u);
+assert.match(workspace, /restoredImportResult\.writeFailures\?\.filter\(\(item\) => item\.retryable\)/u);
+assert.match(workspace, /restoredImportResult\.writeFailures\?\.map\(\(failure\) =>/u);
+assert.match(
+  workspace,
+  /<div\s+id="ltm-destination-scope-control"[^>]*className="mari-editor-panel flex min-h-0 flex-col gap-3 p-3"[^>]*style=\{\{ maxHeight: "calc\(100vh - 12rem\)" \}\}[^>]*>/u,
+);
+assert.match(
+  workspace,
+  /<div\s+id="ltm-bulk-destination-list"[^>]*className="min-h-0 flex-1 overflow-y-auto overscroll-contain"[^>]*>/u,
+);
+assert.match(interop, /content: row\.sourceText\.slice\(0, 500_000\)/u);
 assert.match(workspace, /readyForReviewWithRejectedSuggestions/u);
 assert.match(workspace, /extractionDidNotFinish/u);
 assert.match(activity, /completionReasoningTokens/u);
@@ -168,6 +198,10 @@ assert.doesNotMatch(vault.slice(navigatorContentStart, navigatorContentEnd), /da
 assert.match(vault, /sourceFilter/u);
 assert.doesNotMatch(vault, /availableEverywhereFilter|setAvailableEverywhereFilter/u);
 assert.match(vault, /data-ltm-source-readonly/u);
+assert.match(
+  vault,
+  /draft\.tags\.includes\("imported_character"\)[\s\S]*draft\.tags\.includes\("imported_lorebook"\)/u,
+);
 assert.match(vault, /data-ltm-memory-options/u);
 assert.match(vault, /data-ltm-memory-scope/u);
 assert.match(vault, /currentlyViewingMemoriesIn/u);
@@ -428,9 +462,9 @@ const vaultLocaleValues = Object.entries(locale)
 assert.doesNotMatch(vaultLocaleValues, /\b(?:Metadata|Scope|Derived memories|Connections)\b/u);
 assert.match(workspace, /function SourceOperationWorkbench/u);
 assert.match(workspace, /!previewed \|\| busy \|\| result/u);
-assert.match(workspace, /disabled=\{\s*Boolean\(result\)/u);
+assert.match(workspace, /disabled=\{\s*disabled \|\|\s*Boolean\(result\)/u);
 assert.match(workspace, /confirmAction=\{props\.confirmAction\}/u);
-assert.match(workspace, /key=\{sourceOperation\.id\}/u);
+assert.match(workspace, /key=\{`\$\{sourceOperation\.id\}:\$\{sourceOperation\.operation/u);
 assert.match(workspace, /data-ltm-linked-memory-selection/u);
 assert.match(workspace, /derivedNoteIds: selectedLinkedIds/u);
 assert.match(workspace, /archive: "notes_only"/u);
@@ -438,7 +472,7 @@ assert.match(workspace, /excludedNoteIds: excludedMemories/u);
 assert.match(workspace, /data-ltm-source-operation-preview/u);
 assert.match(workspace, /data-ltm-source-operation-excluded/u);
 assert.match(workspace, /data-ltm-source-operation-result/u);
-assert.match(workspace, /data-ltm-source-import-mode/u);
+assert.match(workspace, /data-ltm-source-mode/u);
 assert.match(workspace, /const sourceCheckboxClass = "size-6 shrink-0 accent-/u);
 assert.match(workspace, /linked\.isError[\s\S]*linkedMemoriesCouldNotLoad/u);
 assert.match(workspace, /!linked\.data \|\| linked\.isError \|\| !previewed/u);
@@ -459,7 +493,7 @@ assert.equal(
   locale["ui.longTermMemory.sourceoperation.confirmDelete"],
   "Permanently delete the source and {{count}} selected linked memories?",
 );
-assert.match(types, /onOpenSources\?: \(source\?: SourceTab\) => boolean \| Promise<boolean>/u);
+assert.match(types, /onOpenSources\?: \(source\?: SourceTab, sourceNoteId\?: string\) => boolean \| Promise<boolean>/u);
 assert.match(api, /export async function requestNotesByIds/u);
 assert.match(api, /if \(!requestedIds\.length\) return \[\] as T\[\]/u);
 assert.match(api, /new URLSearchParams/u);

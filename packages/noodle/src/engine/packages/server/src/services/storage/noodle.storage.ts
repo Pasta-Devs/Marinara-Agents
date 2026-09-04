@@ -19,7 +19,7 @@ import {
   type PersistedNoodleRefreshSchedule,
 } from "../noodle/noodle-refresh-schedule.js";
 import { pruneNoodleRefreshRuns } from "./noodle-refresh-run-retention.js";
-import { createNoodlePoll, readNoodlePollFromMetadata } from "@marinara-engine/shared";
+import { createNoodlePoll, readNoodlePollFromMetadata, type NoodleSettings } from "@marinara-engine/shared";
 import {
   applyNoodleCleanupIfStillStale,
   staleNoodleAccountIds,
@@ -28,6 +28,7 @@ import {
 export type { NoodleDataDeletionCounts } from "../noodle/noodle-data-cleanup.js";
 
 const SETTINGS_ID = "noodle.settings";
+export type PackageNoodleSettings = NoodleSettings & { imageWidth: number; imageHeight: number };
 const DEFAULT_SETTINGS: Record<string, unknown> = {
   refreshesPerDay: 2,
   participantSelectionMode: "random_range",
@@ -39,6 +40,8 @@ const DEFAULT_SETTINGS: Record<string, unknown> = {
   maxLikesPerRefresh: 18,
   maxImagesPerRefresh: 3,
   enableImagePrompts: false,
+  imageWidth: 1024,
+  imageHeight: 1536,
   enableImageInterpretation: true,
   imageGenerationConnectionId: null,
   imageGenerationPrompt:
@@ -65,6 +68,15 @@ const DEFAULT_SETTINGS: Record<string, unknown> = {
 };
 const PUBLIC_SETTING_KEYS = new Set([...Object.keys(DEFAULT_SETTINGS), "refreshSchedule"]);
 const DEFAULT_ACCOUNT_SETTINGS = { profile: {}, social: {} };
+const IMAGE_DIMENSION_MIN = 64;
+const IMAGE_DIMENSION_MAX = 4096;
+
+function imageDimension(value: unknown, fallback: number): number {
+  const numeric = typeof value === "number" || typeof value === "string" ? Number(value) : NaN;
+  return Number.isInteger(numeric) && numeric >= IMAGE_DIMENSION_MIN && numeric <= IMAGE_DIMENSION_MAX
+    ? numeric
+    : fallback;
+}
 
 type Row<T> = T extends { $inferSelect: infer S } ? S : never;
 type AccountRow = Row<typeof noodleAccounts>;
@@ -362,13 +374,20 @@ export function createNoodleStorage(db: DB) {
 
   return {
     async getSettings() {
-      return { ...DEFAULT_SETTINGS, ...(await getSettingsRaw()) };
+      const settings = { ...DEFAULT_SETTINGS, ...(await getSettingsRaw()) };
+      return {
+        ...settings,
+        imageWidth: imageDimension(settings.imageWidth, 1024),
+        imageHeight: imageDimension(settings.imageHeight, 1536),
+      } as PackageNoodleSettings;
     },
     async updateSettings(input: Record<string, unknown>) {
       const patch = Object.fromEntries(
         Object.entries(input).filter(([key]) => PUBLIC_SETTING_KEYS.has(key) && key !== "refreshSchedule"),
       );
       if ("promptPresets" in patch) patch.promptPresets = sanitizePromptPresets(patch.promptPresets);
+      if ("imageWidth" in patch) patch.imageWidth = imageDimension(patch.imageWidth, 1024);
+      if ("imageHeight" in patch) patch.imageHeight = imageDimension(patch.imageHeight, 1536);
       const next = { ...(await this.getSettings()), ...patch };
       await saveSettingsRaw(next);
       const schedule = await this.getRefreshSchedule();

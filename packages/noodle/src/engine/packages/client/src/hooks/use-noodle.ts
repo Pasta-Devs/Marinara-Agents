@@ -22,10 +22,10 @@ import type {
   NoodleRescheduleRefreshInput,
   NoodleRefreshSchedulerStatus,
   NoodleSettings,
-  NoodleSettingsUpdateInput,
 } from "@marinara-engine/shared";
 import { countNoodlePostsSince, mergeNoodlePollVoteInteractions } from "@marinara-engine/shared";
 import type { ImagePromptOverride, ImagePromptReviewItem } from "../components/ui/ImagePromptReviewModal";
+import type { PackageNoodleSettingsUpdateInput } from "../components/noodle/noodle-settings-defaults";
 
 export type NoodleRefreshResult = {
   bootstrap: NoodleBootstrap;
@@ -148,7 +148,7 @@ export function useUpdateNoodleSettings() {
   const qc = useQueryClient();
   return useMutation({
     scope: { id: "noodle-settings" },
-    mutationFn: (settings: NoodleSettingsUpdateInput) => api.put<NoodleSettings>("/noodle/settings", settings),
+    mutationFn: (settings: PackageNoodleSettingsUpdateInput) => api.put<NoodleSettings>("/noodle/settings", settings),
     onMutate: async (patch) => {
       await qc.cancelQueries({ queryKey: noodleKeys.bootstrap() });
       const previous = qc.getQueryData<NoodleBootstrap>(noodleKeys.bootstrap());

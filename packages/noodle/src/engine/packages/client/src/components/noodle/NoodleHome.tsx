@@ -16,6 +16,7 @@ import {
   Heart,
   Image as ImageIcon,
   ListChecks,
+  Menu,
   SlidersHorizontal,
   Loader2,
   MessageCircle,
@@ -688,6 +689,7 @@ export function NoodleHome({ navigation, onNavigate }: NoodleHomeProps) {
   const accountSwitcherRef = useRef<HTMLDivElement | null>(null);
   const timelineScrollRef = useRef<HTMLDivElement | null>(null);
   const [timelineScroller, setTimelineScroller] = useState<HTMLDivElement | null>(null);
+  const imageSizeMigrationStartedRef = useRef(false);
   const setTimelineScrollerRef = useCallback((node: HTMLDivElement | null) => {
     timelineScrollRef.current = node;
     setTimelineScroller(node);
@@ -1066,13 +1068,57 @@ export function NoodleHome({ navigation, onNavigate }: NoodleHomeProps) {
     });
   };
 
-  const saveSettingsAsync = (patch: PackageNoodleSettingsUpdateInput): Promise<void> =>
-    new Promise((resolve, reject) => {
-      updateSettings.mutate(patch, {
-        onSuccess: () => resolve(),
-        onError: reject,
-      });
-    });
+  const saveSettingsAsync = useCallback(
+    (patch: PackageNoodleSettingsUpdateInput): Promise<void> =>
+      new Promise((resolve, reject) => {
+        updateSettings.mutate(patch, {
+          onSuccess: () => resolve(),
+          onError: reject,
+        });
+      }),
+    [updateSettings],
+  );
+
+  useEffect(() => {
+    if (!settings || typeof window === "undefined" || imageSizeMigrationStartedRef.current) return;
+    const migrationKey = "marinara:noodle:image-size-migrated";
+    if (window.localStorage.getItem(migrationKey) === "1") return;
+    try {
+      const handoff = JSON.parse(window.localStorage.getItem("marinara:noodle:legacy-image-size") ?? "null") as {
+        width?: unknown;
+        height?: unknown;
+      } | null;
+      const envelope = JSON.parse(window.localStorage.getItem("marinara-engine-ui") ?? "null") as {
+        state?: Record<string, unknown>;
+      } | null;
+      const legacyState = envelope?.state;
+      const rawWidth = handoff?.width ?? legacyState?.imageNoodleWidth;
+      const rawHeight = handoff?.height ?? legacyState?.imageNoodleHeight;
+      if (rawWidth === undefined && rawHeight === undefined) {
+        window.localStorage.setItem(migrationKey, "1");
+        return;
+      }
+      const width = Number(rawWidth);
+      const height = Number(rawHeight);
+      imageSizeMigrationStartedRef.current = true;
+      void saveSettingsAsync({
+        imageWidth: Number.isInteger(width) && width >= 64 && width <= 4096 ? width : 1024,
+        imageHeight: Number.isInteger(height) && height >= 64 && height <= 4096 ? height : 1536,
+      })
+        .then(() => {
+          window.localStorage.removeItem("marinara:noodle:legacy-image-size");
+          if (legacyState) {
+            delete legacyState.imageNoodleWidth;
+            delete legacyState.imageNoodleHeight;
+            window.localStorage.setItem("marinara-engine-ui", JSON.stringify(envelope));
+          }
+          window.localStorage.setItem(migrationKey, "1");
+        })
+        .catch(() => undefined);
+    } catch {
+      // A malformed legacy store must not block Noodle settings.
+    }
+  }, [saveSettingsAsync, settings]);
 
   const openNoodlePromptEditor = () => {
     if (!noodlePromptText) {
@@ -3828,6 +3874,22 @@ export function NoodleHome({ navigation, onNavigate }: NoodleHomeProps) {
               />
               {settings.enableImagePrompts && (
                 <>
+                  <NumberSetting
+                    label={localizeUi("ui.noodle.noodlehome.imageWidth")}
+                    help={localizeUi("ui.noodle.noodlehome.imageWidthHelp")}
+                    value={(settings as PackageNoodleSettings).imageWidth}
+                    min={64}
+                    max={4096}
+                    onCommit={(value) => saveSettings({ imageWidth: value })}
+                  />
+                  <NumberSetting
+                    label={localizeUi("ui.noodle.noodlehome.imageHeight")}
+                    help={localizeUi("ui.noodle.noodlehome.imageHeightHelp")}
+                    value={(settings as PackageNoodleSettings).imageHeight}
+                    min={64}
+                    max={4096}
+                    onCommit={(value) => saveSettings({ imageHeight: value })}
+                  />
                   <label className="block space-y-1.5">
                     <FieldLabel
                       help={localizeUi("ui.noodle.noodlehome.theImageGenerationConnectionUsedToCreateNoodlePost")}
@@ -4719,12 +4781,10 @@ export function NoodleHome({ navigation, onNavigate }: NoodleHomeProps) {
       >
         <div className="min-h-full w-full border-x border-[var(--noodle-divider)] bg-[var(--background)]">
           {activeNoodleView === "home" && (
-            // The wordmark and the tab row travel together, so the whole bar leaves
-            // on the way down and comes back as one on the way up.
             <div
               ref={setStickyHeader}
               className={cn("sticky top-0 z-30", HIDE_ON_SCROLL_CLASS)}
-              data-component="NoodleView.StickyHeader"
+              data-component="NoodleView.HomeHeader"
             >
               <div
                 className="grid h-14 grid-cols-[3rem_minmax(0,1fr)_3rem] items-center border-b border-[var(--noodle-divider)] bg-[var(--background)]/95 px-3 backdrop-blur @min-[1024px]:hidden"
@@ -4734,17 +4794,12 @@ export function NoodleHome({ navigation, onNavigate }: NoodleHomeProps) {
                   ref={mobileDrawerTriggerRef}
                   type="button"
                   onClick={() => setMobileDrawerOpen(true)}
-                  className="flex h-10 w-10 items-center justify-center rounded-full transition-colors hover:bg-[var(--accent)]"
+                  data-component="NoodleView.MobileMenuTrigger"
+                  className="flex h-10 w-10 items-center justify-center rounded-full text-[var(--noodle-accent)] transition-colors hover:bg-[var(--accent)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--noodle-accent)]"
                   title={localizeUi("ui.noodle.noodlehome.openAccountMenu")}
                   aria-label={localizeUi("ui.noodle.noodlehome.openNoodleAccountMenu")}
                 >
-                  {personaAccount ? (
-                    <Avatar account={personaAccount} size="sm" />
-                  ) : (
-                    <span className="flex h-8 w-8 items-center justify-center rounded-full bg-[var(--noodle-accent)]/15 ring-1 ring-[var(--noodle-accent)]/25">
-                      <AtSign size={18} />
-                    </span>
-                  )}
+                  <Menu size={22} />
                 </button>
                 <NoodleLogo className="mx-auto h-9 w-14" />
                 <span aria-hidden="true" />
@@ -4763,27 +4818,32 @@ export function NoodleHome({ navigation, onNavigate }: NoodleHomeProps) {
                     </p>
                   </div>
                 </div>
-              ) : (
-                <div className="grid grid-cols-2 border-b border-[var(--noodle-divider)] bg-[var(--background)]/95 backdrop-blur">
-                  {TIMELINE_TABS.map((tab) => (
-                    <button
-                      key={tab.id}
-                      type="button"
-                      onClick={() => setTimelineTab(tab.id)}
-                      className={cn(
-                        "relative flex h-12 items-center justify-center text-sm font-bold text-[var(--muted-foreground)] transition-colors hover:bg-[var(--accent)] hover:text-[var(--foreground)]",
-                        timelineTab === tab.id && "text-[var(--foreground)]",
-                      )}
-                      aria-pressed={timelineTab === tab.id}
-                    >
-                      {tab.label}
-                      {timelineTab === tab.id && (
-                        <span className="absolute bottom-0 left-1/2 h-1 w-14 -translate-x-1/2 rounded-full bg-[var(--noodle-accent)]" />
-                      )}
-                    </button>
-                  ))}
-                </div>
-              )}
+              ) : null}
+            </div>
+          )}
+
+          {activeNoodleView === "home" && !isAccountSearch && (
+            <div
+              className="grid grid-cols-2 border-b border-[var(--noodle-divider)] bg-[var(--background)]/95 backdrop-blur"
+              data-component="NoodleView.TimelineTabs"
+            >
+              {TIMELINE_TABS.map((tab) => (
+                <button
+                  key={tab.id}
+                  type="button"
+                  onClick={() => setTimelineTab(tab.id)}
+                  className={cn(
+                    "relative flex h-12 items-center justify-center text-sm font-bold text-[var(--muted-foreground)] transition-colors hover:bg-[var(--accent)] hover:text-[var(--foreground)]",
+                    timelineTab === tab.id && "text-[var(--foreground)]",
+                  )}
+                  aria-pressed={timelineTab === tab.id}
+                >
+                  {tab.label}
+                  {timelineTab === tab.id && (
+                    <span className="absolute bottom-0 left-1/2 h-1 w-14 -translate-x-1/2 rounded-full bg-[var(--noodle-accent)]" />
+                  )}
+                </button>
+              ))}
             </div>
           )}
 
