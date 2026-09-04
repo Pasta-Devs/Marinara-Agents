@@ -1,5 +1,9 @@
 # Noodle release notes
 
+## 1.2.20 — 2026-09-03
+
+- Added independent image width and height settings to Noodle settings.
+
 ## 1.2.19 — 2026-09-03
 
 - Fixed automatic timeline refresh when Marinara requires an admin secret on loopback.

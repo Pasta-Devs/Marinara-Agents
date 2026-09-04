@@ -1,14 +1,19 @@
 import { DEFAULT_NOODLE_SETTINGS, type NoodleSettings, type NoodleSettingsUpdateInput } from "@marinara-engine/shared";
 
 export type PackageNoodleSettings = NoodleSettings & {
+  imageWidth: number;
+  imageHeight: number;
   enableImageInterpretation: boolean;
   promptPresets: import("./noodle-prompt-presets").NoodlePromptPreset[];
 };
 export type PackageNoodleSettingsUpdateInput = NoodleSettingsUpdateInput &
+  Partial<Pick<PackageNoodleSettings, "imageWidth" | "imageHeight">> &
   Partial<Pick<PackageNoodleSettings, "enableImageInterpretation">> &
   Partial<Pick<PackageNoodleSettings, "promptPresets">>;
 const PACKAGE_NOODLE_SETTINGS_DEFAULTS: PackageNoodleSettings = {
   ...DEFAULT_NOODLE_SETTINGS,
+  imageWidth: 1024,
+  imageHeight: 1536,
   enableImageInterpretation: true,
   promptPresets: [],
 };
@@ -30,6 +35,8 @@ export const NOODLE_SETTINGS_SECTION_KEYS: Record<NoodleSettingsSectionId, reado
   general: ["generationConnectionId", "refreshesPerDay", "theme"],
   timeline: ["maxGeneratedPostsPerRefresh", "maxRepliesPerRefresh", "maxRepostsPerRefresh", "maxLikesPerRefresh"],
   images: [
+    "imageWidth",
+    "imageHeight",
     "enableImagePrompts",
     "imageGenerationConnectionId",
     "imageGenerationPrompt",

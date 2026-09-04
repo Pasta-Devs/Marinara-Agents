@@ -8,9 +8,9 @@ import { NOODLER_MEDIA_PREFIX, noodlerPostMediaUrl } from "./slurp-media.js";
 import { resolveImageConnectionFallback } from "../generation/media-connection-fallback.js";
 import { generateImage, stageImageToDisk, type StagedGalleryImage } from "../image/image-generation.js";
 import { resolveConnectionImageDefaults } from "../image/image-generation-defaults.js";
-import { loadImageGenerationUserSettings } from "../image/image-generation-settings.js";
 import { compileImagePrompt, resolveImageStyleGuidanceText } from "../image/image-prompt-compiler.js";
 import { resolveImagePromptReviewSize } from "../image/image-prompt-review.js";
+import { loadImageGenerationUserSettings } from "../image/image-generation-settings.js";
 import { resolveIllustratorCharacterReferences } from "../image/illustrator-references.js";
 import { createCharactersStorage } from "../storage/characters.storage.js";
 import { createConnectionsStorage } from "../storage/connections.storage.js";
@@ -59,6 +59,8 @@ export async function generateNoodlerPostImage(input: {
     | "imageGenerationUseAvatarReferences"
     | "imageGenerationIncludeDescriptions"
     | "enableImageInterpretation"
+    | "imageWidth"
+    | "imageHeight"
   >;
   characters: ReturnType<typeof createCharactersStorage>;
   promptOverrides: ReturnType<typeof createPromptOverridesStorage>;
@@ -79,6 +81,7 @@ export async function generateNoodlerPostImage(input: {
   preview: Omit<NoodleImagePromptReviewItem, "id"> | null;
   stagedMedia: StagedGalleryImage | null;
 }> {
+  const imageSettings = await loadImageGenerationUserSettings(input.db);
   const redactIdentity = (value: string) => {
     if (input.disclosureMode === "open" || !input.linkedPublicAccount) return value;
     const terms = [
@@ -91,7 +94,6 @@ export async function generateNoodlerPostImage(input: {
       value,
     );
   };
-  const imageSettings = await loadImageGenerationUserSettings(input.db);
   const imageDefaults = resolveConnectionImageDefaults(input.imageConnection);
   const imageModel = input.imageConnection.model || "";
   const imageBaseUrl = input.imageConnection.baseUrl || "https://image.pollinations.ai";
@@ -263,8 +265,8 @@ export async function generateNoodlerPostImage(input: {
     : compiledPrompt.negativePrompt || undefined;
   const finalNegativePrompt =
     [baseNegativePrompt, input.negativePromptAdditions].filter(Boolean).join(", ") || undefined;
-  const outputWidth = input.width ?? imageSettings.noodle.width;
-  const outputHeight = input.height ?? imageSettings.noodle.height;
+  const outputWidth = input.width ?? input.settings.imageWidth;
+  const outputHeight = input.height ?? input.settings.imageHeight;
   logDebugOverride(
     input.debugMode,
     "[debug/noodler/image] final image prompt for %s:\n%s",
