@@ -2,9 +2,9 @@
 
 ## 0.15.0 — 2026-09-04 [highlight]
 
-The town starts knowing you. Talk with people, buy from them, take a room at the inn, finish jobs off the board — and the people it happened with remember. First they know your name, then they count you a friend, and you will see it happen: a note the moment somebody warms to you, their standing beside their name when you talk, and the storyteller greets a friend like a friend.
+The town starts knowing you. Talk with people, buy from them, take a room at the inn, finish jobs off the board — and the people it happened with remember. Passing the time of day gets you known, and that is as far as it goes: it takes doing something real for someone — a job off the board, or steady business over a counter — to make a friend of them. You will see it happen: a word the moment somebody warms to you, said in the same breath as whatever you were paid, their standing beside their name when you talk, and the storyteller greets a friend like a friend.
 
-Friends talk differently. Every world already carries the things people would only say to somebody they trust — warmer, more familiar, less like a signpost. Now they actually say them, once you have earned it. Do a job for a stranger and they will remember that too.
+Friends talk differently. Every world already carries the things people would only say to somebody they trust — warmer, more familiar, less like a signpost. Now they actually say them, once you have earned it. And the people you work for remember which job it was.
 
 Worlds and saves you already have carry straight over; nobody in them forgets anything they knew.
 
