@@ -37,6 +37,7 @@ import { deduplicateUnits } from "./dedup.js";
 import { compileLtmEvidenceUnits } from "./evidence-unit-compiler.js";
 import { noteIdForEvidenceUnit, validateLtmEvidenceUnits } from "./evidence-unit-validation.js";
 import { normalizeStructuredSummaryEvidenceUnits } from "./structured-summary-normalizer.js";
+import { isLocalCharacterSubject } from "./chat-scope.js";
 import {
   filterDominatedLtmSubjectNotesForPrompt,
   trustedLtmSubjectPromptCatalog,
@@ -802,6 +803,19 @@ export function evidenceUnitMessages(options: RunLongTermMemoryEvidenceUnitExtra
     }
   }
 
+  const promptCatalog =
+    options.mode && options.mode !== "roleplay"
+      ? {
+          ...options.trustedSubjectCatalog,
+          entries: (options.trustedSubjectCatalog?.entries ?? []).filter(
+            (entry) => !isLocalCharacterSubject(entry.subject),
+          ),
+          notes: (options.trustedSubjectCatalog?.notes ?? []).filter(
+            (note) => !note.subjects?.some(isLocalCharacterSubject),
+          ),
+        }
+      : options.trustedSubjectCatalog;
+
   return [
     {
       role: "system",
@@ -891,7 +905,7 @@ export function evidenceUnitMessages(options: RunLongTermMemoryEvidenceUnitExtra
               ]
             : []),
         ],
-        trustedSubjects: trustedLtmSubjectPromptCatalog(options.trustedSubjectCatalog ?? { entries: [], notes: [] }),
+        trustedSubjects: trustedLtmSubjectPromptCatalog(promptCatalog ?? { entries: [], notes: [] }),
         userInstruction: options.instruction?.trim() || undefined,
         ...(options.aiKeywordExtraction
           ? {
@@ -901,8 +915,8 @@ export function evidenceUnitMessages(options: RunLongTermMemoryEvidenceUnitExtra
           : {}),
         existingTypedNotes: formatExistingNotes(
           filterDominatedLtmSubjectNotesForPrompt(
-            options.existingNotes,
-            options.trustedSubjectCatalog ?? { entries: [], notes: [] },
+            options.existingNotes ?? [],
+            promptCatalog ?? { entries: [], notes: [] },
           ),
           options.maxExistingNoteTokens,
         ),

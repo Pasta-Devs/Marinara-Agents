@@ -454,7 +454,7 @@ export const ltmNoteIdSchema = ltmIdentifierSchema;
 
 export const ltmSubjectReferenceSchema = z
   .object({
-    kind: z.enum(["character", "persona"]),
+    kind: z.enum(["character", "persona", "local_character"]),
     id: z.string().trim().min(1).max(120),
   })
   .strict();
@@ -481,6 +481,12 @@ export const ltmSubjectsSchema = z
   .refine((subjects) => subjects.every((subject, index) => index === 0 || subjects[index - 1]!.key < subject.key), {
     message: "Subjects must be sorted by stable key.",
   });
+
+function hasLocalCharacterSubject(subjects: readonly z.infer<typeof ltmSubjectSchema>[] | undefined) {
+  return subjects?.some(
+    (subject) => subject.ref?.kind === "local_character" || subject.key.startsWith("local_character:"),
+  );
+}
 
 export const ltmSourceProvenanceSchema = z
   .object({
@@ -904,6 +910,13 @@ export const ltmNoteSchema = z
   })
   .strict()
   .superRefine((note, ctx) => {
+    if (hasLocalCharacterSubject(note.subjects) && note.modes.some((mode) => mode !== "roleplay")) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["modes"],
+        message: "Local character subjects are available only in Roleplay mode.",
+      });
+    }
     const allowedPrefixes = allowedStoredNoteIdPrefixes(note.type);
     if (!allowedPrefixes.some((prefix) => note.id === prefix || note.id.startsWith(prefix))) {
       ctx.addIssue({
@@ -1952,6 +1965,13 @@ export const ltmDraftNoteInputSchema = z
   })
   .strip()
   .superRefine((note, ctx) => {
+    if (hasLocalCharacterSubject(note.subjects) && note.modes.some((mode) => mode !== "roleplay")) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["modes"],
+        message: "Local character subjects are available only in Roleplay mode.",
+      });
+    }
     const allowedPrefixes = LTM_NOTE_ID_PREFIXES_BY_TYPE[note.type];
     if (!allowedPrefixes.some((prefix) => note.id === prefix || note.id.startsWith(prefix))) {
       ctx.addIssue({

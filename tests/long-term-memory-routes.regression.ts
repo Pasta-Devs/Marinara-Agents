@@ -204,6 +204,7 @@ async function main() {
             npcUpdates: [],
           },
         ],
+        gameNpcs: [{ name: "Game NPC" }],
       },
       lastMessageAt: null,
       updatedAt: "2026-07-17T01:00:00.000Z",
@@ -987,6 +988,158 @@ async function main() {
       personaId: "persona-fixture",
       personaIds: ["persona-fixture"],
     });
+    const observatoryFamilyId = "group_observatory_branches_37a983fd32de";
+    const archiveChatFamilyId = "chat_chat_b_58689bbec408";
+    await storageService.storage.createNote({
+      id: "char_local_mara_group",
+      title: "Mara",
+      type: "character",
+      status: "active",
+      modes: ["roleplay"],
+      scope: { groupId: "observatory-branches", groupIds: ["observatory-branches"] },
+      tags: [],
+      keywords: [],
+      links: [],
+      subjects: [
+        {
+          key: `local_character:${observatoryFamilyId}:mara`,
+          ref: { kind: "local_character", id: `${observatoryFamilyId}:mara` },
+        },
+      ],
+      sections: {
+        facts: { text: "Mara belongs to the Observatory roleplay family.", updatedAt: "2026-07-17T00:00:00.000Z" },
+      },
+    });
+    await storageService.storage.createNote({
+      id: "char_local_mara_chat",
+      title: "Mara",
+      type: "character",
+      status: "active",
+      modes: ["roleplay"],
+      scope: { chatId: "chat-b", chatIds: ["chat-b"] },
+      tags: [],
+      keywords: [],
+      links: [],
+      subjects: [
+        {
+          key: `local_character:${archiveChatFamilyId}:mara`,
+          ref: { kind: "local_character", id: `${archiveChatFamilyId}:mara` },
+        },
+      ],
+      sections: {
+        facts: { text: "Mara belongs to the Archive roleplay family.", updatedAt: "2026-07-17T00:00:00.000Z" },
+      },
+    });
+    const rejectedGameLocal = await app.inject({
+      method: "POST",
+      url: "/api/long-term-memory/notes",
+      headers,
+      payload: {
+        id: "char_local_game_rejected",
+        title: "Mara",
+        type: "character",
+        status: "active",
+        modes: ["game"],
+        scope: { groupId: "observatory-branches", groupIds: ["observatory-branches"] },
+        tags: [],
+        keywords: [],
+        links: [],
+        subjects: [
+          {
+            key: `local_character:${observatoryFamilyId}:mara`,
+            ref: { kind: "local_character", id: `${observatoryFamilyId}:mara` },
+          },
+        ],
+        sections: {
+          facts: { text: "Mara must remain Roleplay-only.", updatedAt: "2026-07-17T00:00:00.000Z" },
+        },
+      },
+    });
+    assert.equal(rejectedGameLocal.statusCode, 400, rejectedGameLocal.body);
+    const rejectedCrossFamilyPatch = await app.inject({
+      method: "PATCH",
+      url: "/api/long-term-memory/notes/char_local_mara_group",
+      headers,
+      payload: {
+        subjects: [
+          {
+            key: `local_character:${archiveChatFamilyId}:mara`,
+            ref: { kind: "local_character", id: `${archiveChatFamilyId}:mara` },
+          },
+        ],
+      },
+    });
+    assert.equal(rejectedCrossFamilyPatch.statusCode, 400, rejectedCrossFamilyPatch.body);
+    const rejectedBulkFamilyExpansion = await app.inject({
+      method: "POST",
+      url: "/api/long-term-memory/notes/batch",
+      headers,
+      payload: { noteIds: ["char_local_mara_group"], addScope: { groupIds: ["archive-family"] } },
+    });
+    assert.equal(rejectedBulkFamilyExpansion.statusCode, 400, rejectedBulkFamilyExpansion.body);
+    await storageService.storage.createNote({
+      id: "world_transfer_derived_parent",
+      type: "world",
+      status: "active",
+      modes: ["roleplay"],
+      scope: { groupId: "observatory-branches", groupIds: ["observatory-branches"] },
+      tags: [],
+      keywords: [],
+      links: [],
+      sections: { facts: { text: "A derived transfer parent.", updatedAt: "2026-07-17T00:00:00.000Z" } },
+    });
+    await storageService.storage.createNote({
+      id: "char_transfer_derived_local",
+      title: "Mara",
+      type: "character",
+      status: "active",
+      modes: ["roleplay"],
+      scope: { chatId: "chat-b", chatIds: ["chat-b"] },
+      tags: [],
+      keywords: [],
+      links: [{ relation: "extracted_from", target: "world_transfer_derived_parent" }],
+      subjects: [
+        {
+          key: `local_character:${archiveChatFamilyId}:mara`,
+          ref: { kind: "local_character", id: `${archiveChatFamilyId}:mara` },
+        },
+      ],
+      sections: { facts: { text: "A derived local character.", updatedAt: "2026-07-17T00:00:00.000Z" } },
+    });
+    const rejectedDerivedTransfer = await app.inject({
+      method: "POST",
+      url: "/api/long-term-memory/notes/transfer",
+      headers,
+      payload: {
+        requestedNoteIds: ["world_transfer_derived_parent"],
+        derivedNoteIds: ["char_transfer_derived_local"],
+        applyNoteIds: ["world_transfer_derived_parent", "char_transfer_derived_local"],
+        mode: "copy",
+        destinationChatId: "chat-a",
+      },
+    });
+    assert.equal(rejectedDerivedTransfer.statusCode, 400, rejectedDerivedTransfer.body);
+    assert.deepEqual((await storageService.storage.getNote("world_transfer_derived_parent"))?.scope, {
+      groupId: "observatory-branches",
+      groupIds: ["observatory-branches"],
+    });
+    await storageService.storage.deleteNotesPermanently([
+      "world_transfer_derived_parent",
+      "char_transfer_derived_local",
+    ]);
+    const rejectedTransferCrossFamily = await app.inject({
+      method: "POST",
+      url: "/api/long-term-memory/notes/transfer",
+      headers,
+      payload: {
+        requestedNoteIds: ["char_local_mara_group"],
+        derivedNoteIds: [],
+        applyNoteIds: ["char_local_mara_group"],
+        mode: "copy",
+        destinationChatId: "chat-b",
+      },
+    });
+    assert.equal(rejectedTransferCrossFamily.statusCode, 400, rejectedTransferCrossFamily.body);
     await storageService.storage.createNote({
       id: "world_professor_mari_group",
       type: "world",
@@ -1036,6 +1189,21 @@ async function main() {
       true,
       JSON.stringify(scopeTargets.json().characters),
     );
+    assert.equal(
+      scopeTargets.json().localCharacters.some((character: any) => character.id === `${observatoryFamilyId}:mara`),
+      true,
+    );
+    assert.equal(
+      scopeTargets.json().localCharacters.some((character: any) => character.id === `${archiveChatFamilyId}:mara`),
+      false,
+    );
+    const gameScopeTargets = await app.inject({
+      method: "GET",
+      url: "/api/long-term-memory/scope-targets?chatId=game-a&includeAllChats=true",
+      headers,
+    });
+    assert.equal(gameScopeTargets.statusCode, 200, gameScopeTargets.body);
+    assert.deepEqual(gameScopeTargets.json().localCharacters, []);
     const activeChatScopePreview = await app.inject({
       method: "POST",
       url: "/api/long-term-memory/import/preview",
@@ -1116,6 +1284,19 @@ async function main() {
         .characters.some((character: any) => character.id === "character-nyra" && character.label === "Nyra"),
       true,
     );
+    assert.equal(
+      allScopeTargets.json().localCharacters.some((character: any) => character.id === `${archiveChatFamilyId}:mara`),
+      true,
+      JSON.stringify(allScopeTargets.json().localCharacters),
+    );
+    assert.equal(
+      [
+        ...allScopeTargets.json().characters,
+        ...allScopeTargets.json().personas,
+        ...allScopeTargets.json().localCharacters,
+      ].some((target: any) => target.label === "Game NPC"),
+      false,
+    );
     assert.deepEqual(
       allScopeTargets.json().groups.find((group: any) => group.id === "observatory-branches"),
       {
@@ -1128,6 +1309,7 @@ async function main() {
       allScopeTargets.json().groups.some((group: any) => group.id === "professor-mari-only"),
       false,
     );
+    await storageService.storage.deleteNotesPermanently(["char_local_mara_group", "char_local_mara_chat"]);
     const professorMariCharacterPreview = await app.inject({
       method: "POST",
       url: "/api/long-term-memory/import/preview",
