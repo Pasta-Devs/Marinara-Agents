@@ -106,6 +106,7 @@ import {
   slurpMessageClaims,
   slurpMessages,
   slurpThreads,
+  slurpCommissions,
 } from "../../db/schema/slurp.js";
 import { SLURP_CREATOR_MESSAGING_KEY } from "../slurp/slurp-messaging.js";
 import { readNoodlerAccountMediaPath, readNoodlerAvatarMediaPath } from "../slurp/slurp-avatar.js";
@@ -1637,6 +1638,7 @@ export function createSlurpStorage(db: DB) {
           // every thread and leave the next install reading someone else's conversations.
           slurpMessageClaims,
           slurpMessages,
+          slurpCommissions,
           slurpThreads,
         ]) {
           await tx.delete(table);

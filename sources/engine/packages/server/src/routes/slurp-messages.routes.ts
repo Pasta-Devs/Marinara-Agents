@@ -102,7 +102,7 @@ export async function slurpMessageRoutes(app: FastifyInstance) {
     if (!viewer) return reply.code(404).send({ error: "Slurp persona not found" });
     const threads = await messages.listThreadsForViewer(viewer.id);
     const visibleMessages = (await messages.listMessages(thread.id)).map((message) =>
-      side === "creator" && message.kind === "ppv" && !message.unlockedAt ? { ...message, content: "" } : message,
+      side === "viewer" && message.kind === "ppv" && !message.unlockedAt ? { ...message, content: "" } : message,
     );
     return {
       threads: threads.filter((thread) => thread.state !== "declined"),

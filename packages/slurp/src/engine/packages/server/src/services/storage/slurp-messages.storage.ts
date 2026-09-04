@@ -592,7 +592,14 @@ export function createSlurpMessagesStorage(db: DB) {
         content,
         kind: "commission_delivery",
       });
-      if (!message) return null;
+      if (!message) {
+        const settings = await slurp.getSettings();
+        if (settings.walletEnabled) {
+          await slurp.refundCoins(commission.viewerAccountId, commission.price, "failed commission delivery");
+          await slurp.reverseCreatorIncome(commission.creatorAccountId, commission.price, "failed commission delivery");
+        }
+        return null;
+      }
       await db
         .update(slurpCommissions)
         .set({ state: "delivered", deliveryMessageId: message.id, updatedAt: now() })
