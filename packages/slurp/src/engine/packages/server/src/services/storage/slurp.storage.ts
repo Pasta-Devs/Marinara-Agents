@@ -2055,6 +2055,7 @@ export function createSlurpStorage(db: DB) {
             handle: account.handle,
             displayName: account.displayName,
             bio: account.bio,
+            location: account.settings.profile.location ?? "",
             avatarUrl: account.avatarUrl,
             avatarCrop: account.avatarCrop,
             bannerUrl: account.settings.profile.bannerUrl ?? null,
@@ -5240,7 +5241,7 @@ export function createSlurpStorage(db: DB) {
       const stored = readSlurpWallet(await settingsStore.get(slurpWalletKey(viewerAccountId)), economy);
       if (!settings.walletEnabled) return stored;
       const at = new Date();
-      const renewal = renewSubscriptions(applyStipend(stored, at, economy), at);
+      const renewal = renewSubscriptions(stored, at);
       for (const creatorAccountId of renewal.lapsed) await this.unsubscribe(viewerAccountId, creatorAccountId);
       for (const renewed of renewal.renewed) {
         await this.creditCreatorIncome(renewed.creatorAccountId, renewed.price, "renew");
@@ -5273,30 +5274,45 @@ export function createSlurpStorage(db: DB) {
       return next === wallet ? wallet : writeWallet(viewerAccountId, next);
     },
 
-    /** Add coins from a top-up. Uncapped: a top-up is the viewer deciding, not the economy. */
-    async topUpWallet(viewerAccountId: string, amount: number): Promise<SlurpWallet> {
+    /** Claim the configured daily refill. The refill raises a low balance to its floor. */
+    async claimWalletRefill(viewerAccountId: string): Promise<SlurpWallet> {
+      const settings = await this.getSettings();
       const wallet = await this.getWallet(viewerAccountId);
-      const next = credit(wallet, "topUp", amount, new Date());
+      const next = applyStipend(wallet, new Date(), economyFrom(settings));
       return next === wallet ? wallet : writeWallet(viewerAccountId, next);
+    },
+
+    /** Move a tip immediately from one persona wallet to one creator wallet. */
+    async tipCreator(viewerAccountId: string, creatorAccountId: string, amount: number): Promise<SlurpWallet | null> {
+      if (viewerAccountId === creatorAccountId || !Number.isInteger(amount) || amount <= 0) return null;
+      const settings = await this.getSettings();
+      if (!settings.walletEnabled) return null;
+      const creator = await this.getNoodlerAccountById(creatorAccountId);
+      if (!creator || (creator.sourceKind === "persona" && creator.sourceEntityId === viewerAccountId)) return null;
+      const sender = await this.getWallet(viewerAccountId);
+      const charged = spend(sender, "tip", amount, new Date(), creator.handle);
+      if (!charged) return null;
+      await writeWallet(viewerAccountId, charged);
+      const recipientId = creator.sourceKind === "persona" ? creator.sourceEntityId : creator.id;
+      const recipient = await this.getWallet(recipientId);
+      await writeWallet(recipientId, credit(recipient, "income", amount, new Date(), `tip: ${creator.handle}`));
+      return charged;
     },
 
     /**
      * Pay a creator's owner when a fan pays that creator. Only a creator backed by one of this
-     * install's personas has an owner to pay, so a character-backed creator earns nothing and the
-     * coins simply leave the economy.
+     * install's personas pays that persona wallet. Other creators keep their own wallet.
      */
     async creditCreatorIncome(creatorAccountId: string, price: number, reason: "unlock" | "subscribe" | "renew") {
       const settings = await this.getSettings();
       if (!settings.walletEnabled || settings.walletCreatorRevenueSharePercent <= 0) return;
       const creator = await this.getNoodlerAccountById(creatorAccountId);
-      if (!creator || creator.sourceKind !== "persona") return;
+      if (!creator) return;
       const share = Math.floor((price * settings.walletCreatorRevenueSharePercent) / 100);
       if (share <= 0) return;
-      const wallet = await this.getWallet(creator.sourceEntityId);
-      await writeWallet(
-        creator.sourceEntityId,
-        credit(wallet, "income", share, new Date(), `${reason}: ${creator.handle}`),
-      );
+      const recipientId = creator.sourceKind === "persona" ? creator.sourceEntityId : creator.id;
+      const wallet = await this.getWallet(recipientId);
+      await writeWallet(recipientId, credit(wallet, "income", share, new Date(), `${reason}: ${creator.handle}`));
     },
 
     async listPostUnlocksForViewer(viewerAccountId: string): Promise<NoodlePostUnlock[]> {

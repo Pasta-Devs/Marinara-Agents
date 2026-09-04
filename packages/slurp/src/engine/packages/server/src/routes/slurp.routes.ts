@@ -445,6 +445,15 @@ export async function slurpRoutes(app: FastifyInstance) {
     return updated;
   });
 
+  app.patch("/accounts/:id/profile", async (req, reply) => {
+    const parsed = z.object({ profile: z.object({ location: z.string().trim().max(120) }) }).safeParse(req.body);
+    if (!parsed.success) return reply.code(400).send({ error: parsed.error.flatten() });
+    const { id } = req.params as { id: string };
+    const updated = await noodle.updateAccountProfile(id, { profile: parsed.data.profile });
+    if (!updated) return reply.code(404).send({ error: "Creator account not found" });
+    return updated;
+  });
+
   app.get("/noodler/accounts", async (_req, reply) => {
     return noodle.listNoodlerStageProfiles();
   });
@@ -461,14 +470,24 @@ export async function slurpRoutes(app: FastifyInstance) {
     return noodle.getWallet(viewer.id);
   });
 
-  app.post("/noodler/viewer/wallet/top-up", async (req, reply) => {
+  app.post("/noodler/viewer/wallet/daily-refill", async (req, reply) => {
+    const parsed = z.object({ personaId: z.string().trim().min(1) }).safeParse(req.body);
+    if (!parsed.success) return reply.code(400).send({ error: parsed.error.flatten() });
+    const viewer = await resolveViewerPersona(parsed.data.personaId);
+    if (!viewer) return reply.code(404).send({ error: "Slurp persona not found" });
+    return noodle.claimWalletRefill(viewer.id);
+  });
+
+  app.post("/noodler/accounts/:id/tip", async (req, reply) => {
     const parsed = z
-      .object({ personaId: z.string().trim().min(1), amount: z.number().int().min(1).max(100_000) })
+      .object({ personaId: z.string().trim().min(1), amount: z.number().int().min(1).max(9999) })
       .safeParse(req.body);
     if (!parsed.success) return reply.code(400).send({ error: parsed.error.flatten() });
     const viewer = await resolveViewerPersona(parsed.data.personaId);
     if (!viewer) return reply.code(404).send({ error: "Slurp persona not found" });
-    return noodle.topUpWallet(viewer.id, parsed.data.amount);
+    const wallet = await noodle.tipCreator(viewer.id, (req.params as { id: string }).id, parsed.data.amount);
+    if (!wallet) return reply.code(402).send({ error: "Unable to send tip" });
+    return wallet;
   });
 
   /** A creator's own weekly price. `null` clears it back to the Slurp-wide default. */

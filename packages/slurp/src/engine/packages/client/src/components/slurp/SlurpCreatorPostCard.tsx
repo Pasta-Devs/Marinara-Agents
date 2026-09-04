@@ -12,9 +12,11 @@ import {
   Heart,
   Image as ImageIcon,
   MessageCircle,
+  MoreHorizontal,
   Pencil,
   Repeat2,
   RefreshCw,
+  Share2,
   Smile,
   Trash2,
   Lock,
@@ -32,6 +34,8 @@ import {
   type NoodlerStageProfile,
 } from "@marinara-engine/shared";
 import { cn } from "../../lib/utils";
+import { api } from "../../lib/api-client";
+import { toast } from "sonner";
 import { ConversationMediaPickerPanel } from "../chat/ConversationMediaPickerPanel";
 import type { ChatImage } from "../../hooks/use-gallery";
 import { useNearViewportSlurpMediaSrc } from "../../hooks/use-slurp-media-src";
@@ -102,6 +106,7 @@ export function LockedSlurpPostCard({
 }) {
   const { t: localizeUi, i18n } = useUiTranslation();
   const [unlockSheetOpen, setUnlockSheetOpen] = useState(false);
+  const [postMenuOpen, setPostMenuOpen] = useState(false);
   const [demoUnlocked, setDemoUnlocked] = useState(false);
   const likeCount = post.likeCount ?? 0;
   const replyCount = post.replyCount ?? 0;
@@ -161,6 +166,44 @@ export function LockedSlurpPostCard({
           <p className="text-xs font-medium !text-[var(--noodle-accent-foreground)]">
             @{profile.handle} · {formatTime(post.createdAt, i18n.language)}
           </p>
+        </div>
+        <div className="relative shrink-0">
+          <button
+            type="button"
+            onClick={() => setPostMenuOpen((open) => !open)}
+            className="flex h-9 w-9 items-center justify-center rounded-full text-[var(--noodle-accent)] transition-colors hover:bg-[var(--noodle-accent)]/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--noodle-accent)]"
+            title={localizeUi("ui.noodle.noodlepostcard.postActions")}
+            aria-label={localizeUi("ui.noodle.noodlepostcard.postActions")}
+            aria-expanded={postMenuOpen}
+          >
+            <MoreHorizontal size={18} />
+          </button>
+          {postMenuOpen && (
+            <div className="absolute end-0 top-[calc(100%+0.25rem)] z-30 min-w-40 overflow-hidden rounded-lg border border-[var(--noodle-divider)] bg-[var(--background)] py-1 text-xs shadow-2xl shadow-black/30">
+              {onManage && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setPostMenuOpen(false);
+                    onManage();
+                  }}
+                  className="flex min-h-10 w-full items-center gap-2 px-3 text-start hover:bg-[var(--accent)]"
+                >
+                  <Pencil size={14} />
+                  {localizeUi("ui.noodle.lockednoodlerpostcard.managePost")}
+                </button>
+              )}
+              <button
+                type="button"
+                disabled
+                className="flex min-h-10 w-full items-center gap-2 px-3 text-start text-[var(--muted-foreground)] opacity-60"
+                title={localizeUi("ui.slurp.post.unlockToShare", { defaultValue: "Unlock this post to share it." })}
+              >
+                <Share2 size={14} />
+                {localizeUi("ui.slurp.post.share", { defaultValue: "Share as image" })}
+              </button>
+            </div>
+          )}
         </div>
       </div>
 
@@ -298,17 +341,6 @@ export function LockedSlurpPostCard({
             <MessageCircle size={18} aria-hidden="true" /> {replyCount}
             <span className="sr-only">{localizeUi("ui.noodle.noodlehome.replies")}</span>
           </span>
-          <div className="ml-auto flex items-center gap-3">
-            {onManage && (
-              <button
-                type="button"
-                onClick={onManage}
-                className="flex items-center gap-1.5 hover:text-[var(--foreground)]"
-              >
-                <Pencil size={18} /> {localizeUi("ui.noodle.lockednoodlerpostcard.managePost")}
-              </button>
-            )}
-          </div>
         </div>
       </div>
       <Modal
@@ -524,6 +556,7 @@ export function SlurpCreatorPostCard({
   } = useNearViewportSlurpMediaSrc(post.imageUrl, { width: 960 });
   const displayedImageUrl = postImageSrc && postImageSrc !== failedImageUrl ? postImageSrc : null;
   const imageGenerationPending = ctx.generatingPostImageId === post.id;
+  const postMenuOpen = ctx.postMenuId === post.id;
   // Distinct from displayedImageUrl: while postImageSrc is still resolving (the authenticated
   // fetch hasn't returned yet) there is no evidence the image is broken, so editing must not
   // drop it. Only a confirmed <img> render failure (postImageSrc resolved and then errored,
@@ -870,46 +903,90 @@ export function SlurpCreatorPostCard({
               {typeof sponsored.product === "string" ? ` · ${sponsored.product}` : ""}
             </p>
           )}
-          {ctx.postManagement && (
-            /* Three plain buttons instead of a menu: on your own posts these are the only
-               things you ever do, and a menu hides them behind an extra click. */
-            <div className="flex shrink-0 items-center gap-0.5">
-              <button
-                type="button"
-                onClick={() => startEditingPost(editablePost)}
-                className="flex h-9 w-9 items-center justify-center rounded-full text-[var(--noodle-accent)] transition-colors hover:bg-[var(--noodle-accent)]/12 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--noodle-accent)]"
-                title={localizeUi("ui.noodle.noodlepostcard.edit")}
-                aria-label={localizeUi("ui.noodle.noodlepostcard.edit")}
-              >
-                <Pencil size={16} />
-              </button>
-              {ctx.generatePostImage && (post.imagePrompt || post.imageUrl) && (
+          <div className="relative shrink-0">
+            <button
+              type="button"
+              onClick={() => ctx.setPostMenuId((current) => (current === post.id ? null : post.id))}
+              className="flex h-9 w-9 items-center justify-center rounded-full text-[var(--noodle-accent)] transition-colors hover:bg-[var(--noodle-accent)]/12 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--noodle-accent)]"
+              title={localizeUi("ui.noodle.noodlepostcard.postActions")}
+              aria-label={localizeUi("ui.noodle.noodlepostcard.postActions")}
+              aria-expanded={postMenuOpen}
+            >
+              <MoreHorizontal size={18} />
+            </button>
+            {postMenuOpen && (
+              <div className="absolute end-0 top-[calc(100%+0.25rem)] z-30 min-w-40 overflow-hidden rounded-lg border border-[var(--noodle-divider)] bg-[var(--background)] py-1 text-xs shadow-2xl shadow-black/30">
+                {ctx.postManagement && (
+                  <>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        ctx.setPostMenuId(null);
+                        startEditingPost(editablePost);
+                      }}
+                      className="flex min-h-10 w-full items-center gap-2 px-3 text-start transition-colors hover:bg-[var(--accent)]"
+                    >
+                      <Pencil size={14} />
+                      {localizeUi("ui.noodle.noodlepostcard.edit")}
+                    </button>
+                    {ctx.generatePostImage && (post.imagePrompt || post.imageUrl) && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          ctx.setPostMenuId(null);
+                          ctx.generatePostImage?.(post);
+                        }}
+                        disabled={imageGenerationPending}
+                        className="flex min-h-10 w-full items-center gap-2 px-3 text-start transition-colors hover:bg-[var(--accent)] disabled:opacity-50"
+                      >
+                        <RefreshCw
+                          size={14}
+                          className={imageGenerationPending ? "animate-spin motion-reduce:animate-none" : ""}
+                        />
+                        {localizeUi("ui.slurp.image.generate")}
+                      </button>
+                    )}
+                    <button
+                      type="button"
+                      onClick={() => {
+                        ctx.setPostMenuId(null);
+                        deleteNoodlePost(post);
+                      }}
+                      className="flex min-h-10 w-full items-center gap-2 px-3 text-start text-[var(--slurp-danger)] transition-colors hover:bg-[var(--slurp-danger)]/10 [&_svg]:!text-[var(--slurp-danger)]"
+                    >
+                      <Trash2 size={14} />
+                      {localizeUi("lorebook.editor.batch.delete")}
+                    </button>
+                  </>
+                )}
                 <button
                   type="button"
-                  onClick={() => ctx.generatePostImage?.(post)}
-                  disabled={imageGenerationPending}
-                  className="flex h-9 w-9 items-center justify-center rounded-full text-[var(--noodle-accent)] transition-colors hover:bg-[var(--noodle-accent)]/12 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--noodle-accent)] disabled:opacity-50"
-                  title={localizeUi("ui.slurp.image.generate")}
-                  aria-label={localizeUi("ui.slurp.image.generate")}
-                  aria-busy={imageGenerationPending}
+                  onClick={() => {
+                    ctx.setPostMenuId(null);
+                    const persona = ctx.personaAccount?.entityId;
+                    void api
+                      .download(
+                        `/slurp/noodler/posts/${encodeURIComponent(post.id)}/share-card${persona ? `?personaId=${encodeURIComponent(persona)}` : ""}`,
+                        `slurp-${post.id}.png`,
+                      )
+                      .catch((error: unknown) =>
+                        toast.error(
+                          error instanceof Error
+                            ? error.message
+                            : localizeUi("ui.slurp.post.shareFailed", {
+                                defaultValue: "Could not build the share image.",
+                              }),
+                        ),
+                      );
+                  }}
+                  className="flex min-h-10 w-full items-center gap-2 px-3 text-start transition-colors hover:bg-[var(--accent)]"
                 >
-                  <RefreshCw
-                    size={16}
-                    className={imageGenerationPending ? "animate-spin motion-reduce:animate-none" : ""}
-                  />
+                  <Share2 size={14} />
+                  {localizeUi("ui.slurp.post.share", { defaultValue: "Share as image" })}
                 </button>
-              )}
-              <button
-                type="button"
-                onClick={() => deleteNoodlePost(post)}
-                className="flex h-9 w-9 items-center justify-center rounded-full text-[var(--slurp-danger)] transition-colors hover:bg-[var(--slurp-danger)]/12 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--slurp-danger)] [&_svg]:!text-[var(--slurp-danger)]"
-                title={localizeUi("lorebook.editor.batch.delete")}
-                aria-label={localizeUi("lorebook.editor.batch.delete")}
-              >
-                <Trash2 size={16} />
-              </button>
-            </div>
-          )}
+              </div>
+            )}
+          </div>
         </div>
       </div>
       <div>

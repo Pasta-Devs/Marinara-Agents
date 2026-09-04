@@ -124,7 +124,7 @@ test.describe("standalone Slurp package", () => {
 
     const slurp = page.locator('[data-component="NoodleView"]');
     await expect(slurp.getByRole("heading", { name: /Slurp is live|Automatic publishing is paused/u })).toBeVisible();
-    await expect(slurp.getByRole("button", { name: "Run now" })).toBeVisible();
+    await expect(slurp.getByRole("button", { name: "Run Generation now" })).toBeVisible();
     await expect(slurp.getByRole("button", { name: /^Publishing/u }).first()).toBeVisible();
     await expect
       .poll(() =>

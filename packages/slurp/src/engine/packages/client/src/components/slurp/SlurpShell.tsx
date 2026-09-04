@@ -64,7 +64,7 @@ export const NOODLE_ICON_SCOPE_CLASS = "[&_:where(svg)]:text-[var(--noodle-accen
 export const SLURP_ROW_CLASS =
   "relative flex min-h-11 w-full items-center gap-3 overflow-hidden rounded-lg px-3 text-start text-sm font-semibold transition-[background-color,color,transform] hover:bg-[var(--accent)] active:scale-[0.96] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--noodle-accent)] motion-reduce:transition-none motion-reduce:active:scale-100";
 export const SLURP_ROW_ACTIVE_CLASS =
-  "bg-[color-mix(in_srgb,var(--noodle-accent)_24%,var(--slurp-surface-raised))] text-[var(--foreground)] ring-1 ring-inset ring-[var(--noodle-accent)]/45 before:absolute before:inset-y-2 before:start-0 before:w-0.5 before:rounded-full before:bg-[var(--noodle-accent)]";
+  "bg-[color-mix(in_srgb,var(--noodle-accent)_24%,var(--slurp-surface-raised))] text-[var(--foreground)] before:absolute before:inset-y-2 before:start-0 before:w-0.5 before:rounded-full before:bg-[var(--noodle-accent)]";
 /** Selected state for the small pill toggles (feed layout, filters). Same fill, no left bar. */
 export const SLURP_TOGGLE_ACTIVE_CLASS =
   "bg-[color-mix(in_srgb,var(--noodle-accent)_28%,var(--slurp-surface-raised))] text-[var(--foreground)] ring-1 ring-inset ring-[var(--noodle-accent)]/50";

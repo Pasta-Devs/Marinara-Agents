@@ -159,8 +159,8 @@ assert.ok(
 
 // Posts hold still, carry their three actions, and hand image clicks to the dialog.
 assert.doesNotMatch(postCard, /hover:-translate-y/u, "Posts must not move under the pointer");
-assert.match(postCard, /ctx\.postManagement && \(\n\s*\/\* Three plain buttons/u, "Managed posts show their actions");
-assert.doesNotMatch(postCard, /MoreHorizontal/u, "The post action menu is gone");
+assert.match(postCard, /MoreHorizontal/u, "Creator posts must have the shared action menu");
+assert.match(postCard, /Share as image/u, "Creator posts must expose share as image");
 assert.match(postCard, /if \(ctx\.openPost\) ctx\.openPost\(post\.id\);/u, "Post images open the post dialog");
 
 // Portrait images get their own shape instead of a stamp in a 4:3 box.

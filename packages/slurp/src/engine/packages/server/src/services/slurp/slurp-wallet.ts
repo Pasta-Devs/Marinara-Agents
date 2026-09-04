@@ -56,7 +56,7 @@ export const SLURP_DEFAULT_ECONOMY: SlurpEconomy = {
 };
 
 export type SlurpWalletEntryKind =
-  "unlock" | "subscribe" | "renew" | "topUp" | "stipend" | "ad" | "engagement" | "income";
+  "unlock" | "subscribe" | "renew" | "tip" | "topUp" | "stipend" | "ad" | "engagement" | "income";
 
 /** One ledger line. `amount` is signed: negative spends, positive earns. */
 export type SlurpWalletEntry = {
@@ -224,7 +224,7 @@ export function credit(
  */
 export function spend(
   wallet: SlurpWallet,
-  kind: "unlock" | "subscribe" | "renew",
+  kind: "unlock" | "subscribe" | "renew" | "tip",
   amount: number,
   at: Date,
   note?: string,

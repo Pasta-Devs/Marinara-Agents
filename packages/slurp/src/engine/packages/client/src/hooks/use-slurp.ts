@@ -459,7 +459,7 @@ export type NoodlerViewerWallets = Record<string, { coins: number }>;
 
 /** One wallet's ledger line. `amount` is signed: negative spends, positive earns. */
 export type SlurpWalletEntry = {
-  kind: "unlock" | "subscribe" | "renew" | "topUp" | "stipend" | "ad" | "engagement" | "income";
+  kind: "unlock" | "subscribe" | "renew" | "tip" | "topUp" | "stipend" | "ad" | "engagement" | "income";
   amount: number;
   at: string;
   note?: string;
@@ -484,11 +484,29 @@ export function useSlurpWallet(personaId: string | null) {
   });
 }
 
-export function useTopUpSlurpWallet() {
+export function useClaimSlurpDailyRefill() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (input: { personaId: string; amount: number }) =>
-      api.post<SlurpWallet>("/slurp/noodler/viewer/wallet/top-up", input),
+    mutationFn: (input: { personaId: string }) =>
+      api.post<SlurpWallet>("/slurp/noodler/viewer/wallet/daily-refill", input),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: noodleKeys.noodlerRoot() }),
+  });
+}
+
+export function useTipSlurpCreator() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (input: { accountId: string; personaId: string; amount: number }) =>
+      api.post<SlurpWallet>(`/slurp/noodler/accounts/${encodeURIComponent(input.accountId)}/tip`, input),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: noodleKeys.noodlerRoot() }),
+  });
+}
+
+export function useUpdateSlurpAccountProfile() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ accountId, location }: { accountId: string; location: string }) =>
+      api.patch<NoodleAccount>(`/slurp/accounts/${encodeURIComponent(accountId)}/profile`, { profile: { location } }),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: noodleKeys.noodlerRoot() }),
   });
 }

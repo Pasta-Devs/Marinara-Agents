@@ -2308,7 +2308,7 @@ function OverviewCard({
     >
       <span className="flex items-start gap-4">
         <span
-          className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-gradient-to-br ${toneClass} text-white shadow-lg`}
+          className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-gradient-to-br ${toneClass} text-white shadow-lg [&_svg]:!text-white`}
         >
           {icon}
         </span>

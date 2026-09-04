@@ -16,6 +16,7 @@ import {
   Lock,
   MessageCircle,
   Pencil,
+  Play,
   Plus,
   RefreshCw,
   Search,
@@ -70,7 +71,9 @@ import {
   useNoodlerPosts,
   useNoodlerConnectionCounts,
   useSlurpWallet,
-  useTopUpSlurpWallet,
+  useClaimSlurpDailyRefill,
+  useTipSlurpCreator,
+  useUpdateSlurpAccountProfile,
   type SlurpWalletEntry,
   useNoodlerViewerWallets,
   useNoodlerSubscribers,
@@ -1489,9 +1492,70 @@ export function SlurpHome({ navigation, onNavigate }: SlurpHomeProps) {
   } as const;
 
   if (navigation.mode === "creator-settings") {
+    const settingsRail = (
+      <aside
+        className="relative hidden w-[20rem] shrink-0 overflow-hidden px-4 py-5 @min-[1280px]:block"
+        aria-labelledby="slurp-settings-rail-heading"
+      >
+        <div className="sticky top-4 space-y-3">
+          <section className="rounded-xl bg-[var(--slurp-surface)] p-4 shadow-[var(--slurp-shadow-floating)] ring-1 ring-inset ring-[var(--noodle-divider)]">
+            <h2 id="slurp-settings-rail-heading" className="text-sm font-black">
+              {localizeUi("ui.slurp.settings.sectionSummary", { defaultValue: "Section summary" })}
+            </h2>
+            <p className="mt-1 text-xs leading-5 text-[var(--muted-foreground)]">
+              {localizeUi(`ui.slurp.settings.rail.${navigation.section ?? "overview"}`, {
+                defaultValue: "Current Slurp settings and status.",
+              })}
+            </p>
+            <dl className="mt-4 space-y-3 text-xs">
+              <div className="flex items-center justify-between gap-3">
+                <dt className="text-[var(--muted-foreground)]">
+                  {localizeUi("ui.slurp.settings.rail.publishing", { defaultValue: "Publishing" })}
+                </dt>
+                <dd className="font-black">
+                  {slurpSettingsQuery.data?.autoPostingScheduleEnabled
+                    ? localizeUi("ui.slurp.settings.rail.active", { defaultValue: "Active" })
+                    : localizeUi("ui.slurp.settings.rail.paused", { defaultValue: "Paused" })}
+                </dd>
+              </div>
+              <div className="flex items-center justify-between gap-3">
+                <dt className="text-[var(--muted-foreground)]">
+                  {localizeUi("ui.slurp.settings.rail.images", { defaultValue: "Images" })}
+                </dt>
+                <dd className="font-black">
+                  {slurpSettingsQuery.data?.enableImagePrompts
+                    ? localizeUi("ui.slurp.settings.rail.available", { defaultValue: "Available" })
+                    : localizeUi("ui.slurp.settings.rail.paused", { defaultValue: "Paused" })}
+                </dd>
+              </div>
+              <div className="flex items-center justify-between gap-3">
+                <dt className="text-[var(--muted-foreground)]">
+                  {localizeUi("ui.slurp.settings.rail.fans", { defaultValue: "Fan activity" })}
+                </dt>
+                <dd className="font-black">
+                  {slurpSettingsQuery.data?.fanActivityEnabled
+                    ? localizeUi("ui.slurp.settings.rail.active", { defaultValue: "Active" })
+                    : localizeUi("ui.slurp.settings.rail.paused", { defaultValue: "Paused" })}
+                </dd>
+              </div>
+            </dl>
+          </section>
+          <button
+            type="button"
+            onClick={() => onNavigate({ ...navigation, section: "general" })}
+            className="flex min-h-11 w-full items-center justify-center gap-2 rounded-xl bg-[var(--noodle-accent)] px-4 text-sm font-black text-zinc-950 transition-[opacity,transform] hover:opacity-90 active:scale-[0.96] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--noodle-accent)] disabled:opacity-50 motion-reduce:transition-none motion-reduce:active:scale-100"
+          >
+            <Play size={15} fill="currentColor" aria-hidden="true" />
+            {localizeUi("ui.slurp.settings.rail.openPublishing", { defaultValue: "Open publishing" })}
+          </button>
+        </div>
+      </aside>
+    );
     return (
       <NoodleShell
         {...shellProps}
+        contextualRail="populated"
+        rightRail={settingsRail}
         desktopSidebar={
           <SlurpSettingsSidebar navigation={navigation} onNavigate={onNavigate} onExit={exitToCreatorHub} />
         }
@@ -1776,8 +1840,63 @@ export function SlurpHome({ navigation, onNavigate }: SlurpHomeProps) {
   }
 
   if (selectedProfile) {
+    const profileRail = (
+      <aside
+        className="relative hidden w-[20rem] shrink-0 overflow-hidden px-4 py-5 @min-[1280px]:block"
+        aria-labelledby="slurp-profile-rail-heading"
+      >
+        <div className="sticky top-4 space-y-3">
+          <section className="rounded-xl bg-[var(--slurp-surface)] p-4 shadow-[var(--slurp-shadow-floating)] ring-1 ring-inset ring-[var(--noodle-divider)]">
+            <div className="flex items-center gap-3">
+              <Avatar account={selectedProfile} size="lg" />
+              <div className="min-w-0">
+                <h2 id="slurp-profile-rail-heading" className="truncate text-sm font-black">
+                  {selectedProfile.displayName}
+                </h2>
+                <p className="truncate text-xs text-[var(--muted-foreground)]">@{selectedProfile.handle}</p>
+              </div>
+            </div>
+            <div className="mt-4 grid grid-cols-2 gap-2 text-center text-xs">
+              <div className="rounded-lg bg-[var(--accent)] p-2">
+                <strong className="block text-base tabular-nums">{selectedProfile.posts?.length ?? 0}</strong>
+                <span className="text-[var(--muted-foreground)]">
+                  {localizeUi("ui.slurp.profile.posts", { defaultValue: "Posts" })}
+                </span>
+              </div>
+              <div className="rounded-lg bg-[var(--accent)] p-2">
+                <strong className="block text-base tabular-nums">{selectedViewerCreator?.subscriberCount ?? 0}</strong>
+                <span className="text-[var(--muted-foreground)]">
+                  {localizeUi("ui.slurp.profile.subscribers", { defaultValue: "Subscribers" })}
+                </span>
+              </div>
+            </div>
+          </section>
+          {selectedViewerCreator && selectedProfile.sourceAccountId !== viewerPersonaId && (
+            <section className="space-y-2 rounded-xl bg-[var(--slurp-surface)] p-4 ring-1 ring-inset ring-[var(--noodle-divider)]">
+              <p className="text-xs font-bold text-[var(--muted-foreground)]">
+                {localizeUi("ui.slurp.profile.supportCreator", { defaultValue: "Support this creator" })}
+              </p>
+              <p className="text-xs leading-5 text-[var(--muted-foreground)]">
+                {localizeUi("ui.slurp.profile.weeklyAccess", {
+                  defaultValue: "Get weekly access to locked posts and creator activity.",
+                })}
+              </p>
+              <button
+                type="button"
+                onClick={() => toggleCreatorSubscription(selectedProfile.id, selectedViewerCreator.subscribed)}
+                className="min-h-11 w-full rounded-lg bg-[var(--noodle-accent)] px-3 text-sm font-black text-zinc-950 hover:opacity-90"
+              >
+                {selectedViewerCreator.subscribed
+                  ? localizeUi("ui.slurp.profile.subscribed")
+                  : localizeUi("ui.slurp.profile.subscribe")}
+              </button>
+            </section>
+          )}
+        </div>
+      </aside>
+    );
     return (
-      <NoodleShell {...shellProps}>
+      <NoodleShell {...shellProps} contextualRail="populated" rightRail={profileRail}>
         <div className="h-full min-h-0 overflow-y-auto">
           <StageProfileView
             key={`${selectedProfile.id}:${shellPersonaAccount?.id ?? "no-viewer"}`}
@@ -1794,6 +1913,7 @@ export function SlurpHome({ navigation, onNavigate }: SlurpHomeProps) {
             slurpSettings={slurpSettingsQuery.data ?? null}
             postCardCtx={postCardCtx}
             viewerAccounts={viewerAccounts}
+            connectionCounts={connectionCountsQuery.data ?? {}}
             viewerIsLoading={Boolean(viewerPersonaId) && !viewerQuery.data && viewerQuery.isLoading}
             viewerIsError={Boolean(viewerPersonaId) && !viewerQuery.data && viewerQuery.isError}
             onRetryViewer={() => void viewerQuery.refetch()}
@@ -1859,6 +1979,7 @@ export function SlurpHome({ navigation, onNavigate }: SlurpHomeProps) {
     );
   }
 
+  const showDiscovery = navigation.mode === "creator" && navigation.view === "search";
   // Creator discovery stays in the wide-screen rail. Narrow layouts omit it so the
   // timeline remains the primary surface instead of stacking sidebar content above it.
   const feedRightRail = (
@@ -1898,6 +2019,32 @@ export function SlurpHome({ navigation, onNavigate }: SlurpHomeProps) {
             embedded
           />
         </div>
+        {showDiscovery && (
+          <section className="rounded-xl bg-[var(--slurp-surface)] p-4 ring-1 ring-inset ring-[var(--noodle-divider)]">
+            <h2 className="text-sm font-black">
+              {localizeUi("ui.slurp.discover.trending", { defaultValue: "Trending now" })}
+            </h2>
+            <p className="mt-1 text-xs leading-5 text-[var(--muted-foreground)]">
+              {localizeUi("ui.slurp.discover.trendingDetail", {
+                defaultValue: "Creators and posts with the most recent activity.",
+              })}
+            </p>
+            <ol className="mt-3 space-y-2">
+              {(viewerQuery.data?.creators ?? [])
+                .slice()
+                .sort((a, b) => b.posts.length - a.posts.length)
+                .slice(0, 5)
+                .map((creator, index) => (
+                  <li key={creator.profile.id} className="flex items-center gap-2 text-xs">
+                    <span className="w-4 shrink-0 font-black text-[var(--noodle-accent)]">{index + 1}</span>
+                    <Avatar account={creator.profile} size="xs" />
+                    <span className="min-w-0 flex-1 truncate font-semibold">{creator.profile.displayName}</span>
+                    <span className="shrink-0 text-[var(--muted-foreground)]">{creator.posts.length}</span>
+                  </li>
+                ))}
+            </ol>
+          </section>
+        )}
       </div>
     </aside>
   );
@@ -2078,9 +2225,8 @@ export function SlurpHome({ navigation, onNavigate }: SlurpHomeProps) {
     );
   }
 
-  const showDiscovery = navigation.mode === "creator" && navigation.view === "search";
   return (
-    <NoodleShell {...shellProps} rightRail={feedRightRail}>
+    <NoodleShell {...shellProps} contextualRail="populated" rightRail={feedRightRail}>
       <ViewerHub
         personas={personas}
         personasLoading={personasQuery.isLoading}
@@ -3147,6 +3293,7 @@ function StageProfileView({
   slurpSettings,
   postCardCtx,
   viewerAccounts,
+  connectionCounts,
   viewerIsLoading,
   viewerIsError,
   onRetryViewer,
@@ -3187,6 +3334,7 @@ function StageProfileView({
   slurpSettings: ReturnType<typeof useSlurpSettings>["data"] | null;
   postCardCtx: NoodlePostCardCtx;
   viewerAccounts: NoodleAccount[];
+  connectionCounts: Record<string, { fans: number; followers: number }>;
   viewerIsLoading: boolean;
   viewerIsError: boolean;
   onRetryViewer: () => void;
@@ -3221,6 +3369,13 @@ function StageProfileView({
   const [creatorToolsOpen, setCreatorToolsOpen] = useState(false);
   const updateAutoPosting = useUpdateNoodlerAutoPosting();
   const updateFanActivity = useUpdateNoodlerFanActivity();
+  const updateAccountProfile = useUpdateSlurpAccountProfile();
+  const tipCreator = useTipSlurpCreator();
+  const [tipOpen, setTipOpen] = useState(false);
+  const [customTip, setCustomTip] = useState("");
+  const [locationDraft, setLocationDraft] = useState(
+    () => (profile as NoodlerManagedStageProfile & { location?: string }).location ?? "",
+  );
   const uploadProfileAvatar = useUploadNoodlerAvatar();
   const uploadProfileBanner = useUploadNoodlerBanner();
   const generateProfileArtwork = useGenerateNoodlerArtwork();
@@ -3242,6 +3397,20 @@ function StageProfileView({
   const subscribersQuery = useNoodlerSubscribers(profile.id);
   const subscribers = subscribersQuery.data?.pages.flatMap((page) => page.items) ?? [];
   const subscriberTotal = subscribersQuery.data?.pages[0]?.total ?? subscribers.length;
+  const followerTotal = connectionCounts[profile.sourceAccountId]?.followers ?? 0;
+  const profileLikeTotal = posts.reduce((total, post) => total + (post.likeCount ?? 0), 0);
+  const latestActivityAt = posts.reduce((latest, post) => Math.max(latest, Date.parse(post.createdAt)), 0);
+  const activityAge = Date.now() - latestActivityAt;
+  const creatorStatus: "online" | "away" | "offline" =
+    activityAge <= 15 * 60_000
+      ? "online"
+      : activityAge <= 24 * 60 * 60_000 || profile.autoPosting.enabled
+        ? "away"
+        : "offline";
+  const profileLocation = (profile as NoodlerManagedStageProfile & { location?: string }).location ?? "";
+  const profileBioLines = profile.bio.split("\n");
+  const profileBioQuote = profileBioLines[0]?.trim() ?? "";
+  const profileBioBody = profileBioLines.slice(1).join("\n").trim();
   const accent = profileAccent(profile.id);
   const viewingOwnCreator = profile.sourceAccountId === viewerAccount?.entityId;
   const personaBackedCreator = viewerAccounts.some((account) => account.id === profile.sourceAccountId);
@@ -3579,7 +3748,12 @@ function StageProfileView({
           isEditing: editing,
           onStartEditing: onEdit,
           onCancel: onCancelEdit,
-          onSave: onSaveEdit,
+          onSave: () => {
+            onSaveEdit();
+            if (locationDraft !== ((profile as NoodlerManagedStageProfile & { location?: string }).location ?? "")) {
+              updateAccountProfile.mutate({ accountId: profile.id, location: locationDraft });
+            }
+          },
           canSave: Boolean(editDraft.displayName.trim() && editDraft.handle.trim()),
           isSaving: profileSavePending,
           name: editDraft.displayName,
@@ -3588,8 +3762,8 @@ function StageProfileView({
           onHandleChange: (value) => onProfileChange({ handle: value }),
           bio: editDraft.bio,
           onBioChange: (value) => onProfileChange({ bio: value }),
-          location: "",
-          onLocationChange: () => undefined,
+          location: locationDraft,
+          onLocationChange: setLocationDraft,
           privateFields: (
             <div className="space-y-3 rounded-xl border border-[var(--noodle-divider)] bg-[var(--accent)]/35 p-4">
               <div>
@@ -3653,15 +3827,88 @@ function StageProfileView({
                       amount: slurpSubscriptionPriceOf(profile),
                     })}`}
               </button>
+              <div className="relative">
+                <button
+                  type="button"
+                  disabled={tipCreator.isPending}
+                  onClick={() => setTipOpen((open) => !open)}
+                  className="inline-flex min-h-11 items-center justify-center rounded-lg border border-[var(--noodle-divider)] px-4 text-sm font-bold transition-[background-color,opacity,transform] hover:bg-[var(--accent)] active:scale-[0.96] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--noodle-accent)] motion-reduce:transition-none motion-reduce:active:scale-100 disabled:opacity-50"
+                >
+                  {localizeUi("ui.slurp.profile.tip", { defaultValue: "Tip" })}
+                </button>
+                {tipOpen && (
+                  <div className="absolute end-0 top-[calc(100%+0.5rem)] z-20 w-56 rounded-lg border border-[var(--noodle-divider)] bg-[var(--background)] p-3 shadow-xl">
+                    <p className="text-xs font-semibold text-[var(--muted-foreground)]">
+                      {localizeUi("ui.slurp.profile.tipAmount", { defaultValue: "Tip amount" })}
+                    </p>
+                    <div className="mt-2 grid grid-cols-4 gap-1.5">
+                      {[1, 5, 10, 25].map((amount) => (
+                        <button
+                          key={amount}
+                          type="button"
+                          onClick={() => {
+                            if (!viewerAccount?.entityId) return;
+                            tipCreator.mutate({ accountId: profile.id, personaId: viewerAccount.entityId, amount });
+                            setTipOpen(false);
+                          }}
+                          className="min-h-9 rounded-md bg-[var(--accent)] text-xs font-bold hover:bg-[var(--noodle-accent)]/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--noodle-accent)]"
+                        >
+                          {amount}
+                        </button>
+                      ))}
+                    </div>
+                    <div className="mt-2 flex gap-1.5">
+                      <input
+                        type="number"
+                        min={1}
+                        max={9999}
+                        value={customTip}
+                        onChange={(event) => setCustomTip(event.target.value)}
+                        aria-label={localizeUi("ui.slurp.profile.customTip", { defaultValue: "Custom tip amount" })}
+                        className="min-w-0 flex-1 rounded-md border border-[var(--noodle-divider)] bg-[var(--background)] px-2 text-sm"
+                      />
+                      <button
+                        type="button"
+                        disabled={
+                          !viewerAccount?.entityId || !Number.isInteger(Number(customTip)) || Number(customTip) < 1
+                        }
+                        onClick={() => {
+                          if (!viewerAccount?.entityId) return;
+                          tipCreator.mutate({
+                            accountId: profile.id,
+                            personaId: viewerAccount.entityId,
+                            amount: Number(customTip),
+                          });
+                          setCustomTip("");
+                          setTipOpen(false);
+                        }}
+                        className="min-h-9 rounded-md bg-[var(--noodle-accent)] px-2 text-xs font-bold text-zinc-950 disabled:opacity-50"
+                      >
+                        {localizeUi("ui.slurp.profile.sendTip", { defaultValue: "Send" })}
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
             </>
           ) : null
         }
-        bioContent={profile.bio ? <p className="mt-3 whitespace-pre-wrap text-sm leading-6">{profile.bio}</p> : null}
+        status={creatorStatus}
+        stats={{ followers: followerTotal, subscribers: subscriberTotal, likes: profileLikeTotal }}
+        location={profileLocation}
+        bioQuote={profileBioQuote ? <span>{profileBioQuote}</span> : null}
+        bioContent={profileBioBody ? <p className="whitespace-pre-wrap text-sm leading-6">{profileBioBody}</p> : null}
         contentActions={null}
         tabs={[
-          { id: "posts", label: localizeUi("ui.noodle.profile.tabs.posts") },
-          { id: "media", label: localizeUi("ui.noodle.profile.tabs.media") },
-          { id: "stories", label: localizeUi("ui.slurp.stories.archive") },
+          {
+            id: "posts",
+            label: `${localizeUi("ui.noodle.profile.tabs.posts")} (${posts.filter((post) => !isSlurpStory(post)).length})`,
+          },
+          {
+            id: "media",
+            label: `${localizeUi("ui.noodle.profile.tabs.media")} (${posts.filter((post) => Boolean(post.imageUrl)).length})`,
+          },
+          { id: "stories", label: `${localizeUi("ui.slurp.stories.archive")} (${posts.filter(isSlurpStory).length})` },
           {
             id: "subscribers",
             label: localizeUi("ui.noodle.stageProfile.tabs.subscribers", {
@@ -4815,16 +5062,14 @@ function SlurpWalletView({
 }) {
   const { t: localizeUi } = useUiTranslation();
   const walletQuery = useSlurpWallet(personaId);
-  const topUp = useTopUpSlurpWallet();
+  const claimRefill = useClaimSlurpDailyRefill();
   const wallet = walletQuery.data;
   const coins = wallet?.coins ?? fallbackCoins;
-  // ponytail: fixed shopfront. Coins are fiction, so a pack credits the wallet directly; replace
-  // the amounts with server-side packs if they ever cost real money.
-  const packs = [
-    { id: "small", coins: 100, price: "$4.99" },
-    { id: "medium", coins: 550, price: "$19.99" },
-    { id: "large", coins: 1200, price: "$39.99" },
-  ] as const;
+  const subscriptions = wallet ? Object.entries(wallet.subscriptions) : [];
+  const refillFloor = 60;
+  const refillProgress = Math.min(100, Math.round((coins / Math.max(1, refillFloor)) * 100));
+  const nextRefillAt = wallet?.stipendOn ? new Date(`${wallet.stipendOn}T00:00:00.000Z`).getTime() + 86_400_000 : null;
+  const refillReady = !wallet?.stipendOn || (nextRefillAt !== null && nextRefillAt <= Date.now());
   const entryLabel = (kind: SlurpWalletEntry["kind"]) =>
     localizeUi(`ui.slurp.wallet.entry.${kind}`, { defaultValue: kind });
   return (
@@ -4856,44 +5101,78 @@ function SlurpWalletView({
         </section>
 
         <section
-          aria-labelledby="slurp-wallet-packs"
+          aria-labelledby="slurp-wallet-refill"
           className="rounded-xl bg-[var(--slurp-surface)] p-4 ring-1 ring-inset ring-[var(--noodle-divider)]"
         >
-          <h2 id="slurp-wallet-packs" className="text-sm font-bold">
-            {localizeUi("ui.slurp.wallet.topUp", { defaultValue: "Top up" })}
-          </h2>
-          <p className="mt-1 text-xs text-[var(--muted-foreground)]">
-            {localizeUi("ui.slurp.wallet.topUpDetail", {
-              defaultValue: "Coin packs are part of the fiction. Nothing here charges you.",
-            })}
-          </p>
-          <div className="mt-3 grid gap-2 sm:grid-cols-3">
-            {packs.map((pack) => (
-              <div
-                key={pack.id}
-                className="flex flex-col gap-1 rounded-xl bg-[var(--accent)] p-3 ring-1 ring-inset ring-[var(--noodle-divider)]"
-              >
-                <span className="flex items-center gap-1.5 text-lg font-black tabular-nums">
-                  {pack.coins}
-                  <span
-                    className="inline-flex h-4 w-4 items-center justify-center rounded-full bg-[var(--noodle-accent)] text-[0.62rem] font-black leading-none text-[var(--noodle-accent-foreground)]"
-                    aria-hidden="true"
-                  >
-                    C
-                  </span>
-                </span>
-                <span className="text-xs font-semibold text-[var(--muted-foreground)]">{pack.price}</span>
-                <button
-                  type="button"
-                  disabled={!personaId || topUp.isPending}
-                  onClick={() => personaId && topUp.mutate({ personaId, amount: pack.coins })}
-                  className="mt-2 min-h-9 rounded-lg bg-[var(--noodle-accent)]/20 text-xs font-bold text-[var(--noodle-accent-foreground)] ring-1 ring-inset ring-[var(--noodle-accent)]/30 disabled:opacity-60"
-                >
-                  {localizeUi("ui.slurp.wallet.claim", { defaultValue: "Get coins" })}
-                </button>
-              </div>
-            ))}
+          <div className="flex items-start justify-between gap-3">
+            <div>
+              <h2 id="slurp-wallet-refill" className="text-sm font-bold">
+                {localizeUi("ui.slurp.wallet.dailyRefill", { defaultValue: "Daily refill" })}
+              </h2>
+              <p className="mt-1 text-xs text-[var(--muted-foreground)]">
+                {localizeUi("ui.slurp.wallet.dailyRefillDetail", {
+                  defaultValue: "Claim once per day when your balance is low.",
+                })}
+              </p>
+            </div>
+            <span className="text-xs font-bold tabular-nums text-[var(--muted-foreground)]">{refillProgress}%</span>
           </div>
+          <div
+            className="mt-3 h-2 overflow-hidden rounded-full bg-[var(--accent)]"
+            aria-label={`${coins} of ${refillFloor} coins`}
+          >
+            <div
+              className="h-full rounded-full bg-[var(--noodle-accent)] transition-[width] motion-reduce:transition-none"
+              style={{ width: `${refillProgress}%` }}
+            />
+          </div>
+          <div className="mt-3 flex flex-wrap items-center justify-between gap-3">
+            <p className="text-xs text-[var(--muted-foreground)]">
+              {refillReady
+                ? localizeUi("ui.slurp.wallet.refillReady", { defaultValue: "Your refill is ready." })
+                : localizeUi("ui.slurp.wallet.refillNext", { defaultValue: "Available after the next daily reset." })}
+            </p>
+            <button
+              type="button"
+              disabled={!personaId || claimRefill.isPending || !refillReady}
+              onClick={() => personaId && claimRefill.mutate({ personaId })}
+              className="min-h-10 rounded-lg bg-[var(--noodle-accent)] px-4 text-xs font-bold text-zinc-950 transition-[opacity,transform] hover:opacity-90 active:scale-[0.96] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--noodle-accent)] motion-reduce:transition-none motion-reduce:active:scale-100 disabled:opacity-50"
+            >
+              {claimRefill.isPending
+                ? localizeUi("ui.slurp.wallet.refilling", { defaultValue: "Claiming..." })
+                : localizeUi("ui.slurp.wallet.claimRefill", { defaultValue: "Claim daily refill" })}
+            </button>
+          </div>
+        </section>
+
+        <section
+          aria-labelledby="slurp-wallet-subscriptions"
+          className="rounded-xl bg-[var(--slurp-surface)] p-4 ring-1 ring-inset ring-[var(--noodle-divider)]"
+        >
+          <h2 id="slurp-wallet-subscriptions" className="text-sm font-bold">
+            {localizeUi("ui.slurp.wallet.subscriptions", { defaultValue: "Subscriptions" })}
+          </h2>
+          {subscriptions.length > 0 ? (
+            <ul className="mt-3 space-y-2">
+              {subscriptions.map(([creatorId, subscription]) => (
+                <li
+                  key={creatorId}
+                  className="flex items-center justify-between gap-3 rounded-lg bg-[var(--accent)] p-3"
+                >
+                  <span className="min-w-0 truncate text-xs font-semibold">{creatorId}</span>
+                  <span className="shrink-0 text-xs tabular-nums text-[var(--muted-foreground)]">
+                    {subscription.price} / week
+                  </span>
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <p className="mt-2 text-xs text-[var(--muted-foreground)]">
+              {localizeUi("ui.slurp.wallet.noSubscriptions", {
+                defaultValue: "Your active subscriptions will appear here.",
+              })}
+            </p>
+          )}
         </section>
 
         <section

@@ -1,4 +1,4 @@
-import { MapPin, Sparkles, Upload } from "lucide-react";
+import { Heart, MapPin, Sparkles, Upload, Users } from "lucide-react";
 import type { ChangeEvent, CSSProperties, ReactNode, RefObject } from "react";
 import { cn } from "../../lib/utils";
 import { Avatar } from "./SlurpShell";
@@ -76,6 +76,9 @@ interface SlurpProfileSurfaceProps<TTab extends string = SlurpProfileTab> {
   accent?: string;
   featuredContent?: ReactNode;
   spotlight?: boolean;
+  status?: "online" | "away" | "offline";
+  stats?: { followers: number; subscribers: number; likes: number };
+  bioQuote?: ReactNode;
 }
 
 export function SlurpProfileSurface<TTab extends string = SlurpProfileTab>({
@@ -104,6 +107,9 @@ export function SlurpProfileSurface<TTab extends string = SlurpProfileTab>({
   accent,
   featuredContent,
   spotlight = false,
+  status = "away",
+  stats,
+  bioQuote,
 }: SlurpProfileSurfaceProps<TTab>) {
   const { t: localizeUi } = useUiTranslation();
   const hasBanner = Boolean(banner) || decorativeBanner;
@@ -122,27 +128,11 @@ export function SlurpProfileSurface<TTab extends string = SlurpProfileTab>({
       document.getElementById(`${postPanelId}-tab-${String(next.id)}`)?.focus();
     });
   };
-  const hasProfileActions = Boolean(leadingActions || editor || followAction || secondaryActions);
+  const hasProfileActions = Boolean(leadingActions || followAction || secondaryActions);
   const profileActions = (
     <div className="grid min-h-11 w-full min-w-0 grid-cols-2 gap-2 [&>button]:min-w-0 [&>button:only-child]:col-span-2 @min-[560px]:flex @min-[560px]:w-auto @min-[560px]:flex-wrap @min-[560px]:justify-start @min-[560px]:[&>button:only-child]:col-span-1 @min-[860px]:justify-end">
       {!editor?.isEditing && leadingActions}
-      {editor ? (
-        <button
-          type="button"
-          onClick={() => {
-            if (editor.isEditing) editor.onSave();
-            else editor.onStartEditing();
-          }}
-          disabled={editor.isEditing ? !editor.canSave || editor.isSaving : false}
-          className="min-h-11 rounded-xl bg-[var(--noodle-accent)] px-5 text-xs font-bold text-zinc-950 shadow-sm transition-[opacity,transform] hover:opacity-90 active:scale-[0.96] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--noodle-accent)] motion-reduce:transition-none motion-reduce:active:scale-100 disabled:cursor-not-allowed disabled:opacity-50"
-        >
-          {editor.isEditing
-            ? editor.isSaving
-              ? localizeUi("ui.noodle.noodlehome.saving")
-              : localizeUi("ui.noodle.noodlehome.save")
-            : localizeUi("ui.noodle.stageprofileview.editProfile")}
-        </button>
-      ) : followAction ? (
+      {followAction ? (
         <button
           type="button"
           onClick={followAction.onToggle}
@@ -159,17 +149,7 @@ export function SlurpProfileSurface<TTab extends string = SlurpProfileTab>({
             : localizeUi("ui.noodle.noodlehome.follow")}
         </button>
       ) : null}
-      {editor?.isEditing ? (
-        <button
-          type="button"
-          onClick={editor.onCancel}
-          className="min-h-11 rounded-xl border border-[var(--noodle-divider)] px-5 text-xs font-bold transition-colors hover:bg-[var(--accent)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--noodle-accent)]"
-        >
-          {localizeUi("ui.slurp.creatorForm.cancel")}
-        </button>
-      ) : (
-        secondaryActions
-      )}
+      {secondaryActions}
     </div>
   );
   return (
@@ -184,7 +164,7 @@ export function SlurpProfileSurface<TTab extends string = SlurpProfileTab>({
             "group relative isolate overflow-hidden bg-[var(--slurp-canvas,var(--background))]",
             spotlight
               ? "shadow-[0_34px_84px_-60px_var(--noodle-accent)] ring-1 ring-inset ring-white/[0.06]"
-              : "rounded-b-2xl shadow-[var(--slurp-shadow-modal)]",
+              : "shadow-[var(--slurp-shadow-modal)]",
           )}
         >
           <button
@@ -270,7 +250,7 @@ export function SlurpProfileSurface<TTab extends string = SlurpProfileTab>({
       >
         <div
           className={cn(
-            "flex items-end",
+            "relative flex items-end",
             spotlight ? "w-auto" : "w-full",
             // The avatar rides up over the banner by roughly half its own height. It used to sit
             // almost flush with the card edge, which read as two stacked blocks rather than one
@@ -326,6 +306,14 @@ export function SlurpProfileSurface<TTab extends string = SlurpProfileTab>({
           ) : (
             <Avatar account={account} size="xl" />
           )}
+          <span
+            className={cn(
+              "absolute bottom-0 end-0 rounded-full border-2 border-[var(--background)] px-2 py-0.5 text-[0.6rem] font-bold leading-4 text-white",
+              status === "online" ? "bg-emerald-500" : status === "away" ? "bg-amber-500" : "bg-zinc-500",
+            )}
+          >
+            {localizeUi(`ui.slurp.profile.status.${status}`, { defaultValue: status })}
+          </span>
           {avatarUpload && (
             <input
               ref={avatarUpload.fileRef}
@@ -389,6 +377,25 @@ export function SlurpProfileSurface<TTab extends string = SlurpProfileTab>({
                 </>
               )}
             </div>
+            {stats && (
+              <div className="mt-3 flex flex-wrap gap-x-5 gap-y-2 text-xs text-[var(--muted-foreground)]">
+                <span className="inline-flex items-center gap-1.5">
+                  <Users size={14} aria-hidden="true" />
+                  <strong className="text-[var(--foreground)]">{stats.followers}</strong>{" "}
+                  {localizeUi("ui.slurp.profile.followers", { defaultValue: "Followers" })}
+                </span>
+                <span className="inline-flex items-center gap-1.5">
+                  <Users size={14} aria-hidden="true" />
+                  <strong className="text-[var(--foreground)]">{stats.subscribers}</strong>{" "}
+                  {localizeUi("ui.slurp.profile.subscribers", { defaultValue: "Subscribers" })}
+                </span>
+                <span className="inline-flex items-center gap-1.5">
+                  <Heart size={14} aria-hidden="true" />
+                  <strong className="text-[var(--foreground)]">{stats.likes}</strong>{" "}
+                  {localizeUi("ui.slurp.profile.likes", { defaultValue: "Likes" })}
+                </span>
+              </div>
+            )}
             {editor?.isEditing ? (
               <textarea
                 value={editor.bio}
@@ -397,8 +404,25 @@ export function SlurpProfileSurface<TTab extends string = SlurpProfileTab>({
                 className={cn(inPlaceFieldClass, "mt-2 h-24 resize-none text-sm leading-relaxed")}
               />
             ) : (
-              <div className="max-w-[65ch] text-sm leading-relaxed text-[var(--muted-foreground)] text-pretty">
-                {bioContent}
+              <div className="mt-3 max-w-[65ch] text-sm leading-relaxed text-[var(--muted-foreground)] text-pretty">
+                <span className="mb-1 block text-[0.62rem] font-bold uppercase tracking-[0.16em] text-[var(--noodle-accent)]">
+                  {localizeUi("ui.slurp.profile.bioLabel", { defaultValue: "Bio" })}
+                </span>
+                {bioQuote && (
+                  <span className="mb-1 block border-s-2 border-[var(--noodle-accent)]/50 ps-3 italic">{bioQuote}</span>
+                )}
+                <details className="group/bio">
+                  <summary className="list-none cursor-pointer outline-none focus-visible:ring-2 focus-visible:ring-[var(--noodle-accent)]">
+                    <span className="line-clamp-4">{bioContent}</span>
+                    <span className="mt-1 block text-xs font-bold text-[var(--noodle-accent)] group-open/bio:hidden">
+                      {localizeUi("ui.slurp.profile.expandBio", { defaultValue: "Show more" })}
+                    </span>
+                  </summary>
+                  <span className="mt-1 block">{bioContent}</span>
+                  <span className="mt-1 block text-xs font-bold text-[var(--noodle-accent)]">
+                    {localizeUi("ui.slurp.profile.collapseBio", { defaultValue: "Show less" })}
+                  </span>
+                </details>
               </div>
             )}
             {!editor?.isEditing && contentActions}
@@ -446,10 +470,10 @@ export function SlurpProfileSurface<TTab extends string = SlurpProfileTab>({
               </div>
             )}
           </div>
-          {hasProfileActions && <div className="min-w-0 @min-[860px]:max-w-[22rem]">{profileActions}</div>}
+          {hasProfileActions && <div className="min-w-0 @min-[860px]:max-w-[28rem]">{profileActions}</div>}
         </div>
       </div>
-      {preTabsContent && (
+      {(preTabsContent || editor) && (
         <div
           className={cn(
             "mx-3 overflow-hidden @min-[680px]:mx-5 @min-[1040px]:mx-8",
@@ -458,7 +482,34 @@ export function SlurpProfileSurface<TTab extends string = SlurpProfileTab>({
               : "mt-4 rounded-xl shadow-[var(--slurp-shadow-floating)] ring-1 ring-inset ring-[var(--noodle-divider)]",
           )}
         >
-          {preTabsContent}
+          <div className="flex items-center gap-2 border-b border-[var(--noodle-divider)] px-3 @min-[760px]:px-4">
+            <div className="min-w-0 flex-1">{preTabsContent}</div>
+            {editor && (
+              <div className="flex shrink-0 items-center gap-2 py-2">
+                {editor.isEditing && (
+                  <button
+                    type="button"
+                    onClick={editor.onCancel}
+                    className="min-h-10 rounded-lg border border-[var(--noodle-divider)] px-3 text-xs font-bold hover:bg-[var(--accent)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--noodle-accent)]"
+                  >
+                    {localizeUi("ui.slurp.creatorForm.cancel")}
+                  </button>
+                )}
+                <button
+                  type="button"
+                  onClick={() => (editor.isEditing ? editor.onSave() : editor.onStartEditing())}
+                  disabled={editor.isEditing ? !editor.canSave || editor.isSaving : false}
+                  className="min-h-10 rounded-lg bg-[var(--noodle-accent)] px-4 text-xs font-black text-zinc-950 hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--noodle-accent)] disabled:opacity-50"
+                >
+                  {editor.isEditing
+                    ? editor.isSaving
+                      ? localizeUi("ui.noodle.noodlehome.saving")
+                      : localizeUi("ui.noodle.noodlehome.save")
+                    : localizeUi("ui.noodle.stageprofileview.editProfile")}
+                </button>
+              </div>
+            )}
+          </div>
         </div>
       )}
       <div
