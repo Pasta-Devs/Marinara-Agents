@@ -490,6 +490,54 @@ export type SlurpWallet = {
  * The viewer's wallet. Fetching it is what pays the daily stipend and charges due renewals on the
  * server, so the wallet page opening is also what moves the economy forward.
  */
+export type SlurpStudioPost = {
+  id: string;
+  title: string | null;
+  createdAt: string;
+  locked: boolean;
+  hasImage: boolean;
+  reach: number;
+  likeCount: number;
+  replyCount: number;
+  unlockCount: number | null;
+};
+
+export type SlurpStudioCreator = {
+  id: string;
+  handle: string;
+  displayName: string;
+  avatarUrl: string | null;
+  followers: number;
+  subscribers: number;
+  earnings: {
+    coins: number;
+    lifetime: number;
+    ledger: Array<{ kind: string; amount: number; at: string; note?: string }>;
+  };
+  milestone: { reached: number | null; next: number | null; progress: number; remaining: number };
+  /** Null on a first visit: "no change yet" and "measured no change" are different. */
+  followersDelta: number | null;
+  earningsDelta: number | null;
+  milestonesCrossed: number[];
+  posts: SlurpStudioPost[];
+};
+
+/** The Creator home. Reading it also re-marks the point future deltas are measured from. */
+export function useSlurpStudio(personaId: string | null, enabled = true) {
+  return useQuery({
+    queryKey: [...noodleKeys.noodlerRoot(), "studio", personaId ?? "none"],
+    queryFn: () =>
+      api.get<{ since: string | null; creators: SlurpStudioCreator[] }>(
+        `/slurp/noodler/studio?personaId=${encodeURIComponent(personaId!)}`,
+      ),
+    enabled: Boolean(personaId) && enabled,
+    // The snapshot is rewritten on every read, so refetching would silently zero the deltas the
+    // player is looking at. Read once per visit.
+    staleTime: Infinity,
+    refetchOnWindowFocus: false,
+  });
+}
+
 export function useSlurpWallet(personaId: string | null) {
   return useQuery({
     queryKey: [...noodleKeys.noodlerRoot(), "wallet", personaId ?? "none"],

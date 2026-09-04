@@ -13,9 +13,9 @@ first version of this plan was wrong in ways that are not obvious.
 
 | Stage | What | State |
 | ----- | ---- | ----- |
-| 0 | Separate creator earnings from spending money | **next** |
-| 1 | Creator home: legibility, goals, catch-up | not started |
-| 2 | Notification stream | not started |
+| 0 | Separate creator earnings from spending money | **done** |
+| 1 | Creator home: legibility, goals, catch-up | **done** (tip goals pending) |
+| 2 | Notification stream | **next** |
 | 3 | Audience-initiated commissions and questions | not started |
 | 4 | Audience population and funnel | not started |
 | 5 | Reach derived from funnel state | not started |
@@ -296,7 +296,26 @@ to the tip route. Display only, no payout yet.
 Small, unblocks audience income, and repairs the self-payment loop. The creator home needs a real
 earnings figure, so this comes first.
 
-### Stage 1 — creator home
+### Stage 1 — creator home — DONE, except tip goals
+
+`GET /noodler/studio` plus `SlurpStudioView`, reachable from the shell nav for any persona that
+operates a Creator. `slurp-milestones.ts` is pure and testable; `slurp-studio-snapshot.ts` holds
+the mark deltas are measured from.
+
+Deltas are `null` on a first visit rather than `0`, because "no change yet" and "measured no
+change" are different and render differently. Reading the studio rewrites the snapshot, so the
+client hook uses `staleTime: Infinity` — a refetch would silently zero the deltas the player is
+looking at.
+
+Per-post **earnings** attribution is deliberately absent. The ledger carries no post id, and
+`unlockCount` is synthetic reach, so a money figure derived from it would contradict the real
+earnings balance. Add it when Stage 4 makes unlocks real.
+
+**Tip goals are still missing.** They need a per-Creator target and label in settings, plus
+progress measured from earnings since the goal opened. This was one of the two goal mechanics the
+review called for; only milestones landed.
+
+### Stage 1 (original scope)
 
 One surface answering "how am I doing", per operated creator:
 

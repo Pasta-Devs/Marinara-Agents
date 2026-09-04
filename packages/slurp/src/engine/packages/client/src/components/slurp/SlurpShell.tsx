@@ -5,6 +5,7 @@
 // ──────────────────────────────────────────────
 import {
   AtSign,
+  ChartNoAxesColumn,
   ChevronDown,
   Home,
   MessageCircle,
@@ -368,6 +369,9 @@ export interface NoodleShellProps {
   onOpenMessages?: () => void;
   /** Omit on surfaces with no scoped equivalent. */
   onOpenWallet?: () => void;
+  onOpenStudio?: () => void;
+  /** The studio only exists for a persona that operates a Creator. */
+  hasOperatedCreator?: boolean;
   /** Shown on the desktop Wallet row and the identity card, so the balance is not mobile-only. */
   walletBalanceLabel?: string;
   /** Creator banner of the active persona, backing the identity card. Falls back to the accent gradient. */
@@ -603,6 +607,8 @@ export function NoodleShell({
   onOpenSettings,
   onOpenMessages,
   onOpenWallet,
+  onOpenStudio,
+  hasOperatedCreator = false,
   walletBalanceLabel,
   personaBannerUrl,
   onBecomeCreator,
@@ -718,6 +724,20 @@ export function NoodleShell({
                       : localizeUi("ui.noodle.noodleshell.noodleAccountNavigation")
                   }
                 >
+                  {onOpenStudio && hasOperatedCreator && (
+                    <button
+                      type="button"
+                      onClick={onOpenStudio}
+                      aria-current={activeView === "studio" ? "page" : undefined}
+                      className={cn(
+                        "flex min-h-12 w-full items-center gap-4 rounded-xl px-2 text-left text-base font-bold transition-colors hover:bg-[var(--accent)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--noodle-accent)]",
+                        activeView === "studio" && "bg-[var(--noodle-accent)]/10",
+                      )}
+                    >
+                      <ChartNoAxesColumn size={23} />
+                      {localizeUi("ui.slurp.navigation.studio", { defaultValue: "Studio" })}
+                    </button>
+                  )}
                   {onOpenWallet && (
                     <button
                       type="button"

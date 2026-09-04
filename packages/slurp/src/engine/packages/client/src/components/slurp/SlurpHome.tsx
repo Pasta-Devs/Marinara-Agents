@@ -77,6 +77,7 @@ import {
   useNoodlerViewerWallets,
   useNoodlerSubscribers,
   useNoodlerUnseenCount,
+  useSlurpStudio,
   useHideSlurpAd,
   useHideSlurpAdBrand,
   useRecordSlurpAdAction,
@@ -764,6 +765,11 @@ export function SlurpHome({ navigation, onNavigate }: SlurpHomeProps) {
     onNavigate({ mode: "creator", view: "wallet" });
     setMobileDrawerOpen(false);
   };
+  const goToStudio = async () => {
+    if (!(await prepareNavigationAwayFromProfileEditor())) return;
+    onNavigate({ mode: "creator", view: "studio" });
+    setMobileDrawerOpen(false);
+  };
   const closeNoodlerSearch = () => {
     setFeedSearch("");
     onNavigate({ mode: "creator", view: "hub" });
@@ -1411,7 +1417,9 @@ export function SlurpHome({ navigation, onNavigate }: SlurpHomeProps) {
               ? ("messages" as const)
               : navigation.mode === "creator" && navigation.view === "wallet"
                 ? ("wallet" as const)
-                : ("noodler" as const),
+                : navigation.mode === "creator" && navigation.view === "studio"
+                  ? ("studio" as const)
+                  : ("noodler" as const),
     contextualRail:
       // Every destination reserves the same rail column, so the content column does not
       // change width as you move between them.
@@ -1461,6 +1469,9 @@ export function SlurpHome({ navigation, onNavigate }: SlurpHomeProps) {
     onOpenSearch: goToNoodlerSearch,
     onOpenMessages: goToMessages,
     onOpenWallet: goToWallet,
+    onOpenStudio: goToStudio,
+    // The studio is only meaningful for a persona that operates a Creator.
+    hasOperatedCreator: personaBackedCreator,
     walletBalanceLabel: `${viewerWalletsQuery.data?.[viewerPersonaId ?? ""]?.coins ?? SLURP_PLACEHOLDER_BALANCE}`,
     personaBannerUrl: myCreatorProfile?.bannerUrl ?? null,
     onBecomeCreator: shellPersonaAccount
@@ -2062,6 +2073,18 @@ export function SlurpHome({ navigation, onNavigate }: SlurpHomeProps) {
           fallbackCoins={viewerWalletsQuery.data?.[viewerPersonaId ?? ""]?.coins ?? SLURP_PLACEHOLDER_BALANCE}
           personaName={shellPersonaAccount?.displayName ?? ""}
           onBack={exitToCreatorHub}
+        />
+      </NoodleShell>
+    );
+  }
+
+  if (navigation.mode === "creator" && navigation.view === "studio") {
+    return (
+      <NoodleShell {...shellProps}>
+        <SlurpStudioView
+          personaId={viewerPersonaId}
+          onBack={exitToCreatorHub}
+          onOpenProfile={(accountId) => onNavigate({ mode: "creator", view: "profile", accountId })}
         />
       </NoodleShell>
     );
@@ -6509,5 +6532,219 @@ function NoodlerFrame({
       </header>
       <main className="min-h-0 flex-1 overflow-y-auto">{children}</main>
     </div>
+  );
+}
+
+/**
+ * The Creator home.
+ *
+ * A review of the live-world plan found the world had cause and effect the player could never
+ * see: reach moved, posts performed differently, and nothing surfaced why. This is the legibility
+ * surface. Every number the world produces becomes visible and attributable in one place, so the
+ * player can tell what their posting actually did.
+ *
+ * It also carries the only goal Slurp has: the next follower milestone. Systems with nothing to
+ * aim at are a simulation, not a game.
+ */
+function SlurpStudioView({
+  personaId,
+  onBack,
+  onOpenProfile,
+}: {
+  personaId: string | null;
+  onBack: () => void;
+  onOpenProfile: (accountId: string) => void;
+}) {
+  const { t: localizeUi, i18n } = useUiTranslation();
+  const studioQuery = useSlurpStudio(personaId);
+  const creators = studioQuery.data?.creators ?? [];
+  const since = studioQuery.data?.since ?? null;
+
+  const delta = (value: number | null) => {
+    if (value === null || value === 0) return null;
+    return (
+      <span
+        className={cn(
+          "text-xs font-bold tabular-nums",
+          value > 0 ? "text-[var(--noodle-accent)]" : "text-[var(--muted-foreground)]",
+        )}
+      >
+        {value > 0 ? `+${value.toLocaleString()}` : value.toLocaleString()}
+      </span>
+    );
+  };
+
+  return (
+    <NoodlerFrame onBack={onBack} title={localizeUi("ui.slurp.navigation.studio")} action={<span />}>
+      <div className="mx-auto flex w-full max-w-3xl flex-col gap-4 p-4 sm:p-5">
+        {since && (
+          <p className="px-1 text-xs text-[var(--muted-foreground)]">
+            {localizeUi("ui.slurp.studio.since", {
+              defaultValue: "Changes since {{date}}",
+              date: formatTime(since, i18n.language),
+            })}
+          </p>
+        )}
+
+        {studioQuery.isPending ? (
+          <p className="px-1 text-sm text-[var(--muted-foreground)]">
+            {localizeUi("ui.slurp.studio.loading", { defaultValue: "Loading…" })}
+          </p>
+        ) : creators.length === 0 ? (
+          <div className="rounded-xl bg-[var(--slurp-surface)] px-6 py-14 text-center ring-1 ring-inset ring-[var(--noodle-divider)]">
+            <p className="text-sm font-bold">
+              {localizeUi("ui.slurp.studio.emptyTitle", { defaultValue: "No Creators yet" })}
+            </p>
+            <p className="mx-auto mt-1 max-w-sm text-xs text-[var(--muted-foreground)]">
+              {localizeUi("ui.slurp.studio.emptyDetail", {
+                defaultValue: "Make this persona a Creator to see how its posts are doing.",
+              })}
+            </p>
+          </div>
+        ) : (
+          creators.map((creator) => (
+            <section
+              key={creator.id}
+              aria-labelledby={`slurp-studio-${creator.id}`}
+              className="flex flex-col gap-4 rounded-xl bg-[var(--slurp-surface)] p-4 ring-1 ring-inset ring-[var(--noodle-divider)]"
+            >
+              <button
+                type="button"
+                onClick={() => onOpenProfile(creator.id)}
+                className="flex items-center gap-3 rounded-lg px-1 py-1 text-left hover:bg-[var(--noodle-accent)]/[0.06]"
+              >
+                <Avatar account={{ displayName: creator.displayName, avatarUrl: creator.avatarUrl }} size="md" />
+                <span className="min-w-0">
+                  <span id={`slurp-studio-${creator.id}`} className="block truncate text-sm font-bold">
+                    {creator.displayName}
+                  </span>
+                  <span className="block truncate text-xs text-[var(--muted-foreground)]">@{creator.handle}</span>
+                </span>
+              </button>
+
+              <div className="grid grid-cols-3 gap-2">
+                {[
+                  {
+                    label: localizeUi("ui.slurp.studio.followers", { defaultValue: "Followers" }),
+                    value: creator.followers,
+                    change: creator.followersDelta,
+                  },
+                  {
+                    label: localizeUi("ui.slurp.studio.subscribers", { defaultValue: "Subscribers" }),
+                    value: creator.subscribers,
+                    change: null,
+                  },
+                  {
+                    label: localizeUi("ui.slurp.studio.earned", { defaultValue: "Earned" }),
+                    value: creator.earnings.lifetime,
+                    change: creator.earningsDelta,
+                  },
+                ].map((stat) => (
+                  <div key={stat.label} className="rounded-lg bg-[var(--accent)] p-3">
+                    <p className="text-[0.65rem] font-bold uppercase tracking-[0.12em] text-[var(--muted-foreground)]">
+                      {stat.label}
+                    </p>
+                    <p className="mt-1 flex items-baseline gap-1.5">
+                      <span className="text-xl font-black tabular-nums">{stat.value.toLocaleString()}</span>
+                      {delta(stat.change)}
+                    </p>
+                  </div>
+                ))}
+              </div>
+
+              {creator.milestone.next !== null && (
+                <div>
+                  <div className="flex items-baseline justify-between gap-3">
+                    <p className="text-xs font-bold">
+                      {localizeUi("ui.slurp.studio.nextMilestone", {
+                        defaultValue: "Next milestone: {{target}} followers",
+                        target: creator.milestone.next.toLocaleString(),
+                      })}
+                    </p>
+                    <p className="text-xs tabular-nums text-[var(--muted-foreground)]">
+                      {localizeUi("ui.slurp.studio.remaining", {
+                        defaultValue: "{{count}} to go",
+                        count: creator.milestone.remaining.toLocaleString(),
+                      })}
+                    </p>
+                  </div>
+                  <div className="mt-2 h-2 overflow-hidden rounded-full bg-[var(--accent)]">
+                    <div
+                      className="h-full rounded-full bg-[var(--noodle-accent)] transition-[width] motion-reduce:transition-none"
+                      style={{ width: `${Math.round(creator.milestone.progress * 100)}%` }}
+                    />
+                  </div>
+                </div>
+              )}
+
+              {creator.milestonesCrossed.length > 0 && (
+                <p className="rounded-lg bg-[var(--noodle-accent)]/10 px-3 py-2 text-xs font-bold text-[var(--noodle-accent)]">
+                  {localizeUi("ui.slurp.studio.crossed", {
+                    defaultValue: "Passed {{targets}} followers since your last visit.",
+                    targets: creator.milestonesCrossed.map((value) => value.toLocaleString()).join(", "),
+                  })}
+                </p>
+              )}
+
+              {creator.posts.length > 0 && (
+                <div>
+                  <h3 className="text-xs font-bold uppercase tracking-[0.12em] text-[var(--muted-foreground)]">
+                    {localizeUi("ui.slurp.studio.recentPosts", { defaultValue: "Recent posts" })}
+                  </h3>
+                  <ul className="mt-2 flex flex-col divide-y divide-[var(--noodle-divider)]">
+                    {creator.posts.map((post) => (
+                      <li key={post.id} className="flex items-center justify-between gap-3 py-2">
+                        <span className="min-w-0">
+                          <span className="block truncate text-xs font-semibold">
+                            {post.title || localizeUi("ui.slurp.studio.untitled", { defaultValue: "Untitled post" })}
+                          </span>
+                          <span className="block text-[0.7rem] text-[var(--muted-foreground)]">
+                            {[
+                              formatTime(post.createdAt, i18n.language),
+                              post.locked ? localizeUi("ui.slurp.studio.locked", { defaultValue: "locked" }) : null,
+                              post.hasImage ? localizeUi("ui.slurp.studio.withImage", { defaultValue: "image" }) : null,
+                            ]
+                              .filter(Boolean)
+                              .join(" · ")}
+                          </span>
+                        </span>
+                        <span className="shrink-0 text-right">
+                          <span className="block text-xs font-bold tabular-nums">
+                            {localizeUi("ui.slurp.studio.reached", {
+                              defaultValue: "{{count}} reached",
+                              count: post.reach.toLocaleString(),
+                            })}
+                          </span>
+                          <span className="block text-[0.7rem] tabular-nums text-[var(--muted-foreground)]">
+                            {[
+                              localizeUi("ui.slurp.studio.likes", {
+                                defaultValue: "{{count}} likes",
+                                count: post.likeCount.toLocaleString(),
+                              }),
+                              localizeUi("ui.slurp.studio.comments", {
+                                defaultValue: "{{count}} comments",
+                                count: post.replyCount.toLocaleString(),
+                              }),
+                              post.unlockCount !== null
+                                ? localizeUi("ui.slurp.studio.unlocks", {
+                                    defaultValue: "{{count}} unlocks",
+                                    count: post.unlockCount.toLocaleString(),
+                                  })
+                                : null,
+                            ]
+                              .filter(Boolean)
+                              .join(" · ")}
+                          </span>
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+            </section>
+          ))
+        )}
+      </div>
+    </NoodlerFrame>
   );
 }

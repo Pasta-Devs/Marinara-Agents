@@ -122,8 +122,11 @@ import {
   slurpCreatorReach,
   slurpPostLikeCount,
   slurpPostReplyCount,
+  slurpPostImpressions,
   slurpPostUnlockCount,
 } from "../services/slurp/slurp-reach.js";
+import { slurpFollowerMilestone, slurpMilestonesCrossed } from "../services/slurp/slurp-milestones.js";
+import { readSlurpStudioSnapshot, writeSlurpStudioSnapshot } from "../services/slurp/slurp-studio-snapshot.js";
 import { rerollAmbientNoodleProfiles } from "../services/slurp/slurp-ambient-profile-generation.service.js";
 import { ensureAmbientNoodleAccounts, isAmbientNoodleAccount } from "../services/slurp/slurp-ambient-profiles.js";
 import { generateInvitedNoodlePostDraft } from "../services/slurp/slurp-invited-post-draft.service.js";
@@ -972,6 +975,113 @@ export async function slurpRoutes(app: FastifyInstance) {
       }),
     );
   }
+
+  /**
+   * The Creator home: one answer to "how am I doing", per Creator this persona operates.
+   *
+   * A review found the world had cause and effect the player could never see. Reach moved, posts
+   * performed differently, and nothing surfaced why. This is the legibility surface: every number
+   * the world produces becomes visible and attributable here.
+   *
+   * Deltas need a mark to measure from, so the first read stores a snapshot and reports no change.
+   * That is correct rather than a special case: nothing has happened since a visit that never
+   * happened.
+   */
+  app.get("/noodler/studio", async (req, reply) => {
+    const parsed = noodlerViewerPersonaSchema.safeParse(req.query);
+    if (!parsed.success) return reply.code(400).send({ error: parsed.error.flatten() });
+    const viewer = await resolveViewerPersona(parsed.data.personaId);
+    if (!viewer) return reply.code(404).send({ error: "Slurp persona not found" });
+
+    const accounts = await noodle.listNoodlerAccounts();
+    const operated = accounts.filter((account) => creatorBelongsToViewer(account, viewer));
+    const at = new Date();
+    const snapshot = await readSlurpStudioSnapshot(app.db, viewer.id);
+
+    const followerCounts = new Map<string, number>();
+    for (const account of await noodle.listAccounts()) {
+      for (const followedId of account.settings.social.followingAccountIds ?? []) {
+        followerCounts.set(followedId, (followerCounts.get(followedId) ?? 0) + 1);
+      }
+    }
+
+    const postsByAccount = await noodle.listNoodlerPostsByAccounts(
+      operated.map((account) => account.id),
+      6,
+    );
+    const allPostIds = [...postsByAccount.values()].flat().map((post) => post.id);
+    const interactions = allPostIds.length > 0 ? await noodle.listNoodlerInteractions(allPostIds) : [];
+    const interactionsByPostId = new Map<string, typeof interactions>();
+    for (const interaction of interactions) {
+      const existing = interactionsByPostId.get(interaction.postId) ?? [];
+      existing.push(interaction);
+      interactionsByPostId.set(interaction.postId, existing);
+    }
+
+    const creators = await Promise.all(
+      operated.map(async (account) => {
+        const followers = slurpCreatorReach(
+          {
+            accountId: account.id,
+            createdAt: account.createdAt,
+            realFollowers: followerCounts.get(account.id) ?? 0,
+          },
+          at,
+        );
+        const earnings = await noodle.getEarnings(account.id);
+        const previous = snapshot?.creators[account.id] ?? null;
+        const posts = (postsByAccount.get(account.id) ?? []).map((post) => {
+          const postInteractions = interactionsByPostId.get(post.id) ?? [];
+          const input = { postId: post.id, createdAt: post.createdAt, creatorReach: followers };
+          return {
+            id: post.id,
+            title: post.title,
+            createdAt: post.createdAt,
+            locked: post.access === "locked",
+            hasImage: post.imageUrl !== null,
+            reach: slurpPostImpressions(input, at),
+            likeCount: slurpPostLikeCount(
+              { ...input, realLikes: postInteractions.filter((item) => item.type === "like").length },
+              at,
+            ),
+            replyCount: slurpPostReplyCount(
+              { ...input, realReplies: postInteractions.filter((item) => item.type === "reply").length },
+              at,
+            ),
+            unlockCount: post.access === "locked" ? slurpPostUnlockCount(input, at) : null,
+          };
+        });
+        return {
+          id: account.id,
+          handle: account.handle,
+          displayName: account.displayName,
+          avatarUrl: account.avatarUrl,
+          followers,
+          subscribers: (await noodle.listSubscriptionsForCreator(account.id)).length,
+          earnings,
+          milestone: slurpFollowerMilestone(followers),
+          // Null rather than zero on a first read: "no change yet" and "measured no change" are
+          // different, and the client renders them differently.
+          followersDelta: previous ? followers - previous.followers : null,
+          earningsDelta: previous ? earnings.lifetime - previous.lifetimeEarnings : null,
+          milestonesCrossed: previous ? slurpMilestonesCrossed(previous.followers, followers) : [],
+          posts,
+        };
+      }),
+    );
+
+    await writeSlurpStudioSnapshot(app.db, viewer.id, {
+      at: at.toISOString(),
+      creators: Object.fromEntries(
+        creators.map((creator) => [
+          creator.id,
+          { followers: creator.followers, lifetimeEarnings: creator.earnings.lifetime },
+        ]),
+      ),
+    });
+
+    return { since: snapshot?.at ?? null, creators };
+  });
 
   app.get("/noodler/viewer/unseen-count", async (req, reply) => {
     const parsed = noodlerViewerPersonaSchema.safeParse(req.query);

@@ -8,6 +8,8 @@ export type SlurpNavigationState =
   /** `creatorAccountId` lands straight in that Creator's chat, when Messages was opened from a profile. */
   | { mode: "creator"; view: "messages"; creatorAccountId?: string }
   | { mode: "creator"; view: "wallet" }
+  /** The Creator home: earnings, reach, recent post performance, and goals. */
+  | { mode: "creator"; view: "studio" }
   | {
       mode: "creator";
       view: "profile";
