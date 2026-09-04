@@ -2,6 +2,7 @@ import { Heart, MapPin, Sparkles, Upload, Users } from "lucide-react";
 import type { ChangeEvent, CSSProperties, ReactNode, RefObject } from "react";
 import { cn } from "../../lib/utils";
 import { Avatar } from "./SlurpShell";
+import { SlurpEmptyArtwork } from "./SlurpEmptyArtwork";
 import { useTranslation as useUiTranslation } from "react-i18next";
 
 type SlurpProfileTab = "posts" | "likes" | "media";
@@ -183,8 +184,8 @@ export function SlurpProfileSurface<TTab extends string = SlurpProfileTab>({
             {banner.url ? (
               <img src={banner.url} alt="" className="h-full w-full object-cover" />
             ) : (
-              <div className="flex h-full items-center justify-center bg-[var(--noodle-accent)]/10">
-                <span className="text-3xl font-black tracking-[0.12em] text-[var(--noodle-accent)]/70">SLURP</span>
+              <div className="relative h-full overflow-hidden bg-[var(--noodle-accent)]/10">
+                <SlurpEmptyArtwork className="absolute inset-0 opacity-90" />
               </div>
             )}
             <span

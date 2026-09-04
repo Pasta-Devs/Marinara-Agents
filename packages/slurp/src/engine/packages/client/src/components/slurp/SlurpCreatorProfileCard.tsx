@@ -3,6 +3,7 @@ import type { AvatarCrop } from "@marinara-engine/shared";
 import { cn } from "../../lib/utils";
 import { useNearViewportSlurpMediaSrc } from "../../hooks/use-slurp-media-src";
 import { ProfileInitial } from "./SlurpShell";
+import { SlurpEmptyArtwork } from "./SlurpEmptyArtwork";
 
 export type SlurpCreatorProfileCardCreator = {
   profile: {
@@ -64,7 +65,9 @@ export function SlurpCreatorProfileCard({
       >
         {bannerSrc ? (
           <img src={bannerSrc} alt="" loading="lazy" decoding="async" className="h-full w-full object-cover" />
-        ) : null}
+        ) : (
+          <SlurpEmptyArtwork className="absolute inset-0 opacity-90" />
+        )}
         <span
           className="pointer-events-none absolute inset-0 bg-[linear-gradient(to_top,rgba(8,4,10,0.82),transparent_72%)]"
           aria-hidden="true"
