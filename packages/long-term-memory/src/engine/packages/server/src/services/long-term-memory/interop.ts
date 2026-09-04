@@ -321,8 +321,8 @@ function matchesScope(candidate: Candidate, scope?: LtmScope) {
   return matchesImportScope(candidate.scope, scope);
 }
 
-function candidateVisibleInScope(candidate: Candidate, scope: LtmScope | undefined, existing?: LtmNote) {
-  return matchesScope(candidate, scope) || Boolean(existing && matchesImportScope(existing.scope, scope));
+function candidateVisibleInScope(candidate: Candidate, scope: LtmScope | undefined) {
+  return matchesScope(candidate, scope);
 }
 
 function matchesChatSummaryScope(candidateScope: LtmScope, scope?: LtmScope) {
@@ -615,7 +615,7 @@ export async function previewPackageInterop(
     matchExisting = await existingMatcher(storage),
     allSamples = rows.flatMap((row) => {
       const existing = matchExisting(row);
-      return candidateVisibleInScope(row, sourceScope, existing) ? [previewSample(row, existing)] : [];
+      return candidateVisibleInScope(row, sourceScope) ? [previewSample(row, existing)] : [];
     }),
     samples = allSamples.slice(0, request.limit);
   return {
@@ -654,10 +654,9 @@ export async function previewPackageLorebooks(
           ),
           rows = book.candidates
             .filter((row) => {
-              const existing = matchExisting(row);
               return (
                 (!request.mode || row.modes.includes(request.mode)) &&
-                candidateVisibleInScope(row, sourceScope, existing) &&
+                candidateVisibleInScope(row, sourceScope) &&
                 (bookMatches || matchesQuery(row, request.query))
               );
             })
@@ -785,7 +784,7 @@ export async function sourcePackageDetails(
     matchExisting = await existingMatcher(storage),
     details = rows.flatMap((row) => {
       const existing = matchExisting(row);
-      return candidateVisibleInScope(row, sourceScope, existing)
+      return candidateVisibleInScope(row, sourceScope)
         ? [{ ...previewSample(row, existing), content: row.sourceText.slice(0, 500_000) }]
         : [];
     }),
@@ -824,7 +823,7 @@ export async function importPackageInterop(
       { ...request, sourceScope, includeOutOfScope: sourceScope !== undefined },
       selected,
     ),
-    rows = candidateRows.filter((row) => candidateVisibleInScope(row, sourceScope, matchExisting(row))),
+    rows = candidateRows.filter((row) => candidateVisibleInScope(row, sourceScope)),
     resolvedIds = new Set(rows.map((item) => item.sourceId)),
     missingSourceIds = request.sourceIds.filter((id) => !resolvedIds.has(id));
   throwIfAborted(signal);

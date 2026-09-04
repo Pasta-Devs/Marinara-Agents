@@ -572,7 +572,8 @@ function DestinationScopePanel({
       id="ltm-destination-scope-control"
       role="group"
       aria-labelledby={labelId}
-      className="mari-editor-panel flex min-h-0 max-h-[min(42rem,calc(100dvh-8rem))] flex-col gap-3 p-3"
+      className="mari-editor-panel flex min-h-0 flex-col gap-3 p-3"
+      style={{ maxHeight: "calc(100vh - 12rem)" }}
     >
       <div className="flex shrink-0 items-center gap-2 text-xs font-semibold">
         <span id={labelId}>{localizeUi("ui.longTermMemory.sourcesworkspace.makeMemoriesAvailableIn")}</span>
@@ -2517,6 +2518,7 @@ export default function SourcesWorkspace({
         className="mari-editor-tab-rail flex flex-wrap gap-1 rounded-lg border p-1"
         role="tablist"
         aria-label={localizeUi("ui.longTermMemory.sourcesworkspace.sourceTypes")}
+        style={{ display: "flex" }}
       >
         {sourceTabs.map((tab) => (
           <button

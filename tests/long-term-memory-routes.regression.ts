@@ -2516,7 +2516,7 @@ async function main() {
         source: "chats",
         sourceIds: ["chat-a:summary-a", "missing:summary"],
         importConcurrency: 2,
-        destinationScope: { chatId: "chat-b", chatIds: ["chat-b"] },
+        destinationScope: { chatIds: ["chat-a", "chat-b"] },
       },
     });
     assert.equal(importedChat.statusCode, 200, importedChat.body);
@@ -2566,8 +2566,9 @@ async function main() {
       destinationChatPreview
         .json()
         .samples.some((sample: any) => sample.sourceId === "chat-a:summary-a" && sample.status === "imported"),
-      true,
+      false,
     );
+    assert.equal(destinationChatPreview.json().totals.imported, 0);
     const destinationChatDetails = await app.inject({
       method: "POST",
       url: "/api/long-term-memory/import/source-details",
@@ -2575,7 +2576,7 @@ async function main() {
       payload: {
         source: "chats",
         sourceIds: ["chat-a:summary-a"],
-        sourceScope: { chatId: "chat-b", chatIds: ["chat-b"] },
+        sourceScope: { chatId: "chat-a", chatIds: ["chat-a"] },
       },
     });
     assert.equal(destinationChatDetails.statusCode, 200, destinationChatDetails.body);
@@ -2588,8 +2589,8 @@ async function main() {
       payload: {
         source: "chats",
         sourceIds: ["chat-a:summary-a"],
-        sourceScope: { chatId: "chat-b", chatIds: ["chat-b"] },
-        destinationScope: { chatId: "chat-b", chatIds: ["chat-b"] },
+        sourceScope: { chatId: "chat-a", chatIds: ["chat-a"] },
+        destinationScope: { chatIds: ["chat-a", "chat-b"] },
         extract: false,
       },
     });
@@ -2681,7 +2682,7 @@ async function main() {
         source: "chats",
         sourceIds: ["chat-a:summary-a"],
         extract: false,
-        destinationScope: { chatId: "chat-b", chatIds: ["chat-b"] },
+        destinationScope: { chatIds: ["chat-a", "chat-b"] },
       },
     });
     assert.equal(refreshedChat.statusCode, 200, refreshedChat.body);
