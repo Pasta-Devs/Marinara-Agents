@@ -22,6 +22,7 @@ import {
   noodlerViewerPersonaSchema,
   noodleGenerationRequestSchema,
   noodleAccountSettingsPatchSchema,
+  noodleAmbientProfileRerollSchema,
   noodleInteractionUpdateSchema,
   noodleStageProfileUpdateSchema,
   noodleStageProfileDraftRequestSchema,
@@ -116,6 +117,18 @@ import { renderSlurpShareCard } from "../services/slurp/slurp-share-card.js";
 import { getErrorMessage, resolvePersonaAccount } from "../services/slurp/slurp-public-support.js";
 import { generateNoodlerCreatorArtwork } from "../services/slurp/slurp-artwork.operation.js";
 import { slurpMessageRoutes } from "./slurp-messages.routes.js";
+import { resolveSlurpTextConnection } from "../services/slurp/slurp-connection.js";
+import {
+  slurpCreatorReach,
+  slurpPostLikeCount,
+  slurpPostReplyCount,
+  slurpPostUnlockCount,
+} from "../services/slurp/slurp-reach.js";
+import { rerollAmbientNoodleProfiles } from "../services/slurp/slurp-ambient-profile-generation.service.js";
+import { ensureAmbientNoodleAccounts, isAmbientNoodleAccount } from "../services/slurp/slurp-ambient-profiles.js";
+import { generateInvitedNoodlePostDraft } from "../services/slurp/slurp-invited-post-draft.service.js";
+import { isDirectlyInvitedNoodleCharacter } from "../services/slurp/slurp-invited-post-draft-access.js";
+import { tryNoodleOperation } from "../services/slurp/slurp-operation-lock.js";
 
 const slurpTargetedRefreshSchema = noodlerTargetedRefreshSchema.extend({
   access: z.enum(["public", "locked"]).optional(),
@@ -428,6 +441,66 @@ export async function slurpRoutes(app: FastifyInstance) {
     return noodle.updateSlurpSettings(body.data);
   });
 
+  /**
+   * The managed ambient roster, seeded on read.
+   *
+   * The reroll below takes explicit account ids, so the client needs to see the crowd before it
+   * can change any of it.
+   */
+  app.get("/ambient-profiles", async () => {
+    const settings = await noodle.getSettings();
+    const accounts = await ensureAmbientNoodleAccounts(noodle, settings.allowRandomUsers);
+    return {
+      allowRandomUsers: settings.allowRandomUsers,
+      items: accounts.map((account) => ({
+        id: account.id,
+        handle: account.handle,
+        displayName: account.displayName,
+        bio: account.bio,
+        avatarUrl: account.avatarUrl,
+      })),
+    };
+  });
+
+  /**
+   * Reroll the generated identities of the managed ambient profiles.
+   *
+   * Restored after the standalone Noodle/Slurp split dropped the route but kept the service, which
+   * left the feature unreachable. Serialized on the shared `identity` lock, because a reroll and a
+   * profile edit rewriting the same accounts would interleave.
+   */
+  app.post("/ambient-profiles/reroll", async (req, reply) => {
+    const parsed = noodleAmbientProfileRerollSchema.safeParse(req.body ?? {});
+    if (!parsed.success) return reply.code(400).send({ error: parsed.error.flatten() });
+    const settings = await noodle.getSettings();
+    const connection = await resolveSlurpTextConnection(connections, settings.generationConnectionId);
+    if (!connection) return reply.code(400).send({ error: "Select a Slurp generation connection first." });
+    const operation = await tryNoodleOperation("identity", async () => {
+      await ensureAmbientNoodleAccounts(noodle, settings.allowRandomUsers);
+      const accounts = (await Promise.all(parsed.data.accountIds.map((id) => noodle.getAccountById(id)))).filter(
+        (account): account is NoodleAccount => account !== null,
+      );
+      if (accounts.length !== parsed.data.accountIds.length || accounts.some((a) => !isAmbientNoodleAccount(a))) {
+        return { status: "invalid" } as const;
+      }
+      return {
+        status: "ok" as const,
+        result: await rerollAmbientNoodleProfiles({
+          db: app.db,
+          noodle,
+          accounts,
+          connection,
+          debugMode: parsed.data.debugMode ?? false,
+        }),
+      };
+    });
+    if (!operation.acquired) return reply.code(409).send({ error: NOODLE_IDENTITY_LOCK_BUSY });
+    if (operation.value.status === "invalid") {
+      return reply.code(400).send({ error: "Only managed ambient Slurp profiles can be rerolled." });
+    }
+    return operation.value.result;
+  });
+
   app.patch("/accounts/:id/settings", async (req, reply) => {
     const { id } = req.params as { id: string };
     const parsed = noodleAccountSettingsPatchSchema.safeParse(req.body);
@@ -520,12 +593,23 @@ export async function slurpRoutes(app: FastifyInstance) {
         followerCounts.set(followedId, (followerCounts.get(followedId) ?? 0) + 1);
       }
     }
+    const at = new Date();
     const entries = await Promise.all(
       creators.map(async (creator) => [
         creator.id,
         {
+          // Fans are subscribers, and a subscriber is a wallet that pays. That number stays exact.
           fans: (await noodle.listSubscriptionsForCreator(creator.id)).length,
-          followers: followerCounts.get(creator.id) ?? 0,
+          // Followers are social proof and nothing charges against them, so they carry the
+          // synthetic platform reach. Real followers are folded in at a heavy weight.
+          followers: slurpCreatorReach(
+            {
+              accountId: creator.id,
+              createdAt: creator.createdAt,
+              realFollowers: followerCounts.get(creator.id) ?? 0,
+            },
+            at,
+          ),
         },
       ]),
     );
@@ -775,6 +859,8 @@ export async function slurpRoutes(app: FastifyInstance) {
    */
   type NoodlerPricedPostView = NoodlerPostView & {
     unlockPrice: number | null;
+    /** Social proof on the paywall. Null for a post the viewer can already read. */
+    unlockCount: number | null;
     story: boolean;
     linkedPostId: string | null;
   };
@@ -806,6 +892,18 @@ export async function slurpRoutes(app: FastifyInstance) {
       existing.push(interaction);
       interactionsByPostId.set(interaction.postId, existing);
     }
+    // One clock for the whole projection, so every post in a page is measured against the same
+    // instant and two posts made together never disagree about how old they are.
+    const projectedAt = new Date();
+    const reachByAccountId = new Map(
+      [...new Set(posts.map((post) => post.authorAccountId))].map((accountId) => {
+        const account = context.accountById.get(accountId);
+        return [
+          accountId,
+          account ? slurpCreatorReach({ accountId, createdAt: account.createdAt, realFollowers: 0 }, projectedAt) : 0,
+        ] as const;
+      }),
+    );
     return new Map(
       posts.map((post): [string, NoodlerPricedPostView] => {
         const locked = !viewablePostIds.has(post.id);
@@ -839,8 +937,36 @@ export async function slurpRoutes(app: FastifyInstance) {
                 : null,
             createdAt: post.createdAt,
             interactions: locked ? [] : visibleInteractions,
-            likeCount: allInteractions.filter((item) => item.type === "like").length,
-            replyCount: allInteractions.filter((item) => item.type === "reply").length,
+            // Real interactions are never replaced: expanding the list still shows exactly the
+            // accounts that acted. The counts add the silent crowd nobody can click.
+            likeCount: slurpPostLikeCount(
+              {
+                postId: post.id,
+                createdAt: post.createdAt,
+                creatorReach: reachByAccountId.get(post.authorAccountId) ?? 0,
+                realLikes: allInteractions.filter((item) => item.type === "like").length,
+              },
+              projectedAt,
+            ),
+            replyCount: slurpPostReplyCount(
+              {
+                postId: post.id,
+                createdAt: post.createdAt,
+                creatorReach: reachByAccountId.get(post.authorAccountId) ?? 0,
+                realReplies: allInteractions.filter((item) => item.type === "reply").length,
+              },
+              projectedAt,
+            ),
+            unlockCount: locked
+              ? slurpPostUnlockCount(
+                  {
+                    postId: post.id,
+                    createdAt: post.createdAt,
+                    creatorReach: reachByAccountId.get(post.authorAccountId) ?? 0,
+                  },
+                  projectedAt,
+                )
+              : null,
           },
         ];
       }),
@@ -1788,9 +1914,11 @@ export async function slurpRoutes(app: FastifyInstance) {
   app.post("/noodler/stage-profile-draft", async (req, reply) => {
     const parsed = noodleStageProfileDraftRequestSchema.safeParse(req.body);
     if (!parsed.success) return reply.code(400).send({ error: parsed.error.flatten() });
-    const connection = parsed.data.connectionId
-      ? await connections.getWithKey(parsed.data.connectionId)
-      : await connections.getDefaultForAgents();
+    const settings = await noodle.getSettings();
+    const connection = await resolveSlurpTextConnection(
+      connections,
+      parsed.data.connectionId ?? settings.generationConnectionId,
+    );
     if (!connection) return reply.code(404).send({ error: "Noodle generation connection not found" });
     try {
       return await generateNoodlerStageProfileDraft(app.db, {
@@ -1806,6 +1934,40 @@ export async function slurpRoutes(app: FastifyInstance) {
       return reply
         .code(500)
         .send({ error: "Stage profile draft generation failed. Check the generation connection and try again." });
+    }
+  });
+
+  /**
+   * Draft one post for a directly invited character, optionally steered by the user's guidance.
+   *
+   * Restored with the ambient reroll above: the split kept the service and dropped the route.
+   */
+  app.post("/accounts/:id/post-draft", async (req, reply) => {
+    const body = z
+      .object({
+        guidance: z.string().trim().max(20_000).optional(),
+        connectionId: z.string().trim().min(1).optional(),
+        debugMode: z.boolean().optional(),
+      })
+      .safeParse(req.body ?? {});
+    if (!body.success) return reply.code(400).send({ error: body.error.flatten() });
+    const { id } = req.params as { id: string };
+    const account = await noodle.getAccountById(id);
+    if (!isDirectlyInvitedNoodleCharacter(account)) {
+      return reply.code(403).send({ error: "Only directly invited characters can generate post drafts." });
+    }
+    const settings = await noodle.getSettings();
+    const connection = await resolveSlurpTextConnection(
+      connections,
+      body.data.connectionId ?? settings.generationConnectionId,
+    );
+    if (!connection) return reply.code(400).send({ error: "Select a Slurp generation connection first." });
+    try {
+      return await generateInvitedNoodlePostDraft(app.db, account!, connection, body.data);
+    } catch (error) {
+      if (isConnectionAdmissionFailure(error)) return reply.code(409).send({ error: getErrorMessage(error) });
+      logger.error(error, "[slurp] Invited post draft generation failed");
+      return reply.code(500).send({ error: getErrorMessage(error) });
     }
   });
 
@@ -1871,10 +2033,10 @@ export async function slurpRoutes(app: FastifyInstance) {
       return reply.code(201).send({ created: [], skipped: [], failed: [], reasons: [], executionId });
     }
     const settings = await noodle.getSettings();
-    const selectedConnectionId = connectionId === undefined ? settings.generationConnectionId : connectionId;
-    const connection = selectedConnectionId
-      ? await connections.getWithKey(selectedConnectionId)
-      : await connections.getDefaultForAgents();
+    const connection = await resolveSlurpTextConnection(
+      connections,
+      connectionId === undefined ? settings.generationConnectionId : connectionId,
+    );
     if (!connection) return reply.code(400).send({ error: "The selected writing connection is not available." });
     const created: string[] = [];
     const skipped: string[] = [];

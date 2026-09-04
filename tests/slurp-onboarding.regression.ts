@@ -79,8 +79,8 @@ assert.match(storage, /autoPostingImagesEnabled: z\.boolean\(\)/u);
 assert.match(storage, /autoPostingImagesEnabled: false/u);
 assert.match(
   routes,
-  /connectionId[\s\S]*?settings\.generationConnectionId[\s\S]*?connections\.getWithKey\(selectedConnectionId\)[\s\S]*?: await connections\.getDefaultForAgents\(\)/u,
-  "Creator creation must use the selected or Engine default agent connection",
+  /resolveSlurpTextConnection\(\s*connections,\s*connectionId === undefined \? settings\.generationConnectionId : connectionId,\s*\)/u,
+  "Creator creation must use the selected connection, then the shared Slurp fallback ladder",
 );
 assert.match(
   routes,

@@ -14,7 +14,7 @@ import { createCharactersStorage } from "../storage/characters.storage.js";
 import { createConnectionsStorage } from "../storage/connections.storage.js";
 import { noodleGeneratedNoodlerPostSchema } from "@marinara-engine/shared";
 import { noodleResponseFormat } from "./slurp-response-format.js";
-import { noodlerSourceText } from "./slurp-stage-profile-draft.service.js";
+import { noodlerSourceText } from "./slurp-prompt-safety.js";
 import { NOODLER_UNTRUSTED_CONTENT_INSTRUCTION } from "./slurp-generation.service.js";
 
 export type InvitedNoodlePostDraftRequest = {

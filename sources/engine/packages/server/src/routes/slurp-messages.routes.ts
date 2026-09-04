@@ -129,6 +129,7 @@ export async function slurpMessageRoutes(app: FastifyInstance) {
       messages: visibleMessages,
       creator,
       messaging: await messages.getCreatorMessaging(thread.creatorAccountId),
+      commissions: await messages.listCommissionsForThread(thread.id),
     };
   });
 
@@ -151,6 +152,7 @@ export async function slurpMessageRoutes(app: FastifyInstance) {
     return {
       thread: thread ? await freshView(thread.id) : null,
       messages: thread ? await messages.listMessages(thread.id) : [],
+      commissions: thread ? await messages.listCommissionsForThread(thread.id) : [],
       creator,
       // The client shows the gate before the first message is written, so it must know the
       // policy even when no thread exists yet.

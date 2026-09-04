@@ -8,6 +8,7 @@
 import type { DB } from "../../db/connection.js";
 import { logger } from "../../lib/logger.js";
 import { createConnectionsStorage } from "../storage/connections.storage.js";
+import { resolveSlurpTextConnection } from "./slurp-connection.js";
 import { createCharactersStorage } from "../storage/characters.storage.js";
 import { createSlurpStorage } from "../storage/slurp.storage.js";
 import { createSlurpMessagesStorage, type SlurpMessage } from "../storage/slurp-messages.storage.js";
@@ -79,10 +80,10 @@ export async function replyToSlurpMessage(
   try {
     const locked = await tryNoodlerAccountOperation(thread.creatorAccountId, async () => {
       const settings = await slurp.getSettings();
-      const connections = createConnectionsStorage(db);
-      const connection = settings.generationConnectionId
-        ? await connections.getWithKey(settings.generationConnectionId)
-        : await connections.getDefaultForAgents();
+      const connection = await resolveSlurpTextConnection(
+        createConnectionsStorage(db),
+        settings.generationConnectionId,
+      );
       if (!connection) return { status: "connection_not_found" } as const;
       const messaging = await messagesStore.getCreatorMessaging(thread.creatorAccountId);
       const content = await generateSlurpMessageReply({

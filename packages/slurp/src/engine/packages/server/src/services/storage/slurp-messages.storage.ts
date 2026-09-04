@@ -541,6 +541,16 @@ export function createSlurpMessagesStorage(db: DB) {
       return mapCommission(row);
     },
 
+    /** Every commission in one thread, oldest first, so the chat can render them beside the messages. */
+    async listCommissionsForThread(threadId: string): Promise<SlurpCommission[]> {
+      const rows = await db
+        .select()
+        .from(slurpCommissions)
+        .where(eq(slurpCommissions.threadId, threadId))
+        .orderBy(asc(slurpCommissions.createdAt));
+      return rows.map(mapCommission);
+    },
+
     async getCommission(id: string): Promise<SlurpCommission | null> {
       const rows = await db.select().from(slurpCommissions).where(eq(slurpCommissions.id, id));
       return rows[0] ? mapCommission(rows[0]) : null;

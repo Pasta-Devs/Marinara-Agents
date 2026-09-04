@@ -140,7 +140,7 @@ export function readSlurpWallet(raw: string | null, economy: SlurpEconomy = SLUR
   const coins = intOrNull(value.coins);
   return {
     coins: coins !== null && coins >= 0 ? coins : empty.coins,
-    ledger: Array.isArray(value.ledger) ? (value.ledger as SlurpWalletEntry[]).slice(0, LEDGER_LIMIT) : [],
+    ledger: readLedger(value.ledger),
     earnedOn: typeof value.earnedOn === "string" ? value.earnedOn : empty.earnedOn,
     earnedToday: {
       ad: Math.max(0, intOrNull(earned.ad) ?? 0),
@@ -149,6 +149,49 @@ export function readSlurpWallet(raw: string | null, economy: SlurpEconomy = SLUR
     stipendOn: typeof value.stipendOn === "string" ? value.stipendOn : null,
     subscriptions: readSubscriptions(value.subscriptions),
   };
+}
+
+const WALLET_ENTRY_KINDS = new Set<SlurpWalletEntryKind>([
+  "unlock",
+  "subscribe",
+  "renew",
+  "tip",
+  "topUp",
+  "stipend",
+  "ad",
+  "engagement",
+  "income",
+  "messageRequest",
+  "ppv",
+  "commission",
+]);
+
+/**
+ * Keep only the ledger lines the wallet page can actually render.
+ *
+ * Every other field here falls back on bad input, but the ledger used to be cast straight from
+ * JSON. A hand-edited or imported blob then put entries with a missing kind, a non-numeric
+ * amount, or no timestamp in front of the UI, which reads all three unconditionally. Dropping
+ * the bad lines costs recent activity; passing them through costs the tab.
+ */
+function readLedger(value: unknown): SlurpWalletEntry[] {
+  if (!Array.isArray(value)) return [];
+  const entries: SlurpWalletEntry[] = [];
+  for (const raw of value) {
+    if (entries.length >= LEDGER_LIMIT) break;
+    if (!raw || typeof raw !== "object" || Array.isArray(raw)) continue;
+    const entry = raw as Record<string, unknown>;
+    const amount = intOrNull(entry.amount);
+    if (!WALLET_ENTRY_KINDS.has(entry.kind as SlurpWalletEntryKind)) continue;
+    if (amount === null || typeof entry.at !== "string" || Number.isNaN(Date.parse(entry.at))) continue;
+    entries.push({
+      kind: entry.kind as SlurpWalletEntryKind,
+      amount,
+      at: entry.at,
+      ...(typeof entry.note === "string" ? { note: entry.note } : {}),
+    });
+  }
+  return entries;
 }
 
 function readSubscriptions(value: unknown): Record<string, SlurpWalletSubscription> {

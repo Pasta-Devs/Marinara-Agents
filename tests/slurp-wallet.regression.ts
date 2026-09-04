@@ -85,4 +85,44 @@ assert.match(storage, /creditCreatorIncome/u, "a paid creator's owner must be cr
 // back to the default for a key it has no stored value for.
 assert.match(storage, /walletEnabled: true/u, "the economy is on by default");
 
+// Every other wallet field falls back on bad input; the ledger used to be cast straight from
+// JSON, so a hand-edited or imported blob put entries the wallet page reads unconditionally
+// (kind, amount, at) in front of the UI. Bad lines are dropped, good ones survive.
+{
+  const ledger = JSON.stringify({
+    coins: 10,
+    ledger: [
+      { kind: "tip", amount: -5, at: "2026-01-02T03:04:05.000Z", note: "@someone" },
+      { kind: "not-a-kind", amount: -5, at: "2026-01-02T03:04:05.000Z" },
+      { kind: "tip", amount: "five", at: "2026-01-02T03:04:05.000Z" },
+      { kind: "tip", amount: -5, at: "whenever" },
+      { kind: "tip", amount: -5 },
+      null,
+      "nope",
+      { kind: "stipend", amount: 60, at: "2026-01-02T03:04:05.000Z", note: 7 },
+    ],
+  });
+  const wallet = readSlurpWallet(ledger);
+  assert.deepEqual(
+    wallet.ledger.map((entry) => entry.kind),
+    ["tip", "stipend"],
+    "only renderable ledger lines survive a corrupt blob",
+  );
+  assert.equal(wallet.ledger[0]?.note, "@someone");
+  assert.equal(wallet.ledger[1]?.note, undefined, "a non-string note is dropped rather than passed through");
+  assert.equal(wallet.coins, 10, "a bad ledger must not cost the balance");
+  assert.deepEqual(readSlurpWallet('{"ledger":"nope"}').ledger, []);
+}
+
+// The direct-message scheduler must back off like the auto-post and audience schedulers, or a
+// failing connection is retried once a minute forever.
+{
+  const scheduler = readFileSync(
+    "packages/slurp/src/engine/packages/server/src/services/slurp/slurp-message-scheduler.service.ts",
+    "utf8",
+  );
+  assert.match(scheduler, /schedule\(slurpPollBackoffMs\(POLL_MS, consecutiveFailures\)\)/u);
+  assert.match(scheduler, /consecutiveFailures = 0;/u);
+}
+
 console.log("slurp-wallet regression passed");

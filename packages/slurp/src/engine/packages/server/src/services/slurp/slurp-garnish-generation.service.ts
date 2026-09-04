@@ -18,6 +18,7 @@ import type { ChatMessage } from "../llm/base-provider.js";
 import { withConnectionFallbackProvider } from "../llm/connection-fallback-provider.js";
 import { createLLMProvider } from "../llm/provider-registry.js";
 import { createConnectionsStorage } from "../storage/connections.storage.js";
+import { resolveSlurpTextConnection } from "./slurp-connection.js";
 import type { GarnishAdsStorage } from "../garnish-ads/garnish-ads.storage.js";
 import { garnishRatingAllowed, type GarnishAd, type GarnishContentRating } from "../garnish-ads/garnish-ads.types.js";
 import { requireModelAnswer } from "./slurp-model-answer.js";
@@ -75,13 +76,11 @@ export async function generateGarnishAds(
   pool: GarnishAdsStorage,
   request: GarnishGenerationRequest,
 ): Promise<GarnishAd[]> {
+  // Fall back rather than failing when the chosen connection was deleted.
   const connections = createConnectionsStorage(db);
-  // getMainWithKey() does not exist on the Engine's connections storage, so this threw a
-  // TypeError on every run and no ad was ever generated. Resolve the same way the rest of
-  // Slurp does, and fall back rather than failing when the chosen connection was deleted.
   const connection =
-    (request.connectionId ? await connections.getWithKey(request.connectionId) : null) ??
-    (await connections.getDefaultForAgents());
+    (request.connectionId ? await resolveSlurpTextConnection(connections, request.connectionId) : null) ??
+    (await resolveSlurpTextConnection(connections));
   if (!connection) throw new Error("No usable connection for garnish ad generation.");
 
   const count = Math.min(Math.max(request.count ?? 4, 1), 10);

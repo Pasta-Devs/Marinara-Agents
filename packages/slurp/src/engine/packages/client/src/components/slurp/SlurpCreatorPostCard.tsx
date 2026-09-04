@@ -374,7 +374,12 @@ export function LockedSlurpPostCard({
             <span className="min-w-0 flex-1">
               <span className="block text-sm font-bold">{localizeUi("ui.noodle.unlocksheet.unlockThisPost")}</span>
               <span className="block text-xs text-[var(--muted-foreground)]">
-                {localizeUi("ui.noodle.unlocksheet.unlockThisPostDetail")}
+                {noodlerUnlockCountOf(post) > 0
+                  ? localizeUi("ui.slurp.unlocksheet.unlockedBy", {
+                      defaultValue: "{{count}} people unlocked this",
+                      count: noodlerUnlockCountOf(post),
+                    })
+                  : localizeUi("ui.noodle.unlocksheet.unlockThisPostDetail")}
               </span>
             </span>
             <NoodlerFictionalPrice amount={noodlerUnlockPriceOf(post)} />
@@ -419,6 +424,12 @@ const NOODLER_DEFAULT_SUBSCRIPTION_PRICE = 5;
 function noodlerUnlockPriceOf(post: unknown): number {
   const price = (post as { unlockPrice?: unknown } | null)?.unlockPrice;
   return typeof price === "number" && price >= 0 ? price : NOODLER_DEFAULT_UNLOCK_PRICE;
+}
+
+/** Social proof on the paywall. Absent or zero on a post nobody has paid for yet. */
+function noodlerUnlockCountOf(post: unknown): number {
+  const count = (post as { unlockCount?: unknown } | null)?.unlockCount;
+  return typeof count === "number" && count > 0 ? count : 0;
 }
 
 function noodlerSubscriptionPriceOf(profile: unknown): number {

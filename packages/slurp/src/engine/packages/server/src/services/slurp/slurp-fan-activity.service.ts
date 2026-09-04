@@ -17,6 +17,7 @@ import { noodleImageContext } from "./slurp-image-prompt.js";
 import type { ChatMessage } from "../llm/base-provider.js";
 import { createLLMProvider } from "../llm/provider-registry.js";
 import { createConnectionsStorage } from "../storage/connections.storage.js";
+import { resolveSlurpTextConnection } from "./slurp-connection.js";
 import { createSlurpStorage, type SlurpSettings } from "../storage/slurp.storage.js";
 import {
   NOODLE_FAN_ACTIVITY_MAX_ACTIVITIES_PER_CREATOR,
@@ -303,8 +304,5 @@ export async function generateNoodlerFanActivityBatch(input: {
 }
 
 export async function resolveNoodlerFanConnection(db: DB, settings: Pick<SlurpSettings, "generationConnectionId">) {
-  const connections = createConnectionsStorage(db);
-  return settings.generationConnectionId
-    ? connections.getWithKey(settings.generationConnectionId)
-    : connections.getDefaultForAgents();
+  return resolveSlurpTextConnection(createConnectionsStorage(db), settings.generationConnectionId);
 }

@@ -74,8 +74,8 @@ assert.doesNotMatch(
 );
 assert.match(
   replyOperation,
-  /settings\.generationConnectionId[\s\S]*?getWithKey\(settings\.generationConnectionId\)[\s\S]*?getDefaultForAgents/u,
-  "Creator replies must use the Slurp connection with Engine default fallback",
+  /resolveSlurpTextConnection\(createConnectionsStorage\(db\), settings\.generationConnectionId\)/u,
+  "Creator replies must use the Slurp connection with the shared fallback ladder",
 );
 assert.match(imageConnections, /LEGACY_KEY = "noodle\.noodler-image-connections"/u);
 assert.match(imageConnections, /storage\.get\(KEY\)[\s\S]*?storage\.get\(LEGACY_KEY\)/u);
@@ -346,7 +346,11 @@ assert.doesNotMatch(
   /spotlight\s*\?\s*"rounded-\[1\.5rem\]/u,
   "the spotlight identity must blend into the banner instead of becoming another rounded card",
 );
-assert.match(profileSurface, /preTabsContent && \(/u, "Creator Tools must remain separate from public profile content");
+assert.match(
+  profileSurface,
+  /\(preTabsContent \|\| editor\) && \(/u,
+  "Creator Tools must remain separate from public profile content",
+);
 assert.match(home, /data-slurp-home-masthead/u, "Home must expose one unified lobby masthead");
 assert.doesNotMatch(
   home,

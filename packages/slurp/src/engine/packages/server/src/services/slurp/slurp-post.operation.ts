@@ -12,6 +12,7 @@ import type { DB } from "../../db/connection.js";
 import { logger } from "../../lib/logger.js";
 import { newId } from "../../utils/id-generator.js";
 import { createConnectionsStorage } from "../storage/connections.storage.js";
+import { resolveSlurpTextConnection } from "./slurp-connection.js";
 import { createSlurpStorage } from "../storage/slurp.storage.js";
 import { noodlerUnlockPriceMetadata } from "./slurp-prices.js";
 import { generateNoodlerPost } from "./slurp-generation.service.js";
@@ -112,11 +113,10 @@ export async function generateAndApplyNoodlerPost(
       return { status: "noodler_account_not_found" } as const;
     }
     const settings = await noodle.getSettings();
-    const connections = createConnectionsStorage(db);
-    const connectionId = request.connectionId ?? settings.generationConnectionId;
-    const connection = connectionId
-      ? await connections.getWithKey(connectionId)
-      : await connections.getDefaultForAgents();
+    const connection = await resolveSlurpTextConnection(
+      createConnectionsStorage(db),
+      request.connectionId ?? settings.generationConnectionId,
+    );
     if (!connection) return { status: "connection_not_found" } as const;
     const generated = await generateNoodlerPost(db, {
       account,

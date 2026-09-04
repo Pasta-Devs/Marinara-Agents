@@ -2,6 +2,7 @@ import type { NoodlerCreatorReplyResult } from "@marinara-engine/shared";
 import type { DB } from "../../db/connection.js";
 import { logger } from "../../lib/logger.js";
 import { createConnectionsStorage } from "../storage/connections.storage.js";
+import { resolveSlurpTextConnection } from "./slurp-connection.js";
 import { createSlurpStorage } from "../storage/slurp.storage.js";
 import { tryNoodlerAccountOperation } from "./slurp-account-operation-lock.js";
 import { generateNoodlerCreatorReply } from "./slurp-reply-generation.service.js";
@@ -29,10 +30,7 @@ export async function generateAndApplyNoodlerCreatorReply(
 
   const locked = await tryNoodlerAccountOperation(post.authorAccountId, async () => {
     const settings = await noodle.getSettings();
-    const connections = createConnectionsStorage(db);
-    const connection = settings.generationConnectionId
-      ? await connections.getWithKey(settings.generationConnectionId)
-      : await connections.getDefaultForAgents();
+    const connection = await resolveSlurpTextConnection(createConnectionsStorage(db), settings.generationConnectionId);
     if (!connection) return { status: "connection_not_found" } as const;
     const claim = await noodle.claimNoodlerCreatorReply(
       post.authorAccountId,

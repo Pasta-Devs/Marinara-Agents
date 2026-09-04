@@ -1,5 +1,6 @@
 import type { DB } from "../../db/connection.js";
 import { createConnectionsStorage } from "../storage/connections.storage.js";
+import { resolveSlurpTextConnection } from "./slurp-connection.js";
 import { resolveNoodlerImageConnectionId } from "./slurp-image-connections.js";
 import { createSlurpStorage, noodlerReservePolicyFingerprint } from "../storage/slurp.storage.js";
 import { hasSlurpCreatorPostingIntervalConflict } from "./slurp-posting-interval.js";
@@ -116,10 +117,7 @@ export async function prepareNextNoodlerReservePost(db: DB, at = new Date()): Pr
   const selectedPublishAt = publishAt;
 
   const locked = await tryNoodlerAccountOperation(selectedAccount.id, async () => {
-    const connections = createConnectionsStorage(db);
-    const connection = settings.generationConnectionId
-      ? await connections.getWithKey(settings.generationConnectionId)
-      : await connections.getDefaultForAgents();
+    const connection = await resolveSlurpTextConnection(createConnectionsStorage(db), settings.generationConnectionId);
     if (!connection) return "ineligible" as const;
     try {
       let payload = await generateNoodlerPost(db, {

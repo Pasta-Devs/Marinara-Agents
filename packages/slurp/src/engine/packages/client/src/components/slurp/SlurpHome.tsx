@@ -156,6 +156,7 @@ import type { SlurpNavigationState } from "./slurp-navigation.types";
 import { useTranslation as useUiTranslation } from "react-i18next";
 import { SlurpInlineAd } from "./SlurpInlineAd";
 import { SlurpCreatorProfileCard } from "./SlurpCreatorProfileCard";
+import { formatTime } from "./SlurpDateTime";
 
 interface SlurpHomeProps {
   navigation: Extract<SlurpNavigationState, { mode: "creator" }>;
@@ -5073,12 +5074,21 @@ function SlurpWalletView({
   personaName: string;
   onBack: () => void;
 }) {
-  const { t: localizeUi } = useUiTranslation();
+  const { t: localizeUi, i18n } = useUiTranslation();
   const walletQuery = useSlurpWallet(personaId);
   const claimRefill = useClaimSlurpDailyRefill();
+  const toggleSubscription = useToggleNoodlerSubscription();
+  // The wallet stores subscriptions by creator id. Rendering the raw id told the player nothing,
+  // so join the managed profiles the same way every other Slurp surface names a creator.
+  const creatorsQuery = useNoodlerAccounts();
+  const creatorNameById = new Map((creatorsQuery.data ?? []).map((creator) => [creator.id, creator.displayName]));
   const wallet = walletQuery.data;
   const coins = wallet?.coins ?? fallbackCoins;
   const subscriptions = wallet ? Object.entries(wallet.subscriptions) : [];
+  // A spend/earn split is the one number the ledger cannot show at a glance.
+  const spent = (wallet?.ledger ?? []).reduce((total, entry) => total + (entry.amount < 0 ? -entry.amount : 0), 0);
+  const earned = (wallet?.ledger ?? []).reduce((total, entry) => total + (entry.amount > 0 ? entry.amount : 0), 0);
+  const weeklyOutgoing = subscriptions.reduce((total, [, subscription]) => total + subscription.price, 0);
   const refillFloor = 60;
   const refillProgress = Math.min(100, Math.round((coins / Math.max(1, refillFloor)) * 100));
   const nextRefillAt = wallet?.stipendOn ? new Date(`${wallet.stipendOn}T00:00:00.000Z`).getTime() + 86_400_000 : null;
@@ -5162,9 +5172,19 @@ function SlurpWalletView({
           aria-labelledby="slurp-wallet-subscriptions"
           className="rounded-xl bg-[var(--slurp-surface)] p-4 ring-1 ring-inset ring-[var(--noodle-divider)]"
         >
-          <h2 id="slurp-wallet-subscriptions" className="text-sm font-bold">
-            {localizeUi("ui.slurp.wallet.subscriptions", { defaultValue: "Subscriptions" })}
-          </h2>
+          <div className="flex items-baseline justify-between gap-3">
+            <h2 id="slurp-wallet-subscriptions" className="text-sm font-bold">
+              {localizeUi("ui.slurp.wallet.subscriptions", { defaultValue: "Subscriptions" })}
+            </h2>
+            {weeklyOutgoing > 0 && (
+              <span className="text-xs font-bold tabular-nums text-[var(--muted-foreground)]">
+                {localizeUi("ui.slurp.wallet.weeklyOutgoing", {
+                  defaultValue: "{{amount}} / week",
+                  amount: weeklyOutgoing,
+                })}
+              </span>
+            )}
+          </div>
           {subscriptions.length > 0 ? (
             <ul className="mt-3 space-y-2">
               {subscriptions.map(([creatorId, subscription]) => (
@@ -5172,9 +5192,33 @@ function SlurpWalletView({
                   key={creatorId}
                   className="flex items-center justify-between gap-3 rounded-lg bg-[var(--accent)] p-3"
                 >
-                  <span className="min-w-0 truncate text-xs font-semibold">{creatorId}</span>
-                  <span className="shrink-0 text-xs tabular-nums text-[var(--muted-foreground)]">
-                    {subscription.price} / week
+                  <span className="flex min-w-0 flex-col">
+                    <span className="truncate text-xs font-semibold">
+                      {creatorNameById.get(creatorId) ??
+                        localizeUi("ui.slurp.wallet.unknownCreator", { defaultValue: "Unavailable Creator" })}
+                    </span>
+                    <span className="text-[0.7rem] text-[var(--muted-foreground)]">
+                      {localizeUi("ui.slurp.wallet.renewsOn", {
+                        defaultValue: "Renews {{date}}",
+                        date: formatTime(subscription.paidThroughAt, i18n.language),
+                      })}
+                    </span>
+                  </span>
+                  <span className="flex shrink-0 items-center gap-2">
+                    <span className="text-xs tabular-nums text-[var(--muted-foreground)]">
+                      {subscription.price} / week
+                    </span>
+                    <button
+                      type="button"
+                      disabled={!personaId || toggleSubscription.isPending}
+                      onClick={() =>
+                        personaId &&
+                        toggleSubscription.mutate({ creatorAccountId: creatorId, personaId, subscribed: true })
+                      }
+                      className="min-h-8 rounded-lg px-2 text-[0.7rem] font-bold text-[var(--muted-foreground)] ring-1 ring-inset ring-[var(--noodle-divider)] transition-colors hover:text-[var(--foreground)] disabled:opacity-50"
+                    >
+                      {localizeUi("ui.slurp.wallet.unsubscribe", { defaultValue: "Cancel" })}
+                    </button>
                   </span>
                 </li>
               ))}
@@ -5192,18 +5236,31 @@ function SlurpWalletView({
           aria-labelledby="slurp-wallet-activity"
           className="rounded-xl bg-[var(--slurp-surface)] p-4 ring-1 ring-inset ring-[var(--noodle-divider)]"
         >
-          <h2 id="slurp-wallet-activity" className="text-sm font-bold">
-            {localizeUi("ui.slurp.wallet.activity", { defaultValue: "Recent activity" })}
-          </h2>
+          <div className="flex items-baseline justify-between gap-3">
+            <h2 id="slurp-wallet-activity" className="text-sm font-bold">
+              {localizeUi("ui.slurp.wallet.activity", { defaultValue: "Recent activity" })}
+            </h2>
+            {(spent > 0 || earned > 0) && (
+              <span className="text-xs font-bold tabular-nums text-[var(--muted-foreground)]">
+                {localizeUi("ui.slurp.wallet.spentEarned", {
+                  defaultValue: "-{{spent}} / +{{earned}}",
+                  spent,
+                  earned,
+                })}
+              </span>
+            )}
+          </div>
           {wallet && wallet.ledger.length > 0 ? (
             <ul className="mt-3 flex flex-col divide-y divide-[var(--noodle-divider)]">
               {wallet.ledger.map((entry, index) => (
                 <li key={`${entry.at}-${index}`} className="flex items-center justify-between gap-3 py-2">
                   <span className="min-w-0">
                     <span className="block text-xs font-semibold">{entryLabel(entry.kind)}</span>
-                    {entry.note && (
-                      <span className="block truncate text-[0.7rem] text-[var(--muted-foreground)]">{entry.note}</span>
-                    )}
+                    <span className="block truncate text-[0.7rem] text-[var(--muted-foreground)]">
+                      {[creatorNameById.get(entry.note ?? "") ?? entry.note, formatTime(entry.at, i18n.language)]
+                        .filter(Boolean)
+                        .join(" · ")}
+                    </span>
                   </span>
                   <span
                     className={`shrink-0 text-sm font-black tabular-nums ${entry.amount < 0 ? "text-[var(--muted-foreground)]" : "text-[var(--noodle-accent)]"}`}

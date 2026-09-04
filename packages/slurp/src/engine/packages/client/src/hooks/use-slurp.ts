@@ -459,7 +459,21 @@ export type NoodlerViewerWallets = Record<string, { coins: number }>;
 
 /** One wallet's ledger line. `amount` is signed: negative spends, positive earns. */
 export type SlurpWalletEntry = {
-  kind: "unlock" | "subscribe" | "renew" | "tip" | "topUp" | "stipend" | "ad" | "engagement" | "income";
+  kind:
+    | "unlock"
+    | "subscribe"
+    | "renew"
+    | "tip"
+    | "topUp"
+    | "stipend"
+    | "ad"
+    | "engagement"
+    | "income"
+    // Direct-message economy kinds. The server has emitted these since messaging landed; the
+    // client union had not caught up, so a PPV or commission line was typed as impossible.
+    | "messageRequest"
+    | "ppv"
+    | "commission";
   amount: number;
   at: string;
   note?: string;
@@ -813,6 +827,57 @@ export function useGenerateNoodlerStageProfileDraft() {
         })
         .finally(() => clearTimeout(timer));
     },
+  });
+}
+
+/**
+ * Draft one post for a directly invited character, steered by the user's guidance.
+ *
+ * Pairs with `POST /accounts/:id/post-draft`, which the standalone Noodle/Slurp split dropped
+ * while keeping the generator behind it.
+ */
+export function useGenerateNoodlePostDraft() {
+  return useMutation({
+    mutationFn: ({ accountId, ...body }: NoodlePostDraftRequest) =>
+      api.post<NoodlePostDraft>(`/slurp/accounts/${encodeURIComponent(accountId)}/post-draft`, body),
+  });
+}
+
+export type SlurpAmbientProfile = {
+  id: string;
+  handle: string;
+  displayName: string;
+  bio: string;
+  avatarUrl: string | null;
+};
+
+/** The managed ambient roster. Seeded server-side on read, so this is also what creates them. */
+export function useSlurpAmbientProfiles(enabled = true) {
+  return useQuery({
+    queryKey: [...noodleKeys.noodlerRoot(), "ambient-profiles"],
+    queryFn: () => api.get<{ allowRandomUsers: boolean; items: SlurpAmbientProfile[] }>("/slurp/ambient-profiles"),
+    enabled,
+    staleTime: 30_000,
+  });
+}
+
+export type NoodleAmbientProfileRerollResult = {
+  accounts: NoodleAccount[];
+  outcomes: Array<{ accountId: string; status: string; reason?: string }>;
+};
+
+/** Reroll the generated identities of the managed ambient profiles. */
+export function useRerollAmbientProfiles() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (accountIds: string[]) =>
+      api.post<NoodleAmbientProfileRerollResult>("/slurp/ambient-profiles/reroll", { accountIds }),
+    onSuccess: () =>
+      Promise.all([
+        qc.invalidateQueries({ queryKey: noodleKeys.noodlerAccounts() }),
+        qc.invalidateQueries({ queryKey: [...noodleKeys.noodlerRoot(), "ambient-profiles"] }),
+        qc.invalidateQueries({ queryKey: noodleKeys.noodlerEligibleAccountsRoot() }),
+      ]),
   });
 }
 
@@ -1555,6 +1620,19 @@ export type SlurpThread = {
   subscribed: boolean;
 };
 
+export type SlurpCommission = {
+  id: string;
+  threadId: string;
+  viewerAccountId: string;
+  creatorAccountId: string;
+  state: "brief" | "quoted" | "accepted" | "declined" | "delivered";
+  brief: string;
+  price: number;
+  deliveryMessageId: string | null;
+  createdAt: string;
+  updatedAt: string;
+};
+
 export type SlurpSendResponse = {
   thread: SlurpThread;
   message: SlurpMessage;
@@ -1594,6 +1672,7 @@ export function useSlurpThread(threadId: string | null, personaId: string | null
         messages: SlurpMessage[];
         creator: { id: string; handle: string; displayName: string; avatarUrl: string | null } | null;
         messaging: SlurpCreatorMessaging;
+        commissions: SlurpCommission[];
         subscribed?: boolean;
       }>(`/slurp/messages/threads/${encodeURIComponent(threadId!)}?personaId=${encodeURIComponent(personaId!)}`),
     enabled: Boolean(threadId && personaId),
@@ -1613,6 +1692,7 @@ export function useSlurpCompose(creatorAccountId: string | null, personaId: stri
         messages: SlurpMessage[];
         creator: { id: string; handle: string; displayName: string; avatarUrl: string | null } | null;
         messaging: SlurpCreatorMessaging;
+        commissions: SlurpCommission[];
         subscribed?: boolean;
       }>(
         `/slurp/messages/compose?personaId=${encodeURIComponent(personaId!)}&creatorAccountId=${encodeURIComponent(creatorAccountId!)}`,
@@ -1682,7 +1762,7 @@ export function useCreateSlurpCommission() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (input: { personaId: string; creatorAccountId: string; brief: string }) =>
-      api.post<{ commission: Record<string, unknown> }>("/slurp/messages/commissions", input),
+      api.post<{ commission: SlurpCommission }>("/slurp/messages/commissions", input),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: noodleKeys.noodlerRoot() }),
   });
 }
@@ -1691,7 +1771,7 @@ export function useQuoteSlurpCommission() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (input: { commissionId: string; personaId: string; price: number }) =>
-      api.post<{ commission: Record<string, unknown> }>(
+      api.post<{ commission: SlurpCommission }>(
         `/slurp/messages/commissions/${encodeURIComponent(input.commissionId)}/quote`,
         input,
       ),
@@ -1703,7 +1783,7 @@ export function useAcceptSlurpCommission() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (input: { commissionId: string; personaId: string }) =>
-      api.post<{ commission: Record<string, unknown> }>(
+      api.post<{ commission: SlurpCommission }>(
         `/slurp/messages/commissions/${encodeURIComponent(input.commissionId)}/accept`,
         input,
       ),
@@ -1715,7 +1795,7 @@ export function useDeliverSlurpCommission() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (input: { commissionId: string; personaId: string; content: string }) =>
-      api.post<{ commission: Record<string, unknown> }>(
+      api.post<{ commission: SlurpCommission }>(
         `/slurp/messages/commissions/${encodeURIComponent(input.commissionId)}/deliver`,
         input,
       ),

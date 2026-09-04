@@ -2,6 +2,7 @@ import type { FastifyInstance } from "fastify";
 import { logger } from "../../lib/logger.js";
 import { createSlurpMessagesStorage } from "../storage/slurp-messages.storage.js";
 import { replyToSlurpMessage } from "./slurp-message.operation.js";
+import { slurpPollBackoffMs } from "./slurp-poll-backoff.js";
 
 const INITIAL_DELAY_MS = 45_000;
 const POLL_MS = 60_000;
@@ -11,6 +12,7 @@ export function startSlurpMessageScheduler(app: FastifyInstance, registerStop?: 
   let stopped = false;
   let timer: ReturnType<typeof setTimeout> | null = null;
   let active: Promise<void> | null = null;
+  let consecutiveFailures = 0;
   const schedule = (delay: number) => {
     if (!stopped) {
       timer = setTimeout(() => void poll(), delay);
@@ -31,11 +33,15 @@ export function startSlurpMessageScheduler(app: FastifyInstance, registerStop?: 
     })();
     try {
       await active;
+      consecutiveFailures = 0;
     } catch (error) {
+      // Matches the auto-post and audience schedulers: a connection that keeps failing is retried
+      // exponentially slower instead of once a minute forever.
+      consecutiveFailures += 1;
       logger.warn(error, "[slurp-message] queued reply poll failed");
     } finally {
       active = null;
-      schedule(POLL_MS);
+      schedule(slurpPollBackoffMs(POLL_MS, consecutiveFailures));
     }
   };
   const stop = async () => {

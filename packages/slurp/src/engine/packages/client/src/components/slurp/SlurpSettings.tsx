@@ -25,6 +25,8 @@ import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 import {
+  useSlurpAmbientProfiles,
+  useRerollAmbientProfiles,
   useDeleteNoodlerStageProfile,
   useDeleteAllSlurpData,
   useDeleteUnusedSlurpData,
@@ -1989,6 +1991,10 @@ export function SlurpSettings({
                       detail={t("ui.slurp.settings.audience.pausedDetail")}
                     />
                   )}
+                  <AmbientProfilesPanel
+                    allowRandomUsers={settings.allowRandomUsers}
+                    onAllowRandomUsersChange={(value) => update("allowRandomUsers", value)}
+                  />
                   <div className="space-y-3 pt-2">
                     <div>
                       <h2 className="text-sm font-bold">{t("ui.slurp.settings.audience.feedExperience")}</h2>
@@ -2674,5 +2680,93 @@ function PromptEditor({
         </div>
       </div>
     </Modal>
+  );
+}
+
+/**
+ * The managed ambient crowd: the background profiles that fill a feed out so a Creator is not
+ * talking into an empty room.
+ *
+ * Listing them is what seeds them, so opening this panel is also what creates the roster. Reroll
+ * regenerates an identity in place; the account, and anything already attached to it, survives.
+ */
+function AmbientProfilesPanel({
+  allowRandomUsers,
+  onAllowRandomUsersChange,
+}: {
+  allowRandomUsers: boolean;
+  onAllowRandomUsersChange: (value: boolean) => void;
+}) {
+  const { t } = useUiTranslation();
+  const profilesQuery = useSlurpAmbientProfiles();
+  const reroll = useRerollAmbientProfiles();
+  const profiles = profilesQuery.data?.items ?? [];
+  const [selected, setSelected] = useState<string | null>(null);
+
+  const rerollIds = (accountIds: string[], id: string | null) => {
+    if (accountIds.length === 0) return;
+    setSelected(id);
+    reroll.mutate(accountIds, {
+      onSuccess: () => toast.success(t("ui.slurp.settings.ambient.rerolled", { count: accountIds.length })),
+      onError: (error) => toast.error(errorMessage(error)),
+      onSettled: () => setSelected(null),
+    });
+  };
+
+  return (
+    <div className="space-y-3 pt-2">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h2 className="text-sm font-bold">{t("ui.slurp.settings.ambient.title")}</h2>
+          <p className="mt-1 text-xs leading-5 text-[var(--slurp-muted)]">{t("ui.slurp.settings.ambient.detail")}</p>
+        </div>
+        <button
+          type="button"
+          disabled={reroll.isPending || profiles.length === 0}
+          onClick={() =>
+            rerollIds(
+              profiles.map((profile) => profile.id),
+              null,
+            )
+          }
+          className="inline-flex min-h-10 items-center gap-2 rounded-lg border border-[var(--border)] px-3 text-xs font-semibold hover:bg-[var(--accent)] disabled:opacity-50"
+        >
+          <RefreshCw size={14} className={reroll.isPending && selected === null ? "animate-spin" : ""} />
+          {t("ui.slurp.settings.ambient.rerollAll")}
+        </button>
+      </div>
+      <Toggle
+        label={t("ui.slurp.settings.ambient.enabled")}
+        detail={t("ui.slurp.settings.ambient.enabledDetail")}
+        value={allowRandomUsers}
+        onChange={onAllowRandomUsersChange}
+      />
+      {profiles.length > 0 && (
+        <ul className="space-y-2">
+          {profiles.map((profile) => (
+            <li
+              key={profile.id}
+              className="flex items-center justify-between gap-3 rounded-lg border border-[var(--border)] p-3"
+            >
+              <span className="flex min-w-0 flex-col">
+                <span className="truncate text-xs font-semibold">
+                  {profile.displayName} <span className="text-[var(--slurp-muted)]">@{profile.handle}</span>
+                </span>
+                <span className="truncate text-[0.7rem] text-[var(--slurp-muted)]">{profile.bio}</span>
+              </span>
+              <button
+                type="button"
+                disabled={reroll.isPending}
+                onClick={() => rerollIds([profile.id], profile.id)}
+                className="inline-flex min-h-9 shrink-0 items-center gap-1.5 rounded-lg border border-[var(--border)] px-2.5 text-[0.7rem] font-semibold hover:bg-[var(--accent)] disabled:opacity-50"
+              >
+                <RefreshCw size={12} className={selected === profile.id ? "animate-spin" : ""} />
+                {t("ui.slurp.settings.ambient.reroll")}
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
   );
 }
