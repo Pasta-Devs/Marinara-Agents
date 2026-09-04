@@ -7,6 +7,7 @@ import type { SlurpSettings } from "../storage/slurp.storage.js";
 import { logger, logDebugOverride } from "../../lib/logger.js";
 import { newId } from "../../utils/id-generator.js";
 import { resolveImageConnectionFallback } from "../generation/media-connection-fallback.js";
+import { loadImageGenerationUserSettings } from "../image/image-generation-settings.js";
 import { generateImage, stageImageToDisk, type StagedGalleryImage } from "../image/image-generation.js";
 import { resolveConnectionImageDefaults } from "../image/image-generation-defaults.js";
 import { compileImagePrompt, resolveImageStyleGuidanceText } from "../image/image-prompt-compiler.js";
@@ -122,6 +123,7 @@ export async function generateNoodlePostImage(input: {
   promptOverride?: { prompt: string; negativePrompt?: string };
   admissionMode?: ConnectionAdmissionMode;
 }) {
+  const imageSettings = await loadImageGenerationUserSettings(input.db);
   const imageDefaults = resolveConnectionImageDefaults(input.imageConnection);
   const imageModel = input.imageConnection.model || "";
   const imageBaseUrl = input.imageConnection.baseUrl || "https://image.pollinations.ai";
