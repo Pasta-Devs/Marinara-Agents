@@ -36,7 +36,11 @@ export async function installPackageBrowserFixture({ agentsRoot, engineRoot, dat
   const manifest = JSON.parse(await readFile(join(packageRoot, "manifest.json"), "utf8"));
   if (manifest.id !== packageId) throw new Error(`Package manifest ID does not match ${packageId}`);
 
-  const catalog = JSON.parse(await readFile(join(agentsRoot, "catalog", "catalog.json"), "utf8"));
+  const catalogPath =
+    process.env.MARINARA_CATALOG_INCLUDE_INCOMPLETE === "1"
+      ? join(agentsRoot, "catalog", "preview", "catalog.json")
+      : join(agentsRoot, "catalog", "catalog.json");
+  const catalog = JSON.parse(await readFile(catalogPath, "utf8"));
   const catalogEntry = catalog.packages.find((entry) => entry.manifest?.id === packageId);
   if (!catalogEntry) throw new Error(`${packageId} is missing from catalog/catalog.json`);
   if (JSON.stringify(catalogEntry.manifest) !== JSON.stringify(manifest)) {
