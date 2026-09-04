@@ -144,6 +144,7 @@ import {
   NOODLE_PINK,
 } from "./SlurpShell";
 import { SlurpProfileSurface } from "./SlurpProfileSurface";
+import { SlurpMessagesView } from "./SlurpMessages";
 import { SlurpSettings, SlurpSettingsSidebar } from "./SlurpSettings";
 import { NoodleImageComposer } from "./SlurpImageComposer";
 import { NoodlePollComposer } from "./SlurpPollComposer";
@@ -1906,6 +1907,7 @@ export function SlurpHome({ navigation, onNavigate }: SlurpHomeProps) {
             onCancelEdit={closeProfileEditor}
             onSaveEdit={(location) => void saveProfile(location)}
             profileSavePending={updateProfile.isPending}
+            onOpenMessages={(creatorAccountId) => onNavigate({ mode: "creator", view: "messages", creatorAccountId })}
             posts={postsQuery.data ?? []}
             viewerCreator={selectedViewerCreator}
             viewerAccount={shellPersonaAccount}
@@ -2068,13 +2070,13 @@ export function SlurpHome({ navigation, onNavigate }: SlurpHomeProps) {
     return (
       <NoodleShell {...shellProps}>
         <NoodlerFrame onBack={exitToCreatorHub} title={localizeUi("ui.slurp.navigation.messages")} action={<span />}>
-          <div className="flex min-h-0 flex-1 flex-col items-center justify-center gap-3 px-6 py-16 text-center">
-            <MessageCircle size={30} className="text-[var(--noodle-accent)]" />
-            <p className="text-lg font-black">{localizeUi("ui.slurp.messages.title")}</p>
-            <p className="max-w-sm text-sm text-[var(--muted-foreground)]">
-              {localizeUi("ui.slurp.navigation.soon", { defaultValue: "Soon..." })}
-            </p>
-          </div>
+          <SlurpMessagesView
+            key={navigation.creatorAccountId ?? "inbox"}
+            personaId={viewerPersonaId}
+            composeWithCreatorAccountId={navigation.creatorAccountId ?? null}
+            ownedCreatorAccountIds={myCreatorProfile ? [myCreatorProfile.id] : []}
+            onOpenProfile={(accountId) => onNavigate({ mode: "creator", view: "profile", accountId })}
+          />
         </NoodlerFrame>
       </NoodleShell>
     );
@@ -3318,6 +3320,7 @@ function StageProfileView({
   followPending,
   onToggleSubscription,
   subscriptionPending,
+  onOpenMessages,
   accessPending,
   onAccessChange,
 }: {
@@ -3359,6 +3362,8 @@ function StageProfileView({
   followPending: boolean;
   onToggleSubscription: (creatorAccountId: string, subscribed: boolean) => void;
   subscriptionPending: boolean;
+  /** Opens Messages in this Creator's chat. No thread is created until something is sent. */
+  onOpenMessages: (creatorAccountId: string) => void;
   accessPending: boolean;
   onAccessChange: (access: NoodlerManagedStageProfile["access"]) => void;
 }) {
@@ -3826,6 +3831,14 @@ function StageProfileView({
                       defaultValue: "{{amount}} coins / week",
                       amount: slurpSubscriptionPriceOf(profile),
                     })}`}
+              </button>
+              <button
+                type="button"
+                onClick={() => onOpenMessages(profile.id)}
+                className="inline-flex min-h-11 items-center justify-center gap-1.5 rounded-lg border border-[var(--noodle-divider)] px-4 text-sm font-bold transition-[background-color,opacity,transform] hover:bg-[var(--accent)] active:scale-[0.96] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--noodle-accent)] motion-reduce:transition-none motion-reduce:active:scale-100"
+              >
+                <MessageCircle size={16} aria-hidden="true" />
+                {localizeUi("ui.slurp.profile.message", { defaultValue: "Message" })}
               </button>
               <div className="relative">
                 <button

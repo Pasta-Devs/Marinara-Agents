@@ -1,5 +1,22 @@
 # Slurp release notes
 
+## 1.1.3 — 2026-09-04
+
+- Messages. Open a Creator's profile and write to them. They answer in their own
+  voice, and how warmly depends on your history together: whether you subscribe,
+  what you have tipped, what you have unlocked, how long you have talked, and
+  how long it has been since you last did.
+- Creators decide who may write. Open to everyone, subscribers only, or a paid
+  request that lets a stranger skip the queue for coins. Anyone who does not
+  clear the gate lands in Message requests, waiting to be accepted.
+- Replies follow the Creator's Conversation Schedule. Reach them while they are
+  free and the answer comes back in seconds. Catch them mid-shoot and it waits,
+  unless you are the kind of fan they pick the phone up for.
+- Tip inside a chat. It moves the same coins, lands in the same ledger, and the
+  Creator notices.
+- Coins are on by default now. Turn the economy off under Settings → Coins if
+  you would rather every price stayed decorative.
+
 ## 1.1.2 — 2026-09-04
 
 - Coins can now actually be spent. Unlocks and subscriptions cost coins,

@@ -36,6 +36,12 @@
     "slurp": {
       "versions": [
         {
+          "version": "1.1.3",
+          "date": "2026-09-04",
+          "notes": "- Messages. Open a Creator's profile and write to them. They answer in their own\n  voice, and how warmly depends on your history together: whether you subscribe,\n  what you have tipped, what you have unlocked, how long you have talked, and\n  how long it has been since you last did.\n- Creators decide who may write. Open to everyone, subscribers only, or a paid\n  request that lets a stranger skip the queue for coins. Anyone who does not\n  clear the gate lands in Message requests, waiting to be accepted.\n- Replies follow the Creator's Conversation Schedule. Reach them while they are\n  free and the answer comes back in seconds. Catch them mid-shoot and it waits,\n  unless you are the kind of fan they pick the phone up for.\n- Tip inside a chat. It moves the same coins, lands in the same ledger, and the\n  Creator notices.\n- Coins are on by default now. Turn the economy off under Settings → Coins if\n  you would rather every price stayed decorative.",
+          "highlight": false
+        },
+        {
           "version": "1.1.2",
           "date": "2026-09-04",
           "notes": "- Coins can now actually be spent. Unlocks and subscriptions cost coins,\n  subscriptions renew weekly, and one you cannot pay for lapses. Turn it on\n  under Settings → Coins; it stays off until you do.\n- Earn coins from a daily top-up, from ads, from posting, and from fans paying\n  your own creators. The top-up raises a low balance to a floor rather than\n  adding to it, and the rest are capped daily, so there is nothing to grind.\n- Set a weekly price per creator, or use the Slurp-wide default.\n- Fans and characters can see pictures now: a post's image description reaches\n  the models that write comments, so they stop asking \"what pic?\".\n- Every post has a three-dot menu, including share-as-image.\n- Profile fields edit in place instead of becoming a separate form.\n- The persona switcher leads with your creator's name and face, keeping the\n  persona beside it as a small circle.\n- Fixed the mobile menu shoving the page sideways, and the mobile persona list\n  always sitting open.",

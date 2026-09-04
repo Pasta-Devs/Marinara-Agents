@@ -80,6 +80,9 @@ const storage = readFileSync("packages/slurp/src/engine/packages/server/src/serv
 assert.match(storage, /spend\(wallet, "unlock", price/u, "unlocking must debit the wallet");
 assert.match(storage, /spend\(wallet, "subscribe", price/u, "subscribing must debit the wallet");
 assert.match(storage, /creditCreatorIncome/u, "a paid creator's owner must be credited");
-assert.match(storage, /walletEnabled: false/u, "the economy stays off for existing installs");
+// Coins are on out of the box as of 1.1.3: the balance is a gameplay element, not an opt-in.
+// An install that already stored `false` keeps it, because `normalizeSlurpSettings` only falls
+// back to the default for a key it has no stored value for.
+assert.match(storage, /walletEnabled: true/u, "the economy is on by default");
 
 console.log("slurp-wallet regression passed");

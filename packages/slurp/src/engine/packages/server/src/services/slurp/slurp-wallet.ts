@@ -56,7 +56,24 @@ export const SLURP_DEFAULT_ECONOMY: SlurpEconomy = {
 };
 
 export type SlurpWalletEntryKind =
-  "unlock" | "subscribe" | "renew" | "tip" | "topUp" | "stipend" | "ad" | "engagement" | "income";
+  | "unlock"
+  | "subscribe"
+  | "renew"
+  | "tip"
+  | "topUp"
+  | "stipend"
+  | "ad"
+  | "engagement"
+  | "income"
+  /** Paid to skip a creator's message-request tray. */
+  | "messageRequest"
+  /** Paid to unlock one locked direct message. */
+  | "ppv"
+  /** Paid for an accepted custom commission. */
+  | "commission";
+
+/** The kinds a viewer spends on. Earning kinds are credited, never spent. */
+export type SlurpWalletSpendKind = "unlock" | "subscribe" | "renew" | "tip" | "messageRequest" | "ppv" | "commission";
 
 /** One ledger line. `amount` is signed: negative spends, positive earns. */
 export type SlurpWalletEntry = {
@@ -224,7 +241,7 @@ export function credit(
  */
 export function spend(
   wallet: SlurpWallet,
-  kind: "unlock" | "subscribe" | "renew" | "tip",
+  kind: SlurpWalletSpendKind,
   amount: number,
   at: Date,
   note?: string,

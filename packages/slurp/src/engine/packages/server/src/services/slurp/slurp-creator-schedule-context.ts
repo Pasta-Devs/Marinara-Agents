@@ -131,3 +131,107 @@ export async function resolveSlurpCreatorScheduleContext(
   if (context) return context;
   return "No active Conversation Schedule is available for this Creator today.";
 }
+
+/**
+ * Activities that mean "cannot pick up the phone". Everything else counts as reachable, because
+ * a creator at lunch or on the train still answers a DM — only these actually stop them.
+ */
+export const SLURP_AWAY_ACTIVITIES = [
+  "sleep",
+  "asleep",
+  "sleeping",
+  "bed",
+  "shooting",
+  "filming",
+  "on set",
+  "recording",
+  "workout",
+  "gym",
+  "class",
+  "lecture",
+  "meeting",
+  "driving",
+  "flight",
+  "flying",
+] as const;
+
+export type SlurpCreatorAvailability = {
+  online: boolean;
+  /** What the schedule says they are doing right now, for the reply prompt. */
+  activity: string | null;
+  /** Minutes until the next schedule block starts. `null` when nothing is left today. */
+  minutesUntilOnline: number | null;
+};
+
+/** No schedule means always reachable: a creator without one must not read as permanently away. */
+const ALWAYS_AVAILABLE: SlurpCreatorAvailability = { online: true, activity: null, minutesUntilOnline: 0 };
+
+const minutesOfDay = (time: string): number | null => {
+  const match = /^(\d{1,2}):(\d{2})/.exec(time.trim());
+  if (!match) return null;
+  const hours = Number(match[1]);
+  const mins = Number(match[2]);
+  if (!Number.isInteger(hours) || !Number.isInteger(mins) || hours > 23 || mins > 59) return null;
+  return hours * 60 + mins;
+};
+
+/**
+ * Whether the creator is reachable right now, from the same parsed week schedule the prompt
+ * context is built from. One parser, so the text a creator says about their day and the delay
+ * before they answer can never disagree.
+ *
+ * A block is treated as running until the next block starts, which is how the Engine schedule
+ * reads: the entries are a timeline, not a set of appointments with end times.
+ */
+export function slurpCreatorAvailability(
+  schedule: WeekSchedule | null,
+  localNow: Date,
+  awayActivities: readonly string[] = SLURP_AWAY_ACTIVITIES,
+): SlurpCreatorAvailability {
+  if (!schedule) return ALWAYS_AVAILABLE;
+  const days = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
+  const today = schedule.days[days[(localNow.getDay() + 6) % 7]!];
+  if (!today?.length) return ALWAYS_AVAILABLE;
+  const blocks = today
+    .map((block) => ({ at: minutesOfDay(block.time), activity: block.activity }))
+    .filter((block): block is { at: number; activity: string } => block.at !== null)
+    .sort((left, right) => left.at - right.at);
+  if (blocks.length === 0) return ALWAYS_AVAILABLE;
+
+  const nowMinutes = localNow.getHours() * 60 + localNow.getMinutes();
+  let current: { at: number; activity: string } | null = null;
+  for (const block of blocks) {
+    if (block.at <= nowMinutes) current = block;
+    else break;
+  }
+  // Before the first block of the day, the previous day's last activity is still running. Sleep
+  // is the overwhelmingly common case there, so treat the pre-dawn gap as away rather than free.
+  const activity = current?.activity ?? blocks[blocks.length - 1]!.activity;
+  const away = awayActivities.some((needle) => activity.toLowerCase().includes(needle));
+  if (!away) return { online: true, activity, minutesUntilOnline: 0 };
+  const next = blocks.find(
+    (block) => block.at > nowMinutes && !awayActivities.some((needle) => block.activity.toLowerCase().includes(needle)),
+  );
+  return {
+    online: false,
+    activity,
+    minutesUntilOnline: next ? next.at - nowMinutes : null,
+  };
+}
+
+/** The availability for one creator, read from the Engine character the profile points at. */
+export async function resolveSlurpCreatorAvailability(
+  characters: { getById(id: string): Promise<ScheduleCharacter> },
+  source: CreatorSource,
+  timeZone?: string,
+  now: Date = new Date(),
+): Promise<SlurpCreatorAvailability> {
+  if (source.kind !== "character") return ALWAYS_AVAILABLE;
+  const character = await characters.getById(source.entityId);
+  if (!scheduleEnabled(character)) return ALWAYS_AVAILABLE;
+  const schedule = parseSlurpWeekSchedule(record(record(character?.data).extensions).conversationSchedule);
+  if (!schedule || schedule.enabled === false) return ALWAYS_AVAILABLE;
+  const localNow = zonedDate(now, timeZone);
+  if (isStale(schedule, localNow, timeZone)) return ALWAYS_AVAILABLE;
+  return slurpCreatorAvailability(schedule, localNow);
+}

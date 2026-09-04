@@ -1493,3 +1493,183 @@ export function useNoodlerFanActivityStatus(enabled = true) {
     refetchIntervalInBackground: false,
   });
 }
+
+// ──────────────────────────────────────────────
+// Direct messages
+// ──────────────────────────────────────────────
+
+export type SlurpDmPolicy = "open" | "subscribers" | "paid" | "closed";
+
+export type SlurpRapportContribution = {
+  key: string;
+  detail: string;
+  weight: number;
+  points: number;
+};
+
+export type SlurpRapport = {
+  score: number;
+  tier: "stranger" | "acquaintance" | "regular" | "favourite" | "whale";
+  contributions: SlurpRapportContribution[];
+};
+
+export type SlurpCreatorMessaging = {
+  dmPolicy: SlurpDmPolicy;
+  requestFee: number;
+  ppvPrice: number;
+  rapportWeights: Record<string, number>;
+};
+
+export type SlurpMessage = {
+  id: string;
+  threadId: string;
+  senderAccountId: string;
+  role: "viewer" | "creator";
+  kind:
+    "text" | "tip" | "ppv" | "system" | "broadcast" | "commission_brief" | "commission_quote" | "commission_delivery";
+  content: string;
+  imageUrl: string | null;
+  price: number;
+  unlockedAt: string | null;
+  readAt: string | null;
+  createdAt: string;
+};
+
+export type SlurpThread = {
+  id: string;
+  viewerAccountId: string;
+  creatorAccountId: string;
+  state: "request" | "active" | "declined";
+  openedBy: "viewer" | "creator";
+  requestFeePaid: number;
+  lastMessageAt: string;
+  lastMessagePreview: string;
+  viewerUnread: number;
+  creatorUnread: number;
+  rapport: SlurpRapport;
+  createdAt: string;
+  updatedAt: string;
+  creatorHandle: string;
+  creatorDisplayName: string;
+  creatorAvatarUrl: string | null;
+  subscribed: boolean;
+};
+
+export type SlurpSendResponse = {
+  thread: SlurpThread;
+  message: SlurpMessage;
+  reply: SlurpMessage | null;
+  replyStatus: string;
+  typingMs?: number;
+};
+
+const messageKeys = {
+  threads: (personaId: string | null) => [...noodleKeys.noodlerRoot(), "messages", "threads", personaId ?? "none"],
+  thread: (threadId: string, personaId: string | null) => [
+    ...noodleKeys.noodlerRoot(),
+    "messages",
+    "thread",
+    threadId,
+    personaId ?? "none",
+  ],
+};
+
+export function useSlurpThreads(personaId: string | null) {
+  return useQuery({
+    queryKey: messageKeys.threads(personaId),
+    queryFn: () =>
+      api.get<{ threads: SlurpThread[]; unread: number }>(
+        `/slurp/messages/threads?personaId=${encodeURIComponent(personaId!)}`,
+      ),
+    enabled: Boolean(personaId),
+  });
+}
+
+export function useSlurpThread(threadId: string | null, personaId: string | null) {
+  return useQuery({
+    queryKey: messageKeys.thread(threadId ?? "none", personaId),
+    queryFn: () =>
+      api.get<{
+        thread: SlurpThread;
+        messages: SlurpMessage[];
+        creator: { id: string; handle: string; displayName: string; avatarUrl: string | null } | null;
+        messaging: SlurpCreatorMessaging;
+        subscribed?: boolean;
+      }>(`/slurp/messages/threads/${encodeURIComponent(threadId!)}?personaId=${encodeURIComponent(personaId!)}`),
+    enabled: Boolean(threadId && personaId),
+  });
+}
+
+/**
+ * The conversation with one creator, started or not. Used when the player opens a chat from a
+ * profile, where there may be no thread yet and creating one on sight would charge a fee.
+ */
+export function useSlurpCompose(creatorAccountId: string | null, personaId: string | null) {
+  return useQuery({
+    queryKey: [...noodleKeys.noodlerRoot(), "messages", "compose", creatorAccountId ?? "none", personaId ?? "none"],
+    queryFn: () =>
+      api.get<{
+        thread: SlurpThread | null;
+        messages: SlurpMessage[];
+        creator: { id: string; handle: string; displayName: string; avatarUrl: string | null } | null;
+        messaging: SlurpCreatorMessaging;
+        subscribed?: boolean;
+      }>(
+        `/slurp/messages/compose?personaId=${encodeURIComponent(personaId!)}&creatorAccountId=${encodeURIComponent(creatorAccountId!)}`,
+      ),
+    enabled: Boolean(creatorAccountId && personaId),
+  });
+}
+
+export function useSendSlurpMessage() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (input: { personaId: string; creatorAccountId: string; content: string }) =>
+      api.post<SlurpSendResponse>("/slurp/messages/send", input),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: noodleKeys.noodlerRoot() }),
+  });
+}
+
+export function useTipInSlurpThread() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (input: { personaId: string; creatorAccountId: string; amount: number; note?: string }) =>
+      api.post<SlurpSendResponse & { wallet: SlurpWallet }>("/slurp/messages/tip", input),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: noodleKeys.noodlerRoot() }),
+  });
+}
+
+export function useResolveSlurpMessageRequest() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (input: { threadId: string; personaId: string; decision: "accept" | "decline" }) =>
+      api.post<{ thread: SlurpThread }>(`/slurp/messages/threads/${encodeURIComponent(input.threadId)}/request`, input),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: noodleKeys.noodlerRoot() }),
+  });
+}
+
+/** The rapport breakdown, read only by the Creator edit panel. */
+export function useSlurpRapport(creatorAccountId: string | null, personaId: string | null) {
+  return useQuery({
+    queryKey: [...noodleKeys.noodlerRoot(), "messages", "rapport", creatorAccountId ?? "none", personaId ?? "none"],
+    queryFn: () =>
+      api.get<{ messaging: SlurpCreatorMessaging; rapport: SlurpRapport; facts: Record<string, unknown> }>(
+        `/slurp/messages/creators/${encodeURIComponent(creatorAccountId!)}/rapport?personaId=${encodeURIComponent(personaId!)}`,
+      ),
+    enabled: Boolean(creatorAccountId && personaId),
+  });
+}
+
+export function useSetSlurpCreatorMessaging() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (input: { creatorAccountId: string } & Partial<SlurpCreatorMessaging>) => {
+      const { creatorAccountId, ...patch } = input;
+      return api.patch<{ messaging: SlurpCreatorMessaging }>(
+        `/slurp/messages/creators/${encodeURIComponent(creatorAccountId)}/settings`,
+        patch,
+      );
+    },
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: noodleKeys.noodlerRoot() }),
+  });
+}

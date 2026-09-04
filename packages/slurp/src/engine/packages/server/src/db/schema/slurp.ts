@@ -177,3 +177,81 @@ export const noodleRefreshRuns = fileTable("slurp_refresh_runs", {
   createdAt: text("created_at").notNull(),
   updatedAt: text("updated_at").notNull(),
 });
+
+// ──────────────────────────────────────────────
+// Direct messages
+// ──────────────────────────────────────────────
+
+/**
+ * One thread per viewer/creator pair.
+ *
+ * `state` is the gate: a viewer who does not clear the creator's DM policy lands in `request`
+ * and stays there until the creator accepts. Only `active` threads generate replies, so the
+ * gate is one column rather than a rule spread across every read path.
+ */
+export const slurpThreads = fileTable(
+  "slurp_threads",
+  {
+    id: text("id").primaryKey(),
+    viewerAccountId: text("viewer_account_id").notNull(),
+    creatorAccountId: text("creator_account_id").notNull(),
+    state: text("state").notNull().default("active"),
+    openedBy: text("opened_by").notNull().default("viewer"),
+    /** Coins paid to jump a `paid-request` gate, refunded in fiction when the creator accepts. */
+    requestFeePaid: text("request_fee_paid").notNull().default("0"),
+    lastMessageAt: text("last_message_at").notNull(),
+    lastMessagePreview: text("last_message_preview").notNull().default(""),
+    viewerUnread: text("viewer_unread").notNull().default("0"),
+    creatorUnread: text("creator_unread").notNull().default("0"),
+    /** Cached rapport, recomputed on every send. Kept here so the inbox sorts without a scan. */
+    rapport: text("rapport").notNull().default("{}"),
+    createdAt: text("created_at").notNull(),
+    updatedAt: text("updated_at").notNull(),
+  },
+  { uniqueBy: [{ keys: ["viewerAccountId", "creatorAccountId"] }] },
+);
+
+/**
+ * One message. The image columns are copied from `slurp_posts` verbatim so a DM attachment
+ * moves through the same claim-token and lease machinery the post pipeline already runs.
+ *
+ * A thread has exactly one viewer, so `unlockedAt` on the row replaces a join table: a mass
+ * message fans out into one row per subscriber thread and every read path stays identical.
+ */
+export const slurpMessages = fileTable("slurp_messages", {
+  id: text("id").primaryKey(),
+  threadId: text("thread_id").notNull(),
+  senderAccountId: text("sender_account_id").notNull(),
+  /** "viewer" or "creator". Stored rather than derived so a deleted account still renders. */
+  role: text("role").notNull(),
+  kind: text("kind").notNull().default("text"),
+  content: text("content").notNull().default(""),
+  imageUrl: text("image_url"),
+  imagePrompt: text("image_prompt"),
+  imageClaimToken: text("image_claim_token"),
+  imageClaimLeaseUntil: text("image_claim_lease_until"),
+  /** Coins: the unlock price of a locked message, or the amount of a tip. */
+  price: text("price").notNull().default("0"),
+  unlockedAt: text("unlocked_at"),
+  readAt: text("read_at"),
+  metadata: text("metadata").notNull().default("{}"),
+  senderSnapshot: text("sender_snapshot").notNull().default("{}"),
+  createdAt: text("created_at").notNull(),
+});
+
+/**
+ * Reply claims, mirroring `slurp_creator_reply_claims`. A thread may have at most one reply in
+ * flight, so the claim keys on the thread: a scheduler pass and a live send cannot double-reply.
+ */
+export const slurpMessageClaims = fileTable(
+  "slurp_message_claims",
+  {
+    id: text("id").primaryKey(),
+    threadId: text("thread_id").notNull(),
+    triggerMessageId: text("trigger_message_id").notNull(),
+    creatorAccountId: text("creator_account_id").notNull(),
+    replyMessageId: text("reply_message_id"),
+    claimedAt: text("claimed_at").notNull(),
+  },
+  { uniqueBy: [{ keys: ["threadId"] }] },
+);

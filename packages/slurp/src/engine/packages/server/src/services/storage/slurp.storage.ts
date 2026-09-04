@@ -70,6 +70,7 @@ import {
   subscriptionPaidThrough,
   type SlurpEconomy,
   type SlurpWallet,
+  type SlurpWalletSpendKind,
 } from "../slurp/slurp-wallet.js";
 import { logger } from "../../lib/logger.js";
 import {
@@ -101,7 +102,11 @@ import {
   noodlerPreparedPosts,
   noodlerReserveState,
   noodlerFanActivityState,
+  slurpMessageClaims,
+  slurpMessages,
+  slurpThreads,
 } from "../../db/schema/slurp.js";
+import { SLURP_CREATOR_MESSAGING_KEY } from "../slurp/slurp-messaging.js";
 import { readNoodlerAccountMediaPath, readNoodlerAvatarMediaPath } from "../slurp/slurp-avatar.js";
 import { newId, now } from "../../utils/id-generator.js";
 import {
@@ -752,7 +757,7 @@ export const DEFAULT_SLURP_SETTINGS: SlurpSettings = {
   inlineAdsEra: "present",
   inlineAdsWorldContext: "",
   inlineAdsImagesEnabled: false,
-  walletEnabled: false,
+  walletEnabled: true,
   walletUnlockCost: SLURP_DEFAULT_ECONOMY.unlockCost,
   walletSubscriptionCost: SLURP_DEFAULT_ECONOMY.subscriptionCost,
   walletStipendFloor: SLURP_DEFAULT_ECONOMY.stipendFloor,
@@ -1621,6 +1626,11 @@ export function createSlurpStorage(db: DB) {
           noodlerReserveState,
           noodlerPreparedPosts,
           noodlerCreatorReplyClaims,
+          // Direct messages are Slurp data too. Left out, "delete all Slurp data" would keep
+          // every thread and leave the next install reading someone else's conversations.
+          slurpMessageClaims,
+          slurpMessages,
+          slurpThreads,
         ]) {
           await tx.delete(table);
         }
@@ -1646,6 +1656,7 @@ export function createSlurpStorage(db: DB) {
         await settings.remove(SLURP_SETTINGS_KEY);
         await settings.remove(NOODLE_REFRESH_SCHEDULE_KEY);
         await settings.remove(NOODLER_SOURCE_SNAPSHOT_MIGRATION_KEY);
+        await settings.remove(SLURP_CREATOR_MESSAGING_KEY);
         await tx._fileStore.flush();
       });
       return { deletedCreators: accounts.length, deletedPosts: posts.length };
@@ -2025,6 +2036,18 @@ export function createSlurpStorage(db: DB) {
             ),
           );
         await tx.delete(noodlerPreparedPosts).where(eq(noodlerPreparedPosts.creatorAccountId, id));
+        // Threads on either side of the deleted account, and their messages. Left behind, the
+        // inbox would keep listing a creator that no longer exists.
+        const threadRows = await tx
+          .select()
+          .from(slurpThreads)
+          .where(or(eq(slurpThreads.viewerAccountId, id), eq(slurpThreads.creatorAccountId, id)));
+        const threadIds = threadRows.map((row) => row.id);
+        if (threadIds.length > 0) {
+          await tx.delete(slurpMessages).where(inArray(slurpMessages.threadId, threadIds));
+          await tx.delete(slurpMessageClaims).where(inArray(slurpMessageClaims.threadId, threadIds));
+          await tx.delete(slurpThreads).where(inArray(slurpThreads.id, threadIds));
+        }
         await tx
           .delete(noodleInteractions)
           .where(
@@ -5314,10 +5337,36 @@ export function createSlurpStorage(db: DB) {
     },
 
     /**
+     * Debit a viewer for anything that is not a tip or a subscription, returning `null` when the
+     * funds are not there. The direct-message paths route every charge through here so a locked
+     * message, a request fee, and a commission all land in the one ledger the wallet page reads.
+     */
+    async spendCoins(
+      viewerAccountId: string,
+      kind: SlurpWalletSpendKind,
+      amount: number,
+      note?: string,
+    ): Promise<SlurpWallet | null> {
+      const settings = await this.getSettings();
+      if (!settings.walletEnabled || amount <= 0) return this.getWallet(viewerAccountId);
+      const run = viewerSettingsUpdateQueue.then(async () => {
+        const wallet = await this.getWallet(viewerAccountId);
+        const charged = spend(wallet, kind, amount, new Date(), note);
+        return charged ? writeWallet(viewerAccountId, charged) : null;
+      });
+      viewerSettingsUpdateQueue = run.catch(() => undefined);
+      return run;
+    },
+
+    /**
      * Pay a creator's owner when a fan pays that creator. Only a creator backed by one of this
      * install's personas pays that persona wallet. Other creators keep their own wallet.
      */
-    async creditCreatorIncome(creatorAccountId: string, price: number, reason: "unlock" | "subscribe" | "renew") {
+    async creditCreatorIncome(
+      creatorAccountId: string,
+      price: number,
+      reason: "unlock" | "subscribe" | "renew" | "messageRequest" | "ppv" | "commission",
+    ) {
       const settings = await this.getSettings();
       if (!settings.walletEnabled || settings.walletCreatorRevenueSharePercent <= 0) return;
       const creator = await this.getNoodlerAccountById(creatorAccountId);

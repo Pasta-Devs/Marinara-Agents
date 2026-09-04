@@ -46,6 +46,12 @@ function isSlurpNavigation(value: unknown): value is SlurpNavigationState {
       return value.onboarding === undefined || typeof value.onboarding === "boolean";
     case "search":
       return true;
+    // Messages and Wallet fell through to `false`, so a reload always dropped you back on the
+    // hub from either one. `creatorAccountId` reopens the chat you were reading.
+    case "wallet":
+      return true;
+    case "messages":
+      return value.creatorAccountId === undefined || typeof value.creatorAccountId === "string";
     case "profile":
       return (
         (value.accountId === null || typeof value.accountId === "string") &&

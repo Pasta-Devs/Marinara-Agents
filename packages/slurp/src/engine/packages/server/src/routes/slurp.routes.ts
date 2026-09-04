@@ -115,6 +115,7 @@ import {
 import { renderSlurpShareCard } from "../services/slurp/slurp-share-card.js";
 import { getErrorMessage, resolvePersonaAccount } from "../services/slurp/slurp-public-support.js";
 import { generateNoodlerCreatorArtwork } from "../services/slurp/slurp-artwork.operation.js";
+import { slurpMessageRoutes } from "./slurp-messages.routes.js";
 
 const slurpTargetedRefreshSchema = noodlerTargetedRefreshSchema.extend({
   access: z.enum(["public", "locked"]).optional(),
@@ -2497,4 +2498,6 @@ export async function slurpRoutes(app: FastifyInstance) {
       return reply.code(500).send({ error: "NoodleR post generation failed." });
     }
   });
+
+  await slurpMessageRoutes(app);
 }

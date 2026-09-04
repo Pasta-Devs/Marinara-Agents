@@ -5,7 +5,8 @@ export type SlurpProfileConnection = "followers" | "following";
 export type SlurpNavigationState =
   | { mode: "creator"; view: "hub"; onboarding?: boolean }
   | { mode: "creator"; view: "search" }
-  | { mode: "creator"; view: "messages" }
+  /** `creatorAccountId` lands straight in that Creator's chat, when Messages was opened from a profile. */
+  | { mode: "creator"; view: "messages"; creatorAccountId?: string }
   | { mode: "creator"; view: "wallet" }
   | {
       mode: "creator";
