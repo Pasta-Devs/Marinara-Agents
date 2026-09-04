@@ -1,6 +1,6 @@
 # Long-Term Memory changelog
 
-## 1.3.0 — 2026-09-04
+## 1.2.20 — 2026-09-04
 
 - Added conversation-family-scoped Roleplay local-character memories and reviewable first-use mutations.
 - Kept Game Mode dynamic NPC metadata out of Long-Term Memory subjects and targets.

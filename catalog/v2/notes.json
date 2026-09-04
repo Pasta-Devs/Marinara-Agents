@@ -4,10 +4,10 @@
     "long-term-memory": {
       "versions": [
         {
-          "version": "1.3.0",
+          "version": "1.2.20",
           "date": "2026-09-04",
           "notes": "- Added conversation-family-scoped Roleplay local-character memories and reviewable first-use mutations.\n- Kept Game Mode dynamic NPC metadata out of Long-Term Memory subjects and targets.",
-          "highlight": true
+          "highlight": false
         },
         {
           "version": "1.2.19",
