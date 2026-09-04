@@ -2975,4 +2975,3 @@ composer and a window that rebuilds per press.
   over a thin pack just serve the same two lines in a warmer register? The generation
   guidance widened for it; whether it is enough is a live-run question, the same one
   0.14 left open for the topic branches.
-
