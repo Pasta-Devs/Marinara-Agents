@@ -1421,6 +1421,11 @@ export function SlurpHome({ navigation, onNavigate }: SlurpHomeProps) {
     noodlerUnseenCount,
     accent: NOODLE_PINK,
     personaAccount: shellPersonaAccount,
+    // The Slurp identity to show for the active persona, when it runs a Creator profile. Kept
+    // separate from `personaAccount` on purpose: that one carries the persona's own account id,
+    // which the switcher list filter and the isCreator check both key on, while this one carries
+    // the Creator's. Swapping them would make the active persona reappear in its own switcher.
+    creatorIdentity: viewerActorAccount,
     sortedPersonaAccounts: viewerAccounts,
     visiblePersonaAccounts,
     linkedNoodleAccountIds: new Set(

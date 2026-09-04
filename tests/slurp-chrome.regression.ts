@@ -32,4 +32,24 @@ for (const field of ["editor.onNameChange", "editor.onHandleChange", "editor.onB
 // The avatar overlaps the banner rather than sitting flush under it.
 assert.match(surface, /relative z-10 -mt-20 pt-0 @min-\[680px\]:-mt-28/u);
 
+// A persona that runs a Creator is known to the feed by the Creator's name and face, so the
+// switcher card leads with that and keeps the persona as a small circle beside it.
+assert.match(shell, /creatorIdentity\?: NoodleAccount \| null;/u);
+assert.match(shell, /account=\{creatorIdentity \?\? personaAccount\}/u);
+assert.match(shell, /personaBadge=\{creatorIdentity \? personaAccount : null\}/u);
+assert.match(shell, /ui\.slurp\.account\.asPersona/u);
+assert.match(shell, /size="xs"/u, "the badge must not use sm, which swamps an h-11 avatar");
+
+// `personaAccount` still carries the persona's own id. Swapping in the Creator's would make the
+// active persona reappear in its own switcher list and flip the isCreator check false.
+assert.match(
+  shell,
+  /accounts=\{visiblePersonaAccounts\.filter\(\(account\) => account\.id !== personaAccount\?\.id\)\}/u,
+);
+assert.match(shell, /linkedNoodleAccountIds\?\.has\(personaAccount\.id\)/u);
+
+const home = readFileSync("packages/slurp/src/engine/packages/client/src/components/slurp/SlurpHome.tsx", "utf8");
+assert.match(home, /creatorIdentity: viewerActorAccount,/u);
+assert.match(home, /personaAccount: shellPersonaAccount,/u, "the persona account must stay the persona's own");
+
 console.log("slurp-chrome regression passed");

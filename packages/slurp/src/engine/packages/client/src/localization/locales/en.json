@@ -1795,5 +1795,6 @@
   "ui.slurp.settings.ads.explainerEarning": "Acting on an ad pays {{reward}} coins, up to {{cap}} a day. Change either in Coins.",
   "ui.slurp.post.share": "Share as image",
   "ui.slurp.post.shareFailed": "Could not build the share image.",
-  "ui.slurp.profile.pricePerWeek": "{{amount}} coins / week"
+  "ui.slurp.profile.pricePerWeek": "{{amount}} coins / week",
+  "ui.slurp.account.asPersona": "as {{persona}}"
 }

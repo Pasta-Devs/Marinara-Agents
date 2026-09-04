@@ -225,17 +225,21 @@ export function Avatar({
   account: Pick<NoodleAccount, "displayName" | "avatarUrl"> & {
     avatarCrop?: AvatarCrop | null;
   };
-  size?: "sm" | "md" | "lg" | "xl";
+  size?: "xs" | "sm" | "md" | "lg" | "xl";
   solid?: boolean;
 }) {
   const dimension =
-    size === "sm"
-      ? "h-8 w-8"
-      : size === "xl"
-        ? "h-24 w-24 @min-[680px]:h-32 @min-[680px]:w-32 @min-[1040px]:h-36 @min-[1040px]:w-36"
-        : size === "lg"
-          ? "h-24 w-24"
-          : "h-11 w-11";
+    // `xs` exists for the persona badge that overlaps a Creator avatar: `sm` is h-8, which on an
+    // h-11 avatar reads as a second avatar rather than a corner mark.
+    size === "xs"
+      ? "h-5 w-5"
+      : size === "sm"
+        ? "h-8 w-8"
+        : size === "xl"
+          ? "h-24 w-24 @min-[680px]:h-32 @min-[680px]:w-32 @min-[1040px]:h-36 @min-[1040px]:w-36"
+          : size === "lg"
+            ? "h-24 w-24"
+            : "h-11 w-11";
   // NoodleR avatars are served by the package's own route, which a bare <img> cannot
   // authenticate against; the hook swaps those for a fetched object URL and passes the rest through.
   const avatarSrc = useSlurpMediaSrc(account.avatarUrl, { width: size === "xl" || size === "lg" ? 320 : 96 });
@@ -322,6 +326,15 @@ export interface NoodleShellProps {
   /** Posts published since this viewer persona last had the NoodleR or Slurp feed shown to it. */
   noodlerUnseenCount?: number;
   personaAccount: NoodleAccount | null;
+  /**
+   * The active persona's Creator identity, when it runs one. Shown as the main identity on the
+   * switcher card, with the persona kept beside it as a small circle, because a persona that has
+   * become a Creator is known to the feed by the Creator's name and face, not its own.
+   *
+   * Deliberately not folded into `personaAccount`: that account's id drives the switcher list
+   * filter and the isCreator check, and this one carries the Creator's id instead.
+   */
+  creatorIdentity?: NoodleAccount | null;
   sortedPersonaAccounts: NoodleAccount[];
   visiblePersonaAccounts: NoodleAccount[];
   linkedNoodleAccountIds?: ReadonlySet<string>;
@@ -382,6 +395,7 @@ export interface NoodleShellProps {
  */
 function PersonaIdentityCard({
   account,
+  personaBadge,
   bannerUrl,
   counts,
   balanceLabel,
@@ -390,6 +404,8 @@ function PersonaIdentityCard({
   onBecomeCreator,
 }: {
   account: NoodleAccount | null;
+  /** The persona behind a Creator identity. Null when the two are the same account. */
+  personaBadge?: NoodleAccount | null;
   bannerUrl?: string | null;
   counts?: { fans: number; followers: number };
   balanceLabel?: string;
@@ -422,7 +438,17 @@ function PersonaIdentityCard({
           className="flex w-full items-end gap-3 rounded-lg text-left disabled:pointer-events-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--noodle-accent)]"
         >
           {account ? (
-            <Avatar account={account} />
+            <span className="relative shrink-0">
+              <Avatar account={account} />
+              {personaBadge && (
+                <span
+                  className="absolute -bottom-1 -end-1 rounded-full ring-2 ring-[var(--slurp-surface-raised)]"
+                  title={personaBadge.displayName}
+                >
+                  <Avatar account={personaBadge} size="xs" />
+                </span>
+              )}
+            </span>
           ) : (
             <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-[var(--noodle-accent)]/15 ring-1 ring-[var(--noodle-accent)]/25">
               <AtSign size={24} className="text-[var(--noodle-accent)]" />
@@ -435,6 +461,14 @@ function PersonaIdentityCard({
             <span className="block truncate text-xs text-[var(--muted-foreground)]">
               {account ? `@${account.handle}` : localizeUi("ui.noodle.noodleshell.pickAPersonaBelow")}
             </span>
+            {personaBadge && (
+              <span className="mt-0.5 block truncate text-[0.68rem] text-[var(--muted-foreground)]">
+                {localizeUi("ui.slurp.account.asPersona", {
+                  defaultValue: "as {{persona}}",
+                  persona: personaBadge.displayName,
+                })}
+              </span>
+            )}
           </span>
         </button>
         <div className="mt-2 flex items-center justify-between gap-2">
@@ -547,6 +581,7 @@ export function NoodleShell({
   homeActive: homeActiveOverride,
   noodlerUnseenCount = 0,
   personaAccount,
+  creatorIdentity,
   sortedPersonaAccounts,
   visiblePersonaAccounts,
   linkedNoodleAccountIds,
@@ -713,7 +748,8 @@ export function NoodleShell({
 
                 <div className="mt-auto pt-4">
                   <PersonaIdentityCard
-                    account={personaAccount}
+                    account={creatorIdentity ?? personaAccount}
+                    personaBadge={creatorIdentity ? personaAccount : null}
                     bannerUrl={personaBannerUrl}
                     counts={personaAccount ? personaConnectionCounts?.[personaAccount.entityId] : undefined}
                     balanceLabel={walletBalanceLabel}
@@ -872,7 +908,8 @@ export function NoodleShell({
                     // z-index is for.
                     <div className="absolute bottom-[calc(100%+0.5rem)] start-0 z-30 w-[min(22rem,calc(100vw-2rem))] overflow-hidden rounded-xl border border-[var(--noodle-divider)] bg-[var(--background)] p-2 shadow-[var(--slurp-shadow-modal)]">
                       <PersonaIdentityCard
-                        account={personaAccount}
+                        account={creatorIdentity ?? personaAccount}
+                        personaBadge={creatorIdentity ? personaAccount : null}
                         bannerUrl={personaBannerUrl}
                         counts={personaAccount ? personaConnectionCounts?.[personaAccount.entityId] : undefined}
                         balanceLabel={walletBalanceLabel}
