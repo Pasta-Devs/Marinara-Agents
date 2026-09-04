@@ -1,4 +1,4 @@
-// Pixelforge 0.14.0 — Marinara Engine game-surface Experience (single-file client bundle)
+// Pixelforge 0.15.0 — Marinara Engine game-surface Experience (single-file client bundle)
 // Built from packages/pixelforge/src (18 modules) by scripts/build-pixelforge-package.mjs. Do not edit; edit src/ and rebuild.
 (() => {
 "use strict";
@@ -7973,7 +7973,22 @@ PF.Sim = class {
   /** Compact world header prefixed onto turns so the GM narrates the world we show. */
   header() {
     const z = this.zone();
-    const near = this.nearNpc ? `; near: ${this.nearNpc.name} (${this.nearNpc.role})` : "";
+    // THE RUNG WORD RIDES THE NEAR CLAUSE (0.15, plan §13.4), and only past
+    // stranger — the GM should greet a friend as a friend without burning a
+    // persona injection to learn it, and a stranger costs the header nothing
+    // because the word for "no standing" is no word. Hostility, when something
+    // someday writes it, outranks the rung here as it does on the window title.
+    // Read off the block the sim already carries for the ledger tell; the
+    // header stays free of core lookups, and the words stay the ladder's own
+    // (58-player RUNGS — index 0 blanked because the floor goes unsaid).
+    const rel = this.player?.rel?.[this.world?.startZone];
+    const row =
+      this.nearNpc && rel && typeof rel === "object" && Object.prototype.hasOwnProperty.call(rel, this.nearNpc.name)
+        ? rel[this.nearNpc.name]
+        : null;
+    const rung = row ? PF.clamp(Number(row.d) || 0, 0, 3) : 0;
+    const stand = row && row.h ? "hostile" : rung > 0 ? PF.player.RUNGS[rung] : "";
+    const near = this.nearNpc ? `; near: ${this.nearNpc.name} (${this.nearNpc.role}${stand ? `, ${stand}` : ""})` : "";
     // THREE WORDS IN THE PAREN GROUP, and each earns its permanent per-turn cost.
     // The daypart keeps the GM's light and "who is about" narration consistent
     // with what we render and where NPCs actually are. The weather word is the
@@ -9184,8 +9199,48 @@ const evictNotices = (rows) => {
   return out;
 };
 
+// ── The disposition ladder's promotion line (P2, plan §13) ────────────────────
+// The ladder has been in the block since 0.11 — d 0..3, stored, capped, merged,
+// evicted — and for four releases nothing in the game ever moved it: every bump
+// wrote `t` and `s`, every resident stayed d 0, and the journal counted a town
+// of permanent strangers. 0.15 is where it moves, and the WHOLE heuristic is
+// this table: a rung is EARNED when the encounter count crosses its line.
+//
+// Encounters are already weighted at the verb sites — an accepted talk turn, a
+// purchase and a night's berth each count one, and a finished job counts three
+// (61-pack settle(); the reward ruling's "money and the giver's rapport" finally
+// cashing out as movement rather than a tally). So the lines below read in
+// those units: acquainted after a few real exchanges, friendly after sustained
+// business or a couple of jobs, close after the kind of history a player builds
+// on purpose. Numbers are alpha tuning, one edit each, and deliberately high
+// enough that one conversation's presses cannot vault a rung (§12.3's four-bump
+// question is absorbed here: four sends in one window is four points, short of
+// friendly from any distance).
+//
+// PROMOTION IS A CROSSING, NOT A CEILING. bump() promotes only when the count
+// moves from below a line to at-or-past it, and never demotes — so a `d` set
+// PRECISELY (the S1 arm, or a test) stays where it was put unless a NEW line is
+// crossed. A max() over the table would have quietly re-promoted anybody a
+// future demotion verb tried to lower, and fighting the GM is the one thing the
+// heuristic must never do. Hostility is not on this ladder at all: `h` is a
+// flag beside it, written by nothing package-side yet, and waits for S1.
+const PROMOTION = [3, 10, 25]; // t at which d 1, 2, 3 are earned
+
+/** The rung the encounter count has EARNED, 0..3. */
+function rungOf(t) {
+  let rung = 0;
+  for (let step = 0; step < PROMOTION.length; step++) if (t >= PROMOTION[step]) rung = step + 1;
+  return rung;
+}
+
 PF.player = {
   CAPS,
+  // The ladder's words, one authority for every surface that says them — the
+  // window title, the promotion toast, the turn header and the journal all read
+  // from here, because two spellings of "acquainted" is a bug report waiting.
+  // Theme-BLIND on purpose (plan §2.8): a stranger is a stranger in any world.
+  RUNGS: ["stranger", "acquainted", "friendly", "close friend"],
+  PROMOTION,
   QUALITY,
   TOOL_TYPES,
   MIGRATIONS: PLAYER_MIGRATIONS,
@@ -10223,10 +10278,21 @@ PF.player = {
   },
 
   /** Move a relationship. `patch` is { d, t, h, s }: d is the 0-3 ladder, t
-   *  counts encounters, h flags hostility, s is the last line worth remembering.
+   *  counts encounters (weighted at the verb sites — a finished job is three),
+   *  h flags hostility, s is the last line worth remembering.
    *  Two caps bite here and they bite DIFFERENTLY (plan §4): the row cap evicts
    *  whole STRANGER rows, and the line cap evicts the oldest LINE and leaves the
-   *  row standing. */
+   *  row standing.
+   *
+   *  THE LADDER MOVES HERE AND NOWHERE ELSE (0.15, plan §13). When the patch
+   *  carries no explicit `d`, an encounter that crosses a PROMOTION line lifts
+   *  the rung — a crossing, never a max(), so a precisely-set d is not fought
+   *  (the header note above bump's table says why). An explicit `d` stays the
+   *  SETTER it has always been: that arm is S1's, and the harness pins it.
+   *
+   *  Returns `{ row, rose }` — `rose` is the new rung when THIS call earned one
+   *  and 0 otherwise, so a caller with a toast to show knows without diffing.
+   *  Refusal is still `null`, exactly as documented at the cap. */
   bump(core, zoneId, name, patch, gen) {
     const p = this._live(core, gen);
     if (!p) return null;
@@ -10247,6 +10313,8 @@ PF.player = {
       row = { d: 0, t: 0 };
       rows[who] = row;
     }
+    let rose = 0;
+    const tBefore = posInt(row.t, 0);
     if (patch && typeof patch === "object") {
       if (patch.d !== undefined) row.d = PF.clamp(posInt(patch.d, 0), 0, 3);
       row.t = posInt(row.t, 0) + Math.max(0, posInt(patch.t, patch.t === undefined ? 1 : 0));
@@ -10272,8 +10340,31 @@ PF.player = {
     } else {
       row.t = posInt(row.t, 0) + 1;
     }
+    // The crossing. Gated on the ABSENCE of an explicit d — a patch that set the
+    // ladder said exactly where it wanted the row, and the heuristic yields.
+    if (!(patch && typeof patch === "object" && patch.d !== undefined)) {
+      const earned = rungOf(posInt(row.t, 0));
+      if (earned > rungOf(tBefore) && earned > posInt(row.d, 0)) {
+        row.d = earned;
+        rose = earned;
+      }
+    }
     this._touch(core);
-    return row;
+    return { row, rose };
+  },
+
+  /** Where the player stands with one person: `{ d, h }`, zeros for a stranger
+   *  and for anybody the block has never met — the ladder read the window, the
+   *  header and the pack all share (0.15, plan §13). Read-only and cheap on
+   *  purpose: it is called from a per-turn composer and from a window that
+   *  rebuilds on every press, so it allocates one small literal and touches
+   *  nothing. */
+  rung(core, zoneId, name) {
+    const p = this.get(core);
+    const rows = p ? this._ownRead(p.rel, str(zoneId)) : undefined;
+    const row = rows && typeof rows === "object" ? this._ownRead(rows, str(name)) : undefined;
+    if (!row || typeof row !== "object") return { d: 0, h: false };
+    return { d: PF.clamp(posInt(row.d, 0), 0, 3), h: !!row.h };
   },
 
   _relRowCount(p) {
@@ -16204,12 +16295,15 @@ PF.pack = (() => {
    *  hand back a pack whose topic branches vanish on the first fair day. The
    *  guidance asks for a handful; the coverage the window depends on is untagged.
    *
-   *  AND THE REGISTER ASK IS INVERTED (plan §2.7, ruling 4). 0.13 asked for MORE
-   *  FRIEND LINES because that register was where the settlement stopped sounding
-   *  like a signpost. 0.14 serves the stranger register and only that one, so a
-   *  pack written to the old ask spends its best writing on rows nothing reads.
-   *  Friend lines still seal — they are P2's inheritance — they are just not what
-   *  this call asks the model to spend its budget on. */
+   *  AND THE REGISTER ASK IS LEVEL AGAIN (0.15). The ask has swung twice with
+   *  the read side — 0.13 asked friend-heavy for a register nothing served,
+   *  0.14 inverted to stranger-heavy because stranger was all it read — and
+   *  0.15 is where both finally serve: stranger to everyone, friend to anyone
+   *  the ladder has reached friendly with (58-player §13). So the ask leans
+   *  stranger still — most of a town does not know the player, and the stranger
+   *  register is every speaker's floor — but the friend lines are now bought
+   *  for a reader that exists, and the guidance says who reads them instead of
+   *  promising a later release. */
   function guidance(theme) {
     return [
       "You are writing an OFFLINE CONTENT PACK for a settlement that already exists: what its people say,",
@@ -16243,8 +16337,9 @@ PF.pack = (() => {
       `    w (optional): one of ${WEATHERS_ASKED.join(" | ")} — ONLY for a line that needs that sky;`,
       "      most lines should work any day, so leave it off unless the weather is what the line is about.",
       "    text: ONE spoken line, <=200 characters. No name tags, no quotation marks, no stage directions.",
-      `    Cover the places and hours somebody would actually be there, and write mostly ${REGISTERS[0]} lines:`,
-      `    that is the register this game reads, and every ${REGISTERS[1]} line is written for a later one.`,
+      `    Cover the places and hours somebody would actually be there. Lean ${REGISTERS[0]} — most of the`,
+      `    town does not know the player — but write real ${REGISTERS[1]} lines too: they are served the`,
+      "    moment somebody counts the player a friend, and they are where this place stops sounding like a signpost.",
       "- escalation: ONE line per person, {npc, text}: the thing they say when the player asks properly",
       "    about the unresolved situation above — the door, not what is behind it. Keep it withholding.",
       "- overheard: {at, text} — half of somebody else's conversation, heard in passing. Nobody answers it.",
@@ -17126,8 +17221,14 @@ PF.pack = (() => {
      *       world still stands them up (the fold's `known` set), because a line
      *       naming somebody the world cannot resolve is a line the wrap-up would
      *       read out as fact;
-     *    5. `bump({t:1})` — the giver remembers, on the same settlement-scoped
+     *    5. `bump({t:3, s})` — the giver remembers, on the same settlement-scoped
      *       key every other bump uses, and SKIPPED SILENTLY on the same miss.
+     *       THREE, not one (0.15, plan §13): a finished job outweighs a
+     *       greeting on the disposition ladder, which is the reward ruling's
+     *       "money and the giver's rapport" finally paying out as MOVEMENT — one
+     *       hand-in makes a stranger acquainted, and the harness pins exactly
+     *       that. The `s` line is the giver's own memory of it, in the voice the
+     *       economy lines already use (you = the player).
      *
      *  `say` is the caller's own sentence, and it is a CALLBACK rather than a
      *  string so the guard can decide the shape: it is handed the giver's name or
@@ -17145,8 +17246,10 @@ PF.pack = (() => {
       const stands = !!giver && !!folded?.known?.has(giver);
       this.filledToday(core)?.templates.add(template);
       PF.player.log(core, say(stands ? giver : null, PF.economy.money(world, money)), sim.day, gen);
-      if (stands) PF.player.bump(core, world.startZone, giver, { t: 1 }, gen);
-      return { money, giver: stands ? giver : null, template };
+      const bumped = stands
+        ? PF.player.bump(core, world.startZone, giver, { t: 3, s: "You ran a job for me." }, gen)
+        : null;
+      return { money, giver: stands ? giver : null, template, rose: bumped?.rose ?? 0 };
     },
 
     /** Hand one finished job in. Two things happen here that `settle` cannot do
@@ -17175,7 +17278,7 @@ PF.pack = (() => {
         giver ? `Filled ${giver}'s board order — ${paid}.` : `Filled the board order — ${paid}.`,
       );
       if (!done) return fail("refused", { have, n });
-      return { ok: true, reason: null, money: done.money, giver: done.giver, have, n };
+      return { ok: true, reason: null, money: done.money, giver: done.giver, have, n, rose: done.rose ?? 0 };
     },
 
     /** LET ONE JOB GO (plan §2.3). Free, player-initiated, and pressed from the
@@ -17341,10 +17444,12 @@ PF.pack = (() => {
         // and one per errand — so one conversation can now bump the same person
         // up to four times, once per ACCEPTED turn. That is still what the count
         // says it is: `t` counts encounters, four accepted turns are four of
-        // them, and the only reader is P2's disposition ladder, which does not
-        // exist yet. Restated rather than left saying "twice", because a number
-        // in a comment that has stopped being the number is how the next reader
-        // concludes a fifth bump is a bug.
+        // them — and the reader EXISTS now: the disposition ladder promotes on
+        // the crossings (58-player §13), whose lines sit far enough apart that
+        // a four-press conversation cannot vault a rung on its own. Restated
+        // rather than left saying "twice", because a number in a comment that
+        // has stopped being the number is how the next reader concludes a fifth
+        // bump is a bug.
         const done = this.settle(core, row, gen, (giver, paid) =>
           giver && giver !== to ? `Took ${giver}'s word to ${to} — ${paid}.` : `Took word to ${to} — ${paid}.`,
         );
@@ -17358,13 +17463,14 @@ PF.pack = (() => {
     // branches — rumor, work, place, and "Pass the time" — and NONE of them costs
     // a GM call: this is a lookup over an artifact that is already in memory.
     //
-    // THE UNIVERSE IS STRANGER-ONLY (ruling 4). The friend register is written,
-    // sealed and stored, and 0.14 serves none of it: friendship is P2's, and a
-    // stopgap that guessed at it would be a promotion the player never earned.
-    // On the live measured pack that is 7 of 12 lines — the FRIEND half, which
-    // is the unserved one: 5 stranger lines are served and 7 friend lines are
-    // not. That is the honest cost of the ruling and the reason the ladder
-    // below relaxes as hard as it does.
+    // BOTH REGISTERS SERVE, AND THE LADDER DECIDES WHICH LEADS (0.15). Ruling 4
+    // shipped 0.14 stranger-only because a stopgap that GUESSED at friendship
+    // would be a promotion the player never earned — its own words, and its own
+    // sunset clause: the promotion is earned now (58-player §13 — the crossing),
+    // so a speaker the ladder has reached FRIENDLY with serves the friend half
+    // that sat sealed through 0.13 and 0.14, friend-first at every relaxation.
+    // Everyone else still meets exactly 0.14's stranger-only window, byte for
+    // byte, seeded order and all.
     //
     // THE WEATHER TERM: a line with no `w` is served under any sky, and a line
     // tagged `rain` is served under any RAIN — the axis is the five words and an
@@ -17378,14 +17484,20 @@ PF.pack = (() => {
       return zone?.mapKind === "building" ? "dwelling" : "settlement";
     },
 
-    /** Every stranger line this sky can serve, as {line, index} — the index is
-     *  the line's identity for the served set, stable for a session because the
-     *  fold is rebuilt exactly when the world is. */
-    askUniverse(folded, word) {
+    /** Every line this sky can serve TO THIS SPEAKER, as {line, index} — the
+     *  index is the line's identity for the served set, stable for a session
+     *  because the fold is rebuilt exactly when the world is.
+     *
+     *  `befriended` is the 0.15 door: a speaker the ladder has reached FRIENDLY
+     *  with (rung 2 — 58-player §13) serves both registers, everybody else
+     *  serves stranger lines exactly as 0.14 did. The index space is the whole
+     *  pack either way, so a rung earned mid-day changes which lines are
+     *  reachable and not what any already-served index meant. */
+    askUniverse(folded, word, befriended) {
       const out = [];
       const lines = Array.isArray(folded?.pack?.lines) ? folded.pack.lines : [];
       lines.forEach((line, index) => {
-        if (line?.r !== "stranger") return;
+        if (line?.r !== "stranger" && !(befriended && line?.r === "friend")) return;
         if (line.w && line.w !== word) return;
         out.push({ line, index });
       });
@@ -17403,28 +17515,45 @@ PF.pack = (() => {
      *  a button that lied about what it asks. "Pass the time" is the branch that
      *  has somewhere to fall — smalltalk first, then the untagged pool, which is
      *  where most of a hand-written pack lives. */
-    askRungs(branch, at, part) {
+    askRungs(branch, at, part, befriended) {
       const has = (topic) => (row) => row.line.topic === topic;
       const untagged = (row) => row.line.topic === undefined;
       const here = (row) => row.line.at === at;
       const now = (row) => row.line.when === part;
       const rung = (test, pins) => ({ test, pins });
-      if (branch === "smalltalk") {
-        return [
-          rung((r) => here(r) && now(r) && has("smalltalk")(r), "s1|at|part"),
-          rung((r) => here(r) && has("smalltalk")(r), "s2|at"),
-          rung((r) => here(r) && now(r) && untagged(r), "s3|at|part"),
-          rung((r) => here(r) && untagged(r), "s4|at"),
-          rung((r) => has("smalltalk")(r), "s5"),
-          rung(untagged, "s6"),
-        ];
+      const base =
+        branch === "smalltalk"
+          ? [
+              rung((r) => here(r) && now(r) && has("smalltalk")(r), "s1|at|part"),
+              rung((r) => here(r) && has("smalltalk")(r), "s2|at"),
+              rung((r) => here(r) && now(r) && untagged(r), "s3|at|part"),
+              rung((r) => here(r) && untagged(r), "s4|at"),
+              rung((r) => has("smalltalk")(r), "s5"),
+              rung(untagged, "s6"),
+            ]
+          : [
+              rung((r) => here(r) && now(r) && has(branch)(r), "r1|at|part"),
+              rung((r) => here(r) && has(branch)(r), "r2|at"),
+              rung((r) => now(r) && has(branch)(r), "r3|part"),
+              rung(has(branch), "r4"),
+            ];
+      if (!befriended) return base;
+      // THE FRIEND REGISTER LEADS AT EVERY RELAXATION (0.15). Each rung splits
+      // in two — the friend subset first, the stranger subset second — so a
+      // friendly speaker answers in the register the pack wrote for exactly this
+      // moment and falls back to the signpost voice only where the friend pool
+      // at that tier is spent or was never written. Mixing the two in one rung
+      // would have served a 5:7 shuffle in which a friend mostly still talks to
+      // you like a stranger, which is the ratio the register exists to escape.
+      //
+      // The pin suffixes keep the seeded orders apart per register; the `|at`
+      // and `|part` substring reads the signature builder does are unaffected.
+      const split = [];
+      for (const { test, pins } of base) {
+        split.push(rung((r) => r.line.r === "friend" && test(r), `${pins}|rf`));
+        split.push(rung((r) => r.line.r === "stranger" && test(r), `${pins}|rs`));
       }
-      return [
-        rung((r) => here(r) && now(r) && has(branch)(r), "r1|at|part"),
-        rung((r) => here(r) && has(branch)(r), "r2|at"),
-        rung((r) => now(r) && has(branch)(r), "r3|part"),
-        rung(has(branch), "r4"),
-      ];
+      return split;
     },
 
     /** CIRCULAR DAYPART ADJACENCY, measured over the START MINUTES of the four
@@ -17478,7 +17607,11 @@ PF.pack = (() => {
       const folded = PF.save?.packFold?.(core);
       if (!folded) return null;
       const word = sim.weather().word;
-      const universe = this.askUniverse(folded, word);
+      // The rung is the SPEAKER'S — the ladder is per person even though the
+      // lines are per place, so the same bench answers a friend and a stranger
+      // differently in the same hour.
+      const befriended = PF.player.rung(core, sim.world?.startZone, str(npc?.name ?? npc)).d >= 2;
+      const universe = this.askUniverse(folded, word, befriended);
       if (!universe.length) return null;
       const at = this.askAt(sim.zone());
       const part = sim.daypart();
@@ -17490,7 +17623,7 @@ PF.pack = (() => {
         folded._askServed = new Map();
       }
       folded._askServed ??= new Map();
-      const rungs = this.askRungs(branch, at, part);
+      const rungs = this.askRungs(branch, at, part, befriended);
       if (!consume) {
         for (const { test } of rungs) {
           const members = universe.filter(test);
@@ -19133,7 +19266,15 @@ PF.Hud = class {
     const key = this._talkKeyOf(anchor);
     if (key === this._talkRowKey) return;
     this._talkRowKey = key;
-    this.talkWho.textContent = anchor.role ? `${anchor.name} — ${anchor.role}` : anchor.name;
+    // THE STANDING RIDES THE TITLE (0.15, plan §13.4) — one word, and only when
+    // it says something: a stranger's window reads exactly as 0.14's did, and
+    // "stranger" written out would be the ladder announcing its own floor.
+    // Hostile outranks the rung, here as everywhere: whatever you built before,
+    // THIS is the standing that decides the room.
+    const stand = PF.player.rung(this.core, this.core.sim?.world?.startZone, anchor.name);
+    const standWord = stand.h ? "hostile" : stand.d > 0 ? PF.player.RUNGS[stand.d] : "";
+    const who = anchor.role ? `${anchor.name} — ${anchor.role}` : anchor.name;
+    this.talkWho.textContent = standWord ? `${who} · ${standWord}` : who;
     const core = this.core;
     const note = this._talkDoorNote();
     const armed = core._talkConfirm?.controlId ?? null;
@@ -19592,6 +19733,7 @@ PF.Hud = class {
     this.refreshChips();
     const paid = PF.economy.money(this.core.sim.world, result.money);
     this.toast(result.giver ? `Handed in to ${result.giver} — ${paid}` : `Handed in — ${paid}`);
+    if (result.giver && result.rose) this.toast(this.roseLine(result.giver, result.rose));
     const view = PF.pack.boardOffers(this.core);
     if (view.available) this._renderBoard(view);
   }
@@ -19662,9 +19804,22 @@ PF.Hud = class {
     for (const row of done) {
       const paid = PF.economy.money(world, row.money);
       this.toast(row.giver ? `Done for ${row.giver} — ${paid}` : `Job done — ${paid}`);
+      // The rise rides the settle's own return, so the toast fires exactly when
+      // the rung was earned and never re-fires on a reload — there is nothing
+      // stored to re-announce (plan §13.4).
+      if (row.giver && row.rose) this.toast(this.roseLine(row.giver, row.rose));
     }
     // The purse moved, so the chips have.
     this.refreshChips();
+  }
+
+  /** The promotion, said once, in plain words. 0.12's precedent: a level change
+   *  is toasted the moment it happens and then lives on the sheet — a rung
+   *  change is the same kind of moment, and the Standing panel is its sheet. */
+  roseLine(name, rung) {
+    if (rung >= 3) return `${name} counts you a close friend now.`;
+    if (rung >= 2) return `${name} counts you a friend now.`;
+    return `${name} knows you now.`;
   }
 
   /** Take the rod the button is offering. The offer is re-read inside buyRod, so
@@ -21689,7 +21844,11 @@ PF.core = {
           // or failed send is not a conversation. SETTLEMENT-scoped (plan §2:
           // rel keys are per settlement), so one person is one row wherever in
           // the world you happen to meet them.
-          PF.player.bump(this, sim.world.startZone, anchor.name, { t: 1 }, gen);
+          const bumped = PF.player.bump(this, sim.world.startZone, anchor.name, { t: 1 }, gen);
+          // A rung earned by TALKING is announced where a rung earned by a job
+          // already is (hud.questFilled) — same phrase, same authority, and only
+          // on the call that crossed the line.
+          if (bumped?.rose) this.hud?.toast(this.hud.roseLine(anchor.name, bumped.rose));
           if (sentSim === this.sim) {
             onAccepted?.();
             // WHO THE ERRAND WAS RUN TO IS `anchor`, the binding the window and

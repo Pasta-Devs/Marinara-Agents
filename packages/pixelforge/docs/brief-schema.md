@@ -402,7 +402,8 @@ before this the wilds pond a brief asked for simply never existed.
 ## 7. Injection discipline (metering the prose)
 
 Written here because it is what keeps the brief from taxing every turn forever: `name` + free-text
-`role` ride the per-turn header **always**; `situation` injects **once, on the first outbound
+`role` ride the per-turn header **always** (from 0.15, a standing word — `acquainted`/`friendly`/
+`close friend`/`hostile` — joins them for anyone past stranger, and a stranger costs no word at all); `situation` injects **once, on the first outbound
 turn**; a zone's `flavor` injects **once on first entry**; an NPC's `persona` injects **once per
 NPC** (first interaction). The one-shot flags **persist in saves** and burn only when the host
 _accepts_ the turn (a refused send never loses the prose), so a reload never re-taxes the

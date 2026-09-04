@@ -2966,3 +2966,13 @@ composer and a window that rebuilds per press.
 - the turn header's `near:` gains the rung word for anyone past stranger — one word, only
   when it says something.
 
+### 13.5 Deferred to the playtest (§12.3's list grows by two)
+
+- **Do the lines feel earned at these speeds?** Acquainted-in-one-hand-in and
+  friendly-around-day-ten are Stardew-shaped guesses (inspiration, not doctrine); the
+  table is three numbers and one edit.
+- **Does the friend voice read as a change of standing** — or does a friend-first ladder
+  over a thin pack just serve the same two lines in a warmer register? The generation
+  guidance widened for it; whether it is enough is a live-run question, the same one
+  0.14 left open for the topic branches.
+
