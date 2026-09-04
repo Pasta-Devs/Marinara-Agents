@@ -73,6 +73,8 @@ import {
   type SlurpWalletSpendKind,
 } from "../slurp/slurp-wallet.js";
 import { openSlurpGoal, readSlurpGoal, slurpGoalKey, type SlurpGoal } from "../slurp/slurp-goal.js";
+import { createSlurpEventsStorage } from "./slurp-events.storage.js";
+import type { SlurpEventKind } from "../slurp/slurp-event-weight.js";
 import {
   earn,
   readSlurpEarnings,
@@ -5124,6 +5126,7 @@ export function createSlurpStorage(db: DB) {
               },
             });
             await this.creditCreatorIncome(creatorAccountId, price, "subscribe");
+            await this.notifyCreatorIncome(creatorAccountId, "subscribe", price, viewerAccountId);
           }
         }
       }
@@ -5147,6 +5150,8 @@ export function createSlurpStorage(db: DB) {
             eq(noodleAccountSubscriptions.creatorAccountId, creatorAccountId),
           ),
         );
+      // Losing a subscriber is news. A world that only reports good outcomes has no stakes.
+      await this.recordCreatorEvent(creatorAccountId, "lapsed", { actorLabel: viewerAccountId });
     },
 
     async listSubscriptionsForViewer(viewerAccountId: string): Promise<NoodleAccountSubscription[]> {
@@ -5271,7 +5276,10 @@ export function createSlurpStorage(db: DB) {
         const charged = spend(wallet, "unlock", price, new Date(), postId);
         if (charged) await writeWallet(viewerAccountId, charged);
         const post = (await db.select().from(noodlePosts).where(eq(noodlePosts.id, postId)))[0];
-        if (post) await this.creditCreatorIncome(post.authorAccountId, price, "unlock");
+        if (post) {
+          await this.creditCreatorIncome(post.authorAccountId, price, "unlock");
+          await this.notifyCreatorIncome(post.authorAccountId, "unlock", price, viewerAccountId, post.id);
+        }
       }
       return unlock;
     },
@@ -5294,6 +5302,7 @@ export function createSlurpStorage(db: DB) {
       for (const creatorAccountId of renewal.lapsed) await this.unsubscribe(viewerAccountId, creatorAccountId);
       for (const renewed of renewal.renewed) {
         await this.creditCreatorIncome(renewed.creatorAccountId, renewed.price, "renew");
+        await this.notifyCreatorIncome(renewed.creatorAccountId, "renew", renewed.price, viewerAccountId);
       }
       if (renewal.wallet === stored) return stored;
       return writeWallet(viewerAccountId, renewal.wallet);
@@ -5347,6 +5356,7 @@ export function createSlurpStorage(db: DB) {
         try {
           await writeWallet(viewerAccountId, charged);
           await writeEarnings(creator.id, earn(recipient, "tip", amount, new Date(), `tip: ${creator.handle}`));
+          await this.recordCreatorEvent(creator.id, "tip", { amount, actorLabel: viewerAccountId });
           return charged;
         } catch (error) {
           // Restore the sender if the recipient write fails. The shared queue prevents concurrent
@@ -5421,6 +5431,58 @@ export function createSlurpStorage(db: DB) {
       // operator's spending wallet made income and spending money the same balance, so a real
       // audience would have ended every purchasing decision in the game. See slurp-earnings.ts.
       await this.creditEarnings(creator.id, reason, share, `${reason}: ${creator.handle}`);
+    },
+
+    /**
+     * Notify the operator that money arrived.
+     *
+     * Separate from `creditCreatorIncome` on purpose: that one returns early when the wallet is
+     * off or the revenue share is zero, and a Creator with the economy disabled should still be
+     * told that somebody subscribed.
+     */
+    async notifyCreatorIncome(
+      creatorAccountId: string,
+      reason: "unlock" | "subscribe" | "renew" | "messageRequest" | "ppv" | "commission",
+      amount: number,
+      actorLabel?: string | null,
+      subjectId?: string | null,
+    ): Promise<void> {
+      const kind: SlurpEventKind =
+        reason === "subscribe" || reason === "renew"
+          ? "subscribed"
+          : reason === "ppv"
+            ? "ppv_unlock"
+            : reason === "commission"
+              ? "commission_accepted"
+              : "unlock";
+      await this.recordCreatorEvent(creatorAccountId, kind, { amount, actorLabel, subjectId });
+    },
+
+    /**
+     * Record one notification against whoever operates this Creator.
+     *
+     * A character-backed Creator has no operator, so it silently records nothing — that is the
+     * correct answer, not a failure. Never lets a notification failure break the action that
+     * caused it: a subscription that succeeded must not be rolled back because a feed row could
+     * not be written.
+     */
+    async recordCreatorEvent(
+      creatorAccountId: string,
+      kind: SlurpEventKind,
+      detail: { subjectId?: string | null; actorLabel?: string | null; amount?: number } = {},
+    ): Promise<void> {
+      try {
+        const creator = await this.getNoodlerAccountById(creatorAccountId);
+        if (!creator || creator.sourceKind !== "persona" || !creator.sourceEntityId) return;
+        await createSlurpEventsStorage(db).recordAndPrune({
+          recipientPersonaId: creator.sourceEntityId,
+          kind,
+          creatorAccountId,
+          ...detail,
+        });
+      } catch (error) {
+        logger.warn(error, "[slurp-events] Could not record a %s event for %s", kind, creatorAccountId);
+      }
     },
 
     async getGoal(creatorAccountId: string): Promise<SlurpGoal | null> {

@@ -362,6 +362,7 @@ export function createSlurpMessagesStorage(db: DB) {
         const charged = await slurp.spendCoins(viewerAccountId, "messageRequest", admission.fee, creator.handle);
         if (!charged) return { status: "insufficient_funds", required: admission.fee };
         await slurp.creditCreatorIncome(creatorAccountId, admission.fee, "messageRequest");
+        await slurp.notifyCreatorIncome(creatorAccountId, "messageRequest", admission.fee, viewerAccountId);
         feePaid = admission.fee;
       }
 
@@ -478,6 +479,7 @@ export function createSlurpMessagesStorage(db: DB) {
         if (!charged) return null;
         try {
           await slurp.creditCreatorIncome(thread.creatorAccountId, price, "ppv");
+          await slurp.notifyCreatorIncome(thread.creatorAccountId, "ppv", price, viewerAccountId, messageId);
           const unlockedAt = now();
           await db.update(slurpMessages).set({ unlockedAt }).where(eq(slurpMessages.id, messageId));
           return mapMessage({ ...row, unlockedAt });
@@ -538,6 +540,12 @@ export function createSlurpMessagesStorage(db: DB) {
         content: brief,
         metadata: { commissionId: row.id },
       });
+      // Somebody asking you to make something is the strongest thing the world can do, so it
+      // outranks every other event kind.
+      await slurp.recordCreatorEvent(creatorAccountId, "commission_requested", {
+        subjectId: row.id,
+        actorLabel: viewerAccountId,
+      });
       return mapCommission(row);
     },
 
@@ -591,6 +599,13 @@ export function createSlurpMessagesStorage(db: DB) {
       )
         return null;
       await slurp.creditCreatorIncome(commission.creatorAccountId, commission.price, "commission");
+      await slurp.notifyCreatorIncome(
+        commission.creatorAccountId,
+        "commission",
+        commission.price,
+        commission.viewerAccountId,
+        commission.id,
+      );
       await db.update(slurpCommissions).set({ state: "accepted", updatedAt: now() }).where(eq(slurpCommissions.id, id));
       return storage.getCommission(id);
     },
@@ -634,6 +649,10 @@ export function createSlurpMessagesStorage(db: DB) {
         content,
       });
       if (!message) return { status: "not_found" };
+      await slurp.recordCreatorEvent(creatorAccountId, "message", {
+        subjectId: opened.thread.id,
+        actorLabel: viewerAccountId,
+      });
       const thread = await storage.getThreadById(opened.thread.id);
       return { status: "sent", thread: thread ?? opened.thread, message };
     },

@@ -5,6 +5,7 @@
 // ──────────────────────────────────────────────
 import {
   AtSign,
+  Bell,
   ChartNoAxesColumn,
   ChevronDown,
   Home,
@@ -370,6 +371,9 @@ export interface NoodleShellProps {
   /** Omit on surfaces with no scoped equivalent. */
   onOpenWallet?: () => void;
   onOpenStudio?: () => void;
+  onOpenNotifications?: () => void;
+  /** Unseen events, shown as a badge on the notifications entry. */
+  notificationCount?: number;
   /** The studio only exists for a persona that operates a Creator. */
   hasOperatedCreator?: boolean;
   /** Shown on the desktop Wallet row and the identity card, so the balance is not mobile-only. */
@@ -608,6 +612,8 @@ export function NoodleShell({
   onOpenMessages,
   onOpenWallet,
   onOpenStudio,
+  onOpenNotifications,
+  notificationCount = 0,
   hasOperatedCreator = false,
   walletBalanceLabel,
   personaBannerUrl,
@@ -724,6 +730,25 @@ export function NoodleShell({
                       : localizeUi("ui.noodle.noodleshell.noodleAccountNavigation")
                   }
                 >
+                  {onOpenNotifications && (
+                    <button
+                      type="button"
+                      onClick={onOpenNotifications}
+                      aria-current={activeView === "notifications" ? "page" : undefined}
+                      className={cn(
+                        "flex min-h-12 w-full items-center gap-4 rounded-xl px-2 text-left text-base font-bold transition-colors hover:bg-[var(--accent)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--noodle-accent)]",
+                        activeView === "notifications" && "bg-[var(--noodle-accent)]/10",
+                      )}
+                    >
+                      <Bell size={23} />
+                      {localizeUi("ui.slurp.navigation.notifications", { defaultValue: "Notifications" })}
+                      {notificationCount > 0 && (
+                        <span className="ml-auto inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-[var(--noodle-accent)] px-1.5 text-[0.65rem] font-black tabular-nums text-zinc-950">
+                          {notificationCount}
+                        </span>
+                      )}
+                    </button>
+                  )}
                   {onOpenStudio && hasOperatedCreator && (
                     <button
                       type="button"

@@ -126,6 +126,8 @@ import {
   slurpPostUnlockCount,
 } from "../services/slurp/slurp-reach.js";
 import { slurpFollowerMilestone, slurpMilestonesCrossed } from "../services/slurp/slurp-milestones.js";
+import { createSlurpEventsStorage } from "../services/storage/slurp-events.storage.js";
+import { groupSlurpEvents } from "../services/slurp/slurp-event-weight.js";
 import {
   slurpGoalProgress,
   SLURP_GOAL_LABEL_MAX_LENGTH,
@@ -1021,6 +1023,54 @@ export async function slurpRoutes(app: FastifyInstance) {
     }
     const earnings = await noodle.getEarnings(creator.id);
     return { goal: goal ? slurpGoalProgress(goal, earnings.lifetime) : null };
+  });
+
+  /**
+   * The notification stream, and what happened while you were away.
+   *
+   * One table, two presentations: `items` is the full list, `unseen` is what to show on open.
+   * Grouping keeps a busy day to a readable handful instead of a wall.
+   */
+  app.get("/noodler/notifications", async (req, reply) => {
+    const parsed = noodlerViewerPersonaSchema.safeParse(req.query);
+    if (!parsed.success) return reply.code(400).send({ error: parsed.error.flatten() });
+    const viewer = await resolveViewerPersona(parsed.data.personaId);
+    if (!viewer) return reply.code(404).send({ error: "Slurp persona not found" });
+    const events = createSlurpEventsStorage(app.db);
+    const [items, unseen] = await Promise.all([events.list(viewer.id), events.listUnseen(viewer.id)]);
+    // Actors are stored as ids so a renamed or departed account still renders. Resolve to display
+    // names here: "abc-123 subscribed" tells the player nothing, which is the whole failure this
+    // surface exists to fix.
+    const actorIds = [
+      ...new Set(items.concat(unseen).flatMap((event) => (event.actorLabel ? [event.actorLabel] : []))),
+    ];
+    const names = new Map<string, string>();
+    await Promise.all(
+      actorIds.map(async (id) => {
+        const persona = await noodle.getViewer(id).catch(() => null);
+        const name = persona?.displayName ?? (await noodle.getNoodlerAccountById(id))?.displayName ?? null;
+        if (name) names.set(id, name);
+      }),
+    );
+    const named = (list: typeof items) =>
+      list.map((event) => ({
+        ...event,
+        actorLabel: event.actorLabel ? (names.get(event.actorLabel) ?? null) : null,
+      }));
+    return {
+      items: groupSlurpEvents(named(items)),
+      unseen: groupSlurpEvents(named(unseen)),
+      unseenCount: unseen.length,
+    };
+  });
+
+  app.post("/noodler/notifications/seen", async (req, reply) => {
+    const parsed = z.object({ personaId: z.string().trim().min(1) }).safeParse(req.body ?? {});
+    if (!parsed.success) return reply.code(400).send({ error: parsed.error.flatten() });
+    const viewer = await resolveViewerPersona(parsed.data.personaId);
+    if (!viewer) return reply.code(404).send({ error: "Slurp persona not found" });
+    await createSlurpEventsStorage(app.db).markSeen(viewer.id);
+    return { ok: true };
   });
 
   app.get("/noodler/studio", async (req, reply) => {

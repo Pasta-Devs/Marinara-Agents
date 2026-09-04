@@ -269,3 +269,34 @@ export const slurpCommissions = fileTable("slurp_commissions", {
   createdAt: text("created_at").notNull(),
   updatedAt: text("updated_at").notNull(),
 });
+
+/**
+ * One thing that happened, addressed to one persona.
+ *
+ * Slurp had no notification surface at all — only an unseen-post count and DM unread counts.
+ * Nothing reported a subscriber, a tip, an unlock, a milestone, or a loss, so the world could be
+ * made as alive as you like and the player would see none of it.
+ *
+ * `recipientPersonaId` is always a persona. Creator-side events reach the persona that operates
+ * the Creator; a character-backed Creator has no operator and so produces none. Fan-side events
+ * reach the persona directly.
+ *
+ * `weight` carries the significance score. The readable-handful rule means a feed is curated, not
+ * a firehose, and sorting by weight is what lets small events group and trivial ones stay hidden.
+ */
+export const slurpEvents = fileTable("slurp_events", {
+  id: text("id").primaryKey(),
+  recipientPersonaId: text("recipient_persona_id").notNull(),
+  kind: text("kind").notNull(),
+  /** The Creator the event is about, when there is one. */
+  creatorAccountId: text("creator_account_id"),
+  /** The post, thread, or commission the event points at, so a notification can navigate. */
+  subjectId: text("subject_id"),
+  /** Who acted, for display. Stored rather than joined so a departed fan still renders. */
+  actorLabel: text("actor_label"),
+  /** Coins, follower counts, or a milestone target, depending on kind. */
+  amount: text("amount").notNull().default("0"),
+  weight: text("weight").notNull().default("0"),
+  createdAt: text("created_at").notNull(),
+  seenAt: text("seen_at"),
+});

@@ -15,8 +15,8 @@ first version of this plan was wrong in ways that are not obvious.
 | ----- | ---- | ----- |
 | 0 | Separate creator earnings from spending money | **done** |
 | 1 | Creator home: legibility, goals, catch-up | **done** |
-| 2 | Notification stream | **next** |
-| 3 | Audience-initiated commissions and questions | not started |
+| 2 | Notification stream | **done** |
+| 3 | Audience-initiated commissions and questions | **next** |
 | 4 | Audience population and funnel | not started |
 | 5 | Reach derived from funnel state | not started |
 | 6 | Tiered comments, deferred generation queue, event-driven DMs | not started |
@@ -334,7 +334,36 @@ This is the legibility fix. Everything the world does becomes visible and attrib
 Buildable on data that already exists: the wallet ledger, subscriptions, real interaction rows,
 and `slurp-reach.ts`. Top fans stay thin until Stage 4 and that is acceptable.
 
-### Stage 2 — notification stream
+### Stage 2 — notification stream — DONE
+
+`slurp_events` table, `slurp-events.storage.ts`, `GET /noodler/notifications`,
+`POST /noodler/notifications/seen`, and `SlurpNotificationsView` with a badge in the shell nav.
+
+Emitters are wired into the paths that already existed: subscribe, renew, unsubscribe, tip,
+unlock, PPV unlock, message-request fee, commission requested, commission accepted, and a fan
+sending a direct message.
+
+`notifyCreatorIncome` is separate from `creditCreatorIncome` on purpose — the latter returns early
+when the wallet is off or the revenue share is zero, and a Creator with the economy disabled should
+still be told somebody subscribed. A notification failure is caught and logged; it must never roll
+back the action that caused it.
+
+`slurp-event-weight.ts` holds the significance scoring, and it is where the readable-handful rule
+actually lives. Two things it got wrong first, both now pinned by regressions:
+
+- `Math.max(0, NaN)` is `NaN`, so one bad amount produced a `NaN` weight that would sort
+  unpredictably for the life of the row.
+- The first money curve, `log2(1 + coins) * 6`, gave a 3-coin unlock a +12 boost and pushed every
+  routine unlock over the notable line — the exact flood the rule exists to prevent. Dividing by a
+  reference before the log fixed it: 3 coins adds ~3, 500 adds ~45.
+
+Actor ids are resolved to display names at read time. Storing ids keeps a renamed or departed
+account renderable; resolving late is what stops the feed saying "abc-123 subscribed".
+
+Still open: `comment`, `milestone`, and `followers` kinds are defined and weighted but nothing
+emits them yet. Milestones are computed in the studio and should be recorded there.
+
+### Stage 2 (original scope)
 
 A Slurp-owned event table scoped by **recipient persona id**. Only persona-backed creators have an
 owner, so only they produce creator-side notifications; fan-side events go to the persona too.

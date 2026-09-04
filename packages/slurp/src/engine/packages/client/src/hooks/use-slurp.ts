@@ -533,6 +533,56 @@ export type SlurpStudioCreator = {
   posts: SlurpStudioPost[];
 };
 
+export type SlurpEventKind =
+  | "subscribed"
+  | "lapsed"
+  | "tip"
+  | "unlock"
+  | "ppv_unlock"
+  | "commission_requested"
+  | "commission_accepted"
+  | "comment"
+  | "message"
+  | "milestone"
+  | "followers";
+
+export type SlurpEventItem = {
+  id: string;
+  kind: SlurpEventKind;
+  creatorAccountId: string | null;
+  subjectId: string | null;
+  actorLabel: string | null;
+  amount: number;
+  weight: number;
+  createdAt: string;
+  seenAt: string | null;
+};
+
+export type SlurpEventGroup =
+  | { type: "single"; event: SlurpEventItem }
+  | { type: "group"; kind: SlurpEventKind; count: number; total: number; latestAt: string; ids: string[] };
+
+/** The notification stream. `unseen` is what happened while you were away. */
+export function useSlurpNotifications(personaId: string | null, enabled = true) {
+  return useQuery({
+    queryKey: [...noodleKeys.noodlerRoot(), "notifications", personaId ?? "none"],
+    queryFn: () =>
+      api.get<{ items: SlurpEventGroup[]; unseen: SlurpEventGroup[]; unseenCount: number }>(
+        `/slurp/noodler/notifications?personaId=${encodeURIComponent(personaId!)}`,
+      ),
+    enabled: Boolean(personaId) && enabled,
+    staleTime: 15_000,
+  });
+}
+
+export function useMarkSlurpNotificationsSeen() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (personaId: string) => api.post<{ ok: boolean }>("/slurp/noodler/notifications/seen", { personaId }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: [...noodleKeys.noodlerRoot(), "notifications"] }),
+  });
+}
+
 /** Open, replace, or clear a Creator's tip goal. Passing a null label clears it. */
 export function useSetSlurpGoal() {
   const qc = useQueryClient();

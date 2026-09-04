@@ -10,6 +10,7 @@ export type SlurpNavigationState =
   | { mode: "creator"; view: "wallet" }
   /** The Creator home: earnings, reach, recent post performance, and goals. */
   | { mode: "creator"; view: "studio" }
+  | { mode: "creator"; view: "notifications" }
   | {
       mode: "creator";
       view: "profile";

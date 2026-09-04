@@ -78,6 +78,9 @@ import {
   useNoodlerSubscribers,
   useNoodlerUnseenCount,
   useSlurpStudio,
+  useSlurpNotifications,
+  useMarkSlurpNotificationsSeen,
+  type SlurpEventGroup,
   type SlurpStudioCreator,
   useSetSlurpGoal,
   useHideSlurpAd,
@@ -560,6 +563,7 @@ export function SlurpHome({ navigation, onNavigate }: SlurpHomeProps) {
   const onboardingPresentedRef = useRef(false);
   const viewerQuery = useNoodlerViewer(viewerPersonaId);
   const noodlerUnseenCount = useNoodlerUnseenCount(viewerPersonaId);
+  const notificationsQuery = useSlurpNotifications(viewerPersonaId);
   const markFeedSeenMutation = useMarkNoodlerFeedSeen();
   // The stored timestamp advances as soon as the feed is shown, which would erase the divider
   // out from under the reader. Freeze the value the divider uses per persona at that moment,
@@ -765,6 +769,11 @@ export function SlurpHome({ navigation, onNavigate }: SlurpHomeProps) {
   const goToWallet = async () => {
     if (!(await prepareNavigationAwayFromProfileEditor())) return;
     onNavigate({ mode: "creator", view: "wallet" });
+    setMobileDrawerOpen(false);
+  };
+  const goToNotifications = async () => {
+    if (!(await prepareNavigationAwayFromProfileEditor())) return;
+    onNavigate({ mode: "creator", view: "notifications" });
     setMobileDrawerOpen(false);
   };
   const goToStudio = async () => {
@@ -1421,7 +1430,9 @@ export function SlurpHome({ navigation, onNavigate }: SlurpHomeProps) {
                 ? ("wallet" as const)
                 : navigation.mode === "creator" && navigation.view === "studio"
                   ? ("studio" as const)
-                  : ("noodler" as const),
+                  : navigation.mode === "creator" && navigation.view === "notifications"
+                    ? ("notifications" as const)
+                    : ("noodler" as const),
     contextualRail:
       // Every destination reserves the same rail column, so the content column does not
       // change width as you move between them.
@@ -1472,6 +1483,8 @@ export function SlurpHome({ navigation, onNavigate }: SlurpHomeProps) {
     onOpenMessages: goToMessages,
     onOpenWallet: goToWallet,
     onOpenStudio: goToStudio,
+    onOpenNotifications: goToNotifications,
+    notificationCount: notificationsQuery.data?.unseenCount ?? 0,
     // The studio is only meaningful for a persona that operates a Creator.
     hasOperatedCreator: personaBackedCreator,
     walletBalanceLabel: `${viewerWalletsQuery.data?.[viewerPersonaId ?? ""]?.coins ?? SLURP_PLACEHOLDER_BALANCE}`,
@@ -2075,6 +2088,19 @@ export function SlurpHome({ navigation, onNavigate }: SlurpHomeProps) {
           fallbackCoins={viewerWalletsQuery.data?.[viewerPersonaId ?? ""]?.coins ?? SLURP_PLACEHOLDER_BALANCE}
           personaName={shellPersonaAccount?.displayName ?? ""}
           onBack={exitToCreatorHub}
+        />
+      </NoodleShell>
+    );
+  }
+
+  if (navigation.mode === "creator" && navigation.view === "notifications") {
+    return (
+      <NoodleShell {...shellProps}>
+        <SlurpNotificationsView
+          personaId={viewerPersonaId}
+          onBack={exitToCreatorHub}
+          onOpenMessages={() => onNavigate({ mode: "creator", view: "messages" })}
+          onOpenProfile={(accountId) => onNavigate({ mode: "creator", view: "profile", accountId })}
         />
       </NoodleShell>
     );
@@ -6867,5 +6893,121 @@ function SlurpGoalEditor({ creator, personaId }: { creator: SlurpStudioCreator; 
         </div>
       </div>
     </div>
+  );
+}
+
+/**
+ * The notification stream, and what happened while you were away.
+ *
+ * Slurp reported nothing that happened: there was an unseen-post count and DM unread counts, and
+ * no surface for a subscriber, a tip, an unlock, or a loss. The world could be made as alive as
+ * you like and the player would still see none of it.
+ *
+ * The unseen block is shown first and separately, because the first ten seconds of a session are
+ * the product. Marking seen happens on leaving rather than on arriving, so the catch-up does not
+ * vanish out from under the person reading it.
+ */
+function SlurpNotificationsView({
+  personaId,
+  onBack,
+  onOpenMessages,
+  onOpenProfile,
+}: {
+  personaId: string | null;
+  onBack: () => void;
+  onOpenMessages: () => void;
+  onOpenProfile: (accountId: string) => void;
+}) {
+  const { t: localizeUi, i18n } = useUiTranslation();
+  const notificationsQuery = useSlurpNotifications(personaId);
+  const markSeen = useMarkSlurpNotificationsSeen();
+  const unseen = notificationsQuery.data?.unseen ?? [];
+  const items = notificationsQuery.data?.items ?? [];
+
+  const leave = () => {
+    if (personaId && (notificationsQuery.data?.unseenCount ?? 0) > 0) markSeen.mutate(personaId);
+    onBack();
+  };
+
+  const describe = (group: SlurpEventGroup) => {
+    if (group.type === "group") {
+      return localizeUi(`ui.slurp.events.group.${group.kind}`, {
+        defaultValue: "{{count}} × {{kind}}",
+        count: group.count,
+        total: group.total,
+        kind: group.kind,
+      });
+    }
+    const { kind, amount, actorLabel } = group.event;
+    return localizeUi(`ui.slurp.events.single.${kind}`, {
+      defaultValue: kind,
+      amount,
+      who: actorLabel ?? localizeUi("ui.slurp.events.someone", { defaultValue: "Someone" }),
+    });
+  };
+
+  const render = (groups: SlurpEventGroup[]) =>
+    groups.map((group) => {
+      const key = group.type === "single" ? group.event.id : `${group.kind}-${group.ids.length}`;
+      const at = group.type === "single" ? group.event.createdAt : group.latestAt;
+      const actionable =
+        group.type === "single" && (group.event.kind === "message" || group.event.kind === "commission_requested");
+      const creatorId = group.type === "single" ? group.event.creatorAccountId : null;
+      return (
+        <li key={key}>
+          <button
+            type="button"
+            onClick={() => (actionable ? onOpenMessages() : creatorId ? onOpenProfile(creatorId) : undefined)}
+            className="flex w-full items-start justify-between gap-3 rounded-lg px-2 py-2.5 text-left transition-colors hover:bg-[var(--noodle-accent)]/[0.06]"
+          >
+            <span className="min-w-0 text-xs">{describe(group)}</span>
+            <time dateTime={at} className="shrink-0 text-[0.65rem] tabular-nums text-[var(--muted-foreground)]">
+              {formatTime(at, i18n.language)}
+            </time>
+          </button>
+        </li>
+      );
+    });
+
+  return (
+    <NoodlerFrame onBack={leave} title={localizeUi("ui.slurp.navigation.notifications")} action={<span />}>
+      <div className="mx-auto flex w-full max-w-2xl flex-col gap-4 p-4 sm:p-5">
+        {unseen.length > 0 && (
+          <section
+            aria-labelledby="slurp-catch-up"
+            className="rounded-xl bg-[var(--slurp-surface)] p-3 ring-1 ring-inset ring-[var(--noodle-accent)]/30"
+          >
+            <h2
+              id="slurp-catch-up"
+              className="px-2 text-xs font-bold uppercase tracking-[0.14em] text-[var(--noodle-accent)]"
+            >
+              {localizeUi("ui.slurp.events.whileAway", { defaultValue: "While you were away" })}
+            </h2>
+            <ul className="mt-1 flex flex-col">{render(unseen)}</ul>
+          </section>
+        )}
+
+        <section
+          aria-labelledby="slurp-all-events"
+          className="rounded-xl bg-[var(--slurp-surface)] p-3 ring-1 ring-inset ring-[var(--noodle-divider)]"
+        >
+          <h2
+            id="slurp-all-events"
+            className="px-2 text-xs font-bold uppercase tracking-[0.14em] text-[var(--muted-foreground)]"
+          >
+            {localizeUi("ui.slurp.events.all", { defaultValue: "Everything" })}
+          </h2>
+          {items.length === 0 ? (
+            <p className="px-2 py-6 text-center text-xs text-[var(--muted-foreground)]">
+              {localizeUi("ui.slurp.events.empty", {
+                defaultValue: "Nothing has happened yet. Post something and give the audience a reason.",
+              })}
+            </p>
+          ) : (
+            <ul className="mt-1 flex flex-col">{render(items)}</ul>
+          )}
+        </section>
+      </div>
+    </NoodlerFrame>
   );
 }
