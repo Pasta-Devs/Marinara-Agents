@@ -689,6 +689,7 @@ export function NoodleHome({ navigation, onNavigate }: NoodleHomeProps) {
   const accountSwitcherRef = useRef<HTMLDivElement | null>(null);
   const timelineScrollRef = useRef<HTMLDivElement | null>(null);
   const [timelineScroller, setTimelineScroller] = useState<HTMLDivElement | null>(null);
+  const imageSizeMigrationStartedRef = useRef(false);
   const setTimelineScrollerRef = useCallback((node: HTMLDivElement | null) => {
     timelineScrollRef.current = node;
     setTimelineScroller(node);
@@ -1067,13 +1068,57 @@ export function NoodleHome({ navigation, onNavigate }: NoodleHomeProps) {
     });
   };
 
-  const saveSettingsAsync = (patch: PackageNoodleSettingsUpdateInput): Promise<void> =>
-    new Promise((resolve, reject) => {
-      updateSettings.mutate(patch, {
-        onSuccess: () => resolve(),
-        onError: reject,
-      });
-    });
+  const saveSettingsAsync = useCallback(
+    (patch: PackageNoodleSettingsUpdateInput): Promise<void> =>
+      new Promise((resolve, reject) => {
+        updateSettings.mutate(patch, {
+          onSuccess: () => resolve(),
+          onError: reject,
+        });
+      }),
+    [updateSettings],
+  );
+
+  useEffect(() => {
+    if (!settings || typeof window === "undefined" || imageSizeMigrationStartedRef.current) return;
+    const migrationKey = "marinara:noodle:image-size-migrated";
+    if (window.localStorage.getItem(migrationKey) === "1") return;
+    try {
+      const handoff = JSON.parse(window.localStorage.getItem("marinara:noodle:legacy-image-size") ?? "null") as {
+        width?: unknown;
+        height?: unknown;
+      } | null;
+      const envelope = JSON.parse(window.localStorage.getItem("marinara-engine-ui") ?? "null") as {
+        state?: Record<string, unknown>;
+      } | null;
+      const legacyState = envelope?.state;
+      const rawWidth = handoff?.width ?? legacyState?.imageNoodleWidth;
+      const rawHeight = handoff?.height ?? legacyState?.imageNoodleHeight;
+      if (rawWidth === undefined && rawHeight === undefined) {
+        window.localStorage.setItem(migrationKey, "1");
+        return;
+      }
+      const width = Number(rawWidth);
+      const height = Number(rawHeight);
+      imageSizeMigrationStartedRef.current = true;
+      void saveSettingsAsync({
+        imageWidth: Number.isInteger(width) && width >= 64 && width <= 4096 ? width : 1024,
+        imageHeight: Number.isInteger(height) && height >= 64 && height <= 4096 ? height : 1536,
+      })
+        .then(() => {
+          window.localStorage.removeItem("marinara:noodle:legacy-image-size");
+          if (legacyState) {
+            delete legacyState.imageNoodleWidth;
+            delete legacyState.imageNoodleHeight;
+            window.localStorage.setItem("marinara-engine-ui", JSON.stringify(envelope));
+          }
+          window.localStorage.setItem(migrationKey, "1");
+        })
+        .catch(() => undefined);
+    } catch {
+      // A malformed legacy store must not block Noodle settings.
+    }
+  }, [saveSettingsAsync, settings]);
 
   const openNoodlePromptEditor = () => {
     if (!noodlePromptText) {
@@ -3829,6 +3874,22 @@ export function NoodleHome({ navigation, onNavigate }: NoodleHomeProps) {
               />
               {settings.enableImagePrompts && (
                 <>
+                  <NumberSetting
+                    label={localizeUi("ui.noodle.noodlehome.imageWidth")}
+                    help={localizeUi("ui.noodle.noodlehome.imageWidthHelp")}
+                    value={(settings as PackageNoodleSettings).imageWidth}
+                    min={64}
+                    max={4096}
+                    onCommit={(value) => saveSettings({ imageWidth: value })}
+                  />
+                  <NumberSetting
+                    label={localizeUi("ui.noodle.noodlehome.imageHeight")}
+                    help={localizeUi("ui.noodle.noodlehome.imageHeightHelp")}
+                    value={(settings as PackageNoodleSettings).imageHeight}
+                    min={64}
+                    max={4096}
+                    onCommit={(value) => saveSettings({ imageHeight: value })}
+                  />
                   <label className="block space-y-1.5">
                     <FieldLabel
                       help={localizeUi("ui.noodle.noodlehome.theImageGenerationConnectionUsedToCreateNoodlePost")}

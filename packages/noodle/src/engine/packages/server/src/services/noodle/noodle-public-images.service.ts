@@ -1,21 +1,17 @@
 import { existsSync, readFileSync } from "fs";
 import { dirname, resolve } from "path";
 import { fileURLToPath } from "url";
-import {
-  PROFESSOR_MARI_ID,
-  type NoodleAccount,
-  type NoodleBootstrap,
-  type NoodleSettings,
-} from "@marinara-engine/shared";
+import { PROFESSOR_MARI_ID, type NoodleAccount, type NoodleBootstrap } from "@marinara-engine/shared";
+import type { PackageNoodleSettings } from "../storage/noodle.storage.js";
 import type { DB } from "../../db/connection.js";
 import { logger, logDebugOverride } from "../../lib/logger.js";
 import { newId } from "../../utils/id-generator.js";
 import { resolveImageConnectionFallback } from "../generation/media-connection-fallback.js";
 import { generateImage, stageImageToDisk, type StagedGalleryImage } from "../image/image-generation.js";
 import { resolveConnectionImageDefaults } from "../image/image-generation-defaults.js";
-import { loadImageGenerationUserSettings } from "../image/image-generation-settings.js";
 import { compileImagePrompt, resolveImageStyleGuidanceText } from "../image/image-prompt-compiler.js";
 import { resolveImagePromptReviewSize } from "../image/image-prompt-review.js";
+import { loadImageGenerationUserSettings } from "../image/image-generation-settings.js";
 import {
   normalizeIllustratorAppearance,
   readIllustratorAppearance,
@@ -115,7 +111,7 @@ export async function generateNoodlePostImage(input: {
   referenceAccounts: NoodleAccount[];
   postContent: string;
   draftPrompt: string;
-  settings: NoodleSettings;
+  settings: PackageNoodleSettings;
   characters: ReturnType<typeof createCharactersStorage>;
   characterGallery: ReturnType<typeof createCharacterGalleryStorage>;
   promptOverrides: ReturnType<typeof createPromptOverridesStorage>;
@@ -253,8 +249,8 @@ export async function generateNoodlePostImage(input: {
     const previewSize = resolveImagePromptReviewSize({
       connection: input.imageConnection,
       prompt: finalPrompt,
-      width: imageSettings.noodle.width,
-      height: imageSettings.noodle.height,
+      width: input.settings.imageWidth,
+      height: input.settings.imageHeight,
       imageDefaults,
     });
     return {
@@ -278,8 +274,8 @@ export async function generateNoodlePostImage(input: {
         prompt: finalPrompt,
         negativePrompt: finalNegativePrompt,
         model: imageModel,
-        width: imageSettings.noodle.width,
-        height: imageSettings.noodle.height,
+        width: input.settings.imageWidth,
+        height: input.settings.imageHeight,
         imageEndpointId: input.imageConnection.imageEndpointId || undefined,
         comfyWorkflow: input.imageConnection.comfyuiWorkflow || undefined,
         imageDefaults,
@@ -322,8 +318,8 @@ export async function generateNoodlePostImage(input: {
           prompt: finalPrompt,
           provider,
           model: imageModel || "unknown",
-          width: imageSettings.noodle.width,
-          height: imageSettings.noodle.height,
+          width: input.settings.imageWidth,
+          height: input.settings.imageHeight,
         },
       } satisfies StagedNoodlePostMedia,
     };

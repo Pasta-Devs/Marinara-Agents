@@ -339,6 +339,24 @@ export function SlurpSettings({
                   <option value="on_demand">{t("ui.slurp.settings.generationModeOnDemand")}</option>
                 </select>
               </Field>
+              <div className="grid gap-3 sm:grid-cols-2">
+                <Field label={t("ui.slurp.settings.images.width")} detail={t("ui.slurp.settings.images.widthDetail")}>
+                  <NumberSetting
+                    value={settings.imageWidth}
+                    min={64}
+                    max={4096}
+                    onSave={(value) => update("imageWidth", value)}
+                  />
+                </Field>
+                <Field label={t("ui.slurp.settings.images.height")} detail={t("ui.slurp.settings.images.heightDetail")}>
+                  <NumberSetting
+                    value={settings.imageHeight}
+                    min={64}
+                    max={4096}
+                    onSave={(value) => update("imageHeight", value)}
+                  />
+                </Field>
+              </div>
               <PromptCard
                 title="Generation guidance"
                 value={settings.generationGuidance}

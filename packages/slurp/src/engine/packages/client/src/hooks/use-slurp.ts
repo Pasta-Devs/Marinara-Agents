@@ -76,6 +76,8 @@ export const noodleKeys = {
 };
 
 export type SlurpSettings = {
+  imageWidth: number;
+  imageHeight: number;
   refreshesPerDay: number;
   generationGuidance: string;
   postsPerDay: number;
