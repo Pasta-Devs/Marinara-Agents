@@ -72,7 +72,14 @@ import {
   type SlurpWallet,
   type SlurpWalletSpendKind,
 } from "../slurp/slurp-wallet.js";
-import { reverseIncome } from "../slurp/slurp-wallet.js";
+import {
+  earn,
+  readSlurpEarnings,
+  reverse as reverseEarnings,
+  slurpEarningsKey,
+  type SlurpEarnings,
+  type SlurpEarningsEntryKind,
+} from "../slurp/slurp-earnings.js";
 import { logger } from "../../lib/logger.js";
 import {
   NOODLE_FAN_ACTIVITY_MAX_ACTIVITIES_PER_CREATOR,
@@ -1145,6 +1152,13 @@ export function createSlurpStorage(db: DB) {
       JSON.stringify({ ...stored, wallet: { coins: wallet.coins } }),
     );
     return wallet;
+  };
+
+  /** Earnings live under their own key, so a write never races the persona wallet's two-key write. */
+  let earningsUpdateQueue: Promise<unknown> = Promise.resolve();
+  const writeEarnings = async (creatorAccountId: string, earnings: SlurpEarnings) => {
+    await settingsStore.set(slurpEarningsKey(creatorAccountId), JSON.stringify(earnings));
+    return earnings;
   };
 
   const pruneFinishedRefreshRuns = async () => {
@@ -5328,11 +5342,10 @@ export function createSlurpStorage(db: DB) {
         const sender = await this.getWallet(viewerAccountId);
         const charged = spend(sender, "tip", amount, new Date(), creator.handle);
         if (!charged) return null;
-        const recipientId = creator.sourceKind === "persona" ? creator.sourceEntityId : creator.id;
-        const recipient = await this.getWallet(recipientId);
+        const recipient = await this.getEarnings(creator.id);
         try {
           await writeWallet(viewerAccountId, charged);
-          await writeWallet(recipientId, credit(recipient, "income", amount, new Date(), `tip: ${creator.handle}`));
+          await writeEarnings(creator.id, earn(recipient, "tip", amount, new Date(), `tip: ${creator.handle}`));
           return charged;
         } catch (error) {
           // Restore the sender if the recipient write fails. The shared queue prevents concurrent
@@ -5379,12 +5392,12 @@ export function createSlurpStorage(db: DB) {
     async reverseCreatorIncome(creatorAccountId: string, amount: number, note: string): Promise<void> {
       const creator = await this.getNoodlerAccountById(creatorAccountId);
       if (!creator) return;
-      const recipientId = creator.sourceKind === "persona" ? creator.sourceEntityId : creator.id;
-      const run = viewerSettingsUpdateQueue.then(async () => {
-        const wallet = await this.getWallet(recipientId);
-        await writeWallet(recipientId, reverseIncome(wallet, amount, new Date(), `reversal: ${note}`));
+      const run = earningsUpdateQueue.then(async () => {
+        const current = await this.getEarnings(creator.id);
+        const next = reverseEarnings(current, amount, new Date(), `reversal: ${note}`);
+        if (next !== current) await writeEarnings(creator.id, next);
       });
-      viewerSettingsUpdateQueue = run.catch(() => undefined);
+      earningsUpdateQueue = run.catch(() => undefined);
       await run;
     },
 
@@ -5403,9 +5416,29 @@ export function createSlurpStorage(db: DB) {
       if (!creator) return;
       const share = Math.floor((price * settings.walletCreatorRevenueSharePercent) / 100);
       if (share <= 0) return;
-      const recipientId = creator.sourceKind === "persona" ? creator.sourceEntityId : creator.id;
-      const wallet = await this.getWallet(recipientId);
-      await writeWallet(recipientId, credit(wallet, "income", share, new Date(), `${reason}: ${creator.handle}`));
+      // Earnings belong to the Creator, not to the persona operating it. Paying into the
+      // operator's spending wallet made income and spending money the same balance, so a real
+      // audience would have ended every purchasing decision in the game. See slurp-earnings.ts.
+      await this.creditEarnings(creator.id, reason, share, `${reason}: ${creator.handle}`);
+    },
+
+    async getEarnings(creatorAccountId: string): Promise<SlurpEarnings> {
+      return readSlurpEarnings(await settingsStore.get(slurpEarningsKey(creatorAccountId)));
+    },
+
+    async creditEarnings(
+      creatorAccountId: string,
+      kind: Exclude<SlurpEarningsEntryKind, "payout" | "reversal">,
+      amount: number,
+      note?: string,
+    ): Promise<void> {
+      const run = earningsUpdateQueue.then(async () => {
+        const current = await this.getEarnings(creatorAccountId);
+        const next = earn(current, kind, amount, new Date(), note);
+        if (next !== current) await writeEarnings(creatorAccountId, next);
+      });
+      earningsUpdateQueue = run.catch(() => undefined);
+      await run;
     },
 
     async listPostUnlocksForViewer(viewerAccountId: string): Promise<NoodlePostUnlock[]> {
