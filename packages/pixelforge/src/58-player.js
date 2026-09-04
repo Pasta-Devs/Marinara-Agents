@@ -230,8 +230,48 @@ const evictNotices = (rows) => {
   return out;
 };
 
+// ── The disposition ladder's promotion line (P2, plan §13) ────────────────────
+// The ladder has been in the block since 0.11 — d 0..3, stored, capped, merged,
+// evicted — and for four releases nothing in the game ever moved it: every bump
+// wrote `t` and `s`, every resident stayed d 0, and the journal counted a town
+// of permanent strangers. 0.15 is where it moves, and the WHOLE heuristic is
+// this table: a rung is EARNED when the encounter count crosses its line.
+//
+// Encounters are already weighted at the verb sites — an accepted talk turn, a
+// purchase and a night's berth each count one, and a finished job counts three
+// (61-pack settle(); the reward ruling's "money and the giver's rapport" finally
+// cashing out as movement rather than a tally). So the lines below read in
+// those units: acquainted after a few real exchanges, friendly after sustained
+// business or a couple of jobs, close after the kind of history a player builds
+// on purpose. Numbers are alpha tuning, one edit each, and deliberately high
+// enough that one conversation's presses cannot vault a rung (§12.3's four-bump
+// question is absorbed here: four sends in one window is four points, short of
+// friendly from any distance).
+//
+// PROMOTION IS A CROSSING, NOT A CEILING. bump() promotes only when the count
+// moves from below a line to at-or-past it, and never demotes — so a `d` set
+// PRECISELY (the S1 arm, or a test) stays where it was put unless a NEW line is
+// crossed. A max() over the table would have quietly re-promoted anybody a
+// future demotion verb tried to lower, and fighting the GM is the one thing the
+// heuristic must never do. Hostility is not on this ladder at all: `h` is a
+// flag beside it, written by nothing package-side yet, and waits for S1.
+const PROMOTION = [3, 10, 25]; // t at which d 1, 2, 3 are earned
+
+/** The rung the encounter count has EARNED, 0..3. */
+function rungOf(t) {
+  let rung = 0;
+  for (let step = 0; step < PROMOTION.length; step++) if (t >= PROMOTION[step]) rung = step + 1;
+  return rung;
+}
+
 PF.player = {
   CAPS,
+  // The ladder's words, one authority for every surface that says them — the
+  // window title, the promotion toast, the turn header and the journal all read
+  // from here, because two spellings of "acquainted" is a bug report waiting.
+  // Theme-BLIND on purpose (plan §2.8): a stranger is a stranger in any world.
+  RUNGS: ["stranger", "acquainted", "friendly", "close friend"],
+  PROMOTION,
   QUALITY,
   TOOL_TYPES,
   MIGRATIONS: PLAYER_MIGRATIONS,
@@ -1269,10 +1309,21 @@ PF.player = {
   },
 
   /** Move a relationship. `patch` is { d, t, h, s }: d is the 0-3 ladder, t
-   *  counts encounters, h flags hostility, s is the last line worth remembering.
+   *  counts encounters (weighted at the verb sites — a finished job is three),
+   *  h flags hostility, s is the last line worth remembering.
    *  Two caps bite here and they bite DIFFERENTLY (plan §4): the row cap evicts
    *  whole STRANGER rows, and the line cap evicts the oldest LINE and leaves the
-   *  row standing. */
+   *  row standing.
+   *
+   *  THE LADDER MOVES HERE AND NOWHERE ELSE (0.15, plan §13). When the patch
+   *  carries no explicit `d`, an encounter that crosses a PROMOTION line lifts
+   *  the rung — a crossing, never a max(), so a precisely-set d is not fought
+   *  (the header note above bump's table says why). An explicit `d` stays the
+   *  SETTER it has always been: that arm is S1's, and the harness pins it.
+   *
+   *  Returns `{ row, rose }` — `rose` is the new rung when THIS call earned one
+   *  and 0 otherwise, so a caller with a toast to show knows without diffing.
+   *  Refusal is still `null`, exactly as documented at the cap. */
   bump(core, zoneId, name, patch, gen) {
     const p = this._live(core, gen);
     if (!p) return null;
@@ -1293,6 +1344,8 @@ PF.player = {
       row = { d: 0, t: 0 };
       rows[who] = row;
     }
+    let rose = 0;
+    const tBefore = posInt(row.t, 0);
     if (patch && typeof patch === "object") {
       if (patch.d !== undefined) row.d = PF.clamp(posInt(patch.d, 0), 0, 3);
       row.t = posInt(row.t, 0) + Math.max(0, posInt(patch.t, patch.t === undefined ? 1 : 0));
@@ -1318,8 +1371,31 @@ PF.player = {
     } else {
       row.t = posInt(row.t, 0) + 1;
     }
+    // The crossing. Gated on the ABSENCE of an explicit d — a patch that set the
+    // ladder said exactly where it wanted the row, and the heuristic yields.
+    if (!(patch && typeof patch === "object" && patch.d !== undefined)) {
+      const earned = rungOf(posInt(row.t, 0));
+      if (earned > rungOf(tBefore) && earned > posInt(row.d, 0)) {
+        row.d = earned;
+        rose = earned;
+      }
+    }
     this._touch(core);
-    return row;
+    return { row, rose };
+  },
+
+  /** Where the player stands with one person: `{ d, h }`, zeros for a stranger
+   *  and for anybody the block has never met — the ladder read the window, the
+   *  header and the pack all share (0.15, plan §13). Read-only and cheap on
+   *  purpose: it is called from a per-turn composer and from a window that
+   *  rebuilds on every press, so it allocates one small literal and touches
+   *  nothing. */
+  rung(core, zoneId, name) {
+    const p = this.get(core);
+    const rows = p ? this._ownRead(p.rel, str(zoneId)) : undefined;
+    const row = rows && typeof rows === "object" ? this._ownRead(rows, str(name)) : undefined;
+    if (!row || typeof row !== "object") return { d: 0, h: false };
+    return { d: PF.clamp(posInt(row.d, 0), 0, 3), h: !!row.h };
   },
 
   _relRowCount(p) {

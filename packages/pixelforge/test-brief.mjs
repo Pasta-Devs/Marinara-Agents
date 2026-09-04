@@ -8355,7 +8355,11 @@ const SNOW_IDS = ["grassSnow", "grassSnow2", "cropSnow", "canopySnow"];
     const narrowFit = {};
     for (let i = 0; i < 4; i++) narrowFit[`t${i}`] = i;
     A.atlas = { tileSize: 16, columns: 8, tiles: narrowFit };
-    assert.equal(A._overCapacity({ naturalWidth: 96, naturalHeight: 80 }), false, "…while an id map that fits does not");
+    assert.equal(
+      A._overCapacity({ naturalWidth: 96, naturalHeight: 80 }),
+      false,
+      "…while an id map that fits does not",
+    );
     sheetWidth = 128;
     Object.assign(A, { status: "idle", _requestedTheme: null, _capacityLatch: null, _failedAt: 0 });
     A._tileCanvases.clear();
@@ -18990,17 +18994,28 @@ const fire = (node, type) => Promise.all((node.listeners[type] ?? []).map((fn) =
       1,
       "…the completion counter is keyed by TEMPLATE, in the world-free board map",
     );
-    assert.equal(after.rel[w.startZone]?.[taken.giver]?.t ?? 0, before.rel + 1, "…and the giver remembers it");
-    // AS AN ENCOUNTER AND NOT AS A PROMOTION. bump()'s `d` arm is a SETTER, not
-    // an increment (58-player), so `{d:1}` in place of `{t:1}` would move a
-    // stranger onto the friend rung for handing in a board order — and it would
-    // pass the count assertion above unchanged, because bump defaults `t` to 1
-    // whenever the patch omits it. The rung is the assertion that tells the two
-    // patches apart.
+    // THREE ENCOUNTERS' WEIGHT, AND THE RUNG THAT WEIGHT EARNS (0.15, plan §13).
+    // Until this release the pin here read "+1, and d stays 0 — the ladder is
+    // P2's to move." P2 moved it: a finished job bumps the giver by THREE, which
+    // crosses the acquainted line from a standing start, so both halves of the
+    // old pin flip together and they still tell the honest patch from a cheat —
+    // a `{d:1}` in settle() would land d 1 with t at +1, and a lone `{t:1}`
+    // would land t at +1 with d still 0. Only the weighted encounter produces
+    // this exact pair.
+    assert.equal(
+      after.rel[w.startZone]?.[taken.giver]?.t ?? 0,
+      before.rel + 3,
+      "…and the giver remembers it, at a job's weight of three",
+    );
     assert.equal(
       after.rel[w.startZone]?.[taken.giver]?.d ?? 0,
-      0,
-      "…without moving them a rung up the disposition ladder, which is P2's to move",
+      1,
+      "…which crosses the acquainted line — one finished job and they know you",
+    );
+    assert.equal(
+      after.rel[w.startZone]?.[taken.giver]?.s,
+      "You ran a job for me.",
+      "…and the row remembers what happened between you",
     );
     assert.ok(
       lines().some((text) => text.includes(taken.giver) && text.includes(money(row.r.money))),
@@ -19055,8 +19070,8 @@ const fire = (node, type) => Promise.all((node.listeners[type] ?? []).map((fn) =
       assert.equal(P.get(core).pouch.money, purse + owed.money, "…and the purse moved by exactly that");
       assert.equal(
         P.get(core).rel[w.startZone]?.[owed.giver]?.t ?? 0,
-        met + 1,
-        "…and the giver it named is the one who remembers it",
+        met + 3,
+        "…and the giver it named is the one who remembers it, at a job's weight",
       );
     }
 
@@ -19518,7 +19533,7 @@ const fire = (node, type) => Promise.all((node.listeners[type] ?? []).map((fn) =
       "Filled Tam's board order — 6 coins.",
       "…in the line",
     );
-    assert.equal(P.get(core).rel[w.startZone].Tam.t, 1, "…and in the rapport the completion pays");
+    assert.equal(P.get(core).rel[w.startZone].Tam.t, 3, "…and in the rapport the completion pays, at a job's weight");
   } finally {
     globalThis.setTimeout = realSetTimeout;
     globalThis.clearTimeout = realClearTimeout;
@@ -20124,8 +20139,12 @@ const fire = (node, type) => Promise.all((node.listeners[type] ?? []).map((fn) =
     assert.equal(P.get(core).pouch.money, 12, "…and both were paid");
     assert.equal(P.get(core).quests_done_board["b1.d4.wood-a"] ?? 0, 0, "the counter is keyed by TEMPLATE");
     assert.equal(P.get(core).quests_done_board["wood-a"], 1, "…which is what rides in the instance id");
-    assert.equal(P.get(core).rel[w.startZone]?.Ivy?.t, met + 2, "the giver remembers both");
-    assert.equal(P.get(core).rel[w.startZone]?.Ivy?.d ?? 0, 0, "…as encounters, never as a promotion");
+    assert.equal(P.get(core).rel[w.startZone]?.Ivy?.t, met + 6, "the giver remembers both, each at a job's weight");
+    // Six is past the acquainted line (3) and short of friendly (10), so this
+    // doubles as the from-below pin on the friendly threshold: two finished jobs
+    // make an acquaintance and NOT a friend — the ladder is earned in steps, and
+    // the pack's friend register stays shut until the second line is crossed.
+    assert.equal(P.get(core).rel[w.startZone]?.Ivy?.d ?? 0, 1, "…two jobs make an acquaintance, not yet a friend");
     assert.equal(filled.length, 2, "the surface was told about both");
     // AND THE DAY'S RECEIPT WAS FILED, which is the whole reason the one-per-day
     // rule had to land before this hook did: without it, walking out and back is
@@ -20408,8 +20427,15 @@ const fire = (node, type) => Promise.all((node.listeners[type] ?? []).map((fn) =
     assert.equal(P.get(core).ledger.lines.find(([, text]) => text.includes("Took"))[0], 5, "…at the event's day");
     // ROOK IS BUMPED ONCE FOR THE CONVERSATION AND NOT AGAIN FOR THE ERRAND: the
     // deliver bump goes to the GIVER, and Mira is not the person standing here.
+    // The WEIGHTS tell the two bumps apart now — a conversation is one, a
+    // finished job is three — so the pair below also pins that neither bump
+    // landed on the wrong person's scale.
     assert.equal(P.get(core).rel[w.startZone]?.Rook?.t, met + 1, "the person talked to gained one encounter");
-    assert.equal(P.get(core).rel[w.startZone]?.Mira?.t ?? 0, 1, "…and the sender gained one for the errand run");
+    assert.equal(
+      P.get(core).rel[w.startZone]?.Mira?.t ?? 0,
+      3,
+      "…and the sender gained a job's weight for the errand run",
+    );
 
     // ── TWO ERRANDS TO ONE PERSON ARE BOTH RUN BY ONE GREETING ───────────────
     // A filter and not a find, for the catch site's reason: two boards can owe
@@ -20431,12 +20457,18 @@ const fire = (node, type) => Promise.all((node.listeners[type] ?? []).map((fn) =
     // A template can name the same person as giver and target ("come and tell me
     // yourself"). The conversation bumps them and so does the errand, so `t`
     // moves twice in one turn — which is two things having happened, not a bug.
+    // Four now rather than two: the greeting's one plus the finished job's
+    // three, on the one person who was both ends of it.
     assert.equal(take("b1.d5.self", "Tam", "Tam"), true, "an errand to its own giver is taken on");
     const twice = P.get(core).rel[w.startZone]?.Tam?.t ?? 0;
     talkTo(tam);
     await settle();
     assert.equal(active().length, 0, "…and finishes on the same greeting");
-    assert.equal(P.get(core).rel[w.startZone]?.Tam?.t, twice + 2, "…bumping the one person twice, deliberately");
+    assert.equal(
+      P.get(core).rel[w.startZone]?.Tam?.t,
+      twice + 4,
+      "…bumping the one person twice, deliberately, at both weights",
+    );
     const selfLine = lines().at(-1);
     assert.ok(!/Tam's word to Tam/.test(selfLine), `…and the line does not say it twice (${selfLine})`);
 
@@ -29789,6 +29821,72 @@ const fire = (node, type) => Promise.all((node.listeners[type] ?? []).map((fn) =
   // A copy is a second list that a sixth weather word would leave behind.
   assert.equal(pack.WEATHERS, loadedPF.weather.WORDS, "the pack's axis IS the sky's list, not a copy of it");
   assert.deepEqual(pack.WEATHERS, ["fair", "overcast", "rain", "storm", "snow"], "…all five words of it");
+}
+
+// ── THE LADDER MOVES, AND ONLY UPWARD, AND ONLY WHEN EARNED (0.15) ─────────
+// Four releases stored a 0-3 disposition that nothing ever raised: every bump
+// wrote `t`, every resident stayed a stranger, and 7 of 12 generated dialogue
+// lines sat sealed behind a rung nobody could reach. The promotion is one table
+// and one crossing rule in bump(), and this case walks every edge of it.
+{
+  const P = loadedPF.player;
+  const w = world.build(3031, "cozy-village");
+  const core = { chatId: "chat-ladder", sim: new loadedPF.Sim(w), hud: { toast() {}, refreshChips() {} } };
+  const at = (name) => P.get(core).rel.village?.[name] ?? { d: 0, t: 0 };
+  const [ACQ, FRIEND, CLOSE] = P.PROMOTION;
+
+  // The crossings, one line at a time. Encounters below a line change nothing;
+  // the encounter that crosses it is the one that pays, and `rose` says so on
+  // exactly that call and no other.
+  for (let i = 1; i < ACQ; i++) {
+    const step = P.bump(core, "village", "Alder", { t: 1 });
+    assert.equal(step.rose, 0, `encounter ${i} of ${ACQ - 1} promotes nobody`);
+    assert.equal(at("Alder").d, 0, "…still a stranger short of the line");
+  }
+  const cross = P.bump(core, "village", "Alder", { t: 1 });
+  assert.equal(cross.rose, 1, "the crossing call reports the rung it earned");
+  assert.equal(at("Alder").d, 1, "…and the row stands acquainted");
+  assert.equal(P.bump(core, "village", "Alder", { t: 1 }).rose, 0, "the next encounter is just an encounter");
+
+  // A WEIGHTED bump can cross from a standing start — the quest path's shape.
+  const jump = P.bump(core, "village", "Bett", { t: ACQ });
+  assert.equal(jump.rose, 1, "a job's weight crosses acquainted in one call");
+  // …and one weighted bump never vaults PAST the next line it did not reach.
+  assert.equal(at("Bett").d, 1, "…landing exactly on the rung the count earns");
+
+  // The top of the ladder, climbed by raw count.
+  P.bump(core, "village", "Alder", { t: FRIEND });
+  assert.equal(at("Alder").d, 2, "past the friendly line the row is friendly");
+  P.bump(core, "village", "Alder", { t: CLOSE });
+  assert.equal(at("Alder").d, 3, "…and past the close line, close");
+  assert.equal(P.bump(core, "village", "Alder", { t: 50 }).rose, 0, "the ladder has no fifth rung to rise to");
+  assert.equal(at("Alder").d, 3, "…and the top holds");
+
+  // THE SETTER ARM IS UNTOUCHED, both ways round. An explicit d in the patch
+  // suppresses the crossing on that call (the patch said where it wanted the
+  // row), and a row set BELOW its earned count is not re-promoted by the next
+  // sub-line encounter — a crossing needs a line to cross, and the count is
+  // already past all of them. That asymmetry is the design: a future demotion
+  // verb (S1's) must not be fought by the heuristic on every subsequent hello.
+  const setDown = P.bump(core, "village", "Alder", { d: 1, t: 1 });
+  assert.equal(setDown.rose, 0, "an explicit d reports no rise");
+  assert.equal(at("Alder").d, 1, "…and sets exactly what it said");
+  P.bump(core, "village", "Alder", { t: 1 });
+  assert.equal(at("Alder").d, 1, "a demoted row stays demoted across further encounters");
+
+  // The reader, on every kind of row there is.
+  assert.deepEqual(P.rung(core, "village", "Alder"), { d: 1, h: false }, "rung() reads the live row");
+  assert.deepEqual(P.rung(core, "village", "Nobody Yet"), { d: 0, h: false }, "…zeros for the unmet");
+  assert.deepEqual(P.rung(core, "elsewhere", "Alder"), { d: 0, h: false }, "…and zeros for the wrong zone");
+  P.bump(core, "village", "Sworn Enemy", { h: true });
+  assert.deepEqual(P.rung(core, "village", "Sworn Enemy"), { d: 0, h: true }, "…and carries the hostile flag");
+
+  // The promoted rung RIDES THE WIRE: serialize and parse, and the rung is
+  // still earned on the other side — d has been on the wire since 0.11, so this
+  // pins that promotion writes the field the lanes already carry.
+  const text = JSON.stringify(P.serialize(P.get(core)));
+  const back = P.parse(JSON.parse(text)).player;
+  assert.equal(back.rel.village.Bett.d, 1, "an earned rung survives the round-trip");
 }
 
 console.log("brief validator + compiler: all cases passed");

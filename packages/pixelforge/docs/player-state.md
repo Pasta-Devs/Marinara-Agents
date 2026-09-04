@@ -2913,3 +2913,56 @@ that rebuild is committed. What it moved, and what was checked:
   sheet.
 
 The header stays so the next release's prep has a place to land.
+
+## 13. The ladder moves — 0.15's play layer over 0.11's storage
+
+Everything below reads state that has been in the block since 0.11 — `rel[zone][name]`
+rows with `d` 0..3, `t`, `h`, `s`, the caps of §3 and the merge rules of §4.2. 0.15 adds
+**no field and no byte to the wire**: it is the first release where `d` is written by play.
+
+### 13.1 The promotion line
+
+One table (`PROMOTION`, 58-player) and one rule. A rung is EARNED when the encounter
+count crosses its line:
+
+| rung | word         | earned at `t` |
+|------|--------------|---------------|
+| 1    | acquainted   | 3             |
+| 2    | friendly     | 10            |
+| 3    | close friend | 25            |
+
+Encounters are weighted at the verb sites, not in the table: an accepted talk turn, a
+purchase and a night's berth each count **one** (their sites are unchanged from 0.11-0.13);
+a finished job counts **three** (61-pack `settle()` — the reward ruling's "money and the
+giver's rapport" cashing out as movement). So one hand-in makes a stranger acquainted, two
+make an acquaintance and not yet a friend, and §12.3's four-bump conversation is absorbed
+by arithmetic: four sends in one window is four points, short of friendly from any start.
+
+### 13.2 A crossing, never a max()
+
+`bump()` promotes only when `t` moves from below a line to at-or-past it, and only when the
+patch carries **no explicit `d`**. The explicit arm stays the SETTER it has always been —
+that is S1's precise channel and the harness pins it — and a row set BELOW its earned count
+is not re-promoted by the next sub-line encounter, because a crossing needs a line to cross.
+The asymmetry is the design: a future demotion (S1's) must not be fought by the heuristic
+on every subsequent hello. Nothing package-side demotes, and nothing writes `h` — hostility
+still waits for S1.
+
+`bump()` now returns `{ row, rose }` — `rose` is the rung earned by THIS call, else 0 — so
+a caller with a toast to show knows without diffing. Refusal is `null` exactly as §3 documents.
+
+### 13.3 The reader
+
+`rung(core, zoneId, name)` → `{ d, h }`, zeros for the unmet and for the wrong zone. It is
+the one ladder read the window title, the promotion toast, the turn header and the pack's
+register gate all share, and it is deliberately allocation-cheap: it runs inside a per-turn
+composer and a window that rebuilds per press.
+
+### 13.4 What reads the rung (the rest of the release)
+
+- the pack's ask ladder serves the **friend register** at `d >= 2` (61-pack — Ruling 4's
+  own terms: the promotion is now earned, so serving it is the ruling honoured, not overridden);
+- the talk window titles the standing, and the accepted-turn path toasts a rise;
+- the turn header's `near:` gains the rung word for anyone past stranger — one word, only
+  when it says something.
+
