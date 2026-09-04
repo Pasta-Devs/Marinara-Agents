@@ -316,7 +316,7 @@ async function buildTransferPlan(
   const selectedSet = new Set(transferNoteIds);
   const destinationScope = resolveChatLtmWriteScope(destinationChat);
 
-  for (const noteId of requestedNoteIds) {
+  for (const noteId of transferNoteIds) {
     const note = noteLookup.get(noteId)!;
     const nextScope = request.mode === "copy" ? scopeForCopy(note, destinationScope) : destinationScope;
     const localError = localCharacterScopeError(note.subjects, nextScope);

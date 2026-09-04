@@ -1077,6 +1077,56 @@ async function main() {
       payload: { noteIds: ["char_local_mara_group"], addScope: { groupIds: ["archive-family"] } },
     });
     assert.equal(rejectedBulkFamilyExpansion.statusCode, 400, rejectedBulkFamilyExpansion.body);
+    await storageService.storage.createNote({
+      id: "world_transfer_derived_parent",
+      type: "world",
+      status: "active",
+      modes: ["roleplay"],
+      scope: { groupId: "observatory-branches", groupIds: ["observatory-branches"] },
+      tags: [],
+      keywords: [],
+      links: [],
+      sections: { facts: { text: "A derived transfer parent.", updatedAt: "2026-07-17T00:00:00.000Z" } },
+    });
+    await storageService.storage.createNote({
+      id: "char_transfer_derived_local",
+      title: "Mara",
+      type: "character",
+      status: "active",
+      modes: ["roleplay"],
+      scope: { chatId: "chat-b", chatIds: ["chat-b"] },
+      tags: [],
+      keywords: [],
+      links: [{ relation: "extracted_from", target: "world_transfer_derived_parent" }],
+      subjects: [
+        {
+          key: `local_character:${archiveChatFamilyId}:mara`,
+          ref: { kind: "local_character", id: `${archiveChatFamilyId}:mara` },
+        },
+      ],
+      sections: { facts: { text: "A derived local character.", updatedAt: "2026-07-17T00:00:00.000Z" } },
+    });
+    const rejectedDerivedTransfer = await app.inject({
+      method: "POST",
+      url: "/api/long-term-memory/notes/transfer",
+      headers,
+      payload: {
+        requestedNoteIds: ["world_transfer_derived_parent"],
+        derivedNoteIds: ["char_transfer_derived_local"],
+        applyNoteIds: ["world_transfer_derived_parent", "char_transfer_derived_local"],
+        mode: "copy",
+        destinationChatId: "chat-a",
+      },
+    });
+    assert.equal(rejectedDerivedTransfer.statusCode, 400, rejectedDerivedTransfer.body);
+    assert.deepEqual((await storageService.storage.getNote("world_transfer_derived_parent"))?.scope, {
+      groupId: "observatory-branches",
+      groupIds: ["observatory-branches"],
+    });
+    await storageService.storage.deleteNotesPermanently([
+      "world_transfer_derived_parent",
+      "char_transfer_derived_local",
+    ]);
     const rejectedTransferCrossFamily = await app.inject({
       method: "POST",
       url: "/api/long-term-memory/notes/transfer",
