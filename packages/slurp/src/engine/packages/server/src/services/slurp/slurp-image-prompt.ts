@@ -77,3 +77,19 @@ export function normalizeNoodleImagePrompt(value: string | null | undefined): st
 
   return candidate;
 }
+
+/**
+ * A short description of a post's attached image, for prompts that generate reactions to it.
+ *
+ * A generated image already carries the prompt that produced it, which describes the picture
+ * better than a caption model would and costs nothing to reuse. An uploaded image has no prompt,
+ * so it is announced as present but undescribed — a reader who knows an image exists writes
+ * "cute pic" rather than "what pic?", which was the whole failure.
+ *
+ * Returns `null` when the post has no image, so callers can spread it away.
+ */
+export function noodleImageContext(post: { imageUrl?: string | null; imagePrompt?: string | null }): string | null {
+  if (!post.imageUrl) return null;
+  const prompt = post.imagePrompt?.trim();
+  return prompt ? `The post has an attached image showing: ${prompt}` : "The post has an attached image.";
+}

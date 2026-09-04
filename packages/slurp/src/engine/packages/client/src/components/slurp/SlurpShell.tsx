@@ -486,7 +486,7 @@ function PersonaList({
     );
   }
   return (
-    <div className="max-h-64 space-y-1 overflow-y-auto">
+    <div className="max-h-[min(60vh,26rem)] space-y-1 overflow-y-auto">
       {accounts.map((account) => {
         const selected = account.id === activeId;
         return (
@@ -606,7 +606,11 @@ export function NoodleShell({
     <NoodleAccentContext.Provider value={accent}>
       <div
         className={cn(
-          "mari-chrome-token-scope relative flex h-full min-h-0 flex-col bg-[var(--background)] text-[var(--foreground)] antialiased",
+          // `overflow-x-clip`, not `overflow-x-hidden`: the drawer starts at x:100%, so while it
+          // slides in it sits past the right edge and widens the page, which is the flicker and
+          // the push. Clipping stops that. `clip` is used because `hidden` would turn this into a
+          // scroll container and break every sticky header inside it.
+          "mari-chrome-token-scope relative flex h-full min-h-0 flex-col overflow-x-clip bg-[var(--background)] text-[var(--foreground)] antialiased",
           slurpActive && "bg-[var(--slurp-canvas)] @min-[1024px]:bg-[var(--slurp-outer)]",
           NOODLE_ICON_SCOPE_CLASS,
         )}
@@ -717,29 +721,42 @@ export function NoodleShell({
                     onOpenProfile={onOpenProfile}
                     onBecomeCreator={onBecomeCreator}
                   />
-                  <p className={cn(labelClass, "px-2 pb-1 pt-3")}>
-                    {localizeUi("ui.noodle.noodleshell.switchAccount")}
-                  </p>
-                  <PersonaList
-                    accounts={visiblePersonaAccounts.filter((account) => account.id !== personaAccount?.id)}
-                    activeId={personaAccount?.id}
-                    counts={personaConnectionCounts}
-                    linkedIds={linkedNoodleAccountIds}
-                    wallets={personaWallets}
-                    onSwitch={(account) => onSwitchPersona(account, true)}
-                  />
-                  {hasMorePersonaAccounts && (
-                    <button
-                      type="button"
-                      onClick={onLoadMorePersonaAccounts}
-                      className="mt-1 h-9 w-full rounded-lg text-xs font-semibold text-[var(--noodle-accent)] transition-colors hover:bg-[var(--noodle-accent)]/10"
-                    >
-                      {localizeUi("ui.noodle.noodlehome.loadMore", {
-                        visible: visiblePersonaAccounts.length,
-                        total: sortedPersonaAccounts.length,
-                      })}
-                    </button>
-                  )}
+                  {/*
+                    The drawer used to render the whole persona list open, so the identity card
+                    was pushed off-screen on any install with more than a couple of personas.
+                    `<details>` gives the same disclosure as the desktop rail with no state to
+                    hold and no outside-click handler to get wrong.
+                  */}
+                  <details className="group mt-3">
+                    <summary className="flex min-h-11 cursor-pointer list-none items-center justify-between gap-2 rounded-xl px-2 text-left [&::-webkit-details-marker]:hidden">
+                      <span className={labelClass}>{localizeUi("ui.noodle.noodleshell.switchAccount")}</span>
+                      <ChevronDown
+                        size={18}
+                        className="shrink-0 !text-[var(--noodle-accent)] transition-transform group-open:rotate-180"
+                        aria-hidden="true"
+                      />
+                    </summary>
+                    <PersonaList
+                      accounts={visiblePersonaAccounts.filter((account) => account.id !== personaAccount?.id)}
+                      activeId={personaAccount?.id}
+                      counts={personaConnectionCounts}
+                      linkedIds={linkedNoodleAccountIds}
+                      wallets={personaWallets}
+                      onSwitch={(account) => onSwitchPersona(account, true)}
+                    />
+                    {hasMorePersonaAccounts && (
+                      <button
+                        type="button"
+                        onClick={onLoadMorePersonaAccounts}
+                        className="mt-1 h-9 w-full rounded-lg text-xs font-semibold text-[var(--noodle-accent)] transition-colors hover:bg-[var(--noodle-accent)]/10"
+                      >
+                        {localizeUi("ui.noodle.noodlehome.loadMore", {
+                          visible: visiblePersonaAccounts.length,
+                          total: sortedPersonaAccounts.length,
+                        })}
+                      </button>
+                    )}
+                  </details>
                 </div>
               </aside>
             </motion.div>
@@ -849,7 +866,11 @@ export function NoodleShell({
                 )}
                 <div ref={accountSwitcherRef} className="relative mt-auto">
                   {accountSwitcherOpen && (
-                    <div className="absolute bottom-[calc(100%+0.5rem)] left-0 right-0 z-30 overflow-hidden rounded-xl border border-[var(--noodle-divider)] bg-[var(--background)] p-2 shadow-[var(--slurp-shadow-modal)]">
+                    // Sized to its own content rather than to the rail. It used to be pinned
+                    // `left-0 right-0`, so every persona row was squeezed into the sidebar's
+                    // width; it overflows the rail to the end side now, which is what the extra
+                    // z-index is for.
+                    <div className="absolute bottom-[calc(100%+0.5rem)] start-0 z-30 w-[min(22rem,calc(100vw-2rem))] overflow-hidden rounded-xl border border-[var(--noodle-divider)] bg-[var(--background)] p-2 shadow-[var(--slurp-shadow-modal)]">
                       <PersonaIdentityCard
                         account={personaAccount}
                         bannerUrl={personaBannerUrl}

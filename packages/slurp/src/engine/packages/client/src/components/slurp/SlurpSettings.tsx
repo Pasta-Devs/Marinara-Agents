@@ -58,7 +58,7 @@ import {
 } from "../../hooks/use-slurp";
 import { showConfirmDialog } from "../../lib/app-dialogs";
 import { Modal } from "../ui/Modal";
-import type { SlurpNavigationState } from "./slurp-navigation.types";
+import { SLURP_SETTINGS_SECTIONS, type SlurpNavigationState } from "./slurp-navigation.types";
 import type { NoodlerManagedStageProfile } from "@marinara-engine/shared";
 import {
   Avatar,
@@ -87,7 +87,7 @@ type SlurpSettingsProps = {
 };
 
 const archetypes = ["ordinary", "eccentric", "crossFandom", "raider", "organicDiscovery", "freeResource"] as const;
-const settingsSections = ["overview", "general", "creators", "images", "audience", "ads", "advanced"] as const;
+const settingsSections = SLURP_SETTINGS_SECTIONS;
 // Three shipped spice levels. Kept byte-identical to the server presets so the settings surface
 // can tell which level is active and restore one exactly.
 const SLURP_GUIDANCE_PRESETS = {
@@ -1076,7 +1076,7 @@ export function SlurpSettings({
                         </div>
 
                         <div className="space-y-5 p-4 sm:p-5">
-                          <CreatorDetailGroup title={t("ui.slurp.settings.creators.postingGroup")}>
+                          <SettingsGroup title={t("ui.slurp.settings.creators.postingGroup")}>
                             {!personaCreator(selectedCreator) ? (
                               <Toggle
                                 label={t("ui.slurp.settings.creators.autoPost")}
@@ -1101,9 +1101,9 @@ export function SlurpSettings({
                               <CalendarClock size={15} />
                               {t("ui.slurp.settings.creators.schedule")}
                             </button>
-                          </CreatorDetailGroup>
+                          </SettingsGroup>
 
-                          <CreatorDetailGroup title={t("ui.slurp.settings.creators.imagesGroup")}>
+                          <SettingsGroup title={t("ui.slurp.settings.creators.imagesGroup")}>
                             <Toggle
                               label={t("ui.slurp.settings.creators.images")}
                               value={selectedCreator.autoPosting.imagesEnabled}
@@ -1143,7 +1143,7 @@ export function SlurpSettings({
                                 ))}
                               </select>
                             </Field>
-                          </CreatorDetailGroup>
+                          </SettingsGroup>
 
                           {selectedCreator.sourceStatus.state === "missing" && (
                             <p className="rounded-lg border border-red-400/30 bg-red-400/5 p-3 text-xs text-red-300">
@@ -1219,159 +1219,321 @@ export function SlurpSettings({
                 </div>
               )}
 
+              {section === "wallet" && (
+                <div className="space-y-5">
+                  <SectionTitle
+                    title={t("ui.slurp.settings.wallet.title", { defaultValue: "Coins" })}
+                    detail={t("ui.slurp.settings.wallet.detail", {
+                      defaultValue: "Prices, earning, and the daily stipend.",
+                    })}
+                  />
+                  <div className="rounded-xl bg-[var(--slurp-surface-raised)] p-4 text-xs leading-5 text-[var(--slurp-muted)] ring-1 ring-inset ring-[var(--slurp-outline)]">
+                    <p>
+                      {t("ui.slurp.settings.wallet.explainer", {
+                        defaultValue:
+                          "With coins off, prices are decoration and nothing is ever charged. With them on, unlocking a post and subscribing to a creator both cost coins, and running out has consequences: a subscription you cannot pay for lapses.",
+                      })}
+                    </p>
+                    <p className="mt-2">
+                      {t("ui.slurp.settings.wallet.explainerEarning", {
+                        defaultValue:
+                          "The daily stipend tops your balance up to a floor rather than adding to it, so a spender is never stranded and a hoarder is never paid to hoard. Ad and posting rewards are capped per day, so nothing here can be farmed.",
+                      })}
+                    </p>
+                  </div>
+                  <Toggle
+                    label={t("ui.slurp.settings.wallet.enabled", { defaultValue: "Coins actually cost something" })}
+                    detail={t("ui.slurp.settings.wallet.enabledDetail", {
+                      defaultValue: "Off keeps prices as decoration, which is how Slurp has always behaved.",
+                    })}
+                    value={settings.walletEnabled}
+                    onChange={(value) => update("walletEnabled", value)}
+                  />
+                  <Field
+                    label={t("ui.slurp.settings.wallet.unlockCost", { defaultValue: "Unlock a post" })}
+                    detail={t("ui.slurp.settings.wallet.unlockCostDetail", {
+                      defaultValue: "Default price for a locked post. A post keeps the price it was created with.",
+                    })}
+                  >
+                    <NumberSetting
+                      value={settings.walletUnlockCost}
+                      min={0}
+                      max={9999}
+                      onSave={(value) => update("walletUnlockCost", value)}
+                    />
+                  </Field>
+                  <Field
+                    label={t("ui.slurp.settings.wallet.subscriptionCost", { defaultValue: "Subscribe, per week" })}
+                    detail={t("ui.slurp.settings.wallet.subscriptionCostDetail", {
+                      defaultValue:
+                        "Default weekly price. A creator with its own price uses that instead. Subscriptions renew every seven days.",
+                    })}
+                  >
+                    <NumberSetting
+                      value={settings.walletSubscriptionCost}
+                      min={0}
+                      max={9999}
+                      onSave={(value) => update("walletSubscriptionCost", value)}
+                    />
+                  </Field>
+                  <Field
+                    label={t("ui.slurp.settings.wallet.stipendFloor", { defaultValue: "Daily top-up floor" })}
+                    detail={t("ui.slurp.settings.wallet.stipendFloorDetail", {
+                      defaultValue:
+                        "Once a day, a balance below this is topped up to it. Zero turns the stipend off entirely.",
+                    })}
+                  >
+                    <NumberSetting
+                      value={settings.walletStipendFloor}
+                      min={0}
+                      max={99_999}
+                      onSave={(value) => update("walletStipendFloor", value)}
+                    />
+                  </Field>
+                  <Field
+                    label={t("ui.slurp.settings.wallet.adReward", { defaultValue: "Paid per ad you act on" })}
+                    detail={t("ui.slurp.settings.wallet.adRewardDetail", {
+                      defaultValue: "Zero turns ad rewards off.",
+                    })}
+                  >
+                    <NumberSetting
+                      value={settings.walletAdReward}
+                      min={0}
+                      max={999}
+                      onSave={(value) => update("walletAdReward", value)}
+                    />
+                  </Field>
+                  <Field
+                    label={t("ui.slurp.settings.wallet.adDailyCap", { defaultValue: "Most ad coins per day" })}
+                    detail={t("ui.slurp.settings.wallet.adDailyCapDetail", {
+                      defaultValue: "The cap is what stops ad clicking from becoming a job.",
+                    })}
+                  >
+                    <NumberSetting
+                      value={settings.walletAdDailyCap}
+                      min={0}
+                      max={9999}
+                      onSave={(value) => update("walletAdDailyCap", value)}
+                    />
+                  </Field>
+                  <Field
+                    label={t("ui.slurp.settings.wallet.engagementReward", { defaultValue: "Paid per post or comment" })}
+                    detail={t("ui.slurp.settings.wallet.engagementRewardDetail", {
+                      defaultValue: "Zero turns posting rewards off.",
+                    })}
+                  >
+                    <NumberSetting
+                      value={settings.walletEngagementReward}
+                      min={0}
+                      max={999}
+                      onSave={(value) => update("walletEngagementReward", value)}
+                    />
+                  </Field>
+                  <Field
+                    label={t("ui.slurp.settings.wallet.engagementDailyCap", {
+                      defaultValue: "Most posting coins per day",
+                    })}
+                    detail={t("ui.slurp.settings.wallet.engagementDailyCapDetail", {
+                      defaultValue: "The cap is what stops posting from becoming a grind.",
+                    })}
+                  >
+                    <NumberSetting
+                      value={settings.walletEngagementDailyCap}
+                      min={0}
+                      max={9999}
+                      onSave={(value) => update("walletEngagementDailyCap", value)}
+                    />
+                  </Field>
+                  <Field
+                    label={t("ui.slurp.settings.wallet.creatorShare", { defaultValue: "Creator keeps, in percent" })}
+                    detail={t("ui.slurp.settings.wallet.creatorShareDetail", {
+                      defaultValue:
+                        "When a fan pays one of your own creators, this share reaches your wallet. Zero means your creators earn nothing.",
+                    })}
+                  >
+                    <NumberSetting
+                      value={settings.walletCreatorRevenueSharePercent}
+                      min={0}
+                      max={100}
+                      onSave={(value) => update("walletCreatorRevenueSharePercent", value)}
+                    />
+                  </Field>
+                </div>
+              )}
+
               {section === "ads" && (
                 <div className="space-y-5">
                   <SectionTitle title={t("ui.slurp.settings.ads.title")} detail={t("ui.slurp.settings.ads.detail")} />
                   <div className="rounded-xl bg-[var(--slurp-surface-raised)] p-4 text-xs leading-5 text-[var(--slurp-muted)] ring-1 ring-inset ring-[var(--slurp-outline)]">
                     <p>{t("ui.slurp.settings.ads.explainer")}</p>
                     <p className="mt-2">{t("ui.slurp.settings.ads.explainerPool")}</p>
+                    {settings.walletEnabled && settings.walletAdReward > 0 && (
+                      <p className="mt-2">
+                        {t("ui.slurp.settings.ads.explainerEarning", {
+                          defaultValue:
+                            "Acting on an ad pays {{reward}} coins, up to {{cap}} a day. Change either in Coins.",
+                          reward: settings.walletAdReward,
+                          cap: settings.walletAdDailyCap,
+                        })}
+                      </p>
+                    )}
                   </div>
-                  <Toggle
-                    label={t("ui.slurp.settings.inlinePromotions")}
-                    detail={t("ui.slurp.settings.inlinePromotionsDetail")}
-                    value={settings.inlineAdsEnabled}
-                    onChange={(value) => update("inlineAdsEnabled", value)}
-                  />
-                  <Field
-                    label={t("ui.slurp.settings.ads.frequency")}
-                    detail={t("ui.slurp.settings.ads.frequencyDetail")}
-                  >
-                    <select
-                      value={settings.inlineAdsFrequency}
-                      disabled={updateSettings.isPending}
-                      onChange={(event) =>
-                        void update("inlineAdsFrequency", event.target.value as SlurpSettings["inlineAdsFrequency"])
-                      }
-                      className="min-h-11 w-full rounded-lg border border-[var(--slurp-outline)] bg-[var(--slurp-canvas)] px-3 text-base focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--slurp-focus)] disabled:opacity-50 sm:text-sm"
-                    >
-                      <option value="light">{t("ui.slurp.settings.ads.frequencyLight")}</option>
-                      <option value="standard">{t("ui.slurp.settings.ads.frequencyStandard")}</option>
-                      <option value="frequent">{t("ui.slurp.settings.ads.frequencyFrequent")}</option>
-                    </select>
-                  </Field>
-                  <Field label={t("ui.slurp.settings.ads.steering")} detail={t("ui.slurp.settings.ads.steeringDetail")}>
-                    <select
-                      value={settings.inlineAdsSteering}
-                      disabled={updateSettings.isPending}
-                      onChange={(event) =>
-                        void update("inlineAdsSteering", event.target.value as SlurpSettings["inlineAdsSteering"])
-                      }
-                      className="min-h-11 w-full rounded-lg border border-[var(--slurp-outline)] bg-[var(--slurp-canvas)] px-3 text-base focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--slurp-focus)] disabled:opacity-50 sm:text-sm"
-                    >
-                      <option value="personalized">{t("ui.slurp.settings.ads.steeringPersonalized")}</option>
-                      <option value="balanced">{t("ui.slurp.settings.ads.steeringBalanced")}</option>
-                      <option value="random">{t("ui.slurp.settings.ads.steeringRandom")}</option>
-                    </select>
-                  </Field>
-                  <Field label={t("ui.slurp.settings.ads.ceiling")} detail={t("ui.slurp.settings.ads.ceilingDetail")}>
-                    <select
-                      value={settings.inlineAdsContentCeiling}
-                      disabled={updateSettings.isPending}
-                      onChange={(event) =>
-                        void update(
-                          "inlineAdsContentCeiling",
-                          event.target.value as SlurpSettings["inlineAdsContentCeiling"],
-                        )
-                      }
-                      className="min-h-11 w-full rounded-lg border border-[var(--slurp-outline)] bg-[var(--slurp-canvas)] px-3 text-base focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--slurp-focus)] disabled:opacity-50 sm:text-sm"
-                    >
-                      <option value="tame">{t("ui.slurp.settings.ads.ceilingTame")}</option>
-                      <option value="suggestive">{t("ui.slurp.settings.ads.ceilingSuggestive")}</option>
-                      <option value="explicit">{t("ui.slurp.settings.ads.ceilingExplicit")}</option>
-                    </select>
-                  </Field>
-                  <Field label={t("ui.slurp.settings.ads.tone")} detail={t("ui.slurp.settings.ads.toneDetail")}>
-                    <select
-                      value={settings.inlineAdsTone}
-                      disabled={updateSettings.isPending}
-                      onChange={(event) =>
-                        void update("inlineAdsTone", event.target.value as SlurpSettings["inlineAdsTone"])
-                      }
-                      className="min-h-11 w-full rounded-lg border border-[var(--slurp-outline)] bg-[var(--slurp-canvas)] px-3 text-base focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--slurp-focus)] disabled:opacity-50 sm:text-sm"
-                    >
-                      <option value="corporate">{t("ui.slurp.settings.ads.toneCorporate")}</option>
-                      <option value="scammy">{t("ui.slurp.settings.ads.toneScammy")}</option>
-                      <option value="local">{t("ui.slurp.settings.ads.toneLocal")}</option>
-                      <option value="luxury">{t("ui.slurp.settings.ads.toneLuxury")}</option>
-                      <option value="unhinged">{t("ui.slurp.settings.ads.toneUnhinged")}</option>
-                    </select>
-                  </Field>
-                  <Field label={t("ui.slurp.settings.ads.era")} detail={t("ui.slurp.settings.ads.eraDetail")}>
-                    <select
-                      value={settings.inlineAdsEra}
-                      disabled={updateSettings.isPending}
-                      onChange={(event) =>
-                        void update("inlineAdsEra", event.target.value as SlurpSettings["inlineAdsEra"])
-                      }
-                      className="min-h-11 w-full rounded-lg border border-[var(--slurp-outline)] bg-[var(--slurp-canvas)] px-3 text-base focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--slurp-focus)] disabled:opacity-50 sm:text-sm"
-                    >
-                      <option value="present">{t("ui.slurp.settings.ads.eraPresent")}</option>
-                      <option value="nineties">{t("ui.slurp.settings.ads.eraNineties")}</option>
-                      <option value="cyberpunk">{t("ui.slurp.settings.ads.eraCyberpunk")}</option>
-                      <option value="retrofuture">{t("ui.slurp.settings.ads.eraRetrofuture")}</option>
-                    </select>
-                  </Field>
-                  <Field label={t("ui.slurp.settings.ads.world")} detail={t("ui.slurp.settings.ads.worldDetail")}>
-                    <textarea
-                      rows={3}
-                      value={adsWorldDraft ?? settings.inlineAdsWorldContext}
-                      maxLength={1200}
-                      onChange={(event) => setAdsWorldDraft(event.target.value)}
-                      onBlur={() => {
-                        const next = adsWorldDraft;
-                        setAdsWorldDraft(null);
-                        if (next !== null && next !== settings.inlineAdsWorldContext)
-                          void update("inlineAdsWorldContext", next);
-                      }}
-                      className="w-full rounded-lg border border-[var(--slurp-outline)] bg-[var(--slurp-canvas)] p-3 text-base focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--slurp-focus)] disabled:opacity-50 sm:text-sm"
+                  <SettingsGroup title={t("ui.slurp.settings.ads.feedGroup", { defaultValue: "In your feed" })}>
+                    <Toggle
+                      label={t("ui.slurp.settings.inlinePromotions")}
+                      detail={t("ui.slurp.settings.inlinePromotionsDetail")}
+                      value={settings.inlineAdsEnabled}
+                      onChange={(value) => update("inlineAdsEnabled", value)}
                     />
-                  </Field>
-                  <Toggle
-                    label={t("ui.slurp.settings.ads.images")}
-                    detail={t("ui.slurp.settings.ads.imagesDetail")}
-                    value={settings.inlineAdsImagesEnabled}
-                    onChange={(value) => update("inlineAdsImagesEnabled", value)}
-                  />
-                  <Field label={t("ui.slurp.settings.ads.lorebook")} detail={t("ui.slurp.settings.ads.lorebookDetail")}>
-                    <div className="flex flex-wrap gap-2">
+                    <Field
+                      label={t("ui.slurp.settings.ads.frequency")}
+                      detail={t("ui.slurp.settings.ads.frequencyDetail")}
+                    >
                       <select
-                        value={settings.inlineAdsLorebookId ?? ""}
-                        disabled={updateSettings.isPending || adLorebooks.isLoading}
+                        value={settings.inlineAdsFrequency}
+                        disabled={updateSettings.isPending}
                         onChange={(event) =>
-                          void save({
-                            inlineAdsLorebookId: event.target.value || null,
-                            // Clearing the fingerprint makes the next sync regenerate against
-                            // the newly chosen book instead of treating it as already applied.
-                            inlineAdsLorebookRevision: null,
-                          })
+                          void update("inlineAdsFrequency", event.target.value as SlurpSettings["inlineAdsFrequency"])
                         }
-                        className="min-h-11 min-w-0 flex-1 rounded-lg border border-[var(--slurp-outline)] bg-[var(--slurp-canvas)] px-3 text-base focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--slurp-focus)] disabled:opacity-50 sm:text-sm"
+                        className="min-h-11 w-full rounded-lg border border-[var(--slurp-outline)] bg-[var(--slurp-canvas)] px-3 text-base focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--slurp-focus)] disabled:opacity-50 sm:text-sm"
                       >
-                        <option value="">{t("ui.slurp.settings.ads.lorebookNone")}</option>
-                        {(adLorebooks.data?.items ?? []).map((book) => (
-                          <option key={book.id} value={book.id}>
-                            {book.name}
-                          </option>
-                        ))}
+                        <option value="light">{t("ui.slurp.settings.ads.frequencyLight")}</option>
+                        <option value="standard">{t("ui.slurp.settings.ads.frequencyStandard")}</option>
+                        <option value="frequent">{t("ui.slurp.settings.ads.frequencyFrequent")}</option>
                       </select>
-                      <button
-                        type="button"
-                        disabled={!settings.inlineAdsLorebookId || syncAdLorebook.isPending}
-                        onClick={() =>
-                          syncAdLorebook.mutate(true, {
-                            onSuccess: (result) =>
-                              toast.success(t(`ui.slurp.settings.ads.lorebookSync.${result.outcome}`)),
-                            onError: (error) => toast.error(errorMessage(error)),
-                          })
+                    </Field>
+                    <Field
+                      label={t("ui.slurp.settings.ads.steering")}
+                      detail={t("ui.slurp.settings.ads.steeringDetail")}
+                    >
+                      <select
+                        value={settings.inlineAdsSteering}
+                        disabled={updateSettings.isPending}
+                        onChange={(event) =>
+                          void update("inlineAdsSteering", event.target.value as SlurpSettings["inlineAdsSteering"])
                         }
-                        className="min-h-11 rounded-lg border border-[var(--slurp-outline)] px-4 text-sm font-bold hover:bg-[var(--accent)] disabled:opacity-50"
+                        className="min-h-11 w-full rounded-lg border border-[var(--slurp-outline)] bg-[var(--slurp-canvas)] px-3 text-base focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--slurp-focus)] disabled:opacity-50 sm:text-sm"
                       >
-                        {syncAdLorebook.isPending
-                          ? t("ui.slurp.settings.ads.lorebookSyncing")
-                          : t("ui.slurp.settings.ads.lorebookSyncNow")}
-                      </button>
-                    </div>
-                  </Field>
+                        <option value="personalized">{t("ui.slurp.settings.ads.steeringPersonalized")}</option>
+                        <option value="balanced">{t("ui.slurp.settings.ads.steeringBalanced")}</option>
+                        <option value="random">{t("ui.slurp.settings.ads.steeringRandom")}</option>
+                      </select>
+                    </Field>
+                    <Field label={t("ui.slurp.settings.ads.ceiling")} detail={t("ui.slurp.settings.ads.ceilingDetail")}>
+                      <select
+                        value={settings.inlineAdsContentCeiling}
+                        disabled={updateSettings.isPending}
+                        onChange={(event) =>
+                          void update(
+                            "inlineAdsContentCeiling",
+                            event.target.value as SlurpSettings["inlineAdsContentCeiling"],
+                          )
+                        }
+                        className="min-h-11 w-full rounded-lg border border-[var(--slurp-outline)] bg-[var(--slurp-canvas)] px-3 text-base focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--slurp-focus)] disabled:opacity-50 sm:text-sm"
+                      >
+                        <option value="tame">{t("ui.slurp.settings.ads.ceilingTame")}</option>
+                        <option value="suggestive">{t("ui.slurp.settings.ads.ceilingSuggestive")}</option>
+                        <option value="explicit">{t("ui.slurp.settings.ads.ceilingExplicit")}</option>
+                      </select>
+                    </Field>
+                  </SettingsGroup>
+                  <SettingsGroup title={t("ui.slurp.settings.ads.voiceGroup", { defaultValue: "How ads read" })}>
+                    <Field label={t("ui.slurp.settings.ads.tone")} detail={t("ui.slurp.settings.ads.toneDetail")}>
+                      <select
+                        value={settings.inlineAdsTone}
+                        disabled={updateSettings.isPending}
+                        onChange={(event) =>
+                          void update("inlineAdsTone", event.target.value as SlurpSettings["inlineAdsTone"])
+                        }
+                        className="min-h-11 w-full rounded-lg border border-[var(--slurp-outline)] bg-[var(--slurp-canvas)] px-3 text-base focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--slurp-focus)] disabled:opacity-50 sm:text-sm"
+                      >
+                        <option value="corporate">{t("ui.slurp.settings.ads.toneCorporate")}</option>
+                        <option value="scammy">{t("ui.slurp.settings.ads.toneScammy")}</option>
+                        <option value="local">{t("ui.slurp.settings.ads.toneLocal")}</option>
+                        <option value="luxury">{t("ui.slurp.settings.ads.toneLuxury")}</option>
+                        <option value="unhinged">{t("ui.slurp.settings.ads.toneUnhinged")}</option>
+                      </select>
+                    </Field>
+                    <Field label={t("ui.slurp.settings.ads.era")} detail={t("ui.slurp.settings.ads.eraDetail")}>
+                      <select
+                        value={settings.inlineAdsEra}
+                        disabled={updateSettings.isPending}
+                        onChange={(event) =>
+                          void update("inlineAdsEra", event.target.value as SlurpSettings["inlineAdsEra"])
+                        }
+                        className="min-h-11 w-full rounded-lg border border-[var(--slurp-outline)] bg-[var(--slurp-canvas)] px-3 text-base focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--slurp-focus)] disabled:opacity-50 sm:text-sm"
+                      >
+                        <option value="present">{t("ui.slurp.settings.ads.eraPresent")}</option>
+                        <option value="nineties">{t("ui.slurp.settings.ads.eraNineties")}</option>
+                        <option value="cyberpunk">{t("ui.slurp.settings.ads.eraCyberpunk")}</option>
+                        <option value="retrofuture">{t("ui.slurp.settings.ads.eraRetrofuture")}</option>
+                      </select>
+                    </Field>
+                    <Field label={t("ui.slurp.settings.ads.world")} detail={t("ui.slurp.settings.ads.worldDetail")}>
+                      <textarea
+                        rows={3}
+                        value={adsWorldDraft ?? settings.inlineAdsWorldContext}
+                        maxLength={1200}
+                        onChange={(event) => setAdsWorldDraft(event.target.value)}
+                        onBlur={() => {
+                          const next = adsWorldDraft;
+                          setAdsWorldDraft(null);
+                          if (next !== null && next !== settings.inlineAdsWorldContext)
+                            void update("inlineAdsWorldContext", next);
+                        }}
+                        className="w-full rounded-lg border border-[var(--slurp-outline)] bg-[var(--slurp-canvas)] p-3 text-base focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--slurp-focus)] disabled:opacity-50 sm:text-sm"
+                      />
+                    </Field>
+                    <Toggle
+                      label={t("ui.slurp.settings.ads.images")}
+                      detail={t("ui.slurp.settings.ads.imagesDetail")}
+                      value={settings.inlineAdsImagesEnabled}
+                      onChange={(value) => update("inlineAdsImagesEnabled", value)}
+                    />
+                    <Field
+                      label={t("ui.slurp.settings.ads.lorebook")}
+                      detail={t("ui.slurp.settings.ads.lorebookDetail")}
+                    >
+                      <div className="flex flex-wrap gap-2">
+                        <select
+                          value={settings.inlineAdsLorebookId ?? ""}
+                          disabled={updateSettings.isPending || adLorebooks.isLoading}
+                          onChange={(event) =>
+                            void save({
+                              inlineAdsLorebookId: event.target.value || null,
+                              // Clearing the fingerprint makes the next sync regenerate against
+                              // the newly chosen book instead of treating it as already applied.
+                              inlineAdsLorebookRevision: null,
+                            })
+                          }
+                          className="min-h-11 min-w-0 flex-1 rounded-lg border border-[var(--slurp-outline)] bg-[var(--slurp-canvas)] px-3 text-base focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--slurp-focus)] disabled:opacity-50 sm:text-sm"
+                        >
+                          <option value="">{t("ui.slurp.settings.ads.lorebookNone")}</option>
+                          {(adLorebooks.data?.items ?? []).map((book) => (
+                            <option key={book.id} value={book.id}>
+                              {book.name}
+                            </option>
+                          ))}
+                        </select>
+                        <button
+                          type="button"
+                          disabled={!settings.inlineAdsLorebookId || syncAdLorebook.isPending}
+                          onClick={() =>
+                            syncAdLorebook.mutate(true, {
+                              onSuccess: (result) =>
+                                toast.success(t(`ui.slurp.settings.ads.lorebookSync.${result.outcome}`)),
+                              onError: (error) => toast.error(errorMessage(error)),
+                            })
+                          }
+                          className="min-h-11 rounded-lg border border-[var(--slurp-outline)] px-4 text-sm font-bold hover:bg-[var(--accent)] disabled:opacity-50"
+                        >
+                          {syncAdLorebook.isPending
+                            ? t("ui.slurp.settings.ads.lorebookSyncing")
+                            : t("ui.slurp.settings.ads.lorebookSyncNow")}
+                        </button>
+                      </div>
+                    </Field>
+                  </SettingsGroup>
                   <div className="rounded-xl border border-[var(--slurp-outline)] p-4">
                     <h2 className="text-sm font-bold">{t("ui.slurp.settings.ads.pool")}</h2>
                     <p className="mt-1 text-xs leading-5 text-[var(--slurp-muted)]">
@@ -2301,7 +2463,8 @@ function SectionTitle({ title, detail }: { title: string; detail: string }) {
     </div>
   );
 }
-function CreatorDetailGroup({ title, children }: { title: string; children: ReactNode }) {
+/** A labelled group of related settings. Used by every section that has more than a handful. */
+function SettingsGroup({ title, children }: { title: string; children: ReactNode }) {
   return (
     <section
       className="space-y-4 rounded-xl bg-[var(--slurp-surface-raised,var(--background))] p-4 shadow-[var(--slurp-shadow-raised)] sm:p-5"

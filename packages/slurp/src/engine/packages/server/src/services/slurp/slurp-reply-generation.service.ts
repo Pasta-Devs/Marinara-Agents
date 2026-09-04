@@ -13,6 +13,7 @@ import { logDebugOverride } from "../../lib/logger.js";
 import { resolveBaseUrl } from "../generation/connection-base-url.js";
 import { clampGenerationMaxOutputTokens } from "../generation/output-token-limits.js";
 import { resolveStoredChatOptions } from "../generation/generation-parameters.js";
+import { noodleImageContext } from "./slurp-image-prompt.js";
 import { noodleSamplingOptions } from "./slurp-sampling-options.js";
 import { parseGameJsonish } from "../game/jsonish.js";
 import { requireModelAnswer } from "./slurp-model-answer.js";
@@ -70,6 +71,8 @@ export function buildNoodlerCreatorReplyMessages(input: {
     post: {
       title: protect(input.post.title),
       content: protect(input.post.content),
+      // The picture the creator is replying about. Without it every reply talks past the image.
+      ...(noodleImageContext(input.post) && { image: noodleImageContext(input.post) }),
     },
     viewer: {
       displayName: protect(input.viewer.displayName),

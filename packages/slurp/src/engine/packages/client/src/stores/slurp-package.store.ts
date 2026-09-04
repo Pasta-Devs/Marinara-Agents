@@ -1,5 +1,9 @@
 import { create } from "zustand";
-import type { SlurpNavigationState } from "../components/slurp/slurp-navigation.types";
+import {
+  SLURP_SETTINGS_SECTIONS,
+  type SlurpNavigationState,
+  type SlurpSettingsSection,
+} from "../components/slurp/slurp-navigation.types";
 
 const PACKAGE_STATE_KEY = "marinara:slurp:package-ui";
 
@@ -32,8 +36,7 @@ function isSlurpNavigation(value: unknown): value is SlurpNavigationState {
   if (value.mode === "creator-settings") {
     return (
       (value.tab === undefined || value.tab === "creator") &&
-      (value.section === undefined ||
-        ["overview", "general", "creators", "images", "audience", "advanced"].includes(value.section as string)) &&
+      (value.section === undefined || SLURP_SETTINGS_SECTIONS.includes(value.section as SlurpSettingsSection)) &&
       (value.returnTo === undefined || isSlurpNavigation(value.returnTo))
     );
   }

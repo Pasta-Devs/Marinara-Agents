@@ -446,6 +446,54 @@ export function useNoodlerAccounts(enabled = true) {
 
 export type NoodlerViewerWallets = Record<string, { coins: number }>;
 
+/** One wallet's ledger line. `amount` is signed: negative spends, positive earns. */
+export type SlurpWalletEntry = {
+  kind: "unlock" | "subscribe" | "renew" | "topUp" | "stipend" | "ad" | "engagement" | "income";
+  amount: number;
+  at: string;
+  note?: string;
+};
+
+export type SlurpWallet = {
+  coins: number;
+  ledger: SlurpWalletEntry[];
+  earnedToday: { ad: number; engagement: number };
+  subscriptions: Record<string, { paidThroughAt: string; price: number }>;
+};
+
+/**
+ * The viewer's wallet. Fetching it is what pays the daily stipend and charges due renewals on the
+ * server, so the wallet page opening is also what moves the economy forward.
+ */
+export function useSlurpWallet(personaId: string | null) {
+  return useQuery({
+    queryKey: [...noodleKeys.noodlerRoot(), "wallet", personaId ?? "none"],
+    queryFn: () => api.get<SlurpWallet>(`/slurp/noodler/viewer/wallet?personaId=${encodeURIComponent(personaId!)}`),
+    enabled: Boolean(personaId),
+  });
+}
+
+export function useTopUpSlurpWallet() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (input: { personaId: string; amount: number }) =>
+      api.post<SlurpWallet>("/slurp/noodler/viewer/wallet/top-up", input),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: noodleKeys.noodlerRoot() }),
+  });
+}
+
+/** Set a creator's own weekly price, or clear it back to the default with `null`. */
+export function useSetSlurpCreatorPrice() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (input: { accountId: string; price: number | null }) =>
+      api.put<{ price: number }>(`/slurp/noodler/accounts/${encodeURIComponent(input.accountId)}/subscription-price`, {
+        price: input.price,
+      }),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: noodleKeys.noodlerRoot() }),
+  });
+}
+
 export function useNoodlerViewerWallets(enabled = true) {
   return useQuery({
     queryKey: [...noodleKeys.noodlerRoot(), "viewer-wallets"],

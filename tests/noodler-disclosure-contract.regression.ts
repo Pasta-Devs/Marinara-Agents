@@ -184,7 +184,9 @@ const fanActivityPrivacy = readFileSync(
 );
 // Locked posts are eligible fan-activity targets, but only their title reaches the prompt — a
 // fan reply must never be able to restate paid content it was never shown.
-assert.match(fanActivityPrivacy, /access === "locked" \? \{ id, title, access \} : \{ id, title, content, access \}/u);
+// A locked post still withholds its body, but its picture is public, so the image line stays.
+assert.match(fanActivityPrivacy, /\? \{ id, title, access, \.\.\.\(image && \{ image \}\) \}/u);
+assert.doesNotMatch(fanActivityPrivacy, /\? \{ id, title, content/u, "a locked body must never reach the prompt");
 assert.match(fanActivityPrivacy, /Posts marked locked are paid posts\. Only subscribers see them/u);
 
 console.log("NoodleR disclosure contract regressions passed.");

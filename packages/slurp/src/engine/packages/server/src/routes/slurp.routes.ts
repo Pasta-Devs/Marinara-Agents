@@ -1,7 +1,7 @@
 // ──────────────────────────────────────────────
 // Routes: Noodle Fake Social Media
 // ──────────────────────────────────────────────
-import { existsSync } from "fs";
+import { existsSync, readFileSync } from "fs";
 import { basename, dirname } from "path";
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import { extname } from "node:path";
@@ -104,6 +104,7 @@ import {
   unlinkNoodlerMedia,
 } from "../services/slurp/slurp-media.js";
 import {
+  readNoodlerAvatarMediaPath,
   resolveNoodlerAvatarAbsolutePath,
   stageNoodlerAvatar,
   stageNoodlerBanner,
@@ -111,6 +112,7 @@ import {
   unlinkNoodlerBanner,
   resolveNoodlerBannerAbsolutePath,
 } from "../services/slurp/slurp-avatar.js";
+import { renderSlurpShareCard } from "../services/slurp/slurp-share-card.js";
 import { getErrorMessage, resolvePersonaAccount } from "../services/slurp/slurp-public-support.js";
 import { generateNoodlerCreatorArtwork } from "../services/slurp/slurp-artwork.operation.js";
 
@@ -447,6 +449,39 @@ export async function slurpRoutes(app: FastifyInstance) {
     return noodle.listNoodlerStageProfiles();
   });
 
+  /**
+   * One viewer's wallet: balance, recent ledger, and paid-through dates. Reading it is what pays
+   * the daily stipend and charges due renewals, so the wallet page is also the economy's clock.
+   */
+  app.get("/noodler/viewer/wallet", async (req, reply) => {
+    const parsed = z.object({ personaId: z.string().trim().min(1) }).safeParse(req.query);
+    if (!parsed.success) return reply.code(400).send({ error: parsed.error.flatten() });
+    const viewer = await resolveViewerPersona(parsed.data.personaId);
+    if (!viewer) return reply.code(404).send({ error: "Slurp persona not found" });
+    return noodle.getWallet(viewer.id);
+  });
+
+  app.post("/noodler/viewer/wallet/top-up", async (req, reply) => {
+    const parsed = z
+      .object({ personaId: z.string().trim().min(1), amount: z.number().int().min(1).max(100_000) })
+      .safeParse(req.body);
+    if (!parsed.success) return reply.code(400).send({ error: parsed.error.flatten() });
+    const viewer = await resolveViewerPersona(parsed.data.personaId);
+    if (!viewer) return reply.code(404).send({ error: "Slurp persona not found" });
+    return noodle.topUpWallet(viewer.id, parsed.data.amount);
+  });
+
+  /** A creator's own weekly price. `null` clears it back to the Slurp-wide default. */
+  app.put("/noodler/accounts/:id/subscription-price", async (req, reply) => {
+    const parsed = z.object({ price: z.number().int().min(0).max(9999).nullable() }).safeParse(req.body);
+    if (!parsed.success) return reply.code(400).send({ error: parsed.error.flatten() });
+    const { id } = req.params as { id: string };
+    const creator = await noodle.getNoodlerAccountById(id);
+    if (!creator) return reply.code(404).send({ error: "Stage profile not found" });
+    await noodle.setCreatorSubscriptionPrice(id, parsed.data.price);
+    return { price: await noodle.getCreatorSubscriptionPrice(id) };
+  });
+
   app.get("/noodler/viewer-wallets", async (_req, reply) => {
     const personas = await characters.listPersonas();
     return noodle.listViewerWallets(personas.map((persona) => persona.id));
@@ -675,9 +710,18 @@ export async function slurpRoutes(app: FastifyInstance) {
     const visibleAccounts = accounts.filter(
       (account) => creatorBelongsToViewer(account, viewer) || !isNoodlerHiddenFromViewer(account, viewer.id),
     );
+    // Prices for the visible creators only, so a large roster costs one lookup per shown row.
+    const subscriptionPrices = Object.fromEntries(
+      await Promise.all(
+        visibleAccounts.map(
+          async (account) => [account.id, await noodle.getCreatorSubscriptionPrice(account.id)] as const,
+        ),
+      ),
+    );
     return {
       viewer,
       visibleAccounts,
+      subscriptionPrices,
       accountById: new Map(visibleAccounts.map((account) => [account.id, account])),
       profileById,
       subscribedIds,
@@ -695,9 +739,8 @@ export async function slurpRoutes(app: FastifyInstance) {
         profile: context.profileById.get(account.id)!,
         subscribed: context.subscribedIds.has(account.id),
         followed: context.followedIds.has(account.id),
-        // Fictional subscription price, presentation only. Per-Creator pricing would need a field
-        // on the shared Engine account settings type, so every Creator shows the same default.
-        subscriptionPrice: NOODLER_SUBSCRIPTION_COST,
+        // The creator's own weekly price when it has set one, else the Slurp-wide default.
+        subscriptionPrice: context.subscriptionPrices[account.id] ?? NOODLER_SUBSCRIPTION_COST,
         // Feed posts live in a separate keyset-paged query. Keeping this field preserves the
         // shared Engine contract for older consumers without hydrating any post history here.
         posts: [] as NoodlerPostView[],
@@ -766,7 +809,7 @@ export async function slurpRoutes(app: FastifyInstance) {
             imagePrompt: locked ? null : post.imagePrompt,
             metadata: locked ? null : post.metadata,
             // A locked post withholds its metadata, so the price travels as its own field. It is
-            // presentation only — nothing on the unlock route reads it back or checks funds.
+            // The post's own price, which the unlock route charges when the wallet is enabled.
             unlockPrice: locked ? noodlerUnlockPriceFromMetadata(post.metadata) : null,
             story: post.metadata.noodlerPostType === "story",
             linkedPostId:
@@ -958,7 +1001,10 @@ export async function slurpRoutes(app: FastifyInstance) {
     const viewer = await resolveViewerPersona(parsed.data.personaId);
     if (!viewer) return reply.code(404).send({ error: "Slurp persona not found" });
     await ads.record(parsed.data.personaId, (req.params as { id: string }).id, "action");
-    return { ok: true };
+    // Acting on an ad pays, capped per day. The wallet applies the cap, so a capped-out day
+    // quietly pays nothing rather than failing the click.
+    const wallet = await noodle.earnCoins(parsed.data.personaId, "ad", (req.params as { id: string }).id);
+    return { ok: true, coins: wallet.coins };
   });
 
   app.post("/noodler/viewer/ads/brand/hide", async (req, reply) => {
@@ -1199,6 +1245,47 @@ export async function slurpRoutes(app: FastifyInstance) {
     );
   });
 
+  /**
+   * A post rendered as one downloadable PNG: creator avatar and name, title, caption, and the
+   * post image.
+   *
+   * Gated exactly like reading the post. A locked post the viewer has not unlocked is never
+   * rendered — a share card would otherwise be a way to read paid content for free, and the
+   * blurred teaser is not worth sharing. Falls back to the caller's own view when no persona is
+   * supplied, which is the owner path the other management routes use.
+   */
+  app.get("/noodler/posts/:id/share-card", async (req, reply) => {
+    const { id } = req.params as { id: string };
+    const personaId = (req.query as { personaId?: string }).personaId;
+    const readable = personaId ? await resolveReadableNoodlerPost(personaId, id) : null;
+    if (personaId && (!readable || readable.locked)) return reply.code(404).send({ error: "Not Found" });
+    const post = readable?.post ?? (personaId ? null : await noodle.getNoodlerPostById(id));
+    if (!post) return reply.code(404).send({ error: "Not Found" });
+    if (!personaId && post.access === "locked") return reply.code(404).send({ error: "Not Found" });
+    const creator = await noodle.getNoodlerAccountById(post.authorAccountId);
+    if (!creator) return reply.code(404).send({ error: "Not Found" });
+
+    const readBytes = (mediaPath: string | null) => {
+      const absolute = mediaPath ? resolveNoodlerMediaAbsolutePath(mediaPath) : null;
+      return absolute && existsSync(absolute) ? readFileSync(absolute) : null;
+    };
+    const card = await renderSlurpShareCard({
+      displayName: creator.displayName,
+      handle: creator.handle,
+      title: post.title ?? null,
+      content: post.content,
+      avatar: readBytes(readNoodlerAvatarMediaPath(creator.id, creator.avatarUrl ?? null)),
+      image: readBytes(readNoodlerMediaPath(post)),
+    });
+    // No sharp means no card. Say so rather than sending a broken download.
+    if (!card) return reply.code(503).send({ error: "Image rendering is unavailable on this install" });
+    return reply
+      .header("Content-Disposition", `attachment; filename="slurp-${id}.png"`)
+      .header("Cache-Control", "private, max-age=300")
+      .type("image/png")
+      .send(card);
+  });
+
   app.post("/noodler/posts/:id/interactions", async (req, reply) => {
     const parsed = noodlerCreateInteractionSchema.safeParse(req.body);
     if (!parsed.success) return reply.code(400).send({ error: parsed.error.flatten() });
@@ -1222,6 +1309,11 @@ export async function slurpRoutes(app: FastifyInstance) {
       parentInteractionId: parsed.data.parentInteractionId ?? null,
     });
     if (!interaction) return reply.code(400).send({ error: "Could not add that NoodleR interaction." });
+    // Taking part pays, capped per day. A like is one tap, so only the interactions that cost the
+    // player something to write are rewarded — otherwise the cap is reached by tapping hearts.
+    if (parsed.data.type === "reply" || parsed.data.type === "vote") {
+      await noodle.earnCoins(identity.personaId, "engagement", parsed.data.type);
+    }
     return reply.code(201).send(interaction);
   });
 
@@ -1520,7 +1612,14 @@ export async function slurpRoutes(app: FastifyInstance) {
       return reply.code(404).send({ error: "NoodleR stage profile not found" });
     }
     const subscription = await noodle.subscribe(viewer.id, creator.id);
-    if (!subscription) return reply.code(400).send({ error: "Could not subscribe to this stage profile" });
+    if (!subscription) {
+      const [wallet, price] = await Promise.all([
+        noodle.getWallet(viewer.id),
+        noodle.getCreatorSubscriptionPrice(creator.id),
+      ]);
+      if (wallet.coins < price) return reply.code(402).send({ error: "Not enough coins", price, coins: wallet.coins });
+      return reply.code(400).send({ error: "Could not subscribe to this stage profile" });
+    }
     const freshViewer = await resolveViewerPersona(parsed.data.personaId);
     return reply.code(201).send(buildViewerShell(await buildViewerContext(freshViewer ?? viewer)));
   });
@@ -1617,7 +1716,14 @@ export async function slurpRoutes(app: FastifyInstance) {
       return reply.code(404).send({ error: "NoodleR post not found" });
     }
     const unlock = await noodle.unlockPost(viewer.id, post.id);
-    if (!unlock) return reply.code(400).send({ error: "Could not unlock this post" });
+    // An affordable post that still fails is a different problem from an unaffordable one, so
+    // the client can tell "top up" apart from "this post is gone".
+    if (!unlock) {
+      const wallet = await noodle.getWallet(viewer.id);
+      const price = noodlerUnlockPriceFromMetadata(post.metadata);
+      if (wallet.coins < price) return reply.code(402).send({ error: "Not enough coins", price, coins: wallet.coins });
+      return reply.code(400).send({ error: "Could not unlock this post" });
+    }
     return reply.code(201).send(buildViewerShell(await buildViewerContext(viewer)));
   });
 

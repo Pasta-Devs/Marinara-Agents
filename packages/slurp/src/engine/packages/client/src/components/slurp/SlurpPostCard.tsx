@@ -13,6 +13,7 @@ import {
   RefreshCw,
   Repeat2,
   RotateCcw,
+  Share2,
   Smile,
   Trash2,
   X,
@@ -34,6 +35,8 @@ import {
   type NoodlePostImageCrop,
   type NoodleTextMention,
 } from "@marinara-engine/shared";
+import { toast } from "sonner";
+import { api } from "../../lib/api-client";
 import { cn } from "../../lib/utils";
 import { renderInlineWithCustomEmojis } from "../../lib/custom-emoji-render";
 import {
@@ -1788,39 +1791,73 @@ export function NoodlePostCard({ post, ctx }: { post: NoodlePostCardModel; ctx: 
                 {formatTime(post.createdAt, i18n.language)}
               </span>
             </div>
-            {ctx.postManagement && (
-              <div className="relative shrink-0">
-                <button
-                  type="button"
-                  onClick={() => setPostMenuId((current) => (current === post.id ? null : post.id))}
-                  className="flex h-8 w-8 items-center justify-center rounded-full text-[var(--noodle-accent)] transition-colors hover:bg-[var(--noodle-accent)]/10"
-                  title={localizeUi("ui.noodle.noodlepostcard.postActions")}
-                  aria-label={localizeUi("ui.noodle.noodlepostcard.postActions")}
-                >
-                  <MoreHorizontal size={18} />
-                </button>
-                {postMenuId === post.id && (
-                  <div className="absolute right-0 top-[calc(100%+0.25rem)] z-30 min-w-32 overflow-hidden rounded-lg border border-[var(--noodle-divider)] bg-[var(--background)] py-1 text-xs shadow-2xl shadow-black/30">
-                    <button
-                      type="button"
-                      onClick={() => startEditingPost(post)}
-                      className="flex w-full items-center gap-2 px-3 py-2 text-left transition-colors hover:bg-[var(--accent)]"
-                    >
-                      <Pencil size={14} className="text-[var(--noodle-accent)]" />
-                      {localizeUi("ui.noodle.noodlepostcard.edit")}
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => deleteNoodlePost(post)}
-                      className="flex w-full items-center gap-2 px-3 py-2 text-left transition-colors hover:bg-[var(--accent)]"
-                    >
-                      <Trash2 size={14} className="text-[var(--noodle-accent)]" />
-                      {localizeUi("lorebook.editor.batch.delete")}
-                    </button>
-                  </div>
-                )}
-              </div>
-            )}
+            {/*
+              The menu is on every post now, not only the ones you can manage: sharing is
+              something any reader does. Edit and delete stay behind `postManagement`, so a
+              viewer-only projection sees a menu with just Share in it.
+            */}
+            <div className="relative shrink-0">
+              <button
+                type="button"
+                onClick={() => setPostMenuId((current) => (current === post.id ? null : post.id))}
+                className="flex h-8 w-8 items-center justify-center rounded-full text-[var(--noodle-accent)] transition-colors hover:bg-[var(--noodle-accent)]/10"
+                title={localizeUi("ui.noodle.noodlepostcard.postActions")}
+                aria-label={localizeUi("ui.noodle.noodlepostcard.postActions")}
+              >
+                <MoreHorizontal size={18} />
+              </button>
+              {postMenuId === post.id && (
+                <div className="absolute right-0 top-[calc(100%+0.25rem)] z-30 min-w-32 overflow-hidden rounded-lg border border-[var(--noodle-divider)] bg-[var(--background)] py-1 text-xs shadow-2xl shadow-black/30">
+                  {ctx.postManagement && (
+                    <>
+                      <button
+                        type="button"
+                        onClick={() => startEditingPost(post)}
+                        className="flex w-full items-center gap-2 px-3 py-2 text-left transition-colors hover:bg-[var(--accent)]"
+                      >
+                        <Pencil size={14} className="text-[var(--noodle-accent)]" />
+                        {localizeUi("ui.noodle.noodlepostcard.edit")}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => deleteNoodlePost(post)}
+                        className="flex w-full items-center gap-2 px-3 py-2 text-left transition-colors hover:bg-[var(--accent)]"
+                      >
+                        <Trash2 size={14} className="text-[var(--noodle-accent)]" />
+                        {localizeUi("lorebook.editor.batch.delete")}
+                      </button>
+                    </>
+                  )}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setPostMenuId(null);
+                      const persona = ctx.personaAccount?.entityId;
+                      void api
+                        .download(
+                          `/slurp/noodler/posts/${encodeURIComponent(post.id)}/share-card${
+                            persona ? `?personaId=${encodeURIComponent(persona)}` : ""
+                          }`,
+                          `slurp-${post.id}.png`,
+                        )
+                        .catch((error: unknown) =>
+                          toast.error(
+                            error instanceof Error
+                              ? error.message
+                              : localizeUi("ui.slurp.post.shareFailed", {
+                                  defaultValue: "Could not build the share image.",
+                                }),
+                          ),
+                        );
+                    }}
+                    className="flex w-full items-center gap-2 px-3 py-2 text-left transition-colors hover:bg-[var(--accent)]"
+                  >
+                    <Share2 size={14} className="text-[var(--noodle-accent)]" />
+                    {localizeUi("ui.slurp.post.share", { defaultValue: "Share as image" })}
+                  </button>
+                </div>
+              )}
+            </div>
           </div>
           {ctx.postManagement && editingPostId === post.id ? (
             <div className="mt-2 space-y-2">

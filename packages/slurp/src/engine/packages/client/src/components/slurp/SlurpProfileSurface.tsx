@@ -6,10 +6,14 @@ import { useTranslation as useUiTranslation } from "react-i18next";
 
 type SlurpProfileTab = "posts" | "likes" | "media";
 
-const fieldClass =
-  "mari-chrome-field h-9 w-full min-w-0 rounded-lg border border-[var(--marinara-chat-chrome-panel-border)] bg-[var(--background)] px-3 text-xs text-[var(--foreground)] outline-none transition-colors focus:border-[var(--noodle-accent)]";
-const labelClass =
-  "text-[0.68rem] font-semibold uppercase tracking-normal text-[var(--marinara-chat-chrome-panel-muted)]";
+/**
+ * Editing happens in place: a field keeps the exact typography it had a moment ago and only gains
+ * an editable surface. Editing used to swap the whole identity block for a stacked form with tiny
+ * labels, so you lost your bearings the instant you clicked Edit and could not tell what the
+ * result would look like.
+ */
+const inPlaceFieldClass =
+  "w-full min-w-0 rounded-lg border border-dashed border-[var(--noodle-accent)]/45 bg-[var(--noodle-accent)]/[0.06] px-2 py-1 outline-none transition-colors focus:border-solid focus:border-[var(--noodle-accent)] focus:bg-[var(--noodle-accent)]/10";
 
 interface SlurpProfileSurfaceProps<TTab extends string = SlurpProfileTab> {
   mobileHeader: ReactNode;
@@ -268,7 +272,10 @@ export function SlurpProfileSurface<TTab extends string = SlurpProfileTab>({
           className={cn(
             "flex items-end",
             spotlight ? "w-auto" : "w-full",
-            hasBanner ? (spotlight ? "-mt-10 pt-0 @min-[680px]:-mt-16" : "-mt-14") : "pt-5",
+            // The avatar rides up over the banner by roughly half its own height. It used to sit
+            // almost flush with the card edge, which read as two stacked blocks rather than one
+            // profile. `z-10` keeps it above the banner it now overlaps.
+            hasBanner ? (spotlight ? "relative z-10 -mt-20 pt-0 @min-[680px]:-mt-28" : "relative z-10 -mt-24") : "pt-5",
           )}
         >
           {avatarUpload ? (
@@ -330,109 +337,117 @@ export function SlurpProfileSurface<TTab extends string = SlurpProfileTab>({
           )}
         </div>
 
-        {editor?.isEditing ? (
-          <div className="mt-5 w-full space-y-3 text-left @min-[680px]:mt-0">
-            <div className="grid grid-cols-1 gap-3 @min-[680px]:grid-cols-2">
-              <label className="block space-y-1.5">
-                <span className={labelClass}>{localizeUi("ui.noodle.noodleprofilesurface.displayName")}</span>
-                <input
-                  value={editor.name}
-                  onChange={(event) => editor.onNameChange(event.target.value)}
-                  className={fieldClass}
-                />
-              </label>
-              <label className="block space-y-1.5">
-                <span className={labelClass}>{localizeUi("ui.noodle.noodleprofilesurface.name")}</span>
-                <input
-                  value={editor.handle}
-                  onChange={(event) => editor.onHandleChange(event.target.value)}
-                  className={fieldClass}
-                  placeholder={localizeUi("ui.noodle.noodleprofilesurface.mari")}
-                />
-              </label>
-            </div>
-            <label className="block space-y-1.5">
-              <span className={labelClass}>{localizeUi("ui.noodle.noodleprofilesurface.bio")}</span>
-              <textarea
-                value={editor.bio}
-                onChange={(event) => editor.onBioChange(event.target.value)}
-                className={cn(fieldClass, "h-24 resize-none py-2")}
-              />
-            </label>
-            <label className="block space-y-1.5">
-              <span className={labelClass}>{localizeUi("ui.noodle.noodleprofilesurface.location")}</span>
-              <input
-                value={editor.location}
-                onChange={(event) => editor.onLocationChange(event.target.value)}
-                className={fieldClass}
-                placeholder={localizeUi("ui.noodle.noodleprofilesurface.somewhereCozy")}
-              />
-            </label>
-            {editor.privateFields}
-          </div>
-        ) : (
-          <div
-            className={cn(
-              "mt-4 grid w-full min-w-0 items-start gap-4 text-left @min-[680px]:mt-0",
-              hasProfileActions &&
-                "@min-[860px]:grid-cols-[minmax(0,1fr)_auto] @min-[860px]:items-center @min-[860px]:gap-8",
+        <div
+          className={cn(
+            "mt-4 grid w-full min-w-0 items-start gap-4 text-left @min-[680px]:mt-0",
+            hasProfileActions &&
+              "@min-[860px]:grid-cols-[minmax(0,1fr)_auto] @min-[860px]:items-center @min-[860px]:gap-8",
+          )}
+        >
+          <div className="flex min-w-0 flex-col items-start">
+            {identityEyebrow && (
+              <div className="mb-1.5 text-[0.68rem] font-bold uppercase tracking-[0.14em] text-[var(--noodle-accent)]">
+                {identityEyebrow}
+              </div>
             )}
-          >
-            <div className="flex min-w-0 flex-col items-start">
-              {identityEyebrow && (
-                <div className="mb-1.5 text-[0.68rem] font-bold uppercase tracking-[0.14em] text-[var(--noodle-accent)]">
-                  {identityEyebrow}
-                </div>
-              )}
+            {editor?.isEditing ? (
+              <input
+                value={editor.name}
+                onChange={(event) => editor.onNameChange(event.target.value)}
+                aria-label={localizeUi("ui.noodle.noodleprofilesurface.displayName")}
+                className={cn(
+                  inPlaceFieldClass,
+                  "text-2xl font-black leading-[1.08] tracking-[-0.025em] @min-[680px]:text-3xl @min-[1040px]:text-4xl",
+                )}
+              />
+            ) : (
               <h1 className="max-w-full text-2xl font-black leading-[1.08] tracking-[-0.025em] text-balance @min-[680px]:text-3xl @min-[1040px]:text-4xl">
                 {account.displayName}
               </h1>
-              <div className="mt-1 flex max-w-full flex-wrap items-center gap-2 text-sm text-[var(--muted-foreground)]">
-                <span
-                  data-noodle-profile-handle
-                  className="min-w-0 break-all font-medium !text-[var(--noodle-accent-foreground)]"
-                >
-                  @{displayHandle || localizeUi("ui.slurp.profile.fallbackHandle")}
+            )}
+            <div className="mt-1 flex max-w-full flex-wrap items-center gap-2 text-sm text-[var(--muted-foreground)]">
+              {editor?.isEditing ? (
+                <span className="flex min-w-0 flex-1 items-center gap-1 font-medium !text-[var(--noodle-accent-foreground)]">
+                  @
+                  <input
+                    value={editor.handle}
+                    onChange={(event) => editor.onHandleChange(event.target.value)}
+                    aria-label={localizeUi("ui.noodle.noodleprofilesurface.name")}
+                    placeholder={localizeUi("ui.noodle.noodleprofilesurface.mari")}
+                    className={cn(inPlaceFieldClass, "text-sm font-medium")}
+                  />
                 </span>
-                {handleMeta}
-              </div>
+              ) : (
+                <>
+                  <span
+                    data-noodle-profile-handle
+                    className="min-w-0 break-all font-medium !text-[var(--noodle-accent-foreground)]"
+                  >
+                    @{displayHandle || localizeUi("ui.slurp.profile.fallbackHandle")}
+                  </span>
+                  {handleMeta}
+                </>
+              )}
+            </div>
+            {editor?.isEditing ? (
+              <textarea
+                value={editor.bio}
+                onChange={(event) => editor.onBioChange(event.target.value)}
+                aria-label={localizeUi("ui.noodle.noodleprofilesurface.bio")}
+                className={cn(inPlaceFieldClass, "mt-2 h-24 resize-none text-sm leading-relaxed")}
+              />
+            ) : (
               <div className="max-w-[65ch] text-sm leading-relaxed text-[var(--muted-foreground)] text-pretty">
                 {bioContent}
               </div>
-              {contentActions}
-              {location && (
+            )}
+            {!editor?.isEditing && contentActions}
+            {editor?.isEditing ? (
+              <span className="mt-2 flex w-full items-center gap-1.5 text-sm text-[var(--muted-foreground)]">
+                <MapPin size={15} className="shrink-0 text-[var(--noodle-accent)]" />
+                <input
+                  value={editor.location}
+                  onChange={(event) => editor.onLocationChange(event.target.value)}
+                  aria-label={localizeUi("ui.noodle.noodleprofilesurface.location")}
+                  placeholder={localizeUi("ui.noodle.noodleprofilesurface.somewhereCozy")}
+                  className={cn(inPlaceFieldClass, "text-sm")}
+                />
+              </span>
+            ) : (
+              location && (
                 <p className="mt-2 flex items-center gap-1.5 text-sm text-[var(--muted-foreground)]">
                   <MapPin size={15} className="text-[var(--noodle-accent)]" />
                   {location}
                 </p>
-              )}
-              {connections && (
-                <div className="mt-3 flex flex-wrap gap-x-6 gap-y-1 border-t border-[var(--noodle-divider)] pt-3 text-sm text-[var(--muted-foreground)]">
-                  <button
-                    type="button"
-                    onClick={connections.onOpenFollowing}
-                    className="min-h-11 px-1 transition-colors hover:text-[var(--noodle-accent)]"
-                  >
-                    <span className="font-bold text-[var(--foreground)]">{connections.followingCount}</span>{" "}
-                    {localizeUi("ui.noodle.noodleprofilesurface.following")}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={connections.onOpenFollowers}
-                    className="min-h-11 px-1 transition-colors hover:text-[var(--noodle-accent)]"
-                  >
-                    <span className="font-bold text-[var(--foreground)]">{connections.followerCount}</span>{" "}
-                    {localizeUi("ui.noodle.noodleprofilesurface.followers")}
-                  </button>
-                </div>
-              )}
-            </div>
-            {hasProfileActions && <div className="min-w-0 @min-[860px]:max-w-[22rem]">{profileActions}</div>}
+              )
+            )}
+            {/* Settings with no on-profile equivalent, so they can only follow the live fields. */}
+            {editor?.isEditing && editor.privateFields && (
+              <div className="mt-4 w-full space-y-3">{editor.privateFields}</div>
+            )}
+            {!editor?.isEditing && connections && (
+              <div className="mt-3 flex flex-wrap gap-x-6 gap-y-1 border-t border-[var(--noodle-divider)] pt-3 text-sm text-[var(--muted-foreground)]">
+                <button
+                  type="button"
+                  onClick={connections.onOpenFollowing}
+                  className="min-h-11 px-1 transition-colors hover:text-[var(--noodle-accent)]"
+                >
+                  <span className="font-bold text-[var(--foreground)]">{connections.followingCount}</span>{" "}
+                  {localizeUi("ui.noodle.noodleprofilesurface.following")}
+                </button>
+                <button
+                  type="button"
+                  onClick={connections.onOpenFollowers}
+                  className="min-h-11 px-1 transition-colors hover:text-[var(--noodle-accent)]"
+                >
+                  <span className="font-bold text-[var(--foreground)]">{connections.followerCount}</span>{" "}
+                  {localizeUi("ui.noodle.noodleprofilesurface.followers")}
+                </button>
+              </div>
+            )}
           </div>
-        )}
-        {editor?.isEditing && hasProfileActions && (
-          <div className={cn("mt-4", spotlight && "@min-[680px]:col-start-2")}>{profileActions}</div>
-        )}
+          {hasProfileActions && <div className="min-w-0 @min-[860px]:max-w-[22rem]">{profileActions}</div>}
+        </div>
       </div>
       {preTabsContent && (
         <div

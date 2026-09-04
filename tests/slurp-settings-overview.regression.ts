@@ -24,13 +24,12 @@ async function main() {
     readFile("packages/slurp/src/engine/packages/client/src/localization/locales/en.json", "utf8"),
   ]);
 
-  assert.match(navigation, /section\?: "overview" \| "general"/u);
-  assert.match(store, /\["overview", "general", "creators", "images", "audience", "advanced"\]/u);
+  assert.match(navigation, /section\?: SlurpSettingsSection;/u);
+  // One shared list now, so the store cannot drift out of step with the sections that exist.
+  assert.match(store, /SLURP_SETTINGS_SECTIONS\.includes/u);
   assert.match(home, /section: "overview"/u);
-  assert.match(
-    settings,
-    /const settingsSections = \["overview", "general", "creators", "images", "audience", "ads", "advanced"\]/u,
-  );
+  assert.match(settings, /const settingsSections = SLURP_SETTINGS_SECTIONS;/u);
+  assert.match(navigation, /"ads",\n  "wallet",/u, "the wallet section must be reachable");
   assert.match(settings, /section === "overview"/u);
   assert.match(settings, /const imagesReady = imageConnections\.length > 0 && imageEnabledCreators\.length > 0/u);
   assert.match(settings, /save\(\{ autoPostingScheduleEnabled: true, postsPerDay: value \}\)/u);

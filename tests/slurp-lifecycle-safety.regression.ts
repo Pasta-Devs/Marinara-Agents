@@ -169,8 +169,14 @@ assert.match(
 );
 assert.match(
   home,
-  /data-slurp-creator-tools[\s\S]*?aria-expanded=\{creatorToolsOpen\}[\s\S]*?hidden=\{!creatorToolsOpen\}[\s\S]*?onClick=\{onEdit\}[\s\S]*?setAccessSettingsOpen\(true\)[\s\S]*?setAutomationOpen\(true\)[\s\S]*?<NoodlerPostComposer/u,
+  /data-slurp-creator-tools[\s\S]*?aria-expanded=\{creatorToolsOpen\}[\s\S]*?hidden=\{!creatorToolsOpen\}[\s\S]*?setAccessSettingsOpen\(true\)[\s\S]*?setAutomationOpen\(true\)[\s\S]*?<NoodlerPostComposer/u,
   "Collapsed Creator Tools must be one bar: actions and composer both live behind the toggle",
+);
+// Edit belongs to the profile header, next to Follow and Subscribe. It must not come back here.
+assert.doesNotMatch(
+  home.slice(home.indexOf("data-slurp-creator-tools"), home.indexOf("<NoodlerPostComposer")),
+  /onClick=\{onEdit\}/u,
+  "Creator Tools must not duplicate the header's Edit action",
 );
 assert.match(home, /ui\.slurp\.discover\.title/u);
 assert.match(home, /sm:grid-cols-2/u, "Discover must present creators as adaptive cards");

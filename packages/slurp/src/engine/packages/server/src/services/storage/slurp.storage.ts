@@ -56,6 +56,21 @@ export {
   noodlerUnlockPriceFromMetadata,
   noodlerUnlockPriceMetadata,
 } from "../slurp/slurp-prices.js";
+// Re-exported above for consumers; imported here because a re-export creates no local binding.
+import { noodlerUnlockPriceFromMetadata } from "../slurp/slurp-prices.js";
+import {
+  applyStipend,
+  credit,
+  earn,
+  readSlurpWallet,
+  renewSubscriptions,
+  slurpWalletKey,
+  SLURP_DEFAULT_ECONOMY,
+  spend,
+  subscriptionPaidThrough,
+  type SlurpEconomy,
+  type SlurpWallet,
+} from "../slurp/slurp-wallet.js";
 import { logger } from "../../lib/logger.js";
 import {
   NOODLE_FAN_ACTIVITY_MAX_ACTIVITIES_PER_CREATOR,
@@ -213,6 +228,21 @@ export const slurpSettingsSchema = z.object({
   fanRepliesPerRefresh: z.number().int().min(0).max(12),
   fanRepostsPerRefresh: z.number().int().min(0).max(12),
   fanArchetypeWeights: noodlerFanArchetypeWeightsSchema,
+  /**
+   * Wallet economy. Off by default: an existing install keeps the presentation-only prices it
+   * has always had, and nothing starts refusing an unlock because a stored balance ran dry.
+   */
+  walletEnabled: z.boolean(),
+  walletUnlockCost: z.number().int().min(0).max(9999),
+  walletSubscriptionCost: z.number().int().min(0).max(9999),
+  /** Daily stipend tops the balance up to this floor. Zero disables the stipend. */
+  walletStipendFloor: z.number().int().min(0).max(99_999),
+  walletAdReward: z.number().int().min(0).max(999),
+  walletAdDailyCap: z.number().int().min(0).max(9999),
+  walletEngagementReward: z.number().int().min(0).max(999),
+  walletEngagementDailyCap: z.number().int().min(0).max(9999),
+  /** Share of a fan's payment that reaches the viewer's own creator, as a percentage. */
+  walletCreatorRevenueSharePercent: z.number().int().min(0).max(100),
   nightQuiet: z.boolean(),
   onboarding: z.enum(["not_started", "in_progress", "completed"]),
 });
@@ -720,6 +750,15 @@ export const DEFAULT_SLURP_SETTINGS: SlurpSettings = {
   inlineAdsEra: "present",
   inlineAdsWorldContext: "",
   inlineAdsImagesEnabled: false,
+  walletEnabled: false,
+  walletUnlockCost: SLURP_DEFAULT_ECONOMY.unlockCost,
+  walletSubscriptionCost: SLURP_DEFAULT_ECONOMY.subscriptionCost,
+  walletStipendFloor: SLURP_DEFAULT_ECONOMY.stipendFloor,
+  walletAdReward: SLURP_DEFAULT_ECONOMY.adReward,
+  walletAdDailyCap: SLURP_DEFAULT_ECONOMY.adDailyCap,
+  walletEngagementReward: SLURP_DEFAULT_ECONOMY.engagementReward,
+  walletEngagementDailyCap: SLURP_DEFAULT_ECONOMY.engagementDailyCap,
+  walletCreatorRevenueSharePercent: SLURP_DEFAULT_ECONOMY.creatorRevenueSharePercent,
   inlineAdsLorebookId: null,
   inlineAdsLorebookRevision: null,
   refreshesPerDay: 0,
@@ -1047,6 +1086,55 @@ export function createSlurpStorage(db: DB) {
   const settingsStore = createAppSettingsStorage(db);
   const characters = createCharactersStorage(db);
   let publicHandleReconciliation: Promise<void> | null = null;
+
+  /**
+   * Per-creator subscription prices, as one `creatorAccountId -> coins` blob. A creator that sets
+   * no price of its own is billed at the Slurp-wide default, so this map stays small and no
+   * backfill is ever needed.
+   */
+  const CREATOR_PRICES_KEY = "slurp.creator-prices";
+
+  const readCreatorPrices = async (): Promise<Record<string, number>> => {
+    try {
+      const parsed = JSON.parse((await settingsStore.get(CREATOR_PRICES_KEY)) ?? "{}");
+      if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return {};
+      return Object.fromEntries(
+        Object.entries(parsed as Record<string, unknown>).filter(
+          (entry): entry is [string, number] =>
+            typeof entry[1] === "number" && Number.isInteger(entry[1]) && entry[1] >= 0,
+        ),
+      );
+    } catch {
+      return {};
+    }
+  };
+
+  /** The economy the current Slurp settings describe, for the pure rules in `slurp-wallet.ts`. */
+  const economyFrom = (settings: SlurpSettings): SlurpEconomy => ({
+    ...SLURP_DEFAULT_ECONOMY,
+    unlockCost: settings.walletUnlockCost,
+    subscriptionCost: settings.walletSubscriptionCost,
+    stipendFloor: settings.walletStipendFloor,
+    adReward: settings.walletAdReward,
+    adDailyCap: settings.walletAdDailyCap,
+    engagementReward: settings.walletEngagementReward,
+    engagementDailyCap: settings.walletEngagementDailyCap,
+    creatorRevenueSharePercent: settings.walletCreatorRevenueSharePercent,
+  });
+
+  /**
+   * Write the wallet, mirroring the balance onto `NoodleAccountSettings.wallet.coins` so the
+   * balance the sidebar and header already read stays the authoritative number.
+   */
+  const writeWallet = async (viewerAccountId: string, wallet: SlurpWallet) => {
+    await settingsStore.set(slurpWalletKey(viewerAccountId), JSON.stringify(wallet));
+    const stored = normalizeNoodleAccountSettings(await settingsStore.get(slurpViewerSettingsKey(viewerAccountId)));
+    await settingsStore.set(
+      slurpViewerSettingsKey(viewerAccountId),
+      JSON.stringify({ ...stored, wallet: { coins: wallet.coins } }),
+    );
+    return wallet;
+  };
 
   const pruneFinishedRefreshRuns = async () => {
     await db.transaction(async (tx) => {
@@ -4846,8 +4934,24 @@ export function createSlurpStorage(db: DB) {
       return finished;
     },
 
+    /**
+     * Subscribe a viewer to a creator for one paid period.
+     *
+     * Returns `null` when the viewer cannot afford the creator's price, alongside the existing
+     * "no" for a hidden or self-owned creator. Re-subscribing to a creator that is already paid
+     * up charges nothing, so the route stays idempotent.
+     */
     async subscribe(viewerAccountId: string, creatorAccountId: string): Promise<NoodleAccountSubscription | null> {
       if (viewerAccountId === creatorAccountId) return null;
+      const settings = await this.getSettings();
+      let price = 0;
+      if (settings.walletEnabled) {
+        price = await this.getCreatorSubscriptionPrice(creatorAccountId);
+        const wallet = await this.getWallet(viewerAccountId);
+        const paidThrough = wallet.subscriptions[creatorAccountId]?.paidThroughAt;
+        const alreadyPaid = paidThrough !== undefined && Date.parse(paidThrough) > Date.now();
+        if (!alreadyPaid && wallet.coins < price) return null;
+      }
       const run = viewerSettingsUpdateQueue.then(async () => {
         const viewer = await this.getViewer(viewerAccountId);
         if (!viewer) return null;
@@ -4950,10 +5054,37 @@ export function createSlurpStorage(db: DB) {
         });
       });
       viewerSettingsUpdateQueue = run.catch(() => undefined);
-      return run;
+      const subscription = await run;
+      if (subscription && settings.walletEnabled) {
+        const wallet = await this.getWallet(viewerAccountId);
+        const paidThrough = wallet.subscriptions[creatorAccountId]?.paidThroughAt;
+        if (paidThrough === undefined || Date.parse(paidThrough) <= Date.now()) {
+          const at = new Date();
+          const charged = spend(wallet, "subscribe", price, at, creatorAccountId);
+          if (charged) {
+            await writeWallet(viewerAccountId, {
+              ...charged,
+              subscriptions: {
+                ...charged.subscriptions,
+                [creatorAccountId]: { paidThroughAt: subscriptionPaidThrough(at, economyFrom(settings)), price },
+              },
+            });
+            await this.creditCreatorIncome(creatorAccountId, price, "subscribe");
+          }
+        }
+      }
+      return subscription;
     },
 
     async unsubscribe(viewerAccountId: string, creatorAccountId: string): Promise<void> {
+      // The paid period is dropped with the subscription: cancelling is a cancellation, not a
+      // pause, so re-subscribing later pays again rather than resuming a period already bought.
+      const wallet = readSlurpWallet(await settingsStore.get(slurpWalletKey(viewerAccountId)));
+      if (wallet.subscriptions[creatorAccountId]) {
+        const subscriptions = { ...wallet.subscriptions };
+        delete subscriptions[creatorAccountId];
+        await settingsStore.set(slurpWalletKey(viewerAccountId), JSON.stringify({ ...wallet, subscriptions }));
+      }
       await db
         .delete(noodleAccountSubscriptions)
         .where(
@@ -5016,10 +5147,30 @@ export function createSlurpStorage(db: DB) {
       };
     },
 
+    /**
+     * Unlock a locked post for a viewer.
+     *
+     * Returns `null` when the viewer cannot afford it, which is the same "no" the caller already
+     * handles for a missing or hidden post. The price comes from the post, so an edited price
+     * survives a refresh.
+     *
+     * ponytail: the funds check runs before the insert transaction and the debit runs after it,
+     * so two unlocks racing on the last coins can both succeed and leave the balance one unlock
+     * short. Move the wallet inside the transaction if that ever costs more than a coin.
+     */
     async unlockPost(viewerAccountId: string, postId: string): Promise<NoodlePostUnlock | null> {
       const viewer = await this.getViewer(viewerAccountId);
       if (!viewer) return null;
-      return db.transaction(async (tx) => {
+      const settings = await this.getSettings();
+      let price = 0;
+      if (settings.walletEnabled) {
+        const target = (await db.select().from(noodlePosts).where(eq(noodlePosts.id, postId)))[0];
+        if (!target) return null;
+        price = noodlerUnlockPriceFromMetadata(mapPost(target).metadata);
+        if ((await this.getWallet(viewerAccountId)).coins < price) return null;
+      }
+      let created = false;
+      const unlock = await db.transaction(async (tx) => {
         const postRows = await tx.select().from(noodlePosts).where(eq(noodlePosts.id, postId));
         const postRow = postRows[0];
         if (!postRow || mapPost(postRow).access !== "locked") {
@@ -5046,6 +5197,7 @@ export function createSlurpStorage(db: DB) {
         // An already-unlocked post stays idempotent.
         try {
           await tx.insert(noodlePostUnlocks).values({ id: newId(), viewerAccountId, postId, createdAt: timestamp });
+          created = true;
         } catch (error) {
           if (!isFileUniqueConstraintError(error, "slurp_post_unlocks", ["viewerAccountId", "postId"])) throw error;
           const duplicate = await tx
@@ -5054,13 +5206,93 @@ export function createSlurpStorage(db: DB) {
             .where(and(eq(noodlePostUnlocks.viewerAccountId, viewerAccountId), eq(noodlePostUnlocks.postId, postId)));
           return duplicate[0] ? mapPostUnlock(duplicate[0]) : null;
         }
-        // Unlocking no longer touches viewer settings at all: there is nothing to debit.
         const rows = await tx
           .select()
           .from(noodlePostUnlocks)
           .where(and(eq(noodlePostUnlocks.viewerAccountId, viewerAccountId), eq(noodlePostUnlocks.postId, postId)));
         return rows[0] ? mapPostUnlock(rows[0]) : null;
       });
+      if (unlock && created && settings.walletEnabled) {
+        const wallet = await this.getWallet(viewerAccountId);
+        const charged = spend(wallet, "unlock", price, new Date(), postId);
+        if (charged) await writeWallet(viewerAccountId, charged);
+        const post = (await db.select().from(noodlePosts).where(eq(noodlePosts.id, postId)))[0];
+        if (post) await this.creditCreatorIncome(post.authorAccountId, price, "unlock");
+      }
+      return unlock;
+    },
+
+    /**
+     * The viewer's wallet, with the daily stipend paid and any due subscription renewals charged.
+     * Reading is what drives the economy forward: there is no scheduler to keep alive, and a
+     * wallet nobody looked at had no reason to bill.
+     *
+     * A creator the viewer could not pay for is unsubscribed here, which is the whole consequence
+     * of running out of coins.
+     */
+    async getWallet(viewerAccountId: string): Promise<SlurpWallet> {
+      const settings = await this.getSettings();
+      const economy = economyFrom(settings);
+      const stored = readSlurpWallet(await settingsStore.get(slurpWalletKey(viewerAccountId)), economy);
+      if (!settings.walletEnabled) return stored;
+      const at = new Date();
+      const renewal = renewSubscriptions(applyStipend(stored, at, economy), at);
+      for (const creatorAccountId of renewal.lapsed) await this.unsubscribe(viewerAccountId, creatorAccountId);
+      for (const renewed of renewal.renewed) {
+        await this.creditCreatorIncome(renewed.creatorAccountId, renewed.price, "renew");
+      }
+      if (renewal.wallet === stored) return stored;
+      return writeWallet(viewerAccountId, renewal.wallet);
+    },
+
+    /** Subscription price for one creator: its own price when it has set one, else the default. */
+    async getCreatorSubscriptionPrice(creatorAccountId: string): Promise<number> {
+      const [prices, settings] = await Promise.all([readCreatorPrices(), this.getSettings()]);
+      return prices[creatorAccountId] ?? settings.walletSubscriptionCost;
+    },
+
+    /** Set a creator's own weekly price, or clear it back to the Slurp-wide default with `null`. */
+    async setCreatorSubscriptionPrice(creatorAccountId: string, price: number | null): Promise<void> {
+      const prices = await readCreatorPrices();
+      if (price === null) delete prices[creatorAccountId];
+      else if (Number.isInteger(price) && price >= 0) prices[creatorAccountId] = price;
+      else return;
+      await settingsStore.set(CREATOR_PRICES_KEY, JSON.stringify(prices));
+    },
+
+    /** Credit capped earnings for acting on an ad or for the viewer's own engagement. */
+    async earnCoins(viewerAccountId: string, kind: "ad" | "engagement", note?: string): Promise<SlurpWallet> {
+      const settings = await this.getSettings();
+      const wallet = await this.getWallet(viewerAccountId);
+      if (!settings.walletEnabled) return wallet;
+      const next = earn(wallet, kind, new Date(), note, economyFrom(settings));
+      return next === wallet ? wallet : writeWallet(viewerAccountId, next);
+    },
+
+    /** Add coins from a top-up. Uncapped: a top-up is the viewer deciding, not the economy. */
+    async topUpWallet(viewerAccountId: string, amount: number): Promise<SlurpWallet> {
+      const wallet = await this.getWallet(viewerAccountId);
+      const next = credit(wallet, "topUp", amount, new Date());
+      return next === wallet ? wallet : writeWallet(viewerAccountId, next);
+    },
+
+    /**
+     * Pay a creator's owner when a fan pays that creator. Only a creator backed by one of this
+     * install's personas has an owner to pay, so a character-backed creator earns nothing and the
+     * coins simply leave the economy.
+     */
+    async creditCreatorIncome(creatorAccountId: string, price: number, reason: "unlock" | "subscribe" | "renew") {
+      const settings = await this.getSettings();
+      if (!settings.walletEnabled || settings.walletCreatorRevenueSharePercent <= 0) return;
+      const creator = await this.getNoodlerAccountById(creatorAccountId);
+      if (!creator || creator.sourceKind !== "persona") return;
+      const share = Math.floor((price * settings.walletCreatorRevenueSharePercent) / 100);
+      if (share <= 0) return;
+      const wallet = await this.getWallet(creator.sourceEntityId);
+      await writeWallet(
+        creator.sourceEntityId,
+        credit(wallet, "income", share, new Date(), `${reason}: ${creator.handle}`),
+      );
     },
 
     async listPostUnlocksForViewer(viewerAccountId: string): Promise<NoodlePostUnlock[]> {

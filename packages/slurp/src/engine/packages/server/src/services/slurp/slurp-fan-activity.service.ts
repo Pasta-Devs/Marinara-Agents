@@ -13,6 +13,7 @@ import { resolveStoredChatOptions } from "../generation/generation-parameters.js
 import { noodleSamplingOptions } from "./slurp-sampling-options.js";
 import { parseGameJsonish } from "../game/jsonish.js";
 import { requireModelAnswer } from "./slurp-model-answer.js";
+import { noodleImageContext } from "./slurp-image-prompt.js";
 import type { ChatMessage } from "../llm/base-provider.js";
 import { createLLMProvider } from "../llm/provider-registry.js";
 import { createConnectionsStorage } from "../storage/connections.storage.js";
@@ -59,6 +60,8 @@ export interface NoodlerFanCreatorCandidate {
     creatorAccountId: string;
     title: string | null;
     content: string;
+    /** What the attached image shows, so a reply can react to the picture instead of ignoring it. */
+    image?: string | null;
     access: "public" | "locked";
   }>;
   identities: NoodlerFanIdentity[];
@@ -129,6 +132,7 @@ function buildFanActivityMessages(input: {
 }): ChatMessage[] {
   const system = [
     "Propose quiet synthetic audience activity for the supplied Slurp posts.",
+    "A post's image field describes its attached picture. Treat it as something the actor can see, and never ask to be shown an image that is already described.",
     "Posts marked locked are paid posts. Only subscribers see them, so react to the title and the fact it is paid; never invent or state its hidden contents.",
     "Use only supplied creator IDs, actor handles, and post IDs. Never invent identifiers.",
     "Likes and reposts have null content. Replies are one short sentence, normally under 180 characters, natural, relevant, and not repetitive.",
@@ -147,9 +151,11 @@ function buildFanActivityMessages(input: {
     actorHandles: weightedIdentitySequence(candidate.identities, candidate.policy.archetypeWeights).map(
       ({ identity, weight }) => ({ handle: identity.snapshot.handle, weight }),
     ),
-    // Locked bodies stay out of the prompt: a fan reply must not restate paid content.
-    posts: candidate.posts.map(({ id, title, content, access }) =>
-      access === "locked" ? { id, title, access } : { id, title, content, access },
+    // Locked bodies stay out, but the image line stays in: a teaser's picture is public.
+    posts: candidate.posts.map(({ id, title, content, image, access }) =>
+      access === "locked"
+        ? { id, title, access, ...(image && { image }) }
+        : { id, title, content, access, ...(image && { image }) },
     ),
   }));
   return [
@@ -259,6 +265,7 @@ export async function prepareNoodlerFanCreatorCandidates(input: {
       creatorAccountId: creator.id,
       title: post.title,
       content: post.content,
+      image: noodleImageContext(post),
       access: post.access,
     }));
     const identities = provider.resolve(policy.archetypeWeights);

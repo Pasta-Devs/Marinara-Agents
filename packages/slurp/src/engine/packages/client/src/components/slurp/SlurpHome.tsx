@@ -69,6 +69,9 @@ import {
   useNoodlerEligibleAccounts,
   useNoodlerPosts,
   useNoodlerConnectionCounts,
+  useSlurpWallet,
+  useTopUpSlurpWallet,
+  type SlurpWalletEntry,
   useNoodlerViewerWallets,
   useNoodlerSubscribers,
   useNoodlerUnseenCount,
@@ -1900,7 +1903,8 @@ export function SlurpHome({ navigation, onNavigate }: SlurpHomeProps) {
     return (
       <NoodleShell {...shellProps}>
         <SlurpWalletView
-          coins={viewerWalletsQuery.data?.[viewerPersonaId ?? ""]?.coins ?? SLURP_PLACEHOLDER_BALANCE}
+          personaId={viewerPersonaId}
+          fallbackCoins={viewerWalletsQuery.data?.[viewerPersonaId ?? ""]?.coins ?? SLURP_PLACEHOLDER_BALANCE}
           personaName={shellPersonaAccount?.displayName ?? ""}
           onBack={exitToCreatorHub}
         />
@@ -3639,7 +3643,8 @@ function StageProfileView({
               >
                 {viewerCreator.subscribed
                   ? localizeUi("ui.slurp.profile.subscribed")
-                  : `${localizeUi("ui.slurp.profile.subscribe")} · ${localizeUi("ui.noodle.unlocksheet.price", {
+                  : `${localizeUi("ui.slurp.profile.subscribe")} · ${localizeUi("ui.slurp.profile.pricePerWeek", {
+                      defaultValue: "{{amount}} coins / week",
                       amount: slurpSubscriptionPriceOf(profile),
                     })}`}
               </button>
@@ -3702,14 +3707,10 @@ function StageProfileView({
                 hidden={!creatorToolsOpen}
                 className="border-t border-[var(--noodle-divider)] bg-[var(--background)]"
               >
+                {/* Edit lives on the profile header with Follow and Subscribe. It used to be
+                    duplicated here too, which gave the same action two homes and made this panel
+                    look like the place to go. */}
                 <div className="flex flex-wrap gap-2 px-3 py-2 @min-[760px]:px-4">
-                  <button
-                    type="button"
-                    onClick={onEdit}
-                    className="min-h-11 rounded-lg border border-white/[0.08] bg-[var(--slurp-surface-raised)] px-4 text-xs font-bold transition-[background-color,transform] hover:bg-[var(--accent)] active:scale-[0.96] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--noodle-accent)] motion-reduce:transition-none motion-reduce:active:scale-100"
-                  >
-                    {localizeUi("ui.noodle.stageprofileview.editProfile")}
-                  </button>
                   <button
                     type="button"
                     onClick={() => setAccessSettingsOpen(true)}
@@ -4789,18 +4790,38 @@ function SlurpInlineSuggestedCreators({
  * composer are the ones the feed already uses.
  */
 /**
- * The wallet as a place rather than a number: what you hold, what a top-up would cost, and
- * where it went. Coins are fiction, so nothing here charges anything — the packs are a
- * shopfront waiting for a real purchase path.
+ * The wallet as a place rather than a number: what you hold, what a top-up costs, what today's
+ * earning still has left in it, and where every coin went.
+ *
+ * Opening this page is what pays the daily stipend and charges due subscription renewals, because
+ * the server does that work on read. That is deliberate — there is no scheduler to keep alive.
  */
-function SlurpWalletView({ coins, personaName, onBack }: { coins: number; personaName: string; onBack: () => void }) {
+function SlurpWalletView({
+  personaId,
+  fallbackCoins,
+  personaName,
+  onBack,
+}: {
+  personaId: string | null;
+  /** Shown until the wallet loads, so the balance never flashes zero. */
+  fallbackCoins: number;
+  personaName: string;
+  onBack: () => void;
+}) {
   const { t: localizeUi } = useUiTranslation();
-  // ponytail: fixed shopfront, replace with server-side packs once coins can be bought.
+  const walletQuery = useSlurpWallet(personaId);
+  const topUp = useTopUpSlurpWallet();
+  const wallet = walletQuery.data;
+  const coins = wallet?.coins ?? fallbackCoins;
+  // ponytail: fixed shopfront. Coins are fiction, so a pack credits the wallet directly; replace
+  // the amounts with server-side packs if they ever cost real money.
   const packs = [
     { id: "small", coins: 100, price: "$4.99" },
     { id: "medium", coins: 550, price: "$19.99" },
     { id: "large", coins: 1200, price: "$39.99" },
   ] as const;
+  const entryLabel = (kind: SlurpWalletEntry["kind"]) =>
+    localizeUi(`ui.slurp.wallet.entry.${kind}`, { defaultValue: kind });
   return (
     <NoodlerFrame onBack={onBack} title={localizeUi("ui.slurp.navigation.wallet")} action={<span />}>
       <div className="mx-auto flex w-full max-w-2xl flex-col gap-4 p-4 sm:p-5">
@@ -4818,6 +4839,15 @@ function SlurpWalletView({ coins, personaName, onBack }: { coins: number; person
             </span>
           </p>
           {personaName && <p className="mt-1 text-sm text-white/80">{personaName}</p>}
+          {wallet && (
+            <p className="mt-2 text-xs text-white/75">
+              {localizeUi("ui.slurp.wallet.earnedToday", {
+                defaultValue: "Earned today: {{ads}} from ads, {{engagement}} from posting.",
+                ads: wallet.earnedToday.ad,
+                engagement: wallet.earnedToday.engagement,
+              })}
+            </p>
+          )}
         </section>
 
         <section
@@ -4850,10 +4880,11 @@ function SlurpWalletView({ coins, personaName, onBack }: { coins: number; person
                 <span className="text-xs font-semibold text-[var(--muted-foreground)]">{pack.price}</span>
                 <button
                   type="button"
-                  disabled
+                  disabled={!personaId || topUp.isPending}
+                  onClick={() => personaId && topUp.mutate({ personaId, amount: pack.coins })}
                   className="mt-2 min-h-9 rounded-lg bg-[var(--noodle-accent)]/20 text-xs font-bold text-[var(--noodle-accent-foreground)] ring-1 ring-inset ring-[var(--noodle-accent)]/30 disabled:opacity-60"
                 >
-                  {localizeUi("ui.slurp.navigation.soon", { defaultValue: "Soon..." })}
+                  {localizeUi("ui.slurp.wallet.claim", { defaultValue: "Get coins" })}
                 </button>
               </div>
             ))}
@@ -4867,11 +4898,31 @@ function SlurpWalletView({ coins, personaName, onBack }: { coins: number; person
           <h2 id="slurp-wallet-activity" className="text-sm font-bold">
             {localizeUi("ui.slurp.wallet.activity", { defaultValue: "Recent activity" })}
           </h2>
-          <p className="mt-2 text-xs leading-5 text-[var(--muted-foreground)]">
-            {localizeUi("ui.slurp.wallet.activityEmpty", {
-              defaultValue: "Unlocks and subscriptions paid with coins will show up here.",
-            })}
-          </p>
+          {wallet && wallet.ledger.length > 0 ? (
+            <ul className="mt-3 flex flex-col divide-y divide-[var(--noodle-divider)]">
+              {wallet.ledger.map((entry, index) => (
+                <li key={`${entry.at}-${index}`} className="flex items-center justify-between gap-3 py-2">
+                  <span className="min-w-0">
+                    <span className="block text-xs font-semibold">{entryLabel(entry.kind)}</span>
+                    {entry.note && (
+                      <span className="block truncate text-[0.7rem] text-[var(--muted-foreground)]">{entry.note}</span>
+                    )}
+                  </span>
+                  <span
+                    className={`shrink-0 text-sm font-black tabular-nums ${entry.amount < 0 ? "text-[var(--muted-foreground)]" : "text-[var(--noodle-accent)]"}`}
+                  >
+                    {entry.amount > 0 ? `+${entry.amount}` : entry.amount}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <p className="mt-2 text-xs leading-5 text-[var(--muted-foreground)]">
+              {localizeUi("ui.slurp.wallet.activityEmpty", {
+                defaultValue: "Unlocks and subscriptions paid with coins will show up here.",
+              })}
+            </p>
+          )}
         </section>
       </div>
     </NoodlerFrame>
