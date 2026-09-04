@@ -1452,7 +1452,10 @@ PF.pack = (() => {
      *  `say` is the caller's own sentence, and it is a CALLBACK rather than a
      *  string so the guard can decide the shape: it is handed the giver's name or
      *  null and the money already worded by the theme, and hands back the line.
-     *  Returns { money, giver, template } or null when the mutator refused. */
+     *  Returns { money, giver, template, rose } — `rose` is the rung the giver's
+     *  bump EARNED on this call and 0 otherwise, so the caller with a receipt to
+     *  print folds the rise into it rather than saying it in a second toast that
+     *  erases the first (70-hud `_said`) — or null when the mutator refused. */
     settle(core, row, gen, say) {
       const sim = core?.sim;
       const world = sim?.world;
@@ -1465,8 +1468,23 @@ PF.pack = (() => {
       const stands = !!giver && !!folded?.known?.has(giver);
       this.filledToday(core)?.templates.add(template);
       PF.player.log(core, say(stands ? giver : null, PF.economy.money(world, money)), sim.day, gen);
+      // WHICH JOB, not merely that one happened. A constant here was a line-cap
+      // flood: `s` lines are capped at 30 across the whole block and evicted
+      // oldest-first (58-player CAPS.relLines), so thirty completions filled
+      // every slot with one sentence and pushed out the berth line and the
+      // purchase line — the two writers that carried anything a player could
+      // tell apart. The board row's own title is the most specific thing this
+      // path knows; the plain sentence stays as the fallback for a row with no
+      // template standing behind it, which is where there is nothing to name.
+      const titled = capText(folded?.byId?.get(template)?.title, CAPS.title);
       const bumped = stands
-        ? PF.player.bump(core, world.startZone, giver, { t: 3, s: "You ran a job for me.", meaningful: true }, gen)
+        ? PF.player.bump(
+            core,
+            world.startZone,
+            giver,
+            { t: 3, s: titled ? `Ran ${titled} for me.` : "You ran a job for me.", meaningful: true },
+            gen,
+          )
         : null;
       return { money, giver: stands ? giver : null, template, rose: bumped?.rose ?? 0 };
     },

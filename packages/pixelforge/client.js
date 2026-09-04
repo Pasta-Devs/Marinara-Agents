@@ -12082,28 +12082,34 @@ PF.economy = {
    *       people with one name. MEANINGFUL (0.15's ruling): taking a room off
    *       somebody is business between you, and business is what moves the ladder
    *       past acquaintance, where small talk never does.
-   *  Returns { ok, reason, price, zoneId }. */
+   *  Returns { ok, reason, price, zoneId, keeper, rose } — `rose` is the rung the
+   *  night EARNED (0 when it crossed nothing) and `keeper` is who it was taken
+   *  from, both on every return: the receipt this feeds names neither by itself,
+   *  and a caller that had to diff the block to find a rise would say it in a
+   *  second toast, which is a toast that eats the first (70-hud `_said`). */
   rentBerth(core, gen) {
     const offer = this.berthOffer(core);
-    if (!offer.available) return { ok: false, reason: offer.reason, price: offer.price, zoneId: offer.zoneId };
+    const keeper = offer.keeper?.name ?? null;
+    if (!offer.available)
+      return { ok: false, reason: offer.reason, price: offer.price, zoneId: offer.zoneId, keeper, rose: 0 };
     const sim = core.sim;
     const world = sim.world;
     const paid = PF.player.award(core, { money: -offer.price }, gen);
     // The fence, the gate, or a chat switch under us: award() is the first verb
     // that could refuse, and nothing after it has run.
-    if (!paid) return { ok: false, reason: "refused", price: offer.price, zoneId: offer.zoneId };
+    if (!paid) return { ok: false, reason: "refused", price: offer.price, zoneId: offer.zoneId, keeper, rose: 0 };
     PF.player.setHome(core, offer.zoneId, gen);
     PF.player.grant(core, { t: "lodging-key", k: "" }, 1, gen);
     const place = world.zones[offer.zoneId]?.name ?? "the inn";
     PF.player.log(core, `Took a berth at ${place} for ${this.money(world, offer.price)}.`, sim.day, gen);
-    PF.player.bump(
+    const bumped = PF.player.bump(
       core,
       world.startZone,
       offer.keeper.name,
       { t: 1, s: `Let you a berth at ${place}.`, meaningful: true },
       gen,
     );
-    return { ok: true, reason: null, price: offer.price, zoneId: offer.zoneId };
+    return { ok: true, reason: null, price: offer.price, zoneId: offer.zoneId, keeper, rose: bumped?.rose ?? 0 };
   },
 
   // ── Sleep (what the berth is FOR) ──────────────────────────────────────────
@@ -12290,18 +12296,23 @@ PF.economy = {
    *  the first settlement's offer costs nothing: the ladder is a stateless
    *  derived read, so any keeper anywhere sells the same next rung later.
    *
-   *  Returns { ok, reason, price, tier, bait }. */
+   *  Returns { ok, reason, price, tier, bait, keeper, rose } — the berth's shape
+   *  again, and for the berth's reason: the sale can be the encounter that
+   *  crosses a line, and the receipt does not name the keeper on its own. */
   buyRod(core, gen) {
     const offer = this.rodOffer(core);
     // ONE SHAPE ON EVERY RETURN, `bait` included: this branch and the refusal
     // after award() below are the same verb refusing the same purchase, and a
     // caller asking what came with the rod should not get `undefined` from one
     // of them and `null` from the other.
-    if (!offer.available) return { ok: false, reason: offer.reason, price: offer.price, tier: offer.tier, bait: null };
+    const keeper = offer.keeper?.name ?? null;
+    if (!offer.available)
+      return { ok: false, reason: offer.reason, price: offer.price, tier: offer.tier, bait: null, keeper, rose: 0 };
     const sim = core.sim;
     const world = sim.world;
     const paid = PF.player.award(core, { money: -offer.price }, gen);
-    if (!paid) return { ok: false, reason: "refused", price: offer.price, tier: offer.tier, bait: null };
+    if (!paid)
+      return { ok: false, reason: "refused", price: offer.price, tier: offer.tier, bait: null, keeper, rose: 0 };
     PF.player.grant(core, { t: "rod", k: offer.tier }, 1, gen);
     let bait = null;
     if (offer.tier === ROD_TIERS[0]) {
@@ -12316,14 +12327,14 @@ PF.economy = {
       sim.day,
       gen,
     );
-    PF.player.bump(
+    const bumped = PF.player.bump(
       core,
       world.startZone,
       offer.keeper.name,
       { t: 1, s: `Sold you a ${named}.`, meaningful: true },
       gen,
     );
-    return { ok: true, reason: null, price: offer.price, tier: offer.tier, bait };
+    return { ok: true, reason: null, price: offer.price, tier: offer.tier, bait, keeper, rose: bumped?.rose ?? 0 };
   },
 
   // ── Fishing (plan §2.1) ────────────────────────────────────────────────────
@@ -17300,7 +17311,10 @@ PF.pack = (() => {
      *  `say` is the caller's own sentence, and it is a CALLBACK rather than a
      *  string so the guard can decide the shape: it is handed the giver's name or
      *  null and the money already worded by the theme, and hands back the line.
-     *  Returns { money, giver, template } or null when the mutator refused. */
+     *  Returns { money, giver, template, rose } — `rose` is the rung the giver's
+     *  bump EARNED on this call and 0 otherwise, so the caller with a receipt to
+     *  print folds the rise into it rather than saying it in a second toast that
+     *  erases the first (70-hud `_said`) — or null when the mutator refused. */
     settle(core, row, gen, say) {
       const sim = core?.sim;
       const world = sim?.world;
@@ -17313,8 +17327,23 @@ PF.pack = (() => {
       const stands = !!giver && !!folded?.known?.has(giver);
       this.filledToday(core)?.templates.add(template);
       PF.player.log(core, say(stands ? giver : null, PF.economy.money(world, money)), sim.day, gen);
+      // WHICH JOB, not merely that one happened. A constant here was a line-cap
+      // flood: `s` lines are capped at 30 across the whole block and evicted
+      // oldest-first (58-player CAPS.relLines), so thirty completions filled
+      // every slot with one sentence and pushed out the berth line and the
+      // purchase line — the two writers that carried anything a player could
+      // tell apart. The board row's own title is the most specific thing this
+      // path knows; the plain sentence stays as the fallback for a row with no
+      // template standing behind it, which is where there is nothing to name.
+      const titled = capText(folded?.byId?.get(template)?.title, CAPS.title);
       const bumped = stands
-        ? PF.player.bump(core, world.startZone, giver, { t: 3, s: "You ran a job for me.", meaningful: true }, gen)
+        ? PF.player.bump(
+            core,
+            world.startZone,
+            giver,
+            { t: 3, s: titled ? `Ran ${titled} for me.` : "You ran a job for me.", meaningful: true },
+            gen,
+          )
         : null;
       return { money, giver: stands ? giver : null, template, rose: bumped?.rose ?? 0 };
     },
@@ -19441,6 +19470,17 @@ PF.Hud = class {
     this.core.talkSay(text);
   }
 
+  /** ONE SENTENCE PER EVENT (0.15). `toast` below is ONE node and ONE timer per
+   *  surface, which makes two toasts in a tick exactly one toast: the second
+   *  overwrites the first and the player never sees it. That is not a queue
+   *  waiting to be built — it is a rule about the copy. Everything a single
+   *  press has to say is composed HERE and said once, parts joined by a middot,
+   *  so a rung earned at a hand-in rides the money receipt instead of erasing
+   *  it. Empty parts drop out, so the ordinary receipt is unchanged. */
+  _said(...parts) {
+    return parts.filter(Boolean).join(" · ");
+  }
+
   /** `kind` picks the SURFACE, not the styling: "location" goes to the top strip
    *  (see locToastEl), everything else keeps the bottom one. Two nodes and two
    *  timers, so an arrival and a refusal can be on screen together instead of
@@ -19799,8 +19839,14 @@ PF.Hud = class {
     // The purse moved, so the chips have.
     this.refreshChips();
     const paid = PF.economy.money(this.core.sim.world, result.money);
-    this.toast(result.giver ? `Handed in to ${result.giver} — ${paid}` : `Handed in — ${paid}`);
-    if (result.giver && result.rose) this.toast(this.roseLine(result.giver, result.rose));
+    // The receipt already names the giver, so the rise rides it as a CLAUSE —
+    // one sentence, and the money survives the rung (see `_said`).
+    this.toast(
+      this._said(
+        result.giver ? `Handed in to ${result.giver} — ${paid}` : `Handed in — ${paid}`,
+        result.giver && result.rose ? this.roseClause(result.rose) : "",
+      ),
+    );
     const view = PF.pack.boardOffers(this.core);
     if (view.available) this._renderBoard(view);
   }
@@ -19865,17 +19911,29 @@ PF.Hud = class {
    *  for the same walk are both filled by taking it, and each is its own sentence.
    *  An empty list says nothing and touches nothing, which is the ordinary case
    *  for every arrival and every greeting in the game. */
-  questFilled(done) {
-    if (!Array.isArray(done) || !done.length) return;
+  questFilled(done, rise) {
+    const rows = Array.isArray(done) ? done : [];
+    if (!rows.length && !rise?.rung) return;
     const world = this.core.sim?.world;
-    for (const row of done) {
+    // ONE SENTENCE FOR THE WHOLE PRESS. Two errands filled by one walk used to
+    // toast twice and show once; a rise beside a receipt did the same to the
+    // money. Everything the press has to say is composed and said together.
+    const parts = rows.map((row) => {
       const paid = PF.economy.money(world, row.money);
-      this.toast(row.giver ? `Done for ${row.giver} — ${paid}` : `Job done — ${paid}`);
-      // The rise rides the settle's own return, so the toast fires exactly when
-      // the rung was earned and never re-fires on a reload — there is nothing
-      // stored to re-announce (plan §13.4).
-      if (row.giver && row.rose) this.toast(this.roseLine(row.giver, row.rose));
-    }
+      // The rise rides the settle's own return, so it is said exactly when the
+      // rung was earned and never re-fires on a reload — there is nothing stored
+      // to re-announce (plan §13.4). The CLAUSE form, because this half of the
+      // sentence has already named the person.
+      return this._said(
+        row.giver ? `Done for ${row.giver} — ${paid}` : `Job done — ${paid}`,
+        row.giver && row.rose ? this.roseClause(row.rose) : "",
+      );
+    });
+    // The TURN'S OWN rise — the greeting that crossed a line on the way to the
+    // handover — joins the same sentence NAMED, because the person who warmed
+    // to you need not be the person the errand was for.
+    if (rise?.rung) parts.push(this.roseLine(rise.name, rise.rung));
+    this.toast(this._said(...parts));
     // The purse moved, so the chips have.
     this.refreshChips();
   }
@@ -19889,6 +19947,17 @@ PF.Hud = class {
     return `${name} knows you now.`;
   }
 
+  /** The same rise as a CLAUSE, for a receipt that has already said who it was
+   *  about ("Handed in to Alder — 6 coins · they know you now."). Two spellings
+   *  of one moment is the bug roseLine's own header warns about, so this is the
+   *  same authority and the same ladder words — only the subject moves to a
+   *  pronoun, so the sentence does not say the name twice. */
+  roseClause(rung) {
+    if (rung >= 3) return "they count you a close friend now.";
+    if (rung >= 2) return "they count you a friend now.";
+    return "they know you now.";
+  }
+
   /** Take the rod the button is offering. The offer is re-read inside buyRod, so
    *  a frame-old button cannot overcharge anybody; this turns the refusals into
    *  sentences, exactly as rentBerth's caller does. */
@@ -19897,10 +19966,15 @@ PF.Hud = class {
     const result = PF.economy.buyRod(this.core);
     if (result.ok) {
       const named = PF.economy.describe(world, { t: "rod", k: result.tier });
+      // The rod's receipt names the rod, not the keeper — so the rise rides it
+      // named, exactly as the berth's does.
       this.toast(
-        result.bait
-          ? `A ${named} is yours, line and tackle included — ${PF.economy.money(world, result.price)}.`
-          : `A ${named} is yours — ${PF.economy.money(world, result.price)}.`,
+        this._said(
+          result.bait
+            ? `A ${named} is yours, line and tackle included — ${PF.economy.money(world, result.price)}.`
+            : `A ${named} is yours — ${PF.economy.money(world, result.price)}.`,
+          result.rose ? this.roseLine(result.keeper, result.rose) : "",
+        ),
       );
       this.refreshChips();
       return;
@@ -19940,7 +20014,14 @@ PF.Hud = class {
     const world = this.core.sim?.world;
     const result = PF.economy.rentBerth(this.core);
     if (result.ok) {
-      this.toast(`A berth is yours — ${PF.economy.money(world, result.price)} the night.`);
+      // The berth's receipt never names the keeper, so a rise it carries is said
+      // in the NAMED form and composed into the same sentence (see `_said`).
+      this.toast(
+        this._said(
+          `A berth is yours — ${PF.economy.money(world, result.price)} the night.`,
+          result.rose ? this.roseLine(result.keeper, result.rose) : "",
+        ),
+      );
       this.refreshChips();
       return;
     }
@@ -21911,11 +21992,18 @@ PF.core = {
           // or failed send is not a conversation. SETTLEMENT-scoped (plan §2:
           // rel keys are per settlement), so one person is one row wherever in
           // the world you happen to meet them.
+          // CASUAL, and deliberately: this is the talk press, and small talk is
+          // the class that cannot carry anybody past acquainted however long it
+          // goes on (58-player CASUAL_CEILING).
           const bumped = PF.player.bump(this, sim.world.startZone, anchor.name, { t: 1 }, gen);
           // A rung earned by TALKING is announced where a rung earned by a job
           // already is (hud.questFilled) — same phrase, same authority, and only
-          // on the call that crossed the line.
-          if (bumped?.rose) this.hud?.toast(this.hud.roseLine(anchor.name, bumped.rose));
+          // on the call that crossed the line. HANDED to questFilled rather than
+          // toasted beside it: an accepted turn is ONE event to the player, and
+          // two toasts in a tick is one toast, so a rise said separately erased
+          // the handover receipt standing next to it (70-hud `_said`).
+          const rise = bumped?.rose ? { name: anchor.name, rung: bumped.rose } : null;
+          let done = [];
           if (sentSim === this.sim) {
             onAccepted?.();
             // WHO THE ERRAND WAS RUN TO IS `anchor`, the binding the window and
@@ -21923,9 +22011,12 @@ PF.core = {
             // read: the `.then` runs after the host has had its whole thinking
             // time for somebody else to wander in. The delivery was to the
             // person the player was talking to.
-            if (settles)
-              this.hud?.questFilled(PF.pack.delivered(this, anchor.name, gen, settles === true ? "" : settles));
+            if (settles) done = PF.pack.delivered(this, anchor.name, gen, settles === true ? "" : settles);
           }
+          // Outside the fence on purpose, exactly as the old rise toast was: a
+          // chat switch under the await stops the errands from being filed, not
+          // the rung the player already earned from being said.
+          this.hud?.questFilled(done, rise);
         }
       })
       .catch((err) => {

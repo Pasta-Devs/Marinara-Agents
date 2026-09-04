@@ -598,11 +598,18 @@ PF.core = {
           // or failed send is not a conversation. SETTLEMENT-scoped (plan §2:
           // rel keys are per settlement), so one person is one row wherever in
           // the world you happen to meet them.
+          // CASUAL, and deliberately: this is the talk press, and small talk is
+          // the class that cannot carry anybody past acquainted however long it
+          // goes on (58-player CASUAL_CEILING).
           const bumped = PF.player.bump(this, sim.world.startZone, anchor.name, { t: 1 }, gen);
           // A rung earned by TALKING is announced where a rung earned by a job
           // already is (hud.questFilled) — same phrase, same authority, and only
-          // on the call that crossed the line.
-          if (bumped?.rose) this.hud?.toast(this.hud.roseLine(anchor.name, bumped.rose));
+          // on the call that crossed the line. HANDED to questFilled rather than
+          // toasted beside it: an accepted turn is ONE event to the player, and
+          // two toasts in a tick is one toast, so a rise said separately erased
+          // the handover receipt standing next to it (70-hud `_said`).
+          const rise = bumped?.rose ? { name: anchor.name, rung: bumped.rose } : null;
+          let done = [];
           if (sentSim === this.sim) {
             onAccepted?.();
             // WHO THE ERRAND WAS RUN TO IS `anchor`, the binding the window and
@@ -610,9 +617,12 @@ PF.core = {
             // read: the `.then` runs after the host has had its whole thinking
             // time for somebody else to wander in. The delivery was to the
             // person the player was talking to.
-            if (settles)
-              this.hud?.questFilled(PF.pack.delivered(this, anchor.name, gen, settles === true ? "" : settles));
+            if (settles) done = PF.pack.delivered(this, anchor.name, gen, settles === true ? "" : settles);
           }
+          // Outside the fence on purpose, exactly as the old rise toast was: a
+          // chat switch under the await stops the errands from being filed, not
+          // the rung the player already earned from being said.
+          this.hud?.questFilled(done, rise);
         }
       })
       .catch((err) => {
