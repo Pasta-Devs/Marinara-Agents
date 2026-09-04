@@ -678,10 +678,10 @@ export function createLongTermMemoryRoutes(runtime: {
       const eligibleResources = resources.filter((resource) => resource.id !== PROFESSOR_MARI_CHARACTER_ID);
       const chatById = new Map(eligibleChats.map((chat) => [chat.id, chat]));
       const currentChat = chatId ? (chatById.get(chatId) ?? null) : null;
+      const localCatalogChats =
+        currentChat?.mode === "roleplay" ? (includeAllChats ? eligibleChats : [currentChat]) : [];
       const localCatalogs = await Promise.all(
-        (includeAllChats ? eligibleChats : currentChat ? [currentChat] : []).map((chat) =>
-          loadTrustedLtmSubjectCatalog(resolveChatLtmScope(chat), root),
-        ),
+        localCatalogChats.map((chat) => loadTrustedLtmSubjectCatalog(resolveChatLtmScope(chat), root)),
       );
       const chatIds = new Set<string>();
       const groupIds = new Set<string>();
@@ -1020,11 +1020,16 @@ export function createLongTermMemoryRoutes(runtime: {
     app.post<{ Body: unknown }>("/notes/batch", { bodyLimit: MAINTENANCE_BODY_LIMIT_BYTES }, async (request, reply) => {
       const parsed = ltmBulkNoteRequestSchema.safeParse(request.body ?? {});
       if (!parsed.success) return reply.status(400).send({ error: parsed.error.message });
-      const result = ltmBulkNoteResultSchema.parse(await storage.bulkMutateNotes(parsed.data));
-      return {
-        ...result,
-        rebuild: result.affectedNoteIds.length ? await rebuildAfterMutation() : null,
-      };
+      try {
+        const result = ltmBulkNoteResultSchema.parse(await storage.bulkMutateNotes(parsed.data));
+        return {
+          ...result,
+          rebuild: result.affectedNoteIds.length ? await rebuildAfterMutation() : null,
+        };
+      } catch (error) {
+        const result = routeError(error, "Could not update notes.");
+        return reply.status(result.statusCode).send(result.body);
+      }
     });
     app.post<{ Body: unknown }>("/notes", { bodyLimit: NOTE_BODY_LIMIT_BYTES }, async (request, reply) => {
       const parsed = createNoteBody.safeParse(request.body);
@@ -1036,9 +1041,8 @@ export function createLongTermMemoryRoutes(runtime: {
         const rebuild = await rebuildAfterMutation(true);
         return reply.status(201).send({ note, rebuild });
       } catch (error) {
-        if (error instanceof LtmServiceError)
-          return reply.status(error.statusCode).send({ error: error.message, code: error.code });
-        throw error;
+        const result = routeError(error, "Could not create note.");
+        return reply.status(result.statusCode).send(result.body);
       }
     });
     app.patch<{ Params: { id: string }; Body: unknown }>(

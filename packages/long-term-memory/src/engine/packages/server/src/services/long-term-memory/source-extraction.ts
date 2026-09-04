@@ -306,7 +306,20 @@ async function getExistingTypedNotes(options: {
     ? trustedLtmIdentityNotesForSource({
         sourceText: options.sourceText,
         sourceTitle: options.sourceTitle,
-        catalog: options.trustedSubjectCatalog,
+        mode: options.mode,
+        catalog: {
+          ...options.trustedSubjectCatalog,
+          entries:
+            options.mode === "roleplay"
+              ? options.trustedSubjectCatalog.entries
+              : options.trustedSubjectCatalog.entries.filter((entry) => entry.subject.ref?.kind !== "local_character"),
+          notes:
+            options.mode === "roleplay"
+              ? options.trustedSubjectCatalog.notes
+              : options.trustedSubjectCatalog.notes.filter(
+                  (note) => !note.subjects?.some((subject) => subject.ref?.kind === "local_character"),
+                ),
+        },
       })
     : [];
   const noteIds = Array.from(

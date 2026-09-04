@@ -27,9 +27,8 @@ function unit(input: {
 async function main() {
   const { compileLtmEvidenceUnits } = await import(`${source}/evidence-unit-compiler.ts`);
   const { localCharacterScopeError, localCharacterSubjectForName } = await import(`${source}/chat-scope.ts`);
-  const { buildTrustedLtmSubjectCatalog, prepareLtmSubjectIdentityContext } = await import(
-    `${source}/subject-identity.ts`
-  );
+  const { buildTrustedLtmSubjectCatalog, prepareLtmSubjectIdentityContext, trustedLtmIdentityNotesForSource } =
+    await import(`${source}/subject-identity.ts`);
 
   const sourceNote = {
     id: "roleplay-source",
@@ -199,6 +198,25 @@ async function main() {
   assert.equal(
     gameResolution.units.some((item) => item.subjects?.some((subject) => subject.ref?.kind === "local_character")),
     false,
+  );
+  assert.deepEqual(
+    trustedLtmIdentityNotesForSource({
+      sourceText: "Mara arrives.",
+      mode: "game",
+      catalog: {
+        entries: [{ subject: validSubject, name: "Mara", aliases: [], canonicalSlug: "mara", familyId: "chat_chat_a" }],
+        notes: [
+          {
+            ...sourceNote,
+            id: "char_local_mara",
+            type: "character",
+            title: "Mara",
+            subjects: [validSubject],
+          } as any,
+        ],
+      },
+    }),
+    [],
   );
   const gameCatalog = buildTrustedLtmSubjectCatalog({
     roster: [],

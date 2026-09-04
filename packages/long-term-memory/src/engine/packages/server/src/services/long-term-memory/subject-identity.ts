@@ -634,13 +634,23 @@ export function trustedLtmIdentityNotesForSource({
   sourceText,
   sourceTitle,
   catalog,
+  mode,
 }: {
   sourceText: string;
   sourceTitle?: string;
   catalog: TrustedLtmSubjectCatalog;
+  mode?: LtmMode;
 }) {
-  if (catalog.entries.length === 0 || catalog.notes.length === 0) return [];
-  const index = buildCatalogIndex(catalog);
+  const effectiveCatalog =
+    mode && mode !== "roleplay"
+      ? {
+          ...catalog,
+          entries: catalog.entries.filter((entry) => !isLocalCharacterSubject(entry.subject)),
+          notes: catalog.notes.filter((note) => !note.subjects?.some(isLocalCharacterSubject)),
+        }
+      : catalog;
+  if (effectiveCatalog.entries.length === 0 || effectiveCatalog.notes.length === 0) return [];
+  const index = buildCatalogIndex(effectiveCatalog);
   const detected = new Set<string>();
   for (const value of [sourceText, sourceTitle ?? ""]) {
     for (const name of value.matchAll(SOURCE_BACKED_NPC_NAME_PATTERN)) {
@@ -651,7 +661,7 @@ export function trustedLtmIdentityNotesForSource({
   if (detected.size === 0) return [];
 
   const selected = new Map<string, TrustedLtmNoteSubjectMatch>();
-  for (const match of analyzeTrustedLtmNoteSubjects(catalog).matches) {
+  for (const match of analyzeTrustedLtmNoteSubjects(effectiveCatalog).matches) {
     if (!match.subjects.every((subject) => detected.has(subject.key))) continue;
     const key = `${match.note.type}\0${match.subjects.map((subject) => subject.key).join("\0")}`;
     const current = selected.get(key);

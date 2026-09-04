@@ -636,6 +636,8 @@ export class LongTermMemoryStorage {
           JSON.stringify(scope) === JSON.stringify(current.scope)
         )
           continue;
+        const localSubjectError = localCharacterScopeError(current.subjects, scope);
+        if (localSubjectError) throw new LtmServiceError(localSubjectError, 400, "ltm_local_character_scope_invalid");
         changes.push({
           before: current,
           after: ltmNoteSchema.parse({

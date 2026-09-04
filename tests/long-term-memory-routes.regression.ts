@@ -1028,6 +1028,53 @@ async function main() {
         facts: { text: "Mara belongs to the Archive roleplay family.", updatedAt: "2026-07-17T00:00:00.000Z" },
       },
     });
+    const rejectedGameLocal = await app.inject({
+      method: "POST",
+      url: "/api/long-term-memory/notes",
+      headers,
+      payload: {
+        id: "char_local_game_rejected",
+        title: "Mara",
+        type: "character",
+        status: "active",
+        modes: ["game"],
+        scope: { groupId: "observatory-branches", groupIds: ["observatory-branches"] },
+        tags: [],
+        keywords: [],
+        links: [],
+        subjects: [
+          {
+            key: "local_character:group_observatory_branches:mara",
+            ref: { kind: "local_character", id: "group_observatory_branches:mara" },
+          },
+        ],
+        sections: {
+          facts: { text: "Mara must remain Roleplay-only.", updatedAt: "2026-07-17T00:00:00.000Z" },
+        },
+      },
+    });
+    assert.equal(rejectedGameLocal.statusCode, 400, rejectedGameLocal.body);
+    const rejectedCrossFamilyPatch = await app.inject({
+      method: "PATCH",
+      url: "/api/long-term-memory/notes/char_local_mara_group",
+      headers,
+      payload: {
+        subjects: [
+          {
+            key: "local_character:chat_chat_b:mara",
+            ref: { kind: "local_character", id: "chat_chat_b:mara" },
+          },
+        ],
+      },
+    });
+    assert.equal(rejectedCrossFamilyPatch.statusCode, 400, rejectedCrossFamilyPatch.body);
+    const rejectedBulkFamilyExpansion = await app.inject({
+      method: "POST",
+      url: "/api/long-term-memory/notes/batch",
+      headers,
+      payload: { noteIds: ["char_local_mara_group"], addScope: { groupIds: ["archive-family"] } },
+    });
+    assert.equal(rejectedBulkFamilyExpansion.statusCode, 400, rejectedBulkFamilyExpansion.body);
     await storageService.storage.createNote({
       id: "world_professor_mari_group",
       type: "world",
@@ -1085,6 +1132,13 @@ async function main() {
       scopeTargets.json().localCharacters.some((character: any) => character.id === "chat_chat_b:mara"),
       false,
     );
+    const gameScopeTargets = await app.inject({
+      method: "GET",
+      url: "/api/long-term-memory/scope-targets?chatId=game-a&includeAllChats=true",
+      headers,
+    });
+    assert.equal(gameScopeTargets.statusCode, 200, gameScopeTargets.body);
+    assert.deepEqual(gameScopeTargets.json().localCharacters, []);
     const activeChatScopePreview = await app.inject({
       method: "POST",
       url: "/api/long-term-memory/import/preview",
