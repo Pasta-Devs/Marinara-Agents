@@ -19,12 +19,19 @@ export type ScopeTargetPersona = {
   label: string;
   comment?: string;
 };
+export type ScopeTargetLocalCharacter = {
+  id: string;
+  label: string;
+  comment?: string;
+  familyId: string;
+};
 export type ScopeTargets = {
   currentScope: LtmScope | null;
   chats: ScopeTargetChat[];
   groups: ScopeTargetGroup[];
   characters: ScopeTargetCharacter[];
   personas: ScopeTargetPersona[];
+  localCharacters: ScopeTargetLocalCharacter[];
 };
 export type ScopeIndexes = {
   chatsById: Map<string, ScopeTargetChat>;

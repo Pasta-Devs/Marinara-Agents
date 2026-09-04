@@ -507,6 +507,7 @@ async function extractLongTermMemoryFromSourceNoteInner(
   const identityContext = prepareLtmSubjectIdentityContext({
     units: extractionPayload.response.units,
     catalog: options.trustedSubjectCatalog ?? { entries: [], notes: [] },
+    scope,
     sourceBackedNpcSourceText: sourceText,
     sourceBackedNpcSourceTitle: sourceNote.title,
   });

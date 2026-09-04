@@ -454,7 +454,7 @@ export const ltmNoteIdSchema = ltmIdentifierSchema;
 
 export const ltmSubjectReferenceSchema = z
   .object({
-    kind: z.enum(["character", "persona"]),
+    kind: z.enum(["character", "persona", "local_character"]),
     id: z.string().trim().min(1).max(120),
   })
   .strict();

@@ -4,6 +4,12 @@
     "long-term-memory": {
       "versions": [
         {
+          "version": "1.3.0",
+          "date": "2026-09-04",
+          "notes": "- Added conversation-family-scoped Roleplay local-character memories and reviewable first-use mutations.\n- Kept Game Mode dynamic NPC metadata out of Long-Term Memory subjects and targets.",
+          "highlight": true
+        },
+        {
           "version": "1.2.19",
           "date": "2026-09-04",
           "notes": "- Bound the Sources destination panel and restored page scrolling when its list is hovered.\n- Restricted Already imported counts and rows to the selected source scope.",

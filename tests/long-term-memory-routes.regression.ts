@@ -204,6 +204,7 @@ async function main() {
             npcUpdates: [],
           },
         ],
+        gameNpcs: [{ name: "Game NPC" }],
       },
       lastMessageAt: null,
       updatedAt: "2026-07-17T01:00:00.000Z",
@@ -988,6 +989,41 @@ async function main() {
       personaIds: ["persona-fixture"],
     });
     await storageService.storage.createNote({
+      id: "char_local_mara_group",
+      title: "Mara",
+      type: "character",
+      status: "active",
+      modes: ["roleplay"],
+      scope: { groupId: "observatory-branches", groupIds: ["observatory-branches"] },
+      tags: [],
+      keywords: [],
+      links: [],
+      subjects: [
+        {
+          key: "local_character:observatory_branches:mara",
+          ref: { kind: "local_character", id: "observatory_branches:mara" },
+        },
+      ],
+      sections: {
+        facts: { text: "Mara belongs to the Observatory roleplay family.", updatedAt: "2026-07-17T00:00:00.000Z" },
+      },
+    });
+    await storageService.storage.createNote({
+      id: "char_local_mara_chat",
+      title: "Mara",
+      type: "character",
+      status: "active",
+      modes: ["roleplay"],
+      scope: { chatId: "chat-b", chatIds: ["chat-b"] },
+      tags: [],
+      keywords: [],
+      links: [],
+      subjects: [{ key: "local_character:chat_b:mara", ref: { kind: "local_character", id: "chat_b:mara" } }],
+      sections: {
+        facts: { text: "Mara belongs to the Archive roleplay family.", updatedAt: "2026-07-17T00:00:00.000Z" },
+      },
+    });
+    await storageService.storage.createNote({
       id: "world_professor_mari_group",
       type: "world",
       status: "active",
@@ -1035,6 +1071,14 @@ async function main() {
         .characters.some((character: any) => character.id === "character-mara" && character.label === "Mara"),
       true,
       JSON.stringify(scopeTargets.json().characters),
+    );
+    assert.equal(
+      scopeTargets.json().localCharacters.some((character: any) => character.id === "observatory_branches:mara"),
+      true,
+    );
+    assert.equal(
+      scopeTargets.json().localCharacters.some((character: any) => character.id === "chat_b:mara"),
+      false,
     );
     const activeChatScopePreview = await app.inject({
       method: "POST",
@@ -1116,6 +1160,19 @@ async function main() {
         .characters.some((character: any) => character.id === "character-nyra" && character.label === "Nyra"),
       true,
     );
+    assert.equal(
+      allScopeTargets.json().localCharacters.some((character: any) => character.id === "chat_b:mara"),
+      true,
+      JSON.stringify(allScopeTargets.json().localCharacters),
+    );
+    assert.equal(
+      [
+        ...allScopeTargets.json().characters,
+        ...allScopeTargets.json().personas,
+        ...allScopeTargets.json().localCharacters,
+      ].some((target: any) => target.label === "Game NPC"),
+      false,
+    );
     assert.deepEqual(
       allScopeTargets.json().groups.find((group: any) => group.id === "observatory-branches"),
       {
@@ -1128,6 +1185,7 @@ async function main() {
       allScopeTargets.json().groups.some((group: any) => group.id === "professor-mari-only"),
       false,
     );
+    await storageService.storage.deleteNotesPermanently(["char_local_mara_group", "char_local_mara_chat"]);
     const professorMariCharacterPreview = await app.inject({
       method: "POST",
       url: "/api/long-term-memory/import/preview",

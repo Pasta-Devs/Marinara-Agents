@@ -678,6 +678,11 @@ export function createLongTermMemoryRoutes(runtime: {
       const eligibleResources = resources.filter((resource) => resource.id !== PROFESSOR_MARI_CHARACTER_ID);
       const chatById = new Map(eligibleChats.map((chat) => [chat.id, chat]));
       const currentChat = chatId ? (chatById.get(chatId) ?? null) : null;
+      const localCatalogs = await Promise.all(
+        (includeAllChats ? eligibleChats : currentChat ? [currentChat] : []).map((chat) =>
+          loadTrustedLtmSubjectCatalog(resolveChatLtmScope(chat), root),
+        ),
+      );
       const chatIds = new Set<string>();
       const groupIds = new Set<string>();
       const characterIds = new Set<string>();
@@ -746,6 +751,26 @@ export function createLongTermMemoryRoutes(runtime: {
           })
           .sort((left, right) => left.label.localeCompare(right.label) || left.id.localeCompare(right.id)),
       );
+      const localCharacters = numberDuplicateLabels(
+        [
+          ...new Map(
+            localCatalogs.flatMap((catalog) => catalog.entries).map((entry) => [entry.subject.key, entry]),
+          ).values(),
+        ]
+          .flatMap((entry) =>
+            entry.subject.ref?.kind === "local_character" && entry.familyId
+              ? [
+                  {
+                    id: entry.subject.ref.id,
+                    label: entry.name,
+                    comment: `Roleplay family ${entry.familyId}`,
+                    familyId: entry.familyId,
+                  },
+                ]
+              : [],
+          )
+          .sort((left, right) => left.label.localeCompare(right.label) || left.id.localeCompare(right.id)),
+      );
       return {
         currentScope: currentChat ? resolveChatLtmScope(currentChat) : null,
         chats: namedChats,
@@ -764,6 +789,7 @@ export function createLongTermMemoryRoutes(runtime: {
             .sort((left, right) => left.label.localeCompare(right.label) || left.id.localeCompare(right.id)),
         ),
         characters: namedCharacters,
+        localCharacters,
         personas: numberDuplicateLabels(
           [...(includeAllChats ? personas : personas.filter((persona) => personaIds.has(persona.id)))]
             .filter((persona) => persona.id !== PROFESSOR_MARI_CHARACTER_ID)

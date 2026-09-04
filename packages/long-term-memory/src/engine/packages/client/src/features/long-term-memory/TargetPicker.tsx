@@ -6,7 +6,7 @@ export type PickerTarget = {
   id: string;
   label: string;
   comment?: string;
-  kind: "chat" | "group" | "character" | "persona";
+  kind: "chat" | "group" | "character" | "persona" | "local_character";
 };
 
 export type AvailabilityTarget = {
