@@ -6,6 +6,11 @@ import {
   slurpFollowerMilestone,
   slurpMilestonesCrossed,
 } from "../packages/slurp/src/engine/packages/server/src/services/slurp/slurp-milestones.js";
+import {
+  openSlurpGoal,
+  readSlurpGoal,
+  slurpGoalProgress,
+} from "../packages/slurp/src/engine/packages/server/src/services/slurp/slurp-goal.js";
 
 // ── Milestones ──────────────────────────────────────────────────────────────
 // Before the first target there is nothing reached yet, but there is still something to aim at.
@@ -45,6 +50,47 @@ assert.deepEqual(slurpMilestonesCrossed(500, 500), [], "standing still crosses n
 assert.deepEqual(slurpMilestonesCrossed(1_200, 400), [], "losing followers crosses nothing");
 assert.deepEqual(slurpMilestonesCrossed(499, 500), [500], "landing exactly on a target counts");
 
+// ── Tip goals ───────────────────────────────────────────────────────────────
+const opened = openSlurpGoal("New set on Friday", 500, 1_200, new Date("2026-09-01T00:00:00.000Z"));
+assert.ok(opened);
+assert.equal(opened.startLifetime, 1_200);
+
+// Progress is measured from lifetime earnings at the moment the goal opened, never from the
+// balance. A balance falls when money is withdrawn, and a goal that slid backwards because the
+// Creator was paid would be nonsense.
+assert.equal(slurpGoalProgress(opened, 1_200).raised, 0);
+assert.equal(slurpGoalProgress(opened, 1_450).raised, 250);
+assert.equal(slurpGoalProgress(opened, 1_450).remaining, 250);
+assert.equal(slurpGoalProgress(opened, 1_450).met, false);
+
+// A passed goal reads as complete, not as 340%.
+const passed = slurpGoalProgress(opened, 3_000);
+assert.equal(passed.raised, 500);
+assert.equal(passed.progress, 1);
+assert.equal(passed.remaining, 0);
+assert.equal(passed.met, true);
+
+// A reversal after the goal opened must not drive progress negative.
+assert.equal(slurpGoalProgress(opened, 900).raised, 0);
+assert.equal(slurpGoalProgress(opened, 900).progress, 0);
+
+// A goal needs both a label and a believable target.
+assert.equal(openSlurpGoal("   ", 500, 0, new Date()), null);
+assert.equal(openSlurpGoal("ok", 0, 0, new Date()), null);
+assert.equal(openSlurpGoal("ok", 5_000_000, 0, new Date()), null);
+assert.equal(openSlurpGoal("ok", 1.5, 0, new Date()), null);
+
+// Stored goals fall back rather than throwing, like every other Slurp blob.
+assert.equal(readSlurpGoal(null), null);
+assert.equal(readSlurpGoal("not json"), null);
+assert.equal(readSlurpGoal('{"label":"x"}'), null);
+assert.equal(readSlurpGoal('{"label":"","target":5,"startLifetime":0,"startedAt":"2026-01-01T00:00:00.000Z"}'), null);
+assert.equal(
+  readSlurpGoal('{"label":"x","target":5,"startLifetime":0,"startedAt":"whenever"}'),
+  null,
+  "an unparseable start time must not produce a goal",
+);
+
 // ── Wiring ──────────────────────────────────────────────────────────────────
 const root = join(import.meta.dirname, "..", "packages/slurp/src/engine/packages");
 const read = (path: string) => readFileSync(join(root, path), "utf8");
@@ -68,6 +114,11 @@ const hooks = read("client/src/hooks/use-slurp.ts");
 const studioHook = hooks.slice(hooks.indexOf("export function useSlurpStudio"));
 assert.match(studioHook.slice(0, 700), /staleTime: Infinity/u);
 assert.match(studioHook.slice(0, 700), /refetchOnWindowFocus: false/u);
+
+// Only the operating persona may set a goal.
+assert.match(routes, /app\.put\("\/noodler\/accounts\/:id\/goal"/u);
+assert.match(routes, /Only the Creator's owner can set a goal\./u);
+assert.match(home, /function SlurpGoalEditor/u);
 
 const shell = read("client/src/components/slurp/SlurpShell.tsx");
 assert.match(shell, /onOpenStudio && hasOperatedCreator/u, "the studio entry needs an operated Creator");

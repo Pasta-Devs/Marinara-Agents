@@ -72,6 +72,7 @@ import {
   type SlurpWallet,
   type SlurpWalletSpendKind,
 } from "../slurp/slurp-wallet.js";
+import { openSlurpGoal, readSlurpGoal, slurpGoalKey, type SlurpGoal } from "../slurp/slurp-goal.js";
 import {
   earn,
   readSlurpEarnings,
@@ -5420,6 +5421,23 @@ export function createSlurpStorage(db: DB) {
       // operator's spending wallet made income and spending money the same balance, so a real
       // audience would have ended every purchasing decision in the game. See slurp-earnings.ts.
       await this.creditEarnings(creator.id, reason, share, `${reason}: ${creator.handle}`);
+    },
+
+    async getGoal(creatorAccountId: string): Promise<SlurpGoal | null> {
+      return readSlurpGoal(await settingsStore.get(slurpGoalKey(creatorAccountId)));
+    },
+
+    /** Open or replace a Creator's tip goal. Passing a null label clears it. */
+    async setGoal(creatorAccountId: string, label: string | null, target: number): Promise<SlurpGoal | null> {
+      if (label === null) {
+        await settingsStore.remove(slurpGoalKey(creatorAccountId));
+        return null;
+      }
+      const earnings = await this.getEarnings(creatorAccountId);
+      const goal = openSlurpGoal(label, target, earnings.lifetime, new Date());
+      if (!goal) return null;
+      await settingsStore.set(slurpGoalKey(creatorAccountId), JSON.stringify(goal));
+      return goal;
     },
 
     async getEarnings(creatorAccountId: string): Promise<SlurpEarnings> {

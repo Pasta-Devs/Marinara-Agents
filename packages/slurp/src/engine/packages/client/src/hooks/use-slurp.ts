@@ -490,6 +490,16 @@ export type SlurpWallet = {
  * The viewer's wallet. Fetching it is what pays the daily stipend and charges due renewals on the
  * server, so the wallet page opening is also what moves the economy forward.
  */
+export type SlurpGoalProgress = {
+  label: string;
+  target: number;
+  raised: number;
+  progress: number;
+  remaining: number;
+  met: boolean;
+  startedAt: string;
+};
+
 export type SlurpStudioPost = {
   id: string;
   title: string | null;
@@ -515,12 +525,34 @@ export type SlurpStudioCreator = {
     ledger: Array<{ kind: string; amount: number; at: string; note?: string }>;
   };
   milestone: { reached: number | null; next: number | null; progress: number; remaining: number };
+  goal: SlurpGoalProgress | null;
   /** Null on a first visit: "no change yet" and "measured no change" are different. */
   followersDelta: number | null;
   earningsDelta: number | null;
   milestonesCrossed: number[];
   posts: SlurpStudioPost[];
 };
+
+/** Open, replace, or clear a Creator's tip goal. Passing a null label clears it. */
+export function useSetSlurpGoal() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({
+      creatorAccountId,
+      ...body
+    }: {
+      creatorAccountId: string;
+      personaId: string;
+      label: string | null;
+      target: number;
+    }) =>
+      api.put<{ goal: SlurpGoalProgress | null }>(
+        `/slurp/noodler/accounts/${encodeURIComponent(creatorAccountId)}/goal`,
+        body,
+      ),
+    onSuccess: () => qc.invalidateQueries({ queryKey: [...noodleKeys.noodlerRoot(), "studio"] }),
+  });
+}
 
 /** The Creator home. Reading it also re-marks the point future deltas are measured from. */
 export function useSlurpStudio(personaId: string | null, enabled = true) {

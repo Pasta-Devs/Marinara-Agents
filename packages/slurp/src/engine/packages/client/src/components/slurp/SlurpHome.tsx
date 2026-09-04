@@ -78,6 +78,8 @@ import {
   useNoodlerSubscribers,
   useNoodlerUnseenCount,
   useSlurpStudio,
+  type SlurpStudioCreator,
+  useSetSlurpGoal,
   useHideSlurpAd,
   useHideSlurpAdBrand,
   useRecordSlurpAdAction,
@@ -6677,6 +6679,8 @@ function SlurpStudioView({
                 </div>
               )}
 
+              <SlurpGoalEditor creator={creator} personaId={personaId} />
+
               {creator.milestonesCrossed.length > 0 && (
                 <p className="rounded-lg bg-[var(--noodle-accent)]/10 px-3 py-2 text-xs font-bold text-[var(--noodle-accent)]">
                   {localizeUi("ui.slurp.studio.crossed", {
@@ -6746,5 +6750,122 @@ function SlurpStudioView({
         )}
       </div>
     </NoodlerFrame>
+  );
+}
+
+/**
+ * The tip goal on the Creator home: show progress, or open one.
+ *
+ * A milestone is a target the player aims at privately. A tip goal is one the Creator shows the
+ * audience, which is the only thing that gives anyone a reason to tip rather than just watch.
+ * Progress is measured from the lifetime earnings recorded when the goal opened, so a payout
+ * never drags the bar backwards.
+ */
+function SlurpGoalEditor({ creator, personaId }: { creator: SlurpStudioCreator; personaId: string | null }) {
+  const { t: localizeUi } = useUiTranslation();
+  const setGoal = useSetSlurpGoal();
+  const [editing, setEditing] = useState(false);
+  const [label, setLabel] = useState(creator.goal?.label ?? "");
+  const [target, setTarget] = useState(creator.goal?.target ?? 500);
+
+  const submit = (nextLabel: string | null) => {
+    if (!personaId) return;
+    setGoal.mutate(
+      { creatorAccountId: creator.id, personaId, label: nextLabel, target },
+      {
+        onSuccess: () => setEditing(false),
+        onError: (error) => toast.error(errorMessage(error)),
+      },
+    );
+  };
+
+  if (!editing) {
+    return creator.goal ? (
+      <div>
+        <div className="flex items-baseline justify-between gap-3">
+          <p className="min-w-0 truncate text-xs font-bold">{creator.goal.label}</p>
+          <button
+            type="button"
+            onClick={() => setEditing(true)}
+            className="shrink-0 text-xs font-bold text-[var(--noodle-accent)] hover:underline"
+          >
+            {localizeUi("ui.slurp.studio.goalEdit", { defaultValue: "Edit" })}
+          </button>
+        </div>
+        <div className="mt-2 h-2 overflow-hidden rounded-full bg-[var(--accent)]">
+          <div
+            className="h-full rounded-full bg-[var(--noodle-accent)] transition-[width] motion-reduce:transition-none"
+            style={{ width: `${Math.round(creator.goal.progress * 100)}%` }}
+          />
+        </div>
+        <p className="mt-1 text-xs tabular-nums text-[var(--muted-foreground)]">
+          {creator.goal.met
+            ? localizeUi("ui.slurp.studio.goalMet", { defaultValue: "Goal met." })
+            : localizeUi("ui.slurp.studio.goalProgress", {
+                defaultValue: "{{raised}} of {{target}} coins",
+                raised: creator.goal.raised.toLocaleString(),
+                target: creator.goal.target.toLocaleString(),
+              })}
+        </p>
+      </div>
+    ) : (
+      <button
+        type="button"
+        onClick={() => setEditing(true)}
+        className="self-start rounded-lg px-2 py-1 text-xs font-bold text-[var(--noodle-accent)] ring-1 ring-inset ring-[var(--noodle-accent)]/40 hover:bg-[var(--noodle-accent)]/10"
+      >
+        {localizeUi("ui.slurp.studio.goalAdd", { defaultValue: "Set a tip goal" })}
+      </button>
+    );
+  }
+
+  return (
+    <div className="flex flex-col gap-2 rounded-lg bg-[var(--accent)] p-3">
+      <label className="sr-only" htmlFor={`slurp-goal-label-${creator.id}`}>
+        {localizeUi("ui.slurp.studio.goalLabel", { defaultValue: "Goal" })}
+      </label>
+      <input
+        id={`slurp-goal-label-${creator.id}`}
+        value={label}
+        maxLength={80}
+        onChange={(event) => setLabel(event.target.value)}
+        placeholder={localizeUi("ui.slurp.studio.goalPlaceholder", { defaultValue: "New set on Friday…" })}
+        className="h-10 w-full rounded-lg bg-[var(--slurp-canvas,var(--background))] px-3 text-sm outline-none ring-1 ring-inset ring-[var(--noodle-divider)] focus:ring-2 focus:ring-[var(--noodle-accent)]"
+      />
+      <div className="flex items-center gap-2">
+        <label htmlFor={`slurp-goal-target-${creator.id}`} className="text-xs font-bold text-[var(--muted-foreground)]">
+          {localizeUi("ui.slurp.studio.goalTarget", { defaultValue: "Target" })}
+        </label>
+        <input
+          id={`slurp-goal-target-${creator.id}`}
+          type="number"
+          min={1}
+          max={1_000_000}
+          value={target}
+          onChange={(event) => setTarget(Math.max(1, Math.floor(Number(event.target.value) || 0)))}
+          className="h-9 w-28 rounded-lg bg-[var(--slurp-canvas,var(--background))] px-2 text-sm tabular-nums outline-none ring-1 ring-inset ring-[var(--noodle-divider)] focus:ring-2 focus:ring-[var(--noodle-accent)]"
+        />
+        <div className="ml-auto flex gap-2">
+          {creator.goal && (
+            <button
+              type="button"
+              disabled={setGoal.isPending}
+              onClick={() => submit(null)}
+              className="min-h-9 rounded-lg px-3 text-xs font-bold text-[var(--muted-foreground)] ring-1 ring-inset ring-[var(--noodle-divider)] disabled:opacity-50"
+            >
+              {localizeUi("ui.slurp.studio.goalClear", { defaultValue: "Clear" })}
+            </button>
+          )}
+          <button
+            type="button"
+            disabled={setGoal.isPending || !label.trim()}
+            onClick={() => submit(label.trim())}
+            className="min-h-9 rounded-lg bg-[var(--noodle-accent)] px-3 text-xs font-bold text-zinc-950 disabled:opacity-50"
+          >
+            {localizeUi("ui.slurp.studio.goalSave", { defaultValue: "Save goal" })}
+          </button>
+        </div>
+      </div>
+    </div>
   );
 }

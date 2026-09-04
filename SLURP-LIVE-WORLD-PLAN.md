@@ -14,7 +14,7 @@ first version of this plan was wrong in ways that are not obvious.
 | Stage | What | State |
 | ----- | ---- | ----- |
 | 0 | Separate creator earnings from spending money | **done** |
-| 1 | Creator home: legibility, goals, catch-up | **done** (tip goals pending) |
+| 1 | Creator home: legibility, goals, catch-up | **done** |
 | 2 | Notification stream | **next** |
 | 3 | Audience-initiated commissions and questions | not started |
 | 4 | Audience population and funnel | not started |
@@ -311,9 +311,13 @@ Per-post **earnings** attribution is deliberately absent. The ledger carries no 
 `unlockCount` is synthetic reach, so a money figure derived from it would contradict the real
 earnings balance. Add it when Stage 4 makes unlocks real.
 
-**Tip goals are still missing.** They need a per-Creator target and label in settings, plus
-progress measured from earnings since the goal opened. This was one of the two goal mechanics the
-review called for; only milestones landed.
+**Tip goals** landed in `slurp-goal.ts` with `PUT /noodler/accounts/:id/goal` and an editor on the
+Creator home. Progress is measured from lifetime earnings at the moment the goal opened, never
+from the balance: a balance falls when money is withdrawn, and a goal that slid backwards because
+the Creator was paid would be nonsense.
+
+Still open: the goal is not yet shown on the Creator's public profile, which is where it would
+actually give a fan a reason to tip. The studio carries it; the profile does not.
 
 ### Stage 1 (original scope)
 
