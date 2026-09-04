@@ -1069,6 +1069,7 @@
   "ui.slurp.messages.emptyTitle": "아직 대화가 없습니다",
   "ui.slurp.messages.inbox": "받은 편지함",
   "ui.slurp.messages.locked": "잠긴 콘텐츠 — {{price}} 코인",
+  "ui.slurp.messages.unlock": "{{price}} 코인으로 잠금 해제",
   "ui.slurp.messages.noMessages": "아직 메시지가 없습니다",
   "ui.slurp.messages.pending": "대기 중",
   "ui.slurp.messages.policyClosed": "{{name}} 님은 다이렉트 메시지를 꺼 두었습니다.",

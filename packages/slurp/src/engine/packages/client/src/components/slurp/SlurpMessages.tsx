@@ -12,6 +12,7 @@ import {
   useSlurpThread,
   useSlurpThreads,
   useTipInSlurpThread,
+  useUnlockSlurpMessage,
   type SlurpMessage,
   type SlurpThread,
 } from "../../hooks/use-slurp";
@@ -341,7 +342,7 @@ function SlurpThreadView({
             </p>
           )}
           {messages.map((message) => (
-            <MessageBubble key={message.id} message={message} locale={i18n.language} />
+            <MessageBubble key={message.id} message={message} locale={i18n.language} personaId={personaId} />
           ))}
           {typing && (
             <p
@@ -421,8 +422,17 @@ function SlurpThreadView({
   );
 }
 
-function MessageBubble({ message, locale }: { message: SlurpMessage; locale: string }) {
+function MessageBubble({
+  message,
+  locale,
+  personaId,
+}: {
+  message: SlurpMessage;
+  locale: string;
+  personaId?: string | null;
+}) {
   const { t: localizeUi } = useUiTranslation();
+  const unlock = useUnlockSlurpMessage();
   const mine = message.role === "viewer";
   if (message.kind === "tip") {
     return (
@@ -447,13 +457,18 @@ function MessageBubble({ message, locale }: { message: SlurpMessage; locale: str
         )}
       >
         {message.kind === "ppv" && !message.unlockedAt ? (
-          <span className="inline-flex items-center gap-1.5 text-[var(--muted-foreground)]">
+          <button
+            type="button"
+            disabled={!personaId || unlock.isPending}
+            onClick={() => personaId && unlock.mutate({ personaId, messageId: message.id })}
+            className="inline-flex items-center gap-1.5 text-left text-[var(--muted-foreground)] underline-offset-2 hover:underline disabled:opacity-60"
+          >
             <Lock size={13} aria-hidden="true" />
-            {localizeUi("ui.slurp.messages.locked", {
-              defaultValue: "Locked content — {{price}} coins",
+            {localizeUi("ui.slurp.messages.unlock", {
+              defaultValue: "Unlock for {{price}} coins",
               price: message.price,
             })}
-          </span>
+          </button>
         ) : (
           message.content
         )}

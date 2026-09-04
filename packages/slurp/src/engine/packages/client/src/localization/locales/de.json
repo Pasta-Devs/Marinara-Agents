@@ -134,6 +134,7 @@
   "ui.slurp.messages.emptyTitle": "Noch keine Unterhaltungen",
   "ui.slurp.messages.inbox": "Posteingang",
   "ui.slurp.messages.locked": "Gesperrter Inhalt – {{price}} Münzen",
+  "ui.slurp.messages.unlock": "Für {{price}} Münzen entsperren",
   "ui.slurp.messages.noMessages": "Noch keine Nachrichten",
   "ui.slurp.messages.pending": "Ausstehend",
   "ui.slurp.messages.policyClosed": "{{name}} hat Direktnachrichten deaktiviert.",

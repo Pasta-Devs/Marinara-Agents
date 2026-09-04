@@ -30,6 +30,15 @@ const tipSchema = z.object({
   note: z.string().trim().max(280).default(""),
 });
 
+const creatorMessageSchema = z.object({
+  personaId: z.string().trim().min(1),
+  viewerAccountId: z.string().trim().min(1),
+  content: z.string().trim().min(1).max(4000),
+  price: z.number().int().min(0).max(9999).default(0),
+});
+
+const broadcastSchema = creatorMessageSchema.omit({ viewerAccountId: true });
+
 const requestDecisionSchema = z.object({
   personaId: z.string().trim().min(1),
   decision: z.enum(["accept", "decline"]),
@@ -207,6 +216,52 @@ export async function slurpMessageRoutes(app: FastifyInstance) {
       replyStatus: outcome.status,
       wallet: await slurp.getWallet(viewer.id),
     };
+  });
+
+  app.post("/messages/ppv/unlock", async (req, reply) => {
+    const parsed = z
+      .object({ personaId: z.string().trim().min(1), messageId: z.string().trim().min(1) })
+      .safeParse(req.body ?? {});
+    if (!parsed.success) return reply.code(400).send({ error: parsed.error.flatten() });
+    const viewer = await requireViewer(parsed.data.personaId);
+    if (!viewer) return reply.code(404).send({ error: "Slurp persona not found" });
+    const message = await messages.unlockMessage(viewer.id, parsed.data.messageId);
+    if (!message) return reply.code(402).send({ error: "PPV message cannot be unlocked." });
+    return { message, wallet: await slurp.getWallet(viewer.id) };
+  });
+
+  app.post("/messages/creators/:creatorAccountId/ppv", async (req, reply) => {
+    const parsed = creatorMessageSchema.safeParse(req.body ?? {});
+    if (!parsed.success) return reply.code(400).send({ error: parsed.error.flatten() });
+    const { creatorAccountId } = req.params as { creatorAccountId: string };
+    if (!(await ownsCreator(parsed.data.personaId, creatorAccountId)))
+      return reply.code(403).send({ error: "Only the Creator's owner can send PPV messages." });
+    if (parsed.data.price <= 0) return reply.code(400).send({ error: "A PPV message needs a price." });
+    const message = await messages.sendCreatorMessage(creatorAccountId, parsed.data.viewerAccountId, {
+      content: parsed.data.content,
+      kind: "ppv",
+      price: parsed.data.price,
+    });
+    if (!message) return reply.code(404).send({ error: "Viewer or thread not found" });
+    return { message };
+  });
+
+  app.post("/messages/creators/:creatorAccountId/broadcast", async (req, reply) => {
+    const parsed = broadcastSchema.safeParse(req.body ?? {});
+    if (!parsed.success) return reply.code(400).send({ error: parsed.error.flatten() });
+    const { creatorAccountId } = req.params as { creatorAccountId: string };
+    if (!(await ownsCreator(parsed.data.personaId, creatorAccountId)))
+      return reply.code(403).send({ error: "Only the Creator's owner can broadcast messages." });
+    const subscribers = await slurp.listSubscriptionsForCreator(creatorAccountId);
+    const sent = [];
+    for (const subscription of subscribers) {
+      const message = await messages.sendCreatorMessage(creatorAccountId, subscription.viewerAccountId, {
+        content: parsed.data.content,
+        kind: "broadcast",
+      });
+      if (message) sent.push(message.id);
+    }
+    return { sent: sent.length };
   });
 
   app.post("/messages/threads/:threadId/request", async (req, reply) => {

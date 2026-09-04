@@ -134,6 +134,7 @@
   "ui.slurp.messages.emptyTitle": "Brak rozmów",
   "ui.slurp.messages.inbox": "Skrzynka odbiorcza",
   "ui.slurp.messages.locked": "Zablokowana treść — {{price}} monet",
+  "ui.slurp.messages.unlock": "Odblokuj za {{price}} monet",
   "ui.slurp.messages.noMessages": "Brak wiadomości",
   "ui.slurp.messages.pending": "Oczekuje",
   "ui.slurp.messages.policyClosed": "{{name}} ma wyłączone wiadomości prywatne.",

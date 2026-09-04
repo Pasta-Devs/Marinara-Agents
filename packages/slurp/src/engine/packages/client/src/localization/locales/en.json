@@ -1842,6 +1842,7 @@
   "ui.slurp.messages.emptyTitle": "No conversations yet",
   "ui.slurp.messages.inbox": "Inbox",
   "ui.slurp.messages.locked": "Locked content — {{price}} coins",
+  "ui.slurp.messages.unlock": "Unlock for {{price}} coins",
   "ui.slurp.messages.noMessages": "No messages yet",
   "ui.slurp.messages.pending": "Pending",
   "ui.slurp.messages.policyClosed": "{{name}} has direct messages turned off.",

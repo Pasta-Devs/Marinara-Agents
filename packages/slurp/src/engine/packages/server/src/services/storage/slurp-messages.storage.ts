@@ -427,6 +427,51 @@ export function createSlurpMessagesStorage(db: DB) {
       return mapMessage(message);
     },
 
+    async unlockMessage(viewerAccountId: string, messageId: string): Promise<SlurpMessage | null> {
+      const rows = await db.select().from(slurpMessages).where(eq(slurpMessages.id, messageId));
+      const row = rows[0];
+      if (!row) return null;
+      const thread = await storage.getThreadById(String(row.threadId));
+      if (!thread || thread.viewerAccountId !== viewerAccountId || Number(row.price ?? 0) <= 0) return null;
+      if (row.unlockedAt) return mapMessage(row);
+      const price = int(row.price as string);
+      const settings = await slurp.getSettings();
+      if (settings.walletEnabled) {
+        const charged = await slurp.spendCoins(viewerAccountId, "ppv", price, thread.creatorAccountId);
+        if (!charged) return null;
+        try {
+          await slurp.creditCreatorIncome(thread.creatorAccountId, price, "ppv");
+          const unlockedAt = now();
+          await db.update(slurpMessages).set({ unlockedAt }).where(eq(slurpMessages.id, messageId));
+          return mapMessage({ ...row, unlockedAt });
+        } catch (error) {
+          await slurp.refundCoins(viewerAccountId, price, "failed PPV unlock");
+          await slurp.reverseCreatorIncome(thread.creatorAccountId, price, "failed PPV unlock");
+          throw error;
+        }
+      }
+      const unlockedAt = now();
+      await db.update(slurpMessages).set({ unlockedAt }).where(eq(slurpMessages.id, messageId));
+      return mapMessage({ ...row, unlockedAt });
+    },
+
+    async sendCreatorMessage(
+      creatorAccountId: string,
+      viewerAccountId: string,
+      input: { content: string; kind?: SlurpMessageKind; price?: number; metadata?: Record<string, unknown> },
+    ): Promise<SlurpMessage | null> {
+      const opened = await storage.openThread(viewerAccountId, creatorAccountId, "creator");
+      if (opened.status !== "ok") return null;
+      return storage.appendMessage(opened.thread.id, {
+        senderAccountId: creatorAccountId,
+        role: "creator",
+        content: input.content,
+        kind: input.kind,
+        price: input.price,
+        metadata: input.metadata,
+      });
+    },
+
     /**
      * Send as the viewer. Opens the thread when there is none, so the caller never has to know
      * whether this is a first contact or the fortieth message.

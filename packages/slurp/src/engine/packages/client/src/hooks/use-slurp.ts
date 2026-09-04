@@ -1639,6 +1639,45 @@ export function useTipInSlurpThread() {
   });
 }
 
+export function useUnlockSlurpMessage() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (input: { personaId: string; messageId: string }) =>
+      api.post<{ message: SlurpMessage; wallet: SlurpWallet }>("/slurp/messages/ppv/unlock", input),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: noodleKeys.noodlerRoot() }),
+  });
+}
+
+export function useSendSlurpCreatorPpv() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (input: {
+      creatorAccountId: string;
+      personaId: string;
+      viewerAccountId: string;
+      content: string;
+      price: number;
+    }) =>
+      api.post<{ message: SlurpMessage }>(
+        `/slurp/messages/creators/${encodeURIComponent(input.creatorAccountId)}/ppv`,
+        input,
+      ),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: noodleKeys.noodlerRoot() }),
+  });
+}
+
+export function useBroadcastSlurpMessage() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (input: { creatorAccountId: string; personaId: string; content: string }) =>
+      api.post<{ sent: number }>(
+        `/slurp/messages/creators/${encodeURIComponent(input.creatorAccountId)}/broadcast`,
+        input,
+      ),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: noodleKeys.noodlerRoot() }),
+  });
+}
+
 export function useResolveSlurpMessageRequest() {
   const queryClient = useQueryClient();
   return useMutation({
@@ -1663,7 +1702,7 @@ export function useSlurpRapport(creatorAccountId: string | null, personaId: stri
 export function useSetSlurpCreatorMessaging() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (input: { creatorAccountId: string } & Partial<SlurpCreatorMessaging>) => {
+    mutationFn: (input: { creatorAccountId: string; personaId: string } & Partial<SlurpCreatorMessaging>) => {
       const { creatorAccountId, ...patch } = input;
       return api.patch<{ messaging: SlurpCreatorMessaging }>(
         `/slurp/messages/creators/${encodeURIComponent(creatorAccountId)}/settings`,
