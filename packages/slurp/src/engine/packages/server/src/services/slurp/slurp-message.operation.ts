@@ -61,7 +61,10 @@ export async function replyToSlurpMessage(
     messageLength: trigger?.content.length ?? 0,
     minutesUntilOnline: availability.minutesUntilOnline,
   });
-  if (pacing.mode === "queued" && input.force !== true) return { status: "queued", pacing };
+  if (pacing.mode === "queued" && input.force !== true) {
+    await messagesStore.setReplyNotBefore(thread.id, new Date(Date.now() + pacing.notBeforeMs).toISOString());
+    return { status: "queued", pacing };
+  }
 
   const claim = await messagesStore.claimReply(thread.id, input.triggerMessageId, thread.creatorAccountId);
   if (claim.status !== "claimed") return { status: "busy" };

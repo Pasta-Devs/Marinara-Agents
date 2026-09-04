@@ -234,6 +234,14 @@ export function credit(
   );
 }
 
+export function reverseIncome(wallet: SlurpWallet, amount: number, at: Date, note?: string): SlurpWallet {
+  if (!Number.isInteger(amount) || amount <= 0 || wallet.coins < amount) return wallet;
+  return record(
+    { ...wallet, coins: wallet.coins - amount },
+    { kind: "income", amount: -amount, at: at.toISOString(), ...(note && { note }) },
+  );
+}
+
 /**
  * Debit the wallet, or return `null` when the funds are not there. `null` is the caller's signal
  * to refuse the unlock or the subscription — it is the whole point of a real balance, and it is

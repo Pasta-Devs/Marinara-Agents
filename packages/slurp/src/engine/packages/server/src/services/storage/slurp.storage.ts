@@ -72,6 +72,7 @@ import {
   type SlurpWallet,
   type SlurpWalletSpendKind,
 } from "../slurp/slurp-wallet.js";
+import { reverseIncome } from "../slurp/slurp-wallet.js";
 import { logger } from "../../lib/logger.js";
 import {
   NOODLE_FAN_ACTIVITY_MAX_ACTIVITIES_PER_CREATOR,
@@ -1589,6 +1590,12 @@ export function createSlurpStorage(db: DB) {
         .where(eq(noodleInteractions.actorAccountId, personaId));
       for (const interaction of authored) await this.deleteInteractionById(interaction.id);
       await db.transaction(async (tx) => {
+        const threads = await tx.select().from(slurpThreads).where(eq(slurpThreads.viewerAccountId, personaId));
+        for (const thread of threads) {
+          await tx.delete(slurpMessageClaims).where(eq(slurpMessageClaims.threadId, thread.id));
+          await tx.delete(slurpMessages).where(eq(slurpMessages.threadId, thread.id));
+          await tx.delete(slurpThreads).where(eq(slurpThreads.id, thread.id));
+        }
         await tx.delete(noodleAccountSubscriptions).where(eq(noodleAccountSubscriptions.viewerAccountId, personaId));
         await tx.delete(noodlePostUnlocks).where(eq(noodlePostUnlocks.viewerAccountId, personaId));
         await createAppSettingsStorage(tx).remove(slurpViewerSettingsKey(personaId));
@@ -5356,6 +5363,27 @@ export function createSlurpStorage(db: DB) {
       });
       viewerSettingsUpdateQueue = run.catch(() => undefined);
       return run;
+    },
+
+    async refundCoins(viewerAccountId: string, amount: number, note: string): Promise<SlurpWallet> {
+      const run = viewerSettingsUpdateQueue.then(async () => {
+        const wallet = await this.getWallet(viewerAccountId);
+        return writeWallet(viewerAccountId, credit(wallet, "income", amount, new Date(), `refund: ${note}`));
+      });
+      viewerSettingsUpdateQueue = run.catch(() => undefined);
+      return run;
+    },
+
+    async reverseCreatorIncome(creatorAccountId: string, amount: number, note: string): Promise<void> {
+      const creator = await this.getNoodlerAccountById(creatorAccountId);
+      if (!creator) return;
+      const recipientId = creator.sourceKind === "persona" ? creator.sourceEntityId : creator.id;
+      const run = viewerSettingsUpdateQueue.then(async () => {
+        const wallet = await this.getWallet(recipientId);
+        await writeWallet(recipientId, reverseIncome(wallet, amount, new Date(), `reversal: ${note}`));
+      });
+      viewerSettingsUpdateQueue = run.catch(() => undefined);
+      await run;
     },
 
     /**

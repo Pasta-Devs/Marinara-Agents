@@ -44,6 +44,7 @@ const rapportWeightsSchema = z
   .partial();
 
 const messagingPatchSchema = z.object({
+  personaId: z.string().trim().min(1),
   dmPolicy: z.enum(SLURP_DM_POLICIES as unknown as [string, ...string[]]).optional(),
   requestFee: z.number().int().min(0).max(9999).optional(),
   ppvPrice: z.number().int().min(0).max(9999).optional(),
@@ -217,7 +218,18 @@ export async function slurpMessageRoutes(app: FastifyInstance) {
     if (!(await ownsCreator(parsed.data.personaId, thread.creatorAccountId)))
       return reply.code(403).send({ error: "Only the Creator's owner can answer a message request." });
     await messages.resolveRequest(threadId, parsed.data.decision);
-    return { thread: await freshView(threadId) };
+    let outcome: Awaited<ReturnType<typeof replyToSlurpMessage>> = { status: "ineligible" };
+    if (parsed.data.decision === "accept") {
+      const latest = (await messages.listMessages(threadId, 1))[0];
+      if (latest?.role === "viewer") {
+        outcome = await replyToSlurpMessage(app.db, { threadId, triggerMessageId: latest.id });
+      }
+    }
+    return {
+      thread: await freshView(threadId),
+      reply: outcome.status === "replied" ? outcome.message : null,
+      replyStatus: outcome.status,
+    };
   });
 
   app.get("/messages/creators/:creatorAccountId/settings", async (req, reply) => {
@@ -233,10 +245,13 @@ export async function slurpMessageRoutes(app: FastifyInstance) {
     const { creatorAccountId } = req.params as { creatorAccountId: string };
     if (!(await slurp.getNoodlerAccountById(creatorAccountId)))
       return reply.code(404).send({ error: "Creator not found" });
+    if (!(await ownsCreator(parsed.data.personaId, creatorAccountId)))
+      return reply.code(403).send({ error: "Only the Creator's owner can change messaging settings." });
+    const { personaId: _personaId, ...patch } = parsed.data;
     return {
       messaging: await messages.setCreatorMessaging(
         creatorAccountId,
-        parsed.data as Parameters<typeof messages.setCreatorMessaging>[1],
+        patch as Parameters<typeof messages.setCreatorMessaging>[1],
       ),
     };
   });
@@ -253,6 +268,8 @@ export async function slurpMessageRoutes(app: FastifyInstance) {
     if (!creator) return reply.code(404).send({ error: "Creator not found" });
     const viewer = await requireViewer(parsed.data.personaId);
     if (!viewer) return reply.code(404).send({ error: "Slurp persona not found" });
+    if (!(await ownsCreator(parsed.data.personaId, creatorAccountId)))
+      return reply.code(403).send({ error: "Only the Creator's owner can read rapport." });
     const messaging = await messages.getCreatorMessaging(creatorAccountId);
     return {
       messaging,

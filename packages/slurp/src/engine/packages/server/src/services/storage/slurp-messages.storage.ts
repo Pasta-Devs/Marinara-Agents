@@ -55,6 +55,7 @@ export type SlurpThread = {
   lastMessagePreview: string;
   viewerUnread: number;
   creatorUnread: number;
+  replyNotBeforeAt: string | null;
   rapport: SlurpRapport;
   createdAt: string;
   updatedAt: string;
@@ -123,6 +124,7 @@ export function createSlurpMessagesStorage(db: DB) {
     lastMessagePreview: String(row.lastMessagePreview ?? ""),
     viewerUnread: int(row.viewerUnread as string),
     creatorUnread: int(row.creatorUnread as string),
+    replyNotBeforeAt: (row.replyNotBeforeAt as string | null) ?? null,
     rapport: readStoredRapport(json(row.rapport as string)),
     createdAt: String(row.createdAt),
     updatedAt: String(row.updatedAt),
@@ -349,6 +351,7 @@ export function createSlurpMessagesStorage(db: DB) {
         lastMessagePreview: "",
         viewerUnread: "0",
         creatorUnread: "0",
+        replyNotBeforeAt: null,
         rapport: "{}",
         createdAt: timestamp,
         updatedAt: timestamp,
@@ -358,6 +361,10 @@ export function createSlurpMessagesStorage(db: DB) {
       } catch (error) {
         if (!isFileUniqueConstraintError(error, "slurp_threads", ["viewerAccountId", "creatorAccountId"])) throw error;
         const raced = await storage.getThread(viewerAccountId, creatorAccountId);
+        if (feePaid > 0) {
+          await slurp.refundCoins(viewerAccountId, feePaid, "duplicate message request");
+          await slurp.reverseCreatorIncome(creatorAccountId, feePaid, "duplicate message request");
+        }
         return raced ? { status: "ok", thread: raced } : { status: "not_found" };
       }
       const thread = await storage.getThread(viewerAccountId, creatorAccountId);
@@ -412,6 +419,7 @@ export function createSlurpMessagesStorage(db: DB) {
           // The reader is whoever did not send. A creator reply clears nothing the viewer owes.
           viewerUnread: input.role === "creator" ? String(thread.viewerUnread + 1) : String(thread.viewerUnread),
           creatorUnread: input.role === "viewer" ? String(thread.creatorUnread + 1) : String(thread.creatorUnread),
+          replyNotBeforeAt: input.role === "creator" ? null : thread.replyNotBeforeAt,
           rapport: JSON.stringify(rapport),
           updatedAt: timestamp,
         })
@@ -464,7 +472,13 @@ export function createSlurpMessagesStorage(db: DB) {
         content: note,
         price: amount,
       });
-      if (!message) return { status: "not_found" };
+      if (!message) {
+        if (settings.walletEnabled) {
+          await slurp.refundCoins(viewerAccountId, amount, "failed direct-message tip");
+          await slurp.reverseCreatorIncome(creatorAccountId, amount, "failed direct-message tip");
+        }
+        return { status: "not_found" };
+      }
       const thread = await storage.getThreadById(opened.thread.id);
       return { status: "sent", thread: thread ?? opened.thread, message };
     },
@@ -477,7 +491,8 @@ export function createSlurpMessagesStorage(db: DB) {
         .update(slurpThreads)
         .set({ state: decision === "accept" ? "active" : "declined", updatedAt: now() })
         .where(eq(slurpThreads.id, threadId));
-      return storage.getThreadById(threadId);
+      const resolved = await storage.getThreadById(threadId);
+      return resolved;
     },
 
     /** Clear one side's unread count and stamp the messages the other side sent. */
@@ -515,6 +530,16 @@ export function createSlurpMessagesStorage(db: DB) {
       triggerMessageId: string,
       creatorAccountId: string,
     ): Promise<{ status: "claimed"; claimId: string } | { status: "busy" }> {
+      const staleBefore = new Date(Date.now() - 10 * 60_000).toISOString();
+      const stale = await db
+        .select()
+        .from(slurpMessageClaims)
+        .where(
+          and(eq(slurpMessageClaims.threadId, threadId), eq(slurpMessageClaims.creatorAccountId, creatorAccountId)),
+        );
+      for (const row of stale) {
+        if (row.claimedAt < staleBefore) await db.delete(slurpMessageClaims).where(eq(slurpMessageClaims.id, row.id));
+      }
       try {
         const id = newId();
         await db
@@ -531,6 +556,13 @@ export function createSlurpMessagesStorage(db: DB) {
       await db.delete(slurpMessageClaims).where(eq(slurpMessageClaims.id, claimId));
     },
 
+    async setReplyNotBefore(threadId: string, value: string | null): Promise<void> {
+      await db
+        .update(slurpThreads)
+        .set({ replyNotBeforeAt: value, updatedAt: now() })
+        .where(eq(slurpThreads.id, threadId));
+    },
+
     /** Threads waiting on a queued reply, oldest first, for the scheduler. */
     async listThreadsAwaitingReply(limit = 20): Promise<SlurpThread[]> {
       const rows = await db
@@ -539,7 +571,13 @@ export function createSlurpMessagesStorage(db: DB) {
         .where(eq(slurpThreads.state, "active"))
         .orderBy(asc(slurpThreads.lastMessageAt))
         .limit(limit);
-      return rows.map(mapThread).filter((thread) => thread.creatorUnread > 0);
+      const nowMs = Date.now();
+      return rows
+        .map(mapThread)
+        .filter(
+          (thread) =>
+            thread.creatorUnread > 0 && (!thread.replyNotBeforeAt || Date.parse(thread.replyNotBeforeAt) <= nowMs),
+        );
     },
   };
 
