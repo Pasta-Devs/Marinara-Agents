@@ -1196,10 +1196,10 @@ export default function MemoryVault({
   const modeLabel = (mode: string) => localizedLabel(mode, localizeUi, labelKeys.mode);
   const relationLabel = (relation: string) => localizedLabel(relation, localizeUi, labelKeys.relation);
   const scopeTargetLabel = (
-    kind: "chat" | "character" | "group" | "persona",
+    kind: "chat" | "character" | "group" | "persona" | "local_character",
     id: string,
     targets: ReadonlyArray<{ id: string; label: string }>,
-    fallbackLabels: Partial<Record<"chat" | "character" | "group" | "persona", string>> = {},
+    fallbackLabels: Partial<Record<"chat" | "character" | "group" | "persona" | "local_character", string>> = {},
   ) =>
     formatScopeTargetLabel(kind, id, targets, {
       chat: localizeUi("ui.longTermMemory.memoryvault.chat"),
@@ -1675,8 +1675,11 @@ export default function MemoryVault({
         })
       : "",
   ].filter(Boolean);
-  const pickerTargets = useMemo<PickerTarget[]>(
-    () => [
+  const pickerTargets = useMemo<PickerTarget[]>(() => {
+    const localSubjectFamily = draft?.subjects
+      ?.find((subject) => subject.ref?.kind === "local_character")
+      ?.ref?.id?.split(":")[0];
+    return [
       ...(scopeTargets.data?.chats ?? []).map((chat) => ({
         kind: "chat" as const,
         id: chat.id,
@@ -1699,21 +1702,23 @@ export default function MemoryVault({
         label: persona.label,
         comment: persona.comment,
       })),
-      ...(scopeTargets.data?.localCharacters ?? []).map((character) => ({
-        kind: "local_character" as const,
-        id: character.id,
-        label: character.label,
-        comment: character.comment,
-      })),
-    ],
-    [
-      scopeTargets.data?.characters,
-      scopeTargets.data?.chats,
-      scopeTargets.data?.groups,
-      scopeTargets.data?.localCharacters,
-      scopeTargets.data?.personas,
-    ],
-  );
+      ...(scopeTargets.data?.localCharacters ?? [])
+        .filter((character) => !localSubjectFamily || character.familyId === localSubjectFamily)
+        .map((character) => ({
+          kind: "local_character" as const,
+          id: character.id,
+          label: character.label,
+          comment: character.comment,
+        })),
+    ];
+  }, [
+    scopeTargets.data?.characters,
+    scopeTargets.data?.chats,
+    scopeTargets.data?.groups,
+    scopeTargets.data?.localCharacters,
+    scopeTargets.data?.personas,
+    draft?.subjects,
+  ]);
   const availabilityTargets = useMemo<AvailabilityTargets>(() => {
     const chats = scopeTargets.data?.chats ?? [];
     const groups = scopeTargets.data?.groups ?? [];

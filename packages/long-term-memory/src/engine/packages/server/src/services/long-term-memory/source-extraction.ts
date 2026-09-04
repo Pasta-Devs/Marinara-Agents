@@ -508,6 +508,7 @@ async function extractLongTermMemoryFromSourceNoteInner(
     units: extractionPayload.response.units,
     catalog: options.trustedSubjectCatalog ?? { entries: [], notes: [] },
     scope,
+    mode: resolvedMode,
     sourceBackedNpcSourceText: sourceText,
     sourceBackedNpcSourceTitle: sourceNote.title,
   });

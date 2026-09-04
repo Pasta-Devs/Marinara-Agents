@@ -8,6 +8,7 @@ import {
   type LtmEvidenceUnit,
   type LtmExtractionDroppedCandidate,
   type LtmIdentityMatchBasis,
+  type LtmMode,
   type LtmNote,
   type LtmScope,
   type LtmSubject,
@@ -15,6 +16,7 @@ import {
 } from "../../../../shared/src/features/agents/long-term-memory/index.js";
 import {
   isLocalCharacterSubject,
+  localCharacterScopeError,
   localCharacterFamilyFromKey,
   localCharacterSubjectFromKey,
   localCharacterSubjectForName,
@@ -309,6 +311,7 @@ type PreparedLtmSubjectIdentityContext = {
   sourceBackedNpcSourceText?: string;
   sourceBackedNpcSourceTitle?: string;
   scope?: LtmScope;
+  mode?: LtmMode;
 };
 
 export async function loadTrustedLtmSubjectCatalog(scope: LtmScope, root?: string): Promise<TrustedLtmSubjectCatalog> {
@@ -415,6 +418,8 @@ export function buildTrustedLtmSubjectCatalog({
   for (const note of notes.filter((candidate) => candidate.status !== "archived")) {
     const subjects = note.subjects ?? [];
     for (const subject of subjects) {
+      if (isLocalCharacterSubject(subject) && localCharacterScopeError([subject], note.destinationScope ?? note.scope))
+        continue;
       const normalizedSubject = localCharacterSubjectFromKey(subject) ?? subject;
       const existing =
         mutable.get(normalizedSubject.key) ??
@@ -659,32 +664,40 @@ export function prepareLtmSubjectIdentityContext({
   units,
   catalog,
   scope,
+  mode,
   sourceBackedNpcSourceText,
   sourceBackedNpcSourceTitle,
 }: {
   units: LtmEvidenceUnit[];
   catalog: TrustedLtmSubjectCatalog;
   scope?: LtmScope;
+  mode?: LtmMode;
   sourceBackedNpcSourceText?: string;
   sourceBackedNpcSourceTitle?: string;
 }): LtmSubjectIdentityContext {
-  const index = buildCatalogIndex(catalog);
-  const legacyBindings = inferLegacyBindings(catalog, index);
+  const effectiveCatalog =
+    mode && mode !== "roleplay"
+      ? { ...catalog, entries: catalog.entries.filter((entry) => !isLocalCharacterSubject(entry.subject)) }
+      : catalog;
+  const index = buildCatalogIndex(effectiveCatalog);
+  const legacyBindings = inferLegacyBindings(effectiveCatalog, index);
   const batchNames = preResolveBatchSubjectNames({
     units,
     index,
     scope,
+    mode,
     sourceText: sourceBackedNpcSourceText,
     sourceTitle: sourceBackedNpcSourceTitle,
   });
   const context: PreparedLtmSubjectIdentityContext = {
-    catalog,
+    catalog: effectiveCatalog,
     index,
     legacyBindings,
     batchNames,
     sourceBackedNpcSourceText,
     sourceBackedNpcSourceTitle,
     scope,
+    mode,
   };
   return {
     identityKeyForUnit(unit) {
@@ -693,7 +706,7 @@ export function prepareLtmSubjectIdentityContext({
       if (match.status !== "matched") return noteIdForEvidenceUnit(unit);
       const entries = sortSubjectEntries(match.entries);
       return (
-        chooseIdentityTarget(catalog.notes, legacyBindings, entries, unit.bucket)?.id ??
+        chooseIdentityTarget(effectiveCatalog.notes, legacyBindings, entries, unit.bucket)?.id ??
         canonicalNoteIdForEntries(entries, unit.bucket)
       );
     },
@@ -713,6 +726,7 @@ export function resolveLtmSubjectIdentities({
   catalog,
   existingNotes,
   scope,
+  mode,
   enforceTrustedSubjects = true,
   sourceBackedNpcSourceText,
   sourceBackedNpcSourceTitle,
@@ -721,6 +735,7 @@ export function resolveLtmSubjectIdentities({
   catalog: TrustedLtmSubjectCatalog;
   existingNotes: LtmNote[];
   scope?: LtmScope;
+  mode?: LtmMode;
   enforceTrustedSubjects?: boolean;
   sourceBackedNpcSourceText?: string;
   sourceBackedNpcSourceTitle?: string;
@@ -729,6 +744,7 @@ export function resolveLtmSubjectIdentities({
     units,
     catalog,
     scope,
+    mode,
     sourceBackedNpcSourceText,
     sourceBackedNpcSourceTitle,
   }).resolve({ units, existingNotes, enforceTrustedSubjects });
@@ -745,8 +761,16 @@ function resolveLtmSubjectIdentitiesWithContext({
   enforceTrustedSubjects: boolean;
   context: PreparedLtmSubjectIdentityContext;
 }): LtmSubjectIdentityResolution {
-  const { catalog, index, legacyBindings, batchNames, sourceBackedNpcSourceText, sourceBackedNpcSourceTitle, scope } =
-    context;
+  const {
+    catalog,
+    index,
+    legacyBindings,
+    batchNames,
+    sourceBackedNpcSourceText,
+    sourceBackedNpcSourceTitle,
+    scope,
+    mode,
+  } = context;
   const diagnostics: LtmExtractionDiagnostic[] = [];
   const droppedCandidates: LtmExtractionDroppedCandidate[] = [];
   const resolved: ResolvedUnit[] = [];
@@ -769,7 +793,7 @@ function resolveLtmSubjectIdentitiesWithContext({
     if (match.status !== "matched") {
       const sourceBackedNpc = hasSubjectNames
         ? null
-        : sourceBackedNpcSubject(unit, scope, sourceBackedNpcSourceText, sourceBackedNpcSourceTitle);
+        : sourceBackedNpcSubject(unit, scope, mode, sourceBackedNpcSourceText, sourceBackedNpcSourceTitle);
       if (sourceBackedNpc && match.status === "untrusted") {
         addCatalogEntry(index, sourceBackedNpc);
         const subjects = [sourceBackedNpc.subject];
@@ -928,12 +952,14 @@ function preResolveBatchSubjectNames({
   units,
   index,
   scope,
+  mode,
   sourceText,
   sourceTitle,
 }: {
   units: LtmEvidenceUnit[];
   index: CatalogIndex;
   scope?: LtmScope;
+  mode?: LtmMode;
   sourceText?: string;
   sourceTitle?: string;
 }): BatchSubjectNameResolution {
@@ -948,7 +974,7 @@ function preResolveBatchSubjectNames({
   );
   const admissibleUnknownNames: string[] = [];
   const sourceVisibleNames: string[] = [];
-  const familyId = scope ? ltmScopeFamilyId(scope) : null;
+  const familyId = (mode === undefined || mode === "roleplay") && scope ? ltmScopeFamilyId(scope) : null;
 
   for (const name of names) {
     const normalizedName = normalizeSubjectIdentifier(name, "");
@@ -993,7 +1019,8 @@ function preResolveBatchSubjectNames({
   for (const [slug, candidates] of canonicalNamesBySlug) {
     if (new Set(candidates).size !== 1) continue;
     const name = candidates[0]!;
-    const subject = scope ? localCharacterSubjectForName(scope, name) : null;
+    const subject =
+      (mode === undefined || mode === "roleplay") && scope ? localCharacterSubjectForName(scope, name) : null;
     if (!subject) continue;
     const key = subject.key;
     const existing = index.byKey.get(key);
@@ -1016,7 +1043,10 @@ function preResolveBatchSubjectNames({
         status: "ambiguous",
         keys: uniqueStrings(
           longer.flatMap((candidate) => {
-            const subject = scope ? localCharacterSubjectForName(scope, candidate) : null;
+            const subject =
+              (mode === undefined || mode === "roleplay") && scope
+                ? localCharacterSubjectForName(scope, candidate)
+                : null;
             return subject ? [subject.key] : [];
           }),
         ),
@@ -1047,7 +1077,10 @@ function preResolveBatchSubjectNames({
         status: "ambiguous",
         keys: uniqueStrings(
           longer.flatMap((candidate) => {
-            const subject = scope ? localCharacterSubjectForName(scope, candidate) : null;
+            const subject =
+              (mode === undefined || mode === "roleplay") && scope
+                ? localCharacterSubjectForName(scope, candidate)
+                : null;
             return subject ? [subject.key] : [];
           }),
         ),
@@ -1109,9 +1142,11 @@ function resolveNamedUnitSubjects(unit: LtmSubjectIdentityCandidate, batch: Batc
 function sourceBackedNpcSubject(
   unit: LtmEvidenceUnit,
   scope: LtmScope | undefined,
+  mode: LtmMode | undefined,
   sourceText: string | undefined,
   sourceTitle: string | undefined,
 ): TrustedLtmSubjectCatalogEntry | null {
+  if (mode !== undefined && mode !== "roleplay") return null;
   if (unit.bucket !== "character_fact" || (unit.subjectKeys?.length ?? 0) > 0) return null;
   const slug = stripNotePrefix(normalizeSubjectIdentifier(unit.subjectId, ""));
   const sourceNames = sourceBackedNpcNames([sourceText, sourceTitle]);

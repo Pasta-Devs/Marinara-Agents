@@ -13,6 +13,8 @@ import { notePathForId } from "./paths.js";
 import { rebuildLongTermMemoryIndexes } from "./rebuild.js";
 import { LongTermMemoryStorage } from "./storage.js";
 import { withLtmVaultLock } from "./vault-lock.js";
+import { localCharacterScopeError } from "./chat-scope.js";
+import { LtmServiceError } from "./service-error.js";
 
 export async function applyLtmScopeLinksToDerivedNotes(
   sourceNoteId: string,
@@ -32,6 +34,8 @@ export async function applyLtmScopeLinksToDerivedNotes(
       const scope = withMergedLtmScopeLinks(note.scope, links);
       if (JSON.stringify(scope) === JSON.stringify(note.scope)) continue;
       const next = ltmNoteSchema.parse({ ...note, scope, updatedAt: timestamp, version: note.version + 1 });
+      const localSubjectError = localCharacterScopeError(next.subjects, next.destinationScope ?? next.scope);
+      if (localSubjectError) throw new LtmServiceError(localSubjectError, 400, "ltm_local_character_scope_invalid");
       affectedNoteIds.push(next.id);
       files.push({ path: notePathForId(next.id, next.type, options.root), before: note, after: next });
       events.push(

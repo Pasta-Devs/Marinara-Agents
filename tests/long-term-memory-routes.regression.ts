@@ -1000,8 +1000,8 @@ async function main() {
       links: [],
       subjects: [
         {
-          key: "local_character:observatory_branches:mara",
-          ref: { kind: "local_character", id: "observatory_branches:mara" },
+          key: "local_character:group_observatory_branches:mara",
+          ref: { kind: "local_character", id: "group_observatory_branches:mara" },
         },
       ],
       sections: {
@@ -1018,7 +1018,12 @@ async function main() {
       tags: [],
       keywords: [],
       links: [],
-      subjects: [{ key: "local_character:chat_b:mara", ref: { kind: "local_character", id: "chat_b:mara" } }],
+      subjects: [
+        {
+          key: "local_character:chat_chat_b:mara",
+          ref: { kind: "local_character", id: "chat_chat_b:mara" },
+        },
+      ],
       sections: {
         facts: { text: "Mara belongs to the Archive roleplay family.", updatedAt: "2026-07-17T00:00:00.000Z" },
       },
@@ -1073,11 +1078,11 @@ async function main() {
       JSON.stringify(scopeTargets.json().characters),
     );
     assert.equal(
-      scopeTargets.json().localCharacters.some((character: any) => character.id === "observatory_branches:mara"),
+      scopeTargets.json().localCharacters.some((character: any) => character.id === "group_observatory_branches:mara"),
       true,
     );
     assert.equal(
-      scopeTargets.json().localCharacters.some((character: any) => character.id === "chat_b:mara"),
+      scopeTargets.json().localCharacters.some((character: any) => character.id === "chat_chat_b:mara"),
       false,
     );
     const activeChatScopePreview = await app.inject({
@@ -1161,7 +1166,7 @@ async function main() {
       true,
     );
     assert.equal(
-      allScopeTargets.json().localCharacters.some((character: any) => character.id === "chat_b:mara"),
+      allScopeTargets.json().localCharacters.some((character: any) => character.id === "chat_chat_b:mara"),
       true,
       JSON.stringify(allScopeTargets.json().localCharacters),
     );

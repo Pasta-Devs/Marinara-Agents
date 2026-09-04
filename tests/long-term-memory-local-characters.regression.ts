@@ -26,6 +26,7 @@ function unit(input: {
 
 async function main() {
   const { compileLtmEvidenceUnits } = await import(`${source}/evidence-unit-compiler.ts`);
+  const { localCharacterScopeError, localCharacterSubjectForName } = await import(`${source}/chat-scope.ts`);
   const { buildTrustedLtmSubjectCatalog, prepareLtmSubjectIdentityContext } = await import(
     `${source}/subject-identity.ts`
   );
@@ -91,6 +92,29 @@ async function main() {
     true,
   );
 
+  const validSubject = localCharacterSubjectForName(scope, "Mara")!;
+  assert.equal(localCharacterScopeError([validSubject], scope), null);
+  assert.notEqual(
+    localCharacterScopeError([localCharacterSubjectForName({ chatId: "chat-b", chatIds: ["chat-b"] }, "Mara")!], scope),
+    null,
+  );
+  assert.notEqual(
+    localCharacterSubjectForName({ groupId: "shared-family", groupIds: ["shared-family"] }, "Mara")!.key,
+    localCharacterSubjectForName({ chatId: "shared-family", chatIds: ["shared-family"] }, "Mara")!.key,
+  );
+  const longGroupA = "g".repeat(120);
+  const longGroupB = `${"g".repeat(119)}h`;
+  assert.notEqual(
+    localCharacterSubjectForName({ groupId: longGroupA, groupIds: [longGroupA] }, "Mara")!.key,
+    localCharacterSubjectForName({ groupId: longGroupB, groupIds: [longGroupB] }, "Mara")!.key,
+  );
+  const longNameA = `${"m".repeat(60)}a`;
+  const longNameB = `${"m".repeat(60)}b`;
+  assert.notEqual(
+    localCharacterSubjectForName(scope, longNameA)!.key,
+    localCharacterSubjectForName(scope, longNameB)!.key,
+  );
+
   const generic = prepareLtmSubjectIdentityContext({
     units: [
       unit({ bucket: "character_fact", subjectId: "guard", subjectNames: ["the guard"], text: "The guard waits." }),
@@ -125,14 +149,24 @@ async function main() {
         id: "char_mara_one",
         type: "character",
         title: "Mara",
-        subjects: [{ key: "local_character:chat_a:mara-one" }],
+        subjects: [
+          {
+            key: "local_character:chat_chat_a:mara-one",
+            ref: { kind: "local_character", id: "chat_chat_a:mara-one" },
+          },
+        ],
       } as any,
       {
         ...sourceNote,
         id: "char_mara_two",
         type: "character",
         title: "Mara",
-        subjects: [{ key: "local_character:chat_a:mara-two" }],
+        subjects: [
+          {
+            key: "local_character:chat_chat_a:mara-two",
+            ref: { kind: "local_character", id: "chat_chat_a:mara-two" },
+          },
+        ],
       } as any,
     ],
   });
@@ -148,6 +182,23 @@ async function main() {
       existingNotes: [],
     }).units.length,
     0,
+  );
+  const gameResolution = prepareLtmSubjectIdentityContext({
+    units: [unit({ bucket: "character_fact", subjectId: "mara", subjectNames: ["Mara"], text: "Mara arrives." })],
+    catalog: {
+      entries: [{ subject: validSubject, name: "Mara", aliases: [], canonicalSlug: "mara", familyId: "chat_chat_a" }],
+      notes: [],
+    },
+    scope,
+    mode: "game",
+    sourceBackedNpcSourceText: "Mara arrives.",
+  }).resolve({
+    units: [unit({ bucket: "character_fact", subjectId: "mara", subjectNames: ["Mara"], text: "Mara arrives." })],
+    existingNotes: [],
+  });
+  assert.equal(
+    gameResolution.units.some((item) => item.subjects?.some((subject) => subject.ref?.kind === "local_character")),
+    false,
   );
   const gameCatalog = buildTrustedLtmSubjectCatalog({
     roster: [],

@@ -36,6 +36,7 @@ import { DEFAULT_LTM_RETENTION_CONFIG } from "./default-config.js";
 import { readJsonFile, writeJsonAtomic } from "./atomic-json.js";
 import { commitLtmMutation, recoverLtmMutations } from "./mutation-transaction.js";
 import { isEnoent, nowIso } from "./ltm-utils.js";
+import { localCharacterScopeError } from "./chat-scope.js";
 import {
   getLongTermMemoryDirectories,
   getLongTermMemoryRoot,
@@ -315,6 +316,8 @@ export class LongTermMemoryStorage {
     const scope = normalizeLtmScope(draft.scope);
     const destinationScope =
       draft.destinationScope === undefined ? undefined : normalizeLtmScope(draft.destinationScope);
+    const localSubjectError = localCharacterScopeError(draft.subjects, destinationScope ?? scope);
+    if (localSubjectError) throw new LtmServiceError(localSubjectError, 400, "ltm_local_character_scope_invalid");
     if (draft.type !== "source") {
       const availabilityError = validateLtmExplicitAvailability(scope, draft.modes);
       if (availabilityError) throw new LtmServiceError(availabilityError, 400, "ltm_explicit_availability_required");
@@ -390,6 +393,8 @@ export class LongTermMemoryStorage {
         updatedAt: projected.updatedAt ?? timestamp,
         version: current ? current.version + 1 : (projected.version ?? 1),
       });
+      const localSubjectError = localCharacterScopeError(next.subjects, next.destinationScope ?? next.scope);
+      if (localSubjectError) throw new LtmServiceError(localSubjectError, 400, "ltm_local_character_scope_invalid");
       const event = ltmEventSchema.parse({
         id: randomUUID(),
         ts: timestamp,
@@ -478,6 +483,8 @@ export class LongTermMemoryStorage {
         updatedAt: nowIso(),
         version: current.version + 1,
       });
+      const localSubjectError = localCharacterScopeError(next.subjects, next.destinationScope ?? next.scope);
+      if (localSubjectError) throw new LtmServiceError(localSubjectError, 400, "ltm_local_character_scope_invalid");
       const event = ltmEventSchema.parse({
         id: randomUUID(),
         ts: nowIso(),
@@ -938,6 +945,8 @@ export class LongTermMemoryStorage {
         updatedAt: timestamp,
         version: current.version + 1,
       });
+      const localSubjectError = localCharacterScopeError(renamed.subjects, renamed.destinationScope ?? renamed.scope);
+      if (localSubjectError) throw new LtmServiceError(localSubjectError, 400, "ltm_local_character_scope_invalid");
       const plan = await this.sectionRenamePlan(noteId, from, to, timestamp);
       await commitLtmMutation(this.root, {
         files: [
