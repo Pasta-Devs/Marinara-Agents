@@ -23065,8 +23065,10 @@ const fire = (node, type) => Promise.all((node.listeners[type] ?? []).map((fn) =
         linesBefore,
         "…nor wrote a line the wrap-up would read out",
       );
-      // NO FRIEND-REGISTER LINE IS EVER SERVED (ruling 4). Seven of the live
-      // pack's twelve lines hang on one clause, and this is the lane that pins it.
+      // NO FRIEND-REGISTER LINE IS EVER SERVED **TO A STRANGER** (ruling 4, as
+      // 0.15 inherits it). This npc has never been bumped, so the walk below is
+      // 0.14's window preserved byte for byte — the friend half now serves, but
+      // only past the friendly rung, and this lane is what pins the floor.
       const folded = loadedPF.save.packFold(core);
       const friends = new Set(folded.pack.lines.filter((row) => row.r === "friend").map((row) => row.text));
       assert.ok(friends.size > 0, "the default pack really does carry friend lines to keep sealed");
@@ -23119,6 +23121,74 @@ const fire = (node, type) => Promise.all((node.listeners[type] ?? []).map((fn) =
       t.openOn(npc);
       assert.ok(t.rowLabelled("Pass the time"), "one untagged stranger line anywhere keeps the door open");
       assert.equal(loadedPF.pack.ask(core, npc, "smalltalk"), "Anything at all.", "…and it is what gets served");
+    }
+
+    // ── THE FRIEND REGISTER SERVES AT THE EARNED RUNG, PER SPEAKER (0.15) ────
+    // Ruling 4 sealed the friend half because a stopgap that guessed at
+    // friendship would be a promotion nobody earned — its own sunset clause.
+    // The promotion is earned now, and this lane walks the whole seam: the
+    // register opens at FRIENDLY and not a rung sooner, it opens for the person
+    // who earned it and nobody else standing in the same square on the same
+    // day, the friend line LEADS where both registers hold one, and exhaustion
+    // falls back to the signpost voice instead of silence.
+    {
+      const t = stage({ chatId: "chat-friend-register" });
+      const P = loadedPF.player;
+      const zone = core.sim.world.startZone;
+      const ally = t.npcs()[0];
+      const passerby = { name: "Somebody Acquainted" };
+      const folded = loadedPF.save.packFold(core);
+      folded.pack = {
+        ...folded.pack,
+        lines: [
+          { at: "settlement", when: "day", r: "stranger", text: "STRANGER-WORK", topic: "work" },
+          { at: "settlement", when: "day", r: "friend", text: "FRIEND-WORK", topic: "work" },
+          { at: "settlement", when: "day", r: "friend", text: "FRIEND-RUMOR", topic: "rumor" },
+        ],
+      };
+      folded._askServed = new Map();
+      folded._askDay = -1;
+
+      // The rungs are EARNED through the real crossing, not planted with the
+      // setter — this lane should fail if the promotion arm ever breaks, not
+      // paper over it.
+      const rose = P.bump(core, zone, ally.name, { t: P.PROMOTION[1] });
+      assert.equal(rose.rose, 2, "ten encounters' weight makes the ally friendly");
+      P.bump(core, zone, passerby.name, { t: P.PROMOTION[0] });
+      assert.deepEqual(P.rung(core, zone, passerby.name), { d: 1, h: false }, "…and three make an acquaintance");
+
+      // THE FRIEND LEADS, AND A SPENT FRIEND POOL FALLS TO THE SIGNPOST. These
+      // two run first because the served set is per (day, branch) and SHARED —
+      // lines are place-keyed, speakers are not — so the fall-back is only
+      // observable while nobody else has spent the stranger line.
+      assert.equal(loadedPF.pack.ask(core, ally, "work"), "FRIEND-WORK", "the friend register leads for the friend");
+      assert.equal(loadedPF.pack.ask(core, ally, "work"), "STRANGER-WORK", "…and a spent friend pool falls back");
+      assert.equal(loadedPF.pack.askHas(core, ally, "rumor"), true, "the friend-only branch opens for the friend");
+      assert.equal(loadedPF.pack.ask(core, ally, "rumor"), "FRIEND-RUMOR", "…and serves the friend line");
+
+      // ACQUAINTED IS NOT ENOUGH — the register opens one rung higher, and it is
+      // per PERSON: the same square on the same day keeps the rumor branch shut
+      // for the acquaintance, because the only rumor line is one they have not
+      // earned. Their work press lands on the WRAP (the branch's whole shared
+      // pool is spent), and the wrap serves them the signpost line — the friend
+      // line is unreachable from their universe even at exhaustion.
+      assert.equal(
+        loadedPF.pack.askHas(core, passerby, "rumor"),
+        false,
+        "an acquaintance's friend-only branch stays shut",
+      );
+      assert.equal(
+        loadedPF.pack.ask(core, passerby, "work"),
+        "STRANGER-WORK",
+        "…and their wrap re-serves the signpost, never the friend line",
+      );
+
+      // And the stranger path never crossed the seam at any point above.
+      assert.equal(
+        loadedPF.pack.askUniverse(folded, core.sim.weather().word, false).some((row) => row.line.r === "friend"),
+        false,
+        "an unbefriended universe still holds no friend line at all",
+      );
     }
 
     // ── A LINE TAGGED FOR A SKY IS SERVED UNDER THAT SKY AND NO OTHER ───────
@@ -26509,14 +26579,22 @@ const fire = (node, type) => Promise.all((node.listeners[type] ?? []).map((fn) =
       ["at", "when", "r", "text", "topic", "w"],
       "…and `w` sits beside `topic`, because property order is the emission order",
     );
-    // THE REGISTER ASK IS INVERTED (ruling 4). 0.13 asked for MORE FRIEND LINES;
-    // 0.14 serves the stranger register and only that one, so a pack written to
-    // the old ask spends its best writing on rows nothing reads.
+    // THE REGISTER ASK IS LEVEL AGAIN (0.15). 0.13 asked friend-heavy for a
+    // register nothing served; 0.14 inverted to stranger-only because that was
+    // all it read; 0.15 serves both — stranger to everyone, friend at the
+    // ladder's friendly rung — so the guidance leans stranger and tells the
+    // model exactly who reads a friend line now, instead of promising a later
+    // release that has arrived.
     assert.ok(
-      text.includes(`write mostly ${pack.REGISTERS[0]} lines`),
-      "the guidance asks for the register the window actually serves",
+      text.includes(`Lean ${pack.REGISTERS[0]}`),
+      "the guidance still leans the floor register every speaker serves",
     );
-    assert.ok(!/more friend lines than you/.test(text), "…and no longer asks for more of the one it does not");
+    assert.ok(
+      text.includes(`real ${pack.REGISTERS[1]} lines too`) && text.includes("counts the player a friend"),
+      "…and buys friend lines for the reader that now exists, saying who that is",
+    );
+    assert.ok(!/written for a later one/.test(text), "…without deferring them to a release that already shipped");
+    assert.ok(!/more friend lines than you/.test(text), "…and no longer asks for more of the one it leans away from");
     // ESCALATION IS NAMED AS E7'S CONVERGENCE POINT — the section the Ask tree
     // will land on, described as a door rather than as what is behind it.
     assert.ok(
