@@ -414,12 +414,12 @@ export function SlurpProfileSurface<TTab extends string = SlurpProfileTab>({
                 {bioContent && (
                   <details className="group/bio">
                     <summary className="list-none cursor-pointer outline-none focus-visible:ring-2 focus-visible:ring-[var(--noodle-accent)]">
-                      <span className="line-clamp-4">{bioContent}</span>
+                      <div className="line-clamp-4">{bioContent}</div>
                       <span className="mt-1 block text-xs font-bold text-[var(--noodle-accent)] group-open/bio:hidden">
                         {localizeUi("ui.slurp.profile.expandBio", { defaultValue: "Show more" })}
                       </span>
                     </summary>
-                    <span className="mt-1 block">{bioContent}</span>
+                    <div className="mt-1">{bioContent}</div>
                     <span className="mt-1 block text-xs font-bold text-[var(--noodle-accent)]">
                       {localizeUi("ui.slurp.profile.collapseBio", { defaultValue: "Show less" })}
                     </span>

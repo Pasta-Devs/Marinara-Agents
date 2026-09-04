@@ -5280,6 +5280,7 @@ export function createSlurpStorage(db: DB) {
     async claimWalletRefill(viewerAccountId: string): Promise<SlurpWallet> {
       const settings = await this.getSettings();
       const wallet = await this.getWallet(viewerAccountId);
+      if (!settings.walletEnabled) return wallet;
       const next = applyStipend(wallet, new Date(), economyFrom(settings));
       return next === wallet ? wallet : writeWallet(viewerAccountId, next);
     },
@@ -5289,16 +5290,27 @@ export function createSlurpStorage(db: DB) {
       if (viewerAccountId === creatorAccountId || !Number.isInteger(amount) || amount <= 0) return null;
       const settings = await this.getSettings();
       if (!settings.walletEnabled) return null;
-      const creator = await this.getNoodlerAccountById(creatorAccountId);
-      if (!creator || (creator.sourceKind === "persona" && creator.sourceEntityId === viewerAccountId)) return null;
-      const sender = await this.getWallet(viewerAccountId);
-      const charged = spend(sender, "tip", amount, new Date(), creator.handle);
-      if (!charged) return null;
-      await writeWallet(viewerAccountId, charged);
-      const recipientId = creator.sourceKind === "persona" ? creator.sourceEntityId : creator.id;
-      const recipient = await this.getWallet(recipientId);
-      await writeWallet(recipientId, credit(recipient, "income", amount, new Date(), `tip: ${creator.handle}`));
-      return charged;
+      const run = viewerSettingsUpdateQueue.then(async () => {
+        const creator = await this.getNoodlerAccountById(creatorAccountId);
+        if (!creator || (creator.sourceKind === "persona" && creator.sourceEntityId === viewerAccountId)) return null;
+        const sender = await this.getWallet(viewerAccountId);
+        const charged = spend(sender, "tip", amount, new Date(), creator.handle);
+        if (!charged) return null;
+        const recipientId = creator.sourceKind === "persona" ? creator.sourceEntityId : creator.id;
+        const recipient = await this.getWallet(recipientId);
+        try {
+          await writeWallet(viewerAccountId, charged);
+          await writeWallet(recipientId, credit(recipient, "income", amount, new Date(), `tip: ${creator.handle}`));
+          return charged;
+        } catch (error) {
+          // Restore the sender if the recipient write fails. The shared queue prevents concurrent
+          // tips from reading and overwriting the same balance during this two-key operation.
+          await writeWallet(viewerAccountId, sender);
+          throw error;
+        }
+      });
+      viewerSettingsUpdateQueue = run.catch(() => undefined);
+      return run;
     },
 
     /**
