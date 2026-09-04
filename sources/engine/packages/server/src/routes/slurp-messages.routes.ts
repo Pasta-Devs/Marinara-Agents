@@ -38,6 +38,19 @@ const creatorMessageSchema = z.object({
 });
 
 const broadcastSchema = creatorMessageSchema.omit({ viewerAccountId: true });
+const commissionBriefSchema = z.object({
+  personaId: z.string().trim().min(1),
+  creatorAccountId: z.string().trim().min(1),
+  brief: z.string().trim().min(10).max(2000),
+});
+const commissionQuoteSchema = z.object({
+  personaId: z.string().trim().min(1),
+  price: z.number().int().min(1).max(99999),
+});
+const commissionDeliverySchema = z.object({
+  personaId: z.string().trim().min(1),
+  content: z.string().trim().min(1).max(5000),
+});
 
 const requestDecisionSchema = z.object({
   personaId: z.string().trim().min(1),
@@ -88,6 +101,9 @@ export async function slurpMessageRoutes(app: FastifyInstance) {
     const viewer = await requireViewer(parsed.data.personaId);
     if (!viewer) return reply.code(404).send({ error: "Slurp persona not found" });
     const threads = await messages.listThreadsForViewer(viewer.id);
+    const visibleMessages = (await messages.listMessages(thread.id)).map((message) =>
+      side === "creator" && message.kind === "ppv" && !message.unlockedAt ? { ...message, content: "" } : message,
+    );
     return {
       threads: threads.filter((thread) => thread.state !== "declined"),
       unread: threads.reduce((sum, thread) => sum + thread.viewerUnread, 0),
@@ -110,7 +126,7 @@ export async function slurpMessageRoutes(app: FastifyInstance) {
     const creator = await slurp.getNoodlerAccountById(thread.creatorAccountId);
     return {
       thread: await freshView(thread.id),
-      messages: await messages.listMessages(thread.id),
+      messages: visibleMessages,
       creator,
       messaging: await messages.getCreatorMessaging(thread.creatorAccountId),
     };
@@ -253,8 +269,13 @@ export async function slurpMessageRoutes(app: FastifyInstance) {
     if (!(await ownsCreator(parsed.data.personaId, creatorAccountId)))
       return reply.code(403).send({ error: "Only the Creator's owner can broadcast messages." });
     const subscribers = await slurp.listSubscriptionsForCreator(creatorAccountId);
-    const sent = [];
+    const activeSubscribers = [];
     for (const subscription of subscribers) {
+      const wallet = await slurp.getWallet(subscription.viewerAccountId);
+      if (wallet.subscriptions[creatorAccountId]) activeSubscribers.push(subscription);
+    }
+    const sent = [];
+    for (const subscription of activeSubscribers) {
       const message = await messages.sendCreatorMessage(creatorAccountId, subscription.viewerAccountId, {
         content: parsed.data.content,
         kind: "broadcast",
@@ -262,6 +283,46 @@ export async function slurpMessageRoutes(app: FastifyInstance) {
       if (message) sent.push(message.id);
     }
     return { sent: sent.length };
+  });
+
+  app.post("/messages/commissions", async (req, reply) => {
+    const parsed = commissionBriefSchema.safeParse(req.body ?? {});
+    if (!parsed.success) return reply.code(400).send({ error: parsed.error.flatten() });
+    const viewer = await requireViewer(parsed.data.personaId);
+    if (!viewer) return reply.code(404).send({ error: "Slurp persona not found" });
+    const commission = await messages.createCommission(viewer.id, parsed.data.creatorAccountId, parsed.data.brief);
+    if (!commission) return reply.code(403).send({ error: "This Creator is not accepting commissions." });
+    return { commission };
+  });
+
+  app.post("/messages/commissions/:commissionId/quote", async (req, reply) => {
+    const parsed = commissionQuoteSchema.safeParse(req.body ?? {});
+    if (!parsed.success) return reply.code(400).send({ error: parsed.error.flatten() });
+    const commission = await messages.getCommission((req.params as { commissionId: string }).commissionId);
+    if (!commission) return reply.code(404).send({ error: "Commission not found" });
+    if (!(await ownsCreator(parsed.data.personaId, commission.creatorAccountId)))
+      return reply.code(403).send({ error: "Creator ownership required" });
+    return { commission: await messages.quoteCommission(commission.id, parsed.data.price) };
+  });
+
+  app.post("/messages/commissions/:commissionId/accept", async (req, reply) => {
+    const parsed = personaQuerySchema.safeParse(req.body ?? {});
+    if (!parsed.success) return reply.code(400).send({ error: parsed.error.flatten() });
+    const commission = await messages.getCommission((req.params as { commissionId: string }).commissionId);
+    if (!commission || commission.viewerAccountId !== parsed.data.personaId)
+      return reply.code(404).send({ error: "Commission not found" });
+    const accepted = await messages.acceptCommission(commission.id);
+    if (!accepted) return reply.code(402).send({ error: "Not enough coins." });
+    return { commission: accepted };
+  });
+
+  app.post("/messages/commissions/:commissionId/deliver", async (req, reply) => {
+    const parsed = commissionDeliverySchema.safeParse(req.body ?? {});
+    if (!parsed.success) return reply.code(400).send({ error: parsed.error.flatten() });
+    const commission = await messages.getCommission((req.params as { commissionId: string }).commissionId);
+    if (!commission || !(await ownsCreator(parsed.data.personaId, commission.creatorAccountId)))
+      return reply.code(404).send({ error: "Commission not found" });
+    return { commission: await messages.deliverCommission(commission.id, parsed.data.content) };
   });
 
   app.post("/messages/threads/:threadId/request", async (req, reply) => {

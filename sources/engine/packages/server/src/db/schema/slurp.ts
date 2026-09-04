@@ -256,3 +256,16 @@ export const slurpMessageClaims = fileTable(
   },
   { uniqueBy: [{ keys: ["threadId"] }] },
 );
+
+export const slurpCommissions = fileTable("slurp_commissions", {
+  id: text("id").primaryKey(),
+  threadId: text("thread_id").notNull(),
+  viewerAccountId: text("viewer_account_id").notNull(),
+  creatorAccountId: text("creator_account_id").notNull(),
+  state: text("state").notNull().default("brief"),
+  brief: text("brief").notNull(),
+  price: text("price").notNull().default("0"),
+  deliveryMessageId: text("delivery_message_id"),
+  createdAt: text("created_at").notNull(),
+  updatedAt: text("updated_at").notNull(),
+});

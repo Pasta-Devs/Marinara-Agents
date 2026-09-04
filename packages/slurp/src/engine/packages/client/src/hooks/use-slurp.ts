@@ -1678,6 +1678,51 @@ export function useBroadcastSlurpMessage() {
   });
 }
 
+export function useCreateSlurpCommission() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (input: { personaId: string; creatorAccountId: string; brief: string }) =>
+      api.post<{ commission: Record<string, unknown> }>("/slurp/messages/commissions", input),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: noodleKeys.noodlerRoot() }),
+  });
+}
+
+export function useQuoteSlurpCommission() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (input: { commissionId: string; personaId: string; price: number }) =>
+      api.post<{ commission: Record<string, unknown> }>(
+        `/slurp/messages/commissions/${encodeURIComponent(input.commissionId)}/quote`,
+        input,
+      ),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: noodleKeys.noodlerRoot() }),
+  });
+}
+
+export function useAcceptSlurpCommission() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (input: { commissionId: string; personaId: string }) =>
+      api.post<{ commission: Record<string, unknown> }>(
+        `/slurp/messages/commissions/${encodeURIComponent(input.commissionId)}/accept`,
+        input,
+      ),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: noodleKeys.noodlerRoot() }),
+  });
+}
+
+export function useDeliverSlurpCommission() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (input: { commissionId: string; personaId: string; content: string }) =>
+      api.post<{ commission: Record<string, unknown> }>(
+        `/slurp/messages/commissions/${encodeURIComponent(input.commissionId)}/deliver`,
+        input,
+      ),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: noodleKeys.noodlerRoot() }),
+  });
+}
+
 export function useResolveSlurpMessageRequest() {
   const queryClient = useQueryClient();
   return useMutation({

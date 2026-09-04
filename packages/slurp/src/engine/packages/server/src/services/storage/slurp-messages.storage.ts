@@ -9,7 +9,7 @@ import { and, asc, desc, eq } from "../../db/file-query.js";
 import { newId } from "../../utils/id-generator.js";
 import type { DB } from "../../db/connection.js";
 import { isFileUniqueConstraintError } from "../../db/file-schema.js";
-import { slurpMessageClaims, slurpMessages, slurpThreads } from "../../db/schema/slurp.js";
+import { slurpCommissions, slurpMessageClaims, slurpMessages, slurpThreads } from "../../db/schema/slurp.js";
 import { createAppSettingsStorage } from "./app-settings.storage.js";
 import { createSlurpStorage } from "./slurp.storage.js";
 import {
@@ -69,6 +69,19 @@ export type SlurpThreadView = SlurpThread & {
   subscribed: boolean;
 };
 
+export type SlurpCommission = {
+  id: string;
+  threadId: string;
+  viewerAccountId: string;
+  creatorAccountId: string;
+  state: "brief" | "quoted" | "accepted" | "declined" | "delivered";
+  brief: string;
+  price: number;
+  deliveryMessageId: string | null;
+  createdAt: string;
+  updatedAt: string;
+};
+
 export type SlurpSendResult =
   | { status: "sent"; thread: SlurpThread; message: SlurpMessage }
   | { status: "closed" }
@@ -76,6 +89,7 @@ export type SlurpSendResult =
   | { status: "not_found" };
 
 const now = () => new Date().toISOString();
+const messageUnlocks = new Map<string, Promise<SlurpMessage | null>>();
 const int = (value: string | null | undefined, fallback = 0): number => {
   const parsed = Number(value);
   return Number.isFinite(parsed) ? Math.trunc(parsed) : fallback;
@@ -126,6 +140,18 @@ export function createSlurpMessagesStorage(db: DB) {
     creatorUnread: int(row.creatorUnread as string),
     replyNotBeforeAt: (row.replyNotBeforeAt as string | null) ?? null,
     rapport: readStoredRapport(json(row.rapport as string)),
+    createdAt: String(row.createdAt),
+    updatedAt: String(row.updatedAt),
+  });
+  const mapCommission = (row: Record<string, unknown>): SlurpCommission => ({
+    id: String(row.id),
+    threadId: String(row.threadId),
+    viewerAccountId: String(row.viewerAccountId),
+    creatorAccountId: String(row.creatorAccountId),
+    state: String(row.state) as SlurpCommission["state"],
+    brief: String(row.brief),
+    price: int(row.price as string),
+    deliveryMessageId: (row.deliveryMessageId as string | null) ?? null,
     createdAt: String(row.createdAt),
     updatedAt: String(row.updatedAt),
   });
@@ -428,6 +454,17 @@ export function createSlurpMessagesStorage(db: DB) {
     },
 
     async unlockMessage(viewerAccountId: string, messageId: string): Promise<SlurpMessage | null> {
+      const previous = messageUnlocks.get(messageId) ?? Promise.resolve(null);
+      const current = previous.catch(() => null).then(() => storage.unlockMessageUnlocked(viewerAccountId, messageId));
+      messageUnlocks.set(messageId, current);
+      try {
+        return await current;
+      } finally {
+        if (messageUnlocks.get(messageId) === current) messageUnlocks.delete(messageId);
+      }
+    },
+
+    async unlockMessageUnlocked(viewerAccountId: string, messageId: string): Promise<SlurpMessage | null> {
       const rows = await db.select().from(slurpMessages).where(eq(slurpMessages.id, messageId));
       const row = rows[0];
       if (!row) return null;
@@ -460,6 +497,7 @@ export function createSlurpMessagesStorage(db: DB) {
       viewerAccountId: string,
       input: { content: string; kind?: SlurpMessageKind; price?: number; metadata?: Record<string, unknown> },
     ): Promise<SlurpMessage | null> {
+      if (!(await slurp.getViewer(viewerAccountId))) return null;
       const opened = await storage.openThread(viewerAccountId, creatorAccountId, "creator");
       if (opened.status !== "ok") return null;
       return storage.appendMessage(opened.thread.id, {
@@ -470,6 +508,96 @@ export function createSlurpMessagesStorage(db: DB) {
         price: input.price,
         metadata: input.metadata,
       });
+    },
+
+    async createCommission(
+      viewerAccountId: string,
+      creatorAccountId: string,
+      brief: string,
+    ): Promise<SlurpCommission | null> {
+      const opened = await storage.openThread(viewerAccountId, creatorAccountId, "viewer");
+      if (opened.status !== "ok") return null;
+      const timestamp = now();
+      const row = {
+        id: newId(),
+        threadId: opened.thread.id,
+        viewerAccountId,
+        creatorAccountId,
+        state: "brief",
+        brief,
+        price: "0",
+        deliveryMessageId: null,
+        createdAt: timestamp,
+        updatedAt: timestamp,
+      };
+      await db.insert(slurpCommissions).values(row);
+      await storage.appendMessage(opened.thread.id, {
+        senderAccountId: viewerAccountId,
+        role: "viewer",
+        kind: "commission_brief",
+        content: brief,
+        metadata: { commissionId: row.id },
+      });
+      return mapCommission(row);
+    },
+
+    async getCommission(id: string): Promise<SlurpCommission | null> {
+      const rows = await db.select().from(slurpCommissions).where(eq(slurpCommissions.id, id));
+      return rows[0] ? mapCommission(rows[0]) : null;
+    },
+
+    async quoteCommission(id: string, price: number): Promise<SlurpCommission | null> {
+      const timestamp = now();
+      await db
+        .update(slurpCommissions)
+        .set({ state: "quoted", price: String(price), updatedAt: timestamp })
+        .where(eq(slurpCommissions.id, id));
+      const commission = await storage.getCommission(id);
+      if (commission) {
+        await storage.appendMessage(commission.threadId, {
+          senderAccountId: commission.creatorAccountId,
+          role: "creator",
+          kind: "commission_quote",
+          content: `Commission quote: ${price} coins`,
+          price,
+          metadata: { commissionId: id },
+        });
+      }
+      return storage.getCommission(id);
+    },
+
+    async acceptCommission(id: string): Promise<SlurpCommission | null> {
+      const commission = await storage.getCommission(id);
+      if (!commission || commission.state !== "quoted") return commission;
+      const settings = await slurp.getSettings();
+      if (
+        settings.walletEnabled &&
+        !(await slurp.spendCoins(
+          commission.viewerAccountId,
+          "commission",
+          commission.price,
+          commission.creatorAccountId,
+        ))
+      )
+        return null;
+      await slurp.creditCreatorIncome(commission.creatorAccountId, commission.price, "commission");
+      await db.update(slurpCommissions).set({ state: "accepted", updatedAt: now() }).where(eq(slurpCommissions.id, id));
+      return storage.getCommission(id);
+    },
+
+    async deliverCommission(id: string, content: string): Promise<SlurpCommission | null> {
+      const commission = await storage.getCommission(id);
+      if (!commission || commission.state !== "accepted") return commission;
+      const message = await storage.sendCreatorMessage(commission.creatorAccountId, commission.viewerAccountId, {
+        content,
+        kind: "commission_delivery",
+      });
+      if (!message) return null;
+      await db
+        .update(slurpCommissions)
+        .set({ state: "delivered", deliveryMessageId: message.id, updatedAt: now() })
+        .where(eq(slurpCommissions.id, id));
+      return storage.getCommission(id);
     },
 
     /**
