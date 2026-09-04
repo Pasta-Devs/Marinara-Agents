@@ -598,7 +598,11 @@ PF.core = {
           // or failed send is not a conversation. SETTLEMENT-scoped (plan §2:
           // rel keys are per settlement), so one person is one row wherever in
           // the world you happen to meet them.
-          PF.player.bump(this, sim.world.startZone, anchor.name, { t: 1 }, gen);
+          const bumped = PF.player.bump(this, sim.world.startZone, anchor.name, { t: 1 }, gen);
+          // A rung earned by TALKING is announced where a rung earned by a job
+          // already is (hud.questFilled) — same phrase, same authority, and only
+          // on the call that crossed the line.
+          if (bumped?.rose) this.hud?.toast(this.hud.roseLine(anchor.name, bumped.rose));
           if (sentSim === this.sim) {
             onAccepted?.();
             // WHO THE ERRAND WAS RUN TO IS `anchor`, the binding the window and

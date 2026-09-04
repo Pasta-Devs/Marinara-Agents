@@ -23189,6 +23189,96 @@ const fire = (node, type) => Promise.all((node.listeners[type] ?? []).map((fn) =
         false,
         "an unbefriended universe still holds no friend line at all",
       );
+
+      // ── THE TITLE SAYS THE STANDING, AND ONLY WHEN IT SAYS SOMETHING ──────
+      // One word after the role for anyone past stranger; a stranger's window
+      // reads exactly as 0.14's did, because "stranger" written out would be
+      // the ladder announcing its own floor.
+      t.openOn(ally);
+      assert.equal(
+        t.hud.talkWho.textContent,
+        `${ally.name} — ${ally.role} · friendly`,
+        "a friend's window is titled with the rung",
+      );
+      core.closeTalk();
+      const unmet = t.npcs()[1];
+      if (unmet && unmet.name !== ally.name) {
+        t.openOn(unmet);
+        assert.equal(
+          t.hud.talkWho.textContent,
+          `${unmet.name} — ${unmet.role}`,
+          "a stranger's window is titled exactly as before",
+        );
+        core.closeTalk();
+      }
+      // Hostile outranks the rung: whatever was built before, THIS standing
+      // decides the room. Planted with the setter arm — nothing package-side
+      // writes `h` yet, and that is S1's lane, not this one's.
+      P.bump(core, zone, ally.name, { h: true });
+      t.openOn(ally);
+      assert.equal(
+        t.hud.talkWho.textContent,
+        `${ally.name} — ${ally.role} · hostile`,
+        "a hostile flag outranks an earned rung in the title",
+      );
+      core.closeTalk();
+      P.bump(core, zone, ally.name, { h: false });
+    }
+
+    // ── THE RISE IS SAID ONCE, AT THE MOMENT IT IS EARNED (0.15) ────────────
+    // 0.12's precedent: a level change toasts when it happens and then lives on
+    // the sheet. A rung change is the same kind of moment — the Standing panel
+    // is its sheet — and the phrase comes from one place (hud.roseLine) for
+    // both of the paths that can earn one.
+    {
+      const t = stage({ chatId: "chat-rose-toast" });
+      const P = loadedPF.player;
+      const zone = core.sim.world.startZone;
+      const npc = t.npcs()[0];
+      const seen = [];
+      const bare = t.hud.toast.bind(t.hud);
+      t.hud.toast = (line) => {
+        seen.push(line);
+        return bare(line);
+      };
+
+      // The TALK path: two encounters short of the line, then one accepted
+      // turn crosses it — and the toast names the person, once.
+      P.bump(core, zone, npc.name, { t: P.PROMOTION[0] - 1 });
+      assert.equal(seen.length, 0, "no toast for encounters short of the line");
+      t.openOn(npc);
+      core.talkFree();
+      await settle();
+      assert.ok(
+        seen.some((line) => line === `${npc.name} knows you now.`),
+        `the accepted turn that crosses the line says so (${seen.join(" | ")})`,
+      );
+      const said = seen.filter((line) => line.includes("knows you now")).length;
+      core.closeTalk();
+      t.openOn(npc);
+      core.talkFree();
+      await settle();
+      assert.equal(
+        seen.filter((line) => line.includes("knows you now")).length,
+        said,
+        "…and the next accepted turn does not say it again",
+      );
+      core.closeTalk();
+
+      // The QUEST path rides the settle's own return through questFilled — the
+      // same phrase, the same authority, at friend grade.
+      seen.length = 0;
+      t.hud.questFilled([{ money: 5, giver: "Bett Marsh", rose: 2 }]);
+      assert.ok(
+        seen.some((line) => line === "Bett Marsh counts you a friend now."),
+        `a hand-in that crossed the friendly line says so (${seen.join(" | ")})`,
+      );
+      seen.length = 0;
+      t.hud.questFilled([{ money: 5, giver: "Bett Marsh", rose: 0 }]);
+      assert.ok(
+        !seen.some((line) => line.includes("counts you")),
+        "…and a hand-in that crossed nothing stays a receipt",
+      );
     }
 
     // ── A LINE TAGGED FOR A SKY IS SERVED UNDER THAT SKY AND NO OTHER ───────
@@ -29965,6 +30055,40 @@ const fire = (node, type) => Promise.all((node.listeners[type] ?? []).map((fn) =
   const text = JSON.stringify(P.serialize(P.get(core)));
   const back = P.parse(JSON.parse(text)).player;
   assert.equal(back.rel.village.Bett.d, 1, "an earned rung survives the round-trip");
+}
+
+// ── THE HEADER GREETS A FRIEND AS A FRIEND (0.15) ──────────────────────────
+// The near clause gains the rung word for anyone past stranger, so the GM can
+// answer standing without burning a persona injection to learn it — and costs
+// nothing for a stranger, because the word for "no standing" is no word.
+{
+  const P = loadedPF.player;
+  const w = world.build(6060, "cozy-village");
+  const sim = new loadedPF.Sim(w);
+  const core = { chatId: "chat-standing-header", sim, hud: { toast() {}, refreshChips() {} } };
+  P.bump(core, w.startZone, "Vex Friendly", { t: P.PROMOTION[1] });
+  P.bump(core, w.startZone, "Gale Known", { t: P.PROMOTION[0] });
+  P.bump(core, w.startZone, "Grim Foe", { t: P.PROMOTION[1], h: true });
+  assert.ok(sim.player, "the bumps hung the live block on the sim, which is what header() reads");
+
+  const headerNear = (name) => {
+    sim.nearNpc = { name, role: "warden" };
+    const match = sim.header().match(/near: ([^\]]+)/);
+    sim.nearNpc = null;
+    return match ? match[1] : "";
+  };
+  assert.equal(headerNear("Vex Friendly"), "Vex Friendly (warden, friendly)", "a friend is greeted as one");
+  assert.equal(headerNear("Gale Known"), "Gale Known (warden, acquainted)", "…an acquaintance as one");
+  assert.equal(headerNear("Nobody Met"), "Nobody Met (warden)", "…and a stranger exactly as 0.14 wrote them");
+  assert.equal(
+    headerNear("Grim Foe"),
+    "Grim Foe (warden, hostile)",
+    "…and hostility outranks the rung the count earned",
+  );
+  // The cost discipline the header keeps (0.14's rule): the word rides only
+  // when it says something, so the permanent per-turn spend for a town of
+  // strangers is zero bytes.
+  assert.ok(!headerNear("Nobody Met").includes(","), "no standing is no word, not a written-out floor");
 }
 
 console.log("brief validator + compiler: all cases passed");

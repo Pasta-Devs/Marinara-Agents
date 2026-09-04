@@ -1494,7 +1494,7 @@ PF.pack = (() => {
         giver ? `Filled ${giver}'s board order — ${paid}.` : `Filled the board order — ${paid}.`,
       );
       if (!done) return fail("refused", { have, n });
-      return { ok: true, reason: null, money: done.money, giver: done.giver, have, n };
+      return { ok: true, reason: null, money: done.money, giver: done.giver, have, n, rose: done.rose ?? 0 };
     },
 
     /** LET ONE JOB GO (plan §2.3). Free, player-initiated, and pressed from the
@@ -1660,10 +1660,12 @@ PF.pack = (() => {
         // and one per errand — so one conversation can now bump the same person
         // up to four times, once per ACCEPTED turn. That is still what the count
         // says it is: `t` counts encounters, four accepted turns are four of
-        // them, and the only reader is P2's disposition ladder, which does not
-        // exist yet. Restated rather than left saying "twice", because a number
-        // in a comment that has stopped being the number is how the next reader
-        // concludes a fifth bump is a bug.
+        // them — and the reader EXISTS now: the disposition ladder promotes on
+        // the crossings (58-player §13), whose lines sit far enough apart that
+        // a four-press conversation cannot vault a rung on its own. Restated
+        // rather than left saying "twice", because a number in a comment that
+        // has stopped being the number is how the next reader concludes a fifth
+        // bump is a bug.
         const done = this.settle(core, row, gen, (giver, paid) =>
           giver && giver !== to ? `Took ${giver}'s word to ${to} — ${paid}.` : `Took word to ${to} — ${paid}.`,
         );

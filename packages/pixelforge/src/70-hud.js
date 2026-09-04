@@ -811,7 +811,15 @@ PF.Hud = class {
     const key = this._talkKeyOf(anchor);
     if (key === this._talkRowKey) return;
     this._talkRowKey = key;
-    this.talkWho.textContent = anchor.role ? `${anchor.name} — ${anchor.role}` : anchor.name;
+    // THE STANDING RIDES THE TITLE (0.15, plan §13.4) — one word, and only when
+    // it says something: a stranger's window reads exactly as 0.14's did, and
+    // "stranger" written out would be the ladder announcing its own floor.
+    // Hostile outranks the rung, here as everywhere: whatever you built before,
+    // THIS is the standing that decides the room.
+    const stand = PF.player.rung(this.core, this.core.sim?.world?.startZone, anchor.name);
+    const standWord = stand.h ? "hostile" : stand.d > 0 ? PF.player.RUNGS[stand.d] : "";
+    const who = anchor.role ? `${anchor.name} — ${anchor.role}` : anchor.name;
+    this.talkWho.textContent = standWord ? `${who} · ${standWord}` : who;
     const core = this.core;
     const note = this._talkDoorNote();
     const armed = core._talkConfirm?.controlId ?? null;
@@ -1270,6 +1278,7 @@ PF.Hud = class {
     this.refreshChips();
     const paid = PF.economy.money(this.core.sim.world, result.money);
     this.toast(result.giver ? `Handed in to ${result.giver} — ${paid}` : `Handed in — ${paid}`);
+    if (result.giver && result.rose) this.toast(this.roseLine(result.giver, result.rose));
     const view = PF.pack.boardOffers(this.core);
     if (view.available) this._renderBoard(view);
   }
@@ -1340,9 +1349,22 @@ PF.Hud = class {
     for (const row of done) {
       const paid = PF.economy.money(world, row.money);
       this.toast(row.giver ? `Done for ${row.giver} — ${paid}` : `Job done — ${paid}`);
+      // The rise rides the settle's own return, so the toast fires exactly when
+      // the rung was earned and never re-fires on a reload — there is nothing
+      // stored to re-announce (plan §13.4).
+      if (row.giver && row.rose) this.toast(this.roseLine(row.giver, row.rose));
     }
     // The purse moved, so the chips have.
     this.refreshChips();
+  }
+
+  /** The promotion, said once, in plain words. 0.12's precedent: a level change
+   *  is toasted the moment it happens and then lives on the sheet — a rung
+   *  change is the same kind of moment, and the Standing panel is its sheet. */
+  roseLine(name, rung) {
+    if (rung >= 3) return `${name} counts you a close friend now.`;
+    if (rung >= 2) return `${name} counts you a friend now.`;
+    return `${name} knows you now.`;
   }
 
   /** Take the rod the button is offering. The offer is re-read inside buyRod, so
