@@ -411,18 +411,20 @@ export function SlurpProfileSurface<TTab extends string = SlurpProfileTab>({
                 {bioQuote && (
                   <span className="mb-1 block border-s-2 border-[var(--noodle-accent)]/50 ps-3 italic">{bioQuote}</span>
                 )}
-                <details className="group/bio">
-                  <summary className="list-none cursor-pointer outline-none focus-visible:ring-2 focus-visible:ring-[var(--noodle-accent)]">
-                    <span className="line-clamp-4">{bioContent}</span>
-                    <span className="mt-1 block text-xs font-bold text-[var(--noodle-accent)] group-open/bio:hidden">
-                      {localizeUi("ui.slurp.profile.expandBio", { defaultValue: "Show more" })}
+                {bioContent && (
+                  <details className="group/bio">
+                    <summary className="list-none cursor-pointer outline-none focus-visible:ring-2 focus-visible:ring-[var(--noodle-accent)]">
+                      <span className="line-clamp-4">{bioContent}</span>
+                      <span className="mt-1 block text-xs font-bold text-[var(--noodle-accent)] group-open/bio:hidden">
+                        {localizeUi("ui.slurp.profile.expandBio", { defaultValue: "Show more" })}
+                      </span>
+                    </summary>
+                    <span className="mt-1 block">{bioContent}</span>
+                    <span className="mt-1 block text-xs font-bold text-[var(--noodle-accent)]">
+                      {localizeUi("ui.slurp.profile.collapseBio", { defaultValue: "Show less" })}
                     </span>
-                  </summary>
-                  <span className="mt-1 block">{bioContent}</span>
-                  <span className="mt-1 block text-xs font-bold text-[var(--noodle-accent)]">
-                    {localizeUi("ui.slurp.profile.collapseBio", { defaultValue: "Show less" })}
-                  </span>
-                </details>
+                  </details>
+                )}
               </div>
             )}
             {!editor?.isEditing && contentActions}

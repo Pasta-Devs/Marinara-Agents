@@ -2168,6 +2168,7 @@ export function createSlurpStorage(db: DB) {
       id: string,
       stageProfile: NoodleStageProfileInput,
       sourceSnapshot?: NoodlerSourceSnapshot,
+      location?: string,
     ): Promise<NoodleAccount | null> {
       return db.transaction(async (tx) => {
         const rows = await tx
@@ -2198,6 +2199,7 @@ export function createSlurpStorage(db: DB) {
               ...settings,
               profile: {
                 ...profile,
+                ...(location !== undefined && { location: location.trim().slice(0, 120) }),
                 ...(sourceSnapshot && { noodlerSourceSnapshot: sourceSnapshot }),
               },
               privacy: {
@@ -5241,7 +5243,7 @@ export function createSlurpStorage(db: DB) {
       const stored = readSlurpWallet(await settingsStore.get(slurpWalletKey(viewerAccountId)), economy);
       if (!settings.walletEnabled) return stored;
       const at = new Date();
-      const renewal = renewSubscriptions(stored, at);
+      const renewal = renewSubscriptions(applyStipend(stored, at, economy), at);
       for (const creatorAccountId of renewal.lapsed) await this.unsubscribe(viewerAccountId, creatorAccountId);
       for (const renewed of renewal.renewed) {
         await this.creditCreatorIncome(renewed.creatorAccountId, renewed.price, "renew");

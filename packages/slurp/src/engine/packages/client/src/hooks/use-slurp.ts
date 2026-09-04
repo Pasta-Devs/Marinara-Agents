@@ -502,15 +502,6 @@ export function useTipSlurpCreator() {
   });
 }
 
-export function useUpdateSlurpAccountProfile() {
-  const queryClient = useQueryClient();
-  return useMutation({
-    mutationFn: ({ accountId, location }: { accountId: string; location: string }) =>
-      api.patch<NoodleAccount>(`/slurp/accounts/${encodeURIComponent(accountId)}/profile`, { profile: { location } }),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: noodleKeys.noodlerRoot() }),
-  });
-}
-
 /** Set a creator's own weekly price, or clear it back to the default with `null`. */
 export function useSetSlurpCreatorPrice() {
   const queryClient = useQueryClient();

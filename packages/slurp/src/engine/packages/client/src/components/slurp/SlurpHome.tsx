@@ -73,7 +73,6 @@ import {
   useSlurpWallet,
   useClaimSlurpDailyRefill,
   useTipSlurpCreator,
-  useUpdateSlurpAccountProfile,
   type SlurpWalletEntry,
   useNoodlerViewerWallets,
   useNoodlerSubscribers,
@@ -1188,11 +1187,12 @@ export function SlurpHome({ navigation, onNavigate }: SlurpHomeProps) {
     });
   };
 
-  const saveProfile = async () => {
+  const saveProfile = async (location?: string) => {
     if (!profileDraft) return;
     const input = {
       ...profileDraft,
       handle: profileDraft.handle.replace(/^@+/u, ""),
+      ...(editingProfileId && location !== undefined ? { location } : {}),
     };
     const onSuccess = (profile: NoodlerStageProfile & { discardedPreparedPostCount?: number }) => {
       invalidateProfileDraftGeneration();
@@ -1904,7 +1904,7 @@ export function SlurpHome({ navigation, onNavigate }: SlurpHomeProps) {
             profileDraft={editingProfileId === selectedProfile.id ? profileDraft : null}
             onProfileChange={(patch) => setProfileDraft((current) => (current ? { ...current, ...patch } : current))}
             onCancelEdit={closeProfileEditor}
-            onSaveEdit={saveProfile}
+            onSaveEdit={(location) => void saveProfile(location)}
             profileSavePending={updateProfile.isPending}
             posts={postsQuery.data ?? []}
             viewerCreator={selectedViewerCreator}
@@ -3325,7 +3325,7 @@ function StageProfileView({
   profileDraft: NoodleStageProfileInput | null;
   onProfileChange: (patch: Partial<NoodleStageProfileInput>) => void;
   onCancelEdit: () => void;
-  onSaveEdit: () => void;
+  onSaveEdit: (location?: string) => void;
   profileSavePending: boolean;
   posts: SlurpProfilePost[];
   viewerCreator: NonNullable<ReturnType<typeof useNoodlerViewer>["data"]>["creators"][number] | null;
@@ -3369,13 +3369,18 @@ function StageProfileView({
   const [creatorToolsOpen, setCreatorToolsOpen] = useState(false);
   const updateAutoPosting = useUpdateNoodlerAutoPosting();
   const updateFanActivity = useUpdateNoodlerFanActivity();
-  const updateAccountProfile = useUpdateSlurpAccountProfile();
   const tipCreator = useTipSlurpCreator();
   const [tipOpen, setTipOpen] = useState(false);
   const [customTip, setCustomTip] = useState("");
   const [locationDraft, setLocationDraft] = useState(
     () => (profile as NoodlerManagedStageProfile & { location?: string }).location ?? "",
   );
+  const locationProfileId = useRef(profile.id);
+  useEffect(() => {
+    if (locationProfileId.current === profile.id) return;
+    locationProfileId.current = profile.id;
+    setLocationDraft((profile as NoodlerManagedStageProfile & { location?: string }).location ?? "");
+  }, [profile.id, profile]);
   const uploadProfileAvatar = useUploadNoodlerAvatar();
   const uploadProfileBanner = useUploadNoodlerBanner();
   const generateProfileArtwork = useGenerateNoodlerArtwork();
@@ -3397,7 +3402,7 @@ function StageProfileView({
   const subscribersQuery = useNoodlerSubscribers(profile.id);
   const subscribers = subscribersQuery.data?.pages.flatMap((page) => page.items) ?? [];
   const subscriberTotal = subscribersQuery.data?.pages[0]?.total ?? subscribers.length;
-  const followerTotal = connectionCounts[profile.sourceAccountId]?.followers ?? 0;
+  const followerTotal = connectionCounts[profile.id]?.followers ?? 0;
   const profileLikeTotal = posts.reduce((total, post) => total + (post.likeCount ?? 0), 0);
   const latestActivityAt = posts.reduce((latest, post) => Math.max(latest, Date.parse(post.createdAt)), 0);
   const activityAge = Date.now() - latestActivityAt;
@@ -3748,12 +3753,7 @@ function StageProfileView({
           isEditing: editing,
           onStartEditing: onEdit,
           onCancel: onCancelEdit,
-          onSave: () => {
-            onSaveEdit();
-            if (locationDraft !== ((profile as NoodlerManagedStageProfile & { location?: string }).location ?? "")) {
-              updateAccountProfile.mutate({ accountId: profile.id, location: locationDraft });
-            }
-          },
+          onSave: () => onSaveEdit(locationDraft),
           canSave: Boolean(editDraft.displayName.trim() && editDraft.handle.trim()),
           isSaving: profileSavePending,
           name: editDraft.displayName,

@@ -171,6 +171,7 @@ const slurpBulkNoodlerAccountCreateSchema = noodleBulkNoodlerAccountCreateSchema
 });
 
 const noodleStageProfileUpdateRequestSchema = noodleStageProfileUpdateSchema.extend({
+  location: z.string().trim().max(120).optional(),
   sourceRevisionToken: z
     .string()
     .regex(/^[A-Za-z0-9_-]{43}$/u)
@@ -2111,9 +2112,10 @@ export async function slurpRoutes(app: FastifyInstance) {
         sourceSnapshot: _sourceSnapshot,
         sourceRevisionToken: _sourceRevisionToken,
         confirmAvatarReview: _confirmAvatarReview,
+        location,
         ...stageProfile
       } = parsed.data;
-      const updated = await noodle.updateNoodlerStageProfile(id, stageProfile, sourceSnapshot ?? undefined);
+      const updated = await noodle.updateNoodlerStageProfile(id, stageProfile, sourceSnapshot ?? undefined, location);
       if (!updated) return { status: "not_found" } as const;
       const profile = (await noodle.listNoodlerStageProfiles()).find((item) => item.id === updated.id);
       if (!profile) throw new Error("Failed to load the updated NoodleR stage profile.");
