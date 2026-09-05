@@ -375,7 +375,7 @@ const rejectedSuggestionsQuery = z
     chatId: z.string().min(1).max(120).optional(),
   })
   .strict();
-const rejectedSuggestionsDeleteQuery = rejectedSuggestionsQuery.required({ sourceNoteId: true });
+const rejectedSuggestionsDeleteQuery = z.object({ sourceNoteId: ltmNoteIdSchema }).strict();
 const acceptDraftBody = z
   .object({
     mutationIds: z.array(z.string().uuid()).min(1).optional(),

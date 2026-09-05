@@ -187,14 +187,20 @@ async function main() {
       subjectId: "dependent_fact",
       sectionKey: "facts",
       text: "The observatory kept a record of Alice and Rowan's trust.",
-      links: [{ target: "removed_relationship", relation: "evidenced_by" }],
+      links: [{ target: "rel_removed_relationship", relation: "evidenced_by" }],
     }),
   ]);
   const closureDrop = closureAfterInitialDrop.outcome.droppedCandidates.find(
     (candidate) => candidate.validatorCode === "unknown_link_target",
   );
   assert.ok(closureDrop);
-  assert.doesNotMatch(closureDrop.message, /removed_relationship/u);
+  assert.doesNotMatch(closureDrop.message, /rel_removed_relationship/u);
+  assert.equal(
+    closureAfterInitialDrop.diagnostics.find(
+      (diagnostic) => diagnostic.details?.validatorCode === "unknown_link_target",
+    )?.details?.validationStage,
+    "closure",
+  );
   const sourceHashMismatch = compile(chat, [
     {
       ...unit(chat, {

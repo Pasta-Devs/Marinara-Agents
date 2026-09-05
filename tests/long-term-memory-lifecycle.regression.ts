@@ -2975,6 +2975,7 @@ async function main() {
       });
       await clearRejectedButton.click();
       assert.equal(await clearSourceSuggestions.count(), 1);
+      assert.match(lastReviewDiscardMessage, /Clear 1 rejected suggestions from Single-draft mobile source/u);
       confirmReviewDiscard = true;
       await page.evaluate(() => {
         const element = document.querySelector("marinara-capability-long-term-memory") as HTMLElement & {
