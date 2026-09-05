@@ -757,7 +757,22 @@ PF.Sim = class {
   /** Compact world header prefixed onto turns so the GM narrates the world we show. */
   header() {
     const z = this.zone();
-    const near = this.nearNpc ? `; near: ${this.nearNpc.name} (${this.nearNpc.role})` : "";
+    // THE RUNG WORD RIDES THE NEAR CLAUSE (0.15, plan §13.4), and only past
+    // stranger — the GM should greet a friend as a friend without burning a
+    // persona injection to learn it, and a stranger costs the header nothing
+    // because the word for "no standing" is no word. Hostility, when something
+    // someday writes it, outranks the rung here as it does on the window title.
+    // Read off the block the sim already carries for the ledger tell; the
+    // header stays free of core lookups, and the words stay the ladder's own
+    // (58-player RUNGS — index 0 blanked because the floor goes unsaid).
+    const rel = this.player?.rel?.[this.world?.startZone];
+    const row =
+      this.nearNpc && rel && typeof rel === "object" && Object.prototype.hasOwnProperty.call(rel, this.nearNpc.name)
+        ? rel[this.nearNpc.name]
+        : null;
+    const rung = row ? PF.clamp(Number(row.d) || 0, 0, 3) : 0;
+    const stand = row && row.h ? "hostile" : rung > 0 ? PF.player.RUNGS[rung] : "";
+    const near = this.nearNpc ? `; near: ${this.nearNpc.name} (${this.nearNpc.role}${stand ? `, ${stand}` : ""})` : "";
     // THREE WORDS IN THE PAREN GROUP, and each earns its permanent per-turn cost.
     // The daypart keeps the GM's light and "who is about" narration consistent
     // with what we render and where NPCs actually are. The weather word is the

@@ -2678,6 +2678,15 @@ Added by 0.14, and the same rule again — every row is somebody's decision on t
 | **mobility under an open window is a couple of steps, not freedom.** The window opens inside 26px and closes at 32px, so the affordance is one tile of slack and not a walk | stated so it is not oversold; the feel is on the deferred list |
 | **the capacity guard's coverage is arithmetic luck of the count.** It catches a tile sheet too SMALL for its id map — 33 ids into 32 slots after the 0.14 bake. Three appended painters instead of four would have landed in bounds and slipped past it | recorded honestly at the guard |
 
+Added by 0.15 — the release where `d` is written by play for the first time, which is what
+turns three long-standing shapes into things a player can reach:
+
+| limitation (0.15) | status |
+| ----------------- | ------ |
+| **the row cap gains a refusal class it never had.** `_evictStranger` only takes rows at `d 0`, and three encounters now lift a row off that tier for good. So a player who greets 150 different people three times each fills `relRows` with **un-evictable acquaintances**, and every further `bump()` refuses in silence — a new person simply is not remembered. Before 0.15 nothing moved `d`, so every row stayed evictable forever and the cap could always make room | **accepted (alpha)**; the cap is 150 rows across all zones and the refusal is silent by design (§3). The relief is a demotion verb or an eviction preference that reads `t` as well as `d` — both S1's |
+| **the ask ladder's served set is shared across speakers.** It is keyed by (day, BRANCH) and never by person (0.14's memo shape), so a friend's presses spend lines an acquaintance standing in the same square would otherwise have been served. The stranger-path "byte for byte" claim is therefore scoped: it holds exactly in a town where **nobody** is a friend, and the harness's own friend-register case has to order its assertions around the shared pool | **by design**, inherited from 0.14 and unchanged; recorded now that a second register can spend from the same pool |
+| **the one-per-day reload exploit pays triple what it did.** The day's fill receipt is sim-resident and not saved (0.13's row above), so a reload forgets it and the same template can be filled again — and since 0.15 that refill pays **3 rapport** as well as the money, which is a real rung every few reloads rather than a tally | **inherited and unchanged**; the alternative is still a save field for a one-day rule |
+
 **On the packless row, and it is a posture rather than a debt.** The compatibility window **rolls
 with the game**: legacy grows as the game grows, old-alpha worlds are never re-supported, and at
 full release the floor reaches back at most to late-Beta worlds. So a world-compat row in this
@@ -2913,3 +2922,114 @@ that rebuild is committed. What it moved, and what was checked:
   sheet.
 
 The header stays so the next release's prep has a place to land.
+
+## 13. The ladder moves — 0.15's play layer over 0.11's storage
+
+Everything below reads state that has been in the block since 0.11 — `rel[zone][name]`
+rows with `d` 0..3, `t`, `h`, `s`, the caps of §3 and the merge rules of §4.2. 0.15 adds
+**no field and no byte to the wire**: it is the first release where `d` is written by play.
+
+### 13.1 The promotion line
+
+One table (`PROMOTION`, 58-player) and one rule. A rung is EARNED when the encounter
+count crosses its line:
+
+| rung | word         | earned at `t` |
+|------|--------------|---------------|
+| 1    | acquainted   | 3             |
+| 2    | friendly     | 10            |
+| 3    | close friend | 25            |
+
+Encounters are weighted at the verb sites, not in the table, and each site also declares a
+**verb class**:
+
+| verb                  | site                       | weight | class          |
+| --------------------- | -------------------------- | ------ | -------------- |
+| an accepted talk turn | 90-element                 | 1      | **casual**     |
+| a night's berth       | 59-economy `rentBerth()`   | 1      | **meaningful** |
+| a rod bought          | 59-economy `buyRod()`      | 1      | **meaningful** |
+| a finished job        | 61-pack `settle()`         | 3      | **meaningful** |
+
+The classes are the maintainer's ruling of 0.15: saying good morning and asking after the
+rumors should not, over enough mornings, make you somebody's best friend. Small interactions
+raise standing only to a point; doing jobs, running quests, being business partners are what
+carry it past acquaintance.
+
+**CASUAL is the default.** It builds `t` forever and can never leave a row above
+**acquainted** (`CASUAL_CEILING`, 58-player); past that ceiling its encounters accumulate and
+nothing else happens. **MEANINGFUL** may cross any line. The class is a field of the CALL
+(`patch.meaningful`), read in `bump()` and written to no row — the wire is 0.11's to the byte.
+
+**The padding consequence, stated rather than discovered:** casual encounters DO count toward
+the higher thresholds, so a hundred greetings leave a row that one job lifts straight to
+friendly. What small talk cannot be is the press that CROSSES. Two consequences follow and
+both are deliberate: one hand-in still makes a stranger acquainted, and the friend register
+(§13.4) is **not reachable by talking at all** — a speaker serves friend lines only to a
+player who has done business with them or finished their work. §12.3's four-bump
+conversation is absorbed twice over: four sends in one window is four points, and four
+casual points cannot leave anybody above acquainted whatever they add up to.
+
+### 13.2 One rung a press, and a crossing rather than a max()
+
+`bump()` promotes only when the patch carries **no explicit `d`**, and a single call moves the
+row **at most one rung**. `row.d = earned` was a max() in disguise and it had a hole in it: a
+row a demotion put on the floor at `t` 9 was handed TWO rungs by one good morning, because the
+count was still high and there was still a line under it to cross.
+
+The explicit arm stays the SETTER it has always been — that is S1's precise channel and the
+harness pins it. What the heuristic promises a future demotion verb is **rate-limited
+re-promotion, not none**, and the honest statement of it is three sentences. A casual press
+still needs a real crossing, so a row demoted past every line is never re-fought on any
+subsequent hello. A row demoted BELOW a line it can still cross IS lifted by the next
+encounter — by one rung, and no further than acquainted unless the press is meaningful. A
+meaningful press needs no crossing at all, because a row padded by talk is already past every
+line it could cross, and freezing a player out of the ladder for having been friendly is not
+the ruling. Nothing package-side demotes, and nothing writes `h` — hostility still waits for
+S1.
+
+`bump()` now returns `{ row, rose }` — `rose` is the rung earned by THIS call, else 0 — so a
+caller with a receipt to print folds the rise into it rather than diffing for it. Refusal is
+`null` exactly as §3 documents.
+
+### 13.3 The reader
+
+`rung(core, zoneId, name)` → `{ d, h }`, zeros for the unmet and for the wrong zone. It is
+the one ladder read the window title, the promotion toast, the turn header and the pack's
+register gate all share, and it is deliberately allocation-cheap: it runs inside a per-turn
+composer and a window that rebuilds per press.
+
+### 13.4 What reads the rung (the rest of the release)
+
+- the pack's ask ladder serves the **friend register** at `d >= 2` (61-pack — Ruling 4's
+  own terms: the promotion is now earned, so serving it is the ruling honoured, not overridden);
+- the talk window titles the standing, and every press that earns a rung says so;
+- the turn header's `near:` gains the rung word for anyone past stranger — one word, only
+  when it says something.
+
+**One sentence per event.** `hud.toast` is ONE node and ONE timer per surface, so two toasts
+in a tick is exactly one toast: the second overwrites the first and the player never sees it.
+A rise is therefore **composed into** the receipt it stands beside rather than said next to
+it — `hud._said` joins the parts with a middot, `roseClause` is the rise in the pronoun form
+for a receipt that already named the person, and `roseLine` stays the named standalone:
+
+```
+Handed in to Alder — 6 coins · they know you now.
+Done for Bett Marsh — 5 coins · they count you a friend now.
+A berth is yours — 12 coins the night. · Mira knows you now.
+```
+
+The rise rides each verb's own return (`settle()`, `turnIn()`, `rentBerth()`, `buyRod()` all
+carry `rose`; the two counters carry `keeper` as well, because their receipts do not name
+anybody), so it is said exactly when the rung was earned and never re-fires on a reload —
+there is nothing stored to re-announce. An accepted talk turn hands its rise to the same
+composer the errands go through, so a turn that also settles a delivery says both at once.
+
+### 13.5 Deferred to the playtest (§12.3's list grows by two)
+
+- **Do the lines feel earned at these speeds?** Acquainted-in-one-hand-in and
+  friendly-around-day-ten are Stardew-shaped guesses (inspiration, not doctrine); the
+  table is three numbers and one edit.
+- **Does the friend voice read as a change of standing** — or does a friend-first ladder
+  over a thin pack just serve the same two lines in a warmer register? The generation
+  guidance widened for it; whether it is enough is a live-run question, the same one
+  0.14 left open for the topic branches.

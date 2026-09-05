@@ -8355,7 +8355,11 @@ const SNOW_IDS = ["grassSnow", "grassSnow2", "cropSnow", "canopySnow"];
     const narrowFit = {};
     for (let i = 0; i < 4; i++) narrowFit[`t${i}`] = i;
     A.atlas = { tileSize: 16, columns: 8, tiles: narrowFit };
-    assert.equal(A._overCapacity({ naturalWidth: 96, naturalHeight: 80 }), false, "…while an id map that fits does not");
+    assert.equal(
+      A._overCapacity({ naturalWidth: 96, naturalHeight: 80 }),
+      false,
+      "…while an id map that fits does not",
+    );
     sheetWidth = 128;
     Object.assign(A, { status: "idle", _requestedTheme: null, _capacityLatch: null, _failedAt: 0 });
     A._tileCanvases.clear();
@@ -16318,9 +16322,11 @@ await withSavePath(async ({ calls, behavior, makeCore }) => {
       assert.equal(bought.tier, "crude", "…of the rung that was quoted");
       assert.deepEqual(
         Object.keys(bought).sort(),
-        ["bait", "ok", "price", "reason", "tier"],
+        ["bait", "keeper", "ok", "price", "reason", "rose", "tier"],
         "and the sale's shape is the one every other return of this verb carries",
       );
+      assert.equal(bought.keeper, keeper.name, "…naming who sold it, which the receipt line does not");
+      assert.equal(bought.rose, 0, "…and one sale to a stranger crosses nothing yet");
       const after = P.get(core);
       assert.equal(after.pouch.money, 200 - first.price, "the purse paid, exactly once");
       assert.ok(
@@ -16410,12 +16416,15 @@ await withSavePath(async ({ calls, behavior, makeCore }) => {
       // and this one, refusing earlier for the same purchase, used to omit the
       // key entirely — two ways of saying "nothing came with it" from one verb,
       // and a caller reading `bait` gets `undefined` from one branch and `null`
-      // from the other for no reason it could ever discover.
+      // from the other for no reason it could ever discover. 0.15 widened the
+      // shape by two (`keeper`, `rose`) and the discipline widened with it: a
+      // refusal answers the rise question too, in the same words, with 0.
       assert.deepEqual(
         Object.keys(refused).sort(),
-        ["bait", "ok", "price", "reason", "tier"],
+        ["bait", "keeper", "ok", "price", "reason", "rose", "tier"],
         `a refused purchase carries the verb's whole shape (${Object.keys(refused).sort()})`,
       );
+      assert.equal(refused.rose, 0, "…and a sale that never happened crossed nothing");
       assert.equal(refused.bait, null, "…with nothing thrown in, said in the same word the other refusal uses");
       assert.equal(P.get(core).pouch.money, before, "NOTHING was charged — no half-purchase to roll back");
       assert.equal(P.get(core).pouch.items.length, cap - 1, "…and no row was minted either");
@@ -18990,17 +18999,34 @@ const fire = (node, type) => Promise.all((node.listeners[type] ?? []).map((fn) =
       1,
       "…the completion counter is keyed by TEMPLATE, in the world-free board map",
     );
-    assert.equal(after.rel[w.startZone]?.[taken.giver]?.t ?? 0, before.rel + 1, "…and the giver remembers it");
-    // AS AN ENCOUNTER AND NOT AS A PROMOTION. bump()'s `d` arm is a SETTER, not
-    // an increment (58-player), so `{d:1}` in place of `{t:1}` would move a
-    // stranger onto the friend rung for handing in a board order — and it would
-    // pass the count assertion above unchanged, because bump defaults `t` to 1
-    // whenever the patch omits it. The rung is the assertion that tells the two
-    // patches apart.
+    // THREE ENCOUNTERS' WEIGHT, AND THE RUNG THAT WEIGHT EARNS (0.15, plan §13).
+    // Until this release the pin here read "+1, and d stays 0 — the ladder is
+    // P2's to move." P2 moved it: a finished job bumps the giver by THREE, which
+    // crosses the acquainted line from a standing start, so both halves of the
+    // old pin flip together and they still tell the honest patch from a cheat —
+    // a `{d:1}` in settle() would land d 1 with t at +1, and a lone `{t:1}`
+    // would land t at +1 with d still 0. Only the weighted encounter produces
+    // this exact pair.
+    assert.equal(
+      after.rel[w.startZone]?.[taken.giver]?.t ?? 0,
+      before.rel + 3,
+      "…and the giver remembers it, at a job's weight of three",
+    );
     assert.equal(
       after.rel[w.startZone]?.[taken.giver]?.d ?? 0,
-      0,
-      "…without moving them a rung up the disposition ladder, which is P2's to move",
+      1,
+      "…which crosses the acquainted line — one finished job and they know you",
+    );
+    // …AND THE ROW REMEMBERS WHICH JOB IT WAS. A constant here was a line-cap
+    // flood: `s` lines are capped at 30 across the whole block and evicted
+    // oldest-first, so thirty jobs filled every slot with one sentence and
+    // pushed out the berth and the purchase — the two writers that carried
+    // anything a player could tell apart. The title is what the board row said,
+    // which is the most specific thing this path knows.
+    assert.equal(
+      after.rel[w.startZone]?.[taken.giver]?.s,
+      `Ran ${taken.title} for me.`,
+      "…and the row remembers WHICH job happened between you, not merely that one did",
     );
     assert.ok(
       lines().some((text) => text.includes(taken.giver) && text.includes(money(row.r.money))),
@@ -19055,8 +19081,8 @@ const fire = (node, type) => Promise.all((node.listeners[type] ?? []).map((fn) =
       assert.equal(P.get(core).pouch.money, purse + owed.money, "…and the purse moved by exactly that");
       assert.equal(
         P.get(core).rel[w.startZone]?.[owed.giver]?.t ?? 0,
-        met + 1,
-        "…and the giver it named is the one who remembers it",
+        met + 3,
+        "…and the giver it named is the one who remembers it, at a job's weight",
       );
     }
 
@@ -19518,7 +19544,43 @@ const fire = (node, type) => Promise.all((node.listeners[type] ?? []).map((fn) =
       "Filled Tam's board order — 6 coins.",
       "…in the line",
     );
-    assert.equal(P.get(core).rel[w.startZone].Tam.t, 1, "…and in the rapport the completion pays");
+    assert.equal(P.get(core).rel[w.startZone].Tam.t, 3, "…and in the rapport the completion pays, at a job's weight");
+    // THE MECHANICAL FALLBACK, on the one path that reaches it: this row was
+    // accepted straight into the block and no pack template stands behind its
+    // id, so there is no title to name and the line says the plain thing.
+    assert.equal(
+      P.get(core).rel[w.startZone].Tam.s,
+      "You ran a job for me.",
+      "…and a row with no template behind it still remembers that something was done",
+    );
+    // THE CLASS THE SETTLE BUMPS AT (0.15's ruling), pinned by the one thing that
+    // tells the two classes apart. The weight alone cannot: a `{ t: 3 }` somebody
+    // forgot to class lands the same (t + 3, d = 1) pair from a standing start,
+    // because CASUAL is allowed to reach acquainted too. What casual can never do
+    // is leave a row ABOVE it — so pad Tam with greetings to one job short of the
+    // friendly line, watch the talk leave them exactly where it found them, and
+    // hand in a second job. Crossing there is only a MEANINGFUL bump's to do.
+    for (let i = P.get(core).rel[w.startZone].Tam.t; i < P.PROMOTION[1] - 3; i++)
+      P.bump(core, w.startZone, "Tam", { t: 1 });
+    assert.equal(P.get(core).rel[w.startZone].Tam.t, P.PROMOTION[1] - 3, "Tam stands one job short of friendly");
+    assert.deepEqual(P.rung(core, w.startZone, "Tam"), { d: 1, h: false }, "…and all that talk left an acquaintance");
+    P.quest(core, "accept", {
+      id: "b1.d1.b:again",
+      g: `${w.startZone}|Tam`,
+      verb: "visit",
+      target: "away",
+      n: 1,
+      r: { money: 6, xp: 0 },
+      day: 1,
+    });
+    P.quest(core, "progress", { id: "b1.d1.b:again", by: 1 });
+    assert.equal(pack.turnIn(core, "b1.d1.b:again").rose, 2, "the second job crosses, and says which rung it earned");
+    assert.equal(P.get(core).rel[w.startZone].Tam.t, P.PROMOTION[1], "…on the count a job's weight reaches");
+    assert.deepEqual(
+      P.rung(core, w.startZone, "Tam"),
+      { d: 2, h: false },
+      "…and the job, unlike the talk, carries them past acquainted",
+    );
   } finally {
     globalThis.setTimeout = realSetTimeout;
     globalThis.clearTimeout = realClearTimeout;
@@ -20124,8 +20186,12 @@ const fire = (node, type) => Promise.all((node.listeners[type] ?? []).map((fn) =
     assert.equal(P.get(core).pouch.money, 12, "…and both were paid");
     assert.equal(P.get(core).quests_done_board["b1.d4.wood-a"] ?? 0, 0, "the counter is keyed by TEMPLATE");
     assert.equal(P.get(core).quests_done_board["wood-a"], 1, "…which is what rides in the instance id");
-    assert.equal(P.get(core).rel[w.startZone]?.Ivy?.t, met + 2, "the giver remembers both");
-    assert.equal(P.get(core).rel[w.startZone]?.Ivy?.d ?? 0, 0, "…as encounters, never as a promotion");
+    assert.equal(P.get(core).rel[w.startZone]?.Ivy?.t, met + 6, "the giver remembers both, each at a job's weight");
+    // Six is past the acquainted line (3) and short of friendly (10), so this
+    // doubles as the from-below pin on the friendly threshold: two finished jobs
+    // make an acquaintance and NOT a friend — the ladder is earned in steps, and
+    // the pack's friend register stays shut until the second line is crossed.
+    assert.equal(P.get(core).rel[w.startZone]?.Ivy?.d ?? 0, 1, "…two jobs make an acquaintance, not yet a friend");
     assert.equal(filled.length, 2, "the surface was told about both");
     // AND THE DAY'S RECEIPT WAS FILED, which is the whole reason the one-per-day
     // rule had to land before this hook did: without it, walking out and back is
@@ -20408,8 +20474,15 @@ const fire = (node, type) => Promise.all((node.listeners[type] ?? []).map((fn) =
     assert.equal(P.get(core).ledger.lines.find(([, text]) => text.includes("Took"))[0], 5, "…at the event's day");
     // ROOK IS BUMPED ONCE FOR THE CONVERSATION AND NOT AGAIN FOR THE ERRAND: the
     // deliver bump goes to the GIVER, and Mira is not the person standing here.
+    // The WEIGHTS tell the two bumps apart now — a conversation is one, a
+    // finished job is three — so the pair below also pins that neither bump
+    // landed on the wrong person's scale.
     assert.equal(P.get(core).rel[w.startZone]?.Rook?.t, met + 1, "the person talked to gained one encounter");
-    assert.equal(P.get(core).rel[w.startZone]?.Mira?.t ?? 0, 1, "…and the sender gained one for the errand run");
+    assert.equal(
+      P.get(core).rel[w.startZone]?.Mira?.t ?? 0,
+      3,
+      "…and the sender gained a job's weight for the errand run",
+    );
 
     // ── TWO ERRANDS TO ONE PERSON ARE BOTH RUN BY ONE GREETING ───────────────
     // A filter and not a find, for the catch site's reason: two boards can owe
@@ -20431,12 +20504,18 @@ const fire = (node, type) => Promise.all((node.listeners[type] ?? []).map((fn) =
     // A template can name the same person as giver and target ("come and tell me
     // yourself"). The conversation bumps them and so does the errand, so `t`
     // moves twice in one turn — which is two things having happened, not a bug.
+    // Four now rather than two: the greeting's one plus the finished job's
+    // three, on the one person who was both ends of it.
     assert.equal(take("b1.d5.self", "Tam", "Tam"), true, "an errand to its own giver is taken on");
     const twice = P.get(core).rel[w.startZone]?.Tam?.t ?? 0;
     talkTo(tam);
     await settle();
     assert.equal(active().length, 0, "…and finishes on the same greeting");
-    assert.equal(P.get(core).rel[w.startZone]?.Tam?.t, twice + 2, "…bumping the one person twice, deliberately");
+    assert.equal(
+      P.get(core).rel[w.startZone]?.Tam?.t,
+      twice + 4,
+      "…bumping the one person twice, deliberately, at both weights",
+    );
     const selfLine = lines().at(-1);
     assert.ok(!/Tam's word to Tam/.test(selfLine), `…and the line does not say it twice (${selfLine})`);
 
@@ -23033,8 +23112,10 @@ const fire = (node, type) => Promise.all((node.listeners[type] ?? []).map((fn) =
         linesBefore,
         "…nor wrote a line the wrap-up would read out",
       );
-      // NO FRIEND-REGISTER LINE IS EVER SERVED (ruling 4). Seven of the live
-      // pack's twelve lines hang on one clause, and this is the lane that pins it.
+      // NO FRIEND-REGISTER LINE IS EVER SERVED **TO A STRANGER** (ruling 4, as
+      // 0.15 inherits it). This npc has never been bumped, so the walk below is
+      // 0.14's window preserved byte for byte — the friend half now serves, but
+      // only past the friendly rung, and this lane is what pins the floor.
       const folded = loadedPF.save.packFold(core);
       const friends = new Set(folded.pack.lines.filter((row) => row.r === "friend").map((row) => row.text));
       assert.ok(friends.size > 0, "the default pack really does carry friend lines to keep sealed");
@@ -23087,6 +23168,322 @@ const fire = (node, type) => Promise.all((node.listeners[type] ?? []).map((fn) =
       t.openOn(npc);
       assert.ok(t.rowLabelled("Pass the time"), "one untagged stranger line anywhere keeps the door open");
       assert.equal(loadedPF.pack.ask(core, npc, "smalltalk"), "Anything at all.", "…and it is what gets served");
+    }
+
+    // ── THE FRIEND REGISTER SERVES AT THE EARNED RUNG, PER SPEAKER (0.15) ────
+    // Ruling 4 sealed the friend half because a stopgap that guessed at
+    // friendship would be a promotion nobody earned — its own sunset clause.
+    // The promotion is earned now, and this lane walks the whole seam: the
+    // register opens at FRIENDLY and not a rung sooner, it opens for the person
+    // who earned it and nobody else standing in the same square on the same
+    // day, the friend line LEADS where both registers hold one, and exhaustion
+    // falls back to the signpost voice instead of silence.
+    {
+      const t = stage({ chatId: "chat-friend-register" });
+      const P = loadedPF.player;
+      const zone = core.sim.world.startZone;
+      const ally = t.npcs()[0];
+      const passerby = { name: "Somebody Acquainted" };
+      const folded = loadedPF.save.packFold(core);
+      folded.pack = {
+        ...folded.pack,
+        lines: [
+          { at: "settlement", when: "day", r: "stranger", text: "STRANGER-WORK", topic: "work" },
+          { at: "settlement", when: "day", r: "friend", text: "FRIEND-WORK", topic: "work" },
+          { at: "settlement", when: "day", r: "friend", text: "FRIEND-RUMOR", topic: "rumor" },
+        ],
+      };
+      folded._askServed = new Map();
+      folded._askDay = -1;
+
+      // The rungs are EARNED through the real crossing, not planted with the
+      // setter — this lane should fail if the promotion arm ever breaks, not
+      // paper over it. TWO meaningful presses, because one is all a press gets:
+      // the ally is walked up the ladder a rung at a time, exactly as a player
+      // does it. The acquaintance is made by talk alone, which is as far as talk
+      // alone reaches.
+      P.bump(core, zone, ally.name, { t: P.PROMOTION[0], meaningful: true });
+      const rose = P.bump(core, zone, ally.name, { t: P.PROMOTION[1], meaningful: true });
+      assert.equal(rose.rose, 2, "a second favour, at ten encounters' weight, makes the ally friendly");
+      P.bump(core, zone, passerby.name, { t: P.PROMOTION[0] });
+      assert.deepEqual(P.rung(core, zone, passerby.name), { d: 1, h: false }, "…and three greetings an acquaintance");
+
+      // THE FRIEND LEADS, AND A SPENT FRIEND POOL FALLS TO THE SIGNPOST. These
+      // two run first because the served set is per (day, branch) and SHARED —
+      // lines are place-keyed, speakers are not — so the fall-back is only
+      // observable while nobody else has spent the stranger line.
+      assert.equal(loadedPF.pack.ask(core, ally, "work"), "FRIEND-WORK", "the friend register leads for the friend");
+      assert.equal(loadedPF.pack.ask(core, ally, "work"), "STRANGER-WORK", "…and a spent friend pool falls back");
+      assert.equal(loadedPF.pack.askHas(core, ally, "rumor"), true, "the friend-only branch opens for the friend");
+      assert.equal(loadedPF.pack.ask(core, ally, "rumor"), "FRIEND-RUMOR", "…and serves the friend line");
+
+      // ACQUAINTED IS NOT ENOUGH — the register opens one rung higher, and it is
+      // per PERSON: the same square on the same day keeps the rumor branch shut
+      // for the acquaintance, because the only rumor line is one they have not
+      // earned. Their work press lands on the WRAP (the branch's whole shared
+      // pool is spent), and the wrap serves them the signpost line — the friend
+      // line is unreachable from their universe even at exhaustion.
+      assert.equal(
+        loadedPF.pack.askHas(core, passerby, "rumor"),
+        false,
+        "an acquaintance's friend-only branch stays shut",
+      );
+      assert.equal(
+        loadedPF.pack.ask(core, passerby, "work"),
+        "STRANGER-WORK",
+        "…and their wrap re-serves the signpost, never the friend line",
+      );
+
+      // And the stranger path never crossed the seam at any point above.
+      assert.equal(
+        loadedPF.pack.askUniverse(folded, core.sim.weather().word, false).some((row) => row.line.r === "friend"),
+        false,
+        "an unbefriended universe still holds no friend line at all",
+      );
+
+      // ── THE TITLE SAYS THE STANDING, AND ONLY WHEN IT SAYS SOMETHING ──────
+      // One word after the role for anyone past stranger; a stranger's window
+      // reads exactly as 0.14's did, because "stranger" written out would be
+      // the ladder announcing its own floor.
+      t.openOn(ally);
+      assert.equal(
+        t.hud.talkWho.textContent,
+        `${ally.name} — ${ally.role} · friendly`,
+        "a friend's window is titled with the rung",
+      );
+      core.closeTalk();
+      // A lane that can silently skip is a pin that can silently stop pinning:
+      // the fixture must stage a second speaker, and if it ever stops, this
+      // says so instead of quietly not testing the headline claim.
+      const unmet = t.npcs().find((npc) => npc.name !== ally.name);
+      assert.ok(unmet, "the fixture stages a second, unmet speaker");
+      {
+        t.openOn(unmet);
+        assert.equal(
+          t.hud.talkWho.textContent,
+          `${unmet.name} — ${unmet.role}`,
+          "a stranger's window is titled exactly as before",
+        );
+        core.closeTalk();
+      }
+      // Hostile outranks the rung: whatever was built before, THIS standing
+      // decides the room. Planted with the setter arm — nothing package-side
+      // writes `h` yet, and that is S1's lane, not this one's.
+      P.bump(core, zone, ally.name, { h: true });
+      t.openOn(ally);
+      assert.equal(
+        t.hud.talkWho.textContent,
+        `${ally.name} — ${ally.role} · hostile`,
+        "a hostile flag outranks an earned rung in the title",
+      );
+      core.closeTalk();
+      P.bump(core, zone, ally.name, { h: false });
+    }
+
+    // ── THE RISE IS SAID ONCE, AT THE MOMENT IT IS EARNED (0.15) ────────────
+    // 0.12's precedent: a level change toasts when it happens and then lives on
+    // the sheet. A rung change is the same kind of moment — the Standing panel
+    // is its sheet — and the phrase comes from one place (hud.roseLine) for
+    // both of the paths that can earn one.
+    {
+      const t = stage({ chatId: "chat-rose-toast" });
+      const P = loadedPF.player;
+      const zone = core.sim.world.startZone;
+      const npc = t.npcs()[0];
+      const seen = [];
+      const bare = t.hud.toast.bind(t.hud);
+      t.hud.toast = (line) => {
+        seen.push(line);
+        return bare(line);
+      };
+
+      const filled = [];
+      const bareFilled = t.hud.questFilled.bind(t.hud);
+      t.hud.questFilled = (done, rise) => {
+        filled.push({ done, rise });
+        return bareFilled(done, rise);
+      };
+
+      // The TALK path: two encounters short of the line, then one accepted
+      // turn crosses it — and the toast names the person, once.
+      P.bump(core, zone, npc.name, { t: P.PROMOTION[0] - 1 });
+      assert.equal(seen.length, 0, "no toast for encounters short of the line");
+      t.openOn(npc);
+      core.talkFree();
+      await settle();
+      assert.ok(
+        seen.some((line) => line === `${npc.name} knows you now.`),
+        `the accepted turn that crosses the line says so (${seen.join(" | ")})`,
+      );
+      // …AND IT WENT THROUGH THE COMPOSER rather than around it. That is the
+      // difference between a turn that says both things and a turn that says
+      // one: a rise toasted BESIDE the handover receipt erases it, so the rise
+      // is handed to the same call the errands are.
+      assert.deepEqual(
+        filled.at(-1),
+        { done: [], rise: { name: npc.name, rung: 1 } },
+        "the accepted turn hands its rise to the composer, not to a toast of its own",
+      );
+      const said = seen.filter((line) => line.includes("knows you now")).length;
+      core.closeTalk();
+      t.openOn(npc);
+      core.talkFree();
+      await settle();
+      assert.equal(
+        seen.filter((line) => line.includes("knows you now")).length,
+        said,
+        "…and the next accepted turn does not say it again",
+      );
+      core.closeTalk();
+
+      // ── ONE SENTENCE PER EVENT, WHICH IS WHY THE RECEIPT SURVIVES ─────────
+      // `toast` is ONE node and ONE timer per surface, so two toasts in a tick
+      // is one toast: the second overwrites the first and the player never sees
+      // it. A rise standing next to a money receipt therefore ATE it — "Done
+      // for Bett Marsh — 5 coins" went on screen and came straight back off,
+      // and what was left was the sentence about the rung. So the rise is
+      // COMPOSED into the receipt rather than said beside it, and the pin is on
+      // the live node as well as on the calls, because the calls were never the
+      // thing that was broken.
+      const paid5 = loadedPF.economy.money(core.sim.world, 5);
+      seen.length = 0;
+      t.hud.questFilled([{ money: 5, giver: "Bett Marsh", rose: 2 }]);
+      assert.deepEqual(
+        seen,
+        [`Done for Bett Marsh — ${paid5} · they count you a friend now.`],
+        `the hand-in and the rung it earned are one sentence (${seen.join(" | ")})`,
+      );
+      assert.equal(
+        t.hud.toastEl.textContent,
+        `Done for Bett Marsh — ${paid5} · they count you a friend now.`,
+        "…and the money is still on the node the player is actually looking at",
+      );
+      seen.length = 0;
+      t.hud.questFilled([{ money: 5, giver: "Bett Marsh", rose: 0 }]);
+      assert.deepEqual(seen, [`Done for Bett Marsh — ${paid5}`], "…and a hand-in that crossed nothing stays a receipt");
+
+      // TWO ERRANDS IN ONE TURN ARE ONE SENTENCE TOO — the loop used to toast
+      // per row, so the second row ate the first exactly as the rise did.
+      seen.length = 0;
+      t.hud.questFilled([
+        { money: 5, giver: "Bett Marsh", rose: 0 },
+        { money: 5, giver: "Alder Vance", rose: 1 },
+      ]);
+      assert.deepEqual(
+        seen,
+        [`Done for Bett Marsh — ${paid5} · Done for Alder Vance — ${paid5} · they know you now.`],
+        `both errands are said, in one sentence (${seen.join(" | ")})`,
+      );
+
+      // THE BOARD'S OWN HAND-IN, the other receipt a rise stood next to. Driven
+      // through the HUD press with the verb stubbed, because what is under test
+      // is the sentence the press composes and not the quest layer beneath it.
+      const realTurnIn = loadedPF.pack.turnIn;
+      try {
+        loadedPF.pack.turnIn = () => ({ ok: true, reason: null, money: 6, giver: "Alder", rose: 1 });
+        seen.length = 0;
+        t.hud.turnInJob("anything");
+        const paid6 = loadedPF.economy.money(core.sim.world, 6);
+        assert.deepEqual(
+          seen,
+          [`Handed in to Alder — ${paid6} · they know you now.`],
+          `the hand-in receipt keeps its money and gains the rung (${seen.join(" | ")})`,
+        );
+        loadedPF.pack.turnIn = () => ({ ok: true, reason: null, money: 6, giver: "Alder", rose: 0 });
+        seen.length = 0;
+        t.hud.turnInJob("anything");
+        assert.deepEqual(seen, [`Handed in to Alder — ${paid6}`], "…and stays a bare receipt when nothing crossed");
+      } finally {
+        loadedPF.pack.turnIn = realTurnIn;
+      }
+
+      // AND THE STANDALONE FORM IS STILL THE NAMED ONE. The pronoun clause only
+      // ever rides a receipt that already said who it was about; a rise with no
+      // receipt to join names the person, exactly as the talk path above did.
+      seen.length = 0;
+      t.hud.questFilled([], { name: "Bett Marsh", rung: 3 });
+      assert.deepEqual(seen, ["Bett Marsh counts you a close friend now."], "a rise on its own names who rose");
+      seen.length = 0;
+      t.hud.questFilled([], null);
+      assert.deepEqual(seen, [], "…and a turn with nothing to say says nothing");
+    }
+
+    // ── A RUNG EARNED IN A WORLD REPLACED UNDER THE AWAIT IS NOT WRITTEN TO
+    //    ITS REPLACEMENT (0.15, the sentSim identity fence) ──────────────────
+    // The generation fence guards `bump` on `_gen`, which moves ONLY on a chat
+    // switch — but `_rebuild` (a rewind, a checkpoint load, a swipe) replaces
+    // `core.sim` wholesale on the SAME chat WITHOUT touching `_gen`. So a talk
+    // turn composed against one sim and resolving after the rebuild slips past
+    // the gen fence with a bump aimed at a REPLACEMENT world the conversation
+    // never happened in: it promotes a stranger there and fires a friendship
+    // toast on a story that did not earn it. `bump` and its rise now sit inside
+    // the same `sentSim === this.sim` identity fence the delivery does, so a
+    // replaced sim is left untouched and `questFilled` has nothing to announce.
+    // (`flush` stays OUTSIDE that fence on purpose — it is idempotent, monotone
+    // and rebuild-designed; the wrap-up cases above are what would regress if it
+    // were fenced. Only the promotion is object-identity sensitive.)
+    {
+      const P = loadedPF.player;
+      const t = stage({ chatId: "chat-sentsim-swap" });
+      const zone = core.sim.world.startZone;
+      const npc = t.npcs()[0];
+
+      const filled = [];
+      const bareFilled = t.hud.questFilled.bind(t.hud);
+      t.hud.questFilled = (done, rise) => {
+        filled.push({ done, rise });
+        return bareFilled(done, rise);
+      };
+      const seen = [];
+      const bareToast = t.hud.toast.bind(t.hud);
+      t.hud.toast = (line) => {
+        seen.push(line);
+        return bareToast(line);
+      };
+
+      // The world the REBUILD lands under the send: a fresh sim object, same
+      // chat and same `_gen`, standing one casual encounter short of acquainted
+      // with THIS very person — so a stray talk bump would tip them over the
+      // line and toast a rung earned in a story that was never told here.
+      const replaced = new loadedPF.Sim(world.build(4242, "cozy-village"));
+      P.bump({ chatId: t.host.chatId, sim: replaced }, zone, npc.name, { t: P.PROMOTION[0] - 1 });
+      const before = P.get({ sim: replaced }).rel[zone][npc.name];
+      assert.deepEqual(
+        [before.d, before.t],
+        [0, P.PROMOTION[0] - 1],
+        "the replacement stands one short of the line before the send resolves",
+      );
+
+      // Open the window and press the greeting on the LIVE sim, then swap the
+      // sim under the send the way `_rebuild` does — wholesale, and WITHOUT
+      // bumping `_gen` (the seam the gen fence is blind to). The swap lands
+      // inside `sendMessage`, before the accepted-turn `.then` reads `this.sim`,
+      // which is exactly the race a real rewind loses.
+      t.openOn(npc);
+      t.host.sendMessage = (text) => {
+        t.sent.push(text);
+        core.sim = replaced; // the rebuild lands under the await
+        return true;
+      };
+      core.talkFree();
+      await settle();
+
+      const after = P.get({ sim: replaced }).rel[zone][npc.name];
+      assert.deepEqual(
+        [after.d, after.t],
+        [0, P.PROMOTION[0] - 1],
+        "the rung did NOT move on the sim the conversation never happened in",
+      );
+      assert.ok(
+        !filled.some((call) => call.rise),
+        `no rise is handed to the composer for a replaced world (${JSON.stringify(filled)})`,
+      );
+      assert.ok(
+        !seen.some((line) => /knows you now/.test(line)),
+        `and no friendship toast fired on a world the turn did not earn it in (${seen.join(" | ")})`,
+      );
+      core.closeTalk();
+      core.sim = t.sim;
     }
 
     // ── A LINE TAGGED FOR A SKY IS SERVED UNDER THAT SKY AND NO OTHER ───────
@@ -26477,14 +26874,22 @@ const fire = (node, type) => Promise.all((node.listeners[type] ?? []).map((fn) =
       ["at", "when", "r", "text", "topic", "w"],
       "…and `w` sits beside `topic`, because property order is the emission order",
     );
-    // THE REGISTER ASK IS INVERTED (ruling 4). 0.13 asked for MORE FRIEND LINES;
-    // 0.14 serves the stranger register and only that one, so a pack written to
-    // the old ask spends its best writing on rows nothing reads.
+    // THE REGISTER ASK IS LEVEL AGAIN (0.15). 0.13 asked friend-heavy for a
+    // register nothing served; 0.14 inverted to stranger-only because that was
+    // all it read; 0.15 serves both — stranger to everyone, friend at the
+    // ladder's friendly rung — so the guidance leans stranger and tells the
+    // model exactly who reads a friend line now, instead of promising a later
+    // release that has arrived.
     assert.ok(
-      text.includes(`write mostly ${pack.REGISTERS[0]} lines`),
-      "the guidance asks for the register the window actually serves",
+      text.includes(`Lean ${pack.REGISTERS[0]}`),
+      "the guidance still leans the floor register every speaker serves",
     );
-    assert.ok(!/more friend lines than you/.test(text), "…and no longer asks for more of the one it does not");
+    assert.ok(
+      text.includes(`real ${pack.REGISTERS[1]} lines too`) && text.includes("counts the player a friend"),
+      "…and buys friend lines for the reader that now exists, saying who that is",
+    );
+    assert.ok(!/written for a later one/.test(text), "…without deferring them to a release that already shipped");
+    assert.ok(!/more friend lines than you/.test(text), "…and no longer asks for more of the one it leans away from");
     // ESCALATION IS NAMED AS E7'S CONVERGENCE POINT — the section the Ask tree
     // will land on, described as a door rather than as what is behind it.
     assert.ok(
@@ -29789,6 +30194,270 @@ const fire = (node, type) => Promise.all((node.listeners[type] ?? []).map((fn) =
   // A copy is a second list that a sixth weather word would leave behind.
   assert.equal(pack.WEATHERS, loadedPF.weather.WORDS, "the pack's axis IS the sky's list, not a copy of it");
   assert.deepEqual(pack.WEATHERS, ["fair", "overcast", "rain", "storm", "snow"], "…all five words of it");
+}
+
+// ── THE LADDER MOVES, AND ONLY UPWARD, AND ONLY WHEN EARNED (0.15) ─────────
+// Four releases stored a 0-3 disposition that nothing ever raised: every bump
+// wrote `t`, every resident stayed a stranger, and 7 of 12 generated dialogue
+// lines sat sealed behind a rung nobody could reach. The promotion is one table
+// and one crossing rule in bump(), and this case walks every edge of it.
+{
+  const P = loadedPF.player;
+  const w = world.build(3031, "cozy-village");
+  const core = { chatId: "chat-ladder", sim: new loadedPF.Sim(w), hud: { toast() {}, refreshChips() {} } };
+  const at = (name) => P.get(core).rel.village?.[name] ?? { d: 0, t: 0 };
+  const [ACQ, FRIEND, CLOSE] = P.PROMOTION;
+
+  // The crossings, one line at a time. Encounters below a line change nothing;
+  // the encounter that crosses it is the one that pays, and `rose` says so on
+  // exactly that call and no other.
+  for (let i = 1; i < ACQ; i++) {
+    const step = P.bump(core, "village", "Alder", { t: 1 });
+    assert.equal(step.rose, 0, `encounter ${i} of ${ACQ - 1} promotes nobody`);
+    assert.equal(at("Alder").d, 0, "…still a stranger short of the line");
+  }
+  const cross = P.bump(core, "village", "Alder", { t: 1 });
+  assert.equal(cross.rose, 1, "the crossing call reports the rung it earned");
+  assert.equal(at("Alder").d, 1, "…and the row stands acquainted");
+  assert.equal(P.bump(core, "village", "Alder", { t: 1 }).rose, 0, "the next encounter is just an encounter");
+
+  // A WEIGHTED bump can cross from a standing start — the quest path's shape,
+  // which is MEANINGFUL: a job is the verb class that may cross at all.
+  const jump = P.bump(core, "village", "Bett", { t: ACQ, meaningful: true });
+  assert.equal(jump.rose, 1, "a job's weight crosses acquainted in one call");
+  // …and one weighted bump never vaults PAST the next line it did not reach.
+  assert.equal(at("Bett").d, 1, "…landing exactly on the rung the count earns");
+
+  // The top of the ladder, climbed a rung per press. The count is what EARNS a
+  // rung; the press is what SPENDS one, so a weight that clears two lines at
+  // once still buys the nearer of them and leaves the other for the next press.
+  P.bump(core, "village", "Alder", { t: FRIEND, meaningful: true });
+  assert.equal(at("Alder").d, 2, "past the friendly line the row is friendly");
+  P.bump(core, "village", "Alder", { t: CLOSE, meaningful: true });
+  assert.equal(at("Alder").d, 3, "…and past the close line, close");
+  assert.equal(
+    P.bump(core, "village", "Alder", { t: 50, meaningful: true }).rose,
+    0,
+    "the ladder has no fifth rung to rise to",
+  );
+  assert.equal(at("Alder").d, 3, "…and the top holds");
+
+  // THE SETTER ARM IS UNTOUCHED, both ways round. An explicit d in the patch
+  // suppresses the crossing on that call (the patch said where it wanted the
+  // row), and a row set BELOW its earned count is not re-promoted by the next
+  // sub-line encounter — a crossing needs a line to cross, and the count is
+  // already past all of them. That asymmetry is the design: a future demotion
+  // verb (S1's) must not be fought by the heuristic on every subsequent hello.
+  const setDown = P.bump(core, "village", "Alder", { d: 1, t: 1 });
+  assert.equal(setDown.rose, 0, "an explicit d reports no rise");
+  assert.equal(at("Alder").d, 1, "…and sets exactly what it said");
+  P.bump(core, "village", "Alder", { t: 1 });
+  assert.equal(at("Alder").d, 1, "a demoted row stays demoted across further encounters");
+
+  // The reader, on every kind of row there is.
+  assert.deepEqual(P.rung(core, "village", "Alder"), { d: 1, h: false }, "rung() reads the live row");
+  assert.deepEqual(P.rung(core, "village", "Nobody Yet"), { d: 0, h: false }, "…zeros for the unmet");
+  assert.deepEqual(P.rung(core, "elsewhere", "Alder"), { d: 0, h: false }, "…and zeros for the wrong zone");
+  P.bump(core, "village", "Sworn Enemy", { h: true });
+  assert.deepEqual(P.rung(core, "village", "Sworn Enemy"), { d: 0, h: true }, "…and carries the hostile flag");
+
+  // The promoted rung RIDES THE WIRE: serialize and parse, and the rung is
+  // still earned on the other side — d has been on the wire since 0.11, so this
+  // pins that promotion writes the field the lanes already carry.
+  const text = JSON.stringify(P.serialize(P.get(core)));
+  const back = P.parse(JSON.parse(text)).player;
+  assert.equal(back.rel.village.Bett.d, 1, "an earned rung survives the round-trip");
+}
+
+// ── SMALL TALK DOES NOT MAKE A BEST FRIEND (0.15, the maintainer's ruling) ──
+// Saying good morning and asking after the rumors should not, over enough
+// mornings, make you somebody's best friend. Small interactions raise standing
+// only to a point; doing jobs, running quests, being business partners are what
+// carry it past acquaintance. That is TWO VERB CLASSES over the weights that
+// were already at the verb sites, and no new byte anywhere: CASUAL is the talk
+// press (and any ask-menu read that ever bumps) — it builds `t` forever and can
+// never leave a row above ACQUAINTED; MEANINGFUL is the job settle and the two
+// commerce sites — a berth let and a rod sold, which is what "business partner"
+// means in a package with two shops — and it may cross any line, one rung per
+// press.
+{
+  const P = loadedPF.player;
+  const w = world.build(4141, "cozy-village");
+  const core = { chatId: "chat-ruling", sim: new loadedPF.Sim(w), hud: { toast() {}, refreshChips() {} } };
+  const at = (name) => P.get(core).rel.village?.[name] ?? { d: 0, t: 0 };
+
+  // A HUNDRED GREETINGS. The third earns acquainted — small talk is allowed
+  // exactly that much — and then nothing ever again, however long it goes on.
+  for (let i = 0; i < 100; i++) P.bump(core, "village", "Hail Fellow", { t: 1 });
+  assert.equal(at("Hail Fellow").t, 100, "a hundred greetings are a hundred encounters");
+  assert.equal(at("Hail Fellow").d, 1, "…and leave an acquaintance, never a friend");
+
+  // …AND ONE JOB MOVES IT, BY EXACTLY ONE RUNG. The padding consequence, stated
+  // honestly: the casual count DID carry `t` past every line, and the meaningful
+  // press still buys one rung, because it is the CROSSING PRESS that is rationed.
+  const job = P.bump(core, "village", "Hail Fellow", { t: 3, s: "Ran the carp order for me.", meaningful: true });
+  assert.equal(job.rose, 2, "the first real favour after all that talk earns friendly");
+  assert.equal(at("Hail Fellow").d, 2, "…and lands there, not on the rung the padded count would allow");
+  const second = P.bump(core, "village", "Hail Fellow", { t: 3, meaningful: true });
+  assert.equal(second.rose, 3, "…and the next favour earns the top");
+  assert.equal(at("Hail Fellow").d, 3, "…one rung at a time, all the way up");
+
+  // A CASUAL PRESS ON A ROW ALREADY PAST THE CEILING accumulates `t` and does
+  // nothing else — it does not raise, and it does not take anything away.
+  const idle = P.bump(core, "village", "Hail Fellow", { t: 1 });
+  assert.equal(idle.rose, 0, "a greeting to a close friend reports no rise");
+  assert.equal(at("Hail Fellow").d, 3, "…and does not lower them either");
+
+  // THE COMMERCE SITES ARE MEANINGFUL, and they cross the way a job does.
+  P.bump(core, "village", "Keeper", { t: 1, s: "Let you a berth at the Ram.", meaningful: true });
+  P.bump(core, "village", "Keeper", { t: 1, s: "Sold you a crude rod.", meaningful: true });
+  assert.equal(at("Keeper").d, 0, "a berth and a rod are one encounter short of the line");
+  P.bump(core, "village", "Keeper", { t: 1, meaningful: true });
+  assert.equal(at("Keeper").d, 1, "…and the third crosses it");
+
+  // ZERO NEW SAVE FIELDS, PROVEN ON THE ROW ITSELF: `meaningful` is a field of
+  // the CALL, read here and written nowhere, so the row a meaningful bump wrote
+  // carries 0.11's keys and no others.
+  assert.deepEqual(
+    Object.keys(at("Hail Fellow")).sort(),
+    ["a", "d", "s", "t"],
+    "the row a meaningful bump wrote holds 0.11's fields and nothing new",
+  );
+}
+
+// ── A DEMOTION IS NOT UNDONE BY A HELLO (0.15) ──────────────────────────────
+// The S1 safety property, pinned where it is VISIBLE. The two lanes that
+// carried it before both sat at `t` 90 — past every line, so the row had no line
+// left to cross and the property held for the wrong reason. Below the top line
+// it is a live rule, and below the top line is where the max()-in-disguise
+// showed: `row.d = earned` handed a row demoted at `t` 9 TWO rungs for one
+// good morning.
+{
+  const P = loadedPF.player;
+  const w = world.build(5252, "cozy-village");
+  const core = { chatId: "chat-demote", sim: new loadedPF.Sim(w), hud: { toast() {}, refreshChips() {} } };
+  const at = (name) => P.get(core).rel.village?.[name] ?? { d: 0, t: 0 };
+
+  // Nine encounters of real work, then the precise arm takes it all away. `t` 9
+  // is ONE short of the friendly line, which is what makes the next encounter a
+  // crossing — and `{ t: 0 }` demotes without counting itself as one.
+  P.bump(core, "village", "Wronged", { t: 9, meaningful: true });
+  P.bump(core, "village", "Wronged", { d: 0, t: 0 });
+  assert.equal(at("Wronged").d, 0, "the precise arm put the row on the floor");
+  assert.equal(at("Wronged").t, 9, "…one encounter short of the friendly line");
+
+  // ONE HELLO, ONE RUNG — and not one rung past acquainted, because a hello is
+  // not a favour.
+  const hello = P.bump(core, "village", "Wronged", { t: 1 });
+  assert.equal(hello.rose, 1, "one greeting raises one rung");
+  assert.equal(at("Wronged").d, 1, "…to acquainted and no further, whatever the count already says");
+
+  // …and the same row under a MEANINGFUL press still moves one rung, not three.
+  const favour = P.bump(core, "village", "Wronged", { t: 3, meaningful: true });
+  assert.equal(favour.rose, 2, "a favour on the same row moves one rung");
+  assert.equal(at("Wronged").d, 2, "…landing on friendly");
+
+  // THE EXPLICIT SETTER SUPPRESSES THE CROSSING, pinned BELOW the top line so
+  // that the suppression is observable at all: `t` 2 → 3 crosses the acquainted
+  // line on this very call, and the patch's own `d` says the row stays put.
+  P.bump(core, "village", "Held Down", { t: 2 });
+  assert.equal(at("Held Down").d, 0, "two encounters earn nothing");
+  const set = P.bump(core, "village", "Held Down", { d: 0, t: 1 });
+  assert.equal(set.rose, 0, "the call that crossed the line under an explicit d reports no rise");
+  assert.equal(at("Held Down").t, 3, "…the encounter still counted");
+  assert.equal(at("Held Down").d, 0, "…and the ladder stayed exactly where the patch put it");
+}
+
+// ── THE COUNTER SAYS ITS OWN RISE (0.15) ────────────────────────────────────
+// A berth let and a rod sold are MEANINGFUL bumps, so either can be the press
+// that crosses a line — and both verbs threw the crossing away. `bump()` has
+// handed back `{ row, rose }` since the ladder started moving, and these two
+// callers dropped it on the floor, so a keeper who became an acquaintance over
+// the counter said nothing at all. The verb now hands back the rung AND the
+// name, because its receipt ("A berth is yours — …") never names the keeper
+// itself, and the HUD folds both into the sentence it was already printing.
+{
+  const P = loadedPF.player;
+  const E = loadedPF.economy;
+  const w = world.build(9001, "cozy-village");
+  const sim = new loadedPF.Sim(w);
+  const core = { chatId: "chat-commerce-rise", sim, hud: { toast() {}, refreshChips() {} } };
+  sim.zoneId = "inn";
+  sim.nearNpc = w.zones.inn.npcs.find((npc) => npc.name === "Mira");
+  P.award(core, { money: 500 });
+
+  // NO CROSSING, NO RISE: one night is one encounter and the line is three.
+  const first = E.rentBerth(core);
+  assert.equal(first.ok, true, "the room is taken");
+  assert.equal(first.rose, 0, "…and one night crosses nothing");
+  assert.equal(first.keeper, "Mira", "…while still naming who the night was taken from");
+
+  // ONE SHAPE ON EVERY RETURN, refusals included: a caller reading `rose` off a
+  // refusal gets 0, never `undefined`, which is buyRod's own stated discipline.
+  const twice = E.rentBerth(core);
+  assert.equal(twice.ok, false, "the same room is not let twice");
+  assert.equal(twice.rose, 0, "…and the refusal still answers the rise question");
+  assert.equal(twice.keeper, "Mira", "…and still says who refused");
+
+  // AND BOTH COUNTERS CROSS, each on its own press. A second SIM, because the
+  // block hangs off the sim and the first one's berth is already taken — the
+  // keeper is walked to one encounter short of a line, and then the counter is
+  // what carries her over it, which is business moving a ladder small talk
+  // cannot move at all.
+  const sim2 = new loadedPF.Sim(w);
+  sim2.zoneId = "inn";
+  sim2.nearNpc = w.zones.inn.npcs.find((npc) => npc.name === "Mira");
+  const buyer = { chatId: "chat-commerce-rise-2", sim: sim2, hud: { toast() {}, refreshChips() {} } };
+  P.award(buyer, { money: 500 });
+  P.bump(buyer, "village", "Mira", { t: P.PROMOTION[0] - 1, meaningful: true });
+  const berth = E.rentBerth(buyer);
+  assert.equal(berth.ok, true, "the room is taken here too");
+  assert.equal(berth.rose, 1, "…and this night IS the encounter that crosses");
+  assert.equal(berth.keeper, "Mira", "…named, because the berth's receipt does not name her");
+  P.bump(buyer, "village", "Mira", { t: P.PROMOTION[1] - P.PROMOTION[0] - 1, meaningful: true });
+  const rod = E.buyRod(buyer);
+  assert.equal(rod.ok, true, "the rod is sold");
+  assert.equal(rod.rose, 2, "…and the sale is the encounter that crosses the next line");
+  assert.equal(rod.keeper, "Mira", "…named, because the rod's receipt does not name her either");
+  assert.deepEqual(P.rung(buyer, "village", "Mira"), { d: 2, h: false }, "…and the row stands where the rise says");
+}
+
+// ── THE HEADER GREETS A FRIEND AS A FRIEND (0.15) ──────────────────────────
+// The near clause gains the rung word for anyone past stranger, so the GM can
+// answer standing without burning a persona injection to learn it — and costs
+// nothing for a stranger, because the word for "no standing" is no word.
+{
+  const P = loadedPF.player;
+  const w = world.build(6060, "cozy-village");
+  const sim = new loadedPF.Sim(w);
+  const core = { chatId: "chat-standing-header", sim, hud: { toast() {}, refreshChips() {} } };
+  // Climbed rather than planted, and a rung per press — which is why the two
+  // friendly rows take two calls each and the acquaintance takes one.
+  P.bump(core, w.startZone, "Vex Friendly", { t: P.PROMOTION[0], meaningful: true });
+  P.bump(core, w.startZone, "Vex Friendly", { t: P.PROMOTION[1], meaningful: true });
+  P.bump(core, w.startZone, "Gale Known", { t: P.PROMOTION[0] });
+  P.bump(core, w.startZone, "Grim Foe", { t: P.PROMOTION[0], meaningful: true });
+  P.bump(core, w.startZone, "Grim Foe", { t: P.PROMOTION[1], h: true, meaningful: true });
+  assert.ok(sim.player, "the bumps hung the live block on the sim, which is what header() reads");
+
+  const headerNear = (name) => {
+    sim.nearNpc = { name, role: "warden" };
+    const match = sim.header().match(/near: ([^\]]+)/);
+    sim.nearNpc = null;
+    return match ? match[1] : "";
+  };
+  assert.equal(headerNear("Vex Friendly"), "Vex Friendly (warden, friendly)", "a friend is greeted as one");
+  assert.equal(headerNear("Gale Known"), "Gale Known (warden, acquainted)", "…an acquaintance as one");
+  assert.equal(headerNear("Nobody Met"), "Nobody Met (warden)", "…and a stranger exactly as 0.14 wrote them");
+  assert.equal(
+    headerNear("Grim Foe"),
+    "Grim Foe (warden, hostile)",
+    "…and hostility outranks the rung the count earned",
+  );
+  // The cost discipline the header keeps (0.14's rule): the word rides only
+  // when it says something, so the permanent per-turn spend for a town of
+  // strangers is zero bytes.
+  assert.ok(!headerNear("Nobody Met").includes(","), "no standing is no word, not a written-out floor");
 }
 
 console.log("brief validator + compiler: all cases passed");
