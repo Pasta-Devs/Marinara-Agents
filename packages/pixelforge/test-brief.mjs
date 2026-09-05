@@ -31157,7 +31157,13 @@ const fire = (node, type) => Promise.all((node.listeners[type] ?? []).map((fn) =
         assert.equal(P.get(k).pouch.money, 0, "the fixture's purse is unpaid, so a second payment would show");
         assert.equal(await S.keepPlaying(k), true, "…and the second exit takes it");
         assert.equal(S.gate, null, "the gate is gone");
-        assert.equal(S._regenPending.size, 0, "…and so is the re-arm record");
+        // AND THE RECORD IS GONE — cleared by the ATTEMPT's own settle, above,
+        // not by the exit. Said that way round on purpose: every `_failGate`
+        // that can paint this screen returns immediately, so `regenerateStage`'s
+        // `finally` runs in the same microtask as the failure stamp and no press
+        // can land in between. The exit's own clear is defensive and says so at
+        // the line; what a leaked record would do is what this pins.
+        assert.equal(S._regenPending.size, 0, "…and no record survived the attempt to refuse the next press");
         for (let i = 0; i < 20 && S.mode === null; i++) await tick();
         assert.equal(S.mode, null, "nothing re-adopted: the un-arm is BARE, not a lift");
         assert.equal(P.get(k).pouch.money, 0, "…nor did the purse tail re-run over a world already begun");
@@ -31943,8 +31949,35 @@ const fire = (node, type) => Promise.all((node.listeners[type] ?? []).map((fn) =
         rebuild.note.includes("same seed") && rebuild.note.includes("update has fixed the builder"),
         "the free button's sub-line is honest about ruling 8's determinism BEFORE the press",
       );
+      // …AND THE SENTENCE FOR THE STATE WHERE THAT ONE IS FALSE, pinned whole
+      // beside it. Which of the two the panel shows is lane 11b's leg.
+      assert.equal(
+        rebuild.noteReady,
+        "Same setting, same seed — and it builds right now, for no generation call. It still moves you off the stand-in you are standing on, so it asks first.",
+      );
       assert.ok(S.RETRY_COPY.costFree.includes("no generation call"), "the free confirm prices itself at nothing");
       assert.ok(S.RETRY_COPY.costPaid.includes("one generation call — two"), "…and the paid one at one call, or two");
+      // PINNED WHOLE, like the cascade's own note and for the same reason. The
+      // panel lanes ask whether the screen shows `RETRY_COPY.costCascade` — true
+      // of whatever words that constant happens to hold — so the three sentences
+      // the cascade confirmation is made of could be replaced wholesale with the
+      // suite green. The lanes pin WHERE they appear; these pin WHAT they say.
+      assert.equal(S.RETRY_COPY.confirmTitle, "Write the world again?");
+      assert.equal(S.RETRY_COPY.confirmGo, "Yes, write it");
+      assert.equal(
+        S.RETRY_COPY.costPaid,
+        "This writes a new world from your setting (one generation call — two if it also rewrites what its people say).",
+      );
+      assert.equal(S.RETRY_COPY.confirmCascadeTitle, "Move into the new world?");
+      assert.equal(S.RETRY_COPY.confirmCascadeGo, "Yes, take me there");
+      assert.equal(
+        S.RETRY_COPY.costCascade,
+        "Your setting was already written again and stored, so this doesn't write it a second time. One generation call fills in what the new world's people say, and then you arrive there.",
+      );
+      assert.equal(
+        S.RETRY_COPY.pressInFlight,
+        "That attempt is already running, so this press changed nothing — it finishes on its own.",
+      );
       for (const clause of [
         "money, items, skills and the clock come with you",
         "no second starting purse",
@@ -32022,6 +32055,28 @@ const fire = (node, type) => Promise.all((node.listeners[type] ?? []).map((fn) =
       );
       assert.equal(S._forceWrite, true, "the swap owes a write no cache may dedupe away");
       assert.ok((P.get(core)?.pouch?.money ?? 0) > 0, "and with no gate to lift, the install tail paid the purse itself");
+
+      // A VISIT LANDING INSIDE THE FREE PRESS ARMS NOTHING, and this is the one
+      // mode where that has to be said: the re-arm record exists so the rewind
+      // ladder can refuse mid-swap and so a GATED press can be put back on the
+      // screen when the player returns — and the free rebuild gates nothing at
+      // all. Re-armed off the record alone, a chat switch inside the press
+      // freezes the chat on a call nobody made, and nothing lifts it: the
+      // install's own lift no-ops when no gate was holding. The window is real —
+      // the record is written before the pre-arm flush is awaited — so the press
+      // is caught in it rather than described.
+      clearRetry();
+      const mid = makeCore("chat-rebuild-mid", RSEED);
+      mid.host.chatMeta = { ...wizard(), pixelforgeBrief: rBrief };
+      mid.sim = withCompileBroken(() => S.restore(mid.host.chatMeta, "chat-rebuild-mid"));
+      const pressing = S.regenerateStage(mid, "brief", "rebuild");
+      assert.equal(S._regenPending.get("chat-rebuild-mid")?.gated, false, "the record says this press gates nothing");
+      assert.equal(S.armGate(mid, mid.host.chatMeta), false, "…so the visit that lands inside it adopts, as any would");
+      assert.equal(S.gate, null, "…and NO gate is armed: there is no call for one to wait for");
+      assert.equal(await pressing, true, "the press finishes on its own");
+      await tick();
+      assert.equal(mid.sim.world.brieved, true, "…installing the world it went to build");
+      assert.equal(S.gate, null, "with nothing left standing over it");
 
       // …AND IT REFUSES A PLAYED-IN BLOCK, which is the other direction of the
       // same idempotent predicate: a player who earned on the stand-in keeps what
@@ -32391,6 +32446,240 @@ const fire = (node, type) => Promise.all((node.listeners[type] ?? []).map((fn) =
       clearRetry();
     }
   }
+
+  // ── LANE 11b: THE PAID WORLD RE-ROLL, PRESSED ─────────────────────────────
+  // The most expensive press on the surface, driven through the DOM from the
+  // panel button a player actually touches. Lane 5 proves what the re-roll DOES
+  // once it is running; this proves what stands between a player and it, which
+  // is a different thing entirely and was watched by nothing: the rule that
+  // everything replacing the world asks first lives in one registry field now,
+  // and deleting it sent one generation call plus the permanent severance
+  // straight through with no confirmation at all.
+  await withSavePath(async ({ calls, tick }) => {
+    clearRetry();
+    const realGenerate = loadedPF.brief.generate;
+    const realPack = loadedPF.pack.generate;
+    let briefCalls = 0;
+    let packCalls = 0;
+    let packFails = false;
+    loadedPF.brief.generate = async () => {
+      briefCalls += 1;
+      return rBrief2;
+    };
+    loadedPF.pack.generate = async (chatId, { brief, onFailure }) => {
+      packCalls += 1;
+      if (packFails) {
+        onFailure?.("unavailable");
+        return null;
+      }
+      return packFor(brief);
+    };
+    try {
+      // A REAL degrade with real play on it, and a pack owed by seal-side
+      // evidence so the press carries ruling 8's cascade with it.
+      const meta = { ...wizard(), pixelforgeBrief: rBrief, pixelforgePackWanted: true };
+      const core = {
+        chatId: "chat-paidpress",
+        sim: withCompileBroken(() => S.restore(meta, "chat-paidpress")),
+        host: { chatMeta: meta },
+        talkOpen: () => false,
+        closeTalk() {},
+      };
+      const hud = new loadedPF.Hud(new FakeNode("div"), core);
+      core.hud = hud;
+      S.mode = "metadata";
+      assert.ok(!core.sim.world.brieved, "the fixture is standing on a stand-in map");
+      P.grant(core, { t: "rod", k: "fine" }, 1);
+      P.award(core, { money: 25, xp: 4, verb: "fishing" });
+      P.bump(core, "village", "Somebody From The Stand-In", { d: 2, t: 4 });
+      P.log(core, "Something that happened on the stand-in map.", 1);
+      P.setHome(core, core.sim.zoneId);
+      core.sim.clockMin = 23 * 60;
+      core.sim.day = 5;
+      const before = core.sim;
+
+      // THE REGISTRY'S OWN ANSWER, asked directly as well as through the DOM:
+      // both of this stage's modes compile a world and put the player in it,
+      // whatever is standing, so both ask first. The DOM legs below are what
+      // that answer is FOR; this is the field they hang on.
+      assert.equal(S.retryReplacesWorld(core, "brief", "reroll"), true, "the paid re-roll replaces the world");
+      assert.equal(S.retryReplacesWorld(core, "brief", "rebuild"), true, "…and so does the free rebuild");
+
+      hud.update();
+      if (!hud._retry) hud.toggleRetry();
+      const paid = walkNodes(hud.retryBody).find((node) => node.textContent === "Write the world again");
+      assert.ok(paid, "the brief row's one priced button is on the panel");
+      calls.length = 0;
+      await fire(paid, "click");
+      assert.equal(briefCalls, 0, "pressing it spends NOTHING: the press that replaces the world asks first");
+      assert.equal(
+        calls.some((c) => c.kind === "patch"),
+        false,
+        "…and seals nothing either: the point of no return is behind the confirmation, not in front of it",
+      );
+      const asked = textIn(hud.retryBody);
+      assert.ok(asked.includes(S.RETRY_COPY.confirmTitle), "the confirmation is what came up");
+      assert.ok(asked.includes(S.RETRY_COPY.costPaid), "…priced as what it is: a setting written from scratch");
+      assert.ok(
+        !asked.includes(S.RETRY_COPY.costCascade),
+        "…and NOT as the cascade, which would tell them the setting is already written and stored",
+      );
+      assert.ok(
+        !asked.includes(S.RETRY_COPY.confirmCascadeTitle),
+        "…nor titled as a move into a world that does not exist yet",
+      );
+      assert.ok(asked.includes(S.RETRY_COPY.keepsAndLoses), "…carrying the keeps-and-loses contract, whole");
+
+      // "NOT NOW" IS A REAL WAY OUT, and it costs nothing to have looked.
+      const back = walkNodes(hud.retryBody).find((node) => node.textContent === S.RETRY_COPY.confirmBack);
+      assert.ok(back, "the confirmation has a way back");
+      await fire(back, "click");
+      assert.equal(briefCalls, 0, "…which spends nothing");
+      assert.ok(textIn(hud.retryBody).includes("Write the world again"), "…and puts the rows back");
+
+      // AND THE SECOND PRESS IS THE ONE THAT SPENDS. One generation call for the
+      // setting, and the one the cascade owes downstream of it — ruling 8's
+      // arithmetic, which is the same two calls a fresh game spends.
+      const again = walkNodes(hud.retryBody).find((node) => node.textContent === "Write the world again");
+      await fire(again, "click");
+      const go = walkNodes(hud.retryBody).find((node) => node.textContent === S.RETRY_COPY.confirmGo);
+      assert.ok(go, "the way through wears the paid words");
+      calls.length = 0;
+      await fire(go, "click");
+      await tick();
+      assert.equal(briefCalls, 1, "EXACTLY ONE generation call for the setting");
+      assert.equal(packCalls, 1, "…and the one the cascade owes downstream of it, because a pack was owed");
+      assert.equal(
+        S._briefResealed.has("chat-paidpress"),
+        true,
+        "the consent this press earned is recorded on the chat it was given for",
+      );
+
+      // THE SEVERANCE CONTRACT, ASSERTED ON WHAT THE PRESS INSTALLED. The
+      // confirmation named every clause of this; the install is where they come
+      // true or the disclosure was a lie.
+      assert.notEqual(core.sim, before, "the world was replaced");
+      assert.equal(core.sim.world.brieved, true, "…by one that actually compiled");
+      assert.equal(core.sim.world.seed, RSEED, "AT THE SAME SEED — the seed is the world's identity");
+      const now = P.get(core);
+      assert.equal(now.pouch.money, 25, "the money came with them, exactly as the confirmation said");
+      assert.equal(now.skills.verbs.fishing.x, 4, "…and the skills");
+      assert.ok(
+        now.pouch.items.some((i) => i.t === "rod"),
+        "…and the items",
+      );
+      assert.equal(core.sim.clockMin, 23 * 60, "…and the clock");
+      assert.deepEqual(now.rel, {}, "the friendship stayed behind: it belonged to the map that is gone");
+      assert.deepEqual(now.ledger.lines, [], "…and the ledger line");
+      assert.equal(now.home, null, "…and the home anchor");
+      assert.ok(
+        loadedPF.quarantine.peek("stamp")?.fields?.rel?.village?.["Somebody From The Stand-In"],
+        "…set aside in the quarantine slot rather than deleted",
+      );
+      assert.ok(
+        (now.ledger.notices ?? []).some(([, text]) => text.includes("belonged to another world")),
+        "…and the player is told it happened",
+      );
+      hud.destroy();
+
+      // ── THE PRESS THAT SEALED AND THEN FAILED, READ OFF THE PANEL ──────────
+      // Ruling 8's cascade, stopped halfway: the setting is written and stored,
+      // the pack call after it fails, and the install below that exit never
+      // runs — so the player is left standing on the OLD stand-in with a new
+      // setting behind it. Three things this state is the only place to watch,
+      // and every one of them is a sentence or a consent, not a mechanism.
+      clearRetry();
+      loadedPF.quarantine.reset();
+      const halfMeta = { ...wizard(), pixelforgeBrief: rBrief, pixelforgePackWanted: true };
+      const half = {
+        chatId: "chat-halfway",
+        sim: withCompileBroken(() => S.restore(halfMeta, "chat-halfway")),
+        host: { chatMeta: halfMeta },
+        talkOpen: () => false,
+        closeTalk() {},
+      };
+      const halfHud = new loadedPF.Hud(new FakeNode("div"), half);
+      half.hud = halfHud;
+      S.mode = "metadata";
+      const standing = half.sim;
+      packFails = true;
+      assert.equal(await S.regenerateStage(half, "brief", "reroll"), true, "the paid press runs");
+      await tick();
+      assert.equal(briefCalls, 2, "…spending its one call on the setting");
+      assert.equal(packCalls, 2, "…and the cascade's, which is the one that fails here");
+      assert.equal(S.gate.state, "failed", "the failure screen is up");
+      assert.equal(S.gate.stage, "pack", "…stamped at the stage the cascade moved to");
+      assert.equal(half.sim, standing, "and the world was never replaced: the install is below that exit");
+      assert.equal(P.briefHashOf(S._configBrief(halfMeta, "chat-halfway")), rHash2, "…while the new setting IS stored");
+      assert.equal(S.worldBehindBrief(half), true, "which is exactly a setting sealed AHEAD of the world on screen");
+
+      // (1) THE FREE BUTTON'S SUB-LINE HAS TO BE TRUE HERE TOO. Its shipped
+      // sentence says the press works "when an update has fixed the builder,
+      // and changes nothing otherwise" — and in this state no update is
+      // involved, the compile answers right now, and the press would install
+      // the new world immediately (lane 9 is what that press then does).
+      assert.equal(await S.keepPlaying(half), true, "the second exit puts them back in the world to look at it");
+      halfHud.update();
+      if (!halfHud._retry) halfHud.toggleRetry();
+      assert.equal(S.canRebuild(half), true, "the free press can answer right now");
+      const lines = textIn(halfHud.retryBody);
+      const rebuildRow = S.stage("brief").rows.fallback.actions.find((a) => a.mode === "rebuild");
+      assert.ok(lines.includes(rebuildRow.noteReady), "…so the panel says it builds right now, for no call");
+      assert.ok(
+        !lines.includes(rebuildRow.note),
+        "…and not that it waits on an update, which is false of every clause here",
+      );
+      assert.equal(S.actionNote(half, rebuildRow), rebuildRow.noteReady, "the sentence is asked of the state");
+      assert.equal(
+        S.actionNote({ chatId: "nobody" }, rebuildRow),
+        rebuildRow.note,
+        "…and a stage that cannot build yet keeps the shipped one",
+      );
+
+      // (2) A REFUSED PRESS IS NOT A FAILED ONE. The record is planted by hand —
+      // lane 4's own scripted refusal — because the window where a press can
+      // land with another already out is the pre-arm flush, before any gate is
+      // armed to disable the button. What the panel said there was "if this
+      // happens again, the problem is likely the setting, not luck": a failure
+      // that never happened, about a call that is still perfectly fine.
+      S._regenPending.set("chat-halfway", { stage: "brief", mode: "reroll", gated: true });
+      const refused = walkNodes(halfHud.retryBody).find((node) => node.textContent === "Write the world again");
+      await fire(refused, "click");
+      const refusedGo = walkNodes(halfHud.retryBody).find((node) => node.textContent === S.RETRY_COPY.confirmGo);
+      await fire(refusedGo, "click");
+      S._regenPending.delete("chat-halfway");
+      assert.equal(briefCalls, 2, "the refused press spent nothing");
+      assert.equal(halfHud._retryNotes.brief, S.RETRY_COPY.pressInFlight, "…and the panel says what happened: nothing");
+      assert.ok(textIn(halfHud.retryBody).includes(S.RETRY_COPY.pressInFlight), "…on screen, under the row");
+
+      // (3) THE CONSENT SURVIVES THE CHAT IT WAS GIVEN FOR. `reset()` and
+      // `armGate` are what a chat switch calls into this module (lane 7 drives
+      // the real `_switchChat` over them), and the witness is this chat's own
+      // record that somebody standing here agreed to leave that world. Cleared
+      // on the way out, the failure screen goes back to promising the world is
+      // untouched over a chat whose setting has already been replaced, and the
+      // press that finishes the swap stops asking first.
+      const noteWas = S.gateStageNote("pack", true, S.worldBehindBrief(half));
+      assert.equal(noteWas, S.stage("pack").cascade.note, "the failure screen carries the sentence the seal made true");
+      assert.equal(S.retryReplacesWorld(half, "pack", "rewrite"), true, "…and the press that finishes it asks first");
+      S.reset();
+      assert.equal(S.armGate(half, halfMeta), true, "coming back re-arms the boot gate for the pack still owed");
+      assert.equal(S.worldBehindBrief(half), true, "…and the consent came back with the chat it was given for");
+      assert.equal(
+        S.gateStageNote("pack", true, S.worldBehindBrief(half)),
+        noteWas,
+        "…so the screen still says the true thing rather than reverting to the promise the seal broke",
+      );
+      assert.equal(S.retryReplacesWorld(half, "pack", "rewrite"), true, "…and the press still asks first");
+      halfHud.destroy();
+    } finally {
+      loadedPF.brief.generate = realGenerate;
+      loadedPF.pack.generate = realPack;
+      loadedPF.quarantine.reset();
+      clearRetry();
+      restoreAssets();
+    }
+  });
 
   // ── LANE 12: THE BOOT PATH IS BYTE-IDENTICAL ──────────────────────────────
   // Every gap closure is scoped to a post-start install, and this is the pin in
