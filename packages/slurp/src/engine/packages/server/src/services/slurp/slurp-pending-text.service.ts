@@ -114,15 +114,16 @@ function buildMessages(input: {
 export async function drainSlurpPendingText(db: DB, limit = DRAIN_LIMIT): Promise<number> {
   // Nothing was ever queued on a host that cannot hold the table, so there is nothing to drain.
   // Without this the catch-up on open warns on every page load about a queue that cannot exist.
-  const rows = await db
-    .select()
-    .from(slurpPendingText)
-    .orderBy(desc(slurpPendingText.createdAt))
-    .limit(limit)
-    .catch((error: unknown) => {
-      if (isUnsupportedTableError(error)) return [];
-      throw error;
-    });
+  // An unsupported table throws while the query is being built, not when it is awaited, so this
+  // has to be a try rather than a rejection handler.
+  let rows;
+  try {
+    rows = await db.select().from(slurpPendingText).orderBy(desc(slurpPendingText.createdAt)).limit(limit);
+  } catch (error) {
+    // Nothing was ever queued on a host that cannot hold the table, so there is nothing to drain.
+    if (isUnsupportedTableError(error)) return 0;
+    throw error;
+  }
   if (rows.length === 0) return 0;
 
   const noodle = createSlurpStorage(db);

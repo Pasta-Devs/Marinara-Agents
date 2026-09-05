@@ -1,6 +1,6 @@
 # Slurp release notes
 
-## 1.1.18 — 2026-09-05
+## 1.1.19 — 2026-09-05
 
 - Stopped writing a warning to the log every time Slurp is opened on an Engine that cannot hold its newer tables.
 

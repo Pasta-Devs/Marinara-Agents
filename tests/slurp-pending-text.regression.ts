@@ -30,7 +30,10 @@ assert.match(service, /\.orderBy\(desc\(slurpPendingText\.createdAt\)\)\s*\.limi
 
 // A host that cannot hold the queue table has nothing queued, so the drain must read that as an
 // empty queue. Without this the catch-up warned on every page load about a queue that cannot exist.
-assert.match(service, /isUnsupportedTableError\(error\)\) return \[\]/u);
+assert.match(service, /if \(isUnsupportedTableError\(error\)\) return 0;/u);
+// The host throws while the query is built, not when it is awaited, so a rejection handler on the
+// builder never runs. This must stay a try.
+assert.match(service, /try \{\s*rows = await db\.select\(\)\.from\(slurpPendingText\)/u);
 assert.match(service, /if \(!isUnsupportedTableError\(error\)\) \{/u, "enqueue must not log per write either");
 
 // ── Failure is always survivable ────────────────────────────────────────────
