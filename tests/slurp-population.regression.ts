@@ -131,4 +131,9 @@ assert.match(world, /population\.touch\(actor\.id\)/u);
 const fanRun = read("services/slurp/slurp-fan-activity.operation.ts");
 assert.match(fanRun, /cast\.map\(\(member\) => population\.touch\(member\.id\)/u);
 
+// Fan activity is the highest-volume thing the audience does, and it fed nothing into the funnel:
+// follower counts barely moved from the very people who were most active.
+assert.match(fanRun, /advanceTie\(activity\.actorId, activity\.creatorId/u);
+assert.match(fanRun, /activity\.type === "repost" \? "follower" : "liker"/u, "a repost carries further than a like");
+
 console.log("slurp population regression passed");

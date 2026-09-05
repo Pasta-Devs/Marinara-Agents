@@ -26,9 +26,7 @@ export type SlurpEventKind =
   | "comment"
   | "message"
   /** A follower milestone was crossed. */
-  | "milestone"
-  /** Net new followers over a period, already grouped. */
-  | "followers";
+  | "milestone";
 
 /**
  * Base weights. The gaps matter more than the numbers: anything at or above `SLURP_EVENT_NOTABLE`
@@ -45,7 +43,6 @@ const BASE: Record<SlurpEventKind, number> = {
   tip: 45,
   unlock: 30,
   comment: 25,
-  followers: 20,
 };
 
 /**

@@ -555,8 +555,7 @@ export type SlurpEventKind =
   | "commission_accepted"
   | "comment"
   | "message"
-  | "milestone"
-  | "followers";
+  | "milestone";
 
 export type SlurpEventItem = {
   id: string;

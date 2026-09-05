@@ -169,7 +169,20 @@ async function applyAcceptedActivities(
       type: activity.type as "like" | "reply" | "repost",
       content: activity.content,
     });
-    if (result?.created) created += 1;
+    if (result?.created) {
+      created += 1;
+      // Fan activity is the highest-volume thing the audience does, and it fed nothing into the
+      // funnel: follower counts barely moved from the very people who were most active. A repost
+      // carries further than a like — it shows you to somebody else's feed — so it ranks higher.
+      const population = createSlurpPopulationStorage(db);
+      await population
+        .advanceTie(activity.actorId, activity.creatorId, {
+          stage: activity.type === "repost" ? "follower" : "liker",
+          interactions: 1,
+        })
+        .catch(() => undefined);
+      await population.touch(activity.actorId).catch(() => undefined);
+    }
     current = markNoodleFanActivityApplied(current, run.id, activity.id);
   }
   current = finishNoodleFanActivityRun(current, run.id, "completed", finishedAt);
