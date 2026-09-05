@@ -1,5 +1,10 @@
 # Long-Term Memory changelog
 
+## 1.2.21 — 2026-09-05
+
+- Reduced redundant vault scans across Review Queue, Memory Vault, and Sources loading.
+- Preserved local-character scope targets while reusing the existing note snapshot.
+
 ## 1.2.20 — 2026-09-04
 
 - Added conversation-family-scoped Roleplay local-character memories and reviewable first-use mutations.
