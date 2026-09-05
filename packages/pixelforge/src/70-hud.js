@@ -101,10 +101,16 @@ PF.Hud = class {
     // `!inWorld` hiding is a toggle these two have to own (see update()).
     this.journalChip = this._chip("📖", "open the journal", () => this.toggleJournal());
     this.sheetChip = this._chip("👤", "open the character sheet", () => this.toggleSheet());
+    // THE RETRY SURFACE'S STANDING WAY BACK IN (0.16 §2.10c). The popup opens
+    // itself once a visit and is dismissible from then on; this chip is what
+    // keeps the offer reachable without nagging, and its words come off the same
+    // registry region the rows do. It derives STRICTLY from live rows, so a
+    // world that healed stops saying "part stand-in" on its own.
+    this.retryChip = this._chip(PF.save.RETRY_COPY.chip, "what didn't finish being written", () => this.toggleRetry());
     this.topbar = PF.el(
       "div",
       { style: "position:absolute;top:10px;left:50%;transform:translateX(-50%);display:flex;gap:6px;z-index:2;" },
-      [this.locChip, this.clockChip, this.purseChip, this.journalChip, this.sheetChip],
+      [this.locChip, this.clockChip, this.purseChip, this.retryChip, this.journalChip, this.sheetChip],
     );
 
     this.talkBtn = this._btn("Talk (E)", () => core.interact(), S.railBtn);
@@ -291,6 +297,13 @@ PF.Hud = class {
       style: "font:12px/1.65 inherit;opacity:0.85;max-width:34ch;margin-bottom:12px;",
     });
     this.gateRetry = this._btn("Try again", () => PF.save.retryGeneration(this.core));
+    // THE SECOND EXIT (0.16 §2.10d), and it only ever appears when there is
+    // somewhere to go: a playable, non-interim world standing behind the gate.
+    // On a boot-armed pack gate it records the deferral and lets play begin
+    // packless; on a post-start one it simply takes the freeze off the world the
+    // player was already living in.
+    this.gateKeep = this._btn("Keep playing without it", () => void PF.save.keepPlaying(this.core));
+    this.gateKeep.style.display = "none";
     this.gateEl = PF.el(
       "div",
       {
@@ -299,7 +312,7 @@ PF.Hud = class {
           "text-align:center;padding:24px;box-sizing:border-box;gap:0;pointer-events:auto;z-index:4;" +
           "background:rgba(12,14,12,0.9);color:#f3efe2;",
       },
-      [this.gateTitle, this.gateBody, this.gateRetry],
+      [this.gateTitle, this.gateBody, this.gateRetry, this.gateKeep],
     );
     this.gateEl.setAttribute("role", "status");
     this.gateEl.setAttribute("aria-live", "polite");
@@ -356,12 +369,37 @@ PF.Hud = class {
       ]),
       PF.el("div", { style: "flex:1 1 auto;display:flex;gap:14px;overflow:hidden;" }, [this.sheetArt, this.sheetStats]),
     ]);
+    // ── THE GENERATION RETRY POPUP (0.16 §2.10c, ruling 4) ──────────────────
+    // On the two panels' exact shape, and for the exact same reason: the one
+    // window pattern in this package that composes safely with the host. Not an
+    // `aria-modal` dialog (that would make `_hostOwnsKeyboard` true and kill the
+    // keys that close it), a member of `closePanels()`'s mutual-exclusion set —
+    // which is what gets it Escape for free, with zero 90-element edits — and
+    // z-3, under the gate, because a regeneration IN FLIGHT re-arms that gate and
+    // the gate is then the surface.
+    //
+    // IT DOES NOT STOP THE CLOCK. The journal and the sheet do not either;
+    // `sim.talkAnchorId` means "a conversation is open" and is not ours to
+    // borrow. What freezes time is the gate a regeneration arms, at the tick
+    // level, which is exactly right for a world that may be replaced.
+    this.retryBody = PF.el("div", {
+      style: "flex:1 1 auto;overflow:auto;display:flex;flex-direction:column;gap:12px;",
+    });
+    this.retryEl = PF.el("div", { style: panelStyle, "aria-label": "what didn't finish being written" }, [
+      PF.el("div", { style: panelHead }, [
+        PF.el("div", { style: panelTitle, text: PF.save.RETRY_COPY.title }),
+        this._btn("✕ Close", () => this.closeRetry()),
+      ]),
+      this.retryBody,
+    ]);
+
     // Both boot DOWN, as a property rather than inside the style string: the
     // toggles and update() write this same property, and a boot state expressed
     // only in `cssText` is one nothing can read back (the berth button's own
     // discipline).
     this.journalEl.style.display = "none";
     this.sheetEl.style.display = "none";
+    this.retryEl.style.display = "none";
 
     // ── THE TALK WINDOW (plan §2.5) ─────────────────────────────────────────
     // The release's flagship surface, and the one panel here that is deliberately
@@ -449,6 +487,7 @@ PF.Hud = class {
         this.talkEl,
         this.journalEl,
         this.sheetEl,
+        this.retryEl,
         this.gateEl,
       ],
     );
@@ -462,6 +501,29 @@ PF.Hud = class {
     this._journalMemo = null;
     this._sheet = false;
     this._sheetKey = null;
+    // ── THE RETRY POPUP'S OWN STATE (0.16 §2.10c) ───────────────────────────
+    // CHAT IDENTITY LIVES HERE, which is the half that keeps "zero 90-element
+    // edits" true rather than lucky: `70-hud` reads no chat id today and
+    // `_switchChat` never rebuilds the HUD — it calls `refreshChips` and nothing
+    // else — so the latch, the once-a-visit memo and any half-made confirm are
+    // keyed by the chat they belong to and self-reset inside `update()`'s
+    // per-frame reconcile when it changes. Chat A's popup can never mount over
+    // chat B.
+    this._retry = false;
+    this._retryChat = null;
+    this._retryVisit = null;
+    this._retryKey = null;
+    this._retryRows = [];
+    // A half-made press: {stage, action, free}. Dropped on every close, on the
+    // chat change, and once it is spent — a confirmation half-made an hour ago
+    // is not permission for the press that reopens the panel (the journal's own
+    // discipline).
+    this._retryConfirm = null;
+    // Session-only sentences a press LEFT BEHIND, by stage: the free rebuild's
+    // "nothing has changed yet", and the second-failure line. Honestly
+    // re-derived as first-time after a reload, because a durable attempt log is
+    // refused for the same reason a durable failure log is.
+    this._retryNotes = {};
     // ── THE TABS THEMSELVES (0.13 §2.4) ──────────────────────────────────────
     // A LIST of {label, render, memoSync}, and it is a list rather than two
     // branches because the third occupant is already committed (P8's extended
@@ -1519,12 +1581,180 @@ PF.Hud = class {
     // a FROZEN CLOCK with an invisible window underneath, whose first Escape
     // closes a surface they cannot see.
     const open =
-      this._journal || this._sheet || this.boardMenu.style.display === "flex" || this.core.talkOpen?.() === true;
+      this._journal ||
+      this._sheet ||
+      this._retry ||
+      this.boardMenu.style.display === "flex" ||
+      this.core.talkOpen?.() === true;
     this.core.closeTalk?.();
     this.closeJournal();
     this.closeSheet();
+    // THE RETRY POPUP IS ONE OF THEM, and this is the whole of its Escape story
+    // (0.16 §2.10c). It is also where "dismissal is not acceptance" is enforced:
+    // `closePanels` is a blunt close-everything with no "why" channel, so a
+    // player who opened the journal has spent no choice — the close writes no
+    // marker, the once-a-visit memo stops the re-pop, and the chip stays the way
+    // back in. Only a row's own button records anything.
+    this.closeRetry();
     this.closeBoard();
     return open;
+  }
+
+  /** The popup, on `toggleJournal`'s exact shape: one surface at a time, and the
+   *  talk window counts as one of them because it is the member that also stops
+   *  the clock. */
+  toggleRetry() {
+    if (!this._panelsAllowed()) return;
+    if (this._retry) {
+      this.closeRetry();
+      return;
+    }
+    this.closeSheet();
+    this.closeJournal();
+    this.closeBoard();
+    this.core.closeTalk?.();
+    this._retry = true;
+    this._retryChat = this.core.chatId ?? null;
+    this._retryConfirm = null;
+    this._retryKey = null; // opening always paints
+    this._syncRetry();
+    this.retryEl.style.display = "flex";
+  }
+
+  closeRetry() {
+    this._retry = false;
+    this._retryConfirm = null;
+    this.retryEl.style.display = "none";
+  }
+
+  /** Recompute the rows only when something they are derived FROM has moved.
+   *  The key is deliberately all cheap reads — the derivation itself hashes a
+   *  sealed brief, which is not a per-frame cost. */
+  _retryMemoKey() {
+    const core = this.core;
+    const meta = core.host && typeof core.host.chatMeta === "object" ? core.host.chatMeta : null;
+    const gate = PF.save.gateHolds(core)
+      ? `${PF.save.gate.state}|${PF.save.gate.stage}|${PF.save.gate.postStart === true}`
+      : "";
+    return [
+      core.chatId ?? "",
+      gate,
+      core.sim?.world ?? null,
+      meta?.pixelforgeBrief ?? null,
+      meta?.pixelforgePack ?? null,
+      PF.save.fallbackAccepted(meta, core.chatId, "brief"),
+      PF.save.fallbackAccepted(meta, core.chatId, "pack"),
+      this._retryConfirm,
+      this._retryNotes,
+      this._retryNoteRev ?? 0,
+    ];
+  }
+
+  /** Ask the registry what is standing, and repaint if it moved. Returns the
+   *  live rows, which is what the chip reads too. */
+  _syncRetry() {
+    const key = this._retryMemoKey();
+    const held = this._retryKey;
+    const moved = !held || held.length !== key.length || key.some((value, at) => value !== held[at]);
+    if (moved) {
+      this._retryKey = key;
+      this._retryRows = PF.save.retryRows(this.core);
+      if (this._retry) this._renderRetry();
+    }
+    return this._retryRows;
+  }
+
+  /** The panel's body: one block per row, or the confirmation that stands in
+   *  front of a world-replacing press. */
+  _renderRetry() {
+    const C = PF.save.RETRY_COPY;
+    const body = this.retryBody;
+    const confirm = this._retryConfirm;
+    if (confirm) {
+      // THE TWO-STEP CONFIRM, and FREE IS NOT CONSEQUENCE-FREE: the severance is
+      // identical either way, so only the cost line differs.
+      body.replaceChildren(
+        PF.el("div", { style: "font:700 12px/1.6 inherit;", text: confirm.free ? C.confirmFreeTitle : C.confirmTitle }),
+        PF.el("div", { style: "opacity:0.9;", text: confirm.free ? C.costFree : C.costPaid }),
+        PF.el("div", { style: "opacity:0.9;", text: C.keepsAndLoses }),
+        PF.el("div", { style: "display:flex;gap:6px;flex-wrap:wrap;" }, [
+          this._btn(confirm.free ? C.confirmFreeGo : C.confirmGo, () => this._retryGo(confirm)),
+          this._btn(C.confirmBack, () => {
+            this._retryConfirm = null;
+            this._retryKey = null;
+            this._syncRetry();
+          }),
+        ]),
+      );
+      return;
+    }
+    const held = PF.save.gateHolds(this.core);
+    const blocks = [];
+    for (const row of this._retryRows) {
+      const controls = [];
+      for (const action of row.actions) {
+        const button = this._btn(action.label, () => this._retryPress(row, action));
+        // Nothing is pressable while a call is in flight behind the gate.
+        if (held) button.disabled = true;
+        controls.push(button);
+      }
+      const parts = [
+        PF.el("div", { style: "font:700 12px/1.6 inherit;", text: row.label }),
+        PF.el("div", { style: "opacity:0.9;", text: row.body }),
+      ];
+      const note = this._retryNotes[row.stage];
+      if (note) parts.push(PF.el("div", { style: "opacity:0.75;", text: note }));
+      for (const action of row.actions)
+        if (action.note) parts.push(PF.el("div", { style: "opacity:0.75;", text: action.note }));
+      parts.push(PF.el("div", { style: "display:flex;gap:6px;flex-wrap:wrap;" }, controls));
+      blocks.push(PF.el("div", { style: "display:flex;flex-direction:column;gap:6px;" }, parts));
+    }
+    blocks.push(PF.el("div", { style: "opacity:0.75;", text: C.footer }));
+    body.replaceChildren(...blocks);
+  }
+
+  /** A row button. Everything that replaces the world asks first; everything
+   *  else — a pack call, a deferral — is its own press and no more. */
+  _retryPress(row, action) {
+    const C = PF.save.RETRY_COPY;
+    if (action.mode === "rebuild") {
+      // THE FREE PRESS COSTS MILLISECONDS, NOT CALLS, and it says so before it
+      // asks anything: the rebuild is deterministic at the same seed, so when it
+      // cannot answer yet the honest thing is to change the copy rather than
+      // walk the player through a confirmation for a no-op.
+      if (!PF.save.canRebuild(this.core)) {
+        this._retryNotes[row.stage] = C.rebuildUnchanged;
+        this._retryNoteRev = (this._retryNoteRev ?? 0) + 1;
+        this._syncRetry();
+        return;
+      }
+      this._retryConfirm = { stage: row.stage, action, free: true };
+      this._retryKey = null;
+      this._syncRetry();
+      return;
+    }
+    if (action.mode === "reroll") {
+      this._retryConfirm = { stage: row.stage, action, free: false };
+      this._retryKey = null;
+      this._syncRetry();
+      return;
+    }
+    void this._retryGo({ stage: row.stage, action, free: false });
+  }
+
+  async _retryGo(confirm) {
+    this._retryConfirm = null;
+    const stage = confirm.stage;
+    const ok = await PF.save.retryAction(this.core, stage, confirm.action);
+    if (!ok && confirm.action.mode) {
+      // A re-press after a failure says the second-failure sentence rather than
+      // repeating the first one — session-only, on purpose.
+      this._retryNotes[stage] =
+        confirm.action.mode === "rebuild" ? PF.save.RETRY_COPY.rebuildUnchanged : PF.save.RETRY_COPY.secondFailure;
+      this._retryNoteRev = (this._retryNoteRev ?? 0) + 1;
+    }
+    this._retryKey = null;
+    this.update();
   }
 
   toggleJournal() {
@@ -2275,41 +2505,45 @@ PF.Hud = class {
     // same reason `gateWhy` is: a stage that changed without the state changing
     // would leave the wrong sentence up.
     const gateStage = gate ? (PF.save.gate.stage ?? "brief") : null;
+    // WHETHER THIS GATE IS A POST-START ONE (0.16 §2.10d). In the memo key for
+    // exactly the reason `gateWhy` and `gateStage` are: it decides both the note
+    // under the reason and whether the second exit is on screen, and a flag that
+    // changed without the state changing would leave the wrong screen up.
+    const gatePost = gate ? PF.save.gate.postStart === true : false;
+    // …and whether there is anywhere to go if the player declines. A brief-stage
+    // BOOT gate never offers it: the world under that one is the placeholder,
+    // which is the one thing nobody may be left standing in. A pack-stage gate
+    // does — the world is written, and only the work posted in it is missing —
+    // and so does any post-start gate, which is holding a world the player has
+    // already been living in.
+    const gateKeep = gate === "failed" && (gateStage === "pack" || (gatePost && !!sim.world && !sim.world.interim));
     if (
       mode !== this._mode ||
       spatialAvail !== this._spatialAvail ||
       gate !== this._gate ||
       gateWhy !== this._gateWhy ||
-      gateStage !== this._gateStage
+      gateStage !== this._gateStage ||
+      gatePost !== this._gatePost ||
+      gateKeep !== this._gateKeep
     ) {
       this._mode = mode;
       this._spatialAvail = spatialAvail;
       this._gate = gate;
       this._gateWhy = gateWhy;
       this._gateStage = gateStage;
+      this._gatePost = gatePost;
+      this._gateKeep = gateKeep;
       const inWorld = mode === "walk" && !gate;
       this.gateEl.style.display = gate ? "flex" : "none";
       this.gateRetry.style.display = gate === "failed" ? "" : "none";
-      this.gateTitle.textContent =
-        gate === "failed"
-          ? gateStage === "pack"
-            ? // NOT "the work for this world didn't finish being written": the pack
-              // stage is stamped on both sides of the pack's own seal, so on the
-              // arm where the work IS written and the install threw, that title
-              // named the wrong thing as missing. What is true on every arm is
-              // that the world did not finish coming up, which is also the thing
-              // the player is looking at a spinner instead of.
-              "This world didn't finish opening."
-            : "The world didn't finish being written."
-          : gateStage === "pack"
-            ? "Writing what your world has to say…"
-            : "Writing your world…";
-      this.gateBody.textContent =
-        gate === "failed"
-          ? `${PF.save.gateReason(gateWhy, gateStage)} ${PF.save.gateStageNote(gateStage)}`
-          : gateStage === "pack"
-            ? "The settlement is written. One more call is filling in what its people say and the work they have to offer."
-            : "One generation call is shaping the settlement, its people and the places in it. This can take a minute.";
+      this.gateKeep.style.display = gateKeep ? "" : "none";
+      // THE SCREEN'S WORDS ARE THE REGISTRY'S NOW (0.16 §2.10a). They used to be
+      // four hardcoded brief-vs-pack ternaries here — the one place in this
+      // package a string cannot be pinned without a DOM — so a third stage meant
+      // editing branches rather than adding a row, and the strings the player
+      // reads were the part nothing watched.
+      this.gateTitle.textContent = PF.save.gateTitle(gateStage, gate);
+      this.gateBody.textContent = PF.save.gateBody(gateStage, gate, gateWhy, gatePost);
       this.topbar.style.display = gate ? "none" : "";
       // Replay: the host owns the whole screen. Combat: keep a minimal HUD —
       // the mode is inferred from the narrative gameActiveState, which can flip
@@ -2337,6 +2571,8 @@ PF.Hud = class {
       // dialogue mode, so `!inWorld` hiding is a toggle these two have to own.
       this.journalChip.style.display = inWorld ? "" : "none";
       this.sheetChip.style.display = inWorld ? "" : "none";
+      // The retry chip has a second gate of its own — whether there is anything
+      // to say — so its visibility is settled below, off the live rows.
       // …AND THE PANELS THEMSELVES. The sheet CLOSES (plan §2.8): `e`, a cutscene
       // beat, and the props-driven replay/combat modes can all fire under an open
       // one, and a sheet that merely hid would resurface drawn against whoever
@@ -2371,6 +2607,53 @@ PF.Hud = class {
       // exactly "this dialogue came out of a conversation".
       if (mode === "dialogue" && !gate && sim.talkAnchorId == null)
         this.toast("Type in the message box below — Resume to keep walking");
+    }
+    // ── THE RETRY POPUP'S PER-FRAME RECONCILE (0.16 §2.10c) ──────────────────
+    // ABOVE the gate return, deliberately: this is the block that HIDES the
+    // panel under a gate, and one written below the return could never fire on
+    // the condition it was sited for (the talk window's own argument at the top
+    // of this method).
+    //
+    // CHAT IDENTITY FIRST. `_switchChat` never rebuilds the HUD, so this is the
+    // only place that can notice the chat moved — and everything the popup holds
+    // belongs to the chat that raised it.
+    if ((this.core.chatId ?? null) !== this._retryChat) {
+      this._retryChat = this.core.chatId ?? null;
+      this._retry = false;
+      this._retryConfirm = null;
+      this._retryNotes = {};
+      this._retryVisit = null;
+      this._retryKey = null;
+      this.retryEl.style.display = "none";
+    }
+    const retryRows = this._syncRetry();
+    const retryAllowed = mode === "walk" && !gate;
+    this.retryChip.style.display = retryAllowed && retryRows.length ? "" : "none";
+    if (!retryAllowed) {
+      this.retryEl.style.display = "none";
+    } else if (
+      !this._retry &&
+      this._retryVisit !== this._retryChat &&
+      // …AND NEVER OVER SOMETHING THE PLAYER IS ALREADY READING. `toggleRetry`
+      // is a member of the mutual-exclusion set, so an auto-open over an open
+      // journal would CLOSE it — a surface vanishing under somebody mid-read,
+      // for a popup they did not ask for at that moment. It waits instead; the
+      // visit memo is only spent when the panel actually mounts.
+      !this._journal &&
+      !this._sheet &&
+      this.boardMenu.style.display !== "flex" &&
+      this.core.talkOpen?.() !== true &&
+      retryRows.some((row) => !row.accepted)
+    ) {
+      // ONCE PER CHAT VISIT, and only for a stage nobody has already said
+      // "later" to. Everything after that is the chip: nothing nags, nothing
+      // blocks the game, and a close spends no choice.
+      this._retryVisit = this._retryChat;
+      this.toggleRetry();
+    } else if (this._retry && !retryRows.length) {
+      this.closeRetry();
+    } else {
+      this.retryEl.style.display = this._retry ? "flex" : "none";
     }
     // Nothing below the gate means anything: there is no beat to caption, nobody
     // to be standing next to, and the clock is not running.
