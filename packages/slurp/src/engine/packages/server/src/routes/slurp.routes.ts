@@ -599,16 +599,11 @@ export async function slurpRoutes(app: FastifyInstance) {
   // ponytail: counts by scanning; swap for aggregate queries if a player ever keeps
   // enough creator profiles for this to show up in the request time.
   app.get("/noodler/account-connection-counts", async (_req, _reply) => {
-    const [creators, accounts] = await Promise.all([noodle.listNoodlerAccounts(), noodle.listAccounts()]);
-    const followerCounts = new Map<string, number>();
-    for (const account of accounts) {
-      for (const followedId of account.settings.social.followingAccountIds ?? []) {
-        followerCounts.set(followedId, (followerCounts.get(followedId) ?? 0) + 1);
-      }
-    }
+    const creators = await noodle.listNoodlerAccounts();
     const at = new Date();
-    // Real followers now come from the audience funnel as well as the social following list, so a
-    // Creator who loses subscribers actually loses reach. That is what gives growth stakes.
+    // Real followers come from the audience funnel, and only from there. Following also moves the
+    // funnel now, so adding the social following list on top would count the same person twice —
+    // at 25x weight each.
     const countsFunnel = await createSlurpPopulationStorage(app.db).countFollowersForCreators(
       creators.map((creator) => creator.id),
     );
@@ -624,7 +619,7 @@ export async function slurpRoutes(app: FastifyInstance) {
             {
               accountId: creator.id,
               createdAt: creator.createdAt,
-              realFollowers: (followerCounts.get(creator.id) ?? 0) + (countsFunnel.get(creator.id) ?? 0),
+              realFollowers: countsFunnel.get(creator.id) ?? 0,
             },
             at,
           ),
@@ -1071,6 +1066,7 @@ export async function slurpRoutes(app: FastifyInstance) {
       logger.warn(error, "[slurp-world] Catch-up on open failed"),
     );
     const events = createSlurpEventsStorage(app.db);
+    const population = createSlurpPopulationStorage(app.db);
     const [items, unseen] = await Promise.all([events.list(viewer.id), events.listUnseen(viewer.id)]);
     // Actors are stored as ids so a renamed or departed account still renders. Resolve to display
     // names here: "abc-123 subscribed" tells the player nothing, which is the whole failure this
@@ -1081,8 +1077,16 @@ export async function slurpRoutes(app: FastifyInstance) {
     const names = new Map<string, string>();
     await Promise.all(
       actorIds.map(async (id) => {
+        // Three id spaces reach this field: a persona, a Slurp account (ambient profiles), and a
+        // generated population member. The population was added after this resolver and never
+        // wired into it, so every world-driven event — the questions and commissions that are the
+        // whole obligation layer — rendered as "Someone".
         const persona = await noodle.getViewer(id).catch(() => null);
-        const name = persona?.displayName ?? (await noodle.getNoodlerAccountById(id))?.displayName ?? null;
+        const name =
+          persona?.displayName ??
+          (await noodle.getNoodlerAccountById(id))?.displayName ??
+          (await population.get(id))?.displayName ??
+          null;
         if (name) names.set(id, name);
       }),
     );
@@ -1120,13 +1124,6 @@ export async function slurpRoutes(app: FastifyInstance) {
     const at = new Date();
     const snapshot = await readSlurpStudioSnapshot(app.db, viewer.id);
 
-    const followerCounts = new Map<string, number>();
-    for (const account of await noodle.listAccounts()) {
-      for (const followedId of account.settings.social.followingAccountIds ?? []) {
-        followerCounts.set(followedId, (followerCounts.get(followedId) ?? 0) + 1);
-      }
-    }
-
     const postsByAccount = await noodle.listNoodlerPostsByAccounts(
       operated.map((account) => account.id),
       6,
@@ -1146,7 +1143,7 @@ export async function slurpRoutes(app: FastifyInstance) {
           {
             accountId: account.id,
             createdAt: account.createdAt,
-            realFollowers: (followerCounts.get(account.id) ?? 0) + (studioFunnel.get(account.id) ?? 0),
+            realFollowers: studioFunnel.get(account.id) ?? 0,
           },
           at,
         );
@@ -2101,6 +2098,16 @@ export async function slurpRoutes(app: FastifyInstance) {
     }
     const updated = await noodle.updateViewerFollow(viewer.id, creator.id, body.followed);
     if (!updated) return reply.code(400).send({ error: "Could not update follow state" });
+    // Following is a funnel move like any other. Before this the social list and the funnel were
+    // two separate counts of the same person, and reach added both — so a persona who followed and
+    // subscribed counted twice, at 25x weight each.
+    if (body.followed) {
+      await noodle.advanceAudienceTie(viewer.id, creator.id, { stage: "follower" });
+    } else {
+      await createSlurpPopulationStorage(app.db)
+        .lapseTie(viewer.id, creator.id)
+        .catch(() => undefined);
+    }
     const freshViewer = await resolveViewerPersona(body.personaId);
     return buildViewerShell(await buildViewerContext(freshViewer ?? updated.account));
   });

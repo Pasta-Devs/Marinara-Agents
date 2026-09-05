@@ -167,10 +167,23 @@ export function createSlurpPopulationStorage(db: DB) {
       return { ...tie, ...next, spent: int(next.spent), interactions: int(next.interactions) };
     },
 
-    /** Drop a member back to `lapsed`. Used when a subscription ends or attention stops. */
+    /**
+     * Drop a member back to `lapsed`. Used when a subscription ends or attention stops.
+     *
+     * Does nothing when there is no tie. Creating one first — which it used to, via `ensureTie` —
+     * invented a relationship at the moment it ended, so unfollowing somebody you had never
+     * engaged with wrote a row saying you had drifted away from them.
+     */
     async lapseTie(memberId: string, creatorAccountId: string): Promise<void> {
-      const tie = await storage.ensureTie(memberId, creatorAccountId);
-      await db.update(slurpAudienceTies).set({ stage: "lapsed" }).where(eq(slurpAudienceTies.id, tie.id));
+      const rows = await db
+        .select()
+        .from(slurpAudienceTies)
+        .where(and(eq(slurpAudienceTies.memberId, memberId), eq(slurpAudienceTies.creatorAccountId, creatorAccountId)));
+      if (!rows[0]) return;
+      await db
+        .update(slurpAudienceTies)
+        .set({ stage: "lapsed" })
+        .where(eq(slurpAudienceTies.id, String(rows[0].id)));
     },
 
     async listTiesForCreator(creatorAccountId: string): Promise<SlurpAudienceTie[]> {

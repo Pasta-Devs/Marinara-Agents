@@ -26,7 +26,7 @@ import {
 } from "./slurp-fan-activity.service.js";
 import { tryNoodleOperation } from "./slurp-operation-lock.js";
 import { createSlurpPopulationStorage } from "../storage/slurp-population.storage.js";
-import { populationNoodlerFanIdentityProvider } from "./slurp-fan-identity-provider.js";
+import { NOODLER_FAN_IDENTITY_PREFIX, populationNoodlerFanIdentityProvider } from "./slurp-fan-identity-provider.js";
 import { newId } from "../../utils/id-generator.js";
 
 const FAN_PLAN_ROW_PREFIX = "fan-day:";
@@ -175,13 +175,17 @@ async function applyAcceptedActivities(
       // funnel: follower counts barely moved from the very people who were most active. A repost
       // carries further than a like — it shows you to somebody else's feed — so it ranks higher.
       const population = createSlurpPopulationStorage(db);
-      await population
-        .advanceTie(activity.actorId, activity.creatorId, {
-          stage: activity.type === "repost" ? "follower" : "liker",
-          interactions: 1,
-        })
-        .catch(() => undefined);
-      await population.touch(activity.actorId).catch(() => undefined);
+      // Same guard as `advanceAudienceTie`: a recovered plan written before the population existed
+      // still carries `noodler-fan:` archetype ids, and a tie for one is an unresolvable follower.
+      if (!activity.actorId.startsWith(NOODLER_FAN_IDENTITY_PREFIX)) {
+        await population
+          .advanceTie(activity.actorId, activity.creatorId, {
+            stage: activity.type === "repost" ? "follower" : "liker",
+            interactions: 1,
+          })
+          .catch(() => undefined);
+        await population.touch(activity.actorId).catch(() => undefined);
+      }
     }
     current = markNoodleFanActivityApplied(current, run.id, activity.id);
   }

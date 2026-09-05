@@ -1,5 +1,16 @@
 # Slurp release notes
 
+## 1.1.7 — 2026-09-05
+
+- Fans who act through the world now appear by name in Notifications instead of
+  as "Someone".
+- Follower counts no longer count the same person twice. Following a Creator now
+  counts towards their audience, and unfollowing takes it away again.
+- Unfollowing somebody you never engaged with no longer records that you drifted
+  away from them.
+- Opening Slurp repeatedly is cheaper: the audience sweep only runs when enough
+  time has passed for it to find anything.
+
 ## 1.1.6 — 2026-09-05
 
 - Messages now shows conversations written to your Creators, not only the ones

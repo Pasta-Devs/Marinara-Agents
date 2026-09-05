@@ -76,6 +76,7 @@ import { openSlurpGoal, readSlurpGoal, slurpGoalKey, type SlurpGoal } from "../s
 import { createSlurpEventsStorage } from "./slurp-events.storage.js";
 import { createSlurpPopulationStorage } from "./slurp-population.storage.js";
 import type { SlurpFunnelStage } from "../slurp/slurp-population.js";
+import { NOODLER_FAN_IDENTITY_PREFIX } from "../slurp/slurp-fan-identity-provider.js";
 import type { SlurpEventKind } from "../slurp/slurp-event-weight.js";
 import {
   earn,
@@ -5481,6 +5482,10 @@ export function createSlurpStorage(db: DB) {
       creatorAccountId: string,
       input: { stage?: SlurpFunnelStage; spent?: number; interactions?: number },
     ): Promise<void> {
+      // A legacy `noodler-fan:` id names an archetype slot, not a person, and persisted day plans
+      // written before the population existed still carry them. A tie for one is a follower who
+      // can never be resolved or shown, inflating reach with somebody who does not exist.
+      if (memberId.startsWith(NOODLER_FAN_IDENTITY_PREFIX)) return;
       try {
         await createSlurpPopulationStorage(db).advanceTie(memberId, creatorAccountId, input);
       } catch (error) {

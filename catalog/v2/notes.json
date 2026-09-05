@@ -36,6 +36,12 @@
     "slurp": {
       "versions": [
         {
+          "version": "1.1.7",
+          "date": "2026-09-05",
+          "notes": "- Fans who act through the world now appear by name in Notifications instead of\n  as \"Someone\".\n- Follower counts no longer count the same person twice. Following a Creator now\n  counts towards their audience, and unfollowing takes it away again.\n- Unfollowing somebody you never engaged with no longer records that you drifted\n  away from them.\n- Opening Slurp repeatedly is cheaper: the audience sweep only runs when enough\n  time has passed for it to find anything.",
+          "highlight": false
+        },
+        {
           "version": "1.1.6",
           "date": "2026-09-05",
           "notes": "- Messages now shows conversations written to your Creators, not only the ones\n  you started. Anything a fan opened was previously unreachable.\n- Fans reach your Creators on a fresh install, instead of waiting on a setting\n  that is off by default.\n- Likes, replies and reposts count towards your following, so the people who\n  show up most now affect your reach.\n- Tip goals appear on your Creator's profile, where a reader can see them.\n- Passing a follower milestone appears in Notifications.",

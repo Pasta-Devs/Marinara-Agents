@@ -136,4 +136,34 @@ assert.match(fanRun, /cast\.map\(\(member\) => population\.touch\(member\.id\)/u
 assert.match(fanRun, /advanceTie\(activity\.actorId, activity\.creatorId/u);
 assert.match(fanRun, /activity\.type === "repost" \? "follower" : "liker"/u, "a repost carries further than a like");
 
+// ── Cross-boundary defects found by an interaction review ───────────────────
+// Three id spaces reach an actor label: a persona, a Slurp account, and a population member. The
+// population was added after the notification name resolver and never wired into it, so every
+// world-driven event rendered as "Someone".
+const slurpRoutes2 = read("routes/slurp.routes.ts");
+assert.match(slurpRoutes2, /\(await population\.get\(id\)\)\?\.displayName/u);
+
+// Following and the funnel were two counts of the same person, and reach added both at 25x each.
+// Following now moves the funnel, and the social list is no longer summed on top of it.
+assert.match(slurpRoutes2, /advanceAudienceTie\(viewer\.id, creator\.id, \{ stage: "follower" \}\)/u);
+assert.doesNotMatch(
+  slurpRoutes2,
+  /realFollowers: \(followerCounts\.get/u,
+  "reach must have a single source for real followers",
+);
+
+// A legacy `noodler-fan:` id names an archetype slot, not a person. Persisted day plans still
+// carry them, and a tie for one is a follower who can never be resolved but still inflates reach.
+assert.match(slurpStorage, /if \(memberId\.startsWith\(NOODLER_FAN_IDENTITY_PREFIX\)\) return;/u);
+assert.match(fanRun, /!activity\.actorId\.startsWith\(NOODLER_FAN_IDENTITY_PREFIX\)/u);
+
+// Lapsing must not invent a relationship at the moment it ends.
+const popStorage = read("services/storage/slurp-population.storage.ts");
+const lapse = popStorage.slice(popStorage.indexOf("async lapseTie"));
+assert.doesNotMatch(lapse.slice(0, 500), /ensureTie/u, "lapsing must not create a tie");
+assert.match(lapse.slice(0, 500), /if \(!rows\[0\]\) return;/u);
+
+// Churn is a full scan and the catch-up runs on every notifications read.
+assert.match(world, /CHURN_MIN_ELAPSED_DAYS/u);
+
 console.log("slurp population regression passed");
