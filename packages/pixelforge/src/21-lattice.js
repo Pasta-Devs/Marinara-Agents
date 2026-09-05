@@ -54,7 +54,16 @@ PF.lattice = (() => {
     // below), but the separator costs nothing and removes the landmine.
     CHUNK_ID_PREFIX: "w",
     CHUNK_MAP_KIND: "wild", // deliberately not "settlement": the pocket sweep skips those
-    CHUNK_MAP_EXPORT: false, // C10 — the export path dereferences zones across awaits
+    /** THE ONE ENTRY IN THIS BLOCK THAT IS NOT A PLAYTEST KNOB. C10 is anti-scope
+     *  and it is crash-safety rather than taste: the World Maps route is ADDITIVE
+     *  WITH NO DELETE, and the export planner dereferences `world.zones[zoneId]`
+     *  across its awaits while its staleness check never asks whether a zone
+     *  survived — so a cell that exported and was then evicted is a crash, and a
+     *  cell that exported at all is a permanent row on a real player's map, one
+     *  per patch of wilderness they ever walked through, on a lattice with no
+     *  edge. Lane 9 pins the LITERAL and then drives the shipped export, because
+     *  reading this constant back is true for every value it could hold. */
+    CHUNK_MAP_EXPORT: false,
     // ── Streams ──────────────────────────────────────────────────────────────
     STREAM_LABEL: "wild",
     NAME_STREAM_LABEL: "wild-name",

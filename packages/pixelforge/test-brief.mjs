@@ -33096,7 +33096,7 @@ const layoutFingerprint = (w) => {
 
 // ═══ THE WILDERNESS LATTICE — SLICE 1, THE SUBSTRATE (0.16) ═════════════════
 // Cell addressing, the chunk compile, the edge-gate contract, and the seam the
-// compiler now punches into the worlds it already builds. Nine lanes, and the
+// compiler now punches into the worlds it already builds. Ten lanes, and the
 // three load-bearing ones are the three that catch the mistakes this design was
 // written around: a materialization that leaks between cells (lane 1), a punch
 // that moves the main tile stream (lane 3), and a gate that leads somewhere the
@@ -33540,7 +33540,6 @@ const layoutFingerprint = (w) => {
     checkWorld(w, sealed, "lattice/resident");
     const victim = w.zones[chunkIds(w)[0]];
     assert.equal(victim.mapKind, TUNE.CHUNK_MAP_KIND, "a cell is a `wild`, which the sweep does not exempt");
-    assert.equal(victim.mapExport, TUNE.CHUNK_MAP_EXPORT, "…and claims no World Maps row");
     victim.solid[0] = 0; // a corner of the border ring: walkable, and walled in
     assert.throws(
       () => checkWorld(w, sealed, "lattice/broken"),
@@ -33702,7 +33701,85 @@ const layoutFingerprint = (w) => {
     );
   }
 
-  // ── 9. THE SKY AND THE COUNTRY ARE SPENT ──────────────────────────────────
+  // ── 9. NO CELL IS EVER A ROW ON THE PLAYER'S MAP ──────────────────────────
+  // C10, and the plan files it under crash-safety rather than taste. The World
+  // Maps route is ADDITIVE WITH NO DELETE (55-maps-export says so in its own
+  // comment), and the export's planner dereferences `world.zones[zoneId]` across
+  // its awaits while `_stale()` never asks whether a zone survived — so a cell
+  // that exported and was then evicted is the crash the stamp exists to prevent,
+  // and a cell that exported at all is a permanent row on somebody's real map,
+  // one per patch of wilderness they ever walked through, on a lattice with no
+  // edge.
+  //
+  // So the stamp is read as the LITERAL and then MEASURED. Comparing a cell's
+  // `mapExport` against the constant that wrote it is true for every value of
+  // the constant, which is a sentence about the tunables block and not about the
+  // wilderness. This lane drives the shipped export over a world with a country
+  // standing in it and reads back what it would have posted.
+  {
+    const { world: w } = latticeWorld(loadedPF, "cozy-village", 313370, { surround: "fields" });
+    ensureAll(w, cellsTo(2));
+    const cells = chunkIds(w);
+    assert.ok(cells.length >= 20, `a country is standing to be exported (${cells.length} cells)`);
+    for (const id of cells) assert.equal(w.zones[id].mapExport, false, `${id} claims no World Maps row`);
+
+    const core = {
+      chatId: "chat-lattice-maps",
+      sim: { world: w, zoneId: w.startZone },
+      markDirty() {},
+      hud: { toast() {}, refreshChips() {} },
+    };
+    const posted = [];
+    const realGetSpatial = loadedPF.api.getSpatial;
+    const realPostLocations = loadedPF.api.postSpatialLocations;
+    let revision = 1;
+    let serverLocs = [{ id: "loc-root", kind: "settlement" }];
+    try {
+      loadedPF.api.getSpatial = async () => ({
+        definition: { revision, locations: serverLocs.slice() },
+        currentLocationId: "loc-root",
+        breadcrumb: [{ name: "Rootville" }],
+        destinations: [],
+      });
+      loadedPF.api.postSpatialLocations = async (chatId, body) => {
+        for (const row of body.locations) posted.push(row.id);
+        serverLocs = serverLocs.concat(body.locations.map((row) => ({ id: row.id, kind: row.kind })));
+        revision++;
+        return { ok: true, status: 200, body: {} };
+      };
+      loadedPF.mapsExport._done = new WeakSet();
+      loadedPF.mapsExport._failed = null;
+      loadedPF.spatial.reset();
+      // Bind the root by hand, with the refresh's own fire-and-forget export
+      // held off, so the run below is the one the assertions are reading.
+      loadedPF.mapsExport._inFlightWorld = w;
+      await loadedPF.spatial.refresh(core);
+      loadedPF.mapsExport._inFlightWorld = null;
+      await loadedPF.mapsExport.maybeSync(core);
+    } finally {
+      loadedPF.api.getSpatial = realGetSpatial;
+      loadedPF.api.postSpatialLocations = realPostLocations;
+      loadedPF.mapsExport._done = new WeakSet();
+      loadedPF.mapsExport._inFlightWorld = null;
+      loadedPF.mapsExport._failed = null;
+      loadedPF.spatial.reset();
+    }
+    // The export really ran — otherwise "no cell was posted" is a sentence about
+    // a call that never happened. The brief's own zones ARE the rows it exists
+    // to write, so their presence is the witness.
+    assert.ok(posted.length > 0, `the export ran and posted the brief's own zones (${posted.length} rows)`);
+    // A location id is `pf.<hash>.<zoneId>` and a cell id carries underscores, so
+    // the last dotted segment spells the zone back — the same split the route's
+    // own ids are composed for.
+    const cellRows = posted.filter((locId) => L.parse(String(locId).split(".").pop()));
+    assert.deepEqual(cellRows, [], `the export wrote a permanent map row for wilderness: ${cellRows.join(", ")}`);
+    for (const id of cells) {
+      assert.equal(w.bindings[loadedPF.mapsExport.idFor(w, id)], undefined, `${id} binds no location`);
+      assert.equal(w.zones[id].spatialLocationId, null, `…and ${id} records none`);
+    }
+  }
+
+  // ── 10. THE SKY AND THE COUNTRY ARE SPENT ─────────────────────────────────
   // The axes and the surround are inputs, not decoration: a subpolar wet country
   // and an equatorial arid one deal different terrain from one seed, and the
   // settlement's own surround is felt hardest in the ring it can see.
