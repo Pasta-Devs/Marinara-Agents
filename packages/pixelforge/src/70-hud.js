@@ -1724,9 +1724,13 @@ PF.Hud = class {
       // is true in the state the row is usually in and false in the two where
       // the compile already answers. The registry owns both halves and the
       // choice between them — this is one repaint, not a per-frame cost, and
-      // the memo above is what keeps it that way. Which is also why the answer
-      // cannot go stale on the panel: the only things that move it are the
-      // world, the sealed setting and the gate, and all three are in that key.
+      // the memo above is what keeps it that way. Nor can the answer go stale on
+      // the panel, and the enumeration is exact: the probe reads the standing
+      // world, the sealed setting, the gate, and — behind `_regenSeed` and
+      // `_configTheme` — the wizard's seed and theme. The first three are in
+      // that key. The other two are written at setup and nothing moves them
+      // once a game has started, and the seed the probe actually uses is the
+      // standing world's, which is in the key.
       for (const action of row.actions) {
         const line = PF.save.actionNote(this.core, action);
         if (line) parts.push(PF.el("div", { style: "opacity:0.75;", text: line }));
@@ -1751,56 +1755,86 @@ PF.Hud = class {
    *  fork asks, and it is the only thing this branch may believe. */
   _retryPress(row, action) {
     const C = PF.save.RETRY_COPY;
-    if (action.mode === "rebuild") {
-      // THE FREE PRESS COSTS MILLISECONDS, NOT CALLS, and it says so before it
-      // asks anything: the rebuild is deterministic at the same seed, so when it
-      // cannot answer yet the honest thing is to change the copy rather than
-      // walk the player through a confirmation for a no-op.
-      if (!PF.save.canRebuild(this.core)) {
-        this._retryNotes[row.stage] = C.rebuildUnchanged;
-        this._retryNoteRev = (this._retryNoteRev ?? 0) + 1;
-        this._syncRetry();
-        return;
-      }
-      this._retryConfirm = { stage: row.stage, action, free: true };
-      this._retryKey = null;
+    // WHAT A PRESS COSTS AND WHAT IT REPLACES ARE TWO QUESTIONS, and only the
+    // first of them is the mode's to answer. The free rebuild costs milliseconds
+    // rather than calls, and it says so before it asks anything: the rebuild is
+    // deterministic at the same seed, so when it cannot answer yet the honest
+    // thing is to change the copy rather than walk the player through a
+    // confirmation for a no-op.
+    const free = action.mode === "rebuild";
+    if (free && !PF.save.canRebuild(this.core)) {
+      this._retryNotes[row.stage] = C.rebuildUnchanged;
+      this._retryNoteRev = (this._retryNoteRev ?? 0) + 1;
       this._syncRetry();
       return;
     }
+    // THE SECOND QUESTION IS THE REGISTRY'S, FOR EVERY BUTTON WITHOUT EXCEPTION.
+    // The free press installs the same world with the same permanent severance
+    // the paid one does — it just does it for nothing — so a branch that asked
+    // first and reached this line only for the priced modes was the same rule
+    // that had quietly stopped being true one button along: the flag that says
+    // which presses replace the world had a reader the free press never got to.
     if (PF.save.retryReplacesWorld(this.core, row.stage, action.mode)) {
-      // Which of the two priced shapes it is comes off the registry as well: the
-      // cascade's press spends a call on what its people say and lands the
-      // player in a setting that is already written and stored, so it may not
-      // wear the sentence that prices writing one.
+      // Which of the three shapes the confirmation wears comes off the registry
+      // as well: the cascade's press spends a call on what its people say and
+      // lands the player in a setting that is already written and stored, so it
+      // may not wear the sentence that prices writing one — and the free press
+      // may not wear either, because it makes no call at all.
       const cascade = PF.save.stage(row.stage)?.cascade?.mode === action.mode;
-      this._retryConfirm = { stage: row.stage, action, free: false, cascade };
+      this._retryConfirm = { stage: row.stage, action, free, cascade };
       this._retryKey = null;
       this._syncRetry();
       return;
     }
-    void this._retryGo({ stage: row.stage, action, free: false });
+    void this._retryGo({ stage: row.stage, action, free });
   }
 
   async _retryGo(confirm) {
     this._retryConfirm = null;
     const stage = confirm.stage;
-    // A REFUSAL IS NOT A FAILURE, and which one this is has to be asked BEFORE
-    // the dispatch. The pre-arm flush is the one window where a press is already
-    // out and the panel is still live to take another — no gate is armed yet, so
-    // the held-disable does not apply — and `regenerateStage` turns the second
-    // one away having spent nothing and failed nothing. Asked after the await
-    // instead, the record is the FIRST press's and it has already settled.
+    // A REFUSAL IS NOT A FAILURE, and which one this is is asked BEFORE the
+    // dispatch because that is the moment the question is about: the pre-arm
+    // flush is the window where a press is already out and the panel is still
+    // live to take another — no gate is armed yet, so the held-disable does not
+    // apply — and `regenerateStage` turns the second one away having spent
+    // nothing and failed nothing. Read after the await, the answer would be
+    // about the first press's record rather than about this press's refusal.
+    // (Both readings answer the same in the window a press can actually land
+    // in: the refusal returns two microtasks before an after-read could run.
+    // This ordering is the one that cannot start disagreeing, not a fault being
+    // held off by an inch.)
     const busy = PF.save.retryInFlight(this.core);
+    // …AND THE PRESS BELONGS TO THE CHAT THAT MADE IT. That same flush is the
+    // OTHER window the panel is live in: switch chat inside it and
+    // `regenerateStage` returns false having dispatched nothing, while the
+    // per-frame reconcile has already emptied this map for the chat that just
+    // arrived. Written anyway, a sentence about a press nobody there made lands
+    // on their screen — which is the reconcile's own contract, defeated by a
+    // write that lands after it.
+    const pressedIn = this.core.chatId ?? null;
     const ok = await PF.save.retryAction(this.core, stage, confirm.action);
-    if (!ok && confirm.action.mode) {
-      // A re-press after a failure says the second-failure sentence rather than
-      // repeating the first one — session-only, on purpose. A press that was
-      // merely refused says what actually happened to it instead: nothing.
-      this._retryNotes[stage] = busy
-        ? PF.save.RETRY_COPY.pressInFlight
-        : confirm.action.mode === "rebuild"
-          ? PF.save.RETRY_COPY.rebuildUnchanged
-          : PF.save.RETRY_COPY.secondFailure;
+    if (confirm.action.mode && (this.core.chatId ?? null) === pressedIn) {
+      // THE SENTENCE UNDER THE ROW IS ABOUT THE PRESS THAT WAS JUST MADE, which
+      // is why a press that DID what it said clears it rather than leaving the
+      // last one standing: "nothing has changed yet" over a row whose setting
+      // has since been rewritten is the same false-in-this-state copy the
+      // sub-line above was fixed for.
+      //
+      // EVERY SENTENCE IT CAN WRITE IS ABOUT A PRESS THAT SPENT NOTHING
+      // (`retryAction` answers true the moment a call goes out), and the two
+      // that exist are the two refusals that leave NO SCREEN behind them: an
+      // attempt already running, and a free rebuild this build still cannot
+      // answer. A refusal that does raise the failure screen — the pack retry
+      // whose choice-clearing write did not go through — has already said what
+      // happened, there and in its own words, so the panel adds nothing over
+      // the top of it.
+      this._retryNotes[stage] = ok
+        ? null
+        : busy
+          ? PF.save.RETRY_COPY.pressInFlight
+          : confirm.action.mode === "rebuild"
+            ? PF.save.RETRY_COPY.rebuildUnchanged
+            : null;
       this._retryNoteRev = (this._retryNoteRev ?? 0) + 1;
     }
     this._retryKey = null;

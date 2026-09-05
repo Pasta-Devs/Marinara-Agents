@@ -189,14 +189,19 @@ const RETRY_COPY = {
   confirmFreeGo: "Yes, build it",
   confirmCascadeGo: "Yes, take me there",
   confirmBack: "Not now",
+  // THE SENTENCE UNDER A ROW IS ALWAYS ABOUT A PRESS THAT SPENT NOTHING, and
+  // that is a fact about `regenerateStage` rather than a policy: it answers TRUE
+  // the moment a call goes out, so a call that comes back badly paints the
+  // gate's own failure screen and can never reach this map. A second-failure
+  // line ("the problem is likely the setting, not luck") lived here for that
+  // never-taken arm and was therefore false wherever it actually landed — on a
+  // press turned away by the storage precondition, and on a press abandoned by a
+  // chat switch. Refusals get refusal words, and only the ones that leave no
+  // screen behind them need any: the one window where the panel is still live
+  // with a press already out is the pre-arm flush, where the re-entrancy check
+  // turns the second press away having spent nothing and having failed nothing.
   // Session-only, honestly re-derived as first-time after a reload: a durable
   // attempt log is refused for the same reason a durable failure log is.
-  secondFailure: "If this happens again, the problem is likely the setting, not luck.",
-  // …AND A REFUSED PRESS IS NOT A FAILED ONE. The one window where the panel is
-  // still live with a press already out is the pre-arm flush, and a press
-  // landing in it is turned away by the re-entrancy check having spent nothing
-  // and having failed nothing — so the sentence above would report a failure
-  // that never happened, about a call that is still perfectly fine.
   pressInFlight: "That attempt is already running, so this press changed nothing — it finishes on its own.",
 };
 
