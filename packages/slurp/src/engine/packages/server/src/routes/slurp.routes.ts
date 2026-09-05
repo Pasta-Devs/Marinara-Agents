@@ -126,6 +126,7 @@ import {
   slurpPostUnlockCount,
 } from "../services/slurp/slurp-reach.js";
 import { slurpFollowerMilestone, slurpMilestonesCrossed } from "../services/slurp/slurp-milestones.js";
+import { slurpPayoutAllowance } from "../services/slurp/slurp-earnings.js";
 import { createSlurpEventsStorage } from "../services/storage/slurp-events.storage.js";
 import { advanceSlurpWorld } from "../services/slurp/slurp-world.operation.js";
 import { createSlurpPopulationStorage } from "../services/storage/slurp-population.storage.js";
@@ -1111,6 +1112,39 @@ export async function slurpRoutes(app: FastifyInstance) {
     return { ok: true };
   });
 
+  /**
+   * Withdraw earnings into spending money.
+   *
+   * The circuit only closes here: without a payout, earnings are a scoreboard attached to nothing
+   * and being a successful Creator does not change your life as a fan.
+   */
+  app.post("/noodler/accounts/:id/payout", async (req, reply) => {
+    const parsed = z
+      .object({ personaId: z.string().trim().min(1), amount: z.number().int().min(1).max(100_000) })
+      .safeParse(req.body ?? {});
+    if (!parsed.success) return reply.code(400).send({ error: parsed.error.flatten() });
+    const viewer = await resolveViewerPersona(parsed.data.personaId);
+    if (!viewer) return reply.code(404).send({ error: "Slurp persona not found" });
+    const { id } = req.params as { id: string };
+    const creator = await noodle.getNoodlerAccountById(id);
+    if (!creator || !creatorBelongsToViewer(creator, viewer)) {
+      return reply.code(403).send({ error: "Only the Creator's owner can withdraw." });
+    }
+    const result = await noodle.payOutEarnings(creator.id, parsed.data.amount);
+    if (result.status !== "paid") {
+      const earnings = await noodle.getEarnings(creator.id);
+      return reply.code(400).send({
+        error: "That is more than today's payout allows.",
+        allowance: slurpPayoutAllowance(earnings, new Date()),
+      });
+    }
+    return {
+      earnings: result.earnings,
+      allowance: slurpPayoutAllowance(result.earnings, new Date()),
+      wallet: result.wallet,
+    };
+  });
+
   app.get("/noodler/studio", async (req, reply) => {
     const parsed = noodlerViewerPersonaSchema.safeParse(req.query);
     if (!parsed.success) return reply.code(400).send({ error: parsed.error.flatten() });
@@ -1200,6 +1234,7 @@ export async function slurpRoutes(app: FastifyInstance) {
           earnings,
           milestone: slurpFollowerMilestone(followers),
           goal: goal ? slurpGoalProgress(goal, earnings.lifetime) : null,
+          payoutAllowance: slurpPayoutAllowance(earnings, at),
           // Null rather than zero on a first read: "no change yet" and "measured no change" are
           // different, and the client renders them differently.
           followersDelta: previous ? followers - previous.followers : null,

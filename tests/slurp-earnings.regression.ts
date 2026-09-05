@@ -7,6 +7,7 @@ import {
   emptySlurpEarnings,
   payout,
   readSlurpEarnings,
+  slurpPayoutAllowance,
   reverse,
   slurpEarningsKey,
 } from "../packages/slurp/src/engine/packages/server/src/services/slurp/slurp-earnings.js";
@@ -24,6 +25,41 @@ assert.equal(earned.ledger[1]?.note, "@fan");
 assert.equal(earn(earned, "tip", 0, at), earned);
 assert.equal(earn(earned, "tip", -5, at), earned);
 assert.equal(earn(earned, "tip", 1.5, at), earned);
+
+// ── The daily allowance protects the fan economy ────────────────────────────
+// This is the whole reason the two balances are separate. Earnings are meant to be large; spending
+// money is meant to be scarce, because a purchase you can always afford is not a choice. If a
+// successful Creator could move their whole balance across, the fan economy would end the moment
+// the first audience arrived.
+{
+  const small = earn(emptySlurpEarnings(), "tip", 500, at);
+  const large = earn(emptySlurpEarnings(), "tip", 50_000, at);
+  assert.ok(slurpPayoutAllowance(small, at) >= 60, "withdrawing must never be worse than the daily stipend");
+  assert.ok(slurpPayoutAllowance(large, at) > slurpPayoutAllowance(small, at), "success must be felt");
+  // Roughly four times the stipend at the top, not an escape from the economy.
+  assert.ok(slurpPayoutAllowance(large, at) <= 260);
+  assert.ok(
+    slurpPayoutAllowance(large, at) < slurpPayoutAllowance(small, at) * 4,
+    "the curve must flatten rather than run away",
+  );
+  // Never more than is actually there.
+  const broke = earn(emptySlurpEarnings(), "tip", 5, at);
+  assert.equal(slurpPayoutAllowance(broke, at), 5);
+}
+
+// The allowance is spent down within a day and resets the next.
+{
+  const rich = earn(emptySlurpEarnings(), "tip", 5_000, at);
+  const allowance = slurpPayoutAllowance(rich, at);
+  const paidOut = payout(rich, allowance, at);
+  assert.ok(paidOut);
+  assert.equal(slurpPayoutAllowance(paidOut, at), 0, "the day's allowance is used up");
+  const tomorrow = new Date("2026-09-06T12:00:00.000Z");
+  assert.ok(slurpPayoutAllowance(paidOut, tomorrow) > 0, "a new day restores it");
+  // Refused rather than clamped: a caller asking for more has misread the state, and silently
+  // paying less would leave the player believing they moved more.
+  assert.equal(payout(rich, allowance + 1, at), null);
+}
 
 // ── A payout moves money out but never lowers the score ─────────────────────
 // Withdrawing what you earned does not mean you earned less. `lifetime` is what the Creator home
@@ -92,5 +128,28 @@ assert.doesNotMatch(
   /const recipientId = creator\.sourceKind === "persona" \? creator\.sourceEntityId : creator\.id;/u,
   "creator income must not be redirected into a persona spending wallet",
 );
+
+// ── The circuit closes ──────────────────────────────────────────────────────
+// Without a payout, earnings are a scoreboard attached to nothing and being a successful Creator
+// does not change your life as a fan.
+const slurpStorage = readFileSync(
+  join(import.meta.dirname, "..", "packages/slurp/src/engine/packages/server/src/services/storage/slurp.storage.ts"),
+  "utf8",
+);
+assert.match(slurpStorage, /async payOutEarnings\(/u);
+// Only a persona-backed Creator can pay out: a character-backed one has nobody to pay.
+assert.match(
+  slurpStorage,
+  /creator\.sourceKind !== "persona" \|\| !creator\.sourceEntityId\) return \{ status: "refused" \}/u,
+);
+// Earnings are debited first, so a failure puts them back rather than minting spending money.
+assert.match(slurpStorage, /await writeEarnings\(creatorAccountId, current\);/u);
+
+const payoutRoutes = readFileSync(
+  join(import.meta.dirname, "..", "packages/slurp/src/engine/packages/server/src/routes/slurp.routes.ts"),
+  "utf8",
+);
+assert.match(payoutRoutes, /app\.post\("\/noodler\/accounts\/:id\/payout"/u);
+assert.match(payoutRoutes, /Only the Creator's owner can withdraw\./u);
 
 console.log("slurp earnings regression passed");

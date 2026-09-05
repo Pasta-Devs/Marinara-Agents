@@ -80,6 +80,7 @@ import { NOODLER_FAN_IDENTITY_PREFIX } from "../slurp/slurp-fan-identity-provide
 import type { SlurpEventKind } from "../slurp/slurp-event-weight.js";
 import {
   earn,
+  payout as payoutEarnings,
   readSlurpEarnings,
   reverse as reverseEarnings,
   slurpEarningsKey,
@@ -5530,6 +5531,44 @@ export function createSlurpStorage(db: DB) {
       } catch (error) {
         logger.warn(error, "[slurp-events] Could not record a %s event for %s", kind, creatorAccountId);
       }
+    },
+
+    /**
+     * Move earnings into the operating persona's spending money.
+     *
+     * This is what closes the circuit: a Creator who does well funds your habit as a fan. Only a
+     * persona-backed Creator can pay out, because a character-backed one has nobody to pay.
+     *
+     * The two writes are ordered earnings-first: if the wallet write fails the coins are put back,
+     * and a crash between them costs the player money they can see rather than minting money they
+     * cannot account for.
+     */
+    async payOutEarnings(
+      creatorAccountId: string,
+      amount: number,
+    ): Promise<{ status: "paid"; earnings: SlurpEarnings; wallet: SlurpWallet } | { status: "refused" }> {
+      const creator = await this.getNoodlerAccountById(creatorAccountId);
+      if (!creator || creator.sourceKind !== "persona" || !creator.sourceEntityId) return { status: "refused" };
+      const recipientId = creator.sourceEntityId;
+      const run = earningsUpdateQueue.then(async () => {
+        const current = await this.getEarnings(creatorAccountId);
+        const next = payoutEarnings(current, amount, new Date());
+        if (!next) return { status: "refused" as const };
+        await writeEarnings(creatorAccountId, next);
+        try {
+          const wallet = await this.getWallet(recipientId);
+          const credited = await writeWallet(
+            recipientId,
+            credit(wallet, "topUp", amount, new Date(), `payout: ${creator.handle}`),
+          );
+          return { status: "paid" as const, earnings: next, wallet: credited };
+        } catch (error) {
+          await writeEarnings(creatorAccountId, current);
+          throw error;
+        }
+      });
+      earningsUpdateQueue = run.catch(() => undefined);
+      return run;
     },
 
     async getGoal(creatorAccountId: string): Promise<SlurpGoal | null> {

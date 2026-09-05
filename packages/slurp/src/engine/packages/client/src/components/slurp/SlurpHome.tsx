@@ -83,6 +83,7 @@ import {
   type SlurpEventGroup,
   type SlurpStudioCreator,
   useSetSlurpGoal,
+  useSlurpPayout,
   useHideSlurpAd,
   useHideSlurpAdBrand,
   useRecordSlurpAdAction,
@@ -6787,6 +6788,8 @@ function SlurpStudioView({
                 </div>
               )}
 
+              {creator.payoutAllowance > 0 && personaId && <SlurpPayoutRow creator={creator} personaId={personaId} />}
+
               <SlurpGoalEditor creator={creator} personaId={personaId} />
 
               {creator.milestonesCrossed.length > 0 && (
@@ -7138,5 +7141,50 @@ function SlurpNotificationsView({
         </section>
       </div>
     </NoodlerFrame>
+  );
+}
+
+/**
+ * Move earnings into spending money.
+ *
+ * This is the step that connects the two seats the player occupies: a Creator who does well funds
+ * their habit as a fan. Without it earnings are a scoreboard attached to nothing.
+ *
+ * The daily allowance is shown rather than the balance, because the allowance is the number that
+ * decides what you can actually do today.
+ */
+function SlurpPayoutRow({ creator, personaId }: { creator: SlurpStudioCreator; personaId: string }) {
+  const { t: localizeUi } = useUiTranslation();
+  const payout = useSlurpPayout();
+  return (
+    <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg bg-[var(--accent)] p-3">
+      <span className="min-w-0">
+        <span className="block text-xs font-bold">
+          {localizeUi("ui.slurp.studio.payoutTitle", { defaultValue: "Available to withdraw today" })}
+        </span>
+        <span className="block text-[0.7rem] text-[var(--muted-foreground)]">
+          {localizeUi("ui.slurp.studio.payoutDetail", {
+            defaultValue: "{{amount}} coins, from {{balance}} earned and unspent.",
+            amount: creator.payoutAllowance.toLocaleString(),
+            balance: creator.earnings.coins.toLocaleString(),
+          })}
+        </span>
+      </span>
+      <button
+        type="button"
+        disabled={payout.isPending}
+        onClick={() =>
+          payout.mutate(
+            { creatorAccountId: creator.id, personaId, amount: creator.payoutAllowance },
+            { onError: (error) => toast.error(errorMessage(error)) },
+          )
+        }
+        className="min-h-9 shrink-0 rounded-lg bg-[var(--noodle-accent)] px-3 text-xs font-bold text-zinc-950 disabled:opacity-50"
+      >
+        {payout.isPending
+          ? localizeUi("ui.slurp.studio.payoutPending", { defaultValue: "Withdrawing…" })
+          : localizeUi("ui.slurp.studio.payout", { defaultValue: "Withdraw" })}
+      </button>
+    </div>
   );
 }

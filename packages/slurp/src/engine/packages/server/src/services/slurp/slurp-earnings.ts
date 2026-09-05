@@ -55,7 +55,45 @@ export type SlurpEarnings = {
   lifetime: number;
   /** Newest first, capped. An activity list, not an audit log. */
   ledger: SlurpEarningsEntry[];
+  /** UTC day `paidOutToday` belongs to. A different day resets it. */
+  payoutOn: string | null;
+  /** Coins already withdrawn today, against the daily allowance. */
+  paidOutToday: number;
 };
+
+/**
+ * The daily withdrawal ceiling.
+ *
+ * This is what protects the whole point of separating the two balances. Earnings are meant to be
+ * large; spending money is meant to be scarce, because a purchase you can always afford is not a
+ * choice. If a successful Creator could move their entire balance across, the fan economy would
+ * end the moment the first audience arrived.
+ *
+ * The floor sits at the daily stipend, so withdrawing is never worse than not bothering, and the
+ * ceiling is a few multiples of it. A big Creator meaningfully improves their spending power —
+ * roughly four times — rather than escaping the economy.
+ */
+const PAYOUT_FLOOR = 60;
+const PAYOUT_CEILING = 260;
+
+/** Lifetime earnings at which the allowance reaches its ceiling. */
+const PAYOUT_REFERENCE = 20_000;
+
+/**
+ * How much this Creator may still withdraw today.
+ *
+ * Grows on a square-root curve, so early success is felt immediately and later success keeps
+ * mattering without ever running away.
+ */
+export function slurpPayoutAllowance(earnings: SlurpEarnings, at: Date): number {
+  const lifetime = Number.isFinite(earnings.lifetime) ? Math.max(0, earnings.lifetime) : 0;
+  const scale = Math.min(1, Math.sqrt(lifetime / PAYOUT_REFERENCE));
+  const daily = Math.round(PAYOUT_FLOOR + (PAYOUT_CEILING - PAYOUT_FLOOR) * scale);
+  const takenToday = earnings.payoutOn === dayKey(at) ? Math.max(0, earnings.paidOutToday) : 0;
+  return Math.max(0, Math.min(daily - takenToday, earnings.coins));
+}
+
+const dayKey = (at: Date) => at.toISOString().slice(0, 10);
 
 const LEDGER_LIMIT = 60;
 
@@ -78,7 +116,7 @@ const intOrNull = (value: unknown): number | null =>
   typeof value === "number" && Number.isInteger(value) ? value : null;
 
 export function emptySlurpEarnings(): SlurpEarnings {
-  return { coins: 0, lifetime: 0, ledger: [] };
+  return { coins: 0, lifetime: 0, ledger: [], payoutOn: null, paidOutToday: 0 };
 }
 
 /**
@@ -122,7 +160,10 @@ export function readSlurpEarnings(raw: string | null): SlurpEarnings {
   const coins = intOrNull(value.coins);
   const lifetime = intOrNull(value.lifetime);
   const ledger = readLedger(value.ledger);
+  const paidOutToday = intOrNull(value.paidOutToday);
   return {
+    payoutOn: typeof value.payoutOn === "string" ? value.payoutOn : null,
+    paidOutToday: paidOutToday !== null && paidOutToday >= 0 ? paidOutToday : 0,
     coins: coins !== null && coins >= 0 ? coins : 0,
     // Lifetime can never be below the current balance: every coin held was earned at some point.
     lifetime: Math.max(lifetime !== null && lifetime >= 0 ? lifetime : 0, coins !== null && coins >= 0 ? coins : 0),
@@ -174,13 +215,17 @@ export function reverse(earnings: SlurpEarnings, amount: number, at: Date, note?
  * assume success. `lifetime` is deliberately untouched: withdrawing what you earned does not mean
  * you earned less.
  *
- * ponytail: no rate limit yet. Add the cap when a real audience makes the balance large enough to
- * matter — see the Live World Plan, Stage 0.
+
  */
 export function payout(earnings: SlurpEarnings, amount: number, at: Date): SlurpEarnings | null {
   if (!Number.isInteger(amount) || amount <= 0 || earnings.coins < amount) return null;
+  // Refused rather than clamped. A caller that asked for more than the day allows has misread the
+  // state, and silently paying out less would leave the player believing they moved more.
+  if (amount > slurpPayoutAllowance(earnings, at)) return null;
+  const today = dayKey(at);
+  const takenToday = earnings.payoutOn === today ? Math.max(0, earnings.paidOutToday) : 0;
   return record(
-    { ...earnings, coins: earnings.coins - amount },
+    { ...earnings, coins: earnings.coins - amount, payoutOn: today, paidOutToday: takenToday + amount },
     { kind: "payout", amount: -amount, at: at.toISOString() },
   );
 }

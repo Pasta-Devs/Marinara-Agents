@@ -537,6 +537,8 @@ export type SlurpStudioCreator = {
   };
   milestone: { reached: number | null; next: number | null; progress: number; remaining: number };
   goal: SlurpGoalProgress | null;
+  /** Coins this Creator may still withdraw today. */
+  payoutAllowance: number;
   topFans: SlurpTopFan[];
   /** Null on a first visit: "no change yet" and "measured no change" are different. */
   followersDelta: number | null;
@@ -591,6 +593,20 @@ export function useMarkSlurpNotificationsSeen() {
   return useMutation({
     mutationFn: (personaId: string) => api.post<{ ok: boolean }>("/slurp/noodler/notifications/seen", { personaId }),
     onSuccess: () => qc.invalidateQueries({ queryKey: [...noodleKeys.noodlerRoot(), "notifications"] }),
+  });
+}
+
+/** Withdraw earnings into spending money. This is what connects the two seats you play. */
+export function useSlurpPayout() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ creatorAccountId, ...body }: { creatorAccountId: string; personaId: string; amount: number }) =>
+      api.post<{ allowance: number }>(`/slurp/noodler/accounts/${encodeURIComponent(creatorAccountId)}/payout`, body),
+    onSuccess: () =>
+      Promise.all([
+        qc.invalidateQueries({ queryKey: [...noodleKeys.noodlerRoot(), "studio"] }),
+        qc.invalidateQueries({ queryKey: noodleKeys.noodlerViewers() }),
+      ]),
   });
 }
 
