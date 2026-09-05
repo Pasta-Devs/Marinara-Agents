@@ -127,6 +127,34 @@ export function selectNoodlerFanActivities(input: {
   return selected;
 }
 
+/**
+ * One line describing what this person is to this Creator.
+ *
+ * Kept to a sentence. The prompt already carries the posts, the creator card, and every other
+ * actor; a paragraph per fan would crowd out the thing they are reacting to.
+ */
+function describeFanRelationship(persona: {
+  spendTier: string;
+  stage?: string;
+  spent?: number;
+  knownForDays?: number;
+}): string {
+  const parts: string[] = [];
+  if (persona.stage && persona.stage !== "stranger") parts.push(persona.stage);
+  if (persona.knownForDays !== undefined) {
+    parts.push(
+      persona.knownForDays < 14
+        ? "new here"
+        : persona.knownForDays < 90
+          ? `around for ${Math.round(persona.knownForDays / 7)} weeks`
+          : `around for ${Math.round(persona.knownForDays / 30)} months`,
+    );
+  }
+  if (persona.spent) parts.push(`has spent ${persona.spent} coins here`);
+  else if (persona.spendTier === "none") parts.push("has never paid for anything");
+  return parts.length > 0 ? parts.join(", ") : "no history with this creator yet";
+}
+
 function buildFanActivityMessages(input: {
   creators: NoodlerFanCreatorCandidate[];
   settings: Pick<SlurpSettings, "fanLikesPerRefresh" | "fanRepliesPerRefresh" | "fanRepostsPerRefresh">;
@@ -139,6 +167,7 @@ function buildFanActivityMessages(input: {
     "Likes and reposts have null content. Replies are one short sentence, normally under 180 characters, natural, relevant, and not repetitive.",
     "Return JSON only with an activities array.",
     "Each actor handle has a weight; prefer higher-weight actors more often, proportionally.",
+    "Actors carry traits and a relationship to the creator. Write each reply as that specific person: a long-standing paying regular does not sound like somebody who arrived yesterday, and somebody whose trait is 'emoji only' does not write a paragraph.",
     `At most ${input.settings.fanLikesPerRefresh} likes, ${input.settings.fanRepliesPerRefresh} replies, and ${input.settings.fanRepostsPerRefresh} reposts total.`,
     `At most ${NOODLE_FAN_ACTIVITY_MAX_ACTIVITIES_PER_CREATOR} activities for any creator.`,
   ].join("\n");
@@ -149,8 +178,20 @@ function buildFanActivityMessages(input: {
       handle: candidate.creator.handle,
       bio: candidate.creator.bio,
     },
+    // Each actor arrives as a person, not a name. A comment from "a regular who has spent 240
+    // coins here over four months and only shows up at night" is a different comment from one by
+    // an anonymous handle, and all of this was already stored and thrown away.
     actorHandles: weightedIdentitySequence(candidate.identities, candidate.policy.archetypeWeights).map(
-      ({ identity, weight }) => ({ handle: identity.snapshot.handle, weight }),
+      ({ identity, weight }) => ({
+        handle: identity.snapshot.handle,
+        weight,
+        ...(identity.persona
+          ? {
+              traits: identity.persona.traits,
+              relationship: describeFanRelationship(identity.persona),
+            }
+          : {}),
+      }),
     ),
     // Locked bodies stay out, but the image line stays in: a teaser's picture is public.
     posts: candidate.posts.map(({ id, title, content, image, access }) =>

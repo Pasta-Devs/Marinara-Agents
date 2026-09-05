@@ -6,6 +6,23 @@ export interface NoodlerFanIdentity {
   id: string;
   archetype: NoodlerFanArchetype;
   snapshot: NoodleAuthorSnapshot;
+  /**
+   * Who this person is, for the prompt.
+   *
+   * The model used to receive `{ handle, weight }` and nothing else, so every generated comment
+   * came from a name with no person behind it. The population stores traits, a spend tier, and a
+   * relationship to each Creator, and none of it reached the one place it could matter.
+   */
+  persona?: {
+    traits: string[];
+    spendTier: string;
+    /** Funnel stage with this Creator, when there is a tie. */
+    stage?: string;
+    /** Coins spent with this Creator, ever. */
+    spent?: number;
+    /** How long they have been around this Creator, in days. */
+    knownForDays?: number;
+  };
 }
 
 export interface NoodlerFanIdentityProvider {
@@ -54,7 +71,17 @@ export const syntheticNoodlerFanIdentityProvider: NoodlerFanIdentityProvider = {
  * database write and belongs to the caller, not to a `resolve`.
  */
 export function populationNoodlerFanIdentityProvider(
-  members: readonly { id: string; handle: string; displayName: string; archetype: NoodlerFanArchetype }[],
+  members: readonly {
+    id: string;
+    handle: string;
+    displayName: string;
+    archetype: NoodlerFanArchetype;
+    traits: string[];
+    spendTier: string;
+    stage?: string;
+    spent?: number;
+    knownForDays?: number;
+  }[],
 ): NoodlerFanIdentityProvider {
   return {
     resolve(weights) {
@@ -63,6 +90,13 @@ export function populationNoodlerFanIdentityProvider(
         .map((member) => ({
           id: member.id,
           archetype: member.archetype,
+          persona: {
+            traits: member.traits,
+            spendTier: member.spendTier,
+            ...(member.stage ? { stage: member.stage } : {}),
+            ...(member.spent !== undefined ? { spent: member.spent } : {}),
+            ...(member.knownForDays !== undefined ? { knownForDays: member.knownForDays } : {}),
+          },
           snapshot: {
             id: member.id,
             kind: "random_user" as const,

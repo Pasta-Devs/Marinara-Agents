@@ -74,7 +74,7 @@ const read = (path: string) => readFileSync(join(root, path), "utf8");
 
 // The six fixed identities with placeholder handles are no longer what fan activity draws from.
 const operation = read("services/slurp/slurp-fan-activity.operation.ts");
-assert.match(operation, /populationNoodlerFanIdentityProvider\(cast\)/u);
+assert.match(operation, /populationNoodlerFanIdentityProvider\(castWithHistory\)/u);
 // Regulars recur so they can be recognised; new faces arrive so the cast churns. A frozen cast of
 // thirty is the old six-account problem with thirty faces.
 assert.match(operation, /FAN_RUN_RETURNING/u);
@@ -165,5 +165,25 @@ assert.match(lapse.slice(0, 500), /if \(!rows\[0\]\) return;/u);
 
 // Churn is a full scan and the catch-up runs on every notifications read.
 assert.match(world, /CHURN_MIN_ELAPSED_DAYS/u);
+
+// ── The model must be told who is speaking ──────────────────────────────────
+// The fan-activity prompt received `{ handle, weight }` and nothing else, so every generated
+// comment came from a name with no person behind it. Traits, spend tier, and the relationship to
+// this Creator were all stored and thrown away — in an AI-assisted product, that is the whole
+// point of having a population at all.
+const fanService = read("services/slurp/slurp-fan-activity.service.ts");
+assert.match(fanService, /relationship: describeFanRelationship\(identity\.persona\)/u);
+assert.match(fanService, /traits: identity\.persona\.traits/u);
+assert.match(
+  fanService,
+  /Actors carry traits and a relationship to the creator\./u,
+  "the system prompt must tell the model to use them",
+);
+// A paragraph per fan would crowd out the posts they are reacting to.
+assert.match(fanService, /Kept to a sentence\./u);
+
+const provider = read("services/slurp/slurp-fan-identity-provider.ts");
+assert.match(provider, /persona\?: \{/u);
+assert.match(fanRun, /populationNoodlerFanIdentityProvider\(castWithHistory\)/u);
 
 console.log("slurp population regression passed");
