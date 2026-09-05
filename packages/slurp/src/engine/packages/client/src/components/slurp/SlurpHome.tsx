@@ -6644,6 +6644,13 @@ function SlurpStudioView({
 }) {
   const { t: localizeUi, i18n } = useUiTranslation();
   const studioQuery = useSlurpStudio(personaId);
+  // Diegetic by default, optimisation behind a door.
+  //
+  // A Creator would check her earnings, her followers, and who keeps showing up — those are in
+  // character. A milestone progress bar and a per-post performance breakdown are a game HUD, and
+  // leaving them on screen invites playing the meta instead of the character. They stay one tap
+  // away for when that is what you want.
+  const [showPerformance, setShowPerformance] = useState(false);
   const creators = studioQuery.data?.creators ?? [];
   const since = studioQuery.data?.since ?? null;
 
@@ -6664,14 +6671,30 @@ function SlurpStudioView({
   return (
     <NoodlerFrame onBack={onBack} title={localizeUi("ui.slurp.navigation.studio")} action={<span />}>
       <div className="mx-auto flex w-full max-w-3xl flex-col gap-4 p-4 sm:p-5">
-        {since && (
-          <p className="px-1 text-xs text-[var(--muted-foreground)]">
-            {localizeUi("ui.slurp.studio.since", {
-              defaultValue: "Changes since {{date}}",
-              date: formatTime(since, i18n.language),
-            })}
-          </p>
-        )}
+        <div className="flex flex-wrap items-baseline justify-between gap-3 px-1">
+          {since ? (
+            <p className="text-xs text-[var(--muted-foreground)]">
+              {localizeUi("ui.slurp.studio.since", {
+                defaultValue: "Changes since {{date}}",
+                date: formatTime(since, i18n.language),
+              })}
+            </p>
+          ) : (
+            <span />
+          )}
+          {creators.length > 0 && (
+            <button
+              type="button"
+              onClick={() => setShowPerformance((open) => !open)}
+              aria-expanded={showPerformance}
+              className="text-xs font-bold text-[var(--noodle-accent)] hover:underline"
+            >
+              {showPerformance
+                ? localizeUi("ui.slurp.studio.hidePerformance", { defaultValue: "Hide performance" })
+                : localizeUi("ui.slurp.studio.showPerformance", { defaultValue: "Show performance" })}
+            </button>
+          )}
+        </div>
 
         {studioQuery.isPending ? (
           <p className="px-1 text-sm text-[var(--muted-foreground)]">
@@ -6739,7 +6762,7 @@ function SlurpStudioView({
                 ))}
               </div>
 
-              {creator.milestone.next !== null && (
+              {showPerformance && creator.milestone.next !== null && (
                 <div>
                   <div className="flex items-baseline justify-between gap-3">
                     <p className="text-xs font-bold">
@@ -6818,7 +6841,7 @@ function SlurpStudioView({
                 </div>
               )}
 
-              {creator.posts.length > 0 && (
+              {showPerformance && creator.posts.length > 0 && (
                 <div>
                   <h3 className="text-xs font-bold uppercase tracking-[0.12em] text-[var(--muted-foreground)]">
                     {localizeUi("ui.slurp.studio.recentPosts", { defaultValue: "Recent posts" })}

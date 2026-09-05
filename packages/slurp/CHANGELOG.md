@@ -1,5 +1,19 @@
 # Slurp release notes
 
+## 1.1.9 — 2026-09-05
+
+- Fans write like the people they are. Their habits, how long they have been
+  around, and what they have paid now shape what they say.
+- Creators answer people they recognise. A long-standing supporter no longer gets
+  the same reply as a stranger.
+- You can write as your Creator. Answer a fan in your own words, or ask your
+  Creator to draft it for you.
+- Likes and follows arrive while you are reading, instead of only between visits.
+- Posts are placed in the character's own day, so a Tuesday morning and a
+  Saturday night read differently.
+- The Creator home leads with what a creator would actually check. Post
+  performance is one tap away when you want it.
+
 ## 1.1.8 — 2026-09-05
 
 - Creators stop posting the same thing. Each post now gets a rotating angle —

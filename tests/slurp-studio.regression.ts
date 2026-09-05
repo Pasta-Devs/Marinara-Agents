@@ -135,4 +135,14 @@ assert.match(home, /goalForViewer && !editing \?/u);
 const disclosure = readFileSync(join(root, "server/src/services/slurp/slurp-disclosure.ts"), "utf8");
 assert.match(disclosure, /AUDIENCE_FIELDS\.map/u, "the audience projection must stay an allowlist");
 
+// ── Diegetic by default, optimisation behind a door ─────────────────────────
+// A Creator would check her earnings, her followers, and who keeps showing up — those are in
+// character. A milestone progress bar and a per-post performance breakdown are a game HUD, and
+// leaving them on screen invites playing the meta instead of the character.
+assert.match(home, /const \[showPerformance, setShowPerformance\] = useState\(false\)/u);
+assert.match(home, /showPerformance && creator\.milestone\.next !== null/u);
+assert.match(home, /showPerformance && creator\.posts\.length > 0/u);
+// Earnings, followers, top fans, and the tip goal stay visible without asking.
+assert.doesNotMatch(home, /showPerformance && creator\.topFans/u, "who is showing up is in character");
+
 console.log("slurp studio regression passed");
