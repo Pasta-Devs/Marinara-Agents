@@ -94,6 +94,12 @@ PF.Hud = class {
     this.captionEl.setAttribute("aria-atomic", "true");
     this.captionEl.setAttribute("aria-hidden", "true");
     this.locChip = PF.el("span", { style: S.chip, text: "…" });
+    // THE SIGNPOST AT THE EDGE (0.16 §2.3). A gate is crossed by walking into
+    // it, so there is no button to press and nothing to dim — what the player
+    // needs is which way it goes and what is over there. A chip beside the one
+    // that already says where you are, hidden until they are standing at an
+    // edge, and proximity-driven per frame like the offers in the action column.
+    this.gateChip = PF.el("span", { style: `${S.chip}display:none;`, text: "" });
     this.clockChip = PF.el("span", { style: S.chip, text: "" });
     // The purse (S3). Hidden until there is something in it: a legacy world with
     // no economy in it should not carry a permanent "0 coins" telling the player
@@ -115,7 +121,7 @@ PF.Hud = class {
     this.topbar = PF.el(
       "div",
       { style: "position:absolute;top:10px;left:50%;transform:translateX(-50%);display:flex;gap:6px;z-index:2;" },
-      [this.locChip, this.clockChip, this.purseChip, this.retryChip, this.journalChip, this.sheetChip],
+      [this.locChip, this.gateChip, this.clockChip, this.purseChip, this.retryChip, this.journalChip, this.sheetChip],
     );
 
     this.talkBtn = this._btn("Talk (E)", () => core.interact(), S.railBtn);
@@ -2660,6 +2666,11 @@ PF.Hud = class {
         this._sleep = null;
         this.boardBtn.style.display = "none";
         this._board = null;
+        // The signpost is proximity-driven too, and it is a TOPBAR chip — which
+        // the gate hides for free but dialogue mode does not. Leaving walk mode
+        // takes it down here and the walk block decides when it comes back.
+        this.gateChip.style.display = "none";
+        this._gate = null;
       }
       // THE PANEL OPENERS, on the berth button's cadence and for a reason of
       // their own: the gate hides the whole topbar, but the topbar STAYS UP in
@@ -2873,6 +2884,19 @@ PF.Hud = class {
         // does: a board's offers are the offers of a board you are standing at.
         if (board) this.boardBtn.textContent = `📋 ${board.name}`;
         else this.closeBoard();
+      }
+      // THE SIGNPOST, on the board's cadence and memoised the same way — but the
+      // KEY is the edge rather than the words, because the words cost two hashes
+      // and a name-book read and there is no reason to pay them sixty times a
+      // second for a player standing still at a gate. Which edge they are at is
+      // the only thing that can change what the sign says.
+      const gateNear = sim.nearGate;
+      const gateKey = gateNear ? `${sim.zoneId}|${gateNear.dir}` : "";
+      if (gateKey !== this._gate) {
+        this._gate = gateKey;
+        const label = gateNear ? PF.lattice.gateLabel(sim.world, sim.zone(), gateNear) : "";
+        this.gateChip.style.display = label ? "" : "none";
+        if (label) this.gateChip.textContent = label;
       }
       const clock = sim.clockLabel();
       if (clock !== this._clock) {

@@ -2419,6 +2419,23 @@ PF.save = {
       // solid-tile rescue below only fires if that lands in a wall, so the
       // player would silently reappear in a random corner. Land them at the
       // spawn instead, which is the one tile every zone guarantees is walkable.
+      //
+      // THE CELL THE SESSION ENDED IN, MATERIALIZED BEFORE ANYTHING ASKS
+      // WHETHER IT EXISTS (0.16 §2.3, hook 2). A wilderness cell is a cache fill
+      // rather than a zone the compiler built, so a save row naming one resolves
+      // to nothing on a freshly-built world — and the arm below would drop the
+      // player at the start zone and discard the saved x/y ON PURPOSE. A session
+      // that ended in the woods has to reload in the woods.
+      //
+      // ABOVE the resolution test and not beside it: `hasZone` is the question,
+      // and this is what makes the answer true. The refusals cost nothing —
+      // `ensure` returns the zone for any resident id, null for anything that is
+      // not a canonical cell this world speaks for, and null rather than a throw
+      // for a builder fault — and every one of them falls through to exactly the
+      // shipped drop: position lost, world playable, which is the house degrade
+      // shape. A rehydrated lone cell carries four gates by construction, so the
+      // player who lands in one can always walk out of it.
+      PF.lattice.ensure(world, saved.zone);
       const zoneResolved = hasZone(saved.zone);
       if (zoneResolved) sim.zoneId = saved.zone;
       const z = sim.zone();

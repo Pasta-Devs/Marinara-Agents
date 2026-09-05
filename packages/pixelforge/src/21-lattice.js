@@ -272,6 +272,20 @@ PF.lattice = (() => {
     },
   };
 
+  /** THE WORDS THE WILDERNESS SAYS OUT LOUD, in one place — the retry surface's
+   *  `RETRY_COPY` idiom. A bearing, a signpost and a notice: the whole of what
+   *  this feature ever writes on screen.
+   *
+   *  Plain words on purpose. "Cell", "chunk" and "lattice" are how the code
+   *  talks about the country; what the player reads is which way it goes and
+   *  what is over there. */
+  const COPY = {
+    BEARINGS: { N: "North", E: "East", S: "South", W: "West" },
+    // A signpost, never a verb: a gate is crossed by walking into it, so there
+    // is no button to label and nothing to press.
+    gate: (bearing, place) => `${bearing} — ${place}`,
+  };
+
   // ── Directions ──────────────────────────────────────────────────────────────
   // Cell arithmetic and nothing else: north is -y in tiles AND -1 in cells, so
   // east-then-north and north-then-east name the same cell, which is the whole
@@ -554,6 +568,35 @@ PF.lattice = (() => {
     return `The ${book.adj[first]} ${noun}`;
   }
 
+  /** WHAT THE SIGNPOST SAYS — a bearing and the name of the place the gate
+   *  leads to.
+   *
+   *  NAMED WITHOUT BUILDING. A cell's name is a total function of the same
+   *  (seed, cell) the tiles are, so the country over the edge can be read for
+   *  two hashes and no zone at all. That matters twice: the label costs nothing
+   *  to compute for a neighbour nobody has walked into, and it says the SAME
+   *  words whether or not that neighbour happens to be resident — a signpost
+   *  that changed its mind when a cell was evicted would be worse than no
+   *  signpost, and finding the way home from four rings out is exactly what
+   *  these words are for.
+   *
+   *  The three anchor cells are named the other way round, off the zones the
+   *  compiler built: the settlement and the brief's own wilds have names a brief
+   *  wrote, and inventing wilderness words for them would tell the player the
+   *  town was somewhere else. */
+  function gateLabel(world, zone, gate) {
+    const bearing = PF.own(COPY.BEARINGS, gate?.dir);
+    const cell = cellOf(zone);
+    const step = gate && delta(gate.dir);
+    if (!bearing || !cell || !step) return "";
+    const cx = cell.cx + step.cx;
+    const cy = cell.cy + step.cy;
+    const id = cellZoneId(world, cx, cy);
+    if (!id) return "";
+    const place = parse(id) ? nameFor(world, cx, cy, classFor(world, cx, cy)) : PF.own(world.zones, id)?.name;
+    return place ? COPY.gate(bearing, place) : "";
+  }
+
   // ── Building a chunk ────────────────────────────────────────────────────────
   const key = (zone, x, y) => y * zone.w + x;
 
@@ -820,6 +863,7 @@ PF.lattice = (() => {
     delta,
     gateAt,
     gateTargetId,
+    gateLabel,
     arrivalFor,
     insetOf,
     gatesFor,
