@@ -30460,4 +30460,1521 @@ const fire = (node, type) => Promise.all((node.listeners[type] ?? []).map((fn) =
   assert.ok(!headerNear("Nobody Met").includes(","), "no standing is no word, not a written-out floor");
 }
 
+// ═══ THE GENERATION RETRY SURFACE (0.16 slice R; maintainer rulings 4 and 8) ═══
+// Ruling 4 refused to put anything on the fallback map — "no one should play in
+// the fallback map" — and asked for a way OUT of it instead: a post-start popup
+// listing every pre-game stage that failed or fell back, each one individually
+// re-attemptable, keeping the stages that succeeded. Ruling 8 then fixed the one
+// move no recovery path may make: the seed is the world's IDENTITY for the life
+// of the chat, so nothing here reseeds — a regenerated stage re-runs what is
+// DOWNSTREAM of it rather than orphaning an artifact built on the old value.
+//
+// The lanes below drive the whole surface headless: the registry's derivation,
+// the marker's mechanics, both paid retries end to end, the free same-seed
+// rebuild, the re-arm across a real chat switch, the write path under a
+// post-start hold, and the panel itself through the shipped `Hud` over the DOM
+// shim. What is genuinely browser-only — real z-order against the host narration
+// panel, real focus, the visibly frozen clock, toast timing and taste — is on the
+// playtest agenda and is deliberately not simulated here.
+{
+  const P = loadedPF.player;
+  const S = loadedPF.save;
+  const RSEED = 4242;
+  const rBrief = loadedPF.brief.validate(gateBriefData, { theme: "cozy-village", seed: RSEED });
+  // A SECOND, DIFFERENT brief for every re-roll leg: same fixture shape, a
+  // different name, therefore a different hash — which is the whole thing a
+  // re-roll moves and the whole reason a sealed pack goes stale behind it.
+  const rBrief2 = loadedPF.brief.validate(
+    { ...gateBriefData, name: "Netherby" },
+    { theme: "cozy-village", seed: RSEED },
+  );
+  const rHash = P.briefHashOf(rBrief);
+  const rHash2 = P.briefHashOf(rBrief2);
+  assert.notEqual(rHash, rHash2, "the two fixture briefs really are two different worlds' worth of setting");
+  const packFor = (brief) => ({
+    packVersion: 1,
+    theme: "cozy-village",
+    briefHash: P.briefHashOf(brief),
+    templates: [
+      { id: "r:t:a", giver: brief.cast[0].name, verb: "visit", target: { place: "wilds" }, n: 1, title: "Walk out" },
+    ],
+    lines: [],
+    escalation: [],
+    overheard: [],
+  });
+  const wizard = (extra) => ({
+    gameSetupConfig: { experienceConfig: { generate: true, seed: RSEED, theme: "cozy-village", ...extra } },
+  });
+  /** Every per-session map the surface keeps, emptied between legs. Named rather
+   *  than inlined because a leg that inherited another's witness would be a lane
+   *  proving the previous lane's fixture. */
+  const clearRetry = () => {
+    S._briefCache.clear();
+    S._briefSeenInMeta.clear();
+    S._packCache.clear();
+    S._packSeenInMeta.clear();
+    S._packWantedSealed.clear();
+    S._generating.clear();
+    S._regenPending.clear();
+    S._fallbackAcceptedSealed.clear();
+    S._acceptedHousekept.clear();
+    S._briefSuperseded.clear();
+    S.gate = null;
+  };
+  /** A core with the three optional seams `makeCore` does not ship, because the
+   *  install path optional-chains every one of them: without these a spy
+   *  assertion is unwritable rather than red. */
+  const spyCore = (chatId, meta) => {
+    const seen = { closeTalk: 0, cleared: 0, updates: 0, chips: 0, toasts: [] };
+    const core = {
+      chatId,
+      sim: null,
+      host: { chatMeta: meta },
+      closeTalk() {
+        seen.closeTalk += 1;
+      },
+      render: {
+        clearZones() {
+          seen.cleared += 1;
+        },
+      },
+      hud: {
+        toast: (text) => seen.toasts.push(text),
+        refreshChips() {
+          seen.chips += 1;
+        },
+        update() {
+          seen.updates += 1;
+        },
+      },
+    };
+    return { core, seen };
+  };
+  /** THE DEGRADE, by the one patchable door there is. `buildLegacy` is not
+   *  exported and `compile` is a module-local reference, so the way to make a
+   *  sealed brief fail to compile is to make the fold throw — which is
+   *  `build()`'s own catch arm, the real degrade rather than a simulated one.
+   *  SYNCHRONOUS ONLY, deliberately: an async body would put the stub back at
+   *  the first await, which is a fixture that quietly stops being one. */
+  const withCompileBroken = (run) => {
+    const real = loadedPF.brief.foldStored;
+    loadedPF.brief.foldStored = () => {
+      throw new TypeError("this build cannot compile that brief");
+    };
+    try {
+      return run();
+    } finally {
+      loadedPF.brief.foldStored = real;
+    }
+  };
+  const breakCompile = () => {
+    const real = loadedPF.brief.foldStored;
+    loadedPF.brief.foldStored = () => {
+      throw new TypeError("this build cannot compile that brief");
+    };
+    return () => {
+      loadedPF.brief.foldStored = real;
+    };
+  };
+  const assetsHeld = { status: loadedPF.assets.status, noPackage: loadedPF.assets._noPackage };
+  const restoreAssets = () => {
+    loadedPF.assets.status = assetsHeld.status;
+    loadedPF.assets._noPackage = assetsHeld.noPackage;
+  };
+  const textIn = (node) =>
+    walkNodes(node)
+      .map((child) => child.textContent)
+      .filter(Boolean);
+
+  // ── LANE 1: THE DERIVATION TRUTH-TABLE ────────────────────────────────────
+  // Every row of §2.10b, and the point of the whole table is that NOTHING is
+  // logged: the surface derives what is standing from durable records plus this
+  // session's own seal witnesses, every time it is asked. A durable failure log
+  // would have to be written from a code path whose own PATCH may be the thing
+  // failing — a log that lies exactly when it matters. Derivation cannot lie.
+  {
+    clearRetry();
+    const brief = (meta, w, chatId) => S.stage("brief").derive(meta, w, chatId);
+    const pack = (meta, w, chatId) => S.stage("pack").derive(meta, w, chatId);
+    const compiled = world.build(RSEED, "cozy-village", rBrief);
+    const standIn = withCompileBroken(() => world.build(RSEED, "cozy-village", rBrief));
+    assert.equal(compiled.brieved, true, "the fixture's compiled world really compiled");
+    assert.ok(!standIn.brieved, "…and the degrade really degraded, through build()'s own catch");
+    const placeholder = world.build(RSEED, "cozy-village", null);
+    placeholder.interim = true;
+
+    const sealedMeta = { ...wizard(), pixelforgeBrief: rBrief };
+    assert.equal(brief(sealedMeta, compiled, "d-ok"), "ok", "a sealed brief on the world it compiled is ok");
+    assert.equal(brief(sealedMeta, standIn, "d-fb"), "fallback", "…and on a stand-in map it is the fallback row");
+    assert.equal(
+      brief(sealedMeta, placeholder, "d-int"),
+      "pending",
+      "the placeholder is not a fallback: it is the world nobody plays",
+    );
+    assert.equal(
+      brief({ ...wizard(), pixelforgeBrief: { skipped: true } }, standIn, "d-skip"),
+      "declined",
+      "the decline is keyed BY SHAPE, and gets no row ever",
+    );
+    assert.equal(
+      brief({ ...wizard(), pixelforgeBrief: { cast: rBrief.cast } }, standIn, "d-half"),
+      "unreadable",
+      "a good cast with no places or _ids fails build()'s admission gate: unreadable, not fallback",
+    );
+    assert.equal(
+      brief({ ...wizard(), pixelforgeBrief: { templates: [] } }, standIn, "d-foreign"),
+      "unreadable",
+      "…and so does a shape a newer build invented, which _configBrief alone reads as a decline",
+    );
+    assert.equal(brief(wizard(), placeholder, "d-pend"), "pending", "no key and a generate flag is the gate's business");
+    assert.equal(brief({}, standIn, "d-na"), "n/a", "and a pre-0.4.0 chat has no row at all");
+
+    // THE PACK'S ROWS. `packDeferred` is what these read — `packExpected` is
+    // turned FALSE by the very marker that makes the row show, so a derive
+    // written on it would be unsatisfiable exactly when it is meant to fire.
+    const owed = { ...sealedMeta, pixelforgePackWanted: true };
+    assert.equal(
+      pack({ ...owed, pixelforgeFallbackAcceptedPack: true }, compiled, "d-p2"),
+      "fallback",
+      "a pack the player said 'later' to is the fallback row, and stays reachable from the chip",
+    );
+    assert.equal(
+      pack(owed, compiled, "d-p1"),
+      "fallback",
+      "…and so is one nobody is holding a gate for: a post-start failure that bare-un-armed is the same situation",
+    );
+    S.gate = { chatId: "d-p3", state: "generating", attempts: 0, stage: "pack" };
+    assert.equal(pack(owed, compiled, "d-p3"), "pending", "while the gate holds, the blocking screen IS the surface");
+    S.gate = null;
+    assert.equal(
+      pack({ ...sealedMeta, pixelforgePack: packFor(rBrief) }, compiled, "d-p4"),
+      "ok",
+      "a sealed pack whose hash matches the brief is ok — 'any object with templates' is not enough",
+    );
+    for (const era of [true, false]) {
+      assert.equal(
+        pack(
+          {
+            ...sealedMeta,
+            ...(era ? { pixelforgePackWanted: true } : {}),
+            pixelforgePack: { ...packFor(rBrief), briefHash: (rHash ^ 0x5f5f5f5f) >>> 0 },
+          },
+          compiled,
+          `d-p5-${era}`,
+        ),
+        "demoted",
+        `a pack sealed against another brief is demoted ${era ? "with" : "without"} the era marker — the pack object is its own evidence`,
+      );
+    }
+    assert.equal(pack(sealedMeta, compiled, "d-p6"), "n/a", "and no seal-side evidence at all is no row");
+
+    // THE POST-SWAP STALENESS WINDOW. The metadata blob still carries the brief a
+    // re-roll replaced and the sealed pack belongs to it — so a derive that
+    // hashed the blob would call that pack "ok" while the world under it runs a
+    // brief the pack never heard of. The superseded witness is what makes the
+    // answer the true one.
+    S._briefSuperseded.set("d-stale", rHash);
+    S._briefCache.set("d-stale", rBrief2);
+    assert.equal(
+      pack({ ...sealedMeta, pixelforgePack: packFor(rBrief) }, compiled, "d-stale"),
+      "demoted",
+      "the stale blob's own pack is NOT ok: the world moved on from it",
+    );
+    clearRetry();
+
+    // …AND DERIVING WRITES NOTHING. Not one PATCH, from any row, in any state.
+    const realPatch = loadedPF.api.patchMetadata;
+    let patches = 0;
+    loadedPF.api.patchMetadata = async (...args) => {
+      patches += 1;
+      return realPatch(...args);
+    };
+    try {
+      for (const meta of [sealedMeta, owed, { ...sealedMeta, pixelforgePack: packFor(rBrief) }, {}])
+        for (const w of [compiled, standIn, placeholder]) {
+          brief(meta, w, "d-patchfree");
+          pack(meta, w, "d-patchfree");
+        }
+      const { core } = spyCore("d-rows", owed);
+      core.sim = new loadedPF.Sim(standIn);
+      const rows = S.retryRows(core);
+      assert.equal(patches, 0, "deriving is PATCH-free — the surface reads, it never records");
+      assert.deepEqual(
+        rows.map((row) => `${row.stage}:${row.state}`),
+        ["brief:fallback", "pack:fallback"],
+        "…and the rows it hands the panel are both of them, in registry order",
+      );
+      assert.equal(S.retryChipText(core), S.RETRY_COPY.chip, "the chip says so, derived strictly from those rows");
+      const { core: healthy } = spyCore("d-rows-ok", { ...sealedMeta, pixelforgePack: packFor(rBrief) });
+      healthy.sim = new loadedPF.Sim(compiled);
+      assert.deepEqual(S.retryRows(healthy), [], "a world with nothing wrong with it has no rows");
+      assert.equal(S.retryChipText(healthy), null, "…and no chip");
+    } finally {
+      loadedPF.api.patchMetadata = realPatch;
+      clearRetry();
+    }
+
+    // THE RESERVED IDS ARE RESERVED, not guessed at: the registry accommodates
+    // them by SHAPE (a row is a self-contained derive + modes + strings bundle)
+    // and ships neither, because neither has a failure vocabulary yet.
+    assert.deepEqual(
+      S.STAGES.map((row) => row.id),
+      ["brief", "pack"],
+      "two stages exist in code and the table is ordered",
+    );
+    assert.deepEqual(S.RESERVED_STAGES.slice().sort(), ["historygen", "storyboard"], "…and two are named and unshipped");
+    for (const id of S.RESERVED_STAGES) assert.equal(S.stage(id), null, `${id} has no row to read`);
+  }
+
+  // ── LANE 2: THE ACCEPTED MARKER'S MECHANICS ───────────────────────────────
+  // The one new signal family, and where its term LIVES is the whole of it: the
+  // accepted term sits inside `packExpected`, so armGate, wantPack, the ladder's
+  // entry guard and `gateWillHold` all fall out for free. Put at the consumers
+  // instead, every future visit of an accepted chat re-enters the ladder body and
+  // runs a resume plus a save write, forever.
+  await withSavePath(async ({ calls, behavior, tick, makeCore }) => {
+    await withGeneration(async ({ postCount }) => {
+      clearRetry();
+      const realPack = loadedPF.pack.generate;
+      let packOk = false;
+      let packCalls = 0;
+      loadedPF.pack.generate = async (chatId, { brief, onFailure }) => {
+        packCalls += 1;
+        if (packOk) return packFor(brief);
+        onFailure?.("unavailable");
+        return null;
+      };
+      try {
+        behavior.get = async () => ({ available: true, status: 200, body: { exists: false } });
+        const meta = { ...wizard({ packWanted: true }), pixelforgeBrief: rBrief, pixelforgePackWanted: true };
+        const core = makeCore("chat-accept", RSEED);
+        core.host.chatMeta = meta;
+        core.sim = S.restore(meta, "chat-accept");
+        assert.equal(core.sim.world.brieved, true, "the chat arrives in its real world with only the pack owed");
+        assert.equal(S.armGate(core, meta), true, "…and the gate holds for that pack");
+        await S.maybeGenerateBrief(core);
+        await tick();
+        assert.equal(packCalls, 1, "the pack call ran and failed");
+        assert.equal(S.gate.state, "failed", "so the shipped screen is up");
+        assert.equal(S.gate.stage, "pack", "…stamped for the call that failed");
+
+        // THE EXIT THE SCREEN NOW OFFERS.
+        calls.length = 0;
+        assert.equal(await S.keepPlaying(core), true, "and 'keep playing without it' takes it");
+        const marked = calls.find((c) => c.kind === "patch" && "pixelforgeFallbackAcceptedPack" in c.patch);
+        assert.ok(marked, "the deferral is recorded durably, at its own flat key");
+        assert.equal(marked.patch.pixelforgeFallbackAcceptedPack, true, "…as a plain boolean, not a map at one key");
+        assert.equal(
+          S._fallbackAcceptedSealed.has("chat-accept|pack"),
+          true,
+          "…with a session witness beside it, because the blob in our hand has not caught up",
+        );
+        assert.equal(S.gateHolds(core), false, "the gate came down");
+        assert.equal(packCalls, 1, "and no second call was spent taking the exit");
+        assert.equal(postCount(), 0, "…nor any brief call: what was sealed stays sealed");
+        assert.equal(S.packExpected(meta, "chat-accept"), false, "the chat stops being owed a pack");
+        assert.equal(
+          S.packDeferred(meta, "chat-accept"),
+          true,
+          "…while still being OWED one, which is what keeps the row derivable at all",
+        );
+        assert.equal(S.stage("pack").derive(meta, core.sim.world, "chat-accept"), "fallback", "so the row shows");
+        assert.ok((P.get(core)?.pouch?.money ?? 0) > 0, "the world began: the purse is paid at the lift, once");
+
+        // …AND THE NEXT VISIT NEITHER BLOCKS NOR AUTO-SPENDS. The regression this
+        // pins is the every-visit one: with the term at the consumers only, this
+        // chat entered the ladder body and resumed its held world forever.
+        let resumes = 0;
+        let installs = 0;
+        const realResume = S._resumeHeldWorld;
+        const realInstall = S._installSealedWorld;
+        S._resumeHeldWorld = function (...args) {
+          resumes += 1;
+          return realResume.apply(this, args);
+        };
+        S._installSealedWorld = function (...args) {
+          installs += 1;
+          return realInstall.apply(this, args);
+        };
+        try {
+          assert.equal(S.armGate(core, meta), false, "the next visit arms no gate at all");
+          await S.maybeGenerateBrief(core);
+          await tick();
+          assert.equal(packCalls, 1, "…spends no call");
+          assert.equal(resumes + installs, 0, "…and does not re-enter the ladder body to resume a world nobody left");
+        } finally {
+          S._resumeHeldWorld = realResume;
+          S._installSealedWorld = realInstall;
+        }
+
+        // A STAGE THAT HEALS DROPS ITS MARKER. Housekeeping, once per session —
+        // the rows are what the chip reads either way, so this only keeps a
+        // healed chat's metadata from carrying a dead answer forever.
+        meta.pixelforgePack = packFor(rBrief);
+        calls.length = 0;
+        assert.deepEqual(S.retryRows(core), [], "with the pack sealed there is nothing left to offer");
+        assert.equal(S.retryChipText(core), null, "…so the chip goes");
+        const cleared = calls.find((c) => c.kind === "patch" && "pixelforgeFallbackAcceptedPack" in c.patch);
+        assert.ok(cleared, "…and the stale marker is asked to go with it");
+        assert.equal(
+          cleared.patch.pixelforgeFallbackAcceptedPack,
+          null,
+          "nulled, because a queued shallow merge has no delete convention",
+        );
+      } finally {
+        loadedPF.pack.generate = realPack;
+        clearRetry();
+        restoreAssets();
+      }
+    });
+  });
+
+  // ── LANE 2b: THE INTERIM ARM OF THE SAME EXIT ─────────────────────────────
+  // The other half of the shipped nothing-to-generate branch. A visit that sealed
+  // the brief mid-gate and then failed the pack is still standing in the
+  // placeholder, and the exit recompiles the REAL world from the brief already in
+  // hand rather than leaving anybody there: nobody plays the placeholder.
+  await withSavePath(async ({ tick, makeCore }) => {
+    await withGeneration(async () => {
+      clearRetry();
+      try {
+        const meta = { ...wizard({ packWanted: true }), pixelforgeBrief: rBrief, pixelforgePackWanted: true };
+        const core = makeCore("chat-accept-interim", RSEED);
+        core.host.chatMeta = meta;
+        core.sim = new loadedPF.Sim(world.build(RSEED, "cozy-village", null));
+        core.sim.world.interim = true;
+        assert.equal(S.armGate(core, meta), true, "the gate is armed for the pack");
+        S._failGate(core, "network", "pack");
+        assert.equal(await S.keepPlaying(core), true, "the exit is taken over the placeholder too");
+        await tick();
+        assert.ok(!core.sim.world.interim, "…and it did not leave anybody in it");
+        assert.equal(core.sim.world.brieved, true, "the sealed brief was recompiled and installed instead");
+        assert.equal(S.gateHolds(core), false, "with the gate down and play begun");
+      } finally {
+        clearRetry();
+        restoreAssets();
+      }
+    });
+  });
+
+  // ── LANE 3: THE PACK RETRY, END TO END ────────────────────────────────────
+  // The cheap one, and the state-preserving one: clearing the marker makes
+  // `packExpected` true again, so ONLY call two runs, against the brief already
+  // sealed, and it lands in `_resumeHeldWorld` — no sim replacement, no
+  // transplant, the world the player is standing in byte-untouched.
+  await withSavePath(async ({ calls, behavior, tick, makeCore }) => {
+    await withGeneration(async ({ postCount }) => {
+      clearRetry();
+      const realPack = loadedPF.pack.generate;
+      let packCalls = 0;
+      let releasePack = null;
+      loadedPF.pack.generate = async (chatId, { brief }) => {
+        packCalls += 1;
+        await new Promise((resolve) => {
+          releasePack = resolve;
+        });
+        return packFor(brief);
+      };
+      try {
+        behavior.get = async () => ({ available: true, status: 200, body: { exists: false } });
+        const meta = {
+          ...wizard({ packWanted: true }),
+          pixelforgeBrief: rBrief,
+          pixelforgePackWanted: true,
+          pixelforgeFallbackAcceptedPack: true,
+        };
+        const core = makeCore("chat-packretry", RSEED);
+        core.host.chatMeta = meta;
+        core.sim = S.restore(meta, "chat-packretry");
+        S.mode = "metadata"; // the visit already probed; a post-start regen never re-probes
+        assert.equal(S.armGate(core, meta), false, "an accepted chat plays: no gate at boot");
+        const standing = core.sim;
+        core.sim._packFold = { seeded: true };
+        calls.length = 0;
+
+        const pressed = S.regenerateStage(core, "pack", "retry");
+        for (let i = 0; i < 20 && !releasePack; i++) await tick();
+        assert.equal(S.gateHolds(core), true, "the press re-arms the gate over the world already up");
+        assert.equal(S.gate.stage, "pack", "…at the pack stage");
+        assert.equal(S.gate.postStart, true, "…marked post-start, which is what every write exemption reads");
+        assert.equal(S.gate.mode, "retry", "…carrying the mode, so 'Try again' knows what to re-press");
+        assert.equal(S._regenPending.get("chat-packretry")?.stage, "pack", "and the re-arm record stands while it runs");
+        releasePack();
+        assert.equal(await pressed, true, "the press completes");
+        await tick();
+
+        assert.ok(
+          calls.some((c) => c.kind === "patch" && c.patch.pixelforgeFallbackAcceptedPack === null),
+          "the marker was cleared — without that the dispatch finds nothing to generate and bare-lifts",
+        );
+        assert.equal(meta.pixelforgeFallbackAcceptedPack, null, "…and the blob in our hand was mirrored");
+        assert.equal(packCalls, 1, "exactly one generation call was made");
+        assert.equal(postCount(), 0, "…and call one never ran: the brief was already sealed");
+        assert.equal(core.sim, standing, "the world is the SAME object — a pack retry replaces nothing");
+        assert.equal(core.sim._packFold, null, "…and the lift cleared the fold, so the new pack is what folds");
+        const stored = calls.find((c) => c.kind === "patch" && c.patch.pixelforgePack);
+        assert.ok(stored, "the pack sealed and stored");
+        assert.equal(stored.patch.pixelforgePack.briefHash, rHash, "against the brief that was already in hand");
+        assert.equal(S.gateHolds(core), false, "the gate lifted");
+        assert.equal(S._regenPending.size, 0, "and the record was cleared in regenerateStage's own finally");
+        assert.equal(S.stage("pack").derive(meta, core.sim.world, "chat-packretry"), "ok", "the row derives ok now");
+
+        // THE DEMOTED ARM. A pack EXISTS, so no marker-clearing can make
+        // `packExpected` true: this one is a scoped force, and the evidence it
+        // rests on is the sealed-but-stale pack object itself — durable,
+        // seal-side, paid for. Never the wizard's copy, which is the Q9 door.
+        clearRetry();
+        calls.length = 0;
+        packCalls = 0;
+        releasePack = null;
+        loadedPF.pack.generate = async (chatId, { brief }) => {
+          packCalls += 1;
+          return packFor(brief);
+        };
+        const demotedMeta = {
+          ...wizard({ packWanted: true }),
+          pixelforgeBrief: rBrief,
+          pixelforgePack: { ...packFor(rBrief), briefHash: (rHash ^ 0x5f5f5f5f) >>> 0 },
+        };
+        const dCore = makeCore("chat-demoted", RSEED);
+        dCore.host.chatMeta = demotedMeta;
+        dCore.sim = S.restore(demotedMeta, "chat-demoted");
+        S.mode = "metadata";
+        assert.equal(
+          S.packExpected(demotedMeta, "chat-demoted"),
+          false,
+          "nothing is owed by the formula: a pack is there, it is simply the wrong world's",
+        );
+        assert.equal(
+          S.stage("pack").derive(demotedMeta, dCore.sim.world, "chat-demoted"),
+          "demoted",
+          "and the row says so",
+        );
+        assert.equal(await S.regenerateStage(dCore, "pack", "rewrite"), true, "the row's own button re-rolls it");
+        await tick();
+        assert.equal(packCalls, 1, "one call, and only one");
+        const rewritten = calls.filter((c) => c.kind === "patch" && c.patch.pixelforgePack);
+        assert.equal(rewritten.length, 1, "the new pack PATCHed straight over the dead one");
+        assert.equal(rewritten[0].patch.pixelforgePack.briefHash, rHash, "sealed against the world that stands");
+        assert.equal(
+          calls.some((c) => c.kind === "patch" && "pixelforgePackWanted" in c.patch),
+          false,
+          "and the era marker was never minted: a force may not read the wizard's copy",
+        );
+      } finally {
+        loadedPF.pack.generate = realPack;
+        clearRetry();
+        restoreAssets();
+      }
+    });
+  });
+
+  // ── LANE 4: THE PACK RETRY THAT FAILS ─────────────────────────────────────
+  // Four presses in one lane, because the four of them are the failure screen's
+  // whole contract: a refused re-press must not repaint first, a live one
+  // re-enters the REGEN rather than the bare lift, keep-playing un-arms bare, and
+  // a marker-clear that will not store dispatches nothing at all.
+  await withSavePath(async ({ calls, armed, behavior, tick, makeCore }) => {
+    await withGeneration(async () => {
+      clearRetry();
+      const realPack = loadedPF.pack.generate;
+      let packCalls = 0;
+      let packOk = false;
+      loadedPF.pack.generate = async (chatId, { brief, onFailure }) => {
+        packCalls += 1;
+        if (packOk) return packFor(brief);
+        onFailure?.("unavailable");
+        return null;
+      };
+      try {
+        behavior.get = async () => ({ available: true, status: 200, body: { exists: false } });
+        const meta = {
+          ...wizard({ packWanted: true }),
+          pixelforgeBrief: rBrief,
+          pixelforgePackWanted: true,
+          pixelforgeFallbackAcceptedPack: true,
+        };
+        const core = makeCore("chat-packfail", RSEED);
+        core.host.chatMeta = meta;
+        core.sim = S.restore(meta, "chat-packfail");
+        S.mode = "metadata";
+        const standing = core.sim;
+
+        assert.equal(await S.regenerateStage(core, "pack", "retry"), true, "the press ran");
+        await tick();
+        assert.equal(S.gate.state, "failed", "the shipped failed screen is what a failure paints");
+        assert.equal(S.gate.postStart, true, "…still marked post-start");
+        assert.equal(S.gate.mode, "retry", "…and still carrying the mode the press was made in");
+        assert.equal(S._regenPending.size, 0, "the record was released when the attempt settled");
+        assert.equal(core.sim, standing, "and the world nobody touched is untouched");
+
+        // A REFUSED RE-PRESS MUST NOT REPAINT FIRST. The record is planted by
+        // hand, so `regenerateStage` refuses — and the screen has to still be the
+        // failed one, not a spinner with nothing behind it and no button under it.
+        S._regenPending.set("chat-packfail", { stage: "pack", mode: "retry", gated: true });
+        assert.equal(S.retryGeneration(core), true, "the button fires");
+        await tick();
+        assert.equal(S.gate.state, "failed", "…and a refused press leaves the failed screen exactly where it was");
+        assert.equal(packCalls, 1, "with no second call spent on it");
+        S._regenPending.delete("chat-packfail");
+
+        // …AND A LIVE ONE RE-ENTERS THE REGEN RATHER THAN THE BARE LIFT.
+        packOk = true;
+        assert.equal(S.retryGeneration(core), true, "the button fires again");
+        for (let i = 0; i < 60 && S.gate; i++) await tick();
+        assert.equal(packCalls, 2, "the re-press made the call — it did not fall through into a lift");
+        assert.equal(core.sim, standing, "…against the same world, still");
+        assert.equal(S.gateHolds(core), false, "and the gate lifted on the pack that landed");
+
+        // KEEP PLAYING, ON A POST-START GATE: a bare un-arm. The world was
+        // adopted and played long ago, so the lift's adopt and purse tail must
+        // NOT re-run — and the record goes, or the next visit freezes.
+        clearRetry();
+        packOk = false;
+        packCalls = 0;
+        const k = makeCore("chat-packkeep", RSEED);
+        k.host.chatMeta = { ...meta };
+        k.sim = S.restore(k.host.chatMeta, "chat-packkeep");
+        S.mode = "routes";
+        await S.regenerateStage(k, "pack", "retry");
+        await tick();
+        assert.equal(S.gate.state, "failed", "a failed post-start gate");
+        assert.equal(await S.keepPlaying(k), true, "…and the second exit takes it");
+        assert.equal(S.gate, null, "the gate is gone");
+        assert.equal(S._regenPending.size, 0, "…and so is the re-arm record");
+        assert.equal(S.mode, "routes", "and nothing re-adopted: the visit's own probe stands");
+        assert.equal(await S.regenerateStage(k, "pack", "retry"), true, "and a second press retries cleanly");
+        await tick();
+
+        // THE MARKER-CLEAR THAT WILL NOT STORE. Without the marker genuinely
+        // cleared the dispatch would fall through the ladder's entry guard into
+        // the bare lift, spending nothing and running the deferred arms
+        // mid-session — so it dispatches nothing and says so on the shipped
+        // storage screen instead.
+        clearRetry();
+        packCalls = 0;
+        calls.length = 0;
+        const f = makeCore("chat-markerfail", RSEED);
+        f.host.chatMeta = { ...meta };
+        f.sim = S.restore(f.host.chatMeta, "chat-markerfail");
+        S.mode = "metadata";
+        behavior.patch = async () => {
+          throw new Error("no");
+        };
+        const pressed = S.regenerateStage(f, "pack", "retry");
+        for (let i = 0; i < 40; i++) {
+          await tick();
+          while (armed.length) {
+            const timer = armed.shift();
+            if (!timer.interval) timer.fn();
+          }
+        }
+        assert.equal(await pressed, false, "the press refuses");
+        assert.equal(packCalls, 0, "…having dispatched nothing at all");
+        assert.equal(S.gate.state, "failed", "and the shipped storage screen is up");
+        assert.equal(S.gate.failure, "storage", "…carrying the kind that says the save is what did not go through");
+        assert.equal(S.gate.stage, "pack", "…for the stage that was pressed");
+        assert.equal(S._regenPending.size, 0, "with no record left behind to refuse the next press");
+        assert.equal(
+          calls.filter((c) => c.kind === "patch" && "pixelforgeFallbackAcceptedPack" in c.patch).length,
+          3,
+          "and the clear really did spend its three attempts before saying so",
+        );
+      } finally {
+        loadedPF.pack.generate = realPack;
+        clearRetry();
+        restoreAssets();
+      }
+    });
+  });
+
+  // ── LANE 5: THE WORLDGEN RE-ROLL, AND THE HONEST SWAP ─────────────────────
+  // The expensive one. Against a REAL degrade with real play in it: what crosses,
+  // what is set aside, what is said out loud, and every one of the gap closures
+  // that only exist because until now this path had only ever run against an
+  // untouched placeholder.
+  await withSavePath(async ({ calls, tick }) => {
+    clearRetry();
+    const realGenerate = loadedPF.brief.generate;
+    const realPack = loadedPF.pack.generate;
+    let briefCalls = 0;
+    let packCalls = 0;
+    loadedPF.brief.generate = async () => {
+      briefCalls += 1;
+      return rBrief2;
+    };
+    loadedPF.pack.generate = async (chatId, { brief }) => {
+      packCalls += 1;
+      return packFor(brief);
+    };
+    try {
+      // The wizard config SAYS packWanted, and there is no seal-side evidence at
+      // all: this is the Q9 pin, and it is pinned at both read-sites at once.
+      const meta = { ...wizard({ packWanted: true }), pixelforgeBrief: rBrief, pixelforgeWeather: { word: "storm" } };
+      const { core, seen } = spyCore("chat-reroll", meta);
+      core.sim = withCompileBroken(() => S.restore(meta, "chat-reroll"));
+      assert.ok(!core.sim.world.brieved, "the fixture is a REAL degrade: a sealed brief standing on a stand-in map");
+      assert.equal(
+        S.stage("brief").derive(meta, core.sim.world, "chat-reroll"),
+        "fallback",
+        "…which is exactly the fallback row",
+      );
+      S.mode = "metadata";
+
+      // …AND IT HAS BEEN LIVED IN.
+      P.grant(core, { t: "rod", k: "fine" }, 1);
+      P.award(core, { money: 25, xp: 4, verb: "fishing" });
+      P.bump(core, "village", "Somebody From The Stand-In", { d: 2, t: 4 });
+      P.log(core, "Something that happened on the stand-in map.", 1);
+      P.setHome(core, core.sim.zoneId);
+      core.sim.clockMin = 23 * 60;
+      core.sim.day = 5;
+      const played = P.get(core);
+      assert.ok(played.rel.village, "the fixture really has world-bound state on it");
+      const before = core.sim;
+      // A bag with an earlier loss already in it, so the SECOND severance has
+      // something to merge into rather than a slot to bounce off.
+      loadedPF.quarantine.put("chat-reroll", "stamp", {
+        reason: "brief",
+        fromV: played.v,
+        stamps: { seed: 1, briefHash: 1, mintStamp: 1 },
+        fields: { rel: { earlier: { "An Earlier Loss": { d: 1, t: 1 } } } },
+      });
+      const sentSim = core.sim;
+      const gen = S._gen ?? 0;
+
+      calls.length = 0;
+      assert.equal(await S.regenerateStage(core, "brief", "reroll"), true, "the paid re-roll runs");
+      await tick();
+
+      assert.equal(briefCalls, 1, "EXACTLY ONE generation call — the force entered the ladder body, not the bare lift");
+      assert.equal(packCalls, 0, "and no pack call: there is no seal-side evidence that one was ever owed");
+      const sealPatch = calls.find((c) => c.kind === "patch" && c.patch.pixelforgeBrief);
+      assert.ok(sealPatch, "the new brief sealed");
+      assert.equal(P.briefHashOf(sealPatch.patch.pixelforgeBrief), rHash2, "…and it is the new one");
+      assert.equal(
+        P.briefHashOf(sealPatch.patch.pixelforgeBriefPrior),
+        rHash,
+        "with the outgoing brief parked BESIDE it in the same PATCH — one deep, additive, atomic",
+      );
+      assert.equal(
+        "pixelforgePackWanted" in sealPatch.patch,
+        false,
+        "and the era marker was NOT minted from the wizard's copy: the mint stays a creation-era one-shot",
+      );
+      assert.notEqual(core.sim, before, "the world was replaced");
+      assert.equal(core.sim.world.brieved, true, "…by one that actually compiled");
+      assert.equal(core.sim.world.seed, RSEED, "AT THE SAME SEED — the seed is the world's identity and never moves");
+      assert.equal(core.sim.world.seed, S._configSeed(meta), "…the same number the wizard recorded, on every path");
+
+      // WHAT CROSSED, AND WHAT WAS SET ASIDE.
+      const now = P.get(core);
+      assert.equal(now.pouch.money, 25, "the purse crossed — it means the same thing in any world");
+      assert.equal(now.skills.verbs.fishing.x, 4, "and the skill");
+      assert.ok(
+        now.pouch.items.some((i) => i.t === "rod"),
+        "and the rod",
+      );
+      assert.deepEqual(now.rel, {}, "the relationship did not: that person lived on the map that is gone");
+      assert.deepEqual(now.ledger.lines, [], "nor the ledger line");
+      assert.equal(now.home, null, "nor the home anchor");
+      const parked = loadedPF.quarantine.peek("stamp");
+      assert.ok(parked?.fields?.rel?.village?.["Somebody From The Stand-In"], "all of it is in the stamp slot, verbatim");
+      assert.ok(parked.fields.rel.earlier, "…MERGED with the loss the bag was already holding, not bounced off it");
+      assert.ok(
+        (now.ledger.notices ?? []).some(([, text]) => text.includes("belonged to another world")),
+        "and the player is TOLD: the severance notice this path has never emitted",
+      );
+      assert.equal(now.pouch.money, 25, "THERE IS NO SECOND STARTING PURSE: a played-in block keeps what it earned");
+
+      // THE CLOCK, THE SKY, AND THE PLACEMENT THAT HAS TO FOLLOW THEM.
+      assert.equal(core.sim.clockMin, 23 * 60, "the clock crossed");
+      assert.equal(core.sim.day, 5, "and the day");
+      assert.ok(core.sim.weatherOverride, "the sky was re-read: a bare new Sim carries none of its own");
+      const morning = new loadedPF.Sim(world.build(RSEED, "cozy-village", rBrief2));
+      const posts = (sim) =>
+        (sim.zone().npcs ?? [])
+          .map((npc) => `${npc.name}@${npc.x},${npc.y}`)
+          .sort()
+          .join("|");
+      assert.ok(posts(morning), "the 08:00 pass the constructor runs really does place people");
+      assert.notEqual(
+        posts(core.sim),
+        posts(morning),
+        "…and the swapped world stands at its ELEVEN-AT-NIGHT posts, not those anchors: the clock carried WITH a re-place",
+      );
+
+      assert.equal(seen.closeTalk, 1, "an open conversation does not survive the world being replaced");
+      assert.deepEqual(
+        Object.keys(core.sim.world.bindings),
+        [],
+        "and the World-Maps bindings come back empty, honestly lost",
+      );
+      assert.ok(seen.toasts.includes("The world takes shape."), "the arrival reuses the shipped sentence, not a new one");
+      assert.equal(S._forceWrite, true, "and the swap owes a write no cache may dedupe away");
+
+      // THE IN-FLIGHT TURN, ACROSS THE SWAP. The generation fence could not see a
+      // same-chat swap until this release — the install now BUMPS it — so a
+      // continuation that captured the old sim goes stale exactly the way a
+      // chat-switch capture is stale. Its world is gone.
+      assert.notEqual(sentSim, core.sim, "the sim the turn was composed against is not the sim that stands");
+      assert.notEqual(gen, S._gen ?? 0, "the post-start install bumped the generation");
+      assert.equal(P.flush(core, 4, [], gen), false, "…so the turn's own ledger flush lands and refuses");
+      assert.equal(P.get(core).flushedDay, 0, "leaving the day gate where the transplant put it");
+    } finally {
+      loadedPF.brief.generate = realGenerate;
+      loadedPF.pack.generate = realPack;
+      loadedPF.quarantine.reset();
+      clearRetry();
+      restoreAssets();
+    }
+  });
+
+  // ── LANE 5b: THE CASCADE, WHEN THERE IS SOMETHING DOWNSTREAM ──────────────
+  // Ruling 8's law made mechanical: a re-rolled brief strands the pack sealed
+  // against the old one, so the re-roll re-runs it — on SEAL-SIDE evidence only,
+  // never the wizard's answer. This is also the flagship case's arithmetic when
+  // the player skips the free rebuild: the same two calls a fresh game spends.
+  await withSavePath(async ({ calls, tick, makeCore }) => {
+    clearRetry();
+    const realGenerate = loadedPF.brief.generate;
+    const realPack = loadedPF.pack.generate;
+    let briefCalls = 0;
+    let packCalls = 0;
+    loadedPF.brief.generate = async () => {
+      briefCalls += 1;
+      return rBrief2;
+    };
+    loadedPF.pack.generate = async (chatId, { brief }) => {
+      packCalls += 1;
+      return packFor(brief);
+    };
+    try {
+      const meta = { ...wizard(), pixelforgeBrief: rBrief, pixelforgePackWanted: true };
+      const core = makeCore("chat-cascade", RSEED);
+      core.host.chatMeta = meta;
+      core.sim = withCompileBroken(() => S.restore(meta, "chat-cascade"));
+      S.mode = "metadata";
+      calls.length = 0;
+      assert.equal(await S.regenerateStage(core, "brief", "reroll"), true, "the re-roll runs");
+      await tick();
+      assert.equal(briefCalls, 1, "one brief call");
+      assert.equal(packCalls, 1, "…and one pack call, because the seal-side marker says one is owed");
+      const packPatch = calls.find((c) => c.kind === "patch" && c.patch.pixelforgePack);
+      assert.equal(packPatch.patch.pixelforgePack.briefHash, rHash2, "sealed against the world that now stands");
+    } finally {
+      loadedPF.brief.generate = realGenerate;
+      loadedPF.pack.generate = realPack;
+      clearRetry();
+      restoreAssets();
+    }
+  });
+
+  // ── LANE 6: A RE-ROLL THAT FAILS IS A NO-OP ───────────────────────────────
+  // Until the seal PATCH lands, the old brief and the fallback world stand
+  // untouched — which is what makes the popup row survive a failed press.
+  await withSavePath(async ({ calls, tick, makeCore }) => {
+    clearRetry();
+    const realGenerate = loadedPF.brief.generate;
+    loadedPF.brief.generate = async (chatId, { onFailure }) => {
+      onFailure?.("refused");
+      return null;
+    };
+    try {
+      const meta = { ...wizard(), pixelforgeBrief: rBrief };
+      const core = makeCore("chat-rerollfail", RSEED);
+      core.host.chatMeta = meta;
+      core.sim = withCompileBroken(() => S.restore(meta, "chat-rerollfail"));
+      S.mode = "metadata";
+      const before = core.sim;
+      const bytes = JSON.stringify(meta.pixelforgeBrief);
+      calls.length = 0;
+      assert.equal(await S.regenerateStage(core, "brief", "reroll"), true, "the press ran");
+      await tick();
+      assert.equal(S.gate.state, "failed", "and painted the failed screen");
+      assert.equal(S.gate.stage, "brief", "for the stage that failed");
+      assert.equal(core.sim, before, "the world is the same object: nothing was replaced");
+      assert.equal(JSON.stringify(meta.pixelforgeBrief), bytes, "and the sealed brief did not move");
+      assert.equal(
+        calls.some((c) => c.kind === "patch" && (c.patch.pixelforgeBrief || c.patch.pixelforgeBriefPrior)),
+        false,
+        "nothing was stored — a failure seals nothing, and never a stand-in world on anybody's behalf",
+      );
+      assert.equal(
+        S.stage("brief").derive(meta, core.sim.world, "chat-rerollfail"),
+        "fallback",
+        "so the row is still there to press again",
+      );
+      assert.equal(await S.keepPlaying(core), true, "…and the keep-playing exit works from here too");
+      assert.equal(S.gate, null, "taking the freeze off the world they were already living in");
+    } finally {
+      loadedPF.brief.generate = realGenerate;
+      clearRetry();
+      restoreAssets();
+    }
+  });
+
+  // ── LANE 7: RE-ENTRANCY, THE RE-ARM, AND THE VISIT'S ADOPT ────────────────
+  // The mechanism the whole post-start design stands on, driven through the
+  // SHIPPED `_switchChat` rather than a hand-rolled reset+arm: `_switchChat` is
+  // what nulls the mode and re-restores the sim, and a lane that skipped it would
+  // be watching a state the game never reaches.
+  await withSavePath(async ({ behavior, tick }) => {
+    clearRetry();
+    const core = loadedPF.core;
+    const realGenerate = loadedPF.brief.generate;
+    const realPack = loadedPF.pack.generate;
+    const held = { hud: core.hud, sim: core.sim, chatId: core.chatId, host: core.host, render: core.render };
+    const toasts = [];
+    let briefCalls = 0;
+    let release = null;
+    loadedPF.brief.generate = async () => {
+      briefCalls += 1;
+      await new Promise((resolve) => {
+        release = resolve;
+      });
+      return rBrief2;
+    };
+    loadedPF.pack.generate = async (chatId, { brief }) => packFor(brief);
+    try {
+      const meta = { ...wizard(), pixelforgeBrief: rBrief };
+      core.hud = {
+        toast: (text) => toasts.push(text),
+        refreshChips() {},
+        update() {},
+      };
+      core.render = null;
+      core.chatId = "chat-rearm";
+      core.host = { chatMeta: meta };
+      core.sim = withCompileBroken(() => S.restore(meta, "chat-rearm"));
+      S.mode = "metadata";
+      behavior.get = async () => ({ available: true, status: 200, body: { exists: false } });
+
+      // DOUBLE-PRESS IS ONE CALL, and a press for a chat already generating is
+      // refused with `this.gate` untouched — a refusal touches nothing.
+      const first = S.regenerateStage(core, "brief", "reroll");
+      for (let i = 0; i < 20 && !release; i++) await tick();
+      assert.equal(briefCalls, 1, "the first press is in flight");
+      assert.equal(await S.regenerateStage(core, "brief", "reroll"), false, "…and a second press is refused");
+      assert.equal(briefCalls, 1, "with no second call");
+      S._generating.add("chat-other");
+      const gateWas = S.gate;
+      assert.equal(
+        await S.regenerateStage({ chatId: "chat-other" }, "brief", "reroll"),
+        false,
+        "a chat already generating refuses too",
+      );
+      assert.equal(S.gate, gateWas, "…and the refusal left this chat's gate exactly as it was");
+      S._generating.delete("chat-other");
+
+      // THE CHAT SWITCH, MID-REGENERATION. reset() nulls the gate and armGate
+      // arms on neither expectation — both false by construction here — so the
+      // record is the only thing that can put the freeze back.
+      assert.equal(S._regenPending.get("chat-rearm")?.mode, "reroll", "the record stands while the call is out");
+      core._switchChat({ chatId: "chat-elsewhere", chatMeta: {} });
+      assert.equal(S.gateHolds(core), false, "the chat we arrived at is not the one regenerating");
+      core._switchChat({ chatId: "chat-rearm", chatMeta: meta });
+      assert.equal(S.gateHolds(core), true, "coming back RE-ARMS the gate from the record");
+      assert.equal(S.gate.postStart, true, "…as a post-start gate");
+      assert.equal(S.gate.stage, "brief", "…at the stage that is running");
+      assert.equal(S.gate.mode, "reroll", "…carrying the mode, so the retry button knows what to re-press");
+      // …AND THE VISIT'S ADOPT RUNS. Swallowed, the failure exit never writes a
+      // route row at all and the success exit runs the boot probe mid-visit
+      // against the pre-regeneration row, classifies row 6, and rebuilds that
+      // stale row straight over the world it has just installed.
+      for (let i = 0; i < 40 && S.mode === null; i++) await tick();
+      assert.notEqual(S.mode, null, "the visit adopted: a post-start re-arm does not swallow the probe");
+
+      // AND THE LANDING INSTALL LIFTS FOR REAL.
+      const beforeInstall = core.sim;
+      toasts.length = 0;
+      release();
+      for (let i = 0; i < 120 && S.gate; i++) await tick();
+      assert.equal(await first, true, "the press completes");
+      assert.notEqual(core.sim, beforeInstall, "the install landed and replaced the world");
+      assert.equal(core.sim.world.brieved, true, "…with the compiled one");
+      assert.equal(S.gateHolds(core), false, "the gate lifted");
+      assert.equal(S._regenPending.size, 0, "and the record was released — a leak refuses every later press");
+      assert.equal(
+        toasts.includes("The world rewound with the story."),
+        false,
+        "no rewind toast: the visit's adopt already ran, so the lift's own adopt no-ops on mode",
+      );
+      assert.ok(toasts.includes("The world takes shape."), "…and the arrival is the sentence that IS said");
+    } finally {
+      if (release) release();
+      loadedPF.brief.generate = realGenerate;
+      loadedPF.pack.generate = realPack;
+      core.hud = held.hud;
+      core.sim = held.sim;
+      core.chatId = held.chatId;
+      core.host = held.host;
+      core.render = held.render;
+      clearRetry();
+      restoreAssets();
+    }
+  });
+
+  // ── LANE 8: THE STRINGS, READ THROUGH THE HUD ─────────────────────────────
+  // Not off the registry — off `hud.gateTitle.textContent` and `hud.gateBody`,
+  // driven through a real `Hud` on the DOM shim, so what this proves is that the
+  // SCREEN reads the table rather than that the lane author transcribed it.
+  {
+    const realSetTimeout = globalThis.setTimeout;
+    const realClearTimeout = globalThis.clearTimeout;
+    globalThis.setTimeout = () => 0;
+    globalThis.clearTimeout = () => {};
+    S.reset();
+    clearRetry();
+    try {
+      const sim = new loadedPF.Sim(world.build(RSEED, "cozy-village", rBrief));
+      const core = { chatId: "chat-strings", sim, host: { chatMeta: { ...wizard(), pixelforgeBrief: rBrief } } };
+      const hud = new loadedPF.Hud(new FakeNode("div"), core);
+      core.hud = hud;
+      const screen = (gate) => {
+        S.gate = { chatId: "chat-strings", attempts: 0, ...gate };
+        hud.update();
+        return { title: hud.gateTitle.textContent, body: hud.gateBody.textContent };
+      };
+      // THE SHIPPED SIX, BYTE-IDENTICAL for the boot-armed states they were
+      // written for. A screen that drifted here is a screen a player reads.
+      const writing = screen({ state: "generating", stage: "brief" });
+      assert.equal(writing.title, "Writing your world…");
+      assert.equal(
+        writing.body,
+        "One generation call is shaping the settlement, its people and the places in it. This can take a minute.",
+      );
+      const writingPack = screen({ state: "generating", stage: "pack" });
+      assert.equal(writingPack.title, "Writing what your world has to say…");
+      assert.equal(
+        writingPack.body,
+        "The settlement is written. One more call is filling in what its people say and the work they have to offer.",
+      );
+      const failedBrief = screen({ state: "failed", stage: "brief", failure: "refused" });
+      assert.equal(failedBrief.title, "The world didn't finish being written.");
+      assert.ok(failedBrief.body.includes("a shorter, plainer setting description"), "the brief's advice half survived");
+      assert.ok(failedBrief.body.includes("no stand-in world was settled on this chat"), "…and its shipped note");
+      const failedPack = screen({ state: "failed", stage: "pack", failure: "refused" });
+      assert.equal(failedPack.title, "This world didn't finish opening.");
+      assert.ok(
+        !failedPack.body.includes("shorter, plainer setting"),
+        "the pack stage does not tell them to rewrite the one thing that worked",
+      );
+      assert.ok(failedPack.body.includes("Trying again is free"), "…and keeps its own shipped note");
+      assert.equal(
+        S.gateReason("storage", "brief"),
+        "The world was written, but saving it to this chat did not go through.",
+      );
+      assert.equal(
+        S.gateReason("storage", "pack"),
+        "The work was written, but saving it to this chat did not go through.",
+      );
+
+      // THE POST-START VARIANTS, and they exist because the shipped clauses LIE
+      // there: there IS a stand-in world on this chat, standing in front of the
+      // player as they read it, and trying again is no longer free.
+      const postBrief = screen({ state: "failed", stage: "brief", failure: "refused", postStart: true });
+      assert.ok(
+        !postBrief.body.includes("no stand-in world was settled on this chat"),
+        "the post-start brief screen does not deny what is on screen behind it",
+      );
+      assert.ok(postBrief.body.includes("keeping the stand-in costs nothing"), "…and says what the choice actually is");
+      const postPack = screen({ state: "failed", stage: "pack", failure: "refused", postStart: true });
+      assert.ok(!postPack.body.includes("Trying again is free"), "…and the post-start pack screen does not call a paid call free");
+      assert.ok(postPack.body.includes("costs one call"), "…it prices it");
+      assert.equal(hud.gateKeep.style.display, "", "and the second exit is on screen where there is somewhere to go");
+      screen({ state: "failed", stage: "brief", failure: "refused" });
+      assert.equal(
+        hud.gateKeep.style.display,
+        "none",
+        "…but never on a boot brief gate: the world under that one is the placeholder nobody may keep",
+      );
+
+      // THE STRINGS THE POPUP ITSELF READS, which were previously unhomed.
+      assert.equal(S.RETRY_COPY.title, "Some of this world didn't finish being written.");
+      assert.ok(S.RETRY_COPY.footer.startsWith("Or leave this world and start a new game"));
+      assert.equal(S.RETRY_COPY.chip, "World: part stand-in");
+      assert.equal(hud.retryChip.textContent, S.RETRY_COPY.chip, "…and the chip wears the registry's own words");
+      const rebuild = S.stage("brief").rows.fallback.actions.find((a) => a.mode === "rebuild");
+      assert.equal(rebuild.label, "Try building it again (free)");
+      assert.ok(
+        rebuild.note.includes("same seed") && rebuild.note.includes("update has fixed the builder"),
+        "the free button's sub-line is honest about ruling 8's determinism BEFORE the press",
+      );
+      assert.ok(S.RETRY_COPY.costFree.includes("no generation call"), "the free confirm prices itself at nothing");
+      assert.ok(S.RETRY_COPY.costPaid.includes("one generation call — two"), "…and the paid one at one call, or two");
+      for (const clause of [
+        "money, items, skills and the clock come with you",
+        "no second starting purse",
+        "no going back",
+      ])
+        assert.ok(S.RETRY_COPY.keepsAndLoses.includes(clause), `the confirm names what is kept and lost: ${clause}`);
+      assert.ok(S.RETRY_COPY.rebuildUnchanged.includes("nothing has changed yet"), "and the free no-op says so plainly");
+      hud.destroy();
+    } finally {
+      S.gate = null;
+      globalThis.setTimeout = realSetTimeout;
+      globalThis.clearTimeout = realClearTimeout;
+      clearRetry();
+    }
+  }
+
+  // ── LANE 9: THE FREE SAME-SEED REBUILD (ruling 8) ─────────────────────────
+  // v5's flagship was a free RESEED and the maintainer vetoed it: the seed is the
+  // world's identity for the life of the chat, because historygen and everything
+  // downstream must derive from the world that stands. What is left is a rebuild
+  // that is deterministic and says so — it answers only once an update has fixed
+  // the builder, and changes nothing until then.
+  await withSavePath(async ({ calls, tick, makeCore }) => {
+    clearRetry();
+    try {
+      const meta = { ...wizard(), pixelforgeBrief: rBrief, pixelforgePack: packFor(rBrief) };
+      const core = makeCore("chat-rebuild", RSEED);
+      core.host.chatMeta = meta;
+      core.sim = withCompileBroken(() => S.restore(meta, "chat-rebuild"));
+      S.mode = "metadata";
+      assert.ok(!core.sim.world.brieved, "the fixture is standing on a stand-in map");
+
+      // BEFORE THE UPDATE: the compile still throws, so the press is provably a
+      // no-op — and a second press is byte-identical to the first.
+      const before = core.sim;
+      const fixCompile = breakCompile();
+      let one;
+      let two;
+      let could;
+      try {
+        one = await S.regenerateStage(core, "brief", "rebuild");
+        two = await S.regenerateStage(core, "brief", "rebuild");
+        could = S.canRebuild(core);
+      } finally {
+        fixCompile();
+      }
+      assert.equal(one, false, "the free press cannot answer yet");
+      assert.equal(two, false, "…and a repeat press is provably identical: same setting, same seed");
+      assert.equal(could, false, "which is what the copy says up front instead of discovering it at the button");
+      assert.equal(core.sim, before, "the world is untouched");
+      assert.equal(S._regenPending.size, 0, "and the record was released either way");
+      assert.equal(S.gate, null, "with no gate ever armed: there is no call to wait for");
+
+      // AFTER THE UPDATE (the throw-stub gone): the same press installs, for
+      // zero calls, at the same seed.
+      const seedWas = core.sim.world.seed;
+      calls.length = 0;
+      assert.equal(S.canRebuild(core), true, "with the builder fixed, the free press can answer");
+      assert.equal(await S.regenerateStage(core, "brief", "rebuild"), true, "and it does");
+      await tick();
+      assert.notEqual(core.sim, before, "the world was rebuilt");
+      assert.equal(core.sim.world.brieved, true, "…from the brief that was sealed all along");
+      assert.equal(core.sim.world.seed, seedWas, "THE SEED DID NOT MOVE");
+      assert.equal(core.sim.world.seed, S._configSeed(meta), "…and still agrees with the wizard's record of origin");
+      assert.equal(S.gate, null, "no gate was armed for it either");
+      assert.equal(
+        calls.some((c) => c.kind === "patch" && (c.patch.pixelforgeBrief || c.patch.pixelforgePack)),
+        false,
+        "and neither artifact was re-sealed: the free press keeps both",
+      );
+      assert.equal(
+        S.stage("pack").derive(meta, core.sim.world, "chat-rebuild"),
+        "ok",
+        "the sealed pack is still valid by construction — same brief, same hash",
+      );
+      assert.equal(S._forceWrite, true, "the swap owes a write no cache may dedupe away");
+      assert.ok((P.get(core)?.pouch?.money ?? 0) > 0, "and with no gate to lift, the install tail paid the purse itself");
+
+      // …AND IT REFUSES A PLAYED-IN BLOCK, which is the other direction of the
+      // same idempotent predicate: a player who earned on the stand-in keeps what
+      // they earned instead of being handed a second beginning.
+      clearRetry();
+      const played = makeCore("chat-rebuild-played", RSEED);
+      played.host.chatMeta = { ...wizard(), pixelforgeBrief: rBrief };
+      played.sim = withCompileBroken(() => S.restore(played.host.chatMeta, "chat-rebuild-played"));
+      P.award(played, { money: 7 });
+      assert.equal(await S.regenerateStage(played, "brief", "rebuild"), true, "the rebuild runs");
+      await tick();
+      assert.equal(P.get(played).pouch.money, 7, "…and pays no second starting purse over money already earned");
+
+      // AN UNREADABLE SEAL IS NEVER OFFERED THE FREE PRESS: there is nothing
+      // build() will compile, so it could only ever fail.
+      const half = makeCore("chat-rebuild-half", RSEED);
+      half.host.chatMeta = { ...wizard(), pixelforgeBrief: { cast: rBrief.cast } };
+      half.sim = new loadedPF.Sim(world.build(RSEED, "cozy-village", null));
+      assert.equal(
+        S.stage("brief").derive(half.host.chatMeta, half.sim.world, "chat-rebuild-half"),
+        "unreadable",
+        "it derives the unreadable row",
+      );
+      assert.equal(
+        S.stage("brief").rows.unreadable.actions.some((a) => a.mode === "rebuild"),
+        false,
+        "…whose buttons do not include the free rebuild",
+      );
+      assert.equal(S.canRebuild(half), false, "and the press could not have answered anyway");
+      assert.equal(await S.regenerateStage(half, "brief", "rebuild"), false, "…so it refuses if something calls it");
+    } finally {
+      clearRetry();
+      restoreAssets();
+    }
+  });
+
+  // ── LANE 10: THE WRITE PATH UNDER A POST-START HOLD ───────────────────────
+  // The gate's write refusals were all written for a PLACEHOLDER world nobody had
+  // entered. Post-start there is a played world behind the gate, and it is not
+  // walking that needs the exemption — under any hold the tick returns above
+  // `sim.step` and the positional governor, so a held world accrues no position at
+  // all. What needs it is everything a completed turn left behind: the host's
+  // un-gated turn-end arm, and the chat-switch and pagehide paths, which must be
+  // able to take that world with them because a FAILED regeneration hands it
+  // straight back to the player.
+  await withSavePath(async ({ calls, armed, behavior, tick, makeCore }) => {
+    clearRetry();
+    try {
+      const meta = { ...wizard(), pixelforgeBrief: rBrief };
+      const core = makeCore("chat-writes", RSEED);
+      core.host.chatMeta = meta;
+      core.sim = S.restore(meta, "chat-writes");
+      S.mode = "metadata";
+
+      // A BOOT-ARMED GATE KEEPS ALL THREE REFUSALS. (`captureFlush` has none of
+      // its own to pin: it is a try/catch around `_pendingWrite`.)
+      S.gate = { chatId: "chat-writes", state: "generating", attempts: 0, stage: "brief" };
+      calls.length = 0;
+      armed.length = 0;
+      core.sim.day += 1;
+      S.markDirty(core);
+      assert.equal(armed.length, 0, "a boot gate arms no timer");
+      assert.equal(S._pendingWrite(core), null, "…yields no write at the chokepoint");
+      assert.equal(S.captureFlush(core), null, "…so a chat-switch capture is empty too");
+      S.flushTeardown(core);
+      assert.equal(calls.length, 0, "…and a pagehide sends nothing");
+
+      // THE POST-START HOLD DOES NOT STARVE IT.
+      S.gate = {
+        chatId: "chat-writes",
+        state: "generating",
+        attempts: 0,
+        stage: "brief",
+        mode: "reroll",
+        postStart: true,
+      };
+      armed.length = 0;
+      core.sim.day += 1;
+      S.markDirty(core);
+      assert.equal(armed.length, 1, "the debounce arms");
+      const job = S._pendingWrite(core);
+      assert.ok(job, "the chokepoint yields a write");
+      assert.equal(job.snap.day, core.sim.day, "…of the world the player is actually standing in");
+      assert.ok(S.captureFlush(core), "…and a chat switch can take it with them");
+      calls.length = 0;
+      S.flushTeardown(core);
+      assert.equal(calls.filter((c) => c.kind === "patch").length, 1, "and a pagehide takes the played world too");
+
+      // …AND THE BYTES ACTUALLY LAND. Spy ORDER alone is vacuous against a
+      // silently-declined teardown, so this drives the turn-end arm's own
+      // `markDirty` under the hold and reads what reached the wire.
+      S.reset();
+      S.mode = "metadata";
+      const marker = 4321;
+      core.sim.day = marker;
+      S.gate = {
+        chatId: "chat-writes",
+        state: "generating",
+        attempts: 0,
+        stage: "brief",
+        mode: "reroll",
+        postStart: true,
+      };
+      armed.length = 0;
+      calls.length = 0;
+      S.markDirty(core); // the host props turn-end arm, un-gated, exactly as shipped
+      while (armed.length) {
+        const timer = armed.shift();
+        if (!timer.interval) timer.fn();
+      }
+      for (let i = 0; i < 20; i++) await tick();
+      const written = calls.find((c) => c.kind === "patch" && c.patch.pixelforge);
+      assert.ok(written, "the turn-end write LANDED under the hold");
+      assert.equal(written.patch.pixelforge.day, marker, "…carrying the state the completed turn left behind");
+
+      // THE PRE-ARM FLUSH IS AWAITED, AND ITS BYTES LAND BEFORE THE CALL GOES OUT.
+      clearRetry();
+      S.reset();
+      const p = makeCore("chat-prearm", RSEED);
+      p.host.chatMeta = { ...wizard(), pixelforgeBrief: rBrief };
+      p.sim = withCompileBroken(() => S.restore(p.host.chatMeta, "chat-prearm"));
+      S.mode = "metadata";
+      p.sim.day = 77;
+      calls.length = 0;
+      let callsAtDispatch = -1;
+      const realGenerate = loadedPF.brief.generate;
+      loadedPF.brief.generate = async () => {
+        callsAtDispatch = calls.length;
+        return null;
+      };
+      try {
+        await S.regenerateStage(p, "brief", "reroll");
+        await tick();
+      } finally {
+        loadedPF.brief.generate = realGenerate;
+      }
+      const preArm = calls.findIndex((c) => c.kind === "patch" && c.patch.pixelforge?.day === 77);
+      assert.ok(preArm >= 0, "the pre-arm flush actually wrote — a fire-and-forget teardown could have declined silently");
+      assert.ok(preArm < callsAtDispatch, "…and it landed BEFORE the generation call went out");
+
+      // THE REWIND LADDER IS NOT EXEMPTED WITH THE WRITE. Under the hold a moved
+      // row still BLOCKS the PUT exactly as shipped and applies no rewind — the
+      // world behind the freeze is the one about to be replaced, and the two
+      // refusal sites must not disagree about whether the gate holds.
+      clearRetry();
+      S.reset();
+      S.mode = "routes";
+      const r = makeCore("chat-rewind-held", 1313);
+      await S.flush(r, false);
+      r.toasts.length = 0;
+      calls.length = 0;
+      const moved = { v: 1, seed: 1313, theme: "cozy-village", zone: "inn", day: 30, player: { v: 1, game: 1 } };
+      behavior.get = async () => ({ available: true, status: 200, body: { exists: true, state: moved } });
+      S._lastCheckAt = 0;
+      S.gate = {
+        chatId: "chat-rewind-held",
+        state: "generating",
+        attempts: 0,
+        stage: "brief",
+        mode: "reroll",
+        postStart: true,
+      };
+      const worldWas = r.sim;
+      r.sim.day += 1;
+      await S.flush(r, false);
+      assert.equal(calls.filter((c) => c.kind === "put").length, 0, "the blocking verdict still refuses the PUT, as shipped");
+      assert.equal(r.sim, worldWas, "…and no rewind was applied under the hold: the world is the same object");
+      assert.deepEqual(r.toasts, [], "nothing was announced");
+      // …and the first check after the gate comes down is what applies it.
+      S.gate = null;
+      S._lastCheckAt = 0;
+      await S.checkRewind(r);
+      assert.notEqual(r.sim, worldWas, "the moved row lands at the first turn edge after the hold");
+      assert.deepEqual(r.toasts, ["The world rewound with the story."], "…and is announced then");
+    } finally {
+      clearRetry();
+      restoreAssets();
+    }
+  });
+
+  // ── LANE 11: THE POPUP PANEL, IN-HARNESS ──────────────────────────────────
+  // The package ships zero `aria-modal` dialogs on purpose, so the popup is a
+  // boolean-latched overlay in `closePanels()`'s mutual-exclusion set — which is
+  // what gets it Escape for free, with no 90-element edit at all.
+  {
+    const realSetTimeout = globalThis.setTimeout;
+    const realClearTimeout = globalThis.clearTimeout;
+    globalThis.setTimeout = () => 0;
+    globalThis.clearTimeout = () => {};
+    const realPatch = loadedPF.api.patchMetadata;
+    const patched = [];
+    loadedPF.api.patchMetadata = async (chatId, patch) => {
+      patched.push({ chatId, patch });
+    };
+    S.reset();
+    clearRetry();
+    try {
+      const standIn = withCompileBroken(() => world.build(RSEED, "cozy-village", rBrief));
+      const meta = { ...wizard(), pixelforgeBrief: rBrief };
+      const core = {
+        chatId: "chat-panel-a",
+        sim: new loadedPF.Sim(standIn),
+        host: { chatMeta: meta },
+        talkOpen: () => false,
+        closeTalk() {},
+      };
+      const hud = new loadedPF.Hud(new FakeNode("div"), core);
+      core.hud = hud;
+
+      // THE AUTO-OPEN, ONCE PER VISIT.
+      hud.update();
+      assert.equal(hud._retry, true, "the popup opens itself once, on the visit's first in-world frame");
+      assert.equal(hud.retryEl.style.display, "flex", "…and mounts");
+      assert.equal(hud.retryChip.style.display, "", "with the chip standing beside it");
+      const shown = textIn(hud.retryBody);
+      assert.ok(shown.includes("The world"), "the brief's row is on it, in plain words");
+      assert.ok(
+        shown.some((line) => line.includes("you're standing on a stand-in map")),
+        "…saying what is actually wrong",
+      );
+      assert.ok(shown.includes("Try building it again (free)"), "with the free press first");
+      assert.ok(
+        shown.some((line) => line.startsWith("Or leave this world")),
+        "and the leave-and-start-new footer under everything",
+      );
+
+      // A CLOSE SPENDS NO CHOICE. Dismissal is not acceptance: `closePanels` is a
+      // blunt close-everything with no "why" channel, so opening a journal must
+      // never be able to record a deferral.
+      patched.length = 0;
+      assert.equal(hud.closePanels(), true, "the popup is a member of the mutual-exclusion set");
+      assert.equal(hud._retry, false, "…and Escape's own path closes it");
+      assert.equal(patched.length, 0, "WITHOUT writing a marker: a close is not a choice");
+      hud.update();
+      assert.equal(hud._retry, false, "and it does not re-pop: the once-a-visit memo holds");
+      assert.equal(hud.retryChip.style.display, "", "the chip is the standing way back in");
+      assert.equal(hud.closePanels(), false, "…and with nothing open, Escape has nothing to close");
+
+      // …AND IT NEVER OPENS OVER SOMETHING SOMEBODY IS READING.
+      hud._retryVisit = null;
+      hud.toggleJournal();
+      hud.update();
+      assert.equal(hud._retry, false, "an open journal is not something a popup may close from under a reader");
+      hud.closeJournal();
+      hud.update();
+      assert.equal(hud._retry, true, "…it waits, and takes its one auto-open when the surface is free");
+
+      // THE ROW BUTTON DOES RECORD. "Keep the stand-in" is the only thing that does.
+      const keep = walkNodes(hud.retryBody).find((node) => node.textContent === "Keep the stand-in");
+      assert.ok(keep, "the row's own keep button is there");
+      await fire(keep, "click");
+      assert.equal(patched.length, 1, "…and pressing it records the choice");
+      assert.equal(patched[0].patch.pixelforgeFallbackAcceptedBrief, true, "at this stage's own flat key");
+
+      // HIDDEN UNDER THE GATE. A regeneration in flight re-arms the gate, and the
+      // gate is then the surface: the panel says nothing over the top of it.
+      hud.update();
+      if (!hud._retry) hud.toggleRetry();
+      assert.equal(hud.retryEl.style.display, "flex", "the panel is up");
+      S.gate = { chatId: "chat-panel-a", state: "generating", attempts: 0, stage: "brief", postStart: true };
+      hud.update();
+      assert.equal(hud.retryEl.style.display, "none", "…and goes under the gate");
+      assert.equal(hud.retryChip.style.display, "none", "with the chip, which the topbar hides anyway");
+      S.gate = null;
+      hud.update();
+
+      // TWO CHATS THROUGH ONE HUD. `_switchChat` never rebuilds the HUD, so the
+      // latch, the visit memo and any half-made confirm are keyed by the chat that
+      // raised them and self-reset in the per-frame reconcile.
+      if (!hud._retry) hud.toggleRetry();
+      hud._retryNotes.brief = "A sentence chat A's own press left behind.";
+      hud._retryKey = null;
+      hud.update();
+      assert.equal(hud._retry, true, "chat A has its popup open, with a transient sentence on it");
+      assert.ok(textIn(hud.retryBody).includes("A sentence chat A's own press left behind."), "…which is on screen");
+      // Chat B has a row of its own, but the player has ALREADY said "later" to
+      // it — so chat B does NOT auto-open. Chat A's latch surviving would mount
+      // chat A's popup over a chat that never asked for one, which is the whole
+      // reason the latch is keyed by the chat that raised it.
+      core.chatId = "chat-panel-b";
+      core.host.chatMeta = { ...wizard(), pixelforgeBrief: rBrief, pixelforgeFallbackAcceptedBrief: true };
+      hud.update();
+      assert.equal(hud._retryChat, "chat-panel-b", "the reconcile noticed the chat moved");
+      assert.equal(hud._retry, false, "and chat A's popup did NOT mount over chat B");
+      assert.equal(hud.retryEl.style.display, "none", "…nor its panel");
+      assert.equal(hud.retryChip.style.display, "", "chat B still gets the chip: its own row is standing");
+      hud.toggleRetry();
+      assert.ok(textIn(hud.retryBody).includes("The world"), "opening it by hand draws chat B's own rows");
+      assert.ok(
+        !textIn(hud.retryBody).includes("A sentence chat A's own press left behind."),
+        "…and none of chat A's leftovers came with them",
+      );
+      hud.destroy();
+    } finally {
+      loadedPF.api.patchMetadata = realPatch;
+      globalThis.setTimeout = realSetTimeout;
+      globalThis.clearTimeout = realClearTimeout;
+      S.gate = null;
+      clearRetry();
+    }
+  }
+
+  // ── LANE 12: THE BOOT PATH IS BYTE-IDENTICAL ──────────────────────────────
+  // Every gap closure is scoped to a post-start install, and this is the pin in
+  // the other direction: the boot and compat-shim behaviour must not have moved
+  // one line.
+  await withSavePath(async ({ tick }) => {
+    clearRetry();
+    const realGenerate = loadedPF.brief.generate;
+    loadedPF.brief.generate = async () => rBrief;
+    let purses = 0;
+    const realPurse = loadedPF.economy.grantStartingPurse;
+    loadedPF.economy.grantStartingPurse = function (...args) {
+      purses += 1;
+      return realPurse.apply(this, args);
+    };
+    try {
+      const meta = wizard();
+      const { core, seen } = spyCore("chat-boot", meta);
+      core.sim = S.restore(meta, "chat-boot");
+      assert.equal(core.sim.world.interim, true, "a pre-brief chat boots on the placeholder");
+      core.sim.clockMin = 21 * 60;
+      core.sim.day = 9;
+      assert.equal(S.armGate(core, meta), true, "and the gate holds");
+      const genWas = S._gen ?? 0;
+      S._forceWrite = false;
+      await S.maybeGenerateBrief(core);
+      await tick();
+      assert.equal(core.sim.world.brieved, true, "the boot install ran");
+      assert.equal(core.sim.clockMin, 8 * 60, "…and the clock resets to 08:00 exactly as shipped");
+      assert.equal(core.sim.day, 1, "…and the day to 1");
+      assert.equal(seen.closeTalk, 0, "no closeTalk on the boot path: nothing can be open under a boot gate");
+      assert.equal(S._gen ?? 0, genWas, "no generation bump");
+      assert.equal(S._forceWrite, false, "no forced write");
+      assert.equal(purses, 1, "and the purse is paid ONCE, by the lift — the install tail adds nothing here");
+      assert.deepEqual(
+        P.get(core).ledger.notices ?? [],
+        [],
+        "and no severance notice on a block that had nothing to sever",
+      );
+    } finally {
+      loadedPF.brief.generate = realGenerate;
+      loadedPF.economy.grantStartingPurse = realPurse;
+      clearRetry();
+      restoreAssets();
+    }
+  });
+
+  // ── LANE 13: THE AWAY-SUCCESS WITNESS ─────────────────────────────────────
+  // A re-roll that lands while the player is in another chat PATCHes the host,
+  // and the metadata blob in this session's hand still carries the brief it
+  // replaced. Believing that blob would rebuild the degraded world on return,
+  // re-derive the fallback row, and charge a second full paid call for a re-roll
+  // that already succeeded.
+  {
+    clearRetry();
+    try {
+      const stale = { ...wizard(), pixelforgeBrief: rBrief };
+      S._briefSuperseded.set("chat-away", rHash);
+      S._cacheBrief("chat-away", rBrief2);
+      const read = S._configBrief(stale, "chat-away");
+      assert.equal(P.briefHashOf(read), rHash2, "_configBrief returns the NEW brief for the session that rolled it");
+      assert.equal(
+        S._briefSeenInMeta.has("chat-away"),
+        false,
+        "…and never marks the stale blob a witness, which would make the cached new brief evictable",
+      );
+      const rebuilt = world.build(RSEED, "cozy-village", read);
+      assert.equal(rebuilt.brieved, true, "a rebuild from that answer compiles");
+      assert.equal(
+        rebuilt.mintStamp,
+        world.build(RSEED, "cozy-village", rBrief2).mintStamp,
+        "…the NEW world, not the one the blob still names",
+      );
+      assert.equal(
+        S.stage("brief").derive(stale, rebuilt, "chat-away"),
+        "ok",
+        "so the popup row derives ok rather than offering a second paid press",
+      );
+      assert.equal(
+        P.briefHashOf(S._configBrief(stale, "chat-not-away")),
+        rHash,
+        "and another chat still reads its own blob: the witness is per chat",
+      );
+
+      // AND THE RELOAD CASE NEEDS NOTHING. Once the host serves the PATCHed
+      // metadata the blob IS the new brief, and there is no witness to consult.
+      clearRetry();
+      const fresh = { ...wizard(), pixelforgeBrief: rBrief2 };
+      assert.equal(P.briefHashOf(S._configBrief(fresh, "chat-reloaded")), rHash2, "a fresh session reads it straight");
+      assert.equal(S._briefSuperseded.size, 0, "with no session state involved at all");
+    } finally {
+      clearRetry();
+    }
+  }
+}
+
 console.log("brief validator + compiler: all cases passed");
