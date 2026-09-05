@@ -172,6 +172,29 @@ async function main() {
   ]);
   assert.equal(unknownLinkTarget.outcome.droppedCandidates[0]?.validatorCode, "unknown_link_target");
   assert.doesNotMatch(unknownLinkTarget.outcome.droppedCandidates[0]?.message ?? "", /missing_memory/u);
+  const closureAfterInitialDrop = compile(chat, [
+    unit(chat, {
+      bucket: "relationship_state",
+      subjectId: "removed_relationship",
+      sectionKey: "state",
+      text: "Alice and Rowan's trust changed after the argument.",
+      claimKind: "change",
+      subjectNames: ["Alice", "Rowan"],
+      dimensionChanges: { trust: -12 },
+    }),
+    unit(chat, {
+      bucket: "world_fact",
+      subjectId: "dependent_fact",
+      sectionKey: "facts",
+      text: "The observatory kept a record of Alice and Rowan's trust.",
+      links: [{ target: "removed_relationship", relation: "evidenced_by" }],
+    }),
+  ]);
+  const closureDrop = closureAfterInitialDrop.outcome.droppedCandidates.find(
+    (candidate) => candidate.validatorCode === "unknown_link_target",
+  );
+  assert.ok(closureDrop);
+  assert.doesNotMatch(closureDrop.message, /removed_relationship/u);
   const sourceHashMismatch = compile(chat, [
     {
       ...unit(chat, {
