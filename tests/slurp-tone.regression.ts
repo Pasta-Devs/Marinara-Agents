@@ -50,7 +50,8 @@ assert.match(storage, /audienceTone: SLURP_DEFAULT_AUDIENCE_TONE/u);
 // A generated audience member is not a player: no stipend, no renewals, no mirrored settings row.
 // getWallet tops any id up to the stipend floor on read, so every member the world touched was
 // accumulating coins they can never spend.
-assert.match(storage, /if \(this\.isSyntheticWalletHolder\(viewerAccountId\)\) return stored;/u);
+assert.match(storage, /isSyntheticWalletHolder\(viewerAccountId\)/u);
+assert.match(storage, /getWalletNow\(viewerAccountId\)/u);
 
 const settings = read("client/src/components/slurp/SlurpSettings.tsx");
 assert.match(settings, /update\("audienceTone", tone\)/u);

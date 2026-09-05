@@ -610,6 +610,26 @@ export function createSlurpMessagesStorage(db: DB) {
     /** Replace a placeholder brief with the model's rewrite. Text only; nothing else moves. */
     async rewriteCommissionBrief(id: string, brief: string): Promise<void> {
       await db.update(slurpCommissions).set({ brief, updatedAt: now() }).where(eq(slurpCommissions.id, id));
+      const rows = await db.select().from(slurpCommissions).where(eq(slurpCommissions.id, id));
+      const commission = rows[0];
+      if (!commission) return;
+      const messages = await db.select().from(slurpMessages).where(eq(slurpMessages.threadId, commission.threadId));
+      const linked = messages.find((message) => {
+        try {
+          return JSON.parse(String(message.metadata ?? "{}"))?.commissionId === id;
+        } catch {
+          return false;
+        }
+      });
+      if (!linked) return;
+      await db.update(slurpMessages).set({ content: brief }).where(eq(slurpMessages.id, linked.id));
+      const latest = messages.sort((left, right) => right.createdAt.localeCompare(left.createdAt))[0];
+      if (latest?.id === linked.id) {
+        await db
+          .update(slurpThreads)
+          .set({ lastMessagePreview: brief.slice(0, 160), updatedAt: now() })
+          .where(eq(slurpThreads.id, commission.threadId));
+      }
     },
 
     /** Replace a placeholder message with the model's rewrite, and keep the inbox preview in step. */

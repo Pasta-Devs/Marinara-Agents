@@ -78,8 +78,31 @@ assert.deepEqual(readSlurpWallet('{"subscriptions":{"a":{"price":"free"}}}').sub
 // The storage layer must actually gate on the wallet, not just carry it.
 const storage = readFileSync("packages/slurp/src/engine/packages/server/src/services/storage/slurp.storage.ts", "utf8");
 assert.match(storage, /spend\(wallet, "unlock", price/u, "unlocking must debit the wallet");
-assert.match(storage, /spend\(wallet, "subscribe", price/u, "subscribing must debit the wallet");
+assert.match(storage, /spend\(previousWallet, "subscribe", price/u, "subscribing must debit the wallet");
+assert.doesNotMatch(storage, /viewerSettingsUpdateQueue/u, "viewer settings must use the shared financial queue");
+assert.match(
+  storage,
+  /existingPaymentIsValid[\s\S]*?if \(existing\[0\] && existingPaymentIsValid\)/u,
+  "an existing subscription row must be checked against its wallet payment",
+);
+assert.match(
+  storage,
+  /if \(!charged\) \{\s*await this\.unsubscribe\(viewerAccountId, creatorAccountId, true\)/u,
+  "an unaffordable inconsistent subscription must lapse without waiting on the queue again",
+);
 assert.match(storage, /creditCreatorIncome/u, "a paid creator's owner must be credited");
+assert.match(storage, /const restoreWallet = async/u, "financial rollback must restore the wallet representations");
+assert.match(
+  storage,
+  /wallet: \{ coins: walletAfterCharge\.coins \}[\s\S]*?followingAccountIds/u,
+  "the final subscription settings write preserves charged wallet coins",
+);
+assert.match(
+  storage,
+  /await settingsStore\.set\(walletKey, JSON\.stringify\(wallet\)\);[\s\S]*?await settingsStore\.set\(viewerSettingsKey/u,
+  "wallet writes must update the canonical key and mirrored settings key",
+);
+assert.match(storage, /await writeWallet\(viewerAccountId, \{ \.\.\.wallet, subscriptions \}\)/u);
 // Coins are on out of the box as of 1.1.3: the balance is a gameplay element, not an opt-in.
 // An install that already stored `false` keeps it, because `normalizeSlurpSettings` only falls
 // back to the default for a key it has no stored value for.

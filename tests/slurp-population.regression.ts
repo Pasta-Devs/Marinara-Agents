@@ -9,6 +9,7 @@ import {
   slurpMemberActivityWeight,
   slurpMembersActiveAt,
   SLURP_POPULATION_NAME_SPACE,
+  slurpReactivationStage,
 } from "../packages/slurp/src/engine/packages/server/src/services/slurp/slurp-population.js";
 
 const at = new Date("2026-09-05T00:00:00.000Z");
@@ -96,6 +97,11 @@ for (const bad of [Number.NaN, Infinity]) {
   assert.deepEqual(slurpMembersActiveAt(roster, 3, 0), []);
 }
 
+assert.equal(slurpReactivationStage("liker", false), "liker");
+assert.equal(slurpReactivationStage("subscriber", false), "follower");
+assert.equal(slurpReactivationStage("subscriber", true), "subscriber");
+assert.equal(slurpReactivationStage("invalid", false), "follower");
+
 // ── Wiring ──────────────────────────────────────────────────────────────────
 const root = join(import.meta.dirname, "..", "packages/slurp/src/engine/packages/server/src");
 const read = (path: string) => readFileSync(join(root, path), "utf8");
@@ -110,7 +116,7 @@ assert.match(operation, /FAN_RUN_NEWCOMERS/u);
 
 const storage = read("services/storage/slurp-population.storage.ts");
 // A stage is never lowered by advancing: that is churn's job and it has its own reasons.
-assert.match(storage, /nextIndex > currentIndex && nextIndex >= 0 \? input\.stage! : tie\.stage/u);
+assert.match(storage, /nextIndex > currentIndex && nextIndex >= 0/u);
 assert.equal(SLURP_NAMED_CAST_LIMIT, 30);
 // The funnel is ordered, and the order is what a follower count is counted from.
 assert.equal(SLURP_FUNNEL_STAGES.indexOf("subscriber") > SLURP_FUNNEL_STAGES.indexOf("follower"), true);
@@ -153,6 +159,7 @@ assert.match(world, /createSlurpPopulationStorage\(db\)\.get\(actorAccountId\)/u
 // listAll orders by lastActiveAt, so without touch() it keeps ordering by creation time: the same
 // earliest members are redrawn forever and anybody who shows up sinks out of the pool.
 assert.match(world, /population\.touch\(actor\.id\)/u);
+assert.match(world, /const pool = \[\.\.\.returning, \.\.\.newcomers\]/u);
 const fanRun = read("services/slurp/slurp-fan-activity.operation.ts");
 assert.match(fanRun, /cast\.map\(\(member\) => population\.touch\(member\.id\)/u);
 

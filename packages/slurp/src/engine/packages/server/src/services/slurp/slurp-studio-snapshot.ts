@@ -15,6 +15,7 @@ const key = (personaId: string) => `slurp.persona.${personaId}.studio`;
 
 export type SlurpStudioSnapshot = {
   at: string;
+  platformScale?: number;
   creators: Record<string, { followers: number; lifetimeEarnings: number }>;
 };
 
@@ -32,7 +33,7 @@ export async function readSlurpStudioSnapshot(db: DB, personaId: string): Promis
       if (!Number.isFinite(value.followers) || !Number.isFinite(value.lifetimeEarnings)) continue;
       creators[id] = { followers: value.followers, lifetimeEarnings: value.lifetimeEarnings };
     }
-    return { at: parsed.at, creators };
+    return { at: parsed.at, platformScale: parsed.platformScale, creators };
   } catch {
     return null;
   }

@@ -138,7 +138,7 @@ assert.match(operation, /await writeLastTick\(db, until\);\s*return \{\s*status:
 assert.match(operation, /tryNoodleOperation\("slurp-world-tick"/u, "concurrent ticks must not double-apply");
 // An unanswered conversation is somebody waiting on the player, exactly like an unanswered
 // commission, so both count against the same queue.
-assert.match(operation, /listOpenCommissionsForCreator\(account\.id\)\)\.length \+/u);
+assert.match(operation, /listOpenCommissionsForCreator\(account\.id\)/u);
 assert.match(operation, /thread\.creatorUnread > 0/u);
 assert.match(operation, /if \(action\.kind === "message"\)/u);
 

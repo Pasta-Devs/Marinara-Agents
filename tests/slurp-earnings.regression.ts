@@ -122,7 +122,7 @@ const storage = readFileSync(
   join(import.meta.dirname, "..", "packages/slurp/src/engine/packages/server/src/services/storage/slurp.storage.ts"),
   "utf8",
 );
-assert.match(storage, /await this\.creditEarnings\(creator\.id, reason, share/u);
+assert.match(storage, /creditEarningsNow\(creator\.id, reason, share/u);
 assert.doesNotMatch(
   storage,
   /const recipientId = creator\.sourceKind === "persona" \? creator\.sourceEntityId : creator\.id;/u,
@@ -142,8 +142,55 @@ assert.match(
   slurpStorage,
   /creator\.sourceKind !== "persona" \|\| !creator\.sourceEntityId\) return \{ status: "refused" \}/u,
 );
+assert.match(slurpStorage, /enqueueSlurpFinancial\(db, operation\)/u, "financial serialization must be shared per DB");
+assert.match(slurpStorage, /creditEarningsNow/u, "nested earnings writes must bypass the outer queue");
+assert.match(
+  slurpStorage,
+  /await writeWallet\(viewerAccountId, charged\);[\s\S]*?restoreWallet\(viewerAccountId, previousWalletValue, previousViewerSettingsValue\)[\s\S]*?await db\.delete\(noodlePostUnlocks\)\.where\(eq\(noodlePostUnlocks\.id, unlock\.id\)/u,
+  "an unlock failure restores both wallet keys and removes only its unlock row",
+);
+assert.match(
+  slurpStorage,
+  /if \(!paymentCompleted\)[\s\S]*?\/\/ Never leave a newly-created row[\s\S]*?await db\.delete\(noodlePostUnlocks\)/u,
+  "unlock cleanup runs even when compensation fails",
+);
+assert.match(
+  slurpStorage,
+  /await writeWallet\(viewerAccountId, renewal\.wallet\);[\s\S]*?await creditEarningsNow\([\s\S]*?restoreWallet\(viewerAccountId, previousWalletValue, previousViewerSettingsValue\)/u,
+  "renewal persists the wallet before crediting earnings and restores it on failure",
+);
+assert.match(
+  slurpStorage,
+  /for \(const creatorAccountId of renewal\.lapsed\)[\s\S]*?"lapsed subscription cleanup"/u,
+  "lapsed subscription cleanup has a compensation path",
+);
+assert.match(
+  slurpStorage,
+  /"payout"[\s\S]*?restoreWallet\(recipientId, previousWalletValue, previousViewerSettingsValue\)[\s\S]*?writeEarnings\(creatorAccountId, current\)/u,
+  "payout restores both wallet keys before restoring earnings",
+);
+assert.match(
+  slurpStorage,
+  /if \(settings\.walletEnabled\) await writeWallet\(viewerAccountId, walletAfterCharge\);[\s\S]*?await tx\.insert\(noodleAccountSubscriptions\)/u,
+  "a new subscription must charge before inserting its row",
+);
+assert.match(
+  slurpStorage,
+  /where\(eq\(noodleAccountSubscriptions\.id, subscriptionId\)\)/u,
+  "subscription rollback must remove only the new row",
+);
+assert.match(
+  slurpStorage,
+  /existing\[0\] && settings\.walletEnabled && existingWallet[\s\S]*?subscriptionPaidThrough\(at, economyFrom\(settings\)\)[\s\S]*?creditEarningsNow[\s\S]*?notifyCreatorIncome[\s\S]*?hasSubscription: true/u,
+  "an expired existing subscription starts a new paid period",
+);
+assert.match(
+  slurpStorage,
+  /for \(const operation of operations\)[\s\S]*?logger\.error\(error, "\[slurp\] %s compensation failed/u,
+  "compensation attempts every independent restore",
+);
 // Earnings are debited first, so a failure puts them back rather than minting spending money.
-assert.match(slurpStorage, /await writeEarnings\(creatorAccountId, current\);/u);
+assert.match(slurpStorage, /writeEarnings\(creatorAccountId, current\)/u);
 
 const payoutRoutes = readFileSync(
   join(import.meta.dirname, "..", "packages/slurp/src/engine/packages/server/src/routes/slurp.routes.ts"),

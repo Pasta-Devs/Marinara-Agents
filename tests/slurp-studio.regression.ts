@@ -101,7 +101,10 @@ assert.match(routes, /app\.get\("\/noodler\/studio"/u);
 // never appear in someone's studio.
 assert.match(routes, /operated = accounts\.filter\(\(account\) => creatorBelongsToViewer\(account, viewer\)\)/u);
 // A first read has no mark to measure from. Null and zero are different and render differently.
-assert.match(routes, /followersDelta: previous \? followers - previous\.followers : null/u);
+assert.match(
+  routes,
+  /followersDelta:\s*previous && \(snapshot\?\.platformScale === undefined \|\| snapshot\.platformScale === studioScale\)/u,
+);
 assert.match(routes, /earningsDelta: previous \? earnings\.lifetime - previous\.lifetimeEarnings : null/u);
 
 const home = read("client/src/components/slurp/SlurpHome.tsx");

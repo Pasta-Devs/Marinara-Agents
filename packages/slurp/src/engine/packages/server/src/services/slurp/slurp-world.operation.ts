@@ -9,7 +9,6 @@
  * model, so briefs and questions come from the combinatorial bank in `slurp-world-copy.ts`.
  * Auto-posting is the one exception to that rule and it lives in its own scheduler.
  */
-import type { NoodleAuthorSnapshot } from "@marinara-engine/shared";
 import type { DB } from "../../db/connection.js";
 import { logger } from "../../lib/logger.js";
 import { newId } from "../../utils/id-generator.js";
@@ -76,6 +75,10 @@ export async function advanceSlurpWorld(db: DB, until = new Date()): Promise<Slu
     const settings = await noodle.getSettings();
     const activity = slurpWorldActivityMultiplier(settings.worldActivity);
     const scale = slurpPlatformScaleMultiplier(settings.platformScale);
+    if (activity === 0) {
+      await writeLastTick(db, until);
+      return { status: "idle" as const, actions: 0 };
+    }
     const accounts = await noodle.listNoodlerAccounts();
     const allAccounts = await noodle.listAccounts();
 
@@ -104,7 +107,7 @@ export async function advanceSlurpWorld(db: DB, until = new Date()): Promise<Slu
     // Who is actually around at this hour. `activeHour` has been stored on every member since the
     // population shipped and read by nothing, so a night owl and an early riser were equally likely
     // to turn up at four in the morning.
-    const pool = [...(await population.listAll(WORLD_AUDIENCE_POOL)), ...newcomers];
+    const pool = [...returning, ...newcomers];
     const awake = slurpMembersActiveAt(pool, until.getUTCHours(), WORLD_AUDIENCE_POOL);
     const audience = [...awake.map((member) => member.id), ...ambient];
 
@@ -181,9 +184,14 @@ export async function advanceSlurpWorld(db: DB, until = new Date()): Promise<Slu
         // how an obligation layer turns into a chore.
         // Unanswered conversations count with unanswered commissions. Both are somebody waiting on
         // the player, and three of either is already more than a session should open with.
-        openRequests:
-          (await messages.listOpenCommissionsForCreator(account.id)).length +
-          (await messages.listThreadsForCreators([account.id])).filter((thread) => thread.creatorUnread > 0).length,
+        openRequests: await (async () => {
+          const openCommissions = await messages.listOpenCommissionsForCreator(account.id);
+          const commissionThreadIds = new Set(openCommissions.map((commission) => commission.threadId));
+          const unreadThreads = (await messages.listThreadsForCreators([account.id])).filter(
+            (thread) => thread.creatorUnread > 0 && !commissionThreadIds.has(thread.id),
+          );
+          return openCommissions.length + unreadThreads.length;
+        })(),
       })),
     );
 
@@ -206,7 +214,7 @@ export async function advanceSlurpWorld(db: DB, until = new Date()): Promise<Slu
     let pulsed = 0;
     for (const action of pulse) {
       try {
-        if (await applyPulse(db, action, until)) pulsed += 1;
+        if (await applyPulse(db, action)) pulsed += 1;
       } catch (error) {
         logger.warn(error, "[slurp-world] Could not apply a %s pulse", action.kind);
       }
@@ -311,21 +319,9 @@ async function applyAction(db: DB, action: SlurpWorldAction, at: Date): Promise<
     return true;
   }
 
-  const snapshot: NoodleAuthorSnapshot = {
-    id: actor.id,
-    kind: "random_user",
-    entityId: actor.entityId,
-    handle: actor.handle,
-    displayName: actor.displayName,
-    avatarUrl: actor.avatarUrl,
-    avatarCrop: null,
-  };
-  const result = await noodle.createNoodlerFanInteraction(action.postId, {
-    id: newId(),
+  const result = await noodle.createNoodlerWorldInteraction(action.postId, {
     creatorAccountId: action.creatorAccountId,
     actorId: actor.id,
-    actorSnapshot: snapshot,
-    runId: `world:${at.toISOString()}`,
     type: "reply",
     content: slurpAudienceQuestion(`${action.postId}:${action.actorAccountId}`),
   });
@@ -360,24 +356,13 @@ async function applyAction(db: DB, action: SlurpWorldAction, at: Date): Promise<
  * as named people, feed the funnel, and cost nothing. A "follow" differs only in how far it moves
  * the tie — there is no separate follow row for a synthetic fan.
  */
-async function applyPulse(db: DB, action: SlurpPulseAction, at: Date): Promise<boolean> {
+async function applyPulse(db: DB, action: SlurpPulseAction): Promise<boolean> {
   const noodle = createSlurpStorage(db);
   const actor = await resolveActor(db, action.actorAccountId);
   if (!actor) return false;
-  const result = await noodle.createNoodlerFanInteraction(action.postId, {
-    id: newId(),
+  const result = await noodle.createNoodlerWorldInteraction(action.postId, {
     creatorAccountId: action.creatorAccountId,
     actorId: actor.id,
-    actorSnapshot: {
-      id: actor.id,
-      kind: "random_user",
-      entityId: actor.entityId,
-      handle: actor.handle,
-      displayName: actor.displayName,
-      avatarUrl: actor.avatarUrl,
-      avatarCrop: null,
-    },
-    runId: `pulse:${at.toISOString()}`,
     type: "like",
     content: null,
   });

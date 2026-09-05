@@ -99,5 +99,15 @@ assert.match(world, /elapsedMinutes: \(until\.getTime\(\) - since\.getTime\(\)\)
 assert.match(world, /async function applyPulse/u);
 // Free tier only: a like carries no text, so no model call.
 assert.match(world, /type: "like",\s*content: null,/u);
+const storage = readFileSync(
+  join(import.meta.dirname, "..", "packages/slurp/src/engine/packages/server/src/services/storage/slurp.storage.ts"),
+  "utf8",
+);
+assert.match(world, /createNoodlerWorldInteraction\(action\.postId/u, "world actions use internal storage");
+assert.match(storage, /async createNoodlerWorldInteraction\(/u, "world interactions have a separate internal method");
+assert.doesNotMatch(storage, /trustedWorldRun/u, "world-shaped run IDs must not bypass fan validation");
+assert.doesNotMatch(world, /createNoodlerFanInteraction/u, "world actions must not call the persisted fan method");
+assert.doesNotMatch(world, /runId:/u, "world actions must not supply a trust token");
+assert.match(storage, /run\?\.status !== "applying"/u, "fan interactions require an applying persisted run");
 
 console.log("slurp world pulse regression passed");

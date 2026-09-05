@@ -1,5 +1,12 @@
 # Slurp release notes
 
+## 1.1.13 — 2026-09-06
+
+- World and wallet updates now stay consistent when several Slurp actions happen at once.
+- World activity can be turned off without changing the audience or relationship state.
+- Existing subscriptions recover their payment record or lapse when the wallet cannot renew them.
+- World interactions verify the stored audience identity before they are accepted.
+
 ## 1.1.12 — 2026-09-06
 
 - Two new dials in Settings. "How busy the world is" controls how often fans ask

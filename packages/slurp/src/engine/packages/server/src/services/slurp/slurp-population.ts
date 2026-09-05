@@ -174,6 +174,12 @@ export const SLURP_FUNNEL_STAGES = [
 
 export type SlurpFunnelStage = (typeof SLURP_FUNNEL_STAGES)[number] | "lapsed";
 
+export function slurpReactivationStage(stage: unknown, hasSubscription = false): SlurpFunnelStage {
+  if (!SLURP_FUNNEL_STAGES.includes(stage as (typeof SLURP_FUNNEL_STAGES)[number])) return "follower";
+  if (stage === "subscriber" && !hasSubscription) return "follower";
+  return stage as (typeof SLURP_FUNNEL_STAGES)[number];
+}
+
 /**
  * The player can only keep track of about thirty people. Materialising more as individuals costs
  * more and reads worse than a number, so the named cast is capped and the rest stays as reach.

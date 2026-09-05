@@ -99,6 +99,7 @@ assert.match(world, /slurpNextArc\(/u);
 // load would be a full scan for nothing.
 assert.match(world, /elapsedDays >= CHURN_MIN_ELAPSED_DAYS \? accounts : \[\]/u);
 assert.match(world, /isNotableArcChange\(tie\.arc, next\)/u);
+assert.match(read("services/slurp/slurp-population.ts"), /slurpReactivationStage/u);
 
 const schema = read("db/schema/slurp.ts");
 assert.match(schema, /arc: text\("arc"\)\.notNull\(\)\.default\("steady"\)/u);

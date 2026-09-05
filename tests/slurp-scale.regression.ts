@@ -106,6 +106,7 @@ const world = read("server/src/services/slurp/slurp-world.operation.ts");
 assert.match(world, /slurpWorldActivityMultiplier\(settings\.worldActivity\)/u);
 assert.match(world, /slurpPlatformScaleMultiplier\(settings\.platformScale\)/u);
 assert.match(world, /planSlurpWorldTick\(\{ since, until, creators, audience, activity \}\)/u);
+assert.match(world, /if \(activity === 0\) \{[\s\S]*writeLastTick/u);
 
 // Every reach call site must be scaled, or one surface would disagree with the others about how
 // big the same Creator is.
@@ -117,5 +118,7 @@ for (const name of ["countsScale", "projectionScale", "studioScale"]) {
 const settings = read("client/src/components/slurp/SlurpSettings.tsx");
 assert.match(settings, /update\("worldActivity", level\)/u);
 assert.match(settings, /update\("platformScale", level\)/u);
+const studio = read("server/src/routes/slurp.routes.ts");
+assert.match(studio, /snapshot\.platformScale === studioScale/u, "scale changes must not look like follower deltas");
 
 console.log("slurp scale regression passed");

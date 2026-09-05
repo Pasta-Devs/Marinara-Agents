@@ -1254,7 +1254,10 @@ export async function slurpRoutes(app: FastifyInstance) {
           payoutAllowance: slurpPayoutAllowance(earnings, at),
           // Null rather than zero on a first read: "no change yet" and "measured no change" are
           // different, and the client renders them differently.
-          followersDelta: previous ? followers - previous.followers : null,
+          followersDelta:
+            previous && (snapshot?.platformScale === undefined || snapshot.platformScale === studioScale)
+              ? followers - previous.followers
+              : null,
           earningsDelta: previous ? earnings.lifetime - previous.lifetimeEarnings : null,
           milestonesCrossed: previous ? slurpMilestonesCrossed(previous.followers, followers) : [],
           posts,
@@ -1273,6 +1276,7 @@ export async function slurpRoutes(app: FastifyInstance) {
 
     await writeSlurpStudioSnapshot(app.db, viewer.id, {
       at: at.toISOString(),
+      platformScale: studioScale,
       creators: Object.fromEntries(
         creators.map((creator) => [
           creator.id,

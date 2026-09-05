@@ -18,6 +18,7 @@ import {
   type SlurpPopulationMember,
   type SlurpSpendTier,
 } from "../slurp/slurp-population.js";
+import { slurpReactivationStage } from "../slurp/slurp-population.js";
 
 export { SLURP_FUNNEL_STAGES, SLURP_NAMED_CAST_LIMIT, type SlurpFunnelStage };
 
@@ -157,19 +158,25 @@ export function createSlurpPopulationStorage(db: DB) {
     async advanceTie(
       memberId: string,
       creatorAccountId: string,
-      input: { stage?: SlurpFunnelStage; spent?: number; interactions?: number } = {},
+      input: { stage?: SlurpFunnelStage; spent?: number; interactions?: number; hasSubscription?: boolean } = {},
     ): Promise<SlurpAudienceTie> {
       const tie = await storage.ensureTie(memberId, creatorAccountId);
       const currentIndex = SLURP_FUNNEL_STAGES.indexOf(tie.stage as (typeof SLURP_FUNNEL_STAGES)[number]);
       const nextIndex = input.stage
         ? SLURP_FUNNEL_STAGES.indexOf(input.stage as (typeof SLURP_FUNNEL_STAGES)[number])
         : -1;
-      const stage = nextIndex > currentIndex && nextIndex >= 0 ? input.stage! : tie.stage;
+      const stage =
+        tie.stage === "lapsed"
+          ? slurpReactivationStage(input.stage, input.hasSubscription === true)
+          : nextIndex > currentIndex && nextIndex >= 0
+            ? input.stage!
+            : tie.stage;
       const next = {
         stage,
         spent: String(tie.spent + Math.max(0, Math.floor(input.spent ?? 0))),
         interactions: String(tie.interactions + Math.max(0, Math.floor(input.interactions ?? 0))),
         lastSeenAt: now(),
+        ...(tie.stage === "lapsed" && stage !== "lapsed" ? { arc: "returning", arcSince: now() } : {}),
       };
       await db.update(slurpAudienceTies).set(next).where(eq(slurpAudienceTies.id, tie.id));
       return { ...tie, ...next, spent: int(next.spent), interactions: int(next.interactions) };
