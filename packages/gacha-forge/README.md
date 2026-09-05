@@ -51,6 +51,24 @@ the stage** — so a world with a long description had no way to cancel its own 
 escape 1.5.1 had just finished wiring to all four creation screens. The description is gone from that
 screen; the heading, the live status and a foot that mentions it without printing it remain.
 
+
+**1.7.0 is about waiting less and having somewhere to spend a session.** It registers 85 routes.
+
+- **A chapter can be written ahead of you.** Ask once and the remaining beats of the chapter are written in the background, in order, so they open with no wait; the chapter screen counts them as they land and you can stop it or start it again at any point. The chain runs behind whatever you are doing: a beat you open yourself always takes the connection first, and the chain loses its turn rather than its place.
+- **A scene remembers where you stopped.** Leave a beat halfway and coming back offers to carry on from that page instead of reading it from the start. The mark is written when you leave, and only offered when there is enough left to be worth it.
+- **Mini events run alongside every banner.** Each featured banner now draws three smaller events with windows inside its own fourteen days: **Tidewalk**, a ring of prizes you move around with a die that arrives every six hours; **Salvage Bingo**, where Materials runs earn marks that turn over squares on a card; and **Supply Line**, where the first three Materials runs of a day come back with double the loot. The schedule is sealed into the world when the banner opens, so adding events later never reshuffles one already in progress.
+- **The seasonal event is finished.** Ten box draws at once, a boss beatable once a day, 25% more event coin for each character from the banner in your party, and rewards for the total coin earned at five milestones. The event's boxes now hold Tenets as well as the Mandate that unlocks what Tenets pay for — the ladder used to sell the key and not the steps.
+- **One generation at a time, per connection, and yours goes first.** Background work — the chapter chain, banner art, portraits — no longer queues in front of the thing you are waiting for.
+- **Items and rewards show their own art.** Nine screens that drew a symbol now draw the item: the pass ladder, the login week, the seasonal stacks and boss, the shop, the inventory, the summon results, and both mini-event boards.
+- **What a screen promises, it now shows.** The login week names what each day pays before you claim it, and the event box shows what is inside each stack and how much of it is left.
+- **Author and connection controls.** A fifth author directive says how key images should be described; cast books can name a character's role and element; and the Reasoning Effort and Verbosity configured on a connection are used.
+
+Fixes in this line, all reported from play: the top bar no longer cuts off the buttons on its right; the Home no longer sends you back to Chapter One; your persona can be moved around the party and taken out of it; character names are capitalised; the settings control is a gear rather than something closer to a brightness icon; world creation follows the letter size you chose, shows that its options list scrolls, and keeps the arrow on its dropdowns; a Home decoration and a context-warning threshold no longer revert on their own; and the battle screen no longer slides sideways.
+
+One of those is worth naming. Two routes answered `ok` with a value they had not saved: `documents.update` returns `null` on a revision conflict rather than throwing, so an unchecked write is lost in silence. Both now re-read and retry, and answer `write-conflict` rather than a number that is not on disk.
+
+The side rails were also given room. They used to be whatever was left beside a 16:9 stage — 152px on a 1920x1080 window, below the width at which they hide their own text — so the stage now yields width to them on a wide screen: 272px per rail at 1920x1080, and 281px at 2560x1440. The reserve switches itself off where the rails do not exist (fullscreen, and any window narrow enough to drop them), because yielding width to a rail that is not drawn only letterboxes the game.
+
 ### It also reworks screens that already shipped
 
 This release is not only additive; the reworks it carries to interfaces already in staging are listed in the pull request body and summarised here:
