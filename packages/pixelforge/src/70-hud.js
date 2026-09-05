@@ -2530,6 +2530,23 @@ PF.Hud = class {
   }
 
   refreshChips() {
+    // THE SIGNPOST'S MEMO IS DROPPED HERE — the one HUD door every world-
+    // replacing path already knocks on. The package builds exactly one Hud
+    // (`90-element` `attachMain`) and nothing that replaces the world rebuilds
+    // it: `_switchChat` (90-element), `_installSealedWorld` and `_rebuild`
+    // (60-save) all swap the sim underneath and all three call this. Its key is
+    // a zone id and a bearing, NEITHER OF WHICH IS WORLD-UNIQUE — every compiled
+    // world's settlement is `z1`, every cell id is `w_<cx>_<cy>` — so one key
+    // names one edge in every world at once, and without this line a chat switch
+    // between two saves both parked at a north edge leaves the country of the
+    // chat they left on the sign. That is the renderer's own rule for its own
+    // zone-id-keyed cache, one field along (`40-render` `clearZones`). Above the
+    // sim test on purpose: dropping a memo needs no sim.
+    // The cost is one label derivation on an event that was already writing DOM.
+    // The busiest caller is the clock chip below, which at
+    // `CLOCK_SECONDS_PER_GAME_MINUTE` is one derivation per 300 frames of
+    // standing still rather than 300.
+    this._signpost = null;
     const sim = this.core.sim;
     if (!sim) return;
     // The spatial name is the ENGINE's committed party location, which only
@@ -2897,6 +2914,10 @@ PF.Hud = class {
       // gate's, written and read by the mode reconcile at the top of this method,
       // and sharing it would have left both fields holding the other machine's
       // answer on every frame either one ran.
+      // The key names the edge and NOT the world it is an edge of, which is only
+      // safe because the memo is dropped whenever the world underneath can have
+      // changed — `refreshChips`, whose comment carries that argument, and the
+      // `!inWorld` teardown above.
       const gateNear = sim.nearGate;
       const signpostKey = gateNear ? `${sim.zoneId}|${gateNear.dir}` : "";
       if (signpostKey !== this._signpost) {
