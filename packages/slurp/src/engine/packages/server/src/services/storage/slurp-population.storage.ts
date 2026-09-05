@@ -204,6 +204,27 @@ export function createSlurpPopulationStorage(db: DB) {
       return out;
     },
 
+    /**
+     * Real follower counts for several Creators at once.
+     *
+     * The Creator home, the feed projection, and the connection counts all need this, and each
+     * doing its own scan is how a page of posts turns into a table scan per post.
+     */
+    async countFollowersForCreators(creatorAccountIds: readonly string[]): Promise<Map<string, number>> {
+      const floor = SLURP_FUNNEL_STAGES.indexOf("follower");
+      const wanted = new Set(creatorAccountIds);
+      const counts = new Map<string, number>();
+      for (const id of wanted) counts.set(id, 0);
+      const rows = await db.select().from(slurpAudienceTies);
+      for (const row of rows) {
+        const tie = mapTie(row as Record<string, unknown>);
+        if (!wanted.has(tie.creatorAccountId)) continue;
+        const index = SLURP_FUNNEL_STAGES.indexOf(tie.stage as (typeof SLURP_FUNNEL_STAGES)[number]);
+        if (index >= floor && index >= 0) counts.set(tie.creatorAccountId, (counts.get(tie.creatorAccountId) ?? 0) + 1);
+      }
+      return counts;
+    },
+
     /** How many members sit at or above a stage for one Creator. This is a real follower count. */
     async countAtOrAbove(creatorAccountId: string, stage: (typeof SLURP_FUNNEL_STAGES)[number]): Promise<number> {
       const floor = SLURP_FUNNEL_STAGES.indexOf(stage);

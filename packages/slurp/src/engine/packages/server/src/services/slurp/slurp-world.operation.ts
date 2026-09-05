@@ -81,19 +81,6 @@ export async function advanceSlurpWorld(db: DB, until = new Date()): Promise<Slu
       8,
     );
 
-    const creators: SlurpWorldCreator[] = await Promise.all(
-      accounts.map(async (account) => ({
-        id: account.id,
-        followers: slurpCreatorReach({ accountId: account.id, createdAt: account.createdAt, realFollowers: 0 }, until),
-        recentPostIds: (postsByAccount.get(account.id) ?? [])
-          .filter((post) => post.createdAt >= cutoff && post.access !== "draft")
-          .map((post) => post.id),
-        // A queue nobody answered gets no more. Asking again while three requests sit unread is
-        // how an obligation layer turns into a chore.
-        openRequests: (await messages.listOpenCommissionsForCreator(account.id)).length,
-      })),
-    );
-
     // Churn. Somebody who has not been near a Creator in a long time drifts out of the funnel, so
     // the named cast rotates instead of freezing into the same thirty faces. Subscribers are left
     // alone: their tie ends when the subscription does, which has its own path and its own event.
@@ -106,6 +93,31 @@ export async function advanceSlurpWorld(db: DB, until = new Date()): Promise<Slu
         await population.lapseTie(tie.memberId, account.id).catch(() => undefined);
       }
     }
+
+    // Counted after churn, so reach reflects the audience that is left rather than the one that
+    // just drifted out.
+    const tickFunnel = await population.countFollowersForCreators(accounts.map((account) => account.id));
+    const creators: SlurpWorldCreator[] = await Promise.all(
+      accounts.map(async (account) => ({
+        id: account.id,
+        followers: slurpCreatorReach(
+          {
+            accountId: account.id,
+            createdAt: account.createdAt,
+            // Request rates scale with audience, so the tick has to see the same follower count
+            // the player does. Passing zero here made a large Creator as quiet as a new one.
+            realFollowers: tickFunnel.get(account.id) ?? 0,
+          },
+          until,
+        ),
+        recentPostIds: (postsByAccount.get(account.id) ?? [])
+          .filter((post) => post.createdAt >= cutoff && post.access !== "draft")
+          .map((post) => post.id),
+        // A queue nobody answered gets no more. Asking again while three requests sit unread is
+        // how an obligation layer turns into a chore.
+        openRequests: (await messages.listOpenCommissionsForCreator(account.id)).length,
+      })),
+    );
 
     const plan = planSlurpWorldTick({ since, until, creators, audience });
     let applied = 0;

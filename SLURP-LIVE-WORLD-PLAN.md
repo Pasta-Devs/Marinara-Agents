@@ -18,8 +18,8 @@ first version of this plan was wrong in ways that are not obvious.
 | 2 | Notification stream | **done** |
 | 3 | Audience-initiated commissions and questions | **done** |
 | 4 | Audience population and funnel | **done** |
-| 5 | Reach derived from funnel state | **next** |
-| 6 | Tiered comments, deferred generation queue, event-driven DMs | not started |
+| 5 | Reach derived from funnel state | **done** |
+| 6 | Tiered comments, deferred generation queue, event-driven DMs | **next** |
 | 7 | Fan cards, reactions, cast arcs, tone dial, world rhythm | not started |
 
 Re-ordered after a review pass. The original order built a simulation with no goals, no visible
@@ -439,8 +439,6 @@ Also landed:
 
 Still open:
 
-- **Nothing counts from the funnel yet.** `countAtOrAbove` exists and is unused; follower counts
-  still come from `slurp-reach.ts`. The funnel is written and shown but not yet believed. Stage 5.
 - The world tick draws only from ambient accounts for commissions, because a commission needs a
   thread and threads key on an account id. Population members act through snapshot paths.
 
@@ -459,7 +457,23 @@ Rows are created lazily and persisted only once the person acts where the player
 `syntheticNoodlerFanIdentityProvider` is a swap, not a rewrite. The six Engine-owned ambient IDs
 (`AMBIENT_NOODLE_ENTITY_IDS`) stay as seed members.
 
-### Stage 5 — reach derived from funnel state
+### Stage 5 — reach derived from funnel state — DONE
+
+`countFollowersForCreators` feeds the funnel into `slurpCreatorReach` as `realFollowers` at every
+call site: the connection counts, the feed projection, the Creator home, and the world tick. A
+regression asserts no call site hardcodes `realFollowers: 0` any more — the world tick did, which
+made a large Creator draw requests as quietly as a brand-new one.
+
+**The monotonicity rule is gone**, and the reach module now records why. It was a design error
+stated as a principle: a number that cannot fall has no stakes, so raising it means nothing. What
+breaks the illusion is *jitter* — a value that differs between two reads of the same page — not
+decline the player earned by going quiet. The synthetic part is still stable for a fixed audience;
+the total moves because the funnel moves.
+
+Churn now runs before the follower count in the world tick, so reach reflects the audience that is
+left rather than the one that just drifted out.
+
+### Stage 5 (original scope)
 
 Follower count becomes a count of people in follower state plus an un-materialised multiplier.
 Decay comes from lapses. Post performance follows a power law shifted by post properties. The pure

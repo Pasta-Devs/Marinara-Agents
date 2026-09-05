@@ -14,9 +14,14 @@
  * 1. **Deterministic.** Every value derives from stable inputs — an id, a creation time, a clock.
  *    The same post shows the same number on every read, in every session, forever. Nothing draws
  *    a random number at read time.
- * 2. **Monotonic.** Growth depends on age through a saturating curve, and age only increases, so
- *    a count never goes down between reads. A follower number that dropped would break the
- *    illusion faster than a small one ever could.
+ * 2. **Stable under a fixed audience.** For a given `realFollowers`, growth depends on age through
+ *    a saturating curve, and age only increases, so the synthetic part never falls between reads.
+ *
+ *    The total *can* fall, and that is deliberate. An earlier version of this module made
+ *    monotonicity a rule, which was a design error stated as a principle: a number that cannot
+ *    fall has no stakes, so raising it means nothing. What breaks the illusion is jitter — a value
+ *    that differs between two reads of the same page — not decline the player earned by going
+ *    quiet and losing subscribers. Real followers come from the funnel, and people leave it.
  *
  * Reach is presentation only. It never reaches the wallet, the ledger, a payout, or a subscriber
  * list. See `slurp-wallet.ts` for the numbers that must stay exact.

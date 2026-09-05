@@ -607,6 +607,11 @@ export async function slurpRoutes(app: FastifyInstance) {
       }
     }
     const at = new Date();
+    // Real followers now come from the audience funnel as well as the social following list, so a
+    // Creator who loses subscribers actually loses reach. That is what gives growth stakes.
+    const countsFunnel = await createSlurpPopulationStorage(app.db).countFollowersForCreators(
+      creators.map((creator) => creator.id),
+    );
     const entries = await Promise.all(
       creators.map(async (creator) => [
         creator.id,
@@ -619,7 +624,7 @@ export async function slurpRoutes(app: FastifyInstance) {
             {
               accountId: creator.id,
               createdAt: creator.createdAt,
-              realFollowers: followerCounts.get(creator.id) ?? 0,
+              realFollowers: (followerCounts.get(creator.id) ?? 0) + (countsFunnel.get(creator.id) ?? 0),
             },
             at,
           ),
@@ -908,12 +913,19 @@ export async function slurpRoutes(app: FastifyInstance) {
     // One clock for the whole projection, so every post in a page is measured against the same
     // instant and two posts made together never disagree about how old they are.
     const projectedAt = new Date();
+    const authorIds = [...new Set(posts.map((post) => post.authorAccountId))];
+    const projectionFunnel = await createSlurpPopulationStorage(app.db).countFollowersForCreators(authorIds);
     const reachByAccountId = new Map(
-      [...new Set(posts.map((post) => post.authorAccountId))].map((accountId) => {
+      authorIds.map((accountId) => {
         const account = context.accountById.get(accountId);
         return [
           accountId,
-          account ? slurpCreatorReach({ accountId, createdAt: account.createdAt, realFollowers: 0 }, projectedAt) : 0,
+          account
+            ? slurpCreatorReach(
+                { accountId, createdAt: account.createdAt, realFollowers: projectionFunnel.get(accountId) ?? 0 },
+                projectedAt,
+              )
+            : 0,
         ] as const;
       }),
     );
@@ -1090,6 +1102,7 @@ export async function slurpRoutes(app: FastifyInstance) {
     const accounts = await noodle.listNoodlerAccounts();
     const operated = accounts.filter((account) => creatorBelongsToViewer(account, viewer));
     const population = createSlurpPopulationStorage(app.db);
+    const studioFunnel = await population.countFollowersForCreators(operated.map((account) => account.id));
     const at = new Date();
     const snapshot = await readSlurpStudioSnapshot(app.db, viewer.id);
 
@@ -1119,7 +1132,7 @@ export async function slurpRoutes(app: FastifyInstance) {
           {
             accountId: account.id,
             createdAt: account.createdAt,
-            realFollowers: followerCounts.get(account.id) ?? 0,
+            realFollowers: (followerCounts.get(account.id) ?? 0) + (studioFunnel.get(account.id) ?? 0),
           },
           at,
         );

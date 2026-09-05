@@ -24,8 +24,14 @@ assert.notEqual(
   "two creators must not share one audience size",
 );
 
-// ── Monotonic ───────────────────────────────────────────────────────────────
-// Growth depends on age through a saturating curve, and age only increases.
+// ── Stable under a fixed audience ───────────────────────────────────────────
+// For a given real-follower count, the synthetic part never falls: growth depends on age through
+// a saturating curve, and age only increases.
+//
+// The *total* may fall, and that is deliberate. An earlier version made monotonicity a rule, which
+// was a design error stated as a principle — a number that cannot fall has no stakes, so raising
+// it means nothing. What breaks the illusion is jitter between two reads of the same page, not
+// decline the player earned. Real followers come from the funnel and people leave it.
 let previous = 0;
 for (const days of [0, 1, 7, 30, 120, 400, 5_000]) {
   const value = slurpCreatorReach(creator, day(days));
@@ -38,6 +44,13 @@ for (const days of [0, 0.5, 1, 3, 10, 90]) {
   assert.ok(value >= previousLikes, `like count fell between reads at day ${days}`);
   previousLikes = value;
 }
+
+// Losing real followers lowers the total. This is the stake the first version removed.
+assert.ok(
+  slurpCreatorReach({ ...creator, realFollowers: 40 }, day(30)) >
+    slurpCreatorReach({ ...creator, realFollowers: 10 }, day(30)),
+  "shedding followers must cost reach",
+);
 
 // ── Bounded ─────────────────────────────────────────────────────────────────
 // A brand-new creator still reads as a real account, and no creator runs away to absurdity.
@@ -107,6 +120,13 @@ const routes = readFileSync(
 );
 assert.match(routes, /fans: \(await noodle\.listSubscriptionsForCreator\(creator\.id\)\)\.length/u);
 assert.match(routes, /followers: slurpCreatorReach\(/u);
+// Real followers come from the funnel, so a Creator who loses subscribers loses reach.
+assert.match(routes, /countFollowersForCreators/u, "reach must count from the audience funnel");
+assert.doesNotMatch(
+  routes,
+  /realFollowers: 0/u,
+  "no reach call may hardcode an empty audience now that the funnel exists",
+);
 const wallet = readFileSync(
   join(import.meta.dirname, "..", "packages/slurp/src/engine/packages/server/src/services/slurp/slurp-wallet.ts"),
   "utf8",
