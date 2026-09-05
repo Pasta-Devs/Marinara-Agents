@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "id": "slurp",
   "name": "Slurp",
-  "version": "1.1.3",
+  "version": "1.1.4",
   "description": "The standalone successor to NoodleR: create a local Creator profile from an Engine character or persona, publish public or locked posts, and simulate subscriptions and audience activity. Install it, restart Marinara Engine when prompted, then open Home → Slurp.",
   "localizations": {
     "de": {
@@ -67,8 +67,8 @@
     },
     {
       "path": "client.js",
-      "sha256": "db7b3427d0ef79af017f8c639041d718603486873ae938c877194e33217026de",
-      "bytes": 2642627
+      "sha256": "3768ab3c8e5a7ec60515eea97290de2b2261449a0ce7564317e16b9767f355db",
+      "bytes": 2643687
     },
     {
       "path": "slurp-logo.png",

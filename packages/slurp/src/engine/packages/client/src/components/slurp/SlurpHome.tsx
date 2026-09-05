@@ -564,6 +564,16 @@ export function SlurpHome({ navigation, onNavigate }: SlurpHomeProps) {
   const viewerQuery = useNoodlerViewer(viewerPersonaId);
   const noodlerUnseenCount = useNoodlerUnseenCount(viewerPersonaId);
   const notificationsQuery = useSlurpNotifications(viewerPersonaId);
+  const { mutate: markNotificationsSeen } = useMarkSlurpNotificationsSeen();
+  const notificationVisitRef = useRef<{ personaId: string | null; open: boolean }>({ personaId: null, open: false });
+  const notificationsOpen = navigation.mode === "creator" && navigation.view === "notifications";
+  useEffect(() => {
+    const previous = notificationVisitRef.current;
+    if (previous.open && previous.personaId && (!notificationsOpen || previous.personaId !== viewerPersonaId)) {
+      markNotificationsSeen(previous.personaId);
+    }
+    notificationVisitRef.current = { personaId: viewerPersonaId, open: notificationsOpen };
+  }, [notificationsOpen, viewerPersonaId, markNotificationsSeen]);
   const markFeedSeenMutation = useMarkNoodlerFeedSeen();
   // The stored timestamp advances as soon as the feed is shown, which would erase the divider
   // out from under the reader. Freeze the value the divider uses per persona at that moment,
@@ -6920,14 +6930,8 @@ function SlurpNotificationsView({
 }) {
   const { t: localizeUi, i18n } = useUiTranslation();
   const notificationsQuery = useSlurpNotifications(personaId);
-  const markSeen = useMarkSlurpNotificationsSeen();
   const unseen = notificationsQuery.data?.unseen ?? [];
   const items = notificationsQuery.data?.items ?? [];
-
-  const leave = () => {
-    if (personaId && (notificationsQuery.data?.unseenCount ?? 0) > 0) markSeen.mutate(personaId);
-    onBack();
-  };
 
   const describe = (group: SlurpEventGroup) => {
     if (group.type === "group") {
@@ -6953,24 +6957,34 @@ function SlurpNotificationsView({
       const actionable =
         group.type === "single" && (group.event.kind === "message" || group.event.kind === "commission_requested");
       const creatorId = group.type === "single" ? group.event.creatorAccountId : null;
+      const destination = actionable ? onOpenMessages : creatorId ? () => onOpenProfile(creatorId) : null;
+      const content = (
+        <>
+          <span className="min-w-0 text-xs">{describe(group)}</span>
+          <time dateTime={at} className="shrink-0 text-[0.65rem] tabular-nums text-[var(--muted-foreground)]">
+            {formatTime(at, i18n.language)}
+          </time>
+        </>
+      );
       return (
         <li key={key}>
-          <button
-            type="button"
-            onClick={() => (actionable ? onOpenMessages() : creatorId ? onOpenProfile(creatorId) : undefined)}
-            className="flex w-full items-start justify-between gap-3 rounded-lg px-2 py-2.5 text-left transition-colors hover:bg-[var(--noodle-accent)]/[0.06]"
-          >
-            <span className="min-w-0 text-xs">{describe(group)}</span>
-            <time dateTime={at} className="shrink-0 text-[0.65rem] tabular-nums text-[var(--muted-foreground)]">
-              {formatTime(at, i18n.language)}
-            </time>
-          </button>
+          {destination ? (
+            <button
+              type="button"
+              onClick={destination}
+              className="flex w-full items-start justify-between gap-3 rounded-lg px-2 py-2.5 text-left transition-[background-color,transform] hover:bg-[var(--noodle-accent)]/[0.06] active:scale-[0.96] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--noodle-accent)] motion-reduce:transition-none motion-reduce:active:scale-100"
+            >
+              {content}
+            </button>
+          ) : (
+            <div className="flex w-full items-start justify-between gap-3 px-2 py-2.5">{content}</div>
+          )}
         </li>
       );
     });
 
   return (
-    <NoodlerFrame onBack={leave} title={localizeUi("ui.slurp.navigation.notifications")} action={<span />}>
+    <NoodlerFrame onBack={onBack} title={localizeUi("ui.slurp.navigation.notifications")} action={<span />}>
       <div className="mx-auto flex w-full max-w-2xl flex-col gap-4 p-4 sm:p-5">
         {unseen.length > 0 && (
           <section

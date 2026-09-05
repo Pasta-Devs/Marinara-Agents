@@ -315,7 +315,8 @@ export function ProfileInitial({
   );
 }
 
-export type NoodleShellView = "home" | "noodler" | "search" | "profile" | "messages" | "wallet" | "settings" | null;
+export type NoodleShellView =
+  "home" | "noodler" | "search" | "profile" | "messages" | "notifications" | "studio" | "wallet" | "settings" | null;
 type NoodleShellMode = "noodle" | "noodler" | "slurp";
 export type NoodleShellContextualRail = "populated" | "blank" | "spanning";
 
@@ -900,6 +901,24 @@ export function NoodleShell({
                       >
                         <MessageCircle size={22} className="!text-[var(--noodle-accent)]" />
                         {localizeUi("ui.slurp.navigation.messages", { defaultValue: "Messages" })}
+                      </button>
+                    )}
+                    {onOpenNotifications && (
+                      <button
+                        type="button"
+                        onClick={onOpenNotifications}
+                        aria-current={activeView === "notifications" ? "page" : undefined}
+                        className={cn(SLURP_ROW_CLASS, activeView === "notifications" && SLURP_ROW_ACTIVE_CLASS)}
+                      >
+                        <Bell size={22} className="!text-[var(--noodle-accent)]" />
+                        <span className="min-w-0 flex-1">
+                          {localizeUi("ui.slurp.navigation.notifications", { defaultValue: "Notifications" })}
+                        </span>
+                        {notificationCount > 0 && (
+                          <span className="inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-[var(--noodle-accent)] px-1.5 text-[0.65rem] font-black tabular-nums text-zinc-950">
+                            {notificationCount}
+                          </span>
+                        )}
                       </button>
                     )}
                     {onOpenProfile && (

@@ -1,5 +1,13 @@
 # Slurp release notes
 
+## 1.1.4 — 2026-09-05
+
+- Notifications now appear in the desktop navigation with their unread count and
+  selected state, matching the mobile menu.
+- Leaving Notifications through any Slurp navigation control now clears the
+  unread badge. Activity rows that have nowhere to go no longer pretend to be
+  buttons.
+
 ## 1.1.3 — 2026-09-04
 
 - Messages. Open a Creator's profile and write to them. They answer in their own
