@@ -17,7 +17,7 @@ first version of this plan was wrong in ways that are not obvious.
 | 1 | Creator home: legibility, goals, catch-up | **done** |
 | 2 | Notification stream | **done** |
 | 3 | Audience-initiated commissions and questions | **done** |
-| 4 | Audience population and funnel | **next** |
+| 4 | Audience population and funnel | **partly done** |
 | 5 | Reach derived from funnel state | not started |
 | 6 | Tiered comments, deferred generation queue, event-driven DMs | not started |
 | 7 | Fan cards, reactions, cast arcs, tone dial, world rhythm | not started |
@@ -409,7 +409,35 @@ a non-player initiator. Add comments that ask a question and expect an answer.
 
 This is the obligation layer, and it is what makes the world worth returning to.
 
-### Stage 4 — audience population and funnel
+### Stage 4 — audience population and funnel — PARTLY DONE
+
+Landed:
+
+- `slurp-population.ts` — pure combinatorial generator. 48 × 48 × 8 handles and 2,304 display
+  names, which is the number that matters: display names must clear a 30-person named cast by the
+  birthday bound, and a first version with 840 collided inside one cast.
+- `slurp_population` and `slurp_audience_ties` tables, with `slurp-population.storage.ts`.
+  Members are written only once they act; ties carry the funnel stage, spend, and interactions.
+- `populationNoodlerFanIdentityProvider` replaces the six fixed identities. Fan activity now draws
+  a cast per run: `FAN_RUN_RETURNING` people who acted before, so regulars recur and can be
+  recognised, plus `FAN_RUN_NEWCOMERS` new faces, so the roster churns. A frozen cast of thirty is
+  the old six-account problem with thirty faces.
+- Spend tiers are weighted 62/24/12/2. A crowd where everyone pays is neither believable nor
+  interesting, because the few who do pay stop meaning anything.
+
+`advanceTie` never lowers a stage. Churn owns that and has its own reasons.
+
+Still open, and this is what "partly" means:
+
+- **Nothing reads the funnel yet.** `countAtOrAbove` and `listNamedCast` exist and are unused.
+  Follower counts still come from `slurp-reach.ts`, so the funnel is written but not yet believed.
+  That is Stage 5.
+- **No churn.** `lapseTie` exists and nothing calls it, so nobody ever drifts away.
+- Subscribe, tip, and unlock do not yet advance a tie; only the world tick's questions do.
+- The world tick still draws only from ambient accounts for commissions, because a commission
+  needs a thread and threads key on an account id. Population members act through snapshot paths.
+
+### Stage 4 (original scope)
 
 A Slurp-owned population table: handle, display name, archetype, traits, join date, active hours,
 interests, spend tier, and **per-creator funnel state**. Generation is combinatorial. Zero model

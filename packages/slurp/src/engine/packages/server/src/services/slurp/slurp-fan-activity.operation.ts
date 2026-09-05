@@ -25,8 +25,17 @@ import {
   resolveNoodlerFanConnection,
 } from "./slurp-fan-activity.service.js";
 import { tryNoodleOperation } from "./slurp-operation-lock.js";
+import { createSlurpPopulationStorage } from "../storage/slurp-population.storage.js";
+import { populationNoodlerFanIdentityProvider } from "./slurp-fan-identity-provider.js";
+import { newId } from "../../utils/id-generator.js";
 
 const FAN_PLAN_ROW_PREFIX = "fan-day:";
+
+/** People who have acted before and may act again, so a Creator gets recognisable regulars. */
+const FAN_RUN_RETURNING = 10;
+
+/** New faces per run. Small, but enough that the cast is never the same list twice in a row. */
+const FAN_RUN_NEWCOMERS = 2;
 const FAN_PLAN_RETENTION_DAYS = 7;
 const FAN_ACTIVITY_RECOVERY_MAX_AGE_MS = 15 * 60 * 1000;
 
@@ -217,10 +226,23 @@ export async function runNoodlerFanActivity(input: {
       }
       await writePlan(input.db, plan);
 
+      // Draw the cast for this run: mostly people who have acted before, so regulars recur and
+      // can be recognised, plus a couple of new faces so the roster churns instead of freezing
+      // into the same names forever. Churn is the cure for repetition — a fixed cast of thirty is
+      // the old six-account problem with thirty faces.
+      const population = createSlurpPopulationStorage(input.db);
+      const returning = await population.listAll(40);
+      const seeds = [
+        ...returning.slice(0, FAN_RUN_RETURNING).map((member) => member.id.replace(/^slurp-fan:/u, "")),
+        ...Array.from({ length: FAN_RUN_NEWCOMERS }, () => newId()),
+      ];
+      const cast = await Promise.all(seeds.map((seed) => population.ensure(seed, at)));
+
       const creators = await prepareNoodlerFanCreatorCandidates({
         db: input.db,
         settings,
         creatorIds: run.creatorIds,
+        identityProvider: populationNoodlerFanIdentityProvider(cast),
       });
       if (creators.length === 0) {
         plan = finishNoodleFanActivityRun(plan, run.id, "skipped", at);

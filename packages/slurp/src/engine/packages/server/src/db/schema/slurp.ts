@@ -300,3 +300,53 @@ export const slurpEvents = fileTable("slurp_events", {
   createdAt: text("created_at").notNull(),
   seenAt: text("seen_at"),
 });
+
+/**
+ * One member of the audience.
+ *
+ * Rows are written only once a member acts somewhere the player can see, so a Creator's follower
+ * count may read 12,483 while a few hundred rows exist. Everything about a member derives from
+ * `seed`, so the row is a record that they were used, not the source of who they are.
+ *
+ * Nobody here has a profile, a post grid, or an avatar. That is what makes an audience affordable.
+ */
+export const slurpPopulation = fileTable(
+  "slurp_population",
+  {
+    id: text("id").primaryKey(),
+    seed: text("seed").notNull(),
+    handle: text("handle").notNull(),
+    displayName: text("display_name").notNull(),
+    archetype: text("archetype").notNull(),
+    traits: text("traits").notNull().default("[]"),
+    spendTier: text("spend_tier").notNull().default("none"),
+    activeHour: text("active_hour").notNull().default("12"),
+    joinedAt: text("joined_at").notNull(),
+    /** Last time this member did anything. Drives churn: the long-silent drift out. */
+    lastActiveAt: text("last_active_at").notNull(),
+  },
+  { uniqueBy: [{ keys: ["handle"] }] },
+);
+
+/**
+ * What one member is to one Creator.
+ *
+ * The funnel lives here. A follower count is the number of rows in follower state, not an invented
+ * number, and decay is people moving back down rather than a curve applied to a total.
+ */
+export const slurpAudienceTies = fileTable(
+  "slurp_audience_ties",
+  {
+    id: text("id").primaryKey(),
+    memberId: text("member_id").notNull(),
+    creatorAccountId: text("creator_account_id").notNull(),
+    /** stranger | viewer | liker | follower | subscriber | regular | whale | lapsed */
+    stage: text("stage").notNull().default("stranger"),
+    /** Coins this member has paid this Creator, ever. */
+    spent: text("spent").notNull().default("0"),
+    interactions: text("interactions").notNull().default("0"),
+    firstSeenAt: text("first_seen_at").notNull(),
+    lastSeenAt: text("last_seen_at").notNull(),
+  },
+  { uniqueBy: [{ keys: ["memberId", "creatorAccountId"] }] },
+);

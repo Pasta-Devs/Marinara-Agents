@@ -16,6 +16,7 @@ import { newId } from "../../utils/id-generator.js";
 import { createAppSettingsStorage } from "../storage/app-settings.storage.js";
 import { createSlurpStorage } from "../storage/slurp.storage.js";
 import { createSlurpMessagesStorage } from "../storage/slurp-messages.storage.js";
+import { createSlurpPopulationStorage } from "../storage/slurp-population.storage.js";
 import { isAmbientNoodleAccount } from "./slurp-ambient-profiles.js";
 import { tryNoodleOperation } from "./slurp-operation-lock.js";
 import { slurpCreatorReach } from "./slurp-reach.js";
@@ -62,11 +63,13 @@ export async function advanceSlurpWorld(db: DB, until = new Date()): Promise<Slu
     const accounts = await noodle.listNoodlerAccounts();
     const allAccounts = await noodle.listAccounts();
 
-    // Only the ambient roster can act for now. Stage 4 replaces this with the population, and
-    // this line is the only thing that has to change.
-    const audience = settings.allowRandomUsers
+    // The ambient roster plus the generated population. Ambient accounts are real account rows and
+    // can hold threads, so they can be commissioned from; population members act through the
+    // snapshot paths. Both are drawn from, so the world is not six faces.
+    const ambient = settings.allowRandomUsers
       ? allAccounts.filter((account) => isAmbientNoodleAccount(account)).map((account) => account.id)
       : [];
+    const audience = ambient;
 
     const messages = createSlurpMessagesStorage(db);
     const cutoff = new Date(until.getTime() - RECENT_POST_DAYS * 86_400_000).toISOString();
@@ -135,6 +138,10 @@ async function applyAction(db: DB, action: SlurpWorldAction, at: Date): Promise<
     content: slurpAudienceQuestion(`${action.postId}:${action.actorAccountId}`),
   });
   if (!result?.created) return false;
+  // Commenting is a step up the funnel, and the funnel is what a follower count is counted from.
+  await createSlurpPopulationStorage(db)
+    .advanceTie(actor.id, action.creatorAccountId, { stage: "liker", interactions: 1 })
+    .catch(() => undefined);
   // A question is an obligation, so it is reported. An ordinary comment is not.
   await noodle.recordCreatorEvent(action.creatorAccountId, "comment", {
     subjectId: action.postId,
