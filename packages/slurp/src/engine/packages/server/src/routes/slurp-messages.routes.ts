@@ -82,6 +82,18 @@ export async function slurpMessageRoutes(app: FastifyInstance) {
   /** Every route needs the same "is this a real persona" gate, so it lives in one helper. */
   const requireViewer = async (personaId: string) => slurp.getViewer(personaId);
 
+  /**
+   * The messages of a thread as this side is allowed to see them.
+   *
+   * A pay-per-view message the fan has not unlocked must not travel over the wire at all;
+   * hiding it in the client would still hand the text to anyone reading the response. The
+   * Creator side always sees what they wrote.
+   */
+  const visibleMessages = async (threadId: string, side: "viewer" | "creator") =>
+    (await messages.listMessages(threadId)).map((message) =>
+      side === "viewer" && message.kind === "ppv" && !message.unlockedAt ? { ...message, content: "" } : message,
+    );
+
   /** Re-read a thread and enrich it, so every response carries the same joined shape. */
   const freshView = async (threadId: string) => {
     const thread = await messages.getThreadById(threadId);
@@ -125,9 +137,6 @@ export async function slurpMessageRoutes(app: FastifyInstance) {
           null,
       })),
     );
-    const visibleMessages = (await messages.listMessages(thread.id)).map((message) =>
-      side === "viewer" && message.kind === "ppv" && !message.unlockedAt ? { ...message, content: "" } : message,
-    );
     return {
       threads: threads
         .filter((thread) => thread.state !== "declined")
@@ -155,7 +164,7 @@ export async function slurpMessageRoutes(app: FastifyInstance) {
     const creator = await slurp.getNoodlerAccountById(thread.creatorAccountId);
     return {
       thread: await freshView(thread.id),
-      messages: visibleMessages,
+      messages: await visibleMessages(thread.id, side),
       creator,
       messaging: await messages.getCreatorMessaging(thread.creatorAccountId),
       commissions: await messages.listCommissionsForThread(thread.id),
@@ -180,7 +189,7 @@ export async function slurpMessageRoutes(app: FastifyInstance) {
     if (thread) await messages.markRead(thread.id, "viewer");
     return {
       thread: thread ? await freshView(thread.id) : null,
-      messages: thread ? await messages.listMessages(thread.id) : [],
+      messages: thread ? await visibleMessages(thread.id, "viewer") : [],
       commissions: thread ? await messages.listCommissionsForThread(thread.id) : [],
       creator,
       // The client shows the gate before the first message is written, so it must know the

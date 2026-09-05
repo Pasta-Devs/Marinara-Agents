@@ -1,5 +1,10 @@
 # Slurp release notes
 
+## 1.1.16 — 2026-09-05
+
+- The inbox opens again. Listing conversations and opening one both failed outright.
+- A locked message stays locked. Its text was being sent to the browser before it was paid for, and the inbox row quoted the opening line of it.
+
 ## 1.1.15 — 2026-09-05
 
 - Slurp no longer fails outright on an Engine that cannot hold its newer storage tables. The feed, profiles and settings work as before; messages, notifications and the audience simply stay empty until the Engine is updated.

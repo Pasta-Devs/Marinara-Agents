@@ -212,7 +212,8 @@ assert.equal(
 // ── Previews ─────────────────────────────────────────────
 
 assert.equal(slurpMessagePreview("tip", "", 25), "Tipped 25 coins");
-assert.equal(slurpMessagePreview("ppv", "  something   new ", 8), "Locked: something new");
+// The inbox row is rendered before the fan pays, so it must not quote the locked message.
+assert.equal(slurpMessagePreview("ppv", "  something   new ", 8), "Sent locked content");
 assert.equal(slurpMessagePreview("text", "hi ".repeat(80), 0).length <= 80, true, "Previews must stay on one row");
 
 console.info("Slurp messaging regression passed.");

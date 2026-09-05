@@ -131,7 +131,9 @@ export function slurpReplyPacing(input: {
 export function slurpMessagePreview(kind: SlurpMessageKind, content: string, price: number): string {
   const trimmed = content.replace(/\s+/g, " ").trim();
   if (kind === "tip") return `Tipped ${price} coins`;
-  if (kind === "ppv") return trimmed ? `Locked: ${clamp(trimmed, 60)}` : "Sent locked content";
+  // Never the content: the preview is shown in the inbox before the fan has paid, so quoting the
+  // first line of a locked message hands over exactly what was being sold.
+  if (kind === "ppv") return "Sent locked content";
   if (kind === "commission_brief") return `Commission request: ${clamp(trimmed, 50)}`;
   if (kind === "commission_quote") return `Quoted ${price} coins`;
   if (kind === "commission_delivery") return "Delivered a commission";
