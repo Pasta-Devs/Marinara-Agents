@@ -334,7 +334,7 @@ export function validateLtmEvidenceUnits({
         drop({
           candidateIndex,
           reason,
-          message: userFacingDropMessageForDiagnostic(dropDiagnostic),
+          message: userFacingDropMessageForDiagnostic(dropDiagnostic, reason),
           code: dropDiagnostic.code,
           details: dropDiagnostic.details,
         });
@@ -802,7 +802,14 @@ function userFacingDropMessageForCode(code: string, reason: LtmExtractionDropRea
   return userFacingDropMessage(reason);
 }
 
-function userFacingDropMessageForDiagnostic(diagnostic: LtmExtractionDiagnostic) {
+function userFacingDropMessageForDiagnostic(diagnostic: LtmExtractionDiagnostic, reason: LtmExtractionDropReason) {
+  if (
+    diagnostic.code === "unknown_link_target" ||
+    diagnostic.code === "relationship_state_missing_caused_by" ||
+    diagnostic.code === "overlong_target_note_id"
+  ) {
+    return userFacingDropMessageForCode(diagnostic.code, reason);
+  }
   return diagnostic.message.trim().slice(0, 240) || "The candidate did not pass validation.";
 }
 

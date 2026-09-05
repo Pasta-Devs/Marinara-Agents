@@ -386,6 +386,20 @@ async function main() {
       );
       assert.equal(legacyFingerprintRejection[0]?.id, firstRejections[0]?.id);
       assert.equal(legacyFingerprintRejection[0]?.candidate.validatorCode, "invalid_evidence_unit_format");
+      const exportedWithValidatorCode = await exportLongTermMemoryData(root);
+      assert.equal(
+        exportedWithValidatorCode.rejectedSuggestions.find((suggestion) => suggestion.id === firstRejections[0]?.id)
+          ?.candidate.validatorCode,
+        "invalid_evidence_unit_format",
+      );
+      const validatorBackupRoot = join(dataDir, "validator-code-backup");
+      await replaceLongTermMemoryData(exportedWithValidatorCode, validatorBackupRoot);
+      assert.equal(
+        (await exportLongTermMemoryData(validatorBackupRoot)).rejectedSuggestions.find(
+          (suggestion) => suggestion.id === firstRejections[0]?.id,
+        )?.candidate.validatorCode,
+        "invalid_evidence_unit_format",
+      );
       assert.deepEqual(await deleteRejectedSuggestionsForSource("source_second_import", root), {
         deletedCount: 1,
         sourceNoteId: "source_second_import",

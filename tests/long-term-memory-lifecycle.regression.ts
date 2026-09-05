@@ -292,6 +292,7 @@ async function main() {
       const availabilityPatches: Array<Record<string, unknown>> = [];
       let deletedSuggestionId: string | null = null;
       const clearedRejectedSourceIds = new Set<string>();
+      let clearRejectedSuggestionsFailure = false;
       const scopeTargetQueries: string[] = [];
       const noteQueries: string[] = [];
       const sourcePreviewRequests: Record<string, unknown>[] = [];
@@ -1480,6 +1481,7 @@ async function main() {
         }
         if (request.method === "DELETE" && url.pathname.endsWith("/rejected-suggestions")) {
           const sourceNoteId = url.searchParams.get("sourceNoteId");
+          if (clearRejectedSuggestionsFailure) return send(500, { error: "Clear rejected suggestions fixture failed" });
           clearedRejectedSourceIds.add(sourceNoteId ?? "");
           return send(200, { deletedCount: 1, sourceNoteId });
         }
@@ -2988,6 +2990,14 @@ async function main() {
         };
         element.dispatchEvent(new CustomEvent("marinara-capability-props"));
       });
+      clearRejectedSuggestionsFailure = true;
+      await clearRejectedButton.click();
+      await page
+        .locator('[data-ltm-status="danger"]')
+        .filter({ hasText: "Clear rejected suggestions fixture failed" })
+        .waitFor();
+      assert.equal(await clearSourceSuggestions.count(), 1);
+      clearRejectedSuggestionsFailure = false;
       await clearRejectedButton.click();
       await clearSourceSuggestions.waitFor({ state: "detached" });
       await page.getByText("Removed 1 rejected suggestion from Single-draft mobile source.", { exact: true }).waitFor();

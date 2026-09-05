@@ -150,8 +150,10 @@ async function main() {
   ]);
   assert.equal(relationshipWithMissingCause.accounting.keptUnits, 0);
   assert.equal(
-    relationshipWithMissingCause.outcome.droppedCandidates.some((candidate) =>
-      candidate.message.includes("does not exist"),
+    relationshipWithMissingCause.outcome.droppedCandidates.some(
+      (candidate) =>
+        candidate.message.includes("missing a caused_by link") &&
+        !candidate.message.includes("timeline_missing_argument"),
     ),
     true,
   );
@@ -169,6 +171,7 @@ async function main() {
     }),
   ]);
   assert.equal(unknownLinkTarget.outcome.droppedCandidates[0]?.validatorCode, "unknown_link_target");
+  assert.doesNotMatch(unknownLinkTarget.outcome.droppedCandidates[0]?.message ?? "", /missing_memory/u);
   const sourceHashMismatch = compile(chat, [
     {
       ...unit(chat, {
@@ -426,10 +429,11 @@ async function main() {
   assert.equal(oversizedDerivedNoteId.compiledResponse.mutations.length, 0);
   assert.equal(
     oversizedDerivedNoteId.outcome.droppedCandidates.some((candidate) =>
-      candidate.message.includes("exceeds the long-term memory storage contract"),
+      candidate.message.includes("too long to keep safely"),
     ),
     true,
   );
+  assert.doesNotMatch(oversizedDerivedNoteId.outcome.droppedCandidates[0]?.message ?? "", /a{120}/u);
   assert.equal(
     oversizedDerivedNoteId.diagnostics.some(
       (diagnostic) => diagnostic.details?.validatorCode === "overlong_target_note_id",
