@@ -36,6 +36,12 @@
     "slurp": {
       "versions": [
         {
+          "version": "1.1.18",
+          "date": "2026-09-05",
+          "notes": "- Stopped writing a warning to the log every time Slurp is opened on an Engine that cannot hold its newer tables.",
+          "highlight": false
+        },
+        {
           "version": "1.1.17",
           "date": "2026-09-05",
           "notes": "- Slurp opens again. The tab crashed on load.\n- The ambient audience panel in Settings no longer breaks the page when opened.\n- The empty feed can once more offer to open your own Creator profile.",

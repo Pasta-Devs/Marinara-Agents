@@ -15,6 +15,7 @@
  * most recent items are the ones anybody will actually look at.
  */
 import type { DB } from "../../db/connection.js";
+import { isUnsupportedTableError } from "../storage/slurp-host-tables.js";
 import { desc, eq } from "../../db/file-query.js";
 import { logger } from "../../lib/logger.js";
 import { slurpPendingText } from "../../db/schema/slurp.js";
@@ -65,7 +66,10 @@ export async function enqueueSlurpPendingText(
   } catch (error) {
     // A placeholder that never gets rewritten is still a usable placeholder. Never let the queue
     // break the action that produced the text.
-    logger.warn(error, "[slurp-pending] Could not enqueue a %s rewrite", input.kind);
+    // A host that cannot hold the table says so once at activation; repeating it per write is noise.
+    if (!isUnsupportedTableError(error)) {
+      logger.warn(error, "[slurp-pending] Could not enqueue a %s rewrite", input.kind);
+    }
   }
 }
 
@@ -108,7 +112,17 @@ function buildMessages(input: {
  * see. Returns how many were rewritten.
  */
 export async function drainSlurpPendingText(db: DB, limit = DRAIN_LIMIT): Promise<number> {
-  const rows = await db.select().from(slurpPendingText).orderBy(desc(slurpPendingText.createdAt)).limit(limit);
+  // Nothing was ever queued on a host that cannot hold the table, so there is nothing to drain.
+  // Without this the catch-up on open warns on every page load about a queue that cannot exist.
+  const rows = await db
+    .select()
+    .from(slurpPendingText)
+    .orderBy(desc(slurpPendingText.createdAt))
+    .limit(limit)
+    .catch((error: unknown) => {
+      if (isUnsupportedTableError(error)) return [];
+      throw error;
+    });
   if (rows.length === 0) return 0;
 
   const noodle = createSlurpStorage(db);
