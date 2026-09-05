@@ -28013,6 +28013,30 @@ const fire = (node, type) => Promise.all((node.listeners[type] ?? []).map((fn) =
   });
 }
 
+/** Everything about a built world that the tile streams decide, and nothing
+ *  else: geometry, cover, collision, where the cast stands, and the mint stamp.
+ *  Not the theme palette, not prose, not the axis stamps.
+ *
+ *  At module scope because two cases share it: the side-stream pin below, and
+ *  the lattice's seam-diff lane, which rebuilds the tree WITHOUT its gate punch
+ *  and holds that rebuild to three of the pin's own frozen 0.13.0 hashes. A
+ *  second copy of this function would make that a comparison between two
+ *  transcriptions rather than between two trees. */
+const layoutFingerprint = (w) => {
+  const h = createHash("sha256");
+  h.update(`${w.startZone}|${w.mintStamp}`);
+  for (const id of Object.keys(w.zones).sort()) {
+    const z = w.zones[id];
+    h.update(`\nZ ${id}|${z.name}|${z.w}x${z.h}|${z.mapKind ?? ""}|${z.place ?? ""}`);
+    h.update(`\ng ${z.ground.join(",")}`);
+    h.update(`\no ${z.object.join(",")}`);
+    h.update(`\nc ${z.overhead.join(",")}`);
+    h.update(`\ns ${Array.from(z.solid).join(",")}`);
+    for (const npc of z.npcs) h.update(`\nn ${npc.id}|${npc.name}|${npc.x}|${npc.y}`);
+  }
+  return h.digest("hex").slice(0, 16);
+};
+
 // 120. THE SIDE-STREAM PIN — existing seeds keep their exact layouts (0.14 §2.1,
 // §0.19). The release mints two climate AXES per world, and the one thing a mint
 // must not do is move the tile RNG: compile runs ONE main stream
@@ -28039,23 +28063,9 @@ const fire = (node, type) => Promise.all((node.listeners[type] ?? []).map((fn) =
   // cases lean on.
   const LAYOUT_SEEDS = [1, 2, 3, 4, 5, 7, 11, 31, 80021, 424242];
 
-  /** Everything about a built world that the tile streams decide, and nothing
-   *  else: geometry, cover, collision, where the cast stands, and the mint
-   *  stamp. Not the theme palette, not prose, not the axis stamps. */
-  const layoutFingerprint = (w) => {
-    const h = createHash("sha256");
-    h.update(`${w.startZone}|${w.mintStamp}`);
-    for (const id of Object.keys(w.zones).sort()) {
-      const z = w.zones[id];
-      h.update(`\nZ ${id}|${z.name}|${z.w}x${z.h}|${z.mapKind ?? ""}|${z.place ?? ""}`);
-      h.update(`\ng ${z.ground.join(",")}`);
-      h.update(`\no ${z.object.join(",")}`);
-      h.update(`\nc ${z.overhead.join(",")}`);
-      h.update(`\ns ${Array.from(z.solid).join(",")}`);
-      for (const npc of z.npcs) h.update(`\nn ${npc.id}|${npc.name}|${npc.x}|${npc.y}`);
-    }
-    return h.digest("hex").slice(0, 16);
-  };
+  // (layoutFingerprint is declared above this case: the lattice's seam-diff lane
+  // pins the PRE-SEAM tree against three of the frozen hashes below, and one
+  // definition is what makes that comparison mean anything.)
 
   // Three brief shapes, because the three take three different paths through
   // build(): no brief at all is the legacy layout, the themed default is the
@@ -33081,6 +33091,691 @@ const fire = (node, type) => Promise.all((node.listeners[type] ?? []).map((fn) =
     } finally {
       clearRetry();
     }
+  }
+}
+
+// ═══ THE WILDERNESS LATTICE — SLICE 1, THE SUBSTRATE (0.16) ═════════════════
+// Cell addressing, the chunk compile, the edge-gate contract, and the seam the
+// compiler now punches into the worlds it already builds. Nine lanes, and the
+// three load-bearing ones are the three that catch the mistakes this design was
+// written around: a materialization that leaks between cells (lane 1), a punch
+// that moves the main tile stream (lane 3), and a gate that leads somewhere the
+// player cannot stand (lanes 4 and 5).
+{
+  const L = loadedPF.lattice;
+  const TUNE = L.TUNE;
+  const SCALES = ["outpost", "hamlet", "village", "town", "city"];
+  const SURROUNDS = ["woods", "fields", "rocky", "water", "barren"];
+  const PROSPERITIES = ["struggling", "modest", "thriving"];
+
+  /** A compiled world, shaped by whichever knobs a lane wants to vary. */
+  const latticeWorld = (PF, theme, seed, over) => {
+    const draft = PF.brief.defaults(theme, seed);
+    Object.assign(draft, over ?? {});
+    const sealed = PF.brief.validate(draft, { theme, seed });
+    const built = PF.world.build(seed, theme, sealed);
+    assert.equal(built.brieved, true, `the fixture at ${theme}/${seed} compiled rather than degrading`);
+    return { world: built, sealed };
+  };
+
+  /** The cells inside a square ring, nearest first. */
+  const cellsTo = (depth) => {
+    const out = [];
+    for (let cx = -depth; cx <= depth; cx++) for (let cy = -depth; cy <= depth; cy++) out.push({ cx, cy });
+    return out.sort((a, b) => Math.max(Math.abs(a.cx), Math.abs(a.cy)) - Math.max(Math.abs(b.cx), Math.abs(b.cy)));
+  };
+
+  /** Everything a CELL is — which is more than `layoutFingerprint` hashes. The
+   *  gates and the feature register ride along on purpose: a duplicated gate or
+   *  a duplicated feature row is invisible to a tile hash, and duplication is
+   *  precisely the failure the record-free edge design exists to remove. */
+  const cellFingerprint = (z) => {
+    const h = createHash("sha256");
+    h.update(`${z.id}|${z.name}|${z.w}x${z.h}|${z.mapKind}|${z.mapExport}|${z.terrain ?? ""}`);
+    h.update(`\ng ${z.ground.join(",")}`);
+    h.update(`\no ${z.object.join(",")}`);
+    h.update(`\nc ${z.overhead.join(",")}`);
+    h.update(`\ns ${Array.from(z.solid).join(",")}`);
+    h.update(`\nG ${(z.gates ?? []).map((g) => `${g.dir}${g.x},${g.y}`).join(";")}`);
+    h.update(`\nF ${(z.features ?? []).map((f) => `${f.id}|${f.tag}|${f.name}|${f.rect.x},${f.rect.y}`).join(";")}`);
+    h.update(`\nP ${(z.portals ?? []).map((p) => `${p.x},${p.y}>${p.toZone}`).join(";")}`);
+    return h.digest("hex").slice(0, 16);
+  };
+
+  const ensureAll = (w, cells) => cells.map((c) => L.ensure(w, L.cellZoneId(w, c.cx, c.cy)));
+  const chunkIds = (w) => Object.keys(w.zones).filter((id) => L.parse(id));
+
+  // ── 1. ONE CELL, ONE STREAM ───────────────────────────────────────────────
+  // Order-independence is the whole claim of a total function, and it is the one
+  // a lazily-compiled world breaks first: build A before B and B comes out
+  // different, so the world a player sees depends on the path they walked. Both
+  // orders, both builds, and the fingerprint carries the gates and the features
+  // rather than the tiles alone.
+  {
+    const cells = cellsTo(2);
+    const forward = latticeWorld(loadedPF, "cozy-village", 90210, { surround: "woods" }).world;
+    const backward = latticeWorld(loadedPF, "cozy-village", 90210, { surround: "woods" }).world;
+    ensureAll(forward, cells);
+    ensureAll(backward, [...cells].reverse());
+    let compared = 0;
+    for (const { cx, cy } of cells) {
+      const id = L.cellZoneId(forward, cx, cy);
+      if (!L.parse(id)) continue; // an anchor cell: the settlement or a brief wilds
+      compared++;
+      assert.equal(
+        cellFingerprint(backward.zones[id]),
+        cellFingerprint(forward.zones[id]),
+        `${id} is the same country whichever order it was walked into`,
+      );
+    }
+    assert.ok(compared >= 20, `the order sweep really compiled cells (${compared})`);
+
+    // A different seed is a different country. Not "some tile differs" — nearly
+    // every cell has to, or the seed is decorative.
+    const other = latticeWorld(loadedPF, "cozy-village", 90211, { surround: "woods" }).world;
+    ensureAll(other, cells);
+    let differing = 0;
+    for (const { cx, cy } of cells) {
+      const id = L.cellZoneId(forward, cx, cy);
+      if (!L.parse(id) || !other.zones[id]) continue;
+      if (cellFingerprint(other.zones[id]) !== cellFingerprint(forward.zones[id])) differing++;
+    }
+    assert.ok(differing >= compared - 1, `a second seed lays a different wilderness (${differing}/${compared})`);
+  }
+
+  // ── 2. NOTHING A CELL DOES REACHES THE WORLD IT HANGS OFF ─────────────────
+  // The side-stream discipline, asked of the lattice: materializing 25 cells
+  // must not move one tile, one gate or one portal of the settlement or of any
+  // zone the brief named.
+  {
+    const { world: w } = latticeWorld(loadedPF, "sci-fi-colony", 5150, { surround: "rocky" });
+    const before = new Map(Object.keys(w.zones).map((id) => [id, cellFingerprint(w.zones[id])]));
+    ensureAll(w, cellsTo(2));
+    assert.ok(chunkIds(w).length >= 20, `cells really were compiled (${chunkIds(w).length})`);
+    for (const [id, print] of before) {
+      assert.equal(cellFingerprint(w.zones[id]), print, `${id} did not move while the country was compiled around it`);
+    }
+    assert.equal(before.size + chunkIds(w).length, Object.keys(w.zones).length, "and nothing else appeared either");
+
+    // NO LATTICE PORTAL RECORDS, ANYWHERE — the invariant that replaces the
+    // design this one was chosen over. A `portals` entry naming a cell is a
+    // defect by definition: it is what dangles when the cell is evicted, what
+    // duplicates when it comes back, and what would put the shipped "every
+    // portal's target exists" contract in the position of having to be relaxed.
+    // And no cell holds an NPC (C6): nothing new reaches the schedule resolver.
+    for (const zone of Object.values(w.zones)) {
+      for (const portal of zone.portals) {
+        assert.equal(L.parse(portal.toZone), null, `${zone.id} wrote a portal record into the cell ${portal.toZone}`);
+      }
+    }
+    for (const id of chunkIds(w)) {
+      assert.deepEqual(w.zones[id].portals, [], `${id} carries no portal records of its own`);
+      assert.deepEqual(w.zones[id].npcs, [], `${id} is uninhabited, so the schedule resolver gains nothing`);
+    }
+  }
+
+  // ── 3. THE SEAM DIFF — the punch moves the ring and NOTHING ELSE ──────────
+  // §0.18's tripwire, made a lane. The `struggling` scuffing loop draws the main
+  // tile stream once per painted path tile, so a seam laid with the road block
+  // shifts every later consumer of that stream — measured at 73 changed
+  // settlement tiles and a re-rolled wilds. Punched late, the diff is the seam.
+  //
+  // The baseline is the tree WITHOUT the seam, rebuilt by rewriting the four
+  // call sites out of 20-world and putting the two pocket seals back where they
+  // used to run. That rebuild is held to three of the side-stream pin's own
+  // frozen 0.13.0 fingerprints, so "the baseline is the shipped compiler" is
+  // proven rather than asserted — and so is the claim that moving a seal which
+  // draws no RNG moves no world.
+  {
+    const SEAM_EDITS = [
+      ["PF.lattice.reservationsFor(v, seamGates)", "[]"],
+      ["PF.lattice.reservationsFor(zone, wildsGates)", "[]"],
+      ["PF.lattice.punchGates(zone, wildsGates);", "void wildsGates;"],
+      ["PF.lattice.punchGates(v, seamGates);", "void seamGates;"],
+      [
+        "      sealPockets(zone, zone.spawn);\n      // (the west spawn is set above",
+        "      void 0;\n      // (the west spawn is set above",
+      ],
+      [
+        "      // (the seal used to run HERE, and now runs after the punches below)",
+        "      sealPockets(zone, zone.spawn);",
+      ],
+      ["    v.cell = { cx: 0, cy: 0 };\n    sealPockets(v, v.spawn);", "    v.cell = { cx: 0, cy: 0 };"],
+      ["    zones.z1 = v;", "    sealPockets(v, v.spawn);\n    zones.z1 = v;"],
+    ];
+    const rewritten = (edits) => {
+      const source = MODULES.map((name) => {
+        let text = readFileSync(join(here, "src", name), "utf8");
+        if (name !== "20-world.js") return text;
+        for (const [from, to] of edits) {
+          const next = text.replace(from, to);
+          assert.notEqual(next, text, `the seam rewrite still names 20-world's "${from.trim().slice(0, 48)}"`);
+          text = next;
+        }
+        return text;
+      }).join("\n");
+      const PF = new Function(`"use strict";\n${source}\nreturn PF;`)();
+      PF.api.postSpatialLocations = async () => ({ ok: false, status: 404, body: null });
+      PF.api.patchMetadata = async () => {};
+      return PF;
+    };
+    const preSeam = rewritten(SEAM_EDITS);
+    // PHASE ONE ON ITS OWN. The punch clears the whole apron, so it would cover
+    // for a reservation that never ran — which would make "the aprons are
+    // reserved" a claim no lane could fail. This build reserves and does NOT
+    // punch, so the tile a doorway is about to be laid on is asked, in the one
+    // state where only phase one can have kept it clear.
+    const unpunched = rewritten(SEAM_EDITS.filter(([from]) => from.startsWith("PF.lattice.punchGates")));
+
+    // THE BASELINE IS THE SHIPPED COMPILER. Three of the frozen 0.13.0 hashes,
+    // quoted from the pin above: if the rewrite reconstructed anything other
+    // than the pre-slice tree, these are what says so.
+    for (const [theme, seed, want] of [
+      ["cozy-village", 1, "8e666935dc3bc3f1"],
+      ["sci-fi-colony", 424242, "3dda8c65a3ccfba0"],
+      ["cozy-village", 31, "deefc2f185fed000"],
+    ]) {
+      assert.equal(
+        layoutFingerprint(preSeam.world.build(seed, theme, preSeam.brief.defaults(theme, seed))),
+        want,
+        `the seam-free rebuild at ${theme}/${seed} IS the tree the pin was taken against`,
+      );
+    }
+
+    let gatedZones = 0;
+    let seamTiles = 0;
+    for (const theme of ["cozy-village", "sci-fi-colony"]) {
+      for (const prosperity of PROSPERITIES) {
+        for (let step = 0; step < 4; step++) {
+          const seed = 104729 * (step + 1);
+          const over = {
+            scale: SCALES[step % SCALES.length],
+            surround: SURROUNDS[step % SURROUNDS.length],
+            prosperity,
+          };
+          const before = latticeWorld(preSeam, theme, seed, over).world;
+          const after = latticeWorld(loadedPF, theme, seed, over).world;
+          const reservedOnly = latticeWorld(unpunched, theme, seed, over).world;
+          for (const id of Object.keys(after.zones)) {
+            const a = before.zones[id];
+            const b = after.zones[id];
+            assert.ok(a, `${theme}/${seed}: the seam invented no zone (${id})`);
+            if (!b.gates) {
+              // A zone with no gate has to be untouched, tile for tile.
+              assert.equal(
+                cellFingerprint(b),
+                cellFingerprint(a),
+                `${theme}/${seed}: ${id} has no seam and did not move`,
+              );
+              continue;
+            }
+            gatedZones++;
+            // PHASE ONE, ASKED WHERE ONLY PHASE ONE CAN ANSWER: on the build
+            // that reserved and never punched, no doorway tile INSIDE the border
+            // ring carries a trunk or a crown. The ring tile itself always does —
+            // `borderTrees` plants the whole ring before anything else runs, and
+            // opening it is the punch's own job — so the tiles under test are the
+            // ones a scatter could have claimed and a reservation had to hold.
+            const unpunchedZone = reservedOnly.zones[id];
+            for (const gate of b.gates) {
+              for (const tile of L.apronTiles(b, gate)) {
+                if (tile.x === 0 || tile.y === 0 || tile.x === b.w - 1 || tile.y === b.h - 1) continue;
+                const at = tile.y * b.w + tile.x;
+                assert.notEqual(
+                  unpunchedZone.object[at],
+                  "trunk",
+                  `${theme}/${seed}: ${id} scattered a trunk onto the ${gate.dir} doorway before it was ever punched`,
+                );
+                assert.notEqual(
+                  unpunchedZone.overhead[at],
+                  "canopy",
+                  `${theme}/${seed}: ${id} hung a crown over the ${gate.dir} doorway`,
+                );
+              }
+            }
+            // The seam's own footprint: the apron tiles, plus the shadow the
+            // reservation casts on the scatter (the shipped reserve test is a
+            // ±1x/±2y box) and the canopy row a suppressed trunk would have hung.
+            const seam = new Set();
+            for (const gate of b.gates) {
+              for (const tile of L.apronTiles(b, gate)) {
+                for (let dx = -1; dx <= 1; dx++) {
+                  for (let dy = -3; dy <= 2; dy++) {
+                    const x = tile.x + dx;
+                    const y = tile.y + dy;
+                    if (x >= 0 && y >= 0 && x < b.w && y < b.h) seam.add(y * b.w + x);
+                  }
+                }
+              }
+            }
+            let moved = 0;
+            for (let at = 0; at < b.ground.length; at++) {
+              if (
+                a.ground[at] === b.ground[at] &&
+                a.object[at] === b.object[at] &&
+                a.overhead[at] === b.overhead[at] &&
+                a.solid[at] === b.solid[at]
+              ) {
+                continue;
+              }
+              moved++;
+              assert.ok(
+                seam.has(at),
+                `${theme}/${seed}/${prosperity}: ${id} moved at ${at % b.w},${(at / b.w) | 0}, which is not seam`,
+              );
+            }
+            seamTiles += moved;
+            assert.ok(moved > 0, `${theme}/${seed}: ${id} grew a seam that changed nothing`);
+          }
+          // AND THE TRIPWIRE ITSELF: a shifted main stream re-rolls the wilds
+          // ground cover wholesale and re-lays the town, so "every non-seam tile
+          // still matches, on a `struggling` world, in the zones the scuffing
+          // loop feeds" is the measurement saying the punch stayed late.
+          assert.equal(before.mintStamp, after.mintStamp, `${theme}/${seed}: the seam minted nobody`);
+        }
+      }
+    }
+    assert.ok(gatedZones >= 24, `the seam sweep really ran (${gatedZones} gated zones, ${seamTiles} tiles moved)`);
+  }
+
+  // ── 4. RECIPROCITY — every gate's neighbour holds the gate back ───────────
+  // The edge contract is arithmetic, so this is the lane that says the
+  // arithmetic closes: whatever a gate computes, once materialized, faces back.
+  {
+    let gates = 0;
+    for (const theme of ["cozy-village", "sci-fi-colony"]) {
+      for (let step = 0; step < SCALES.length; step++) {
+        const seed = 31337 + step * 7919;
+        const { world: w } = latticeWorld(loadedPF, theme, seed, {
+          scale: SCALES[step],
+          surround: SURROUNDS[(step + 1) % SURROUNDS.length],
+        });
+        ensureAll(w, cellsTo(step === 0 ? 3 : 2));
+        for (const zone of Object.values(w.zones)) {
+          if (!zone.gates) continue;
+          for (const gate of zone.gates) {
+            gates++;
+            assert.equal(zone.solid[gate.y * zone.w + gate.x], 0, `${zone.id}: its own ${gate.dir} gate is walkable`);
+            const inset = L.insetOf(zone, gate);
+            assert.ok(
+              inset.x >= 0 && inset.y >= 0 && inset.x < zone.w && inset.y < zone.h,
+              `${zone.id}: the ${gate.dir} arrival tile is inside the zone`,
+            );
+            assert.equal(zone.solid[inset.y * zone.w + inset.x], 0, `${zone.id}: the ${gate.dir} arrival is walkable`);
+            const targetId = L.gateTargetId(w, zone, gate);
+            assert.ok(targetId, `${zone.id}: the ${gate.dir} gate names a zone`);
+            const dest = L.ensure(w, targetId);
+            assert.ok(dest, `${zone.id}: the ${gate.dir} gate's ${targetId} materializes`);
+            assert.ok(
+              (dest.gates ?? []).some((g) => g.dir === L.opposite(gate.dir)),
+              `${targetId} holds the gate back toward ${zone.id}`,
+            );
+            const arrival = L.arrivalFor(dest, gate.dir);
+            assert.ok(arrival, `${zone.id} -> ${targetId} lands somewhere the player can stand`);
+            assert.equal(dest.solid[arrival.y * dest.w + arrival.x], 0, "…and that tile is walkable");
+          }
+        }
+        // The seams the brief already had. A wilds keeps its shipped portal pair
+        // home and is given NO gate over it, which is how a record and a gate
+        // are kept from ever answering for the same tile.
+        assert.deepEqual(L.cellOf(w.zones[w.startZone]), { cx: 0, cy: 0 }, "the settlement stands at the origin cell");
+        for (const cell of Object.keys(w.latticeAnchors)) {
+          const anchor = w.zones[w.latticeAnchors[cell]];
+          assert.ok(anchor?.gates?.length, `the brief wilds at ${cell} carries gates`);
+          assert.equal(
+            anchor.gates.some((g) => g.dir === (L.cellOf(anchor).cx > 0 ? "W" : "E")),
+            false,
+            `${anchor.id} writes no gate over its portal pair home`,
+          );
+        }
+      }
+    }
+    assert.ok(gates >= 300, `the reciprocity sweep really walked gates (${gates})`);
+
+    // HOW MANY GATES A SETTLEMENT GETS IS A FUNCTION OF WHAT THE BRIEF ALREADY
+    // HUNG THERE, and both ends of that have to be walked: a brief with no wilds
+    // opens all four spine terminals, and a brief with two keeps its two portal
+    // pairs and opens only north and south. Every shipped default brief carries
+    // exactly one wilds, so neither end is covered by the sweep above.
+    for (const [label, places, want] of [
+      ["a brief with no wilds", [], ["N", "E", "S", "W"]],
+      [
+        "a brief with both wilds",
+        [
+          { kind: "wilds", name: "The Long Coppice" },
+          { kind: "wilds", name: "The Sunken Fen" },
+        ],
+        ["N", "S"],
+      ],
+    ]) {
+      const { world: w } = latticeWorld(loadedPF, "cozy-village", 96331, { places });
+      const home = w.zones[w.startZone];
+      assert.deepEqual(
+        [...new Set(home.gates.map((g) => g.dir))].sort(),
+        want.slice().sort(),
+        `${label}: the settlement opens exactly the terminals nothing else owns`,
+      );
+      assert.equal(home.gates.length, want.length * TUNE.GATE_SPAN, `${label}: each terminal is a full-width pair`);
+      assert.equal(Object.keys(w.latticeAnchors).length, places.length, `${label}: its wilds hold the cells beside it`);
+      for (const cell of Object.keys(w.latticeAnchors)) {
+        const anchor = w.zones[w.latticeAnchors[cell]];
+        assert.equal(anchor.gates.length, 3 * TUNE.GATE_SPAN, `${label}: ${anchor.id} opens its three outward edges`);
+      }
+      // The step-time reader, which is how the walking frame will ask: a gate
+      // tile answers with its gate and ordinary ground answers with nothing.
+      const one = home.gates[0];
+      assert.equal(L.gateAt(home, one.x, one.y), one, "a gate tile answers with its own gate");
+      assert.equal(L.gateAt(home, home.spawn.x, home.spawn.y), null, "…and the spawn answers with nothing");
+    }
+
+    // THE FALLBACK GETS NOTHING (maintainer ruling, 2026-09-05). Not "a smaller
+    // lattice": a legacy world carries no cell, no gate, no anchor table and no
+    // surround, and `ensure` refuses it outright — so there is nothing on that
+    // map for a gate to collide with, because no gate is ever written to it.
+    const legacy = loadedPF.world.build(4242, "cozy-village", null);
+    assert.equal(legacy.brieved, undefined, "the fixture really is the fallback map");
+    for (const zone of Object.values(legacy.zones)) {
+      assert.equal(zone.gates, undefined, `${zone.id} carries no gates`);
+      assert.equal(zone.cell, undefined, `${zone.id} stands in no cell`);
+    }
+    assert.equal(legacy.latticeAnchors, undefined, "the fallback names no anchored cells");
+    assert.equal(legacy.surround, undefined, "…and stamps no surround for a weight table to read");
+    assert.equal(L.cellZoneId(legacy, 0, 0), null, "the origin cell resolves to nothing on the fallback map");
+    assert.equal(L.ensure(legacy, "w_1_0"), null, "and no cell can be compiled into it");
+    assert.equal(Object.keys(legacy.zones).length, 3, "the fallback still has exactly its three shipped zones");
+  }
+
+  // ── 5. REACHABILITY — no gate is a wall, on any gated zone ────────────────
+  // Widened past the chunks on purpose: the shipped pocket sweep exempts
+  // settlements, and the settlement is now a zone with holes punched in its
+  // border ring. A clear arrival tile with a blocked tile behind it passes lane
+  // 4 and fails here, which is the whole reason this lane is separate.
+  {
+    let zones = 0;
+    let approaches = 0;
+    for (const theme of ["cozy-village", "sci-fi-colony"]) {
+      for (let step = 0; step < 6; step++) {
+        const seed = 611953 + step * 104729;
+        const { world: w } = latticeWorld(loadedPF, theme, seed, {
+          scale: SCALES[step % SCALES.length],
+          surround: SURROUNDS[step % SURROUNDS.length],
+          prosperity: PROSPERITIES[step % PROSPERITIES.length],
+        });
+        ensureAll(w, cellsTo(2));
+        for (const zone of Object.values(w.zones)) {
+          if (!zone.gates) continue;
+          zones++;
+          const reached = floodFill(zone, zone.spawn);
+          for (const gate of zone.gates) {
+            const inset = L.insetOf(zone, gate);
+            assert.ok(
+              reached.has(`${inset.x},${inset.y}`),
+              `${theme}/${seed}: ${zone.id} seals its own ${gate.dir} gate off from its spawn`,
+            );
+          }
+          // …and every landmark can be walked up to. A pool is solid by design,
+          // so the approach is the ring around the rect and not the rect.
+          for (const feature of zone.features ?? []) {
+            if (!String(feature.id).startsWith("wild:")) continue;
+            approaches++;
+            let touched = false;
+            for (let y = feature.rect.y - 1; y <= feature.rect.y + feature.rect.h && !touched; y++) {
+              for (let x = feature.rect.x - 1; x <= feature.rect.x + feature.rect.w && !touched; x++) {
+                if (reached.has(`${x},${y}`)) touched = true;
+              }
+            }
+            assert.ok(touched, `${theme}/${seed}: ${zone.id} put ${feature.name} where nobody can reach it`);
+          }
+        }
+      }
+    }
+    assert.ok(zones >= 100, `the reachability sweep really ran (${zones} gated zones)`);
+    assert.ok(approaches >= 5, `…and it found landmarks to walk up to (${approaches})`);
+
+    // COVERAGE, PROVEN RATHER THAN ASSUMED. A cell stamps mapKind "wild" and
+    // carries a spawn, so it enters the shipped whole-world pocket sweep — and
+    // the way to show that is to break one cell and watch the sweep say so.
+    const { world: w, sealed } = latticeWorld(loadedPF, "cozy-village", 8675309, { surround: "woods" });
+    ensureAll(w, cellsTo(1));
+    checkWorld(w, sealed, "lattice/resident");
+    const victim = w.zones[chunkIds(w)[0]];
+    assert.equal(victim.mapKind, TUNE.CHUNK_MAP_KIND, "a cell is a `wild`, which the sweep does not exempt");
+    assert.equal(victim.mapExport, TUNE.CHUNK_MAP_EXPORT, "…and claims no World Maps row");
+    victim.solid[0] = 0; // a corner of the border ring: walkable, and walled in
+    assert.throws(
+      () => checkWorld(w, sealed, "lattice/broken"),
+      /sealed off from its own spawn/,
+      "a cell with a pocket in it fails the shipped sweep, so the sweep really covers cells",
+    );
+  }
+
+  // ── 6. CONTAINMENT — a builder that throws is a tile that does nothing ────
+  // The frame loop re-arms its own animation frame BEFORE it steps, so a throw
+  // out of a gate step is sixty faults a second behind a frozen screen; a throw
+  // out of a restore costs the save. Neither is worth a wilderness cell.
+  {
+    const { world: w } = latticeWorld(loadedPF, "cozy-village", 220129, { surround: "fields" });
+    const id = L.cellZoneId(w, 4, -3);
+    const realSeal = loadedPF.world.prims.sealPockets;
+    const realWarn = console.warn;
+    const warned = [];
+    try {
+      console.warn = (...args) => warned.push(args.map(String).join(" "));
+      loadedPF.world.prims.sealPockets = () => {
+        throw new Error("pixelforge: a deliberately broken cell builder");
+      };
+      assert.equal(L.ensure(w, id), null, "a builder that throws hands back nothing");
+      assert.equal(w.zones[id], undefined, "…and installs nothing");
+      assert.equal(L.ensure(w, id), null, "a second try is refused the same way");
+      assert.equal(warned.length, 1, "and it is loud exactly once, not once per step");
+      assert.ok(warned[0].includes(id), `the warning names the cell (${warned[0]})`);
+    } finally {
+      loadedPF.world.prims.sealPockets = realSeal;
+      console.warn = realWarn;
+    }
+    const healed = L.ensure(w, id);
+    assert.ok(healed && healed.id === id, "and once the builder works the cell compiles — the refusal latched nothing");
+    assert.equal(cellFingerprint(healed), cellFingerprint(L.compileChunk(w, 4, -3)), "…as the cell it always was");
+  }
+
+  // ── 7. IDS, AND THE WALK HOME ─────────────────────────────────────────────
+  // Round-trip canonicality rather than a list of spellings somebody thought of:
+  // an id is a cell iff spelling that cell back gives the identical string. And
+  // then the positive half, which a refusal-only lane would have certified the
+  // bug against — `ensure` hands a RESIDENT zone straight back whatever its id
+  // looks like, because the ids a gate names for the three anchored cells are
+  // `z1` and the brief's own wilds, and none of them are cell ids at all.
+  {
+    const { world: w } = latticeWorld(loadedPF, "cozy-village", 606060, { surround: "water" });
+    const hostile = [
+      "w_007_0",
+      "w_-0_0",
+      "w_1e3_0",
+      "w_1_0|x",
+      "w_1_0 ",
+      " w_1_0",
+      "w_+1_0",
+      "w_1__0",
+      "w_1.0_0",
+      "W_1_0",
+      "w_1_0_0",
+      "w__0",
+      "__proto__",
+      "constructor",
+      "toString",
+      "z1",
+      `w_${"9".repeat(4000)}_0`,
+      `w_${Number.MAX_SAFE_INTEGER + 10}_0`,
+    ];
+    for (const id of hostile) assert.equal(L.parse(id), null, `"${id.slice(0, 24)}" is not a cell`);
+    for (const [cx, cy] of [
+      [0, 0],
+      [1, 0],
+      [-1, 0],
+      [7, -13],
+      [-9999, 12345],
+    ]) {
+      assert.deepEqual(L.parse(L.idFor(cx, cy)), { cx, cy }, `${L.idFor(cx, cy)} round-trips`);
+    }
+    // No compiled id is ever a cell id, so no cell can shadow a zone the brief
+    // named or a floor the partitioner grew.
+    for (const id of Object.keys(w.zones)) assert.equal(L.parse(id), null, `${id} is not in the cell namespace`);
+
+    // A cell id naming an ANCHORED cell is refused rather than built twice: the
+    // brief's east wilds already IS (1,0), and a second zone for it would be a
+    // place nobody can reach standing beside the place everybody can.
+    const anchored = Object.keys(w.latticeAnchors);
+    assert.ok(anchored.length, "the fixture's brief hung a wilds");
+    for (const cell of anchored) {
+      const [cx, cy] = cell.split(",").map(Number);
+      const shadow = L.idFor(cx, cy);
+      assert.ok(L.parse(shadow), `${shadow} parses as a cell`);
+      assert.equal(L.ensure(w, shadow), null, `…and is refused, because ${cell} is already the brief's own zone`);
+      assert.equal(w.zones[shadow], undefined, "nothing was installed under it");
+    }
+
+    // THE WALK HOME. Resident passthrough, by reference, building nothing and
+    // warning nothing — and the gate arithmetic that actually gets there.
+    const realWarn = console.warn;
+    const warned = [];
+    try {
+      console.warn = (...args) => warned.push(args.map(String).join(" "));
+      const zoneCount = Object.keys(w.zones).length;
+      for (const id of [w.startZone, ...anchored.map((cell) => w.latticeAnchors[cell])]) {
+        assert.equal(L.ensure(w, id), w.zones[id], `ensure("${id}") is the standing zone, by reference`);
+      }
+      assert.equal(Object.keys(w.zones).length, zoneCount, "the walk home compiled nothing");
+      assert.equal(warned.length, 0, "…and said nothing");
+      // And the arithmetic lands on them: the cell north of the origin steps
+      // south into the settlement, and the cell beyond a wilds steps back in.
+      const north = L.ensure(w, L.cellZoneId(w, 0, -1));
+      assert.equal(
+        L.gateTargetId(
+          w,
+          north,
+          north.gates.find((g) => g.dir === "S"),
+        ),
+        w.startZone,
+        "south out of the first cell is the way home",
+      );
+      assert.ok(L.arrivalFor(w.zones[w.startZone], "S"), "…and the settlement has the gate to arrive through");
+      for (const cell of anchored) {
+        const [cx, cy] = cell.split(",").map(Number);
+        const outward = L.ensure(w, L.cellZoneId(w, cx + Math.sign(cx), cy));
+        const inward = outward.gates.find((g) => g.dir === (cx > 0 ? "W" : "E"));
+        assert.equal(
+          L.gateTargetId(w, outward, inward),
+          w.latticeAnchors[cell],
+          `${outward.id} steps back into the brief's own wilds`,
+        );
+        assert.ok(L.arrivalFor(w.zones[w.latticeAnchors[cell]], inward.dir), "…and the wilds gained the gate for it");
+      }
+      assert.equal(warned.length, 0, "the whole walk home was quiet");
+    } finally {
+      console.warn = realWarn;
+    }
+  }
+
+  // ── 8. THE WILDERNESS COSTS NO SAVE BYTES ─────────────────────────────────
+  // Zero new envelope keys was the design's own constraint, and the honest way
+  // to check it is a real snapshot with a country standing behind it.
+  {
+    const { world: w } = latticeWorld(loadedPF, "cozy-village", 777333, { surround: "barren" });
+    const sim = new loadedPF.Sim(w);
+    const before = JSON.stringify(loadedPF.save.snapshot({ sim, chatId: "chat-lattice" }));
+    ensureAll(w, cellsTo(2));
+    assert.ok(chunkIds(w).length >= 20, `a country is standing (${chunkIds(w).length} cells)`);
+    assert.equal(
+      JSON.stringify(loadedPF.save.snapshot({ sim, chatId: "chat-lattice" })),
+      before,
+      "25 compiled cells add nothing at all to the envelope",
+    );
+    // …and standing IN one costs only the zone string the envelope already has.
+    const standing = chunkIds(w)[0];
+    sim.teleport(standing, w.zones[standing].spawn.x, w.zones[standing].spawn.y);
+    const inside = loadedPF.save.snapshot({ sim, chatId: "chat-lattice" });
+    assert.equal(inside.zone, standing, "the envelope's existing zone key is the whole of it");
+    assert.deepEqual(
+      Object.keys(inside).sort(),
+      Object.keys(JSON.parse(before)).sort(),
+      "and the key set did not grow by one",
+    );
+  }
+
+  // ── 9. THE SKY AND THE COUNTRY ARE SPENT ──────────────────────────────────
+  // The axes and the surround are inputs, not decoration: a subpolar wet country
+  // and an equatorial arid one deal different terrain from one seed, and the
+  // settlement's own surround is felt hardest in the ring it can see.
+  {
+    const histogram = (over) => {
+      const { world: w } = latticeWorld(loadedPF, "cozy-village", 424243, over);
+      const counts = {};
+      for (const { cx, cy } of cellsTo(4)) {
+        if (!L.parse(L.cellZoneId(w, cx, cy))) continue;
+        const cls = L.classFor(w, cx, cy);
+        counts[cls] = (counts[cls] ?? 0) + 1;
+      }
+      return counts;
+    };
+    const wet = histogram({ latitude: "subpolar", precipitation: "wet", surround: "water" });
+    const arid = histogram({ latitude: "equatorial", precipitation: "arid", surround: "barren" });
+    assert.notDeepEqual(wet, arid, "two skies over one seed deal two countries");
+    assert.ok((wet.fen ?? 0) > (arid.fen ?? 0), `a wet world holds more fen (${wet.fen} vs ${arid.fen})`);
+    assert.ok((arid.scree ?? 0) > (wet.scree ?? 0), `an arid one holds more scree (${arid.scree} vs ${wet.scree})`);
+
+    // The surround BIASES RING 1 and fades outward — the country a town stands
+    // in is the country you see the moment you step outside it.
+    const rocky = latticeWorld(loadedPF, "cozy-village", 5, { surround: "rocky" }).world;
+    const woods = latticeWorld(loadedPF, "cozy-village", 5, { surround: "woods" }).world;
+    const near = L.classWeights(rocky, 1).scree / L.classWeights(woods, 1).scree;
+    const far = L.classWeights(rocky, 6).scree / L.classWeights(woods, 6).scree;
+    assert.ok(near > 1.5, `a rocky surround thickens the scree beside the town (x${near.toFixed(2)})`);
+    assert.ok(far < near, `…and lets go of it further out (x${far.toFixed(2)} at ring 6)`);
+    assert.ok(L.classWeights(rocky, 1).woods < L.classWeights(woods, 1).woods, "and it thins that ring's woods too");
+
+    // ONE LANDMARK IN ROUGHLY SEVEN CELLS — checked against the design's own
+    // arithmetic rather than against a sample and a hope. The BASE table is what
+    // carries the claim; the ring term and the surround pull on it, and the band
+    // is how far either is allowed to move it before the bias has become a
+    // different design.
+    const neutral = { brieved: true, seed: 11, latitude: "temperate", precipitation: "moderate" };
+    const base = L.landmarkRate(neutral, 0);
+    assert.ok(
+      Math.abs(base - TUNE.LANDMARK_RATE_TARGET) <= TUNE.LANDMARK_RATE_TOLERANCE,
+      `the class weights really do mean ~1 landmark in 7 (${base.toFixed(4)})`,
+    );
+    for (const surround of [undefined, ...SURROUNDS]) {
+      for (let atRing = 1; atRing <= 6; atRing++) {
+        const pulled = L.landmarkRate({ ...neutral, surround }, atRing);
+        assert.ok(
+          pulled <= base * TUNE.LANDMARK_RATE_BAND && pulled >= base / TUNE.LANDMARK_RATE_BAND,
+          `${surround ?? "no"} surround at ring ${atRing} pulls the landmark rate to ${pulled.toFixed(4)}, out of band`,
+        );
+      }
+    }
+    // Flavor rides RARITY: a landmark cell carries one bounded line and ordinary
+    // country costs the injection budget nothing at all.
+    const walked = latticeWorld(loadedPF, "cozy-village", 11, {
+      latitude: "temperate",
+      precipitation: "moderate",
+    }).world;
+    ensureAll(walked, cellsTo(3));
+    let landmarks = 0;
+    for (const id of chunkIds(walked)) {
+      const zone = walked.zones[id];
+      // The cheap answer and the expensive one agree: `classFor` reads the first
+      // draw of the same stream the builder reads, so asking what is out there
+      // without paying for tiles cannot drift from what compiling it deals.
+      const { cx, cy } = L.parse(id);
+      assert.equal(L.classFor(walked, cx, cy), zone.terrain, `${id} is the class the cheap read says it is`);
+      if (L.isLandmark(zone)) {
+        landmarks++;
+        assert.ok(zone.flavor && zone.flavor.length <= TUNE.FLAVOR_MAX_CHARS, `${id} carries one bounded line`);
+      } else {
+        assert.equal(zone.flavor, undefined, `${id} is ordinary country and injects nothing`);
+      }
+    }
+    assert.ok(landmarks > 0, `the sweep found landmarks to check (${landmarks}/${chunkIds(walked).length})`);
   }
 }
 
