@@ -2792,7 +2792,7 @@ function AmbientProfilesPanel({
   allowRandomUsers: boolean;
   onAllowRandomUsersChange: (value: boolean) => void;
 }) {
-  const { t } = useUiTranslation();
+  const { t } = useTranslation();
   const profilesQuery = useSlurpAmbientProfiles();
   const reroll = useRerollAmbientProfiles();
   const profiles = profilesQuery.data?.items ?? [];

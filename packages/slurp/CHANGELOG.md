@@ -1,5 +1,11 @@
 # Slurp release notes
 
+## 1.1.17 — 2026-09-05
+
+- Slurp opens again. The tab crashed on load.
+- The ambient audience panel in Settings no longer breaks the page when opened.
+- The empty feed can once more offer to open your own Creator profile.
+
 ## 1.1.16 — 2026-09-05
 
 - The inbox opens again. Listing conversations and opening one both failed outright.

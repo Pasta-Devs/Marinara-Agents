@@ -1497,7 +1497,7 @@ export function SlurpHome({ navigation, onNavigate }: SlurpHomeProps) {
     onOpenNotifications: goToNotifications,
     notificationCount: notificationsQuery.data?.unseenCount ?? 0,
     // The studio is only meaningful for a persona that operates a Creator.
-    hasOperatedCreator: personaBackedCreator,
+    hasOperatedCreator: Boolean(myCreatorProfile),
     walletBalanceLabel: `${viewerWalletsQuery.data?.[viewerPersonaId ?? ""]?.coins ?? SLURP_PLACEHOLDER_BALANCE}`,
     personaBannerUrl: myCreatorProfile?.bannerUrl ?? null,
     onBecomeCreator: shellPersonaAccount
@@ -2336,6 +2336,11 @@ export function SlurpHome({ navigation, onNavigate }: SlurpHomeProps) {
         onTabChange={setFeedTab}
         onToggleFollow={toggleCreatorFollow}
         authorProfile={accountsQuery.isSuccess ? mainAuthorProfile : null}
+        onOpenAuthorProfile={
+          mainAuthorProfile
+            ? () => onNavigate({ mode: "creator", view: "profile", accountId: mainAuthorProfile.id })
+            : undefined
+        }
         onToggleSubscription={toggleCreatorSubscription}
         togglePending={toggleSubscription.isPending || toggleFollow.isPending}
         inlineAdsEnabled={slurpSettingsQuery.data?.inlineAdsEnabled !== false}
@@ -4501,6 +4506,7 @@ function ViewerHub({
   onTabChange,
   onToggleFollow,
   authorProfile,
+  onOpenAuthorProfile,
   onToggleSubscription,
   togglePending,
   inlineAdsEnabled,
@@ -4541,6 +4547,8 @@ function ViewerHub({
   onTabChange: (tab: "following" | "all") => void;
   onToggleFollow: (creatorAccountId: string, followed: boolean) => void;
   authorProfile: NoodlerManagedStageProfile | null;
+  /** Open the persona's own Creator profile from the empty feed. */
+  onOpenAuthorProfile?: () => void;
   onToggleSubscription: (creatorAccountId: string, subscribed: boolean) => void;
   togglePending: boolean;
   inlineAdsEnabled: boolean;
