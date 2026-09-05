@@ -68,8 +68,8 @@ assert.match(
 );
 assert.match(
   memoryVaultSource,
-  /scopeTargetLabel\([\s\S]*?"persona",[\s\S]*?draft\.scope\.personaId,[\s\S]*?pickerTargets,[\s\S]*?missingPersona/u,
-  "the persona scope pill provides the missing-persona override",
+  /const unavailableLabels = \{[\s\S]*?persona: localizeUi\("ui\.longTermMemory\.memoryvault\.unavailablePersona"\)[\s\S]*?const entries = availabilityEntries\(scope, targets, unavailableLabels\)/u,
+  "the availability pills provide the missing-persona override",
 );
 
 process.stdout.write("Long-Term Memory scope fallback regression: localized defaults and per-kind overrides ok\n");
