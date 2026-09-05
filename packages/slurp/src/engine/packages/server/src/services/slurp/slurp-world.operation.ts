@@ -20,7 +20,7 @@ import { createSlurpPopulationStorage } from "../storage/slurp-population.storag
 import { isAmbientNoodleAccount } from "./slurp-ambient-profiles.js";
 import { tryNoodleOperation } from "./slurp-operation-lock.js";
 import { slurpCreatorReach } from "./slurp-reach.js";
-import { slurpAudienceQuestion, slurpCommissionBrief } from "./slurp-world-copy.js";
+import { slurpAudienceOpener, slurpAudienceQuestion, slurpCommissionBrief } from "./slurp-world-copy.js";
 import { planSlurpWorldTick, type SlurpWorldAction, type SlurpWorldCreator } from "./slurp-world.js";
 import { planSlurpWorldPulse, type SlurpPulseAction } from "./slurp-world-pulse.js";
 
@@ -141,7 +141,11 @@ export async function advanceSlurpWorld(db: DB, until = new Date()): Promise<Slu
           .map((post) => post.id),
         // A queue nobody answered gets no more. Asking again while three requests sit unread is
         // how an obligation layer turns into a chore.
-        openRequests: (await messages.listOpenCommissionsForCreator(account.id)).length,
+        // Unanswered conversations count with unanswered commissions. Both are somebody waiting on
+        // the player, and three of either is already more than a session should open with.
+        openRequests:
+          (await messages.listOpenCommissionsForCreator(account.id)).length +
+          (await messages.listThreadsForCreators([account.id])).filter((thread) => thread.creatorUnread > 0).length,
       })),
     );
 
@@ -225,6 +229,22 @@ async function applyAction(db: DB, action: SlurpWorldAction, at: Date): Promise<
   const noodle = createSlurpStorage(db);
   const actor = await resolveActor(db, action.actorAccountId);
   if (!actor) return false;
+
+  if (action.kind === "message") {
+    const messages = createSlurpMessagesStorage(db);
+    const sent = await messages.sendViewerMessage(
+      action.actorAccountId,
+      action.creatorAccountId,
+      slurpAudienceOpener(`${action.creatorAccountId}:${action.actorAccountId}:${at.toISOString()}`),
+    );
+    if (sent.status !== "sent") return false;
+    const population = createSlurpPopulationStorage(db);
+    await population
+      .advanceTie(actor.id, action.creatorAccountId, { stage: "viewer", interactions: 1 })
+      .catch(() => undefined);
+    await population.touch(actor.id).catch(() => undefined);
+    return true;
+  }
 
   if (action.kind === "commission") {
     const messages = createSlurpMessagesStorage(db);

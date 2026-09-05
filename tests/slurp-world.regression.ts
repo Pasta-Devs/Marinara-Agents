@@ -5,6 +5,7 @@ import { join } from "node:path";
 import {
   planSlurpWorldTick,
   slurpCommissionChancePerDay,
+  slurpMessageChancePerDay,
   slurpQuestionChancePerDay,
   slurpWorldElapsedDays,
   SLURP_WORLD_MAX_ACTIONS,
@@ -13,6 +14,7 @@ import {
   type SlurpWorldCreator,
 } from "../packages/slurp/src/engine/packages/server/src/services/slurp/slurp-world.js";
 import {
+  slurpAudienceOpener,
   slurpAudienceQuestion,
   slurpCommissionBrief,
 } from "../packages/slurp/src/engine/packages/server/src/services/slurp/slurp-world-copy.js";
@@ -109,6 +111,21 @@ assert.ok(briefs.size > 60, `commission briefs must vary, got ${briefs.size} of 
 const questions = new Set(Array.from({ length: 100 }, (_, index) => slurpAudienceQuestion(`post-${index}`)));
 assert.ok(questions.size > 5, `questions must vary, got ${questions.size}`);
 
+// ── Somebody writing to you unprompted ──────────────────────────────────────
+// The strongest signal the world can send is somebody addressing you without being addressed
+// first. It stops being a signal the moment it is routine, so it is the rarest thing here.
+assert.equal(slurpMessageChancePerDay(100), 0, "a small Creator gets no cold messages");
+assert.ok(slurpMessageChancePerDay(5_000) < slurpCommissionChancePerDay(5_000), "rarer than a commission");
+assert.ok(slurpMessageChancePerDay(10_000_000) <= 0.3, "capped");
+for (const bad of [-1, Number.NaN]) {
+  assert.ok(Number.isFinite(slurpMessageChancePerDay(bad)), `rate was not finite for ${bad}`);
+}
+
+// Openers vary and stay vague. A first message that pretends to know something about a post it has
+// not read is worse than one that simply says hello.
+assert.equal(slurpAudienceOpener("seed"), slurpAudienceOpener("seed"));
+assert.ok(new Set(Array.from({ length: 60 }, (_, index) => slurpAudienceOpener(`o${index}`))).size > 4);
+
 // ── Wiring ──────────────────────────────────────────────────────────────────
 const root = join(import.meta.dirname, "..", "packages/slurp/src/engine/packages/server/src");
 const read = (path: string) => readFileSync(join(root, path), "utf8");
@@ -119,6 +136,11 @@ assert.match(operation, /export async function advanceSlurpWorld/u);
 // A failed action must never stop the mark being written, or the same stretch replays forever.
 assert.match(operation, /await writeLastTick\(db, until\);\s*return \{\s*status: applied \+ pulsed > 0/u);
 assert.match(operation, /tryNoodleOperation\("slurp-world-tick"/u, "concurrent ticks must not double-apply");
+// An unanswered conversation is somebody waiting on the player, exactly like an unanswered
+// commission, so both count against the same queue.
+assert.match(operation, /listOpenCommissionsForCreator\(account\.id\)\)\.length \+/u);
+assert.match(operation, /thread\.creatorUnread > 0/u);
+assert.match(operation, /if \(action\.kind === "message"\)/u);
 
 const routes = read("routes/slurp.routes.ts");
 assert.match(routes, /await advanceSlurpWorld\(app\.db\)\.catch\(/u, "catch-up must not cost the player their feed");

@@ -25,14 +25,19 @@ export type SlurpWorldAction =
   /** Somebody asks the Creator to make something. */
   | { kind: "commission"; creatorAccountId: string; actorAccountId: string }
   /** Somebody asks a question under a post and expects an answer. */
-  | { kind: "question"; creatorAccountId: string; actorAccountId: string; postId: string };
+  | { kind: "question"; creatorAccountId: string; actorAccountId: string; postId: string }
+  /** Somebody writes to the Creator without being written to first. */
+  | { kind: "message"; creatorAccountId: string; actorAccountId: string };
 
 export type SlurpWorldCreator = {
   id: string;
   followers: number;
   /** Posts recent enough to still be drawing attention. Empty means nothing to ask about. */
   recentPostIds: readonly string[];
-  /** Requests already waiting on this Creator. A queue nobody answered gets no more. */
+  /**
+   * Requests already waiting on this Creator: unanswered commissions and unanswered conversations
+   * alike. A queue nobody has replied to gets no more, or an obligation layer becomes a chore.
+   */
   openRequests: number;
 };
 
@@ -88,6 +93,19 @@ export function slurpCommissionChancePerDay(followers: number): number {
   return Math.min(0.5, Math.log10(count / 100) * 0.09);
 }
 
+/**
+ * Chance per day that somebody writes to the Creator unprompted.
+ *
+ * The rarest thing the world does, and deliberately so. A stranger opening a conversation is the
+ * strongest signal the world can send — somebody addressed *you* — and it stops being a signal the
+ * moment it is routine.
+ */
+export function slurpMessageChancePerDay(followers: number): number {
+  const count = Number.isFinite(followers) ? Math.max(0, followers) : 0;
+  if (count < 250) return 0;
+  return Math.min(0.3, Math.log10(count / 250) * 0.06);
+}
+
 /** Chance per day that somebody asks a question under a recent post. Commoner and lighter. */
 export function slurpQuestionChancePerDay(followers: number): number {
   const count = Number.isFinite(followers) ? Math.max(0, followers) : 0;
@@ -140,6 +158,11 @@ export function planSlurpWorldTick(input: {
     if (random() < slurpCommissionChancePerDay(creator.followers) * days) {
       actions.push({ kind: "commission", creatorAccountId: creator.id, actorAccountId: pick() });
       // One heavy ask per Creator per tick. Two at once reads as a glitch, not as popularity.
+      continue;
+    }
+
+    if (random() < slurpMessageChancePerDay(creator.followers) * days) {
+      actions.push({ kind: "message", creatorAccountId: creator.id, actorAccountId: pick() });
       continue;
     }
 

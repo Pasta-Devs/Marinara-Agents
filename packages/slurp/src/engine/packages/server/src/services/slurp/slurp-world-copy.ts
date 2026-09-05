@@ -81,3 +81,24 @@ export function slurpCommissionBrief(seed: string): string {
 export function slurpAudienceQuestion(seed: string): string {
   return QUESTIONS[pickIndex(seed, "question", QUESTIONS.length)]!;
 }
+
+/**
+ * An opening line from somebody who has never written before.
+ *
+ * Same rule as the commission briefs: vague on purpose. A first message that pretends to know
+ * something specific about a post it has not read is worse than one that simply says hello.
+ */
+const OPENERS = [
+  "hi — been reading for a while, finally said something",
+  "hope it is ok to message. just wanted to say I like what you do",
+  "you probably get this a lot but you seem genuinely nice",
+  "not asking for anything, just wanted to say hi",
+  "been meaning to write for weeks and kept chickening out",
+  "hey. long time reader, first time writing",
+  "sorry to appear out of nowhere. your last few posts got me",
+  "is it weird to message? felt weird not to",
+] as const;
+
+export function slurpAudienceOpener(seed: string): string {
+  return OPENERS[pickIndex(seed, "opener-dm", OPENERS.length)]!;
+}
