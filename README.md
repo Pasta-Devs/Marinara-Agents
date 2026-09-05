@@ -61,6 +61,8 @@ Across its Engine compatibility lanes, the catalog currently contains **36 first
 
 For complete mode, lifecycle, and settings documentation for every package, see the Engine's [Downloadable Agents Reference](https://github.com/Pasta-Devs/Marinara-Engine/blob/staging/docs/agents/built-in-agents.md).
 
+For manual-only Illustrator on the updated Engine staging build, set **Run Interval** to **0** in its setup or when adding it to a chat. This stops automatic Illustrator runs, including automatic scene backgrounds, while keeping the **Gallery → Illustrate** and **Background** actions available. The default remains **5**; choose a positive interval to resume automatic runs. This is an Engine scheduling option, so no Illustrator package update is required.
+
 ### In development
 
 These packages are being built in this repository but are not ready for the stable catalog yet. A package is either **in development** (hidden from every Engine channel) or **staging only** (offered to Engine `staging` testers, hidden from stable `main` users). See [Contributing § Packages that are not ready for everyone](CONTRIBUTING.md#packages-that-are-not-ready-for-everyone).
