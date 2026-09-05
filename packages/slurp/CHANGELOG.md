@@ -1,5 +1,16 @@
 # Slurp release notes
 
+## 1.2.0 — 2026-09-06
+
+- Withdraw what your Creator earns. A daily allowance moves earnings into your
+  spending money, so running a Creator well finally pays for being a fan.
+- Fans write to you first. Somebody may open a conversation without being
+  written to — rarely, so it still means something when they do.
+- The world keeps hours. Night owls turn up at night and early risers in the
+  morning, instead of everyone being equally likely at 4am.
+- Choose how harsh your audience is: Kind, Honest, or Unfiltered. Separate from
+  how explicit your Creators are.
+
 ## 1.1.9 — 2026-09-05
 
 - Fans write like the people they are. Their habits, how long they have been

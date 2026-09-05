@@ -1991,6 +1991,33 @@ export function SlurpSettings({
                       detail={t("ui.slurp.settings.audience.pausedDetail")}
                     />
                   )}
+                  <div className="space-y-3 pt-2">
+                    <div>
+                      <h2 className="text-sm font-bold">{t("ui.slurp.settings.audience.toneTitle")}</h2>
+                      <p className="mt-1 text-xs leading-5 text-[var(--slurp-muted)]">
+                        {t("ui.slurp.settings.audience.toneDetail")}
+                      </p>
+                    </div>
+                    <div className="flex flex-wrap gap-2">
+                      {(["warm", "mixed", "unfiltered"] as const).map((tone) => (
+                        <button
+                          key={tone}
+                          type="button"
+                          onClick={() => update("audienceTone", tone)}
+                          aria-pressed={settings.audienceTone === tone}
+                          className={cn(
+                            "min-h-10 rounded-lg border px-3 text-xs font-semibold transition-colors",
+                            settings.audienceTone === tone
+                              ? "border-[var(--noodle-accent)] bg-[var(--noodle-accent)]/10 text-[var(--noodle-accent)]"
+                              : "border-[var(--border)] hover:bg-[var(--accent)]",
+                          )}
+                        >
+                          {t(`ui.slurp.settings.audience.tone.${tone}`)}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
                   <AmbientProfilesPanel
                     allowRandomUsers={settings.allowRandomUsers}
                     onAllowRandomUsersChange={(value) => update("allowRandomUsers", value)}

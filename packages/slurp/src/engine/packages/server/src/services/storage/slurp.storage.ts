@@ -73,6 +73,7 @@ import {
   type SlurpWalletSpendKind,
 } from "../slurp/slurp-wallet.js";
 import { openSlurpGoal, readSlurpGoal, slurpGoalKey, type SlurpGoal } from "../slurp/slurp-goal.js";
+import { SLURP_AUDIENCE_TONES, SLURP_DEFAULT_AUDIENCE_TONE } from "../slurp/slurp-tone.js";
 import { createSlurpEventsStorage } from "./slurp-events.storage.js";
 import { createSlurpPopulationStorage } from "./slurp-population.storage.js";
 import type { SlurpFunnelStage } from "../slurp/slurp-population.js";
@@ -211,6 +212,7 @@ export const slurpSettingsSchema = z.object({
   imageHeight: z.number().int().min(64).max(4096),
   refreshesPerDay: z.number().int().min(0).max(24),
   generationGuidance: z.string().max(20_000),
+  audienceTone: z.enum(SLURP_AUDIENCE_TONES),
   generationConnectionId: z.string().nullable(),
   imageGenerationConnectionId: z.string().nullable(),
   imageGenerationPrompt: z.string(),
@@ -788,6 +790,7 @@ export const DEFAULT_SLURP_SETTINGS: SlurpSettings = {
   imageHeight: 1536,
   refreshesPerDay: 0,
   generationGuidance: NOODLER_DEFAULT_GENERATION_GUIDANCE,
+  audienceTone: SLURP_DEFAULT_AUDIENCE_TONE,
   generationConnectionId: null,
   imageGenerationConnectionId: null,
   imageGenerationPrompt: NOODLER_DEFAULT_IMAGE_GENERATION_PROMPT,
@@ -5316,11 +5319,26 @@ export function createSlurpStorage(db: DB) {
      * A creator the viewer could not pay for is unsubscribed here, which is the whole consequence
      * of running out of coins.
      */
+    /**
+     * A generated audience member is not a player, so they never receive a daily stipend.
+     *
+     * `getWallet` tops any id up to the stipend floor on read, which meant every population member
+     * the world touched accumulated coins they can never spend and a mirrored settings row nobody
+     * reads. They still hold a balance — they need one to pay a request fee — it simply stops
+     * growing on its own.
+     */
+    isSyntheticWalletHolder(accountId: string): boolean {
+      return accountId.startsWith("slurp-fan:");
+    },
+
     async getWallet(viewerAccountId: string): Promise<SlurpWallet> {
       const settings = await this.getSettings();
       const economy = economyFrom(settings);
       const stored = readSlurpWallet(await settingsStore.get(slurpWalletKey(viewerAccountId)), economy);
       if (!settings.walletEnabled) return stored;
+      // A generated audience member is not a player: no stipend, no renewals, no mirrored settings
+      // row. They keep the balance they need to pay a request fee; it simply stops growing.
+      if (this.isSyntheticWalletHolder(viewerAccountId)) return stored;
       const at = new Date();
       const renewal = renewSubscriptions(applyStipend(stored, at, economy), at);
       for (const creatorAccountId of renewal.lapsed) await this.unsubscribe(viewerAccountId, creatorAccountId);

@@ -278,6 +278,7 @@ export type SlurpSettings = {
   imageHeight: number;
   refreshesPerDay: number;
   generationGuidance: string;
+  audienceTone: "warm" | "mixed" | "unfiltered";
   postsPerDay: number;
   autoPostingScheduleEnabled: boolean;
   autoPostGenerationMode: "pre_generate" | "on_demand";

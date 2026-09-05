@@ -19,6 +19,7 @@ import { createLLMProvider } from "../llm/provider-registry.js";
 import { createConnectionsStorage } from "../storage/connections.storage.js";
 import { resolveSlurpTextConnection } from "./slurp-connection.js";
 import { createSlurpStorage, type SlurpSettings } from "../storage/slurp.storage.js";
+import { slurpAudienceToneInstruction } from "./slurp-tone.js";
 import {
   NOODLE_FAN_ACTIVITY_MAX_ACTIVITIES_PER_CREATOR,
   NOODLE_FAN_ACTIVITY_MAX_CREATORS_PER_RUN,
@@ -157,7 +158,10 @@ function describeFanRelationship(persona: {
 
 function buildFanActivityMessages(input: {
   creators: NoodlerFanCreatorCandidate[];
-  settings: Pick<SlurpSettings, "fanLikesPerRefresh" | "fanRepliesPerRefresh" | "fanRepostsPerRefresh">;
+  settings: Pick<
+    SlurpSettings,
+    "fanLikesPerRefresh" | "fanRepliesPerRefresh" | "fanRepostsPerRefresh" | "audienceTone"
+  >;
 }): ChatMessage[] {
   const system = [
     "Propose quiet synthetic audience activity for the supplied Slurp posts.",
@@ -167,6 +171,7 @@ function buildFanActivityMessages(input: {
     "Likes and reposts have null content. Replies are one short sentence, normally under 180 characters, natural, relevant, and not repetitive.",
     "Return JSON only with an activities array.",
     "Each actor handle has a weight; prefer higher-weight actors more often, proportionally.",
+    slurpAudienceToneInstruction(input.settings.audienceTone),
     "Actors carry traits and a relationship to the creator. Write each reply as that specific person: a long-standing paying regular does not sound like somebody who arrived yesterday, and somebody whose trait is 'emoji only' does not write a paragraph.",
     `At most ${input.settings.fanLikesPerRefresh} likes, ${input.settings.fanRepliesPerRefresh} replies, and ${input.settings.fanRepostsPerRefresh} reposts total.`,
     `At most ${NOODLE_FAN_ACTIVITY_MAX_ACTIVITIES_PER_CREATOR} activities for any creator.`,
@@ -317,7 +322,10 @@ export async function prepareNoodlerFanCreatorCandidates(input: {
 
 export async function generateNoodlerFanActivityBatch(input: {
   db: DB;
-  settings: Pick<SlurpSettings, "fanLikesPerRefresh" | "fanRepliesPerRefresh" | "fanRepostsPerRefresh">;
+  settings: Pick<
+    SlurpSettings,
+    "fanLikesPerRefresh" | "fanRepliesPerRefresh" | "fanRepostsPerRefresh" | "audienceTone"
+  >;
   connection: GenerationConnection;
   creators: NoodlerFanCreatorCandidate[];
   debugMode?: boolean;
