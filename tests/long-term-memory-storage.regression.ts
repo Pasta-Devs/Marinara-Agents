@@ -882,11 +882,22 @@ async function main() {
       assert.equal(rewrittenDraft?.source.sourceNoteId, canonicalSourceId);
       assert.equal(rewrittenDraft?.source.extractionFingerprint?.sourceHash, rewrittenDraft?.source.sourceHash);
       assert.equal((rewrittenDraft?.mutations[0] as any).note.links[0].target, canonicalSourceId);
-      const review = await projectLongTermMemoryDraftReview({
-        root,
-        sourceNoteId: canonicalSourceId,
-      });
-      assert.equal(review.counts.drafts, 1);
+      const originalGetNotesByIds = LongTermMemoryStorage.prototype.getNotesByIds;
+      const reviewLookupIds: string[][] = [];
+      LongTermMemoryStorage.prototype.getNotesByIds = async function (ids) {
+        reviewLookupIds.push([...ids]);
+        return originalGetNotesByIds.call(this, ids);
+      };
+      try {
+        const review = await projectLongTermMemoryDraftReview({
+          root,
+          sourceNoteId: canonicalSourceId,
+        });
+        assert.equal(review.counts.drafts, 1);
+      } finally {
+        LongTermMemoryStorage.prototype.getNotesByIds = originalGetNotesByIds;
+      }
+      assert.deepEqual(reviewLookupIds, [[canonicalSourceId, "timeline_legacy_evidence", "world_legacy_target"]]);
       const rewrittenEventMutation = rewrittenDraft?.mutations.find((mutation) => mutation.id === eventMutationId);
       assert.equal(rewrittenEventMutation?.kind, "create_note");
       assert.equal(rewrittenEventMutation?.claimKind, "change");

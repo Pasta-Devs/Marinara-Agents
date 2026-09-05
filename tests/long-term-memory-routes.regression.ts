@@ -1256,11 +1256,24 @@ async function main() {
       scopeTargets.json().characters.some((character: any) => character.id === "character-nyra"),
       false,
     );
-    const allScopeTargets = await app.inject({
-      method: "GET",
-      url: "/api/long-term-memory/scope-targets?chatId=chat-a&includeAllChats=true",
-      headers,
-    });
+    const storagePrototype = Object.getPrototypeOf(storageService.storage);
+    const originalListNotes = storagePrototype.listNotes;
+    let scopeTargetListNotes = 0;
+    storagePrototype.listNotes = async function (...args: any[]) {
+      scopeTargetListNotes += 1;
+      return originalListNotes.apply(this, args);
+    };
+    let allScopeTargets: any;
+    try {
+      allScopeTargets = await app.inject({
+        method: "GET",
+        url: "/api/long-term-memory/scope-targets?chatId=chat-a&includeAllChats=true",
+        headers,
+      });
+    } finally {
+      storagePrototype.listNotes = originalListNotes;
+    }
+    assert.equal(scopeTargetListNotes, 1, "all-chat scope targets must reuse the route's note snapshot");
     assert.equal(allScopeTargets.statusCode, 200, allScopeTargets.body);
     assert.equal(
       allScopeTargets.json().chats.some((chat: any) => chat.id === "game-empty"),
