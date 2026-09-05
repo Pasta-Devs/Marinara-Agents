@@ -23252,8 +23252,12 @@ const fire = (node, type) => Promise.all((node.listeners[type] ?? []).map((fn) =
         "a friend's window is titled with the rung",
       );
       core.closeTalk();
-      const unmet = t.npcs()[1];
-      if (unmet && unmet.name !== ally.name) {
+      // A lane that can silently skip is a pin that can silently stop pinning:
+      // the fixture must stage a second speaker, and if it ever stops, this
+      // says so instead of quietly not testing the headline claim.
+      const unmet = t.npcs().find((npc) => npc.name !== ally.name);
+      assert.ok(unmet, "the fixture stages a second, unmet speaker");
+      {
         t.openOn(unmet);
         assert.equal(
           t.hud.talkWho.textContent,
