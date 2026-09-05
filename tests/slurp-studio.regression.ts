@@ -126,4 +126,13 @@ assert.match(shell, /onOpenStudio && hasOperatedCreator/u, "the studio entry nee
 // Milestones were computed here, rendered here, and reported nowhere.
 assert.match(routes, /recordCreatorEvent\(creator\.id, "milestone", \{ amount: target \}\)/u);
 
+// A tip goal exists to give somebody else a reason to tip, so the fan looking at the profile has
+// to be able to see it. It rides on the viewer scope beside subscriptionPrice, because the
+// audience profile projection is a strict allowlist and must stay one.
+assert.match(routes, /goal: context\.goalByAccountId\.get\(account\.id\) \?\? null/u);
+assert.match(home, /function noodlerGoalOf/u);
+assert.match(home, /goalForViewer && !editing \?/u);
+const disclosure = readFileSync(join(root, "server/src/services/slurp/slurp-disclosure.ts"), "utf8");
+assert.match(disclosure, /AUDIENCE_FIELDS\.map/u, "the audience projection must stay an allowlist");
+
 console.log("slurp studio regression passed");

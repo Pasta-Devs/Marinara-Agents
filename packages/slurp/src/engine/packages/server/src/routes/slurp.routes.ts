@@ -833,6 +833,18 @@ export async function slurpRoutes(app: FastifyInstance) {
     const visibleAccounts = accounts.filter(
       (account) => creatorBelongsToViewer(account, viewer) || !isNoodlerHiddenFromViewer(account, viewer.id),
     );
+    // A tip goal exists to give a fan a reason to tip, and it was only ever visible to the Creator
+    // who set it. It belongs on the profile the fan is looking at.
+    const goalByAccountId = new Map(
+      await Promise.all(
+        visibleAccounts.map(async (account) => {
+          const goal = await noodle.getGoal(account.id);
+          if (!goal) return [account.id, null] as const;
+          const earnings = await noodle.getEarnings(account.id);
+          return [account.id, slurpGoalProgress(goal, earnings.lifetime)] as const;
+        }),
+      ),
+    );
     // Prices for the visible creators only, so a large roster costs one lookup per shown row.
     const subscriptionPrices = Object.fromEntries(
       await Promise.all(
@@ -844,6 +856,7 @@ export async function slurpRoutes(app: FastifyInstance) {
     return {
       viewer,
       visibleAccounts,
+      goalByAccountId,
       subscriptionPrices,
       accountById: new Map(visibleAccounts.map((account) => [account.id, account])),
       profileById,
@@ -864,6 +877,7 @@ export async function slurpRoutes(app: FastifyInstance) {
         followed: context.followedIds.has(account.id),
         // The creator's own weekly price when it has set one, else the Slurp-wide default.
         subscriptionPrice: context.subscriptionPrices[account.id] ?? NOODLER_SUBSCRIPTION_COST,
+        goal: context.goalByAccountId.get(account.id) ?? null,
         // Feed posts live in a separate keyset-paged query. Keeping this field preserves the
         // shared Engine contract for older consumers without hydrating any post history here.
         posts: [] as NoodlerPostView[],

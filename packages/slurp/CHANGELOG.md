@@ -1,5 +1,16 @@
 # Slurp release notes
 
+## 1.1.6 — 2026-09-05
+
+- Messages now shows conversations written to your Creators, not only the ones
+  you started. Anything a fan opened was previously unreachable.
+- Fans reach your Creators on a fresh install, instead of waiting on a setting
+  that is off by default.
+- Likes, replies and reposts count towards your following, so the people who
+  show up most now affect your reach.
+- Tip goals appear on your Creator's profile, where a reader can see them.
+- Passing a follower milestone appears in Notifications.
+
 ## 1.1.5 — 2026-09-05
 
 - The audience is a real crowd instead of twelve fixed accounts. Fans are

@@ -3343,6 +3343,31 @@ function SlurpMediaWall({
   );
 }
 
+/**
+ * A Creator's tip goal, as the fan sees it.
+ *
+ * The server sends this on the viewer scope alongside the shared view types, which have no goal
+ * field — the same arrangement `subscriptionPrice` already uses. It cannot ride on the profile,
+ * because the audience profile projection is a strict allowlist and must stay one.
+ */
+function noodlerGoalOf(
+  scope: unknown,
+): { label: string; raised: number; target: number; progress: number; met: boolean } | null {
+  const goal = (scope as { goal?: unknown } | null)?.goal;
+  if (!goal || typeof goal !== "object") return null;
+  const value = goal as Record<string, unknown>;
+  if (typeof value.label !== "string" || typeof value.target !== "number" || typeof value.raised !== "number") {
+    return null;
+  }
+  return {
+    label: value.label,
+    raised: value.raised,
+    target: value.target,
+    progress: typeof value.progress === "number" ? value.progress : 0,
+    met: value.met === true,
+  };
+}
+
 function StageProfileView({
   profile,
   profileDraft,
@@ -3490,6 +3515,9 @@ function StageProfileView({
   // Every Slurp Creator profile is operator-managed, so post controls and artwork editing stay
   // available regardless of which viewer persona is looking at the profile.
   const managedCreator = true;
+  // The goal the audience sees. It rides on the viewer scope beside `subscriptionPrice`, because
+  // the audience profile projection is a strict allowlist and must stay that way.
+  const goalForViewer = noodlerGoalOf(viewerCreator);
   const editing = Boolean(profileDraft);
   const editDraft = profileDraft ?? {
     displayName: profile.displayName,
@@ -3998,7 +4026,28 @@ function StageProfileView({
         activeTab={activeTab}
         onTabChange={setActiveTab}
         preTabsContent={
-          managedCreator && !editing ? (
+          goalForViewer && !editing ? (
+            <section className="border-b border-[var(--noodle-divider)] bg-[var(--slurp-surface)] px-4 py-3 sm:px-6">
+              <div className="flex items-baseline justify-between gap-3">
+                <p className="min-w-0 truncate text-xs font-bold">{goalForViewer.label}</p>
+                <p className="shrink-0 text-xs tabular-nums text-[var(--muted-foreground)]">
+                  {goalForViewer.met
+                    ? localizeUi("ui.slurp.profile.goalMet", { defaultValue: "Goal met" })
+                    : localizeUi("ui.slurp.profile.goalProgress", {
+                        defaultValue: "{{raised}} / {{target}}",
+                        raised: goalForViewer.raised.toLocaleString(),
+                        target: goalForViewer.target.toLocaleString(),
+                      })}
+                </p>
+              </div>
+              <div className="mt-2 h-2 overflow-hidden rounded-full bg-[var(--accent)]">
+                <div
+                  className="h-full rounded-full bg-[var(--noodle-accent)] transition-[width] motion-reduce:transition-none"
+                  style={{ width: `${Math.round(goalForViewer.progress * 100)}%` }}
+                />
+              </div>
+            </section>
+          ) : managedCreator && !editing ? (
             <section
               data-slurp-creator-tools
               className="border-b border-[var(--noodle-divider)] bg-[var(--slurp-surface)]"
