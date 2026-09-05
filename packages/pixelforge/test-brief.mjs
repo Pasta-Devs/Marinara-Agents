@@ -34032,6 +34032,160 @@ const layoutFingerprint = (w) => {
     assert.equal(warned.length, 1, "and the fault is loud exactly once, not once per frame");
   }
 
+  // ── 1b. THE SIGNPOST ON THE SCREEN, AND WHAT IT COSTS TO STAND STILL ──────
+  // Lane 1 asks `gateLabel` what it WOULD say. This is the half the player reads,
+  // and every part of it is HUD-shaped: the words have to reach a chip, the chip
+  // has to come down when they walk away from the edge and when the world stops
+  // being walkable, and the memo that keeps the whole thing cheap has to be a
+  // field nothing else owns.
+  //
+  // That last one is not hypothetical. The first draft of this chip memoised on
+  // `this._gate` — which the loading gate's own reconcile has owned since the
+  // retry surface landed — so both memos missed on every frame: ~25 style
+  // properties plus two derived sentences rewritten at 60Hz, including on the
+  // generation loading screen, which is the one screen in the package that should
+  // be completely still. Nothing in the suite could see it, because nothing in
+  // this slice mounted a Hud. So the stationary legs below count REAL work — the
+  // label derivation and the mode block's own DOM write — instead of trusting
+  // either memo's comment about itself.
+  {
+    const realSetTimeout = globalThis.setTimeout;
+    const realClearTimeout = globalThis.clearTimeout;
+    globalThis.setTimeout = () => 0; // the toast fade is a timer; nothing here waits for one
+    globalThis.clearTimeout = () => {};
+    const realGateLabel = L.gateLabel;
+    S.reset();
+    loadedPF.spatial.reset();
+    try {
+      const { world: w, meta } = wildWorld("cozy-village", 24601, { surround: "woods" });
+      const sim = new loadedPF.Sim(w);
+      const core = makeCore("chat-signpost", sim, meta);
+      core.interact = () => {};
+      core.setMode = () => {};
+      core.resume = () => {};
+      core.hud = new loadedPF.Hud(new FakeNode("div"), core);
+      const hud = core.hud;
+
+      // BEFORE ANY FRAME HAS DECIDED. The constructor does not call update(), so a
+      // chip that booted visible would be on screen naming an edge nobody is
+      // standing at for every frame before the first one — and for the whole of a
+      // mount that never reaches one.
+      // (The boot state is in the constructor's `cssText`, where PF.el writes a
+      // style string; update() is what starts writing the property beside it.)
+      assert.match(hud.gateChip.style.cssText, /display:none/, "the signpost boots hidden");
+      assert.equal(hud.gateChip.textContent, "", "…and says nothing");
+      assert.ok(hud.topbar.children.includes(hud.gateChip), "it lives beside the chip that says where you are");
+
+      // TWO COUNTERS, OVER THE TWO THINGS A FRAME MUST NOT REPEAT: the words the
+      // sign is made of, and the mode block whose field the memo used to share.
+      // `gateTitle.textContent` is written from exactly one place in the package —
+      // inside that block — so it is the block's own witness rather than a proxy.
+      let labels = 0;
+      L.gateLabel = (...args) => {
+        labels++;
+        return realGateLabel.apply(null, args);
+      };
+      let reconciles = 0;
+      let title = hud.gateTitle.textContent;
+      Object.defineProperty(hud.gateTitle, "textContent", {
+        configurable: true,
+        get: () => title,
+        set: (value) => {
+          reconciles++;
+          title = value;
+        },
+      });
+      /** One frame of the shipped loop's walking half: the sim recomputes its
+       *  proximity reads, the HUD reconciles against them. */
+      const frame = () => {
+        sim.step(1 / 60, {});
+        hud.update();
+      };
+
+      // OUT IN THE MIDDLE OF THE SETTLEMENT there is no edge within reach.
+      const home = w.zones[w.startZone];
+      sim.teleport(w.startZone, home.spawn.x, home.spawn.y);
+      frame();
+      assert.equal(sim.nearGate, null, "the fixture's spawn is nowhere near an edge");
+      assert.equal(hud.gateChip.style.display, "none", "…so there is no sign up");
+      assert.equal(hud._retry, false, "…and no retry popup is standing in front of any of this");
+
+      // AT THE EDGE — beside the tile and not on it, which is the frame the player
+      // actually gets to read.
+      const north = (home.gates ?? []).find((g) => g.dir === "N");
+      assert.ok(north, "the settlement has a north edge to stand at");
+      const inset = L.insetOf(home, north);
+      sim.teleport(w.startZone, inset.x, inset.y);
+      frame();
+      assert.equal(sim.nearGate?.dir, "N", "standing beside it, the sim knows which edge it is");
+      assert.equal(hud.gateChip.style.display, "", "…and the sign is up");
+      // The words, checked against the country itself — which nothing had built
+      // when the chip was written, and which is exactly the claim the label makes.
+      const over = L.ensure(w, L.cellZoneId(w, 0, -1));
+      assert.ok(over, "the country over that edge compiles");
+      assert.equal(
+        hud.gateChip.textContent,
+        `North — ${over.name}`,
+        "…reading a bearing and the name of the place it leads to",
+      );
+
+      // THE FRAME THAT COSTS NOTHING. Ten more frames standing exactly where they
+      // are: no words re-derived, no mode block re-run. `gateLabel` alone builds a
+      // Set over every resident zone per call, and standing still reading a sign is
+      // the posture this chip was added for.
+      const spentLabels = labels;
+      const spentReconciles = reconciles;
+      for (let i = 0; i < 10; i++) frame();
+      assert.equal(labels, spentLabels, "ten stationary frames re-derive the sign's words zero times");
+      assert.equal(reconciles, spentReconciles, "…and re-run the mode reconcile zero times");
+      assert.equal(hud.gateChip.textContent, `North — ${over.name}`, "…and the sign still says what it said");
+
+      // WALKING AWAY TAKES IT DOWN.
+      sim.teleport(w.startZone, home.spawn.x, home.spawn.y);
+      frame();
+      assert.equal(hud.gateChip.style.display, "none", "walking back into the middle takes the sign down");
+
+      // AND SO DOES LEAVING WALK MODE. The gate hides the whole topbar for free,
+      // but the topbar STAYS UP in dialogue mode, so this hiding is a toggle the
+      // chip has to own — and coming back has to put the sign up again, which is
+      // only true if leaving cleared the memo as well as the chip.
+      sim.teleport(w.startZone, inset.x, inset.y);
+      frame();
+      assert.equal(hud.gateChip.style.display, "", "back at the edge, back up");
+      sim.mode = "dialogue";
+      hud.update();
+      assert.equal(hud.gateChip.style.display, "none", "a conversation takes the sign down with the rest of walking");
+      sim.mode = "walk";
+      frame();
+      assert.equal(hud.gateChip.style.display, "", "…and resuming exploring puts it back");
+      assert.equal(hud.gateChip.textContent, `North — ${over.name}`, "…with the words it had");
+
+      // AND THE STILLEST SCREEN OF ALL. Under a loading gate the tick returns above
+      // `sim.step` — a held world accrues nothing at all — so these are update()
+      // calls without a step, exactly as the shipped gated branch makes them. This
+      // is the screen the first procedural playtest opens on, on hardware already
+      // busy compiling a world: ten frames, and the only write is the one that put
+      // the screen up.
+      S.gate = { chatId: core.chatId, state: "generating", attempts: 0, stage: "brief" };
+      const heldFrom = reconciles;
+      const heldLabels = labels;
+      hud.update();
+      assert.equal(hud.gateEl.style.display, "flex", "the loading screen is up");
+      assert.equal(hud.topbar.style.display, "none", "…with the topbar and its chips behind it");
+      assert.equal(reconciles, heldFrom + 1, "…written once, when it went up");
+      for (let i = 0; i < 10; i++) hud.update();
+      assert.equal(reconciles, heldFrom + 1, "and ten more frames of a static loading screen rewrite nothing");
+      assert.equal(labels, heldLabels, "…nor does a held world ask what any signpost says");
+    } finally {
+      L.gateLabel = realGateLabel;
+      S.gate = null;
+      globalThis.setTimeout = realSetTimeout;
+      globalThis.clearTimeout = realClearTimeout;
+      S.reset();
+      loadedPF.spatial.reset();
+    }
+  }
+
   // ── 2. THE RELOAD — a session that ended in the woods reloads in the woods ─
   // The regression this slice exists to prevent. A cell is a cache fill rather
   // than a zone the compiler built, so a save row naming one resolves to nothing
