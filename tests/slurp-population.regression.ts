@@ -6,6 +6,8 @@ import {
   generateSlurpPopulationMember,
   SLURP_FUNNEL_STAGES,
   SLURP_NAMED_CAST_LIMIT,
+  slurpMemberActivityWeight,
+  slurpMembersActiveAt,
   SLURP_POPULATION_NAME_SPACE,
 } from "../packages/slurp/src/engine/packages/server/src/services/slurp/slurp-population.js";
 
@@ -68,6 +70,32 @@ for (const entry of sample.slice(0, 400)) {
   assert.ok(Number.isInteger(entry.activeHour) && entry.activeHour >= 0 && entry.activeHour < 24);
 }
 
+// ── The world has a daily rhythm ────────────────────────────────────────────
+// `activeHour` was stored on every member since the population shipped and read by nothing, so a
+// night owl and an early riser were equally likely to turn up at four in the morning. A feed with
+// no rhythm reads as a machine emitting events rather than as people with lives.
+assert.equal(slurpMemberActivityWeight(23, 23), 1);
+assert.ok(slurpMemberActivityWeight(23, 22) > slurpMemberActivityWeight(23, 17));
+// The clock wraps: 2am is close to 11pm, not twenty-one hours away.
+assert.ok(slurpMemberActivityWeight(23, 2) > slurpMemberActivityWeight(23, 11));
+// Never zero — people surprise you, and an audience that vanishes for twelve hours is not alive
+// either.
+assert.ok(slurpMemberActivityWeight(23, 11) > 0);
+for (const bad of [Number.NaN, Infinity]) {
+  assert.ok(Number.isFinite(slurpMemberActivityWeight(bad, 12)), `weight was not finite for ${bad}`);
+}
+
+// Who is around must not reshuffle between two reads of the same hour.
+{
+  const roster = Array.from({ length: 24 }, (_, index) => ({ id: `m${index}`, activeHour: index }));
+  assert.deepEqual(slurpMembersActiveAt(roster, 3, 5), slurpMembersActiveAt(roster, 3, 5));
+  const night = slurpMembersActiveAt(roster, 3, 5).map((member) => member.activeHour);
+  const morning = slurpMembersActiveAt(roster, 9, 5).map((member) => member.activeHour);
+  assert.notDeepEqual(night, morning, "different hours must bring different people");
+  assert.ok(night.every((hour) => Math.min(Math.abs(hour - 3), 24 - Math.abs(hour - 3)) <= 3));
+  assert.deepEqual(slurpMembersActiveAt(roster, 3, 0), []);
+}
+
 // ── Wiring ──────────────────────────────────────────────────────────────────
 const root = join(import.meta.dirname, "..", "packages/slurp/src/engine/packages/server/src");
 const read = (path: string) => readFileSync(join(root, path), "utf8");
@@ -115,11 +143,8 @@ assert.match(world, /tie\.stage === "subscriber"\) continue;/u);
 // allowRandomUsers governs whether ambient profiles join the feed; it is not a switch for whether
 // a Creator has an audience, and it defaults to false — gating the tick on it left the whole
 // obligation layer dark on a fresh install.
-assert.match(world, /const returning = \(await population\.listAll\(WORLD_AUDIENCE_POOL\)\)/u);
-assert.match(
-  world,
-  /const audience = \[\.\.\.returning, \.\.\.newcomers\.map\(\(member\) => member\.id\), \.\.\.ambient\]/u,
-);
+assert.match(world, /const returning = await population\.listAll\(WORLD_AUDIENCE_POOL\)/u);
+assert.match(world, /const audience = \[\.\.\.awake\.map\(\(member\) => member\.id\), \.\.\.ambient\]/u);
 // An actor is either an ambient account row or a population member with no row at all. Resolving
 // only accounts silently dropped every population action.
 assert.match(world, /async function resolveActor/u);
@@ -165,6 +190,7 @@ assert.match(lapse.slice(0, 500), /if \(!rows\[0\]\) return;/u);
 
 // Churn is a full scan and the catch-up runs on every notifications read.
 assert.match(world, /CHURN_MIN_ELAPSED_DAYS/u);
+assert.match(world, /slurpMembersActiveAt\(pool, until\.getUTCHours\(\), WORLD_AUDIENCE_POOL\)/u);
 
 // ── The model must be told who is speaking ──────────────────────────────────
 // The fan-activity prompt received `{ handle, weight }` and nothing else, so every generated

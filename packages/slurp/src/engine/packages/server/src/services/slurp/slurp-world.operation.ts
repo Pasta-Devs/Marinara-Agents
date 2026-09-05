@@ -20,6 +20,7 @@ import { createSlurpPopulationStorage } from "../storage/slurp-population.storag
 import { isAmbientNoodleAccount } from "./slurp-ambient-profiles.js";
 import { tryNoodleOperation } from "./slurp-operation-lock.js";
 import { slurpCreatorReach } from "./slurp-reach.js";
+import { slurpMembersActiveAt } from "./slurp-population.js";
 import { slurpAudienceOpener, slurpAudienceQuestion, slurpCommissionBrief } from "./slurp-world-copy.js";
 import { planSlurpWorldTick, type SlurpWorldAction, type SlurpWorldCreator } from "./slurp-world.js";
 import { planSlurpWorldPulse, type SlurpPulseAction } from "./slurp-world-pulse.js";
@@ -84,7 +85,7 @@ export async function advanceSlurpWorld(db: DB, until = new Date()): Promise<Slu
     // Both kinds can hold threads: ambient profiles are account rows, and population members key
     // their thread and wallet by id like any other viewer.
     const population = createSlurpPopulationStorage(db);
-    const returning = (await population.listAll(WORLD_AUDIENCE_POOL)).map((member) => member.id);
+    const returning = await population.listAll(WORLD_AUDIENCE_POOL);
     // Top the pool up with fresh people when the world has not met many yet, so a new install has
     // somebody to act and an old one keeps gaining faces.
     const newcomers = await Promise.all(
@@ -95,7 +96,12 @@ export async function advanceSlurpWorld(db: DB, until = new Date()): Promise<Slu
     const ambient = settings.allowRandomUsers
       ? allAccounts.filter((account) => isAmbientNoodleAccount(account)).map((account) => account.id)
       : [];
-    const audience = [...returning, ...newcomers.map((member) => member.id), ...ambient];
+    // Who is actually around at this hour. `activeHour` has been stored on every member since the
+    // population shipped and read by nothing, so a night owl and an early riser were equally likely
+    // to turn up at four in the morning.
+    const pool = [...(await population.listAll(WORLD_AUDIENCE_POOL)), ...newcomers];
+    const awake = slurpMembersActiveAt(pool, until.getUTCHours(), WORLD_AUDIENCE_POOL);
+    const audience = [...awake.map((member) => member.id), ...ambient];
 
     const messages = createSlurpMessagesStorage(db);
     const cutoff = new Date(until.getTime() - RECENT_POST_DAYS * 86_400_000).toISOString();

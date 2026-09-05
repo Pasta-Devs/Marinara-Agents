@@ -276,3 +276,38 @@ export function generateSlurpPopulationMember(seed: string, joinedAt: Date): Slu
  * the whole point is that the cast never runs out.
  */
 export const SLURP_POPULATION_NAME_SPACE = FIRST.length * SECOND.length * SUFFIXES.length;
+
+/**
+ * How likely this person is to be around at a given hour.
+ *
+ * `activeHour` has been stored on every member since the population shipped and read by nothing,
+ * so a night owl and an early riser were equally likely to turn up at four in the morning. A feed
+ * with no daily rhythm reads as a machine emitting events rather than as people with lives.
+ *
+ * Returns a weight rather than a yes or no: somebody can always be up late, just less often.
+ */
+export function slurpMemberActivityWeight(activeHour: number, hour: number): number {
+  if (!Number.isFinite(activeHour) || !Number.isFinite(hour)) return 1;
+  const distance = Math.min(Math.abs(activeHour - hour), 24 - Math.abs(activeHour - hour));
+  // Full weight within a couple of hours of their usual time, tapering to a fifth on the far side
+  // of the clock. Never zero — people surprise you.
+  return Math.max(0.2, 1 - (distance / 12) * 0.8);
+}
+
+/** Pick the members most likely to be around now, keeping the list deterministic. */
+export function slurpMembersActiveAt<T extends { id: string; activeHour: number }>(
+  members: readonly T[],
+  hour: number,
+  limit: number,
+): T[] {
+  return [...members]
+    .map((member) => ({
+      member,
+      // Weight, then a stable tiebreak on id, so "who is around" does not reshuffle between two
+      // reads of the same hour.
+      weight: slurpMemberActivityWeight(member.activeHour, hour),
+    }))
+    .sort((left, right) => right.weight - left.weight || (left.member.id < right.member.id ? -1 : 1))
+    .slice(0, Math.max(0, limit))
+    .map((entry) => entry.member);
+}
