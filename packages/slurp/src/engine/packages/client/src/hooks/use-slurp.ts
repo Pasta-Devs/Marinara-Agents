@@ -575,7 +575,9 @@ export type SlurpEventKind =
   | "commission_accepted"
   | "comment"
   | "message"
-  | "milestone";
+  | "milestone"
+  | "arc"
+  | "returned";
 
 export type SlurpEventItem = {
   id: string;

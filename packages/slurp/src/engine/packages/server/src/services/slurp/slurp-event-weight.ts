@@ -26,7 +26,11 @@ export type SlurpEventKind =
   | "comment"
   | "message"
   /** A follower milestone was crossed. */
-  | "milestone";
+  | "milestone"
+  /** Somebody's relationship with a Creator changed direction: rising, or burning out. */
+  | "arc"
+  /** Somebody who had drifted away came back. */
+  | "returned";
 
 /**
  * Base weights. The gaps matter more than the numbers: anything at or above `SLURP_EVENT_NOTABLE`
@@ -43,6 +47,10 @@ const BASE: Record<SlurpEventKind, number> = {
   tip: 45,
   unlock: 30,
   comment: 25,
+  // A person changing direction outranks a routine reaction and sits below money. Somebody coming
+  // back is the better story of the two, so it is weighted above a change of direction.
+  returned: 65,
+  arc: 48,
 };
 
 /**

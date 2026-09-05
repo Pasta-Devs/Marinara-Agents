@@ -22,6 +22,8 @@ export interface NoodlerFanIdentity {
     spent?: number;
     /** How long they have been around this Creator, in days. */
     knownForDays?: number;
+    /** Where the relationship is heading. */
+    arc?: string;
   };
 }
 
@@ -81,6 +83,7 @@ export function populationNoodlerFanIdentityProvider(
     stage?: string;
     spent?: number;
     knownForDays?: number;
+    arc?: string;
   }[],
 ): NoodlerFanIdentityProvider {
   return {
@@ -96,6 +99,7 @@ export function populationNoodlerFanIdentityProvider(
             ...(member.stage ? { stage: member.stage } : {}),
             ...(member.spent !== undefined ? { spent: member.spent } : {}),
             ...(member.knownForDays !== undefined ? { knownForDays: member.knownForDays } : {}),
+            ...(member.arc ? { arc: member.arc } : {}),
           },
           snapshot: {
             id: member.id,

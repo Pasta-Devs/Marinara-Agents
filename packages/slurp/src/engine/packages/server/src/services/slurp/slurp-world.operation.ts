@@ -21,6 +21,7 @@ import { isAmbientNoodleAccount } from "./slurp-ambient-profiles.js";
 import { tryNoodleOperation } from "./slurp-operation-lock.js";
 import { slurpCreatorReach } from "./slurp-reach.js";
 import { slurpMembersActiveAt } from "./slurp-population.js";
+import { isNotableArcChange, slurpNextArc } from "./slurp-arc.js";
 import { slurpAudienceOpener, slurpAudienceQuestion, slurpCommissionBrief } from "./slurp-world-copy.js";
 import { enqueueSlurpPendingText } from "./slurp-pending-text.service.js";
 import { planSlurpWorldTick, type SlurpWorldAction, type SlurpWorldCreator } from "./slurp-world.js";
@@ -124,6 +125,32 @@ export async function advanceSlurpWorld(db: DB, until = new Date()): Promise<Slu
         if (tie.stage === "lapsed" || tie.stage === "stranger" || tie.stage === "subscriber") continue;
         if (tie.lastSeenAt >= staleBefore) continue;
         await population.lapseTie(tie.memberId, account.id).catch(() => undefined);
+      }
+    }
+
+    // Arcs. Where each relationship is heading, as opposed to where it stands. Runs on the same
+    // cadence as churn because it reads the same silence, and because recomputing a three-week
+    // trajectory on every page load would be a full scan for nothing.
+    for (const account of elapsedDays >= CHURN_MIN_ELAPSED_DAYS ? accounts : []) {
+      for (const tie of await population.listTiesForCreator(account.id)) {
+        if (tie.stage === "stranger") continue;
+        const next = slurpNextArc({
+          stage: tie.stage,
+          interactions: tie.interactions,
+          spent: tie.spent,
+          daysSinceSeen: (until.getTime() - Date.parse(tie.lastSeenAt)) / 86_400_000 || 0,
+          daysOnArc: tie.arcSince ? (until.getTime() - Date.parse(tie.arcSince)) / 86_400_000 || 0 : 999,
+          arc: tie.arc,
+        });
+        if (next === tie.arc) continue;
+        await population.setTieArc(tie.id, next).catch(() => undefined);
+        // Only a change somebody would notice. Sliding back to steady is the absence of news.
+        if (isNotableArcChange(tie.arc, next)) {
+          await noodle.recordCreatorEvent(account.id, next === "returning" ? "returned" : "arc", {
+            actorLabel: tie.memberId,
+            subjectId: next,
+          });
+        }
       }
     }
 

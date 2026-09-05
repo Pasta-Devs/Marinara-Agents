@@ -9,6 +9,7 @@ import { and, asc, desc, eq } from "../../db/file-query.js";
 import { now } from "../../utils/id-generator.js";
 import type { DB } from "../../db/connection.js";
 import { slurpAudienceTies, slurpPopulation } from "../../db/schema/slurp.js";
+import { SLURP_ARCS, type SlurpArc } from "../slurp/slurp-arc.js";
 import {
   generateSlurpPopulationMember,
   SLURP_FUNNEL_STAGES,
@@ -29,6 +30,9 @@ export type SlurpAudienceTie = {
   interactions: number;
   firstSeenAt: string;
   lastSeenAt: string;
+  arc: SlurpArc;
+  /** When the current arc was set. Null for a tie that predates arcs. */
+  arcSince: string | null;
 };
 
 const int = (value: unknown): number => {
@@ -67,6 +71,8 @@ function mapTie(row: Record<string, unknown>): SlurpAudienceTie {
     interactions: int(row.interactions),
     firstSeenAt: String(row.firstSeenAt),
     lastSeenAt: String(row.lastSeenAt),
+    arc: (SLURP_ARCS as readonly string[]).includes(String(row.arc)) ? (String(row.arc) as SlurpArc) : "steady",
+    arcSince: (row.arcSince as string | null) ?? null,
   };
 }
 
@@ -135,6 +141,8 @@ export function createSlurpPopulationStorage(db: DB) {
         interactions: "0",
         firstSeenAt: timestamp,
         lastSeenAt: timestamp,
+        arc: "steady",
+        arcSince: timestamp,
       };
       await db.insert(slurpAudienceTies).values(row);
       return mapTie(row);
@@ -184,6 +192,11 @@ export function createSlurpPopulationStorage(db: DB) {
         .update(slurpAudienceTies)
         .set({ stage: "lapsed" })
         .where(eq(slurpAudienceTies.id, String(rows[0].id)));
+    },
+
+    /** Set somebody's direction. Stamped, because an arc that has run its course must expire. */
+    async setTieArc(tieId: string, arc: SlurpArc): Promise<void> {
+      await db.update(slurpAudienceTies).set({ arc, arcSince: now() }).where(eq(slurpAudienceTies.id, tieId));
     },
 
     async listTiesForCreator(creatorAccountId: string): Promise<SlurpAudienceTie[]> {

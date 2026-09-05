@@ -23,6 +23,7 @@ import { createLLMProvider } from "../llm/provider-registry.js";
 import { createConnectionsStorage } from "../storage/connections.storage.js";
 import { createSlurpStorage } from "../storage/slurp.storage.js";
 import { createSlurpPopulationStorage } from "../storage/slurp-population.storage.js";
+import { slurpArcDescription } from "./slurp-arc.js";
 import {
   NOODLER_UNTRUSTED_CONTENT_INSTRUCTION,
   noodlerIdentityInstruction,
@@ -211,6 +212,10 @@ async function describeCommenterRelationship(db: DB, creatorAccountId: string, v
     if (tie) {
       if (tie.stage !== "stranger" && tie.stage !== "lapsed") parts.push(tie.stage);
       if (tie.stage === "lapsed") parts.push("drifted away for a while and is back");
+      // Where they are heading, not just where they stand. A regular on the way out does not get
+      // the same reply as one on the way in, and that difference is the whole point of an arc.
+      const arc = slurpArcDescription(tie.arc);
+      if (arc) parts.push(arc);
       if (tie.spent > 0) parts.push(`has spent ${tie.spent} coins on you`);
       const days = Math.round((Date.now() - Date.parse(tie.firstSeenAt)) / 86_400_000);
       if (Number.isFinite(days) && days >= 14)

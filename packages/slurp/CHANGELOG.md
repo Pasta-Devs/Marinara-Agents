@@ -1,5 +1,15 @@
 # Slurp release notes
 
+## 1.1.11 — 2026-09-06
+
+- Regulars have a direction now, not just a standing. Somebody can be getting
+  more into your posts, drifting off, or coming back after a while away — and a
+  supporter who goes quiet reads as exactly that.
+- Notifications tell you when somebody comes back or starts paying more
+  attention. Quietly drifting off stays quiet, as it would in life.
+- Creators answer people according to where the relationship is heading, not only
+  how far along it is.
+
 ## 1.1.10 — 2026-09-06
 
 - Withdraw what your Creator earns. A daily allowance moves earnings into your

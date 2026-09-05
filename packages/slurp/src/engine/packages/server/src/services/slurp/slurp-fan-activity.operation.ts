@@ -277,6 +277,7 @@ export async function runNoodlerFanActivity(input: {
             ? {
                 stage: tie.stage,
                 spent: tie.spent,
+                arc: tie.arc,
                 knownForDays: Math.max(0, Math.round((at.getTime() - Date.parse(tie.firstSeenAt)) / 86_400_000) || 0),
               }
             : {}),
