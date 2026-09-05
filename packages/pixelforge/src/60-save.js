@@ -192,6 +192,12 @@ const RETRY_COPY = {
   // Session-only, honestly re-derived as first-time after a reload: a durable
   // attempt log is refused for the same reason a durable failure log is.
   secondFailure: "If this happens again, the problem is likely the setting, not luck.",
+  // …AND A REFUSED PRESS IS NOT A FAILED ONE. The one window where the panel is
+  // still live with a press already out is the pre-arm flush, and a press
+  // landing in it is turned away by the re-entrancy check having spent nothing
+  // and having failed nothing — so the sentence above would report a failure
+  // that never happened, about a call that is still perfectly fine.
+  pressInFlight: "That attempt is already running, so this press changed nothing — it finishes on its own.",
 };
 
 /** THE STAGE REGISTRY (ruling 4's extensibility demand, §2.10a). One row per
@@ -254,6 +260,15 @@ const STAGE_ROWS = [
             label: "Try building it again (free)",
             mode: "rebuild",
             note: "Same setting, same seed — this works when an update has fixed the builder, and changes nothing otherwise.",
+            // THE SAME BUTTON HAS A SECOND STATE, and the sentence above is
+            // FALSE in it: once the compile answers — an update fixed the
+            // builder, or a paid re-roll stored a setting this build can
+            // compile — the press works immediately, with no update involved
+            // and nothing unchanged about it. `noteReady` is that state's own
+            // sentence, and `actionNote` picks between them off the same probe
+            // the press itself makes.
+            noteReady:
+              "Same setting, same seed — and it builds right now, for no generation call. It still moves you off the stand-in you are standing on, so it asks first.",
           },
           { key: "reroll", label: "Write the world again", mode: "reroll" },
           { key: "keep", label: "Keep the stand-in", accept: true },
@@ -1331,6 +1346,13 @@ PF.save = {
       // heals it. Position and zone are NOT recoverable and are not attempted:
       // the two id spaces never intersect, so arrival is the new world's spawn
       // and the confirm copy says so.
+      //
+      // RE-READ HERE RATHER THAN PASSED IN, deliberately: every caller reads its
+      // own `meta` before a generation call and holds it across the await, and
+      // the sky is the one field on it the host refreshes underneath them. The
+      // livest blob is the correct one for a world that is being stood up right
+      // now, and a seventh positional parameter carrying a staler copy of it
+      // would be worse than the read.
       const meta =
         core.host && typeof core.host.chatMeta === "object" && core.host.chatMeta !== null ? core.host.chatMeta : {};
       core.sim.clockMin = PF.clamp(carriedClock.clockMin | 0, 0, 24 * 60 - 1);
@@ -1695,6 +1717,18 @@ PF.save = {
       // and a post-start gate is standing over a world with real play in it, so
       // this can only be a defensive refusal.
       if (!core.sim?.world || core.sim.world.interim) return false;
+      // …AND THIS CLEAR CANNOT FIRE TODAY, which is worth saying out loud rather
+      // than leaving it to look load-bearing. The constraint it guards is "no
+      // press may leave a re-arm record behind it", and the record is already
+      // gone by here: every `_failGate` that can paint this screen is followed
+      // by an immediate `return`, so `regenerateStage`'s own `finally` clears it
+      // in the same microtask run as the failure stamp — before any click can
+      // land, clicks being macrotasks. It stays because the plan writes the
+      // clear into this exit and because the alternative is an arm that silently
+      // depends on another function's ordering: a record that outlived its
+      // attempt refuses every later press and re-freezes every later visit
+      // through `armGate`. Deliberately unwatched — a lane for it would have to
+      // plant a state the game cannot reach.
       this._regenPending.delete(core.chatId);
       this.gate = null;
       core.hud?.update?.();
@@ -1779,6 +1813,23 @@ PF.save = {
     if (!this.briefCompiles(sealed)) return false;
     const theme = this._configTheme(meta) ?? "cozy-village";
     return !!PF.world.build(this._regenSeed(core, meta), theme, sealed).brieved;
+  },
+
+  /** THE SUB-LINE UNDER A ROW'S OWN BUTTON, and for the free rebuild it is a
+   *  STATE question rather than a constant. Its shipped sentence is written for
+   *  the state the row is usually in — the builder is broken, so the press
+   *  changes nothing until an update fixes it — and there are two states where
+   *  every clause of it is false: an update HAS fixed the builder, and the
+   *  cascade, where a paid re-roll has just stored a setting this build compiles
+   *  and the free press installs its world immediately. §2.10a asks every clause
+   *  to be true in every state its stage can be in, so a row that carries a
+   *  `noteReady` gets it asked; a row that does not is a constant, exactly as
+   *  before. Asked THROUGH the same probe the press makes, so the sentence and
+   *  the button can never disagree. */
+  actionNote(core, action) {
+    if (!action?.note) return null;
+    if (action.noteReady && this.canRebuild(core)) return action.noteReady;
+    return action.note;
   },
 
   /** WOULD THIS PRESS REPLACE THE WORLD IN FRONT OF THE PLAYER? The surface's
@@ -1919,6 +1970,19 @@ PF.save = {
     } finally {
       this._regenPending.delete(chatId);
     }
+  },
+
+  /** IS A RE-ATTEMPT ALREADY OUT FOR THIS CHAT? The two terms
+   *  `regenerateStage` refuses on, asked from outside so the surface can tell a
+   *  press that was REFUSED from a press that FAILED. They are two different
+   *  sentences to a player — one spent a call and did not work, the other spent
+   *  nothing and is still working — and the panel had only the failed one. Asked
+   *  BEFORE the dispatch by its one caller: after it, the first press's own
+   *  settle has already cleared the record and the answer is about the wrong
+   *  moment. */
+  retryInFlight(core) {
+    const chatId = core?.chatId;
+    return !!chatId && (this._generating.has(chatId) || this._regenPending.has(chatId));
   },
 
   /** The popup's per-row button, routed by the registry's own action shape so

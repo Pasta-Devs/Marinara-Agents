@@ -1720,8 +1720,17 @@ PF.Hud = class {
       ];
       const note = this._retryNotes[row.stage];
       if (note) parts.push(PF.el("div", { style: "opacity:0.75;", text: note }));
-      for (const action of row.actions)
-        if (action.note) parts.push(PF.el("div", { style: "opacity:0.75;", text: action.note }));
+      // A BUTTON'S OWN SUB-LINE IS ASKED, NOT READ: the free rebuild's sentence
+      // is true in the state the row is usually in and false in the two where
+      // the compile already answers. The registry owns both halves and the
+      // choice between them — this is one repaint, not a per-frame cost, and
+      // the memo above is what keeps it that way. Which is also why the answer
+      // cannot go stale on the panel: the only things that move it are the
+      // world, the sealed setting and the gate, and all three are in that key.
+      for (const action of row.actions) {
+        const line = PF.save.actionNote(this.core, action);
+        if (line) parts.push(PF.el("div", { style: "opacity:0.75;", text: line }));
+      }
       parts.push(PF.el("div", { style: "display:flex;gap:6px;flex-wrap:wrap;" }, controls));
       blocks.push(PF.el("div", { style: "display:flex;flex-direction:column;gap:6px;" }, parts));
     }
@@ -1775,12 +1784,23 @@ PF.Hud = class {
   async _retryGo(confirm) {
     this._retryConfirm = null;
     const stage = confirm.stage;
+    // A REFUSAL IS NOT A FAILURE, and which one this is has to be asked BEFORE
+    // the dispatch. The pre-arm flush is the one window where a press is already
+    // out and the panel is still live to take another — no gate is armed yet, so
+    // the held-disable does not apply — and `regenerateStage` turns the second
+    // one away having spent nothing and failed nothing. Asked after the await
+    // instead, the record is the FIRST press's and it has already settled.
+    const busy = PF.save.retryInFlight(this.core);
     const ok = await PF.save.retryAction(this.core, stage, confirm.action);
     if (!ok && confirm.action.mode) {
       // A re-press after a failure says the second-failure sentence rather than
-      // repeating the first one — session-only, on purpose.
-      this._retryNotes[stage] =
-        confirm.action.mode === "rebuild" ? PF.save.RETRY_COPY.rebuildUnchanged : PF.save.RETRY_COPY.secondFailure;
+      // repeating the first one — session-only, on purpose. A press that was
+      // merely refused says what actually happened to it instead: nothing.
+      this._retryNotes[stage] = busy
+        ? PF.save.RETRY_COPY.pressInFlight
+        : confirm.action.mode === "rebuild"
+          ? PF.save.RETRY_COPY.rebuildUnchanged
+          : PF.save.RETRY_COPY.secondFailure;
       this._retryNoteRev = (this._retryNoteRev ?? 0) + 1;
     }
     this._retryKey = null;
