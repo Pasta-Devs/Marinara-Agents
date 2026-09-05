@@ -127,6 +127,7 @@ import {
 } from "../services/slurp/slurp-reach.js";
 import { slurpFollowerMilestone, slurpMilestonesCrossed } from "../services/slurp/slurp-milestones.js";
 import { createSlurpEventsStorage } from "../services/storage/slurp-events.storage.js";
+import { advanceSlurpWorld } from "../services/slurp/slurp-world.operation.js";
 import { groupSlurpEvents } from "../services/slurp/slurp-event-weight.js";
 import {
   slurpGoalProgress,
@@ -1036,6 +1037,12 @@ export async function slurpRoutes(app: FastifyInstance) {
     if (!parsed.success) return reply.code(400).send({ error: parsed.error.flatten() });
     const viewer = await resolveViewerPersona(parsed.data.personaId);
     if (!viewer) return reply.code(404).send({ error: "Slurp persona not found" });
+    // Catch-up on open. This is one of the two callers of `advanceSlurpWorld`; the other is the
+    // background scheduler. Advancing on read mirrors `applyStipend`, which bills on read and
+    // needs no timer to stay correct. A failure here must not cost the player their feed.
+    await advanceSlurpWorld(app.db).catch((error: unknown) =>
+      logger.warn(error, "[slurp-world] Catch-up on open failed"),
+    );
     const events = createSlurpEventsStorage(app.db);
     const [items, unseen] = await Promise.all([events.list(viewer.id), events.listUnseen(viewer.id)]);
     // Actors are stored as ids so a renamed or departed account still renders. Resolve to display

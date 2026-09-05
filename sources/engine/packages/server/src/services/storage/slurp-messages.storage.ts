@@ -559,6 +559,18 @@ export function createSlurpMessagesStorage(db: DB) {
       return rows.map(mapCommission);
     },
 
+    /**
+     * Commissions still waiting on the Creator: a brief with no quote, or a quote not yet
+     * delivered. The world reads this to avoid piling requests onto a queue nobody answered.
+     */
+    async listOpenCommissionsForCreator(creatorAccountId: string): Promise<SlurpCommission[]> {
+      const rows = await db
+        .select()
+        .from(slurpCommissions)
+        .where(eq(slurpCommissions.creatorAccountId, creatorAccountId));
+      return rows.map(mapCommission).filter((row) => row.state === "brief" || row.state === "accepted");
+    },
+
     async getCommission(id: string): Promise<SlurpCommission | null> {
       const rows = await db.select().from(slurpCommissions).where(eq(slurpCommissions.id, id));
       return rows[0] ? mapCommission(rows[0]) : null;

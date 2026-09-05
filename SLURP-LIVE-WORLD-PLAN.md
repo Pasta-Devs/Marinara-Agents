@@ -16,8 +16,8 @@ first version of this plan was wrong in ways that are not obvious.
 | 0 | Separate creator earnings from spending money | **done** |
 | 1 | Creator home: legibility, goals, catch-up | **done** |
 | 2 | Notification stream | **done** |
-| 3 | Audience-initiated commissions and questions | **next** |
-| 4 | Audience population and funnel | not started |
+| 3 | Audience-initiated commissions and questions | **done** |
+| 4 | Audience population and funnel | **next** |
 | 5 | Reach derived from funnel state | not started |
 | 6 | Tiered comments, deferred generation queue, event-driven DMs | not started |
 | 7 | Fan cards, reactions, cast arcs, tone dial, world rhythm | not started |
@@ -373,7 +373,36 @@ notification must navigate to the thing it describes.
 
 Include significance scoring and grouping from the start, or the readable-handful rule is lost.
 
-### Stage 3 — audience-initiated commissions and questions
+### Stage 3 — audience-initiated commissions and questions — DONE
+
+`advanceSlurpWorld` is the `advanceWorld(since, until)` the plan asked for: one function, two
+callers — `slurp-world-scheduler.service.ts` every six hours, and the notifications read on open.
+Advancing on read mirrors `applyStipend`, which bills on read and needs no timer.
+
+`slurp-world.ts` holds the planner and is pure, so rates are testable without a database.
+`slurp-world-copy.ts` is the Tier 1 bank: combinatorial, deterministic, free. Briefs stay vague on
+purpose — a template that fakes specificity about a post it never read is worse than one that does
+not try. Specificity is Tier 2's job and Tier 2 runs when the player is present.
+
+Ambient accounts act as the audience because they are real account rows and can therefore hold
+threads. `advanceSlurpWorld` has one line selecting them; Stage 4 changes only that line.
+
+Rates, measured: a 2,500-follower Creator sees about 6 commissions and 12 questions over 30 days.
+The rate is invariant to tick frequency, because elapsed days scale the per-day chance.
+
+Three guards, all with regressions:
+
+- **Elapsed time is capped** at `SLURP_WORLD_MAX_CATCHUP_DAYS`. A month away must not produce a
+  month of backlog.
+- **A full queue is left alone.** Asking again while three requests sit unanswered is how an
+  obligation layer becomes a chore.
+- **Creators are shuffled before the action ceiling is applied.** Without it the budget went to
+  whichever Creators sorted first, and the rest of a large roster stayed permanently silent. A
+  30-creator roster now serves all 30.
+
+Still open: `slurp-world-copy.ts` briefs are generic. Tier 2 rewriting on open is Stage 6.
+
+### Stage 3 (original scope)
 
 Let the world ask for things. Reuse the commission flow exactly as built; it needs no new UI, only
 a non-player initiator. Add comments that ask a question and expect an answer.
