@@ -1,22 +1,16 @@
 # Slurp release notes
 
-## 1.2.1 — 2026-09-06
-
-- Settings now says when a Creator's Conversation Schedule has expired. Engine
-  schedules cover one week, and a lapsed one silently stopped giving the Creator
-  their daily routine and their message pacing — it only looked like the writing
-  had got worse.
-
-## 1.2.0 — 2026-09-06
+## 1.1.10 — 2026-09-06
 
 - Withdraw what your Creator earns. A daily allowance moves earnings into your
-  spending money, so running a Creator well finally pays for being a fan.
-- Fans write to you first. Somebody may open a conversation without being
-  written to — rarely, so it still means something when they do.
-- The world keeps hours. Night owls turn up at night and early risers in the
-  morning, instead of everyone being equally likely at 4am.
-- Choose how harsh your audience is: Kind, Honest, or Unfiltered. Separate from
-  how explicit your Creators are.
+  spending money, so running a Creator well pays for being a fan.
+- Fans write to you first, rarely, so it still means something when they do.
+- The world keeps hours: night owls turn up at night, early risers in the morning.
+- Choose how harsh your audience is — Kind, Honest, or Unfiltered.
+- Settings says when a Creator's Conversation Schedule has expired, instead of
+  letting it lapse silently.
+- What fans say is written properly when you open Slurp, rather than staying the
+  placeholder the world wrote while you were away.
 
 ## 1.1.9 — 2026-09-05
 

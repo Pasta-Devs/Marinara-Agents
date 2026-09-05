@@ -4219,6 +4219,16 @@ export function createSlurpStorage(db: DB) {
     // Callers pass post IDs already resolved from NoodleR-account queries
     // (listNoodlerPostsByAccounts), so this trusts them and issues a single bulk
     // read instead of re-validating each ID with getNoodlerPostById (2N reads).
+    async getNoodlerInteractionById(id: string): Promise<NoodleInteraction | null> {
+      const rows = await db.select().from(noodleInteractions).where(eq(noodleInteractions.id, id));
+      return rows[0] ? mapInteraction(rows[0]) : null;
+    },
+
+    /** Replace a placeholder comment with the model's rewrite. Text only. */
+    async rewriteNoodlerInteractionContent(id: string, content: string): Promise<void> {
+      await db.update(noodleInteractions).set({ content }).where(eq(noodleInteractions.id, id));
+    },
+
     async listNoodlerInteractions(noodlerPostIds: string[] = []): Promise<NoodleInteraction[]> {
       if (noodlerPostIds.length === 0) return [];
       const rows = await db

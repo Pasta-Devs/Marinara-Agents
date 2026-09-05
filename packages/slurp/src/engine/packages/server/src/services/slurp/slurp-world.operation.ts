@@ -22,6 +22,7 @@ import { tryNoodleOperation } from "./slurp-operation-lock.js";
 import { slurpCreatorReach } from "./slurp-reach.js";
 import { slurpMembersActiveAt } from "./slurp-population.js";
 import { slurpAudienceOpener, slurpAudienceQuestion, slurpCommissionBrief } from "./slurp-world-copy.js";
+import { enqueueSlurpPendingText } from "./slurp-pending-text.service.js";
 import { planSlurpWorldTick, type SlurpWorldAction, type SlurpWorldCreator } from "./slurp-world.js";
 import { planSlurpWorldPulse, type SlurpPulseAction } from "./slurp-world-pulse.js";
 
@@ -244,6 +245,12 @@ async function applyAction(db: DB, action: SlurpWorldAction, at: Date): Promise<
       slurpAudienceOpener(`${action.creatorAccountId}:${action.actorAccountId}:${at.toISOString()}`),
     );
     if (sent.status !== "sent") return false;
+    await enqueueSlurpPendingText(db, {
+      kind: "opener",
+      subjectId: sent.message.id,
+      creatorAccountId: action.creatorAccountId,
+      actorLabel: actor.id,
+    });
     const population = createSlurpPopulationStorage(db);
     await population
       .advanceTie(actor.id, action.creatorAccountId, { stage: "viewer", interactions: 1 })
@@ -257,6 +264,13 @@ async function applyAction(db: DB, action: SlurpWorldAction, at: Date): Promise<
     const brief = slurpCommissionBrief(`${action.creatorAccountId}:${action.actorAccountId}:${at.toISOString()}`);
     const commission = await messages.createCommission(action.actorAccountId, action.creatorAccountId, brief);
     if (!commission) return false;
+    // The brief is a placeholder. Queue it to be written properly the next time the player is here.
+    await enqueueSlurpPendingText(db, {
+      kind: "commission",
+      subjectId: commission.id,
+      creatorAccountId: action.creatorAccountId,
+      actorLabel: actor.id,
+    });
     const population = createSlurpPopulationStorage(db);
     await population
       .advanceTie(actor.id, action.creatorAccountId, { stage: "viewer", interactions: 1 })
@@ -284,6 +298,13 @@ async function applyAction(db: DB, action: SlurpWorldAction, at: Date): Promise<
     content: slurpAudienceQuestion(`${action.postId}:${action.actorAccountId}`),
   });
   if (!result?.created) return false;
+  await enqueueSlurpPendingText(db, {
+    kind: "question",
+    subjectId: result.interaction.id,
+    creatorAccountId: action.creatorAccountId,
+    postId: action.postId,
+    actorLabel: actor.id,
+  });
   // Commenting is a step up the funnel, and the funnel is what a follower count is counted from.
   const population = createSlurpPopulationStorage(db);
   await population

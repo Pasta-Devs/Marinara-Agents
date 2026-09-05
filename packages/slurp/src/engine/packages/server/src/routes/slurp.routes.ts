@@ -129,6 +129,7 @@ import { slurpFollowerMilestone, slurpMilestonesCrossed } from "../services/slur
 import { slurpPayoutAllowance } from "../services/slurp/slurp-earnings.js";
 import { createSlurpEventsStorage } from "../services/storage/slurp-events.storage.js";
 import { advanceSlurpWorld } from "../services/slurp/slurp-world.operation.js";
+import { drainSlurpPendingText } from "../services/slurp/slurp-pending-text.service.js";
 import { createSlurpPopulationStorage } from "../services/storage/slurp-population.storage.js";
 import { groupSlurpEvents } from "../services/slurp/slurp-event-weight.js";
 import {
@@ -1065,6 +1066,11 @@ export async function slurpRoutes(app: FastifyInstance) {
     // needs no timer to stay correct. A failure here must not cost the player their feed.
     await advanceSlurpWorld(app.db).catch((error: unknown) =>
       logger.warn(error, "[slurp-world] Catch-up on open failed"),
+    );
+    // Tier 2. The world writes from templates because unattended work never calls the model; this
+    // is where that debt is paid, with the player present and against text they are about to read.
+    await drainSlurpPendingText(app.db).catch((error: unknown) =>
+      logger.warn(error, "[slurp-pending] Drain on open failed"),
     );
     const events = createSlurpEventsStorage(app.db);
     const population = createSlurpPopulationStorage(app.db);

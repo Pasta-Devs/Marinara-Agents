@@ -36,16 +36,10 @@
     "slurp": {
       "versions": [
         {
-          "version": "1.2.1",
+          "version": "1.1.10",
           "date": "2026-09-06",
-          "notes": "- Settings now says when a Creator's Conversation Schedule has expired. Engine\n  schedules cover one week, and a lapsed one silently stopped giving the Creator\n  their daily routine and their message pacing — it only looked like the writing\n  had got worse.",
+          "notes": "- Withdraw what your Creator earns. A daily allowance moves earnings into your\n  spending money, so running a Creator well pays for being a fan.\n- Fans write to you first, rarely, so it still means something when they do.\n- The world keeps hours: night owls turn up at night, early risers in the morning.\n- Choose how harsh your audience is — Kind, Honest, or Unfiltered.\n- Settings says when a Creator's Conversation Schedule has expired, instead of\n  letting it lapse silently.\n- What fans say is written properly when you open Slurp, rather than staying the\n  placeholder the world wrote while you were away.",
           "highlight": false
-        },
-        {
-          "version": "1.2.0",
-          "date": "2026-09-06",
-          "notes": "- Withdraw what your Creator earns. A daily allowance moves earnings into your\n  spending money, so running a Creator well finally pays for being a fan.\n- Fans write to you first. Somebody may open a conversation without being\n  written to — rarely, so it still means something when they do.\n- The world keeps hours. Night owls turn up at night and early risers in the\n  morning, instead of everyone being equally likely at 4am.\n- Choose how harsh your audience is: Kind, Honest, or Unfiltered. Separate from\n  how explicit your Creators are.",
-          "highlight": true
         },
         {
           "version": "1.1.9",

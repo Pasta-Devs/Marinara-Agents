@@ -350,3 +350,26 @@ export const slurpAudienceTies = fileTable(
   },
   { uniqueBy: [{ keys: ["memberId", "creatorAccountId"] }] },
 );
+
+/**
+ * Text the world wrote from a template and would rather have written properly.
+ *
+ * Unattended work never calls the model, so a commission brief or a question opened by a
+ * background tick comes from the combinatorial bank — vague on purpose, because a template that
+ * fakes specificity about a post it never read is worse than one that does not try.
+ *
+ * That vagueness is a cost of the rule, not a feature. A row here says "this was a placeholder";
+ * when the player is next present, the model rewrites it against the thing it is actually about.
+ */
+export const slurpPendingText = fileTable("slurp_pending_text", {
+  id: text("id").primaryKey(),
+  /** commission | question | opener */
+  kind: text("kind").notNull(),
+  /** The commission, interaction, or message row whose text is a placeholder. */
+  subjectId: text("subject_id").notNull(),
+  creatorAccountId: text("creator_account_id").notNull(),
+  /** The post a question is about. Null for the other kinds. */
+  postId: text("post_id"),
+  actorLabel: text("actor_label"),
+  createdAt: text("created_at").notNull(),
+});

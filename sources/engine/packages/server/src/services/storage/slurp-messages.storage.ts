@@ -602,6 +602,34 @@ export function createSlurpMessagesStorage(db: DB) {
       return rows.map(mapCommission).filter((row) => row.state === "brief" || row.state === "accepted");
     },
 
+    async getMessageById(id: string): Promise<SlurpMessage | null> {
+      const rows = await db.select().from(slurpMessages).where(eq(slurpMessages.id, id));
+      return rows[0] ? mapMessage(rows[0]) : null;
+    },
+
+    /** Replace a placeholder brief with the model's rewrite. Text only; nothing else moves. */
+    async rewriteCommissionBrief(id: string, brief: string): Promise<void> {
+      await db.update(slurpCommissions).set({ brief, updatedAt: now() }).where(eq(slurpCommissions.id, id));
+    },
+
+    /** Replace a placeholder message with the model's rewrite, and keep the inbox preview in step. */
+    async rewriteMessageContent(id: string, content: string): Promise<void> {
+      const rows = await db.select().from(slurpMessages).where(eq(slurpMessages.id, id));
+      const row = rows[0];
+      if (!row) return;
+      await db.update(slurpMessages).set({ content }).where(eq(slurpMessages.id, id));
+      const thread = await storage.getThreadById(String(row.threadId));
+      // The inbox row caches the last message, so rewriting the message without this leaves the
+      // list showing the placeholder next to a conversation that no longer contains it.
+      const latest = (await storage.listMessages(String(row.threadId), 1))[0];
+      if (thread && latest?.id === id) {
+        await db
+          .update(slurpThreads)
+          .set({ lastMessagePreview: content.slice(0, 160), updatedAt: now() })
+          .where(eq(slurpThreads.id, thread.id));
+      }
+    },
+
     async getCommission(id: string): Promise<SlurpCommission | null> {
       const rows = await db.select().from(slurpCommissions).where(eq(slurpCommissions.id, id));
       return rows[0] ? mapCommission(rows[0]) : null;
