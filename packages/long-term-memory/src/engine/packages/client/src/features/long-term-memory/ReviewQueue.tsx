@@ -183,7 +183,7 @@ function draftDisplayTitle(item: LtmDraftReviewDraft, localizeUi: ReturnType<typ
   if (firstMutation?.kind === "create_note") {
     return noteDisplayTitle(firstMutation.note, localizeUi("ui.longTermMemory.reviewqueue.untitledMemory"));
   }
-  return item.draft.summary || localizeUi("ui.longTermMemory.reviewqueue.noDraftSummary");
+  return item.draft.summary.trim() || localizeUi("ui.longTermMemory.reviewqueue.noDraftSummary");
 }
 
 function humanizeReviewText(
@@ -2839,7 +2839,7 @@ export default function ReviewQueue({
             <div data-ltm-review-workbench className="mari-editor-panel min-w-0 space-y-4 p-3 sm:p-4">
               <header className="flex flex-wrap items-start justify-between gap-3 border-b border-[var(--border)] pb-4">
                 <div className="min-w-0">
-                  <h2 data-ltm-review-draft-title className="text-base font-semibold tracking-tight">
+                  <h2 data-ltm-review-draft-title className="break-words text-base font-semibold tracking-tight">
                     {selectedDraft
                       ? reviewDraftTitle(selectedDraft)
                       : localizeUi("ui.longTermMemory.reviewqueue.sourceNote", {
