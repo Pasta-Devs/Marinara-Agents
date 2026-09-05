@@ -74,6 +74,7 @@ import {
 } from "../slurp/slurp-wallet.js";
 import { openSlurpGoal, readSlurpGoal, slurpGoalKey, type SlurpGoal } from "../slurp/slurp-goal.js";
 import { SLURP_AUDIENCE_TONES, SLURP_DEFAULT_AUDIENCE_TONE } from "../slurp/slurp-tone.js";
+import { resolveSlurpCreatorScheduleStatus } from "../slurp/slurp-creator-schedule-context.js";
 import { createSlurpEventsStorage } from "./slurp-events.storage.js";
 import { createSlurpPopulationStorage } from "./slurp-population.storage.js";
 import type { SlurpFunnelStage } from "../slurp/slurp-population.js";
@@ -2123,6 +2124,15 @@ export function createSlurpStorage(db: DB) {
                 ? (account.settings.scheduler.autoPosting ?? defaultAutoPostingSettings())
                 : { ...(account.settings.scheduler.autoPosting ?? defaultAutoPostingSettings()), enabled: false },
             fanActivity: account.settings.scheduler.fanActivity ?? null,
+            // Reported so a stale schedule is visible. Engine schedules expire weekly, and until
+            // now one that lapsed simply stopped applying with no signal anywhere.
+            scheduleStatus: publicAccount
+              ? await resolveSlurpCreatorScheduleStatus(characters, {
+                  kind: publicAccount.kind,
+                  entityId: publicAccount.entityId,
+                  displayName: publicAccount.displayName,
+                })
+              : { state: "not-applicable" as const },
             sourceStatus: !currentSource
               ? { state: "missing" as const }
               : compareMinimizedNoodlerSourceSnapshot(

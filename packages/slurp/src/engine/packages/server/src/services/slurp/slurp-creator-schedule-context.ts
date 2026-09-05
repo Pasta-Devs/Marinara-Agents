@@ -220,6 +220,48 @@ export function slurpCreatorAvailability(
 }
 
 /** The availability for one creator, read from the Engine character the profile points at. */
+/**
+ * Why a Creator does or does not have a schedule today.
+ *
+ * Every prompt path collapses all four failure modes into one sentence — "No active Conversation
+ * Schedule is available" — which is right for a prompt and useless for a person. The dangerous one
+ * is `stale`: Engine schedules are keyed to a Monday, so a schedule that was not regenerated this
+ * week silently stops applying. The Creator loses their daily rhythm and their message pacing, and
+ * nothing anywhere said so. It just looks like the writing got worse.
+ */
+export type SlurpScheduleStatus =
+  /** Persona-backed. Schedules are a character feature, so there is nothing to report. */
+  | { state: "not-applicable" }
+  /** The character has Conversation Schedules switched off. */
+  | { state: "disabled" }
+  /** No schedule has ever been saved for this character. */
+  | { state: "missing" }
+  /** A schedule exists but belongs to an earlier week, so nothing is reading it. */
+  | { state: "stale" }
+  /** In use today, with this many blocks. */
+  | { state: "active"; blocks: number }
+  /** This week's schedule has no blocks for today specifically. */
+  | { state: "empty-today" };
+
+export async function resolveSlurpCreatorScheduleStatus(
+  characters: { getById(id: string): Promise<ScheduleCharacter> },
+  source: CreatorSource,
+  timeZone?: string,
+  now: Date = new Date(),
+): Promise<SlurpScheduleStatus> {
+  if (source.kind !== "character") return { state: "not-applicable" };
+  const character = await characters.getById(source.entityId);
+  if (!scheduleEnabled(character)) return { state: "disabled" };
+  const schedule = parseSlurpWeekSchedule(record(record(character?.data).extensions).conversationSchedule);
+  if (!schedule) return { state: "missing" };
+  if (schedule.enabled === false) return { state: "disabled" };
+  const localNow = zonedDate(now, timeZone);
+  if (isStale(schedule, localNow, timeZone)) return { state: "stale" };
+  const days = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
+  const today = schedule.days[days[(localNow.getDay() + 6) % 7]!];
+  return today?.length ? { state: "active", blocks: today.length } : { state: "empty-today" };
+}
+
 export async function resolveSlurpCreatorAvailability(
   characters: { getById(id: string): Promise<ScheduleCharacter> },
   source: CreatorSource,

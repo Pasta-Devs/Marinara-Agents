@@ -447,7 +447,10 @@ function preservePollVotes(current: NoodleBootstrap | undefined, next: NoodleBoo
 export function useNoodlerAccounts(enabled = true) {
   return useQuery({
     queryKey: noodleKeys.noodlerAccounts(),
-    queryFn: () => api.get<NoodlerManagedStageProfile[]>("/slurp/noodler/accounts"),
+    // The server sends `scheduleStatus` alongside the shared type, which has no such field — the
+    // same arrangement `subscriptionPrice` and the tip goal already use.
+    queryFn: () =>
+      api.get<Array<NoodlerManagedStageProfile & { scheduleStatus?: SlurpScheduleStatus }>>("/slurp/noodler/accounts"),
     enabled,
     staleTime: 10_000,
     // Autonomous reserve work changes operator state without a client mutation.
@@ -491,6 +494,20 @@ export type SlurpWallet = {
  * The viewer's wallet. Fetching it is what pays the daily stipend and charges due renewals on the
  * server, so the wallet page opening is also what moves the economy forward.
  */
+/**
+ * Why a Creator does or does not have an Engine Conversation Schedule today.
+ *
+ * `stale` is the one that matters: Engine schedules are keyed to a Monday, so one that was not
+ * regenerated this week stops applying with no signal anywhere.
+ */
+export type SlurpScheduleStatus =
+  | { state: "not-applicable" }
+  | { state: "disabled" }
+  | { state: "missing" }
+  | { state: "stale" }
+  | { state: "empty-today" }
+  | { state: "active"; blocks: number };
+
 export type SlurpTopFan = {
   id: string;
   displayName: string | null;

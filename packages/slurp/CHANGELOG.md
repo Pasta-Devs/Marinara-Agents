@@ -1,5 +1,12 @@
 # Slurp release notes
 
+## 1.2.1 — 2026-09-06
+
+- Settings now says when a Creator's Conversation Schedule has expired. Engine
+  schedules cover one week, and a lapsed one silently stopped giving the Creator
+  their daily routine and their message pacing — it only looked like the writing
+  had got worse.
+
 ## 1.2.0 — 2026-09-06
 
 - Withdraw what your Creator earns. A daily allowance moves earnings into your

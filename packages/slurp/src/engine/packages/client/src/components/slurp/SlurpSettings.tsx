@@ -1050,6 +1050,14 @@ export function SlurpSettings({
                                       })
                                     : t(`ui.slurp.settings.creators.sourceStatus.${creator.sourceStatus.state}`)}
                                 </span>
+                                {/* A stale schedule stops applying silently: the Creator loses their
+                                    daily rhythm and their message pacing, and it just looks like the
+                                    writing got worse. Say so where the Creator is managed. */}
+                                {creator.scheduleStatus?.state === "stale" && (
+                                  <span className="mt-1 block truncate text-[0.68rem] font-semibold text-amber-600 dark:text-amber-400">
+                                    {t("ui.slurp.settings.creators.scheduleStale")}
+                                  </span>
+                                )}
                               </span>
                             </button>
                           );
@@ -1172,6 +1180,12 @@ export function SlurpSettings({
                             </Field>
                           </SettingsGroup>
 
+                          {selectedCreator.scheduleStatus &&
+                            selectedCreator.scheduleStatus.state !== "not-applicable" && (
+                              <p className="text-xs leading-5 text-[var(--slurp-muted)]">
+                                {t(`ui.slurp.settings.creators.schedule.${selectedCreator.scheduleStatus.state}`)}
+                              </p>
+                            )}
                           {selectedCreator.sourceStatus.state === "missing" && (
                             <p className="rounded-lg border border-red-400/30 bg-red-400/5 p-3 text-xs text-red-300">
                               {t("ui.slurp.settings.creators.sourceMissing")}
