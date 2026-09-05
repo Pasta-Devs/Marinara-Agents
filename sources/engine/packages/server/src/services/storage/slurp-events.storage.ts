@@ -7,6 +7,7 @@
  *
  * Every later stage of the live-world plan writes here rather than inventing its own surface.
  */
+import { tolerateMissingTables } from "./slurp-host-tables.js";
 import { and, desc, eq, isNull } from "../../db/file-query.js";
 import { newId, now } from "../../utils/id-generator.js";
 import type { DB } from "../../db/connection.js";
@@ -153,5 +154,14 @@ export function createSlurpEventsStorage(db: DB) {
     },
   };
 
-  return storage;
+  // Notifications are newer than some hosts. An Engine that cannot hold the table shows an empty
+  // stream instead of a failed request.
+  return tolerateMissingTables(storage, {
+    record: () => null,
+    recordAndPrune: () => null,
+    list: () => [],
+    listUnseen: () => [],
+    countUnseen: () => 0,
+    prune: () => 0,
+  });
 }

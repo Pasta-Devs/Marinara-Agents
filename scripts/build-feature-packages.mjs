@@ -159,6 +159,7 @@ const slurpOwnedSourcePaths = [
   "packages/server/src/services/slurp",
   "packages/server/src/services/storage/slurp.storage.ts",
   "packages/server/src/services/storage/slurp-financial-queue.ts",
+  "packages/server/src/services/storage/slurp-host-tables.ts",
 ];
 // Release builds must bundle the current source; runtime reuse is for explicit non-release verification builds.
 const releaseBuild = process.env.MARINARA_RELEASE_BUILD !== "0";
@@ -325,7 +326,7 @@ const features = [
   },
   {
     id: "slurp",
-    version: "1.1.14",
+    version: "1.1.15",
     minEngineVersion: "2.4.3",
     maxEngineExclusive: MAX_ENGINE_EXCLUSIVE,
     name: "Slurp",

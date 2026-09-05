@@ -202,6 +202,7 @@ const slurpOwnedSourcePaths = [
   "packages/server/src/services/slurp",
   "packages/server/src/services/storage/slurp.storage.ts",
   "packages/server/src/services/storage/slurp-financial-queue.ts",
+  "packages/server/src/services/storage/slurp-host-tables.ts",
 ];
 for (const relativePath of slurpOwnedSourcePaths) {
   const packageOwnedPath = join(repoRoot, "packages/slurp/src/engine", relativePath);

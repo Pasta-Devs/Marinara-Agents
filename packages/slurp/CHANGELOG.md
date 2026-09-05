@@ -1,5 +1,9 @@
 # Slurp release notes
 
+## 1.1.15 — 2026-09-05
+
+- Slurp no longer fails outright on an Engine that cannot hold its newer storage tables. The feed, profiles and settings work as before; messages, notifications and the audience simply stay empty until the Engine is updated.
+
 ## 1.1.14 — 2026-09-05
 
 - Messages, the audience, notifications, and the world clock work again. Slurp adds its own storage tables but never told the host about them, so each of those features failed as soon as it touched storage. On an Engine too old to accept package tables, Slurp now says so once in the log instead of erroring on every scheduler run.

@@ -5,6 +5,7 @@
 // Its own module rather than more of `slurp.storage.ts`, which is already past five thousand
 // lines. It composes that storage for accounts, subscriptions, and the wallet instead of
 // reimplementing them, so a DM tip and a profile tip move coins through exactly one code path.
+import { tolerateMissingTables } from "./slurp-host-tables.js";
 import { and, asc, desc, eq } from "../../db/file-query.js";
 import { newId } from "../../utils/id-generator.js";
 import type { DB } from "../../db/connection.js";
@@ -881,7 +882,22 @@ export function createSlurpMessagesStorage(db: DB) {
     },
   };
 
-  return storage;
+  // Messaging tables are newer than some hosts. Reads become empty and writes become no-ops there,
+  // so the inbox shows nothing rather than failing; see slurp-host-tables.
+  return tolerateMissingTables(storage, {
+    getThreadById: () => null,
+    getThread: () => null,
+    getMessageById: () => null,
+    getCommission: () => null,
+    listMessages: () => [],
+    listThreadsForCreators: () => [],
+    listThreadsForViewer: () => [],
+    listCommissionsForThread: () => [],
+    listOpenCommissionsForCreator: () => [],
+    listThreadsAwaitingReply: () => [],
+    rapportFactsFor: () => [],
+    claimReply: () => null,
+  });
 }
 
 export { SLURP_DEFAULT_CREATOR_MESSAGING };

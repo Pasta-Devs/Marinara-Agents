@@ -5,6 +5,7 @@
  * That is what lets a Creator show thousands of followers while a few hundred rows exist: the
  * count is reach, and the rows are the people who did something.
  */
+import { tolerateMissingTables } from "./slurp-host-tables.js";
 import { and, asc, desc, eq } from "../../db/file-query.js";
 import { now } from "../../utils/id-generator.js";
 import type { DB } from "../../db/connection.js";
@@ -259,5 +260,15 @@ export function createSlurpPopulationStorage(db: DB) {
     },
   };
 
-  return storage;
+  // An Engine without `registerTables` rejects every package-owned table, and the funnel is read
+  // by surfaces that predate it. Behave as an empty audience there rather than failing the page.
+  return tolerateMissingTables(storage, {
+    ensure: (seed: string, at = new Date()) => generateSlurpPopulationMember(seed, at),
+    get: () => null,
+    listAll: () => [],
+    listTiesForCreator: () => [],
+    listNamedCast: () => [],
+    countFollowersForCreators: (creatorAccountIds: readonly string[]) =>
+      new Map(creatorAccountIds.map((id) => [id, 0])),
+  });
 }

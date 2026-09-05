@@ -28,4 +28,23 @@ const schema = readFileSync(join(src, "db/schema/slurp.ts"), "utf8");
 const declared = [...schema.matchAll(/fileTable\(\s*"?([a-z_]*)/gu)].length;
 assert.ok(declared > 15, `expected the full Slurp table set, saw ${declared}`);
 
+// A host that cannot hold the new tables must degrade, not fail. The feed reads follower counts
+// from the funnel, so an unsupported table there took down a surface that predates the funnel.
+const store = join(src, "services/storage");
+const helper = readFileSync(join(store, "slurp-host-tables.ts"), "utf8");
+assert.match(helper, /\[file-storage\] Unsupported table/u, "only the host's own error may be swallowed");
+for (const file of ["slurp-population.storage.ts", "slurp-events.storage.ts", "slurp-messages.storage.ts"]) {
+  const text = readFileSync(join(store, file), "utf8");
+  assert.match(text, /return tolerateMissingTables\(storage, \{/u, `${file} must degrade`);
+}
+
+// Counting must still answer for every creator asked about, or a caller reading the map by id
+// gets undefined where it expects a number.
+const population = readFileSync(join(store, "slurp-population.storage.ts"), "utf8");
+assert.match(
+  population,
+  /countFollowersForCreators: \(creatorAccountIds[\s\S]*?new Map\(creatorAccountIds\.map\(\(id\) => \[id, 0\]\)\)/u,
+  "the empty-audience fallback must still key every requested creator",
+);
+
 console.log("slurp table registration regression passed");
