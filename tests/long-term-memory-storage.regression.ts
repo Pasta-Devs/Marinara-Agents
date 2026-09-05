@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
-import { mkdir, mkdtemp, readFile, readdir, rm, stat, utimes, writeFile } from "node:fs/promises";
+import { chmod, mkdir, mkdtemp, readFile, readdir, rm, stat, utimes, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { randomUUID } from "node:crypto";
 import { runWithSafeCleanup } from "./regression-helpers.ts";
 
@@ -102,9 +102,12 @@ async function main() {
     resetLongTermMemorySettings,
     parseLongTermMemoryBackup,
   } = await import(`${source}/backup-restore.ts`);
-  const { addRejectedSuggestions, deleteRejectedSuggestion, listRejectedSuggestions } = await import(
-    `${source}/rejected-suggestions.ts`
-  );
+  const {
+    addRejectedSuggestions,
+    deleteRejectedSuggestion,
+    deleteRejectedSuggestionsForSource,
+    listRejectedSuggestions,
+  } = await import(`${source}/rejected-suggestions.ts`);
 
   const dataDir = await mkdtemp(join(tmpdir(), "marinara-ltm-storage-"));
   const logger = { debug() {}, info() {}, warn() {}, error() {} };
@@ -363,6 +366,61 @@ async function main() {
       await addRejectedSuggestions(rejectionDraft, root);
       await addRejectedSuggestions(rejectionDraft, root);
       assert.equal((await listRejectedSuggestions({ chatId: "chat-a" }, root)).length, 2);
+      const legacyFingerprintRejection = await addRejectedSuggestions(
+        {
+          ...rejectionDraft,
+          extractionOutcome: {
+            ...rejectionDraft.extractionOutcome,
+            droppedCandidates: [
+              {
+                index: 0,
+                reason: "invalid_format",
+                message: "Rejected candidate.",
+                snippet: "candidate",
+                validatorCode: "invalid_evidence_unit_format",
+              },
+            ],
+          },
+        } as any,
+        root,
+      );
+      assert.equal(legacyFingerprintRejection[0]?.id, firstRejections[0]?.id);
+      assert.equal(legacyFingerprintRejection[0]?.candidate.validatorCode, "invalid_evidence_unit_format");
+      const exportedWithValidatorCode = await exportLongTermMemoryData(root);
+      assert.equal(
+        exportedWithValidatorCode.rejectedSuggestions.find((suggestion) => suggestion.id === firstRejections[0]?.id)
+          ?.candidate.validatorCode,
+        "invalid_evidence_unit_format",
+      );
+      const validatorBackupRoot = join(dataDir, "validator-code-backup");
+      await replaceLongTermMemoryData(exportedWithValidatorCode, validatorBackupRoot);
+      assert.equal(
+        (await exportLongTermMemoryData(validatorBackupRoot)).rejectedSuggestions.find(
+          (suggestion) => suggestion.id === firstRejections[0]?.id,
+        )?.candidate.validatorCode,
+        "invalid_evidence_unit_format",
+      );
+      assert.deepEqual(await deleteRejectedSuggestionsForSource("source_second_import", root), {
+        deletedCount: 1,
+        sourceNoteId: "source_second_import",
+      });
+      assert.deepEqual(await deleteRejectedSuggestionsForSource("source_second_import", root), {
+        deletedCount: 0,
+        sourceNoteId: "source_second_import",
+      });
+      assert.equal((await listRejectedSuggestions({ chatId: "chat-a" }, root)).length, 1);
+      const rejectedPath = ltmRejectedSuggestionsPath(root);
+      const rejectedDirectory = dirname(rejectedPath);
+      await chmod(rejectedDirectory, 0o500);
+      try {
+        await assert.rejects(
+          () => deleteRejectedSuggestionsForSource("source_valid_import", root),
+          /EACCES|permission|read-only/i,
+        );
+      } finally {
+        await chmod(rejectedDirectory, 0o700);
+      }
+      assert.equal((await listRejectedSuggestions({ chatId: "chat-a" }, root)).length, 1);
       const rejectionId = firstRejections[0]!.id;
       assert.deepEqual(await deleteRejectedSuggestion(rejectionId, root), { deleted: true, id: rejectionId });
       assert.deepEqual(await deleteRejectedSuggestion(rejectionId, root), { deleted: false, id: rejectionId });

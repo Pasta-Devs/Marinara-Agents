@@ -2091,6 +2091,7 @@ export const ltmExtractionDroppedCandidateSchema = z
   .object({
     index: z.number().int().min(0).max(LTM_EXTRACTION_MAX_CANDIDATES),
     reason: ltmExtractionDropReasonSchema,
+    validatorCode: z.string().trim().min(1).max(120).optional(),
     message: z.string().min(1).max(240),
     snippet: z.string().min(1).max(280).optional(),
     issues: z.array(z.string().trim().min(1).max(240)).max(8).optional(),
@@ -2341,6 +2342,13 @@ export const ltmRejectedSuggestionsResponseSchema = z
   .object({
     suggestions: z.array(ltmRejectedSuggestionSchema).max(10_000),
     total: z.number().int().min(0).max(10_000),
+  })
+  .strict();
+
+export const ltmRejectedSuggestionsClearResponseSchema = z
+  .object({
+    deletedCount: z.number().int().min(0).max(10_000),
+    sourceNoteId: ltmNoteIdSchema,
   })
   .strict();
 
@@ -2954,6 +2962,7 @@ export type LtmDraftPreflightBlocker = z.infer<typeof ltmDraftPreflightBlockerSc
 export type LtmDraftPreflightRow = z.infer<typeof ltmDraftPreflightRowSchema>;
 export type LtmDraftPreflightResponse = z.infer<typeof ltmDraftPreflightResponseSchema>;
 export type LtmRejectedSuggestionsResponse = z.infer<typeof ltmRejectedSuggestionsResponseSchema>;
+export type LtmRejectedSuggestionsClearResponse = z.infer<typeof ltmRejectedSuggestionsClearResponseSchema>;
 export type LtmExtractSourceNoteRequest = z.infer<typeof ltmExtractSourceNoteRequestSchema>;
 export type LtmExtractSourceNoteResponse = z.infer<typeof ltmExtractSourceNoteResponseSchema>;
 export type LtmInteropSource = z.infer<typeof ltmInteropSourceSchema>;

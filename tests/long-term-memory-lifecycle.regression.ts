@@ -251,6 +251,8 @@ async function main() {
         pathToFileURL(join(engineRoot, "node_modules/@playwright/test/index.mjs")).href
       );
       const rejectedSuggestionId = "2a1b5c7d-9e0f-4a1b-8c2d-3e4f5a6b7c8d";
+      const otherRejectedSuggestionId = "3b2c6d8e-0f1a-4b2c-9d3e-4f5a6b7c8d9e";
+      const thirdRejectedSuggestionId = "4c3d7e9f-1a2b-4c3d-8e4f-5a6b7c8d9e0f";
       let savedNote: Record<string, unknown> | null = null;
       const noteTimestamp = "2026-07-30T00:00:00.000Z";
       let legacyGlobalNote = {
@@ -289,6 +291,8 @@ async function main() {
       };
       const availabilityPatches: Array<Record<string, unknown>> = [];
       let deletedSuggestionId: string | null = null;
+      const clearedRejectedSourceIds = new Set<string>();
+      let clearRejectedSuggestionsFailure = false;
       const scopeTargetQueries: string[] = [];
       const noteQueries: string[] = [];
       const sourcePreviewRequests: Record<string, unknown>[] = [];
@@ -1165,33 +1169,69 @@ async function main() {
         if (request.method === "GET" && url.pathname.endsWith("/rejected-suggestions")) {
           rejectedSuggestionQueries.push(url.search);
           if (url.searchParams.has("chatId")) return send(200, { suggestions: [], total: 0 });
-          return send(200, {
-            suggestions: reviewQueueEmpty
-              ? []
-              : [
-                  {
-                    id: rejectedSuggestionId,
-                    fingerprint: "a".repeat(64),
-                    source: { sourceNoteId: "source_mobile_recovery" },
-                    scope: {},
-                    modes: ["roleplay"],
-                    candidate: {
-                      index: 0,
-                      reason: "invalid_format",
-                      message: "A recoverable mobile memory.",
-                      snippet: "A recoverable mobile memory.",
-                      recovery: {
-                        noteType: "world",
-                        noteId: "world_mobile_recovery",
-                        sectionKey: "facts",
-                      },
+          const suggestions = reviewQueueEmpty
+            ? []
+            : [
+                {
+                  id: rejectedSuggestionId,
+                  fingerprint: "a".repeat(64),
+                  source: { sourceNoteId: "source_mobile_recovery" },
+                  scope: {},
+                  modes: ["roleplay"],
+                  candidate: {
+                    index: 0,
+                    reason: "invalid_format",
+                    validatorCode: "invalid_evidence_unit_format",
+                    message: "A recoverable mobile memory.",
+                    snippet: "A recoverable mobile memory.",
+                    issues: ["units.0.text: Required"],
+                    recovery: {
+                      noteType: "world",
+                      noteId: "world_mobile_recovery",
+                      sectionKey: "facts",
                     },
-                    createdAt: "2026-07-30T00:00:00.000Z",
-                    lastSeenAt: "2026-07-30T00:00:00.000Z",
                   },
-                ],
-            total: reviewQueueEmpty ? 0 : 1,
-          });
+                  createdAt: "2026-07-30T00:00:00.000Z",
+                  lastSeenAt: "2026-07-30T00:00:00.000Z",
+                },
+                {
+                  id: otherRejectedSuggestionId,
+                  fingerprint: "b".repeat(64),
+                  source: { sourceNoteId: "source_mobile_single" },
+                  scope: {},
+                  modes: ["roleplay"],
+                  candidate: {
+                    index: 1,
+                    reason: "unsupported_bucket",
+                    validatorCode: "event_shaped_character_fact",
+                    message: "Character facts cannot capture ordinary scene actions.",
+                    snippet: "Rowan entered the observatory.",
+                  },
+                  createdAt: "2026-07-30T00:00:00.000Z",
+                  lastSeenAt: "2026-07-30T00:00:00.000Z",
+                },
+                {
+                  id: thirdRejectedSuggestionId,
+                  fingerprint: "c".repeat(64),
+                  source: { sourceNoteId: "source_mobile_blank" },
+                  scope: {},
+                  modes: ["roleplay"],
+                  candidate: {
+                    index: 2,
+                    reason: "missing_source_evidence",
+                    validatorCode: "missing_evidence",
+                    message: "Evidence unit must reference the source note evidence.",
+                    snippet: "A blank-source suggestion.",
+                  },
+                  createdAt: "2026-07-30T00:00:00.000Z",
+                  lastSeenAt: "2026-07-30T00:00:00.000Z",
+                },
+              ].filter(
+                (suggestion) =>
+                  !clearedRejectedSourceIds.has(suggestion.source.sourceNoteId) &&
+                  suggestion.id !== deletedSuggestionId,
+              );
+          return send(200, { suggestions, total: suggestions.length });
         }
         if (request.method === "POST" && url.pathname.endsWith("/notes")) {
           const chunks: Buffer[] = [];
@@ -1438,6 +1478,12 @@ async function main() {
         if (request.method === "DELETE" && url.pathname.includes("/rejected-suggestions/")) {
           deletedSuggestionId = decodeURIComponent(url.pathname.split("/").at(-1)!);
           return send(200, { deleted: true, id: deletedSuggestionId });
+        }
+        if (request.method === "DELETE" && url.pathname.endsWith("/rejected-suggestions")) {
+          const sourceNoteId = url.searchParams.get("sourceNoteId");
+          if (clearRejectedSuggestionsFailure) return send(500, { error: "Clear rejected suggestions fixture failed" });
+          clearedRejectedSourceIds.add(sourceNoteId ?? "");
+          return send(200, { deletedCount: 1, sourceNoteId });
         }
         return send(404, {});
       });
@@ -2610,6 +2656,13 @@ async function main() {
       const recoveryReviewText = await page.locator('[data-ltm-workspace-pane="workbench"]').innerText();
       assert.match(recoveryReviewText, /Mobile recovery source/u);
       assert.match(recoveryReviewText, /Mobile recovery memory/u);
+      assert.match(recoveryReviewText, /A recoverable mobile memory\./u);
+      assert.match(recoveryReviewText, /Show 1 format details/u);
+      await page.getByText("Show 1 format details", { exact: true }).click();
+      assert.match(
+        await page.locator('[data-ltm-workspace-pane="workbench"]').innerText(),
+        /units\.0\.text: Required/u,
+      );
       await page.getByRole("button", { name: /^Recover suggestion:/u }).click();
       await page.locator("[data-ltm-note-editor]").waitFor();
       await page.locator("[data-ltm-details-toggle]").click();
@@ -2896,6 +2949,72 @@ async function main() {
       assert.equal(await page.locator('[role="alert"]').count(), 0);
       assert.equal(deletedSuggestionId, rejectedSuggestionId);
       assert.equal(savedNote?.type, "world");
+      await page.locator('[data-ltm-control="navigation"][data-ltm-destination="review"]').first().click();
+      const clearSource = page.locator('[data-ltm-review-source-select="source_mobile_single"]');
+      await clearSource.click();
+      await page.locator("[data-ltm-rejected-suggestions] > summary").click();
+      const clearSourceSuggestions = page.locator(
+        '[data-ltm-rejected-source="source_mobile_single"] [data-ltm-rejected-suggestion]',
+      );
+      await clearSourceSuggestions.waitFor();
+      const clearRejectedButton = page.locator("[data-ltm-clear-rejected-suggestions]");
+      confirmReviewDiscard = false;
+      await page.evaluate(() => {
+        const element = document.querySelector("marinara-capability-long-term-memory") as HTMLElement & {
+          capabilityProps?: Record<string, unknown>;
+        };
+        element.capabilityProps = {
+          ...element.capabilityProps,
+          confirmAction: (
+            window as Window & {
+              confirmReviewDiscard: (options: { message?: string }) => boolean;
+            }
+          ).confirmReviewDiscard,
+        };
+        element.dispatchEvent(new CustomEvent("marinara-capability-props"));
+      });
+      await clearRejectedButton.click();
+      assert.equal(await clearSourceSuggestions.count(), 1);
+      assert.match(lastReviewDiscardMessage, /Clear 1 rejected suggestions from Single-draft mobile source/u);
+      confirmReviewDiscard = true;
+      await page.evaluate(() => {
+        const element = document.querySelector("marinara-capability-long-term-memory") as HTMLElement & {
+          capabilityProps?: Record<string, unknown>;
+        };
+        element.capabilityProps = {
+          ...element.capabilityProps,
+          confirmAction: (
+            window as Window & {
+              confirmReviewDiscard: (options: { message?: string }) => boolean;
+            }
+          ).confirmReviewDiscard,
+        };
+        element.dispatchEvent(new CustomEvent("marinara-capability-props"));
+      });
+      clearRejectedSuggestionsFailure = true;
+      await clearRejectedButton.click();
+      await page
+        .locator('[data-ltm-status="danger"]')
+        .filter({ hasText: "Clear rejected suggestions fixture failed" })
+        .waitFor();
+      assert.equal(await clearSourceSuggestions.count(), 1);
+      clearRejectedSuggestionsFailure = false;
+      await clearRejectedButton.click();
+      await clearSourceSuggestions.waitFor({ state: "detached" });
+      await page.getByText("Removed 1 rejected suggestion from Single-draft mobile source.", { exact: true }).waitFor();
+      await page.locator('[data-ltm-review-source-select="source_mobile_blank"]').click();
+      await page.locator("[data-ltm-rejected-suggestions] > summary").click();
+      assert.equal(
+        await page.locator('[data-ltm-rejected-source="source_mobile_blank"] [data-ltm-rejected-suggestion]').count(),
+        1,
+      );
+      await page.evaluate(() => {
+        const element = document.querySelector("marinara-capability-long-term-memory") as HTMLElement & {
+          capabilityProps?: Record<string, unknown>;
+        };
+        element.capabilityProps = { ...element.capabilityProps, confirmAction: undefined };
+        element.dispatchEvent(new CustomEvent("marinara-capability-props"));
+      });
       const expectedInitialChatSourceScope = {
         chatId: "desktop-chat",
         chatIds: ["desktop-chat"],

@@ -360,6 +360,7 @@ export function validateLtmEvidenceUnits({
     const dropped = droppedCandidate({
       candidateIndex,
       reason: "unsupported_bucket",
+      code,
       message,
       unit,
     });
@@ -386,7 +387,13 @@ export function validateLtmEvidenceUnits({
         unit,
         "relationship_state_missing_caused_by",
         causedByTargets.length > 0
-          ? `Dropped a relationship_state change whose caused_by target '${causedByTargets.join("', '")}' was removed during validation.`
+          ? userFacingDropMessageForDiagnostic(
+              {
+                code: "relationship_state_missing_caused_by",
+                message: `Dropped a relationship_state change whose caused_by target '${causedByTargets.join("', '")}' was removed during validation.`,
+              },
+              "unsupported_bucket",
+            )
           : userFacingDropMessageForCode("relationship_state_missing_caused_by", "unsupported_bucket"),
         {
           causedByTargets,
@@ -407,7 +414,13 @@ export function validateLtmEvidenceUnits({
       dropKeptUnit(
         unit,
         "unknown_link_target",
-        `Dropped a candidate whose link target '${missingLink.target}' was removed during validation.`,
+        userFacingDropMessageForDiagnostic(
+          {
+            code: "unknown_link_target",
+            message: `Dropped a candidate whose link target '${missingLink.target}' was removed during validation.`,
+          },
+          "unsupported_bucket",
+        ),
         { linkTarget: missingLink.target, linkRelation: missingLink.relation },
       );
       changed = true;
@@ -674,6 +687,7 @@ function isSourceSummaryPayload(text: string) {
 
 function droppedCandidate(
   input: Required<Pick<DroppedCandidateInput, "candidateIndex" | "reason" | "message" | "unit">> & {
+    code?: string;
     snippet?: string;
   },
 ): LtmExtractionDroppedCandidate {
@@ -681,6 +695,7 @@ function droppedCandidate(
   return {
     index: input.candidateIndex,
     reason: input.reason,
+    ...(input.code ? { validatorCode: input.code } : {}),
     message: input.message,
     ...(safeSnippet(input.snippet ?? input.unit.text)
       ? { snippet: safeSnippet(input.snippet ?? input.unit.text)! }
@@ -738,7 +753,8 @@ function diagnosticToDropReason(code: string): LtmExtractionDropReason | null {
     return "placeholder_output";
   }
   if (code === "unsupported_dialogue_quote") return "quote_not_found_in_source";
-  if (code === "missing_source_note_evidence" || code === "missing_evidence") return "missing_source_evidence";
+  if (code === "missing_source_note_evidence" || code === "missing_evidence" || code === "source_hash_mismatch")
+    return "missing_source_evidence";
   if (code === "source_summary_payload") return "source_summary_payload";
   if (
     code === "unsupported_source_extraction_bucket" ||
@@ -798,11 +814,18 @@ function userFacingDropMessageForCode(code: string, reason: LtmExtractionDropRea
   return userFacingDropMessage(reason);
 }
 
-function userFacingDropMessageForDiagnostic(diagnostic: LtmExtractionDiagnostic, reason: LtmExtractionDropReason) {
-  if (diagnostic.code === "unknown_link_target" || diagnostic.code === "relationship_state_missing_caused_by") {
-    return diagnostic.message;
+function userFacingDropMessageForDiagnostic(
+  diagnostic: Pick<LtmExtractionDiagnostic, "code" | "message">,
+  reason: LtmExtractionDropReason,
+) {
+  if (
+    diagnostic.code === "unknown_link_target" ||
+    diagnostic.code === "relationship_state_missing_caused_by" ||
+    diagnostic.code === "overlong_target_note_id"
+  ) {
+    return userFacingDropMessageForCode(diagnostic.code, reason);
   }
-  return userFacingDropMessageForCode(diagnostic.code, reason);
+  return diagnostic.message.trim().slice(0, 240) || "The candidate did not pass validation.";
 }
 
 function userFacingDropMessage(reason: LtmExtractionDropReason) {
