@@ -34058,7 +34058,10 @@ const layoutFingerprint = (w) => {
     loadedPF.spatial.reset();
     try {
       const { world: w, meta } = wildWorld("cozy-village", 24601, { surround: "woods" });
-      const sim = new loadedPF.Sim(w);
+      // `sim` is reassigned ONCE, at the world swap near the foot of this lane —
+      // `frame()` below reads the binding rather than capturing a sim, so the
+      // whole lane keeps driving whatever the core is holding.
+      let sim = new loadedPF.Sim(w);
       const core = makeCore("chat-signpost", sim, meta);
       core.interact = () => {};
       core.setMode = () => {};
@@ -34159,6 +34162,62 @@ const layoutFingerprint = (w) => {
       frame();
       assert.equal(hud.gateChip.style.display, "", "…and resuming exploring puts it back");
       assert.equal(hud.gateChip.textContent, `North — ${over.name}`, "…with the words it had");
+
+      // THE WORLD SWAPPED UNDER A MOUNTED HUD — the hazard a memo only acquires
+      // once it WORKS. The package builds exactly one Hud (`90-element`
+      // `attachMain`) and every world-replacing path keeps it, so a key made of a
+      // zone id and a bearing names one edge in every world at once: every
+      // compiled world's settlement is `z1`, and there are four bearings. Two
+      // chats both parked at a north edge is an ordinary state — it is the
+      // designed place to stand — and the arriving one must not be shown the
+      // country of the chat it replaced. Driven the way `_switchChat`,
+      // `_installSealedWorld` and `_rebuild` all drive it: a new sim over a new
+      // world, the same Hud object, and `refreshChips()`.
+      const { world: bw } = wildWorld("cozy-village", 90210, { surround: "woods" });
+      const bHome = bw.zones[bw.startZone];
+      const bNorth = (bHome.gates ?? []).find((g) => g.dir === "N");
+      assert.ok(bNorth, "the second world's settlement has a north edge as well");
+      const bOver = L.ensure(bw, L.cellZoneId(bw, 0, -1));
+      assert.notEqual(bOver.name, over.name, "…and a different country over it, or this arm proves nothing");
+      const collided = hud._signpost;
+      sim = new loadedPF.Sim(bw);
+      const bInset = L.insetOf(bHome, bNorth);
+      sim.teleport(bw.startZone, bInset.x, bInset.y);
+      core.sim = sim;
+      hud.refreshChips();
+      frame();
+      assert.equal(sim.nearGate?.dir, "N", "the arriving chat is standing at a north edge too");
+      assert.equal(hud._signpost, collided, "…under the very key the chat we left had written");
+      assert.equal(hud.gateChip.style.display, "", "…and the sign is up");
+      assert.equal(
+        hud.gateChip.textContent,
+        `North — ${bOver.name}`,
+        "…naming the country of the world in front of the player, not the one they left",
+      );
+
+      // AND THE OTHER FACE OF THE SAME KEY, the zone id — because every northward
+      // crossing lands one inset inside the new cell's SOUTH doorway, so two hops
+      // running are two different places reached at the same bearing. A key that
+      // named only the bearing would hit on the second and keep the first
+      // neighbour's name up while the player stood a cell past it. Nothing here
+      // calls `refreshChips`: the shipped frame loop happens to clear the memo on
+      // every zone change too (`90-element` `_zoneChanged`), and this arm holds
+      // the key to its own claim rather than to that.
+      const hop1 = walkOut(sim, "N");
+      assert.equal(hop1.id, L.cellZoneId(bw, 0, -1), "walking north out of the second town lands in the cell above it");
+      frame();
+      assert.equal(sim.nearGate?.dir, "S", "…standing beside the doorway home");
+      assert.equal(hud.gateChip.textContent, `South — ${bHome.name}`, "…which the sign names as the way back");
+      const hop2 = walkOut(sim, "N");
+      assert.equal(hop2.id, L.cellZoneId(bw, 0, -2), "one more crossing, one more cell out");
+      frame();
+      assert.equal(sim.nearGate?.dir, "S", "beside a south doorway again — same bearing, different place");
+      assert.notEqual(bHome.name, bOver.name, "…and the two places behind those doorways are named differently");
+      assert.equal(
+        hud.gateChip.textContent,
+        `South — ${bOver.name}`,
+        "…so the sign names the cell the player just left and not the town two cells back",
+      );
 
       // AND THE STILLEST SCREEN OF ALL. Under a loading gate the tick returns above
       // `sim.step` — a held world accrues nothing at all — so these are update()
