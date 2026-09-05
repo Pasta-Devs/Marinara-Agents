@@ -12,6 +12,7 @@ import { isFileUniqueConstraintError } from "../../db/file-schema.js";
 import { slurpCommissions, slurpMessageClaims, slurpMessages, slurpThreads } from "../../db/schema/slurp.js";
 import { createAppSettingsStorage } from "./app-settings.storage.js";
 import { createSlurpStorage } from "./slurp.storage.js";
+import { createSlurpPopulationStorage } from "./slurp-population.storage.js";
 import {
   admitSlurpThread,
   readSlurpCreatorMessaging,
@@ -522,7 +523,14 @@ export function createSlurpMessagesStorage(db: DB) {
       viewerAccountId: string,
       input: { content: string; kind?: SlurpMessageKind; price?: number; metadata?: Record<string, unknown> },
     ): Promise<SlurpMessage | null> {
-      if (!(await slurp.getViewer(viewerAccountId))) return null;
+      // A counterpart is a persona, an ambient Slurp account, or a generated population member.
+      // Gating on personas alone meant a fan the world sent could write to a Creator and never be
+      // answered — an obligation with no way to discharge it.
+      const counterpartExists =
+        Boolean(await slurp.getViewer(viewerAccountId).catch(() => null)) ||
+        Boolean(await slurp.getNoodlerAccountById(viewerAccountId)) ||
+        Boolean(await createSlurpPopulationStorage(db).get(viewerAccountId));
+      if (!counterpartExists) return null;
       const opened = await storage.openThread(viewerAccountId, creatorAccountId, "creator");
       if (opened.status !== "ok") return null;
       return storage.appendMessage(opened.thread.id, {

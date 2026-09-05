@@ -69,4 +69,19 @@ assert.match(messages, /ui\.slurp\.messages\.inbound/u, "the inbox must show Cre
 // A thread the player opened with their own Creator must not appear on both sides.
 assert.match(messageStorage, /if \(wanted\.has\(thread\.viewerAccountId\)\) continue;/u);
 
+// ── Writing as the Creator ──────────────────────────────────────────────────
+// The Creator's side of a conversation was generated and only generated. Once Creator-side threads
+// became visible, the only composer on screen sent as the viewer — which would have opened a second
+// conversation from the persona to their own Creator instead of answering the fan.
+assert.match(messageRoutes, /app\.post\("\/messages\/creators\/:creatorAccountId\/reply"/u);
+assert.match(messages, /if \(ownsCreator && thread\) \{/u, "a Creator-side send must go the other way");
+// The model is the fallback, not the default.
+assert.match(messageRoutes, /app\.post\("\/messages\/creators\/:creatorAccountId\/draft-reply"/u);
+assert.match(messages, /useDraftSlurpCreatorReply/u);
+
+// A fan the world sent must be answerable. Gating on personas alone left an obligation with no way
+// to discharge it.
+assert.match(messageStorage, /const counterpartExists =/u);
+assert.match(messageStorage, /createSlurpPopulationStorage\(db\)\.get\(viewerAccountId\)/u);
+
 console.log("slurp messaging surface regression passed");

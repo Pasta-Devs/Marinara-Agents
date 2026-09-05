@@ -24,7 +24,9 @@ import {
   useDeliverSlurpCommission,
   useQuoteSlurpCommission,
   useResolveSlurpMessageRequest,
+  useDraftSlurpCreatorReply,
   useSendSlurpCreatorPpv,
+  useSendSlurpCreatorReply,
   useSendSlurpMessage,
   useSlurpCompose,
   useSlurpThread,
@@ -304,6 +306,8 @@ function SlurpThreadView({
   const tip = useTipInSlurpThread();
   const resolveRequest = useResolveSlurpMessageRequest();
   const createCommission = useCreateSlurpCommission();
+  const creatorReply = useSendSlurpCreatorReply();
+  const draftReply = useDraftSlurpCreatorReply();
   const [draft, setDraft] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [typing, setTyping] = useState(false);
@@ -317,7 +321,7 @@ function SlurpThreadView({
   const subscribed = thread?.subscribed ?? threadQuery.data?.subscribed ?? false;
   const targetCreatorAccountId = thread?.creatorAccountId ?? creator?.id ?? creatorAccountId;
   const ownsCreator = Boolean(targetCreatorAccountId && ownedCreatorAccountIds.includes(targetCreatorAccountId));
-  const busy = send.isPending || tip.isPending;
+  const busy = send.isPending || tip.isPending || creatorReply.isPending || draftReply.isPending;
 
   // Follow the conversation down as it grows, the way every chat surface does.
   useEffect(() => {
@@ -340,6 +344,18 @@ function SlurpThreadView({
     setError(null);
     setDraft("");
     try {
+      // On a Creator-side thread the player is the Creator, so the message goes the other way.
+      // Sending through the viewer route here opened a second conversation from the persona to
+      // their own Creator instead of answering the fan.
+      if (ownsCreator && thread) {
+        await creatorReply.mutateAsync({
+          creatorAccountId: thread.creatorAccountId,
+          personaId,
+          viewerAccountId: thread.viewerAccountId,
+          content,
+        });
+        return;
+      }
       const result = await send.mutateAsync({
         personaId,
         creatorAccountId: targetCreatorAccountId,
@@ -524,6 +540,29 @@ function SlurpThreadView({
                   );
               }}
             />
+          )}
+          {ownsCreator && thread && personaId && (
+            <button
+              type="button"
+              disabled={busy}
+              onClick={() => {
+                setError(null);
+                draftReply
+                  .mutateAsync({ creatorAccountId: thread.creatorAccountId, personaId, threadId: thread.id })
+                  .catch((cause: unknown) =>
+                    setError(
+                      cause instanceof Error
+                        ? cause.message
+                        : localizeUi("ui.slurp.messages.draftFailed", { defaultValue: "Could not draft a reply." }),
+                    ),
+                  );
+              }}
+              className="self-start rounded-lg px-2 py-1 text-xs font-bold text-[var(--noodle-accent)] ring-1 ring-inset ring-[var(--noodle-accent)]/40 hover:bg-[var(--noodle-accent)]/10 disabled:opacity-50"
+            >
+              {draftReply.isPending
+                ? localizeUi("ui.slurp.messages.drafting", { defaultValue: "Writing…" })
+                : localizeUi("ui.slurp.messages.draftReply", { defaultValue: "Let them answer" })}
+            </button>
           )}
           <div className="flex flex-wrap items-center gap-1.5">
             <Coins size={14} className="text-[var(--noodle-accent)]" aria-hidden="true" />

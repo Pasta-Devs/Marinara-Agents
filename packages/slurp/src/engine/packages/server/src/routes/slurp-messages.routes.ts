@@ -277,6 +277,66 @@ export async function slurpMessageRoutes(app: FastifyInstance) {
     return { message, wallet: await slurp.getWallet(viewer.id) };
   });
 
+  /**
+   * Write as the Creator, in your own words.
+   *
+   * The Creator's side of a conversation was generated and only generated. There was no way to
+   * answer a fan yourself, and once Creator-side threads became visible the only composer on
+   * screen sent as the viewer — the wrong direction entirely.
+   */
+  app.post("/messages/creators/:creatorAccountId/reply", async (req, reply) => {
+    const parsed = z
+      .object({
+        personaId: z.string().trim().min(1),
+        viewerAccountId: z.string().trim().min(1),
+        content: z.string().trim().min(1).max(2000),
+      })
+      .safeParse(req.body ?? {});
+    if (!parsed.success) return reply.code(400).send({ error: parsed.error.flatten() });
+    const { creatorAccountId } = req.params as { creatorAccountId: string };
+    if (!(await ownsCreator(parsed.data.personaId, creatorAccountId))) {
+      return reply.code(403).send({ error: "Only the Creator's owner can write as them." });
+    }
+    const message = await messages.sendCreatorMessage(creatorAccountId, parsed.data.viewerAccountId, {
+      content: parsed.data.content,
+    });
+    if (!message) return reply.code(404).send({ error: "Conversation not found" });
+    const thread = await messages.getThread(parsed.data.viewerAccountId, creatorAccountId);
+    return { message, thread: thread ? await freshView(thread.id) : null };
+  });
+
+  /**
+   * Have the Creator draft their own reply, for the player to send or rewrite.
+   *
+   * The generator is the fallback here rather than the default: the maintainer wants to write as
+   * their Creator, with the model available when they would rather not.
+   */
+  app.post("/messages/creators/:creatorAccountId/draft-reply", async (req, reply) => {
+    const parsed = z
+      .object({ personaId: z.string().trim().min(1), threadId: z.string().trim().min(1) })
+      .safeParse(req.body ?? {});
+    if (!parsed.success) return reply.code(400).send({ error: parsed.error.flatten() });
+    const { creatorAccountId } = req.params as { creatorAccountId: string };
+    if (!(await ownsCreator(parsed.data.personaId, creatorAccountId))) {
+      return reply.code(403).send({ error: "Only the Creator's owner can draft as them." });
+    }
+    const thread = await messages.getThreadById(parsed.data.threadId);
+    if (!thread || thread.creatorAccountId !== creatorAccountId) {
+      return reply.code(404).send({ error: "Conversation not found" });
+    }
+    const latest = (await messages.listMessages(thread.id, 1))[0];
+    if (!latest) return reply.code(400).send({ error: "Nothing to reply to yet." });
+    const outcome = await replyToSlurpMessage(app.db, {
+      threadId: thread.id,
+      triggerMessageId: latest.id,
+      force: true,
+    });
+    if (outcome.status !== "replied") {
+      return reply.code(502).send({ error: "Could not draft a reply.", status: outcome.status });
+    }
+    return { message: outcome.message, thread: await freshView(thread.id) };
+  });
+
   app.post("/messages/creators/:creatorAccountId/ppv", async (req, reply) => {
     const parsed = creatorMessageSchema.safeParse(req.body ?? {});
     if (!parsed.success) return reply.code(400).send({ error: parsed.error.flatten() });

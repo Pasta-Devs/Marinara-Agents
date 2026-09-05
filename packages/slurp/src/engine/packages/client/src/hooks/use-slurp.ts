@@ -1874,6 +1874,32 @@ export function useUnlockSlurpMessage() {
   });
 }
 
+/** Write as the Creator, in your own words. */
+export function useSendSlurpCreatorReply() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (input: { creatorAccountId: string; personaId: string; viewerAccountId: string; content: string }) =>
+      api.post<{ message: SlurpMessage; thread: SlurpThread | null }>(
+        `/slurp/messages/creators/${encodeURIComponent(input.creatorAccountId)}/reply`,
+        input,
+      ),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: noodleKeys.noodlerRoot() }),
+  });
+}
+
+/** Have the Creator draft a reply. The model is the fallback, not the default. */
+export function useDraftSlurpCreatorReply() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (input: { creatorAccountId: string; personaId: string; threadId: string }) =>
+      api.post<{ message: SlurpMessage; thread: SlurpThread | null }>(
+        `/slurp/messages/creators/${encodeURIComponent(input.creatorAccountId)}/draft-reply`,
+        input,
+      ),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: noodleKeys.noodlerRoot() }),
+  });
+}
+
 export function useSendSlurpCreatorPpv() {
   const queryClient = useQueryClient();
   return useMutation({
