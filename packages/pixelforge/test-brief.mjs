@@ -33856,4 +33856,668 @@ const layoutFingerprint = (w) => {
   }
 }
 
+// ═══ THE WILDERNESS LATTICE — SLICE 2, WALKING IT (0.16) ════════════════════
+// Slice 1 built the country and proved it was the same country whichever order
+// it was compiled in. This is the half a player touches: stepping through an
+// edge, reloading in the woods, being told what is out there, and the write path
+// that a walk with no boundaries in it would otherwise turn into a flush storm.
+//
+// Every lane drives the SHIPPED machinery. The crossing goes through `sim.step`
+// rather than through `ensure`; the reload goes through `simFromSaved` and
+// `_rebuild`; the arrival goes through 90-element's own `_zoneChanged` and
+// 50-spatial's own drift arm; the governor goes through 60-save's real debounce
+// with a spy on top. Six lanes, and the two load-bearing ones are the two that
+// catch what this slice could silently get wrong: a session that ends in the
+// woods and reloads in the town square (lane 2), and a walk that writes the
+// whole chat shard once a cell (lane 6).
+{
+  const L = loadedPF.lattice;
+  const TUNE = L.TUNE;
+  const S = loadedPF.save;
+  const P = loadedPF.player;
+
+  /** A compiled world with a wilderness hanging off it. */
+  const wildWorld = (theme, seed, over) => {
+    const draft = loadedPF.brief.defaults(theme, seed);
+    Object.assign(draft, over ?? {});
+    const sealed = loadedPF.brief.validate(draft, { theme, seed });
+    const built = loadedPF.world.build(seed, theme, sealed);
+    assert.equal(built.brieved, true, `the fixture at ${theme}/${seed} compiled rather than degrading`);
+    return { world: built, sealed, meta: { pixelforgeBrief: sealed } };
+  };
+  const chunkIds = (w) => Object.keys(w.zones).filter((id) => L.parse(id));
+
+  /** The four inputs, so a lane says "walk north" rather than restating the
+   *  key map every time it wants to cross something. */
+  const PUSH = { N: { up: true }, E: { right: true }, S: { down: true }, W: { left: true } };
+
+  /** STAND ONE TILE INSIDE AN EDGE AND WALK INTO IT — through the real step
+   *  loop, at the real walk speed, one fixed frame at a time. Nothing here calls
+   *  `ensure`: a gate that never fires under a walking player is exactly the bug
+   *  a table read cannot see, which is the shipped `walkUntilCross`'s own
+   *  argument applied to the edge that has no record behind it. */
+  const walkOut = (sim, dir, ticks = 200) => {
+    const zone = sim.zone();
+    const gate = (zone.gates ?? []).find((g) => g.dir === dir);
+    assert.ok(gate, `${zone.id} has a ${dir} edge to walk into`);
+    const inset = L.insetOf(zone, gate);
+    sim.teleport(zone.id, inset.x, inset.y);
+    const from = zone.id;
+    for (let tick = 0; tick < ticks; tick++) {
+      const res = sim.step(1 / 60, PUSH[dir]);
+      if (res.zoneChanged) return { from, id: sim.zoneId, res, ticks: tick + 1 };
+    }
+    return { from, id: null, res: { zoneChanged: false }, ticks };
+  };
+
+  /** The frame loop's own arrival method, driven against a core of a lane's
+   *  choosing. It lives on 90-element's singleton core and touches nothing but
+   *  plain properties, so calling it with our core as `this` runs the SHIPPED
+   *  arrival rather than a copy of it — the same trick the visit-verb cases use,
+   *  and the reason the text pin below is about the LINE that calls it. */
+  const arrive = (core) => loadedPF.core._zoneChanged.call(core);
+
+  const makeCore = (chatId, sim, meta) => {
+    const toasts = [];
+    return {
+      chatId,
+      sim,
+      toasts,
+      host: { chatMeta: meta ?? {} },
+      hud: {
+        toast: (msg, kind) => toasts.push({ msg, kind: kind ?? "" }),
+        refreshChips() {},
+        questFilled() {},
+      },
+      markDirty() {
+        S.markDirty(this);
+      },
+    };
+  };
+
+  // ── 1. THE CROSSING, DRIVEN THROUGH THE STEP LOOP ─────────────────────────
+  // Materialization on the edge step, the arrival landing on the far side's own
+  // doorway, and the walk HOME — which is the transition an `ensure` that parsed
+  // before it looked would have refused, because the ids a gate names for the
+  // three anchored cells are `z1` and the brief's own wilds and none of them are
+  // cell ids at all. Then the refusal: a builder that throws leaves an inert
+  // tile the player walks away from, not a hole and not a frozen frame.
+  {
+    const { world: w } = wildWorld("cozy-village", 4242, { surround: "woods" });
+    const sim = new loadedPF.Sim(w);
+    const north = L.cellZoneId(w, 0, -1);
+    assert.ok(L.parse(north), "the cell north of the settlement is a cell and not an anchor");
+    assert.equal(w.zones[north], undefined, "…and nobody has compiled it yet");
+
+    const out = walkOut(sim, "N");
+    assert.equal(out.id, north, "walking into the settlement's north edge lands in the cell north of it");
+    assert.equal(out.res.zoneChanged, true, "…and the step says so");
+    assert.ok(w.zones[north], "the step materialized the cell it walked into");
+    const landing = L.arrivalFor(w.zones[north], "N");
+    assert.equal(playerTile(sim), `${landing.x},${landing.y}`, "the player stands on the far side's own doorway");
+    assert.equal(sim.zone().solid[landing.y * sim.zone().w + landing.x], 0, "…which is a tile they can stand on");
+
+    // THE SIGNPOST, one frame later — and one frame later is the point. The
+    // frame the player is standing ON a gate is the frame they leave through it,
+    // so an under-feet-only label would compute and never render; the reach is
+    // the record loop's own Manhattan one.
+    sim.step(1 / 60, {});
+    assert.equal(sim.nearGate?.dir, "S", "standing beside the doorway home, the sim knows which edge it is");
+    assert.equal(
+      L.gateLabel(w, sim.zone(), sim.nearGate),
+      `South — ${w.zones.z1.name}`,
+      "…and the sign names the settlement, because that is what is over there",
+    );
+    // AND THE OUTWARD SIGN NAMES COUNTRY NOBODY HAS COMPILED, which is the whole
+    // reason the label is a function of the cell rather than a read off a
+    // resident zone: a signpost that changed its mind when a neighbour was
+    // evicted would be worse than no signpost at all.
+    const east = (sim.zone().gates ?? []).find((g) => g.dir === "E");
+    const eastId = L.gateTargetId(w, sim.zone(), east);
+    assert.equal(w.zones[eastId], undefined, "the cell east of here does not exist yet");
+    const eastSign = L.gateLabel(w, sim.zone(), east);
+    assert.ok(eastSign.startsWith("East — "), `the outward sign gives a bearing (${eastSign})`);
+    assert.equal(eastSign, `East — ${L.ensure(w, eastId).name}`, "…and it was right about a place nothing had built");
+    assert.equal(L.gateLabel(w, sim.zone(), east), eastSign, "…and it says the same words now that it stands");
+
+    // THE WALK HOME, both kinds. Back south into the settlement, and — from a
+    // cell hanging off it — west into the brief's own wilds. Neither id is a
+    // cell id; both are resident; nothing is built for either.
+    const zonesBefore = Object.keys(w.zones).length;
+    const home = walkOut(sim, "S");
+    assert.equal(home.id, "z1", "walking back south is the walk home");
+    assert.equal(Object.keys(w.zones).length, zonesBefore, "…and it built nothing to get there");
+
+    const wilds = L.cellZoneId(w, 1, 0);
+    assert.ok(wilds && !L.parse(wilds), "this brief hung a wilds east of the settlement");
+    const outer = L.ensure(w, L.cellZoneId(w, 2, 0));
+    assert.ok(outer, "the cell beyond the wilds compiles");
+    sim.teleport(outer.id, outer.spawn.x, outer.spawn.y);
+    const built = Object.keys(w.zones).length;
+    const toWilds = walkOut(sim, "W");
+    assert.equal(toWilds.id, wilds, "walking west out of that cell arrives in the wilds the brief named");
+    assert.equal(Object.keys(w.zones).length, built, "…which was already standing, so nothing was built");
+
+    // THE REFUSAL. A builder that throws is contained at `ensure`, so the branch
+    // gets nothing back and the tile does nothing — and the STEP still finishes
+    // its frame, which is why the other proximity reads survive an inert edge.
+    const realSeal = loadedPF.world.prims.sealPockets;
+    const realWarn = console.warn;
+    const warned = [];
+    let refusedTicks = 0;
+    try {
+      console.warn = (...args) => warned.push(args.map(String).join(" "));
+      loadedPF.world.prims.sealPockets = () => {
+        throw new Error("pixelforge: a deliberately broken cell builder");
+      };
+      const wilderness = L.ensure(w, L.cellZoneId(w, 3, 0));
+      assert.equal(wilderness, null, "the fixture really did break the builder");
+      sim.teleport(outer.id, outer.spawn.x, outer.spawn.y);
+      const standing = Object.keys(w.zones).length;
+      const stuck = walkOut(sim, "E", 240);
+      refusedTicks = stuck.ticks;
+      assert.equal(stuck.id, null, "an edge whose far side will not compile moves nobody");
+      assert.equal(stuck.res.zoneChanged, false, "…and never claims it did");
+      assert.equal(sim.zoneId, outer.id, "the player is where they were");
+      assert.equal(Object.keys(w.zones).length, standing, "…and nothing half-built was installed");
+      // The frame still ran to the end: the other reads are recomputed rather
+      // than skipped, which is what "inert tile" means and "hole" would not.
+      assert.equal(sim.nearGate?.dir, "E", "the edge is still an edge — it simply does not go anywhere");
+      assert.equal(sim.nearNpc, null, "…and the rest of the frame's proximity reads still ran");
+    } finally {
+      loadedPF.world.prims.sealPockets = realSeal;
+      console.warn = realWarn;
+    }
+    assert.ok(refusedTicks >= 240, "the player really did keep walking into it, frame after frame");
+    assert.equal(warned.length, 1, "and the fault is loud exactly once, not once per frame");
+  }
+
+  // ── 2. THE RELOAD — a session that ended in the woods reloads in the woods ─
+  // The regression this slice exists to prevent. A cell is a cache fill rather
+  // than a zone the compiler built, so a save row naming one resolves to nothing
+  // on a freshly-built world — and the shipped arm for that drops the player at
+  // the start zone and discards the saved x/y ON PURPOSE. Both restore doors are
+  // driven, because `_rebuild` routes through the same one.
+  {
+    const { world: w, meta } = wildWorld("cozy-village", 5772, { surround: "fields" });
+    const standing = L.cellZoneId(w, 3, -1);
+    assert.ok(L.ensure(w, standing), "the cell the session ends in compiles");
+    const sim = new loadedPF.Sim(w);
+    sim.teleport(standing, 8, 9);
+    sim.day = 6;
+    sim.clockMin = 17 * 60 + 40;
+    const snap = S.snapshot({ sim, chatId: "chat-wild-reload" });
+    assert.equal(snap.zone, standing, "the envelope carries the cell id and nothing else about it");
+    assert.equal(snap.w, undefined, "…no tiles");
+    assert.equal(snap.zones, undefined, "…no zone list");
+
+    const back = S.simFromSaved(JSON.parse(JSON.stringify(snap)), meta, "chat-wild-reload");
+    assert.equal(back.zoneId, standing, "the reload lands in the cell the session ended in");
+    assert.equal(back.x, sim.x, "…at the x it was saved at, not at a spawn");
+    assert.equal(back.y, sim.y, "…and the y");
+    assert.notEqual(back.world, w, "…on a world that really was rebuilt from the seed");
+    assert.deepEqual(
+      Array.from(back.world.zones[standing].solid),
+      Array.from(w.zones[standing].solid),
+      "…and the cell came back the same country it was",
+    );
+
+    // FOUR WORKING GATES, walked. A rehydrated lone cell is the case the
+    // record-wiring design could not answer — no record exists to stand on, so
+    // the player would have been sealed in a box. Gates are arithmetic, so the
+    // cell that came back alone still has all four of them.
+    for (const dir of L.DIRS) {
+      back.teleport(standing, 8, 9);
+      const hop = walkOut(back, dir);
+      const cell = L.parse(standing);
+      const step = L.delta(dir);
+      assert.equal(
+        hop.id,
+        L.cellZoneId(back.world, cell.cx + step.cx, cell.cy + step.cy),
+        `the reloaded cell's ${dir} edge still leads where the arithmetic says`,
+      );
+    }
+
+    // AND THE OTHER DOOR. `_rebuild` is what a rewind and a world swap use, and
+    // it routes through the same restore — so it needs nothing of its own, which
+    // is a claim worth driving rather than asserting.
+    const core = makeCore("chat-wild-reload", back, meta);
+    S._rebuild(core, JSON.parse(JSON.stringify(snap)));
+    assert.equal(core.sim.zoneId, standing, "a rebuild lands in the woods too");
+    assert.equal(core.sim.x, sim.x, "…at the same tile");
+    S.reset();
+  }
+
+  // ── 3. A SAVE ROW NAMING SOMETHING ELSE ───────────────────────────────────
+  // The hostile-id list from slice 1's id lane, pushed through the RESTORE path
+  // rather than through `ensure` directly — because this is where a bad id would
+  // actually arrive, and because the shipped degrade for one is a behaviour
+  // (start zone, saved position discarded) rather than a return value.
+  {
+    const { world: w, meta } = wildWorld("cozy-village", 31337, { surround: "rocky" });
+    const clean = Object.keys(w.zones).length;
+    const row = (zone) => ({ v: 1, seed: 31337, theme: "cozy-village", zone, x: 200, y: 200, facing: 1 });
+    const hostile = [
+      "w_007_0",
+      "w_-0_0",
+      "w_1e3_0",
+      "w_1_0|x",
+      "__proto__",
+      "constructor",
+      "no-such-zone",
+      `w_${"9".repeat(4000)}_0`,
+      // CANONICAL, AND STILL REFUSED: (1,0) is spoken for by the brief's own
+      // wilds on this world, so `w_1_0` names a cell that already has a zone
+      // under another id. Building a second one would put a cell nobody can
+      // reach beside the wilds everybody can.
+      "w_1_0",
+    ];
+    for (const id of hostile) {
+      const sim = S.simFromSaved(row(id), meta, `chat-hostile-${id.slice(0, 12)}`);
+      assert.equal(sim.zoneId, sim.world.startZone, `"${id.slice(0, 20)}" degrades to the start zone`);
+      assert.equal(
+        playerTile(sim),
+        `${sim.world.zones[sim.world.startZone].spawn.x},${sim.world.zones[sim.world.startZone].spawn.y}`,
+        `…at its spawn, with the row's own x/y discarded`,
+      );
+      assert.equal(chunkIds(sim.world).length, 0, `…and "${id.slice(0, 20)}" materialized nothing`);
+      assert.equal(Object.keys(sim.world.zones).length, clean, "…so the world is the world the compiler built");
+    }
+    // …and the positive half, so the refusals above are not certifying a hook
+    // that refuses everything: a real cell id materializes EXACTLY one zone.
+    const good = S.simFromSaved(row(L.idFor(-2, 4)), meta, "chat-hostile-good");
+    assert.equal(good.zoneId, L.idFor(-2, 4), "a canonical cell this world speaks for is restored into");
+    assert.equal(chunkIds(good.world).length, 1, "…and exactly one cell was compiled to do it");
+  }
+
+  // ── 4. WHAT GETS WRITTEN DOWN, AND WHAT DOES NOT ──────────────────────────
+  // `player.found` is an eighty-row ledger shared with every discovery consumer
+  // there will ever be, and it evicts the oldest by day. A writer that filed
+  // every patch of heath would fill it with terrain inside a day's walking and
+  // then start evicting the ruin somebody found on day three — so only landmarks
+  // are written down, and the toast cadence follows the same rule: ordinary
+  // country is one notice, a landmark is two.
+  await withSavePath(async ({ tick }) => {
+    S.mode = "metadata";
+    const { world: w, meta } = wildWorld("cozy-village", 11, { surround: "woods" });
+    for (let cx = -3; cx <= 3; cx++) for (let cy = -3; cy <= 3; cy++) L.ensure(w, L.cellZoneId(w, cx, cy));
+    const cells = chunkIds(w);
+    const marked = cells.filter((id) => L.isLandmark(w.zones[id]));
+    const plain = cells.filter((id) => !L.isLandmark(w.zones[id]));
+    assert.ok(marked.length >= 3, `the sweep found landmarks to walk into (${marked.length}/${cells.length})`);
+    assert.ok(plain.length >= 3, `…and ordinary country to walk through (${plain.length})`);
+
+    const sim = new loadedPF.Sim(w);
+    const core = makeCore("chat-found", sim, meta);
+    const enterCell = (id) => {
+      const zone = w.zones[id];
+      sim.teleport(id, zone.spawn.x, zone.spawn.y);
+      core.toasts.length = 0;
+      arrive(core);
+      return core.toasts;
+    };
+    const rows = () => P.get(core)?.found?.zones ?? [];
+
+    const plainToasts = enterCell(plain[0]);
+    assert.equal(plainToasts.length, 1, "ordinary country is ONE notice — where you are, and nothing else");
+    assert.equal(plainToasts[0].kind, "location", "…on the top surface, clear of the narration panel");
+    assert.equal(rows().length, 0, "…and it is not written down");
+
+    const found = enterCell(marked[0]);
+    assert.equal(found.length, 2, "a landmark is TWO — where you are, and what you found");
+    assert.equal(found[0].kind, "location", "…the arrival at the top");
+    assert.equal(found[1].kind, "", "…and the discovery on the bottom surface, so neither lands on the other");
+    assert.equal(
+      found[1].msg,
+      `Found: ${w.zones[marked[0]].features[0].name}`,
+      "…naming the landmark rather than the cell",
+    );
+    assert.deepEqual(
+      rows(),
+      [{ p: marked[0], e: 0, d: 0, day: sim.day, seen: true }],
+      "exactly one row, at the surface depth the field actually means",
+    );
+
+    // RE-ENTRY UPSERTS AND SAYS NOTHING. You do not discover a place twice, and
+    // a row per visit would be a walk back and forth emptying the ledger.
+    const again = enterCell(marked[0]);
+    assert.equal(again.length, 1, "walking back in is an arrival, not a discovery");
+    assert.equal(rows().length, 1, "…and the ledger still holds one row for it");
+
+    // A SECOND LANDMARK IS A SECOND ROW — so the selectivity above is about
+    // terrain and not about the ledger having stopped accepting anything.
+    enterCell(marked[1]);
+    assert.equal(rows().length, 2, "another landmark is another row");
+    for (const id of plain.slice(0, 6)) enterCell(id);
+    assert.equal(rows().length, 2, "…while six more patches of country add none");
+
+    // AND THEY SURVIVE A REBUILD WITHOUT RE-TOASTING. The ledger rides the
+    // envelope; the cells are recompiled from the seed. A discovery that came
+    // back as news would be the ledger failing to mean anything across a reload.
+    const snap = S.snapshot(core);
+    S._rebuild(core, JSON.parse(JSON.stringify(snap)));
+    assert.equal(P.get(core).found.zones.length, 2, "the ledger came back through the envelope");
+    L.ensure(core.sim.world, marked[0]);
+    core.sim.teleport(marked[0], 2, 2);
+    core.toasts.length = 0;
+    arrive(core);
+    assert.equal(core.toasts.length, 1, "…so walking back in after a reload is an arrival and not news");
+    assert.equal(P.get(core).found.zones.length, 2, "…and writes no second row");
+    await tick();
+  });
+
+  // ── 4b. THE OTHER REAL ZONE-CHANGE CALLER ─────────────────────────────────
+  // 50-spatial's drift arm teleports the player when the GM narrates a move, and
+  // it never calls `_zoneChanged`. Hung off the frame loop alone, the lattice
+  // would never hear about it: the cell the GM moved the player OUT of would
+  // stay the most-recently-entered one for the rest of the session, and the
+  // residency order that reads it would be describing a walk that stopped
+  // happening. Driven through the shipped refresh, not asserted about.
+  {
+    const { world: w, meta } = wildWorld("cozy-village", 8181, { surround: "fields" });
+    const sim = new loadedPF.Sim(w);
+    const core = makeCore("chat-drift", sim, meta);
+    const prevGetSpatial = loadedPF.api.getSpatial;
+    try {
+      loadedPF.spatial.reset();
+      loadedPF.api.getSpatial = async () => ({
+        definition: { revision: 1 },
+        currentLocationId: "loc-town",
+        breadcrumb: [{ name: "Town" }],
+        destinations: [],
+      });
+      await loadedPF.spatial.refresh(core);
+      assert.equal(w.bindings["loc-town"], w.startZone, "the first location seen binds the settlement");
+
+      // The player walks out into the country, and the GM then narrates them
+      // somewhere else entirely.
+      const cell = L.ensure(w, L.cellZoneId(w, 2, 1));
+      sim.teleport(cell.id, cell.spawn.x, cell.spawn.y);
+      arrive(core);
+      assert.equal(w._entered.at(-1), cell.id, "the walked arrival is the most recent one");
+
+      const indoors = Object.keys(w.zones).find((id) => id !== w.startZone && !L.parse(id));
+      w.bindings["loc-elsewhere"] = indoors;
+      loadedPF.api.getSpatial = async () => ({
+        definition: { revision: 1 },
+        currentLocationId: "loc-elsewhere",
+        breadcrumb: [{ name: "Elsewhere" }],
+        destinations: [],
+      });
+      await loadedPF.spatial.refresh(core);
+      assert.equal(sim.zoneId, indoors, "the drift arm moved the player");
+      assert.equal(w._entered.at(-1), indoors, "…and the lattice heard about the arrival");
+      assert.equal(w._entered.at(-2), cell.id, "…so the cell they left is no longer the latest thing they did");
+    } finally {
+      loadedPF.api.getSpatial = prevGetSpatial;
+      loadedPF.spatial.reset();
+      S.reset();
+    }
+  }
+
+  // ── 5. THE PROSE BUDGET IS BOUNDED BY RARITY, NOT BY DISTANCE ─────────────
+  // A zone's flavor injects once on first entry and burns a permanent `intro`
+  // flag, and `intro.zones` has no cap. On a lattice with no edge that is the
+  // one place a walk could grow the save without limit — so ordinary country
+  // carries no flavor at all and the budget is a function of how many landmarks
+  // exist to find rather than of how far anybody walks.
+  {
+    const { world: w } = wildWorld("cozy-village", 90909, { surround: "barren" });
+    for (let cx = -3; cx <= 3; cx++) for (let cy = -3; cy <= 3; cy++) L.ensure(w, L.cellZoneId(w, cx, cy));
+    const cells = chunkIds(w);
+    const marked = cells.filter((id) => L.isLandmark(w.zones[id]));
+    const plain = cells.filter((id) => !L.isLandmark(w.zones[id]));
+    assert.ok(plain.length >= 20, `there is ordinary country in the sweep to walk through (${plain.length})`);
+    assert.ok(marked.length >= 1, `…and something worth walking to (${marked.length})`);
+
+    const sim = new loadedPF.Sim(w);
+    const visit = (id) => {
+      sim.teleport(id, w.zones[id].spawn.x, w.zones[id].spawn.y);
+      const prefix = sim.composePrefix(null);
+      sim.commitIntro();
+      return prefix;
+    };
+    for (const id of plain.slice(0, 20)) {
+      const prefix = visit(id);
+      assert.ok(!prefix.includes(`[${w.zones[id].name}:`), `${id} is ordinary country and injects nothing`);
+    }
+    assert.equal(Object.keys(sim.intro.zones).length, 0, "twenty cells of country cost the prose budget nothing");
+
+    let flavorBytes = 0;
+    for (const id of marked) {
+      const prefix = visit(id);
+      assert.ok(prefix.includes(`[${w.zones[id].name}:`), `${id} lands its one line on first entry`);
+      assert.ok(w.zones[id].flavor.length <= TUNE.FLAVOR_MAX_CHARS, `…which is bounded (${id})`);
+      flavorBytes += w.zones[id].flavor.length;
+      assert.equal(visit(id).includes(`[${w.zones[id].name}:`), false, "…and never a second time");
+    }
+    assert.equal(
+      Object.keys(sim.intro.zones).length,
+      marked.length,
+      "one entry per landmark, and one per landmark only",
+    );
+    // The docs row's number, measured rather than estimated.
+    console.log(
+      `pixelforge 0.16 lattice: ${marked.length}/${cells.length} cells carry prose; ` +
+        `${flavorBytes} flavor bytes, ${JSON.stringify(sim.intro.zones).length} serialized intro bytes`,
+    );
+  }
+
+  // ── 6. THE WRITE GOVERNOR ─────────────────────────────────────────────────
+  // Every zone entry arms a whole-shard write today, which is fine for a world
+  // where crossing a boundary is an event. Out in the lattice it is what walking
+  // IS: a boundary every six to eight seconds, each one a full snapshot PUT plus
+  // a metadata PATCH over a store that re-serializes the chat's whole shard.
+  //
+  // The fix is one line, and it is deliberately NOT a second leash: a cell-to-
+  // cell step writes nothing event-shaped and rides the thirty-second positional
+  // autosave the frame loop already runs. So this lane drives the real debounce
+  // with a spy on top rather than testing the predicate and calling it a day —
+  // an inert leash that never held anything is exactly what the earlier design
+  // shipped past its own review.
+  await withSavePath(async ({ calls, armed, tick }) => {
+    const { world: w, meta } = wildWorld("cozy-village", 606, { surround: "woods" });
+    const sim = new loadedPF.Sim(w);
+    const core = makeCore("chat-governor", sim, meta);
+    const realMarkDirty = S.markDirty;
+    const marks = [];
+    // "A flush landed" is one write of the save envelope, whichever door this
+    // mode uses — the metadata PATCH here, a route PUT elsewhere — so the lane
+    // counts the envelope rather than a transport.
+    const saves = () => calls.filter((c) => c.kind === "put" || (c.kind === "patch" && c.patch?.pixelforge)).length;
+    const fresh = () => {
+      S.reset();
+      S.mode = "metadata";
+      marks.length = 0;
+      armed.length = 0;
+    };
+    try {
+      S.markDirty = function (c) {
+        marks.push(c?.sim?.zoneId ?? null);
+        return realMarkDirty.call(this, c);
+      };
+
+      // A LANDMARK IS AN EVENT AND WRITES ON PURPOSE — the first entry files the
+      // row, and a later one refreshes the day it was last seen, which is what
+      // keeps it from being the oldest thing in an eighty-row ledger. So every
+      // leg below subtracts the ledger's own writes and holds the WALKING to the
+      // remainder, rather than assuming a landmark-free route and being true
+      // only at the seed it was written against.
+      const foundRows = () => (P.get(core)?.found?.zones ?? []).length;
+      const ledgerWrites = (id) => (L.isLandmark(w.zones[id]) ? 1 : 0);
+
+      // LEAVING TOWN IS AN EVENT, and it keeps the write it always had.
+      fresh();
+      const out = walkOut(sim, "N");
+      assert.ok(L.parse(out.id), "the walk out of the settlement lands in the country");
+      arrive(core);
+      assert.equal(
+        marks.length - ledgerWrites(out.id),
+        1,
+        "stepping out of the settlement writes, exactly as it always did",
+      );
+      assert.equal(armed.length, 1, "…arming the shipped debounce");
+      assert.equal(armed[0].ms, 2500, "…at its shipped 2.5 seconds");
+
+      // AND THEN THE WALK IS FREE. Forty cell-to-cell crossings, driven through
+      // the real step loop and the real arrival method.
+      fresh();
+      const CROSSINGS = 40;
+      let discovered = 0;
+      let ledgered = 0;
+      let quested = 0;
+      for (let i = 0; i < CROSSINGS; i++) {
+        const wroteBefore = marks.length;
+        const knewBefore = foundRows();
+        const hop = walkOut(sim, "E");
+        assert.ok(L.parse(hop.from) && L.parse(hop.id), `crossing ${i} is country to country (${hop.from}→${hop.id})`);
+        arrive(core);
+        discovered += foundRows() - knewBefore;
+        ledgered += ledgerWrites(hop.id);
+        assert.equal(
+          marks.length - wroteBefore,
+          ledgerWrites(hop.id),
+          `crossing ${i} wrote exactly what the ledger asked for and not a byte more (${hop.id})`,
+        );
+        if (i === CROSSINGS / 2) {
+          // ONE EVENT MID-WALK — a quest settling, a line of dialogue, anything
+          // that is not the walking itself. It flushes on the shipped debounce,
+          // because the walk is holding no timer for it to queue behind.
+          while (armed.length) armed.shift().fn();
+          await tick();
+          const before = saves();
+          const wroteBefore = marks.length;
+          // A REAL EVENT, not a bare `markDirty`: a line filed in the journal is
+          // what a quest settling or a conversation actually does to the
+          // envelope, and a write with nothing new in it would be deduped by the
+          // flush's own caches — which would make this leg pass for the wrong
+          // reason.
+          assert.equal(
+            P.log(core, "A traveller passes on the road.", sim.day, S._gen ?? 0),
+            true,
+            "the mid-walk event really was filed",
+          );
+          quested += marks.length - wroteBefore;
+          assert.equal(armed.length, 1, "an event mid-walk arms the debounce it always armed");
+          assert.equal(armed[0].ms, 2500, "…at 2.5 seconds, not behind a walk's backoff");
+          armed.shift().fn();
+          await tick();
+          assert.equal(saves(), before + 1, "…and it lands");
+        }
+      }
+      assert.ok(discovered > 0, `the walk really did pass things worth finding (${discovered})`);
+      assert.equal(
+        marks.length,
+        ledgered + quested,
+        `forty crossings wrote nothing of their own (${marks.length - ledgered - quested} stray writes)`,
+      );
+      assert.ok(
+        ledgered < CROSSINGS / 2,
+        `…and most of the walk really was silent (${CROSSINGS - ledgered} of ${CROSSINGS} crossings)`,
+      );
+
+      // WALKING BACK IN IS AN EVENT AGAIN. The exemption is about the country,
+      // not about the player having been in it.
+      fresh();
+      const doorstep = L.ensure(w, L.cellZoneId(w, 0, -1));
+      sim.teleport(doorstep.id, doorstep.spawn.x, doorstep.spawn.y);
+      const back = walkOut(sim, "S");
+      assert.equal(back.id, w.startZone, "walking south off the doorstep cell is walking back into the settlement");
+      arrive(core);
+      assert.equal(marks.length, 1, "arriving back in a named place writes");
+
+      // A FORCED WRITE IS NOT DELAYED BY THE WALK, because the walk never holds
+      // the shared timer the rewind corrective would otherwise queue behind.
+      fresh();
+      // A teleport is an arrival like any other, so it is registered before the
+      // counting starts — otherwise the walk's first step would be measured as a
+      // step out of wherever the player was standing three legs ago, which is
+      // exactly what the predicate is supposed to notice.
+      sim.teleport(doorstep.id, doorstep.spawn.x, doorstep.spawn.y);
+      arrive(core);
+      fresh();
+      let ledgeredAgain = 0;
+      for (let i = 0; i < 4; i++) {
+        const hop = walkOut(sim, "E");
+        arrive(core);
+        ledgeredAgain += ledgerWrites(hop.id);
+      }
+      assert.equal(armed.length, ledgeredAgain ? 1 : 0, "four more crossings hold a timer only for the ledger");
+      // Whatever a discovery legitimately armed is spent first, so the force is
+      // measured against an idle timer rather than against shipped coalescing.
+      while (armed.length) armed.shift().fn();
+      await tick();
+      S._forceWrite = true;
+      S.markDirty(core);
+      assert.equal(armed.length, 1, "a forced write arms immediately");
+      assert.equal(armed[0].ms, 2500, "…on the shipped debounce and not on a backoff rung");
+      const before = saves();
+      armed.shift().fn();
+      await tick();
+      assert.equal(saves(), before + 1, "…and lands");
+    } finally {
+      S.markDirty = realMarkDirty;
+      S._forceWrite = false;
+      S.reset();
+    }
+  });
+
+  // ── 6b. THE PREDICATE, AND THE TWO LINES IT HANGS OFF ─────────────────────
+  // `isChunkCrossing` is pure and total: two ids in, a boolean out, no world and
+  // no side effects. And the join between it and the frame loop is text-pinned,
+  // because the loop it lives in is a `requestAnimationFrame` closure that wants
+  // a page — the same honest instrument the visit verb's own arrival uses, and
+  // for the same reason: it catches the deletion, it cannot catch a rewrite that
+  // keeps the words, and prettier is what keeps the shape stable.
+  {
+    const CASES = [
+      [L.idFor(1, 1), L.idFor(2, 1), true, "country to country"],
+      [L.idFor(-4, 7), L.idFor(-4, 8), true, "…in any direction"],
+      ["z1", L.idFor(0, -1), false, "leaving the settlement"],
+      [L.idFor(0, -1), "z1", false, "coming back to it"],
+      ["z3", L.idFor(2, 0), false, "leaving a place the brief named"],
+      [null, L.idFor(0, -1), false, "the first arrival of a session"],
+      [L.idFor(1, 1), L.idFor(1, 1), false, "standing still is not a crossing"],
+      ["h5", "h5u", false, "and a staircase is not one either"],
+      ["w_007_0", L.idFor(7, 0), false, "an id that is not canonical is not a cell"],
+      [undefined, undefined, false, "and nothing at all is nothing at all"],
+    ];
+    for (const [from, to, want, why] of CASES) {
+      assert.equal(L.isChunkCrossing(from, to), want, why);
+      assert.equal(L.isChunkCrossing(from, to), want, `…and asking twice is the same answer (${why})`);
+    }
+
+    const element = readFileSync(join(here, "src", "90-element.js"), "utf8");
+    assert.match(
+      element,
+      /if \(!PF\.lattice\.isChunkCrossing\(entered\.from, entered\.id\)\) PF\.save\.markDirty\(this\);/,
+      "the frame loop's arrival writes through the predicate rather than unconditionally",
+    );
+    assert.match(
+      element,
+      /const entered = PF\.lattice\.enter\(this, sim\.zoneId\);/,
+      "…off the arrival bookkeeping both zone-change callers run",
+    );
+    assert.match(
+      readFileSync(join(here, "src", "50-spatial.js"), "utf8"),
+      /PF\.lattice\.enter\(core, zoneId\);/,
+      "and the drift arm runs it too",
+    );
+
+    // THE GOVERNOR THE EXEMPTION HANDS THE WALK TO. Its period lives in a raf
+    // closure where a module-level constant could never reach `PF`, so the lane
+    // reads the literal out of the source rather than restating it — a retune
+    // moves both together or fails here.
+    const governor = element.match(/t - this\._lastPosSave > ([\d_]+)/);
+    assert.ok(governor, "the positional autosave governor is still where the exemption leans on it");
+    const period = Number(governor[1].replace(/_/g, ""));
+    assert.equal(period, 30_000, "…at thirty seconds");
+    assert.equal(
+      Math.ceil((20 * 60 * 1000) / period),
+      40,
+      "so a twenty-minute walk is at most forty positional writes, where every crossing writing would be ~150",
+    );
+  }
+}
+
 console.log("brief validator + compiler: all cases passed");
