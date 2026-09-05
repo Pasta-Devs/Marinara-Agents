@@ -1,5 +1,9 @@
 # Slurp release notes
 
+## 1.1.20 — 2026-09-06
+
+- Stories now have a distinct Home shelf and an Add Story action that opens the Story composer directly.
+
 ## 1.1.19 — 2026-09-05
 
 - Stopped writing a warning to the log every time Slurp is opened on an Engine that cannot hold its newer tables.

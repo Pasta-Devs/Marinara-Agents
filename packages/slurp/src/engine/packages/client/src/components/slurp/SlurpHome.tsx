@@ -1425,6 +1425,12 @@ export function SlurpHome({ navigation, onNavigate }: SlurpHomeProps) {
     }
     setMobileDrawerOpen(false);
   };
+  const openStoryComposer = () => {
+    if (mainAuthorProfile) {
+      updateNoodlerPostDraft(mainAuthorProfile.id, { postType: "story", poll: null, title: "" });
+    }
+    openPostComposer();
+  };
 
   const shellProps = {
     appMode: "slurp" as const,
@@ -2336,6 +2342,7 @@ export function SlurpHome({ navigation, onNavigate }: SlurpHomeProps) {
         onTabChange={setFeedTab}
         onToggleFollow={toggleCreatorFollow}
         authorProfile={accountsQuery.isSuccess ? mainAuthorProfile : null}
+        onAddStory={openStoryComposer}
         onOpenAuthorProfile={
           mainAuthorProfile
             ? () => onNavigate({ mode: "creator", view: "profile", accountId: mainAuthorProfile.id })
@@ -3464,7 +3471,7 @@ function StageProfileView({
   const bannerSrc = useSlurpMediaSrc(profile.bannerUrl, { width: 1280 });
   const [accessSettingsOpen, setAccessSettingsOpen] = useState(false);
   const [automationOpen, setAutomationOpen] = useState(false);
-  const [creatorToolsOpen, setCreatorToolsOpen] = useState(false);
+  const [creatorToolsOpen, setCreatorToolsOpen] = useState(draft.postType === "story");
   const updateAutoPosting = useUpdateNoodlerAutoPosting();
   const updateFanActivity = useUpdateNoodlerFanActivity();
   const tipCreator = useTipSlurpCreator();
@@ -4506,6 +4513,7 @@ function ViewerHub({
   onTabChange,
   onToggleFollow,
   authorProfile,
+  onAddStory,
   onOpenAuthorProfile,
   onToggleSubscription,
   togglePending,
@@ -4547,6 +4555,7 @@ function ViewerHub({
   onTabChange: (tab: "following" | "all") => void;
   onToggleFollow: (creatorAccountId: string, followed: boolean) => void;
   authorProfile: NoodlerManagedStageProfile | null;
+  onAddStory: () => void;
   /** Open the persona's own Creator profile from the empty feed. */
   onOpenAuthorProfile?: () => void;
   onToggleSubscription: (creatorAccountId: string, subscribed: boolean) => void;
@@ -4866,7 +4875,13 @@ function ViewerHub({
       </div>
       {/* Part of the page, not the bar: the strip belongs to Home, so it stays put while the
           sticky header does its own hide-on-scroll dance above it. */}
-      <SlurpMomentsShelf moments={moments} newSinceAt={newSinceAt} onOpenMoment={setActiveMomentId} embedded />
+      <SlurpMomentsShelf
+        moments={moments}
+        newSinceAt={newSinceAt}
+        onOpenMoment={setActiveMomentId}
+        onAddStory={onAddStory}
+        embedded
+      />
       <div className="hidden border-b border-[var(--noodle-divider)] py-3 @min-[1024px]:block @min-[1024px]:px-4 @min-[1280px]:hidden">
         <SubscriptionSections
           creators={(scope?.creators ?? []).filter(
@@ -5479,11 +5494,13 @@ function SlurpMomentsShelf({
   moments,
   newSinceAt,
   onOpenMoment,
+  onAddStory,
   embedded = false,
 }: {
   moments: SlurpMoment[];
   newSinceAt: string | null;
   onOpenMoment: (postId: string) => void;
+  onAddStory?: () => void;
   embedded?: boolean;
 }) {
   const { t: localizeUi } = useUiTranslation();
@@ -5508,24 +5525,32 @@ function SlurpMomentsShelf({
       className={cn(
         "relative isolate overflow-hidden",
         embedded
-          ? "bg-[var(--slurp-canvas)] pb-1 after:pointer-events-none after:absolute after:inset-x-0 after:bottom-0 after:h-6 after:bg-[linear-gradient(to_bottom,transparent,var(--slurp-canvas))] after:content-[''] @min-[1024px]:bg-[linear-gradient(180deg,color-mix(in_srgb,var(--noodle-accent)_5%,transparent),transparent)]"
+          ? "border-b border-[var(--noodle-divider)] bg-[linear-gradient(120deg,color-mix(in_srgb,var(--noodle-accent)_7%,var(--slurp-surface-raised)),color-mix(in_srgb,var(--slurp-violet)_5%,var(--slurp-surface)))] py-3 shadow-[0_12px_28px_-26px_rgba(0,0,0,0.9)]"
           : "mx-3 mt-3 rounded-xl bg-[linear-gradient(145deg,var(--slurp-surface-raised),color-mix(in_srgb,var(--noodle-accent)_7%,var(--slurp-canvas)))] py-4 shadow-[var(--slurp-shadow-floating)] ring-1 ring-inset ring-[var(--noodle-divider)] sm:mx-4",
       )}
     >
-      <div className={cn("flex items-end justify-between gap-3 px-4", embedded && "@min-[1024px]:px-5")}>
+      <div className={cn("flex items-start justify-between gap-3 px-4", embedded && "@min-[1024px]:px-5")}>
         <div>
           <h2 id="slurp-moments-heading" className="text-sm font-bold tracking-tight">
             {localizeUi("ui.slurp.moments.title")}
           </h2>
-          {!embedded && (
-            <p className="mt-0.5 text-xs text-[var(--muted-foreground)]">{localizeUi("ui.slurp.moments.detail")}</p>
-          )}
+          <p className="mt-0.5 text-xs text-[var(--muted-foreground)]">{localizeUi("ui.slurp.moments.detail")}</p>
         </div>
+        {onAddStory && (
+          <button
+            type="button"
+            onClick={onAddStory}
+            className="flex min-h-10 shrink-0 items-center gap-1.5 rounded-lg bg-[var(--noodle-accent)] px-3 text-xs font-black text-zinc-950 shadow-[var(--slurp-shadow-raised)] transition-[opacity,transform] hover:opacity-90 active:scale-[0.96] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--slurp-focus)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--slurp-surface)] motion-reduce:transition-none motion-reduce:active:scale-100"
+          >
+            <Plus size={15} aria-hidden="true" />
+            {localizeUi("ui.slurp.moments.add")}
+          </button>
+        )}
       </div>
       <div
         className={cn(
           "flex snap-x gap-3 overflow-x-auto px-4 pb-1 pe-12 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden @min-[1024px]:px-5",
-          embedded ? "mt-1" : "mt-3",
+          "mt-3",
         )}
       >
         {creatorMoments.length === 0 ? (
@@ -5802,7 +5827,7 @@ function NoodlerPostComposer({
   guidePending: boolean;
 }) {
   const { t: localizeUi } = useUiTranslation();
-  const [expanded, setExpanded] = useState(false);
+  const [expanded, setExpanded] = useState(draft.postType === "story");
   const [postError, setPostError] = useState<string | null>(null);
   const [guideError, setGuideError] = useState<string | null>(null);
   const [activeTool, setActiveTool] = useState<NoodlerComposerTool | null>(null);

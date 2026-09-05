@@ -33,6 +33,7 @@
   "ui.slurp.settings.inlinePromotionsDetail": "Creator 게시물 사이에 작은 가상 광고를 표시합니다.",
   "ui.slurp.moments.title": "스토리",
   "ui.slurp.moments.detail": "최근 24시간 동안 공유된 크리에이터 스토리입니다.",
+  "ui.slurp.moments.add": "스토리 추가",
   "ui.slurp.moments.empty": "아직 새로운 스토리가 없습니다. 새 스토리는 24시간 동안 여기에 표시됩니다.",
   "ui.slurp.moments.open": "{{name}}의 스토리 열기",
   "ui.slurp.moments.new": "새로움",
