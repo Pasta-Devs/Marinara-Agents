@@ -36,6 +36,12 @@
     "slurp": {
       "versions": [
         {
+          "version": "1.1.5",
+          "date": "2026-09-05",
+          "notes": "- The audience is a real crowd instead of twelve fixed accounts. Fans are\n  generated with their own handles, habits, and spending, and the people who\n  keep showing up recur so you start to recognise them. New faces arrive and\n  quiet ones drift away, so the same names do not answer everything forever.\n- Fans now ask you for things. Somebody may request a commission or leave a\n  question under a recent post, and it waits until you answer it.\n- Your audience is counted, not invented. Following, subscribing, tipping, and\n  unlocking move a person closer to a Creator, and losing subscribers now costs\n  real reach. Your Creator home shows who is showing up, what they have spent,\n  and how they behave.\n- The world moves between visits. It advances a few times a day and again when\n  you open Slurp, and it never spends model tokens while nobody is watching.",
+          "highlight": false
+        },
+        {
           "version": "1.1.4",
           "date": "2026-09-05",
           "notes": "- Notifications now appear in the desktop navigation with their unread count and\n  selected state, matching the mobile menu.\n- Leaving Notifications through any Slurp navigation control now clears the\n  unread badge. Activity rows that have nowhere to go no longer pretend to be\n  buttons.",

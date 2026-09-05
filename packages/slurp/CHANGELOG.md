@@ -1,5 +1,20 @@
 # Slurp release notes
 
+## 1.1.5 — 2026-09-05
+
+- The audience is a real crowd instead of twelve fixed accounts. Fans are
+  generated with their own handles, habits, and spending, and the people who
+  keep showing up recur so you start to recognise them. New faces arrive and
+  quiet ones drift away, so the same names do not answer everything forever.
+- Fans now ask you for things. Somebody may request a commission or leave a
+  question under a recent post, and it waits until you answer it.
+- Your audience is counted, not invented. Following, subscribing, tipping, and
+  unlocking move a person closer to a Creator, and losing subscribers now costs
+  real reach. Your Creator home shows who is showing up, what they have spent,
+  and how they behave.
+- The world moves between visits. It advances a few times a day and again when
+  you open Slurp, and it never spends model tokens while nobody is watching.
+
 ## 1.1.4 — 2026-09-05
 
 - Notifications now appear in the desktop navigation with their unread count and
