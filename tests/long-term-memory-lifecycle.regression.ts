@@ -306,6 +306,8 @@ async function main() {
         second: "10000000-0000-4000-8000-000000000012",
         recovery: "10000000-0000-4000-8000-000000000013",
         merge: "10000000-0000-4000-8000-000000000014",
+        single: "10000000-0000-4000-8000-000000000015",
+        blank: "10000000-0000-4000-8000-000000000016",
       };
       const reviewMutationIds = {
         first: "10000000-0000-4000-8000-000000000021",
@@ -420,6 +422,7 @@ async function main() {
           },
         };
       };
+      const singleDraftTitle = `Single-source-mobile-memory-${"x".repeat(300)}`;
       let reviewSources: any[] = [
         {
           sourceNoteId: "source_mobile_recovery",
@@ -427,7 +430,7 @@ async function main() {
           drafts: [
             {
               draft: {
-                ...makeReviewDraft(reviewDraftIds.recovery),
+                ...makeReviewDraft(reviewDraftIds.recovery, undefined, "Mobile recovery draft"),
                 source: {
                   sourceNoteId: "source_mobile_recovery",
                   chatId: "chat-a",
@@ -440,6 +443,50 @@ async function main() {
                   message: "No mutation survived extraction.",
                 },
               ],
+              diagnostics: [],
+              candidateRejections: [],
+              deduplications: [],
+            },
+          ],
+          targets: [],
+        },
+        {
+          sourceNoteId: "source_mobile_single",
+          modes: ["roleplay"],
+          drafts: [
+            {
+              draft: {
+                ...makeReviewDraft(reviewDraftIds.single, undefined, singleDraftTitle),
+                summary: singleDraftTitle,
+                source: {
+                  sourceNoteId: "source_mobile_single",
+                  chatId: "chat-a",
+                },
+              },
+              freshness: "fresh",
+              blockReasons: [],
+              diagnostics: [],
+              candidateRejections: [],
+              deduplications: [],
+            },
+          ],
+          targets: [],
+        },
+        {
+          sourceNoteId: "source_mobile_blank",
+          modes: ["roleplay"],
+          drafts: [
+            {
+              draft: {
+                ...makeReviewDraft(reviewDraftIds.blank),
+                summary: " \t",
+                source: {
+                  sourceNoteId: "source_mobile_blank",
+                  chatId: "chat-a",
+                },
+              },
+              freshness: "fresh",
+              blockReasons: [],
               diagnostics: [],
               candidateRejections: [],
               deduplications: [],
@@ -871,6 +918,36 @@ async function main() {
               keywords: [],
               links: [],
               sections: { source: { text: "Mobile recovery source text.", updatedAt: noteTimestamp } },
+              createdAt: noteTimestamp,
+              updatedAt: noteTimestamp,
+              version: 1,
+            },
+            {
+              id: "source_mobile_single",
+              title: "Single-draft mobile source",
+              type: "source",
+              status: "active",
+              modes: ["roleplay"],
+              scope: {},
+              tags: [],
+              keywords: [],
+              links: [],
+              sections: { source: { text: "Single-draft mobile source text.", updatedAt: noteTimestamp } },
+              createdAt: noteTimestamp,
+              updatedAt: noteTimestamp,
+              version: 1,
+            },
+            {
+              id: "source_mobile_blank",
+              title: "Blank-summary mobile source",
+              type: "source",
+              status: "active",
+              modes: ["roleplay"],
+              scope: {},
+              tags: [],
+              keywords: [],
+              links: [],
+              sections: { source: { text: "Blank-summary mobile source text.", updatedAt: noteTimestamp } },
               createdAt: noteTimestamp,
               updatedAt: noteTimestamp,
               version: 1,
@@ -1691,7 +1768,48 @@ async function main() {
       assert.equal(availabilityPatches.length, 1);
       await page.getByRole("button", { name: "Cancel" }).click();
       await page.locator('[data-ltm-navigation="desktop"] [data-ltm-destination="review"]').click();
-      await page.locator('[data-ltm-review-source-select="source_mobile_review"]').click();
+      const recoverySource = page.locator('[data-ltm-review-source-select="source_mobile_recovery"]');
+      if ((await recoverySource.getAttribute("aria-expanded")) !== "true") await recoverySource.click();
+      const recoveryDraft = page.locator(`[data-ltm-review-draft-select="${reviewDraftIds.recovery}"]`);
+      await recoveryDraft.waitFor();
+      assert.match(await recoveryDraft.innerText(), /Mobile recovery draft summary/u);
+      assert.doesNotMatch(await recoveryDraft.innerText(), /Draft 1/u);
+      const singleSource = page.locator('[data-ltm-review-source-select="source_mobile_single"]');
+      await singleSource.click();
+      const singleDraft = page.locator(`[data-ltm-review-draft-select="${reviewDraftIds.single}"]`);
+      await singleDraft.waitFor();
+      assert.match(await singleDraft.innerText(), /Single-source-mobile-memory-/u);
+      assert.doesNotMatch(await singleDraft.innerText(), /Draft 1/u);
+      await singleDraft.click();
+      await page.setViewportSize({ width: 390, height: 844 });
+      assert.equal(await page.locator("[data-ltm-review-draft-title]").innerText(), singleDraftTitle);
+      assert.equal(
+        await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth),
+        true,
+      );
+      await page.setViewportSize({ width: 1280, height: 900 });
+      const blankSource = page.locator('[data-ltm-review-source-select="source_mobile_blank"]');
+      await blankSource.click();
+      const blankDraft = page.locator(`[data-ltm-review-draft-select="${reviewDraftIds.blank}"]`);
+      await blankDraft.waitFor();
+      assert.equal(await blankDraft.innerText(), "No draft summary.\n0\nFresh");
+      await blankDraft.click();
+      assert.equal(await page.locator("[data-ltm-review-draft-title]").innerText(), "No draft summary.");
+      const reviewSource = page.locator('[data-ltm-review-source-select="source_mobile_review"]');
+      await reviewSource.click();
+      const reviewDraftRows = page.locator(
+        `#ltm-review-source-panel-source_mobile_review [data-ltm-review-draft-select]`,
+      );
+      await reviewDraftRows.first().waitFor();
+      assert.equal(await reviewDraftRows.count(), 3);
+      const reviewDraftRowText = await reviewDraftRows.allInnerTexts();
+      for (const title of [
+        "First mobile review memory",
+        "Second mobile review memory summary",
+        "Merge proposed mobile memory",
+      ])
+        assert.equal(reviewDraftRowText.filter((text) => text.includes(title)).length, 1);
+      assert.ok(reviewDraftRowText.every((text) => !/Draft 1/u.test(text)));
       await page
         .locator(`[data-ltm-review-mutation="${reviewMutationIds.first}"] [data-ltm-review-mutation-toggle]`)
         .click();
@@ -2246,7 +2364,14 @@ async function main() {
       await page.locator("[data-ltm-review-draft-title]").waitFor();
       assert.equal(
         await page.locator("[data-ltm-review-draft-title]").innerText(),
-        "Source note: Mobile review source",
+        "Second mobile review memory summary",
+      );
+      assert.equal(
+        await page
+          .locator('[data-ltm-workspace-pane="workbench"]')
+          .getByText("Source note: Mobile review source", { exact: true })
+          .count(),
+        1,
       );
       const reviewText = await page.locator('[data-ltm-workspace-pane="workbench"]').innerText();
       assert.match(reviewText, /Second mobile review memory/u);
