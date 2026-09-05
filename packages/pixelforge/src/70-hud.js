@@ -2669,8 +2669,11 @@ PF.Hud = class {
         // The signpost is proximity-driven too, and it is a TOPBAR chip — which
         // the gate hides for free but dialogue mode does not. Leaving walk mode
         // takes it down here and the walk block decides when it comes back.
+        // Its memo is `_signpost` and NOT `_gate`: the field above belongs to the
+        // loading gate's own reconcile, and a second owner writing an edge key
+        // into it would defeat both memos every frame.
         this.gateChip.style.display = "none";
-        this._gate = null;
+        this._signpost = null;
       }
       // THE PANEL OPENERS, on the berth button's cadence and for a reason of
       // their own: the gate hides the whole topbar, but the topbar STAYS UP in
@@ -2890,10 +2893,14 @@ PF.Hud = class {
       // and a name-book read and there is no reason to pay them sixty times a
       // second for a player standing still at a gate. Which edge they are at is
       // the only thing that can change what the sign says.
+      // The memo has a name of its own for a reason: `_gate` is the loading
+      // gate's, written and read by the mode reconcile at the top of this method,
+      // and sharing it would have left both fields holding the other machine's
+      // answer on every frame either one ran.
       const gateNear = sim.nearGate;
-      const gateKey = gateNear ? `${sim.zoneId}|${gateNear.dir}` : "";
-      if (gateKey !== this._gate) {
-        this._gate = gateKey;
+      const signpostKey = gateNear ? `${sim.zoneId}|${gateNear.dir}` : "";
+      if (signpostKey !== this._signpost) {
+        this._signpost = signpostKey;
         const label = gateNear ? PF.lattice.gateLabel(sim.world, sim.zone(), gateNear) : "";
         this.gateChip.style.display = label ? "" : "none";
         if (label) this.gateChip.textContent = label;
