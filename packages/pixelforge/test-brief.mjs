@@ -31970,6 +31970,14 @@ const fire = (node, type) => Promise.all((node.listeners[type] ?? []).map((fn) =
       );
       assert.equal(S.RETRY_COPY.confirmCascadeTitle, "Move into the new world?");
       assert.equal(S.RETRY_COPY.confirmCascadeGo, "Yes, take me there");
+      // …AND THE FREE SHAPE'S THREE, for the same reason and with the same
+      // weight: it replaces the world exactly as permanently as the priced ones.
+      assert.equal(S.RETRY_COPY.confirmFreeTitle, "Build this world again?");
+      assert.equal(S.RETRY_COPY.confirmFreeGo, "Yes, build it");
+      assert.equal(
+        S.RETRY_COPY.costFree,
+        "This builds the world again from the setting you already have — no generation call, same setting, same seed.",
+      );
       assert.equal(
         S.RETRY_COPY.costCascade,
         "Your setting was already written again and stored, so this doesn't write it a second time. One generation call fills in what the new world's people say, and then you arrive there.",
@@ -32530,11 +32538,17 @@ const fire = (node, type) => Promise.all((node.listeners[type] ?? []).map((fn) =
       );
       assert.ok(asked.includes(S.RETRY_COPY.keepsAndLoses), "…carrying the keeps-and-loses contract, whole");
 
-      // "NOT NOW" IS A REAL WAY OUT, and it costs nothing to have looked.
+      // "NOT NOW" IS A REAL WAY OUT, and it costs nothing to have looked. The
+      // settle is what makes that an assertion rather than a hope: the counter
+      // is incremented several awaits downstream of the handler, so a decline
+      // that quietly STARTED the press it was declining reads as zero in the
+      // click's own microtask and is only visible once the dispatch has landed.
       const back = walkNodes(hud.retryBody).find((node) => node.textContent === S.RETRY_COPY.confirmBack);
       assert.ok(back, "the confirmation has a way back");
       await fire(back, "click");
+      await tick();
       assert.equal(briefCalls, 0, "…which spends nothing");
+      assert.equal(core.sim, before, "…and leaves the world they were standing in exactly where it was");
       assert.ok(textIn(hud.retryBody).includes("Write the world again"), "…and puts the rows back");
 
       // AND THE SECOND PRESS IS THE ONE THAT SPENDS. One generation call for the
@@ -32672,6 +32686,287 @@ const fire = (node, type) => Promise.all((node.listeners[type] ?? []).map((fn) =
       );
       assert.equal(S.retryReplacesWorld(half, "pack", "rewrite"), true, "…and the press still asks first");
       halfHud.destroy();
+
+      // ── THE FREE WORLD REBUILD, PRESSED ────────────────────────────────────
+      // The brief row has TWO buttons that replace the world, and this is the
+      // other one: same install, same permanent severance, no generation call —
+      // which is exactly why "free" must not buy it a way past the confirmation.
+      // Driven from the panel button for the same reason the paid press is: the
+      // rule lives in one registry field, and a press that walked round it
+      // dropped the friendship, the home anchor and the world itself on ONE
+      // press with nothing asked. The state is the one the row's own sub-line
+      // describes — an update has fixed the builder, so the compile answers now.
+      clearRetry();
+      loadedPF.quarantine.reset();
+      const freeMeta = { ...wizard(), pixelforgeBrief: rBrief, pixelforgePack: packFor(rBrief) };
+      const freeCore = {
+        chatId: "chat-freepress",
+        sim: withCompileBroken(() => S.restore(freeMeta, "chat-freepress")),
+        host: { chatMeta: freeMeta },
+        talkOpen: () => false,
+        closeTalk() {},
+      };
+      const freeHud = new loadedPF.Hud(new FakeNode("div"), freeCore);
+      freeCore.hud = freeHud;
+      S.mode = "metadata";
+      assert.ok(!freeCore.sim.world.brieved, "the fixture is standing on a stand-in map");
+      P.grant(freeCore, { t: "rod", k: "fine" }, 1);
+      P.award(freeCore, { money: 25, xp: 4, verb: "fishing" });
+      P.bump(freeCore, "village", "Somebody From The Stand-In", { d: 2, t: 4 });
+      P.log(freeCore, "Something that happened on the stand-in map.", 1);
+      P.setHome(freeCore, freeCore.sim.zoneId);
+      freeCore.sim.clockMin = 21 * 60;
+      freeCore.sim.day = 3;
+      const stoodIn = freeCore.sim;
+      const spentWas = { brief: briefCalls, pack: packCalls };
+      // COUNTED AT THE INSTALL ITSELF, not inferred from the world moving: "it
+      // asked first" and "it installed once" are two different claims, and only
+      // one of them survives a press that asks and then installs twice.
+      let installs = 0;
+      const realInstall = S._installSealedWorld;
+      S._installSealedWorld = function (...args) {
+        installs += 1;
+        return realInstall.apply(this, args);
+      };
+      try {
+        // BEFORE THE UPDATE, THE PRESS SAYS SO RATHER THAN ASKING. A
+        // confirmation for a press that provably changes nothing is a question
+        // with no consequence on either side of it, so what the player gets is
+        // the row's own sentence — the same words the sub-line warned them with.
+        const fixCompile = breakCompile();
+        try {
+          assert.equal(S.canRebuild(freeCore), false, "with the builder still broken the free press cannot answer");
+          freeHud.update();
+          if (!freeHud._retry) freeHud.toggleRetry();
+          const early = walkNodes(freeHud.retryBody).find(
+            (node) => node.textContent === "Try building it again (free)",
+          );
+          assert.ok(early, "the button is on the panel either way");
+          await fire(early, "click");
+          await tick();
+          assert.equal(installs, 0, "…and pressing it installs nothing");
+          assert.equal(freeCore.sim, stoodIn, "…nor moves them off the stand-in");
+          const said = textIn(freeHud.retryBody);
+          assert.ok(said.includes(S.RETRY_COPY.rebuildUnchanged), "it says nothing has changed yet, under the row");
+          assert.ok(
+            !said.includes(S.RETRY_COPY.confirmFreeTitle),
+            "…rather than walking them through a confirmation for a no-op",
+          );
+        } finally {
+          fixCompile();
+        }
+
+        assert.equal(S.canRebuild(freeCore), true, "the builder answers now, so the free press is live");
+        assert.equal(
+          S.retryReplacesWorld(freeCore, "brief", "rebuild"),
+          true,
+          "…and the registry says this press replaces the world, which is what routes it through the confirm",
+        );
+        freeHud.update();
+        if (!freeHud._retry) freeHud.toggleRetry();
+        const freeBtn = walkNodes(freeHud.retryBody).find(
+          (node) => node.textContent === "Try building it again (free)",
+        );
+        assert.ok(freeBtn, "the brief row's free button is on the panel");
+        calls.length = 0;
+        await fire(freeBtn, "click");
+        await tick();
+        assert.equal(installs, 0, "pressing it installs NOTHING: free is not consequence-free, so it asks first");
+        assert.equal(freeCore.sim, stoodIn, "…the world they are standing in is the very same object");
+        assert.equal(briefCalls, spentWas.brief, "…and it spent no call, which is the whole of what free means");
+        const asked = textIn(freeHud.retryBody);
+        assert.ok(asked.includes(S.RETRY_COPY.confirmFreeTitle), "the free confirmation is what came up");
+        assert.ok(asked.includes(S.RETRY_COPY.costFree), "…priced at what it actually costs: nothing");
+        assert.ok(
+          !asked.includes(S.RETRY_COPY.costPaid),
+          "…and NOT at a generation call it never makes, nor two of them",
+        );
+        assert.ok(!asked.includes(S.RETRY_COPY.confirmTitle), "…nor titled as writing a setting from scratch");
+        assert.ok(
+          !asked.includes(S.RETRY_COPY.confirmCascadeTitle),
+          "…nor as a move into a world somebody has just paid for",
+        );
+        assert.ok(asked.includes(S.RETRY_COPY.keepsAndLoses), "…carrying the same keeps-and-loses contract, whole");
+
+        // "NOT NOW" IS THE SAME WAY OUT HERE, and it leaves the world standing.
+        const freeBack = walkNodes(freeHud.retryBody).find((node) => node.textContent === S.RETRY_COPY.confirmBack);
+        assert.ok(freeBack, "the free confirmation has a way back too");
+        await fire(freeBack, "click");
+        await tick();
+        assert.equal(installs, 0, "…which installs nothing");
+        assert.equal(freeCore.sim, stoodIn, "…and leaves them exactly where they were standing");
+        assert.ok(textIn(freeHud.retryBody).includes("Try building it again (free)"), "…and puts the rows back");
+
+        // AND THE SECOND PRESS IS THE ONE THAT MOVES THEM — for no call at all,
+        // at the seed the world has had since it was made.
+        const freeAgain = walkNodes(freeHud.retryBody).find(
+          (node) => node.textContent === "Try building it again (free)",
+        );
+        await fire(freeAgain, "click");
+        const freeGo = walkNodes(freeHud.retryBody).find((node) => node.textContent === S.RETRY_COPY.confirmFreeGo);
+        assert.ok(freeGo, "the way through wears the free words");
+        await fire(freeGo, "click");
+        await tick();
+        assert.equal(installs, 1, "EXACTLY ONE install, made by the press that asked for it");
+        assert.equal(briefCalls, spentWas.brief, "…for no generation call");
+        assert.equal(packCalls, spentWas.pack, "…and none downstream of it either: the brief never moved");
+        assert.equal(
+          calls.some((c) => c.kind === "patch" && (c.patch.pixelforgeBrief || c.patch.pixelforgePack)),
+          false,
+          "…and neither artifact was re-sealed: the free press keeps both",
+        );
+        assert.notEqual(freeCore.sim, stoodIn, "the world was replaced");
+        assert.equal(freeCore.sim.world.brieved, true, "…by one that actually compiled");
+        assert.equal(
+          freeCore.sim.world.seed,
+          RSEED,
+          "AT THE SAME SEED — ruling 8's identity holds on the free path too",
+        );
+        const nowFree = P.get(freeCore);
+        assert.equal(nowFree.pouch.money, 25, "the money came with them, exactly as the confirmation said");
+        assert.equal(nowFree.skills.verbs.fishing.x, 4, "…and the skills");
+        assert.ok(
+          nowFree.pouch.items.some((i) => i.t === "rod"),
+          "…and the items",
+        );
+        assert.equal(freeCore.sim.clockMin, 21 * 60, "…and the clock");
+        assert.deepEqual(nowFree.rel, {}, "the friendship stayed behind: it belonged to the map that is gone");
+        assert.deepEqual(nowFree.ledger.lines, [], "…and the ledger line");
+        assert.equal(nowFree.home, null, "…and the home anchor");
+        assert.ok(
+          loadedPF.quarantine.peek("stamp")?.fields?.rel?.village?.["Somebody From The Stand-In"],
+          "…set aside in the quarantine slot rather than deleted",
+        );
+        assert.ok(
+          (nowFree.ledger.notices ?? []).some(([, text]) => text.includes("belonged to another world")),
+          "…and the player is told it happened",
+        );
+        // …AND A PRESS THAT DID WHAT IT SAID LEAVES NO SENTENCE BEHIND IT — not
+        // one of its own, and not the one the broken-builder press left above,
+        // which by now says the opposite of what happened.
+        assert.ok(!freeHud._retryNotes.brief, "nothing was left under the row to explain a press that worked");
+        assert.deepEqual(S.retryRows(freeCore), [], "…and the row is gone, because the world it was about is fixed");
+      } finally {
+        S._installSealedWorld = realInstall;
+      }
+      freeHud.destroy();
+
+      // ── A CHAT SWITCH INSIDE THE PRE-ARM FLUSH WRITES NOTHING ──────────────
+      // The second window the panel is live in, and the one the sentence under a
+      // row can be stranded in: every mode awaits an ordinary flush BEFORE it
+      // arms anything, the player can leave inside that await, and the press
+      // then returns having dispatched nothing. The per-frame reconcile has
+      // already emptied the note map for the chat that arrived — so a note
+      // written after it lands on somebody else's screen, about a press they
+      // never made.
+      clearRetry();
+      const switchMetaA = { ...wizard(), pixelforgeBrief: rBrief };
+      const switchMetaB = { ...wizard(), pixelforgeBrief: rBrief };
+      const switchCore = {
+        chatId: "chat-switch-a",
+        sim: withCompileBroken(() => S.restore(switchMetaA, "chat-switch-a")),
+        host: { chatMeta: switchMetaA },
+        talkOpen: () => false,
+        closeTalk() {},
+      };
+      const switchHud = new loadedPF.Hud(new FakeNode("div"), switchCore);
+      switchCore.hud = switchHud;
+      S.mode = "metadata";
+      let releaseFlush;
+      const flushHeld = new Promise((resolve) => (releaseFlush = resolve));
+      const realFlush = S.flush;
+      S.flush = async () => flushHeld;
+      try {
+        switchHud.update();
+        if (!switchHud._retry) switchHud.toggleRetry();
+        assert.equal(S.canRebuild(switchCore), true, "the free press can answer here, so it reaches its confirmation");
+        const leaving = walkNodes(switchHud.retryBody).find(
+          (node) => node.textContent === "Try building it again (free)",
+        );
+        await fire(leaving, "click");
+        const leavingGo = walkNodes(switchHud.retryBody).find(
+          (node) => node.textContent === S.RETRY_COPY.confirmFreeGo,
+        );
+        const pressing = fire(leavingGo, "click");
+        await tick();
+        // The host moves the chat under the press, exactly as `_switchChat` does.
+        switchCore.chatId = "chat-switch-b";
+        switchCore.host.chatMeta = switchMetaB;
+        switchCore.sim = withCompileBroken(() => S.restore(switchMetaB, "chat-switch-b"));
+        const arrived = switchCore.sim;
+        switchHud.update();
+        assert.deepEqual(switchHud._retryNotes, {}, "the reconcile empties the map for the chat that arrived");
+        releaseFlush();
+        await pressing;
+        await tick();
+        switchHud.update();
+        if (!switchHud._retry) switchHud.toggleRetry();
+        assert.deepEqual(switchHud._retryNotes, {}, "…and the abandoned press wrote nothing into it on its way out");
+        assert.ok(
+          !textIn(switchHud.retryBody).includes(S.RETRY_COPY.rebuildUnchanged),
+          "…so chat B is not told what happened to a press it never made",
+        );
+        assert.equal(switchCore.sim, arrived, "…and the chat they arrived at kept the world it arrived with");
+      } finally {
+        S.flush = realFlush;
+      }
+      switchHud.destroy();
+
+      // ── A REFUSAL THAT RAISES THE FAILURE SCREEN SAYS IT THERE ─────────────
+      // The pack retry has to clear the player's "later" marker before it may
+      // dispatch, and three storage attempts down it refuses: nothing is sent,
+      // and the screen that comes up says the save is what did not go through.
+      // The panel's own sentence used to say the opposite over the top of it —
+      // that the problem was likely the setting — which is the wrong stage and
+      // the wrong cause for a press that never reached a call at all.
+      clearRetry();
+      const storeMeta = {
+        ...wizard(),
+        pixelforgeBrief: rBrief,
+        pixelforgePackWanted: true,
+        pixelforgeFallbackAcceptedPack: true,
+      };
+      const storeCore = {
+        chatId: "chat-storagerefusal",
+        sim: S.restore(storeMeta, "chat-storagerefusal"),
+        host: { chatMeta: storeMeta },
+        talkOpen: () => false,
+        closeTalk() {},
+      };
+      const storeHud = new loadedPF.Hud(new FakeNode("div"), storeCore);
+      storeCore.hud = storeHud;
+      S.mode = "metadata";
+      const realClear = S._clearAccepted;
+      S._clearAccepted = async () => false;
+      try {
+        storeHud.update();
+        if (!storeHud._retry) storeHud.toggleRetry();
+        // A sentence an earlier press left behind, so the refusal is watched for
+        // clearing it as well as for not writing its own.
+        storeHud._retryNotes.pack = S.RETRY_COPY.pressInFlight;
+        storeHud._retryNoteRev = (storeHud._retryNoteRev ?? 0) + 1;
+        storeHud._retryKey = null;
+        storeHud.update();
+        const retryBtn = walkNodes(storeHud.retryBody).find((node) => node.textContent === "Try that call again");
+        assert.ok(retryBtn, "the pack row's own retry button is on the panel");
+        const spentBefore = packCalls;
+        await fire(retryBtn, "click");
+        await tick();
+        assert.equal(packCalls, spentBefore, "the refused press spent nothing: the marker still stands");
+        assert.equal(S.gate.state, "failed", "and the failure screen is what came up");
+        assert.equal(S.gate.failure, "storage", "…stamped at the thing that actually failed");
+        assert.ok(
+          S.gateReason(S.gate.failure, S.gate.stage).includes("saving it to this chat did not go through"),
+          "…which is the screen saying so in its own words",
+        );
+        assert.ok(
+          !storeHud._retryNotes.pack,
+          "…so the panel adds no sentence of its own, and clears the one an earlier press left",
+        );
+      } finally {
+        S._clearAccepted = realClear;
+      }
+      storeHud.destroy();
     } finally {
       loadedPF.brief.generate = realGenerate;
       loadedPF.pack.generate = realPack;
