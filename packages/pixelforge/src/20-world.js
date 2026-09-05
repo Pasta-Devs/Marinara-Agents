@@ -2747,6 +2747,17 @@ PF.world = (() => {
     const wildsArrivals = wildsPlaces.flatMap((_, index) =>
       [midY - 1, midY].map((y) => ({ x: index === 0 ? v.w - 2 : 1, y })),
     );
+    // THE LATTICE SEAM, PHASE ONE (21-lattice). Every spine terminal a brief
+    // wilds did not already take becomes a gate onto the open country, and its
+    // apron is reserved HERE — before the scatter — for the same reason the
+    // wilds arrivals above are: nothing is allowed to stand in a doorway, and
+    // the shipped reserve test keeps the tiles either side of one clear too, so
+    // the way out is not hemmed in by the trees beside it. The paint itself
+    // waits until after everything else (phase two, below the wilds loop).
+    const seamGates = PF.lattice.settlementGates(v, {
+      east: wildsPlaces.length > 0,
+      west: wildsPlaces.length > 1,
+    });
     scatterTrees(
       v,
       rnd,
@@ -2756,6 +2767,7 @@ PF.world = (() => {
         stallReserved,
         shopFrontReserved,
         wildsArrivals,
+        PF.lattice.reservationsFor(v, seamGates),
       ),
     );
     // ── Open ground ────────────────────────────────────────────────────────────
@@ -3023,10 +3035,8 @@ PF.world = (() => {
         rect: { x: boardAt.x, y: boardAt.y, w: 1, h: 1 },
       });
     }
-    // Last thing done to the settlement's tiles, so it sees the trees, the
-    // buildings, the stalls, the features and the greens together — a pocket is
-    // usually made by two of them meeting, not by either alone.
-    sealPockets(v, v.spawn);
+    // (the settlement's pocket seal used to run HERE, and now runs after the
+    // seam is punched, below the wilds loop — see the comment on it)
     zones.z1 = v;
 
     // ── Interior zones ──
@@ -3108,6 +3118,12 @@ PF.world = (() => {
     }
 
     // ── Wilds zones, hung off alternating map edges ──
+    // WHICH LATTICE CELLS ARE ALREADY SPOKEN FOR. The settlement is (0,0) and a
+    // brief wilds takes (1,0) east or (-1,0) west, so those cells resolve to the
+    // zone the brief already named rather than to a compiled cell — the walk out
+    // of town and the walk back are the SAME ids they always were. Runtime-only,
+    // like the climate stamp: no save row, re-derived on every load.
+    const latticeAnchors = {};
     wildsPlaces.forEach((place, index) => {
       const id = zoneIdForPlace(place);
       if (!id) return;
@@ -3195,27 +3211,39 @@ PF.world = (() => {
           break;
         }
       }
+      // THE LATTICE SEAM, PHASE ONE (21-lattice). A brief wilds keeps its portal
+      // pair home and gains gates on its other three edges, so the country does
+      // not stop at the edge of the brief's own wood. Aprons reserved beside the
+      // arrival tiles below, for the same reason and against the same scatter;
+      // the N/S gate columns sit two clear of the `water-crossing` stream this
+      // builder lays at x = 20-21, so no apron is ever asked to stand in water.
+      const wildsGates = PF.lattice.wildsGates(zone, east);
       // Reserve BOTH sides' arrival tiles and spawns — the west-hung wilds'
       // arrival used to land inside scattered trunks on some seeds.
-      scatterTrees(zone, rnd, tags.has("dense-growth") ? 70 : 45, [
-        { x: 1, y: wMidY },
-        { x: 1, y: wMidY + 1 },
-        { x: 2, y: wMidY },
-        { x: 3, y: wMidY },
-        { x: 20, y: wMidY },
-        { x: 21, y: wMidY + 1 },
-        { x: zone.w - 2, y: wMidY },
-        { x: zone.w - 2, y: wMidY + 1 },
-        { x: zone.w - 3, y: wMidY },
-        { x: zone.w - 4, y: wMidY },
-      ]);
+      scatterTrees(
+        zone,
+        rnd,
+        tags.has("dense-growth") ? 70 : 45,
+        [
+          { x: 1, y: wMidY },
+          { x: 1, y: wMidY + 1 },
+          { x: 2, y: wMidY },
+          { x: 3, y: wMidY },
+          { x: 20, y: wMidY },
+          { x: 21, y: wMidY + 1 },
+          { x: zone.w - 2, y: wMidY },
+          { x: zone.w - 2, y: wMidY + 1 },
+          { x: zone.w - 3, y: wMidY },
+          { x: zone.w - 4, y: wMidY },
+        ].concat(PF.lattice.reservationsFor(zone, wildsGates)),
+      );
       // Set BEFORE the pockets are closed, not after. The west wilds moves its
       // spawn to the far side further down, and sealing from the east side first
       // would mark the west half — the future spawn and the tile the portal
       // actually delivers the player onto — solid whenever the scatter happens to
       // separate the two.
       zone.spawn = east ? { x: 3, y: wMidY } : { x: zone.w - 4, y: wMidY };
-      sealPockets(zone, zone.spawn);
+      // (the seal used to run HERE, and now runs after the punches below)
       // Two-tile edge portals: east edge of the settlement for the first wilds,
       // west edge for the second.
       const vx = east ? v.w - 1 : 0;
@@ -3243,11 +3271,39 @@ PF.world = (() => {
           label: `Back to ${brief.name}`,
         });
       }
+      // THE LATTICE SEAM, PHASE TWO. Punched here, beside the portal punch above
+      // and after every pass that draws on the main tile stream, because the
+      // `struggling` scuffing loop draws that stream once per painted path tile —
+      // a seam laid with the road block shifts every downstream consumer of it,
+      // measured at 73 changed settlement tiles and a re-rolled wilds against 8
+      // when the punch waits.
+      PF.lattice.punchGates(zone, wildsGates);
+      zone.gates = wildsGates;
+      zone.cell = { cx: east ? 1 : -1, cy: 0 };
+      latticeAnchors[`${zone.cell.cx},0`] = id;
+      // AND ONLY NOW THE SEAL, which used to run before both punches. The punch
+      // opens ring tiles that were solid when the sweep passed them, so a sweep
+      // running first leaves newly-cleared ground walkable-but-unswept and any
+      // pocket behind a gate unsealed — the measured softlock class this builder
+      // already carries a paragraph about. The sweep draws no RNG, so moving it
+      // moves no stream.
+      sealPockets(zone, zone.spawn);
       // (the west spawn is set above, before sealPockets reads it)
       zone.flavor = place.flavor;
       zone.mapKind = "place"; // World Maps export kind (spec §8)
       zones[id] = zone;
     });
+
+    // The settlement's own seam, punched after the wilds loop for the same
+    // reason and in the same phase — and the settlement's pocket seal after
+    // that, which is where it moved from its old home two hundred lines up. It
+    // now sees the trees, the buildings, the stalls, the features, the greens
+    // AND every hole punched in the border ring together; a pocket is usually
+    // made by two of them meeting, not by either alone.
+    PF.lattice.punchGates(v, seamGates);
+    v.gates = seamGates;
+    v.cell = { cx: 0, cy: 0 };
+    sealPockets(v, v.spawn);
 
     // ── Dwelling and workplace interiors ──
     // Until now a dwelling was a facade with nothing behind it, so a resident the
@@ -3795,6 +3851,15 @@ PF.world = (() => {
       theme: activeTheme,
       latitude: axes.latitude,
       precipitation: axes.precipitation,
+      // THE SURROUND, STAMPED BESIDE THE AXES and for exactly the same reason.
+      // `brief.surround` is read once, up at the ground-cover roll, and was never
+      // kept — so the wilderness, which is a function of the country a settlement
+      // stands in, had no way to read the country from the world it hangs off.
+      // Runtime-only, zero save bytes, re-minted on every load; the legacy and
+      // degraded paths leave it undefined and the weight table's neutral fallback
+      // covers them.
+      surround: brief.surround,
+      latticeAnchors,
       brieved: true, // marks a compiled world (saves still carry only seed/theme/zone)
       situation: brief.situation,
       zones,
@@ -3818,9 +3883,23 @@ PF.world = (() => {
     return null;
   }
 
+  /** THE ZONE PRIMITIVES, handed out to the wilderness lattice (21-lattice).
+   *
+   *  A wilderness cell is a zone like any other — the same three layers, the same
+   *  solidity map, the same reachability sweep, the same feature register — and
+   *  the bake concatenates every module into one scope with no imports, so the
+   *  only way a second module builds one is for this one to hand its own tools
+   *  over. Every entry here is already used by the builders above: the lattice
+   *  adds no zone shape, no painter and no sweep of its own, which is what keeps
+   *  "a chunk is a zone" true rather than aspirational. Handed out DELIBERATELY
+   *  narrow — the placement passes, the arithmetic and the tables stay private,
+   *  because a second builder reaching into those is the drift this export
+   *  exists to prevent. */
+  const prims = { makeZone, put, fillRect, borderTrees, sealPockets, PLACERS };
+
   // The board's reserved key and tag ride out with the builder because they are
   // the JOIN between the compiler and its consumers: 30-sim finds the register
   // row by this id, and the harness holds the tag to the promise that no brief
   // vocabulary contains it.
-  return { build, idx, BOARD_FEATURE_ID, BOARD_FEATURE_TAG };
+  return { build, idx, BOARD_FEATURE_ID, BOARD_FEATURE_TAG, prims };
 })();
