@@ -12898,7 +12898,7 @@ await withSavePath(async ({ calls, armed, behavior, tick, makeCore }) => {
 
     // The retry is a real retry: same chat, same gate, one more host call.
     responses.post = async () => ({ status: 200, body: { ok: true, data: gateBriefData } });
-    assert.equal(loadedPF.save.retryGeneration(core2), true, "the failure screen's button re-runs generation");
+    assert.equal(await loadedPF.save.retryGeneration(core2), true, "the failure screen's button re-runs generation");
     assert.equal(loadedPF.save.gate.state, "generating", "flipping the panel back synchronously");
     for (let i = 0; i < 50 && loadedPF.save.gate; i++) await tick();
     assert.equal(loadedPF.save.gate, null, "and the retry seals it");
@@ -12952,7 +12952,7 @@ await withSavePath(async ({ calls, armed, behavior, tick, makeCore }) => {
       // The retry clears the verdict: the panel must not still be explaining the
       // last failure while a new call is in flight behind it.
       responses.post = async () => ({ status: 200, body: { ok: true, data: gateBriefData } });
-      assert.equal(loadedPF.save.retryGeneration(refused), true, "the button runs");
+      assert.equal(await loadedPF.save.retryGeneration(refused), true, "the button runs");
       assert.equal(loadedPF.save.gate.state, "generating", "flipping the panel back synchronously");
       assert.equal(loadedPF.save.gate.failure, null, "…and clearing the verdict, so it stops explaining a dead one");
       for (let i = 0; i < 50 && loadedPF.save.gate; i++) await tick();
@@ -13042,7 +13042,7 @@ await withSavePath(async ({ calls, armed, behavior, tick, makeCore }) => {
     calls.length = 0;
     armed.length = 0;
     const postsBeforeRetry = postCount();
-    assert.equal(loadedPF.save.retryGeneration(thrower), true, "the failure screen's button runs");
+    assert.equal(await loadedPF.save.retryGeneration(thrower), true, "the failure screen's button runs");
     for (let i = 0; i < 50 && loadedPF.save.gate; i++) await tick();
     assert.equal(loadedPF.save.gate, null, "the gate lifts");
     assert.equal(postCount(), postsBeforeRetry, "without paying for a second generation — the brief is already sealed");
@@ -13135,7 +13135,7 @@ await withSavePath(async ({ calls, armed, behavior, tick, makeCore }) => {
     assert.equal(loadedPF.save._briefCache.has("chat-gate-early"), false, "with nothing sealed");
     const postsBeforeEarly = postCount();
     responses.post = async () => ({ status: 200, body: { ok: true, data: gateBriefData } });
-    assert.equal(loadedPF.save.retryGeneration(early), true, "the button runs");
+    assert.equal(await loadedPF.save.retryGeneration(early), true, "the button runs");
     for (let i = 0; i < 50 && loadedPF.save.gate; i++) await tick();
     assert.equal(postCount(), postsBeforeEarly + 1, "and THIS retry does pay for a generation, because none landed");
     assert.equal(early.sim.world.brieved, true, "sealing the world it came back with");
@@ -25487,7 +25487,7 @@ const fire = (node, type) => Promise.all((node.listeners[type] ?? []).map((fn) =
         // the hold does: its own gate is "generating", not "failed". Asserted rather
         // than called and discarded — this case cannot claim to drive it into the
         // dispatcher, because it never gets that far.
-        assert.equal(loadedPF.save.retryGeneration(core), false, "the retry button refuses a gate that is not failed");
+        assert.equal(await loadedPF.save.retryGeneration(core), false, "the retry button refuses a gate that is not failed");
         await tick();
         assert.equal(postCount(), 1, "no second brief call");
         assert.equal(packCount(), 1, "and no second PAID pack call");
@@ -25602,7 +25602,7 @@ const fire = (node, type) => Promise.all((node.listeners[type] ?? []).map((fn) =
         assert.equal(core.sim.world.interim, true, "and the world under it is still the placeholder");
 
         answer = "ok";
-        assert.equal(loadedPF.save.retryGeneration(core), true, "the button fires");
+        assert.equal(await loadedPF.save.retryGeneration(core), true, "the button fires");
         await tick();
         assert.equal(postCount(), 1, "NO second brief call — the world is already written and paid for");
         assert.equal(packCount(), 2, "the pack call is what ran again");
@@ -25714,7 +25714,7 @@ const fire = (node, type) => Promise.all((node.listeners[type] ?? []).map((fn) =
         const sealedBytes = JSON.stringify(afterPatches(meta, calls).pixelforgeBrief);
         const placeholder = core.sim.world;
         core.host.chatMeta = afterPatches(meta, calls);
-        assert.equal(loadedPF.save.retryGeneration(core), true, "the button fires");
+        assert.equal(await loadedPF.save.retryGeneration(core), true, "the button fires");
         for (let i = 0; i < 50 && loadedPF.save.gate; i++) await tick();
         assert.equal(loadedPF.save.gateHolds(core), false, "the gate lifts");
         assert.notEqual(core.sim.world, placeholder, "onto the world the retry finished installing");
@@ -25872,7 +25872,7 @@ const fire = (node, type) => Promise.all((node.listeners[type] ?? []).map((fn) =
           "…and it is one-shot: the next visit will not generate a second one",
         );
         core.host.chatMeta = settled;
-        assert.equal(loadedPF.save.retryGeneration(core), true, "the button fires");
+        assert.equal(await loadedPF.save.retryGeneration(core), true, "the button fires");
         for (let i = 0; i < 50 && loadedPF.save.gate; i++) await tick();
         assert.equal(postCount(), 1, "and it makes NO second brief call — it recompiles from the sealed one");
         assert.equal(loadedPF.save.gateHolds(core), false, "the gate lifts onto that world");
@@ -27741,7 +27741,7 @@ const fire = (node, type) => Promise.all((node.listeners[type] ?? []).map((fn) =
 
         // …AND THE BUTTON DOES WHAT THE SCREEN SAID. A whole answer this time.
         responses.post = async () => body(6, 40);
-        assert.equal(loadedPF.save.retryGeneration(core), true, "the retry fires");
+        assert.equal(await loadedPF.save.retryGeneration(core), true, "the retry fires");
         for (let i = 0; i < 50 && loadedPF.save.gate; i++) await tick();
         assert.equal(postCount(), 2, "one more pack call, and only one");
         assert.equal(loadedPF.save.gateHolds(core), false, "the gate lifts");
@@ -27852,7 +27852,7 @@ const fire = (node, type) => Promise.all((node.listeners[type] ?? []).map((fn) =
           false,
           "nothing is owed any more: the retry is the INSTALL, which is why the copy may not promise a second pack call",
         );
-        assert.equal(loadedPF.save.retryGeneration(core), true, "the button fires");
+        assert.equal(await loadedPF.save.retryGeneration(core), true, "the button fires");
         for (let i = 0; i < 50 && loadedPF.save.gate; i++) await tick();
         assert.equal(loadedPF.save.gateHolds(core), false, "the gate lifts");
         assert.equal(core.sim.world.brieved, true, "onto the world the retry finished installing");
@@ -27965,7 +27965,7 @@ const fire = (node, type) => Promise.all((node.listeners[type] ?? []).map((fn) =
 
         // THE RETRY, AND THE LIFT UNDER IT.
         responses.post = async () => whole;
-        assert.equal(loadedPF.save.retryGeneration(core), true, "the retry fires");
+        assert.equal(await loadedPF.save.retryGeneration(core), true, "the retry fires");
         for (let i = 0; i < 50 && loadedPF.save.gate; i++) await tick();
         assert.equal(loadedPF.save.gateHolds(core), false, "the gate lifts");
         assert.equal(P.get(core).pouch.money, loadedPF.economy.STARTING_PURSE, "and THAT is where the purse is paid");
@@ -31008,11 +31008,13 @@ const fire = (node, type) => Promise.all((node.listeners[type] ?? []).map((fn) =
         assert.equal(S._regenPending.size, 0, "the record was released when the attempt settled");
         assert.equal(core.sim, standing, "and the world nobody touched is untouched");
 
-        // A REFUSED RE-PRESS MUST NOT REPAINT FIRST. The record is planted by
-        // hand, so `regenerateStage` refuses — and the screen has to still be the
-        // failed one, not a spinner with nothing behind it and no button under it.
+        // A REFUSED RE-PRESS MUST NOT REPAINT FIRST — AND MUST SAY IT REFUSED.
+        // The record is planted by hand, so `regenerateStage` refuses; the screen
+        // has to still be the failed one, not a spinner with nothing behind it
+        // and no button under it, and the press reports the delegate's own answer
+        // rather than a `true` that makes a dead press look like a live one.
         S._regenPending.set("chat-packfail", { stage: "pack", mode: "retry", gated: true });
-        assert.equal(S.retryGeneration(core), true, "the button fires");
+        assert.equal(await S.retryGeneration(core), false, "a refused press says so: the answer is the delegate's");
         await tick();
         assert.equal(S.gate.state, "failed", "…and a refused press leaves the failed screen exactly where it was");
         assert.equal(packCalls, 1, "with no second call spent on it");
@@ -31020,7 +31022,7 @@ const fire = (node, type) => Promise.all((node.listeners[type] ?? []).map((fn) =
 
         // …AND A LIVE ONE RE-ENTERS THE REGEN RATHER THAN THE BARE LIFT.
         packOk = true;
-        assert.equal(S.retryGeneration(core), true, "the button fires again");
+        assert.equal(await S.retryGeneration(core), true, "the button fires again");
         for (let i = 0; i < 60 && S.gate; i++) await tick();
         assert.equal(packCalls, 2, "the re-press made the call — it did not fall through into a lift");
         assert.equal(core.sim, standing, "…against the same world, still");
@@ -31039,10 +31041,23 @@ const fire = (node, type) => Promise.all((node.listeners[type] ?? []).map((fn) =
         await S.regenerateStage(k, "pack", "retry");
         await tick();
         assert.equal(S.gate.state, "failed", "a failed post-start gate");
+        // THE THREE THINGS `_liftGate`'S TAIL WOULD DO, each pinned by a witness
+        // it would move. §2.10d says the tail must NOT re-run here — this visit
+        // adopted and was paid long ago — and "bounded damage today" is not a
+        // guard: with `mode` null, the lift's adopt runs a BOOT probe mid-session
+        // against the pre-regeneration row, which is the row-6 rebuild the whole
+        // post-start design is built to avoid.
+        k.sim._packFold = { pack: { briefHash: 1 } };
+        S.mode = null;
+        assert.equal(P.get(k).pouch.money, 0, "the fixture's purse is unpaid, so a second payment would show");
         assert.equal(await S.keepPlaying(k), true, "…and the second exit takes it");
         assert.equal(S.gate, null, "the gate is gone");
         assert.equal(S._regenPending.size, 0, "…and so is the re-arm record");
-        assert.equal(S.mode, "routes", "and nothing re-adopted: the visit's own probe stands");
+        for (let i = 0; i < 20 && S.mode === null; i++) await tick();
+        assert.equal(S.mode, null, "nothing re-adopted: the un-arm is BARE, not a lift");
+        assert.equal(P.get(k).pouch.money, 0, "…nor did the purse tail re-run over a world already begun");
+        assert.ok(k.sim._packFold, "…nor did the lift's own pack-fold invalidation");
+        S.mode = "routes";
         assert.equal(await S.regenerateStage(k, "pack", "retry"), true, "and a second press retries cleanly");
         await tick();
 
@@ -31270,6 +31285,240 @@ const fire = (node, type) => Promise.all((node.listeners[type] ?? []).map((fn) =
     }
   });
 
+  // ── LANE 5c: THE CASCADE THAT FAILS HALFWAY, AND THE PRESS THAT FINISHES IT ─
+  // Ruling 8's cascade moves the gate's STAGE downstream mid-attempt, and the
+  // mode rides along untouched: a paid re-roll seals its brief, fails the pack,
+  // and the failed screen is stamped `pack` while the mode on it is still
+  // `reroll` — a mode the pack row does not offer. Resolved against the mode
+  // alone the press finds no descriptor and refuses having touched anything: a
+  // dead button on the one screen built around it, over a world the freeze is
+  // still holding. And the world is not the one that was paid for either — the
+  // install sits below the pack's failure exit, so it never ran.
+  await withSavePath(async ({ calls, tick, makeCore }) => {
+    clearRetry();
+    const realGenerate = loadedPF.brief.generate;
+    const realPack = loadedPF.pack.generate;
+    let briefCalls = 0;
+    let packCalls = 0;
+    let packOk = false;
+    loadedPF.brief.generate = async () => {
+      briefCalls += 1;
+      return rBrief2;
+    };
+    loadedPF.pack.generate = async (chatId, { brief, onFailure }) => {
+      packCalls += 1;
+      if (packOk) return packFor(brief);
+      onFailure?.("unavailable");
+      return null;
+    };
+    try {
+      const meta = { ...wizard(), pixelforgeBrief: rBrief, pixelforgePackWanted: true };
+      const core = makeCore("chat-cascadefail", RSEED);
+      core.host.chatMeta = meta;
+      core.sim = withCompileBroken(() => S.restore(meta, "chat-cascadefail"));
+      S.mode = "metadata";
+      const standIn = core.sim;
+      calls.length = 0;
+
+      assert.equal(await S.regenerateStage(core, "brief", "reroll"), true, "the paid re-roll runs");
+      await tick();
+      assert.equal(briefCalls, 1, "the brief call landed and sealed");
+      assert.equal(packCalls, 1, "…and the cascade's pack call was made, and failed");
+      assert.equal(S.gate.state, "failed", "the failed screen is up");
+      assert.equal(S.gate.stage, "pack", "…stamped at the stage that actually failed");
+      assert.equal(S.gate.mode, "reroll", "…while the mode riding it is still the brief's");
+      assert.equal(core.sim, standIn, "and the world is STILL the stand-in: the install is below the failure exit");
+
+      // THE SCREEN SAYS THE TRUE THING ABOUT THAT STATE. The shipped post-start
+      // pack note promises the world in front of the player is untouched
+      // whatever happens here — false the moment a new brief is sealed behind it.
+      const cascadeNote = S.gateStageNote("pack", true, "reroll");
+      assert.notEqual(cascadeNote, S.stage("pack").screens.postStartNote, "the cascade gets its own sentence");
+      assert.ok(cascadeNote.includes("written again"), "…which says the setting was rewritten and is stored");
+      assert.equal(
+        S.gateStageNote("pack", true, "retry"),
+        S.stage("pack").screens.postStartNote,
+        "…and an ordinary post-start pack gate keeps the shipped one",
+      );
+
+      // THE PRESS ITSELF. It must not be dead, it must not re-buy the call that
+      // SUCCEEDED (ruling 8's token-saving half), and it has to land the player
+      // in the world they already paid for.
+      packOk = true;
+      assert.equal(await S.retryGeneration(core), true, "the failed screen's button really presses");
+      for (let i = 0; i < 120 && S.gate; i++) await tick();
+      assert.equal(briefCalls, 1, "NO second brief call: a paid retry only ever re-runs a call that never succeeded");
+      assert.equal(packCalls, 2, "…and the one it does re-run is the pack call that failed");
+      assert.notEqual(core.sim, standIn, "the world was replaced at last");
+      assert.equal(core.sim.world.brieved, true, "…by the one the sealed brief describes");
+      assert.equal(core.sim.world.seed, RSEED, "at the same seed, on this path too");
+      assert.equal(S.gateHolds(core), false, "the gate lifted");
+      assert.equal(S._regenPending.size, 0, "…with no record left behind to refuse the next press");
+      const packPatch = calls.filter((c) => c.kind === "patch" && c.patch.pixelforgePack).pop();
+      assert.equal(
+        packPatch.patch.pixelforgePack.briefHash,
+        rHash2,
+        "and the pack sealed against the world that now stands",
+      );
+      assert.equal(
+        S.stage("brief").derive(meta, core.sim.world, "chat-cascadefail"),
+        "ok",
+        "so the popup has nothing left to offer: the whole attempt finished",
+      );
+    } finally {
+      loadedPF.brief.generate = realGenerate;
+      loadedPF.pack.generate = realPack;
+      clearRetry();
+      restoreAssets();
+    }
+  });
+
+  // ── LANE 5d: THE SEED IS THE STANDING WORLD'S, NOT THE WIZARD'S ───────────
+  // Ruling 8 admits no reachability argument — no path may move the seed — and
+  // the two sources are not one question: `/game/create`'s reuse-an-existing-chat
+  // arm rewrites `gameSetupConfig` wholesale while `simFromSaved` prefers the
+  // SAVE ENVELOPE's seed, so a chat whose setup was edited after creation carries
+  // two different numbers. The fixture below is one where they DISAGREE, which is
+  // the only fixture that can tell which one the ladder read.
+  await withSavePath(async ({ tick, makeCore }) => {
+    clearRetry();
+    const realGenerate = loadedPF.brief.generate;
+    const realPack = loadedPF.pack.generate;
+    let seedAsked = null;
+    loadedPF.brief.generate = async (chatId, { seed }) => {
+      seedAsked = seed;
+      return rBrief2;
+    };
+    loadedPF.pack.generate = async (chatId, { brief }) => packFor(brief);
+    try {
+      const CONFIG_SEED = 999999;
+      const meta = { ...wizard({ seed: CONFIG_SEED }), pixelforgeBrief: rBrief };
+      // The world the player is STANDING IN is the one the save envelope built,
+      // at the original seed — and the wizard config has since been rewritten.
+      const core = makeCore("chat-seedsplit", RSEED);
+      core.host.chatMeta = meta;
+      S.mode = "metadata";
+      assert.notEqual(S._configSeed(meta), core.sim.world.seed, "the fixture's two sources really do disagree");
+      assert.equal(
+        S.stage("brief").derive(meta, core.sim.world, "chat-seedsplit"),
+        "fallback",
+        "…on a world that is standing on a stand-in map, which is the row that offers the re-roll",
+      );
+      assert.equal(S._regenSeed(core, meta), RSEED, "the shared ladder answers with the world that stands");
+
+      assert.equal(await S.regenerateStage(core, "brief", "reroll"), true, "the paid re-roll runs");
+      await tick();
+      assert.equal(seedAsked, RSEED, "the generation call was made for the world the player is standing in");
+      assert.equal(core.sim.world.seed, RSEED, "…and the world it installed carries that same identity");
+      assert.notEqual(core.sim.world.seed, CONFIG_SEED, "the rewritten wizard config did NOT move the seed");
+    } finally {
+      loadedPF.brief.generate = realGenerate;
+      loadedPF.pack.generate = realPack;
+      clearRetry();
+      restoreAssets();
+    }
+  });
+
+  // ── LANE 5e: A SECOND PRESS INSIDE THE PRECONDITION ───────────────────────
+  // The pack retry's marker clear is a metadata round trip with its own backoff,
+  // run before any gate is armed — so the popup's held-disable does not apply
+  // there either. With the record written after it, a second press walked
+  // straight through the re-entrancy check and its own `finally` deleted the
+  // record while the first press's call was still out: the next visit re-armed
+  // through `armGate`'s ORDINARY path, a boot-shaped gate over a played world
+  // with nothing running behind it.
+  await withSavePath(async ({ calls, behavior, tick, makeCore }) => {
+    clearRetry();
+    const realPack = loadedPF.pack.generate;
+    let packCalls = 0;
+    loadedPF.pack.generate = async (chatId, { brief }) => {
+      packCalls += 1;
+      return packFor(brief);
+    };
+    let releasePatch = null;
+    try {
+      behavior.patch = async (chatId, patch) => {
+        if (patch && "pixelforgeFallbackAcceptedPack" in patch)
+          await new Promise((resolve) => {
+            releasePatch = resolve;
+          });
+      };
+      const meta = {
+        ...wizard(),
+        pixelforgeBrief: rBrief,
+        pixelforgePackWanted: true,
+        pixelforgeFallbackAcceptedPack: true,
+      };
+      const core = makeCore("chat-clearrace", RSEED);
+      core.host.chatMeta = meta;
+      core.sim = S.restore(meta, "chat-clearrace");
+      S.mode = "metadata";
+      calls.length = 0;
+
+      const first = S.regenerateStage(core, "pack", "retry");
+      for (let i = 0; i < 20 && !releasePatch; i++) await tick();
+      assert.ok(releasePatch, "the marker clear is in flight");
+      assert.equal(S.gate, null, "with no gate armed yet, so nothing on screen is disabled");
+      assert.equal(S._regenPending.has("chat-clearrace"), true, "…but the record already covers the precondition");
+      assert.equal(await S.regenerateStage(core, "pack", "retry"), false, "so a second press is refused");
+      assert.equal(
+        calls.filter((c) => c.kind === "patch" && "pixelforgeFallbackAcceptedPack" in c.patch).length,
+        1,
+        "…having fired no second marker PATCH of its own",
+      );
+      assert.equal(S._regenPending.has("chat-clearrace"), true, "and the refusal did not delete the record it found");
+
+      releasePatch();
+      assert.equal(await first, true, "the first press completes");
+      for (let i = 0; i < 80 && S.gate; i++) await tick();
+      assert.equal(packCalls, 1, "one call, once");
+      assert.equal(S._regenPending.size, 0, "and the record is released when the attempt settles");
+    } finally {
+      if (releasePatch) releasePatch();
+      loadedPF.pack.generate = realPack;
+      clearRetry();
+      restoreAssets();
+    }
+  });
+
+  // ── LANE 5f: A REFUSED PARK IS SAID HONESTLY ──────────────────────────────
+  // The comforting sentence promises the opposite of what happened. The bag's
+  // one true refusal is its size ceiling, and on that refusal the swap's notice
+  // degrades to the overflow wording the rehydration arms already use.
+  await withSavePath(async ({ tick, makeCore }) => {
+    clearRetry();
+    const realGenerate = loadedPF.brief.generate;
+    const realPut = loadedPF.quarantine.put;
+    loadedPF.brief.generate = async () => rBrief2;
+    loadedPF.quarantine.put = () => false;
+    try {
+      const meta = { ...wizard(), pixelforgeBrief: rBrief };
+      const core = makeCore("chat-parkrefused", RSEED);
+      core.host.chatMeta = meta;
+      core.sim = withCompileBroken(() => S.restore(meta, "chat-parkrefused"));
+      S.mode = "metadata";
+      P.bump(core, "village", "Somebody From The Stand-In", { d: 2, t: 4 });
+      assert.equal(await S.regenerateStage(core, "brief", "reroll"), true, "the re-roll runs");
+      await tick();
+      const notices = (P.get(core).ledger.notices ?? []).map(([, text]) => text);
+      assert.equal(
+        notices.some((text) => text.includes("belonged to another world")),
+        false,
+        "the comforting sentence is NOT said over a park that refused",
+      );
+      assert.ok(
+        notices.some((text) => text.includes("could not be kept, and is gone")),
+        "…the honest one is",
+      );
+    } finally {
+      loadedPF.brief.generate = realGenerate;
+      loadedPF.quarantine.put = realPut;
+      loadedPF.quarantine.reset();
+      clearRetry();
+      restoreAssets();
+    }
+  });
+
   // ── LANE 6: A RE-ROLL THAT FAILS IS A NO-OP ───────────────────────────────
   // Until the seal PATCH lands, the old brief and the fallback world stand
   // untouched — which is what makes the popup row survive a failed press.
@@ -31373,11 +31622,26 @@ const fire = (node, type) => Promise.all((node.listeners[type] ?? []).map((fn) =
       assert.equal(S._regenPending.get("chat-rearm")?.mode, "reroll", "the record stands while the call is out");
       core._switchChat({ chatId: "chat-elsewhere", chatMeta: {} });
       assert.equal(S.gateHolds(core), false, "the chat we arrived at is not the one regenerating");
+      // THE AWAY VISIT'S OWN ADOPT IS DRAINED BEFORE THE RETURN ONE, and this
+      // drain is the whole difference between a lane and a lane that proves
+      // nothing: `adopt` chains a task that reads `core.chatId` when it RUNS, so
+      // two back-to-back switches put the away probe in the same turn as the
+      // return visit and set `mode` whether or not the re-arm swallowed anything.
+      for (let i = 0; i < 40 && S.mode === null; i++) await tick();
+      assert.notEqual(S.mode, null, "the away visit's own probe has settled, on the chat it belongs to");
       core._switchChat({ chatId: "chat-rearm", chatMeta: meta });
+      assert.equal(S.mode, null, "…and the return switch cleared it again, so what follows is THIS visit's");
       assert.equal(S.gateHolds(core), true, "coming back RE-ARMS the gate from the record");
       assert.equal(S.gate.postStart, true, "…as a post-start gate");
       assert.equal(S.gate.stage, "brief", "…at the stage that is running");
       assert.equal(S.gate.mode, "reroll", "…carrying the mode, so the retry button knows what to re-press");
+      // …AND THE RE-ARM ANSWERS "DO NOT DEFER THE ADOPT". The boolean's shipped
+      // meaning is "defer adopt to `_liftGate`", which is right at boot and wrong
+      // here — so `_switchChat` adopts on the visit. Pinned on the RETURN as well
+      // as on the consequence, because the consequence alone was watchable only
+      // through the confound the drain above just removed.
+      assert.equal(S.armGate(core, meta), false, "the post-start re-arm does not swallow the visit's adopt");
+      assert.equal(S.gate.postStart, true, "…and re-arming again left the same post-start gate standing");
       // …AND THE VISIT'S ADOPT RUNS. Swallowed, the failure exit never writes a
       // route row at all and the success exit runs the boot probe mid-visit
       // against the pre-regeneration row, classifies row 6, and rebuilds that
@@ -31482,6 +31746,18 @@ const fire = (node, type) => Promise.all((node.listeners[type] ?? []).map((fn) =
       const postPack = screen({ state: "failed", stage: "pack", failure: "refused", postStart: true });
       assert.ok(!postPack.body.includes("Trying again is free"), "…and the post-start pack screen does not call a paid call free");
       assert.ok(postPack.body.includes("costs one call"), "…it prices it");
+      // AND THE CASCADE'S OWN SCREEN, read through the HUD like the rest: a paid
+      // re-roll that sealed its brief and failed the pack is stamped `pack` while
+      // the mode on it is still the brief's, and the shipped post-start sentence
+      // promises the world behind the screen is untouched — which the seal has
+      // already made false.
+      const cascade = screen({ state: "failed", stage: "pack", failure: "refused", postStart: true, mode: "reroll" });
+      assert.equal(cascade.title, "This world didn't finish opening.", "the title is still the stage's own");
+      assert.ok(
+        !cascade.body.includes("untouched whatever happens here"),
+        "…but the screen does not tell them the world is untouched after their setting was replaced",
+      );
+      assert.ok(cascade.body.includes("written again"), "…it says the setting was rewritten and is stored");
       assert.equal(hud.gateKeep.style.display, "", "and the second exit is on screen where there is somewhere to go");
       screen({ state: "failed", stage: "brief", failure: "refused" });
       assert.equal(
@@ -31495,6 +31771,13 @@ const fire = (node, type) => Promise.all((node.listeners[type] ?? []).map((fn) =
       assert.ok(S.RETRY_COPY.footer.startsWith("Or leave this world and start a new game"));
       assert.equal(S.RETRY_COPY.chip, "World: part stand-in");
       assert.equal(hud.retryChip.textContent, S.RETRY_COPY.chip, "…and the chip wears the registry's own words");
+      assert.equal(S.chipTextFor([{}]), S.RETRY_COPY.chip, "the chip's rule is the registry's, and the HUD asks it");
+      assert.equal(S.chipTextFor([]), null, "…which is what hides it when a world has healed");
+      // THE ONCE-A-VISIT MEMO STARTS ON A SENTINEL, not on `null` — `null` is a
+      // chat id this HUD can hold, and two memos agreeing on the first frame is a
+      // popup that can never open.
+      assert.notEqual(hud._retryVisit, null, "no visit is spent yet, said with a value no chat id can equal");
+      assert.notEqual(hud._retryVisit, hud._retryChat, "…so the first frame of any chat is still an unspent visit");
       const rebuild = S.stage("brief").rows.fallback.actions.find((a) => a.mode === "rebuild");
       assert.equal(rebuild.label, "Try building it again (free)");
       assert.ok(
@@ -31748,6 +32031,22 @@ const fire = (node, type) => Promise.all((node.listeners[type] ?? []).map((fn) =
       assert.equal(calls.filter((c) => c.kind === "put").length, 0, "the blocking verdict still refuses the PUT, as shipped");
       assert.equal(r.sim, worldWas, "…and no rewind was applied under the hold: the world is the same object");
       assert.deepEqual(r.toasts, [], "nothing was announced");
+
+      // …AND THE WINDOWS EITHER SIDE OF THE GATE HOLD IT TOO. The gate is not up
+      // for the whole press: every mode awaits an ordinary flush BEFORE arming,
+      // and the free rebuild arms no gate at all — one compile and a swap either
+      // side of that same await, with the sim still stepping. A rewind landing in
+      // either window rebuilds the very world the press is about to replace, and
+      // the player reads "The world rewound with the story." immediately before
+      // "The world takes shape." The re-arm record spans the whole attempt.
+      S.gate = null;
+      S._regenPending.set("chat-rewind-held", { stage: "brief", mode: "rebuild", gated: false });
+      S._lastCheckAt = 0;
+      await S.checkRewind(r);
+      assert.equal(r.sim, worldWas, "no gate at all, and the rewind still held: the ATTEMPT is what holds it");
+      assert.deepEqual(r.toasts, [], "…and nothing was announced over the swap that is coming");
+      S._regenPending.delete("chat-rewind-held");
+
       // …and the first check after the gate comes down is what applies it.
       S.gate = null;
       S._lastCheckAt = 0;
