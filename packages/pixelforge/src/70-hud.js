@@ -3,6 +3,11 @@
 // chips, touch D-pad, Talk / Travel / Keyboard controls, toasts. The root is
 // pointer-events:none; each control opts back in — clicks in empty space fall
 // through to the narration below (host contract).
+
+/** "No chat visit has been spent on the retry popup yet." A sentinel rather than
+ *  `null` because `null` is a chat id this HUD can actually hold. */
+const NO_RETRY_VISIT = Symbol("pixelforge:no-retry-visit");
+
 PF.Hud = class {
   constructor(rootEl, core) {
     this.core = core;
@@ -296,7 +301,7 @@ PF.Hud = class {
     this.gateBody = PF.el("div", {
       style: "font:12px/1.65 inherit;opacity:0.85;max-width:34ch;margin-bottom:12px;",
     });
-    this.gateRetry = this._btn("Try again", () => PF.save.retryGeneration(this.core));
+    this.gateRetry = this._btn("Try again", () => void PF.save.retryGeneration(this.core));
     // THE SECOND EXIT (0.16 §2.10d), and it only ever appears when there is
     // somewhere to go: a playable, non-interim world standing behind the gate.
     // On a boot-armed pack gate it records the deferral and lets play begin
@@ -511,7 +516,12 @@ PF.Hud = class {
     // chat B.
     this._retry = false;
     this._retryChat = null;
-    this._retryVisit = null;
+    // NO VISIT HAS BEEN SPENT YET, said with a value no chat id can equal. Both
+    // memos used to start `null`, and `null` is also what `_retryChat` reads
+    // when there is no chat — so on the very first frame of a chat-less core the
+    // two agreed and the popup could never auto-open. A sentinel means "unspent"
+    // and nothing else.
+    this._retryVisit = NO_RETRY_VISIT;
     this._retryKey = null;
     this._retryRows = [];
     // A half-made press: {stage, action, free}. Dropped on every close, on the
@@ -2510,6 +2520,11 @@ PF.Hud = class {
     // under the reason and whether the second exit is on screen, and a flag that
     // changed without the state changing would leave the wrong screen up.
     const gatePost = gate ? PF.save.gate.postStart === true : false;
+    // WHICH RE-ATTEMPT THIS GATE IS HOLDING, in the memo key for the same reason
+    // the stage is: ruling 8's cascade can move the stage under a running
+    // attempt, and the pair — stage plus mode — is what decides both the note
+    // under the reason and what the retry button will actually press.
+    const gateMode = gate ? (PF.save.gate.mode ?? null) : null;
     // …and whether there is anywhere to go if the player declines. A brief-stage
     // BOOT gate never offers it: the world under that one is the placeholder,
     // which is the one thing nobody may be left standing in. A pack-stage gate
@@ -2524,6 +2539,7 @@ PF.Hud = class {
       gateWhy !== this._gateWhy ||
       gateStage !== this._gateStage ||
       gatePost !== this._gatePost ||
+      gateMode !== this._gateMode ||
       gateKeep !== this._gateKeep
     ) {
       this._mode = mode;
@@ -2532,6 +2548,7 @@ PF.Hud = class {
       this._gateWhy = gateWhy;
       this._gateStage = gateStage;
       this._gatePost = gatePost;
+      this._gateMode = gateMode;
       this._gateKeep = gateKeep;
       const inWorld = mode === "walk" && !gate;
       this.gateEl.style.display = gate ? "flex" : "none";
@@ -2543,7 +2560,7 @@ PF.Hud = class {
       // editing branches rather than adding a row, and the strings the player
       // reads were the part nothing watched.
       this.gateTitle.textContent = PF.save.gateTitle(gateStage, gate);
-      this.gateBody.textContent = PF.save.gateBody(gateStage, gate, gateWhy, gatePost);
+      this.gateBody.textContent = PF.save.gateBody(gateStage, gate, gateWhy, gatePost, gateMode);
       this.topbar.style.display = gate ? "none" : "";
       // Replay: the host owns the whole screen. Combat: keep a minimal HUD —
       // the mode is inferred from the narrative gameActiveState, which can flip
@@ -2622,13 +2639,16 @@ PF.Hud = class {
       this._retry = false;
       this._retryConfirm = null;
       this._retryNotes = {};
-      this._retryVisit = null;
+      this._retryVisit = NO_RETRY_VISIT;
       this._retryKey = null;
       this.retryEl.style.display = "none";
     }
     const retryRows = this._syncRetry();
     const retryAllowed = mode === "walk" && !gate;
-    this.retryChip.style.display = retryAllowed && retryRows.length ? "" : "none";
+    // THE CHIP'S RULE IS THE REGISTRY'S, asked with the rows the memo already
+    // holds so the derivation is not paid twice a frame. Re-deriving the
+    // visibility here was a second copy of a rule that has one home.
+    this.retryChip.style.display = retryAllowed && PF.save.chipTextFor(retryRows) ? "" : "none";
     if (!retryAllowed) {
       this.retryEl.style.display = "none";
     } else if (

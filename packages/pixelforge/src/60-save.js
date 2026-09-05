@@ -106,9 +106,6 @@ const PACK_META_KEY = "pixelforgePack";
 const PACK_WANTED_META_KEY = "pixelforgePackWanted";
 
 // ── THE GENERATION RETRY SURFACE (0.16 §2.10, maintainer ruling 4) ────────────
-// PROVISIONAL — maintainer ruling 2026-09-05: playtest values, expected to
-// change; one edit here changes code and lanes together.
-//
 // Ruling 4 rejected putting anything on the fallback map — "no one should play
 // in the fallback map" — and asked instead for a way OUT of it: after the game
 // starts, anything generated before game start that failed or is standing on a
@@ -118,19 +115,30 @@ const PACK_WANTED_META_KEY = "pixelforgePackWanted";
 // here ever moves it — a regenerated stage re-runs everything DOWNSTREAM of it
 // instead (new brief → pack re-run), rather than orphaning an artifact built on
 // the old value.
-const RETRY_TUNE = {
+//
+// THE KEYS ARE WIRE FORMAT, NOT PLAYTEST TUNABLES, and they are kept apart from
+// the tunables below for exactly that reason: the PROVISIONAL header invites an
+// edit, and a durable metadata key renamed on that invitation orphans every chat
+// already carrying the old one. These change only the way any stored key changes
+// — with a compatibility story written first.
+const RETRY_KEYS = {
   /** One flat boolean key per stage, meaning exactly "the player chose to keep
    *  playing on this stage's fallback for now". FLAT rather than one map at one
    *  key: the metadata PATCH is a queued SHALLOW merge (see `_configBrief`'s own
    *  rationale below), so a map would be a read-modify-write whose lost-update
    *  window grows with every stage reserved here. Written only by a row's own
    *  explicit button — never by a failure, and never by a mere dismissal. */
-  ACCEPT_KEYS: { brief: "pixelforgeFallbackAcceptedBrief", pack: "pixelforgeFallbackAcceptedPack" },
+  ACCEPTED: { brief: "pixelforgeFallbackAcceptedBrief", pack: "pixelforgeFallbackAcceptedPack" },
   /** The outgoing brief, parked beside the new one in the SAME PATCH when a paid
    *  re-roll replaces it. One deep, additive, atomic: every other
    *  destroy-the-only-copy path in this module parks first, and a degraded brief
    *  is exactly the shape a newer build wrote and this one cannot compile. */
-  PRIOR_BRIEF_KEY: "pixelforgeBriefPrior",
+  PRIOR_BRIEF: "pixelforgeBriefPrior",
+};
+
+// PROVISIONAL — maintainer ruling 2026-09-05: playtest values, expected to
+// change; one edit here changes code and lanes together.
+const RETRY_TUNE = {
   /** The marker PATCHes ride the seal PATCH's own ladder, deliberately: three
    *  attempts at the same spacing, so a storage failure here reads on the
    *  shipped storage screen rather than inventing a second vocabulary. */
@@ -282,6 +290,22 @@ const STAGE_ROWS = [
     id: "pack",
     label: "What the people say and do",
     modes: { retry: { gated: true }, rewrite: { gated: true } },
+    /** WHAT A PRESS MEANS WHEN THIS STAGE WAS REACHED BY CASCADE (ruling 8's
+     *  law, §2.10d). A regenerated stage re-runs everything downstream of it, so
+     *  a paid re-roll whose brief SEALED and whose pack then failed is standing
+     *  at this stage carrying the BRIEF's mode name — a mode this row does not
+     *  offer. Resolved against `gate.mode` alone the press would find no
+     *  descriptor, refuse, and change nothing: a dead button on the one screen
+     *  built around it, over a world the freeze is still holding. So the row
+     *  says what a press owes here instead — the brief moved, so what is owed is
+     *  this world's pack, which is exactly `rewrite` — and it carries its own
+     *  sentence, because the shipped note ("the world you are standing in is
+     *  untouched whatever happens here") stops being true the moment a new brief
+     *  is sealed behind the screen saying it. */
+    cascade: {
+      mode: "rewrite",
+      note: "Your setting was written again and it is stored, so the new world is settled — what didn't finish is what its people say. Trying again costs one call and brings you to the new world. Keep playing without it and the new world is there the next time you open this chat.",
+    },
     screens: {
       generating: {
         title: "Writing what your world has to say…",
@@ -934,7 +958,7 @@ PF.save = {
    *  `_packWanted`'s discipline: a truthy value a later release writes for some
    *  other reason must not silence a stage. */
   fallbackAccepted(meta, chatId, stageId) {
-    const key = RETRY_TUNE.ACCEPT_KEYS[stageId];
+    const key = RETRY_KEYS.ACCEPTED[stageId];
     if (!key) return false;
     if (meta?.[key] === true) return true;
     return !!chatId && this._fallbackAcceptedSealed.has(`${chatId}|${stageId}`);
@@ -950,7 +974,7 @@ PF.save = {
    *  alternative (a boot gate that asks first) is a loading-gate redesign this
    *  release declines. */
   async _acceptFallback(chatId, stageId) {
-    const key = RETRY_TUNE.ACCEPT_KEYS[stageId];
+    const key = RETRY_KEYS.ACCEPTED[stageId];
     if (!chatId || !key) return false;
     for (let attempt = 0; attempt < RETRY_TUNE.STORE_ATTEMPTS; attempt++) {
       try {
@@ -974,7 +998,7 @@ PF.save = {
    *  The local blob is mirrored on success (the PATCH is a shallow merge with no
    *  delete convention, so the key is nulled rather than removed). */
   async _clearAccepted(chatId, stageId, meta) {
-    const key = RETRY_TUNE.ACCEPT_KEYS[stageId];
+    const key = RETRY_KEYS.ACCEPTED[stageId];
     if (!chatId || !key) return false;
     for (let attempt = 0; attempt < RETRY_TUNE.STORE_ATTEMPTS; attempt++) {
       try {
@@ -997,7 +1021,7 @@ PF.save = {
    *  keeps a healed chat's metadata from carrying a dead answer forever. */
   _forgetAccepted(core, stageId) {
     const chatId = core?.chatId;
-    if (!chatId || !RETRY_TUNE.ACCEPT_KEYS[stageId]) return;
+    if (!chatId || !RETRY_KEYS.ACCEPTED[stageId]) return;
     const meta = core.host && typeof core.host.chatMeta === "object" ? core.host.chatMeta : null;
     if (!this.fallbackAccepted(meta, chatId, stageId)) return;
     const memo = `${chatId}|${stageId}`;
@@ -1488,9 +1512,18 @@ PF.save = {
    *  of the install lands here with `pixelforgeBrief` already PATCHed, one-shot, and
    *  a retry that recompiles from it rather than re-rolling it. "Exactly as you left
    *  it" was false for that chat. What survives both is what ruling #7 actually
-   *  guarantees: NO failure seals a world on the player's behalf, ever. */
-  gateStageNote(stage, postStart) {
+   *  guarantees: NO failure seals a world on the player's behalf, ever.
+   *
+   *  THE PACK STAGE HAS A FIFTH, and it is the one the cascade opened: a paid
+   *  re-roll that SEALED its brief and failed the pack lands here with the new
+   *  setting already stored and the old world still on screen. Both post-start
+   *  clauses are false there — the setting is not the one that was written and
+   *  settled before the press, and the world in front of the player is not
+   *  untouched, because the seal is the point of no return and the next visit
+   *  arrives in the new one. The row carries that sentence itself. */
+  gateStageNote(stage, postStart, mode) {
     const row = this.stage(stage) ?? this.stage("brief");
+    if (postStart && this._cascaded(row.id, mode) && row.cascade.note) return row.cascade.note;
     if (postStart && row.screens.postStartNote) return row.screens.postStartNote;
     return row.screens.note;
   },
@@ -1504,9 +1537,9 @@ PF.save = {
     return state === "failed" ? row.screens.failed.title : row.screens.generating.title;
   },
 
-  gateBody(stage, state, kind, postStart) {
+  gateBody(stage, state, kind, postStart, mode) {
     const row = this.stage(stage) ?? this.stage("brief");
-    if (state === "failed") return `${this.gateReason(kind, stage)} ${this.gateStageNote(stage, postStart)}`;
+    if (state === "failed") return `${this.gateReason(kind, stage)} ${this.gateStageNote(stage, postStart, mode)}`;
     return row.screens.generating.body;
   },
 
@@ -1526,9 +1559,30 @@ PF.save = {
     return STAGE_ROWS.find((row) => row.id === stageId) ?? null;
   },
 
+  /** Did the gate reach this stage as a CASCADE of another stage's regeneration?
+   *  Asked of the two marks the gate already carries rather than of a third one:
+   *  a mode the stamped stage does not offer can only have been stamped by an
+   *  upstream stage and carried down by `_stageGate`'s spread. */
+  _cascaded(stageId, mode) {
+    const row = this.stage(stageId);
+    return !!(mode && row && row.cascade && !row.modes?.[mode]);
+  },
+
+  /** The re-attempt a press at this stage actually means. Normally `gate.mode`,
+   *  which belongs to `gate.stage`; when the cascade moved the stage out from
+   *  under it, the stage's own cascade mode is what the press owes. Left alone
+   *  when neither exists, so the press refuses honestly rather than silently. */
+  _pressMode(stageId, mode) {
+    return this._cascaded(stageId, mode) ? this.stage(stageId).cascade.mode : mode;
+  },
+
   /** The retry the gate's failure state offers, and the only caller is that
-   *  button: everything else re-arms by revisiting the chat. */
-  retryGeneration(core) {
+   *  button: everything else re-arms by revisiting the chat.
+   *
+   *  ASYNC ONLY SO THE POST-START ANSWER IS THE DELEGATE'S — the body still runs
+   *  to completion synchronously (there is no await above either return), so the
+   *  boot path's repaint lands in the pressing frame exactly as it always has. */
+  async retryGeneration(core) {
     if (!this.gateHolds(core) || this.gate.state !== "failed") return false;
     // "TRY AGAIN" KNOWS WHERE IT IS (0.16 §2.10d). On a boot gate this is the
     // shipped behaviour, byte-untouched: re-stamp and re-enter the ladder, which
@@ -1540,10 +1594,21 @@ PF.save = {
     // ladder's own header comment names. So this path mutates NOTHING and
     // delegates whole; `regenerateStage` re-stamps the gate itself, after its
     // check passes. The gate literal carries both halves the press needs.
-    if (this.gate.postStart) {
-      void this.regenerateStage(core, this.gate.stage, this.gate.mode);
-      return true;
-    }
+    //
+    // …AND THE MODE IS RESOLVED AGAINST THE STAMPED STAGE, never assumed to
+    // match it. Ruling 8's cascade moves the stage downstream MID-ATTEMPT — a
+    // paid re-roll whose brief seals fails at the pack stage still carrying
+    // "reroll" — and a mode the stamped row does not offer is a `regenerateStage`
+    // that refuses having touched nothing, which is a dead button on the one
+    // screen built around it, over a world the freeze is still holding. The
+    // ROW says what a press owes at its own stage; `_pressMode` asks it.
+    //
+    // AND THE DELEGATION'S ANSWER IS THE PRESS'S ANSWER (§2.10d). A `true`
+    // returned over a refusal is the silence that made the dead press invisible:
+    // the caller cannot tell a live press from a spent one, and neither can a
+    // lane. This is the one path that can refuse, so it is the one that reports.
+    if (this.gate.postStart)
+      return this.regenerateStage(core, this.gate.stage, this._pressMode(this.gate.stage, this.gate.mode));
     this.gate = { ...this.gate, state: "generating", failure: null };
     core.hud?.update?.();
     void this.maybeGenerateBrief(core);
@@ -1626,9 +1691,19 @@ PF.save = {
 
   /** The topbar chip's words, derived STRICTLY from live rows so a world that
    *  healed never keeps saying "part stand-in". Null when there is nothing to
-   *  say, which is what hides it. */
+   *  say, which is what hides it.
+   *
+   *  TWO ENTRY POINTS, ONE RULE, and the split is what makes the rule the
+   *  SHIPPED one rather than a parallel copy of it: the HUD already holds a
+   *  memoised row list (re-deriving per frame is a cost the memo exists to
+   *  avoid), so it asks `chipTextFor` with the rows it has, and this one is for
+   *  a caller holding only a core. A lane pinning this pins what the chip says. */
+  chipTextFor(rows) {
+    return rows && rows.length ? RETRY_COPY.chip : null;
+  },
+
   retryChipText(core) {
-    return this.retryRows(core).length ? RETRY_COPY.chip : null;
+    return this.chipTextFor(this.retryRows(core));
   },
 
   /** Would the free same-seed rebuild actually produce a world this time?
@@ -1669,16 +1744,23 @@ PF.save = {
    *      Arm-then-enter is a hard hang: the ladder early-returns on its own
    *      in-flight Set, leaving "writing…" with nothing running behind it, the
    *      tick loop frozen and the retry button hidden.
-   *   2. PRECONDITIONS BEFORE THE RECORD, THE GATE AND THE DISPATCH. A pack
+   *   2. THE RECORD IS WRITTEN BEFORE THE PRECONDITION, and it is written HERE
+   *      and cleared in THIS function's own `finally`, never the callee's: the
+   *      ladder's `finally` sits below an early-out that the guarded paths take,
+   *      so a record left to it leaks — and a leaked record refuses every later
+   *      press and re-freezes every later visit. Before the precondition rather
+   *      than after it because the precondition is a metadata round trip with
+   *      its own backoff, run with NO gate armed yet — so the popup's
+   *      held-disable does not apply either — and a second press inside that
+   *      await walked straight through the check above and then deleted the
+   *      record in its own `finally` while the first press's call was still out.
+   *      The next visit then re-armed through `armGate`'s ORDINARY path: a
+   *      boot-shaped gate over a played world with nothing running behind it.
+   *   3. THE PRECONDITION STILL PRECEDES THE GATE AND THE DISPATCH. A pack
    *      retry has to clear the accepted marker DURABLY first: without that,
    *      `packExpected` stays false and the dispatch falls through the ladder's
    *      nothing-to-generate branch into the bare lift, spending nothing and
    *      running the deferred arms mid-session.
-   *   3. THE RECORD IS WRITTEN HERE AND CLEARED IN THIS FUNCTION'S OWN
-   *      `finally`, never the callee's: the ladder's `finally` sits below an
-   *      early-out that the guarded paths take, so a record left to it leaks —
-   *      and a leaked record refuses every later press and re-freezes every
-   *      later visit.
    *   4. THE PRE-ARM FLUSH IS AWAITED, and it is the ORDINARY chained write, not
    *      the teardown shape (which is fire-and-forget, spends the keepalive
    *      quota while the page is alive, and silently declines on a blocked last
@@ -1695,28 +1777,27 @@ PF.save = {
     if (this._generating.has(chatId) || this._regenPending.has(chatId)) return false;
     const meta =
       core.host && typeof core.host.chatMeta === "object" && core.host.chatMeta !== null ? core.host.chatMeta : {};
-    // 2. Preconditions.
-    if (mode === "retry" && !(await this._clearAccepted(chatId, "pack", meta))) {
-      // Three attempts down. The shipped storage screen says the true thing, and
-      // NOTHING is dispatched: the marker still stands, so the ladder would have
-      // found nothing to generate.
-      if (chatId !== core.chatId) return false;
-      this.gate = {
-        chatId,
-        state: "failed",
-        attempts: 1,
-        failure: "storage",
-        stage: "pack",
-        mode,
-        postStart: true,
-      };
-      core.hud?.update?.();
-      return false;
-    }
-    const theme = this._configTheme(meta) ?? "cozy-village";
-    const seed = this._regenSeed(core, meta);
+    // 2. The record, covering the WHOLE attempt — precondition included.
     this._regenPending.set(chatId, { stage: stageId, mode, gated: descriptor.gated });
     try {
+      // 3. Preconditions.
+      if (mode === "retry" && !(await this._clearAccepted(chatId, "pack", meta))) {
+        // Three attempts down. The shipped storage screen says the true thing,
+        // and NOTHING is dispatched: the marker still stands, so the ladder
+        // would have found nothing to generate.
+        if (chatId !== core.chatId) return false;
+        this.gate = {
+          chatId,
+          state: "failed",
+          attempts: 1,
+          failure: "storage",
+          stage: "pack",
+          mode,
+          postStart: true,
+        };
+        core.hud?.update?.();
+        return false;
+      }
       // THE FREE SAME-SEED REBUILD (ruling 8's replacement for the vetoed
       // reseed). No LLM call, no ladder, no gate, no in-flight hold — one
       // compile attempt, and a still-degraded result changes nothing and says
@@ -1725,7 +1806,13 @@ PF.save = {
       // case — worldgen failed, everything else sealed — for zero tokens, and
       // the sealed pack stays valid by construction because the brief, and so
       // its hash, are untouched.
+      //
+      // The seed and the theme are read HERE and not above, because this is the
+      // only mode that compiles a world itself: the gated modes hand the ladder
+      // a force and the ladder reads its own pair.
       if (mode === "rebuild") {
+        const theme = this._configTheme(meta) ?? "cozy-village";
+        const seed = this._regenSeed(core, meta);
         const sealed = this._configBrief(meta, chatId);
         if (!this.briefCompiles(sealed)) return false;
         if (!PF.world.build(seed, theme, sealed).brieved) return false;
@@ -1835,7 +1922,19 @@ PF.save = {
     this._generating.add(chatId);
     try {
       const theme = this._configTheme(meta) ?? "cozy-village";
-      let seed = this._configSeed(meta);
+      // READ-SITE 5 — THE SEED, AND ON A FORCE IT IS THE STANDING WORLD'S
+      // (maintainer ruling 8). The seed is the world's identity for the life of
+      // the chat, so no recovery path may move it — and the wizard config is not
+      // where that identity lives: `/game/create`'s reuse-an-existing-chat arm
+      // rewrites `gameSetupConfig` wholesale, `simFromSaved` prefers the SAVE
+      // ENVELOPE's seed over the config, and `snapshot()` writes the live
+      // world's, so a chat whose setup was edited after creation carries two
+      // different numbers. At BOOT the two questions are the same one (there is
+      // no world yet that anybody is standing in) and this line is byte-
+      // untouched; on a force there IS one, and it is the answer. `_regenSeed`
+      // is the shared ladder — live world, then wizard, then the chat-id hash —
+      // so the free rebuild and the paid re-roll can only ever agree.
+      let seed = force ? this._regenSeed(core, meta) : this._configSeed(meta);
       if (seed === null) seed = PF.hashStr(String(chatId));
       const setup = meta.gameSetupConfig && typeof meta.gameSetupConfig === "object" ? meta.gameSetupConfig : {};
       const preferences = [
@@ -1888,7 +1987,7 @@ PF.save = {
         // fallback world stand untouched, so a failed re-roll leaves the player
         // exactly where they were with the popup row intact; once it lands it is
         // the point of no return, and the confirm copy says so.
-        if (force === "brief" && priorBrief) patch[RETRY_TUNE.PRIOR_BRIEF_KEY] = priorBrief;
+        if (force === "brief" && priorBrief) patch[RETRY_KEYS.PRIOR_BRIEF] = priorBrief;
         // READ-SITE 2 — the marker copy is SUPPRESSED on the force path. The
         // mint stays a creation-era one-shot: a force on a months-old chat must
         // never be able to mint `pixelforgePackWanted` out of a wizard config
@@ -2004,7 +2103,31 @@ PF.save = {
       // POST-START IS THE GATE'S OWN ANSWER, so the eight gap closures below are
       // scoped to a regeneration and the boot/compat-shim path is byte-identical.
       const postStart = this.gateHolds(core) && this.gate.postStart === true;
-      if (briefWanted || force === "brief" || core.sim?.world?.interim)
+      // …AND THE CASCADE OWES AN INSTALL OF ITS OWN. A re-roll whose brief
+      // SEALED and whose pack then FAILED leaves the new brief stored and the
+      // old world still standing — the install is below the pack's failure exit,
+      // so it never ran. The press that finishes that attempt comes back through
+      // the PACK stage (`force: "pack"`), where not one of the three terms above
+      // is true, and `_resumeHeldWorld` would resume the very world the player
+      // paid to leave. So a FORCED post-start run installs as well when the
+      // world in front of the player was not compiled from a brief at all AND
+      // the sealed one compiles into a real one — `canRebuild`'s own single
+      // probe (build() never throws; the absence of `brieved` IS the answer),
+      // asked against the values the install would use. Both halves are
+      // load-bearing: without the second, a chat standing on a stand-in with a
+      // DEMOTED pack would rebuild a degrade over a degrade on the shipped
+      // rewrite press, severing world-bound play for nothing.
+      // `force === "pack"` rather than any force, and the narrowing is the whole
+      // cost story: it is the only force that reaches this fork without having
+      // already decided to install, so the probe build below never runs on a
+      // path whose answer was known a term earlier.
+      const cascadeInstall =
+        postStart &&
+        force === "pack" &&
+        !!core.sim?.world &&
+        !core.sim.world.brieved &&
+        PF.world.build(seed, theme, sealed).brieved;
+      if (briefWanted || force === "brief" || core.sim?.world?.interim || cascadeInstall)
         this._installSealedWorld(core, chatId, sealed, seed, theme, postStart);
       else this._resumeHeldWorld(core, chatId, sealed);
     } catch (err) {
@@ -2781,9 +2904,20 @@ PF.save = {
    *  refusal sites would then disagree about whether the gate holds. Under a
    *  post-start hold the pre-check proceeds and its row-4/7 verdicts still BLOCK
    *  the PUT exactly as shipped; the moved row is applied by the first turn edge
-   *  after the gate comes down, through the shipped `checkRewind` path. */
+   *  after the gate comes down, through the shipped `checkRewind` path.
+   *
+   *  AND IT IS THE ATTEMPT THAT HOLDS, NOT THE GATE. The gate is not up for the
+   *  whole press: every mode awaits an ordinary flush BEFORE arming (a PUT round
+   *  trip), and the free rebuild arms no gate at all — one synchronous compile
+   *  and a swap either side of that same await. In both windows the sim is still
+   *  stepping and nothing above refuses, so a checkpoint rewind landing there
+   *  would `_rebuild` the world the press is about to replace and the player
+   *  would read "The world rewound with the story." immediately before "The
+   *  world takes shape." The re-arm record spans the whole attempt, which is
+   *  exactly the window that has to hold. */
   _rewindHeld(core) {
-    return this.gateHolds(core) && this.gate.postStart === true;
+    if (this.gateHolds(core) && this.gate.postStart === true) return true;
+    return !!core?.chatId && this._regenPending.has(core.chatId);
   },
 
   async _applyRewind(core, decided, chatId, gen, seqAtIssue, reread) {
