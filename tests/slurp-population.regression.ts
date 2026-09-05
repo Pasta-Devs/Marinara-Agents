@@ -186,4 +186,18 @@ const provider = read("services/slurp/slurp-fan-identity-provider.ts");
 assert.match(provider, /persona\?: \{/u);
 assert.match(fanRun, /populationNoodlerFanIdentityProvider\(castWithHistory\)/u);
 
+// ── Being a particular fan has to change something ──────────────────────────
+// A Creator answered a whale who had spent four hundred coins exactly as they answered a stranger:
+// the comment-reply prompt carried a display name and a handle and nothing else. The direct-message
+// path has had rapport since it shipped; the comment path never did — and comments are where most
+// people are actually seen.
+const replyService = read("services/slurp/slurp-reply-generation.service.ts");
+assert.match(replyService, /relationship: input\.relationship \?\? "no history with this creator yet"/u);
+assert.match(replyService, /Let the relationship set the warmth\./u);
+assert.match(replyService, /async function describeCommenterRelationship/u);
+// A reply is one or two sentences; a paragraph of history would dominate the comment it answers.
+assert.match(replyService, /Deliberately short\./u);
+// A missing relationship must never refuse a reply.
+assert.match(replyService, /A missing relationship is not a reason to refuse a reply\./u);
+
 console.log("slurp population regression passed");

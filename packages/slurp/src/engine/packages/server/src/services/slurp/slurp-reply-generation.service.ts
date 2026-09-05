@@ -22,6 +22,7 @@ import type { ChatMessage } from "../llm/base-provider.js";
 import { createLLMProvider } from "../llm/provider-registry.js";
 import { createConnectionsStorage } from "../storage/connections.storage.js";
 import { createSlurpStorage } from "../storage/slurp.storage.js";
+import { createSlurpPopulationStorage } from "../storage/slurp-population.storage.js";
 import {
   NOODLER_UNTRUSTED_CONTENT_INSTRUCTION,
   noodlerIdentityInstruction,
@@ -46,6 +47,16 @@ export function buildNoodlerCreatorReplyMessages(input: {
   publicIdentity: PublicIdentity | null;
   generationGuidance: string;
   scheduleContext?: string;
+  /**
+   * What this viewer is to this Creator.
+   *
+   * A creator used to answer a whale who had spent four hundred coins exactly as they answered a
+   * stranger, because the reply prompt carried a display name and a handle and nothing else. The
+   * direct-message path has had rapport since it shipped; the comment path never did — so being a
+   * particular fan changed nothing about how you were treated in the one place most people are
+   * actually seen.
+   */
+  relationship?: string;
 }): ChatMessage[] {
   const protect = (value: string | null | undefined) =>
     protectNoodlerGeneratedIdentity(value, input.disclosureMode, input.publicIdentity) ?? "";
@@ -56,6 +67,7 @@ export function buildNoodlerCreatorReplyMessages(input: {
     input.generationGuidance.trim(),
     noodlerIdentityInstruction(input.disclosureMode, input.publicIdentity),
     "Keep the reply direct and brief: one or two short sentences, normally under 240 characters.",
+    "Let the relationship set the warmth. A stranger gets a friendly but ordinary reply; somebody who has been here a long time or paid for a lot gets recognition, familiarity, and a callback to what they have given you.",
     'Return exactly one JSON object with one string field named "content".',
     "Return JSON only. No prose outside the JSON object.",
   ]
@@ -77,6 +89,7 @@ export function buildNoodlerCreatorReplyMessages(input: {
     viewer: {
       displayName: protect(input.viewer.displayName),
       handle: protect(input.viewer.handle),
+      relationship: input.relationship ?? "no history with this creator yet",
     },
     viewerComment: protect(input.parent.content) || (input.parent.imageUrl ? "[image reply]" : ""),
     scheduleContext: input.scheduleContext ?? "No active Conversation Schedule is available for this Creator today.",
@@ -125,12 +138,16 @@ export async function generateNoodlerCreatorReply(input: {
   const scheduleContext = source
     ? await resolveSlurpCreatorScheduleContext(createCharactersStorage(input.db), source, undefined, new Date())
     : undefined;
+  // Who this commenter is to this Creator. Read from the funnel and from whether they subscribe,
+  // both of which were already recorded and never reached this prompt.
+  const relationship = await describeCommenterRelationship(input.db, input.creator.id, input.viewer.id);
   const messages = buildNoodlerCreatorReplyMessages({
     ...input,
     disclosureMode,
     publicIdentity,
     generationGuidance: settings.generationGuidance,
     scheduleContext,
+    relationship,
   });
   const debugMode = input.debugMode === true || isDebugAgentsEnabled();
   const options = {
@@ -173,4 +190,35 @@ export async function generateNoodlerCreatorReply(input: {
   );
   if (!protectedContent) throw new Error("Slurp creator reply generation returned no usable content.");
   return protectedContent;
+}
+
+/**
+ * One line describing what a commenter is to a Creator.
+ *
+ * Deliberately short. A reply is one or two sentences, and a paragraph of history would dominate
+ * the comment it is answering.
+ */
+async function describeCommenterRelationship(db: DB, creatorAccountId: string, viewerId: string): Promise<string> {
+  const parts: string[] = [];
+  try {
+    const subscribed = (await createSlurpStorage(db).listSubscriptionsForViewer(viewerId)).some(
+      (entry) => entry.creatorAccountId === creatorAccountId,
+    );
+    if (subscribed) parts.push("subscribes to you");
+    const tie = (await createSlurpPopulationStorage(db).listTiesForCreator(creatorAccountId)).find(
+      (entry) => entry.memberId === viewerId,
+    );
+    if (tie) {
+      if (tie.stage !== "stranger" && tie.stage !== "lapsed") parts.push(tie.stage);
+      if (tie.stage === "lapsed") parts.push("drifted away for a while and is back");
+      if (tie.spent > 0) parts.push(`has spent ${tie.spent} coins on you`);
+      const days = Math.round((Date.now() - Date.parse(tie.firstSeenAt)) / 86_400_000);
+      if (Number.isFinite(days) && days >= 14)
+        parts.push(`around for ${days >= 90 ? `${Math.round(days / 30)} months` : `${Math.round(days / 7)} weeks`}`);
+    }
+  } catch {
+    // A missing relationship is not a reason to refuse a reply.
+    return "no history with this creator yet";
+  }
+  return parts.length > 0 ? parts.join(", ") : "no history with this creator yet";
 }
