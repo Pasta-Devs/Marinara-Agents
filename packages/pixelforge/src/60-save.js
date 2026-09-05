@@ -172,12 +172,22 @@ const RETRY_COPY = {
     "This writes a new world from your setting (one generation call — two if it also rewrites what its people say).",
   costFree:
     "This builds the world again from the setting you already have — no generation call, same setting, same seed.",
-  // FREE IS NOT CONSEQUENCE-FREE: the severance is identical either way, so both
-  // confirmations carry the same keeps-and-loses contract under their cost line.
+  // THE THIRD SHAPE, and it is here because the paid one would LIE on it: the
+  // cascade's press writes no setting — that call already succeeded and its
+  // answer is stored — it re-runs what is still owed and lands the player in the
+  // world their setting already describes. Same severance, different price, so
+  // the cost line is the only half that changes.
+  confirmCascadeTitle: "Move into the new world?",
+  costCascade:
+    "Your setting was already written again and stored, so this doesn't write it a second time. One generation call fills in what the new world's people say, and then you arrive there.",
+  // FREE IS NOT CONSEQUENCE-FREE: the severance is identical either way, so all
+  // three confirmations carry the same keeps-and-loses contract under their cost
+  // line.
   keepsAndLoses:
     "Your money, items, skills and the clock come with you. Friendships, quests, discoveries, your home and anything you bought here stay behind — they belonged to this map, and maps you exported stay in your collection. There's no second starting purse; you keep what you've earned. Once the new world is written there's no going back, even if you close this window. You'll arrive at the new world's door.",
   confirmGo: "Yes, write it",
   confirmFreeGo: "Yes, build it",
+  confirmCascadeGo: "Yes, take me there",
   confirmBack: "Not now",
   // Session-only, honestly re-derived as first-time after a reload: a durable
   // attempt log is refused for the same reason a durable failure log is.
@@ -206,8 +216,14 @@ const STAGE_ROWS = [
     /** Which re-attempts this stage offers, and whether each one runs BEHIND THE
      *  GATE. `gated: false` is the free rebuild: one synchronous compile, no
      *  ladder, no gate, no hold — so a chat switch mid-press has nothing to
-     *  re-arm and the row simply re-derives on return. */
-    modes: { rebuild: { gated: false }, reroll: { gated: true } },
+     *  re-arm and the row simply re-derives on return.
+     *
+     *  `installs` is the OTHER question, and it is the one the confirmation
+     *  reads: both of this stage's modes compile a world and put the player in
+     *  it, whatever else is standing, so both ask first. The pack row's modes
+     *  carry no such flag because neither installs by itself — one of them does
+     *  it in exactly one state, which is `retryReplacesWorld`'s job to know. */
+    modes: { rebuild: { gated: false, installs: true }, reroll: { gated: true, installs: true } },
     screens: {
       generating: {
         title: "Writing your world…",
@@ -581,6 +597,18 @@ PF.save = {
    *  enough: after a real reload the host serves the PATCHed metadata and the
    *  blob IS the new brief. */
   _briefSuperseded: new Map(),
+  /** Chats whose brief THIS SESSION re-rolled and sealed (0.16 §2.10d). The
+   *  CONSENT witness, and it is what the world-replacing tail of a cascade hangs
+   *  on: the paid re-roll is the press that showed the keeps-and-loses confirm,
+   *  and the world that press was confirmed against is the world the install
+   *  replaces. Neither of the two facts already on hand can stand in for it —
+   *  `_briefSuperseded` is keyed by the OLD brief's hash and an unreadable seal
+   *  has none, and the world's own shape says nothing about who asked for the
+   *  new setting: a second device whose metadata refreshed to a brief IT never
+   *  requested is standing in exactly the same shape. Session-only by design; a
+   *  witness that outlived the confirm would be the same silent swap one boot
+   *  later. */
+  _briefResealed: new Set(),
 
   /** Reads core.sim and core.chatId and NOTHING else: 80-setup calls this with
    *  a synthetic two-key core, and reaching for core.host/hud/render there
@@ -1520,12 +1548,42 @@ PF.save = {
    *  clauses are false there — the setting is not the one that was written and
    *  settled before the press, and the world in front of the player is not
    *  untouched, because the seal is the point of no return and the next visit
-   *  arrives in the new one. The row carries that sentence itself. */
-  gateStageNote(stage, postStart, mode) {
+   *  arrives in the new one. The row carries that sentence itself.
+   *
+   *  AND `cascaded` IS A FACT ABOUT THE STATE, NEVER ABOUT THE MODE ON THE GATE.
+   *  It was the mode once — "a mode this row does not offer was stamped by an
+   *  upstream stage" — and that reading lasted exactly one press: `_pressMode`
+   *  rewrites the mode to one the row DOES offer, so the SECOND failure of the
+   *  very same attempt went back to painting the post-start sentence over a chat
+   *  whose brief had already been sealed. The condition the sentence describes is
+   *  still true then, so the caller asks `worldBehindBrief` and hands the answer
+   *  down. */
+  gateStageNote(stage, postStart, cascaded) {
     const row = this.stage(stage) ?? this.stage("brief");
-    if (postStart && this._cascaded(row.id, mode) && row.cascade.note) return row.cascade.note;
+    if (postStart && cascaded && row.cascade?.note) return row.cascade.note;
     if (postStart && row.screens.postStartNote) return row.screens.postStartNote;
     return row.screens.note;
+  },
+
+  /** IS THE SETTING THAT IS SEALED AHEAD OF THE WORLD THE PLAYER IS STANDING IN?
+   *  One question, three readers, and they have to agree or the surface lies:
+   *  the install fork replaces the world exactly here, the failure screen's
+   *  sentence promises exactly this, and the confirmation warns about exactly
+   *  it.
+   *
+   *  BOTH TERMS ARE THE POINT. The witness says THIS SESSION re-rolled this
+   *  chat's brief behind the keeps-and-loses confirm — a brief that merely
+   *  arrived (another device's re-roll, refreshed into `chatMeta`) is a swap
+   *  nobody standing here agreed to, and the shape alone cannot tell the two
+   *  apart. The world's own `brieved` mark says the swap has not happened yet:
+   *  compile() writes it, so a world without it was never built from any brief,
+   *  and a world with it is the sealed brief's own — there is nothing left
+   *  behind and nothing left to replace. */
+  worldBehindBrief(core) {
+    const chatId = core?.chatId;
+    if (!chatId || !this._briefResealed.has(chatId)) return false;
+    const world = core?.sim?.world;
+    return !!world && !world.brieved;
   },
 
   /** The gate's TITLE and BODY, off the same rows. They used to be ternaries in
@@ -1537,9 +1595,9 @@ PF.save = {
     return state === "failed" ? row.screens.failed.title : row.screens.generating.title;
   },
 
-  gateBody(stage, state, kind, postStart, mode) {
+  gateBody(stage, state, kind, postStart, cascaded) {
     const row = this.stage(stage) ?? this.stage("brief");
-    if (state === "failed") return `${this.gateReason(kind, stage)} ${this.gateStageNote(stage, postStart, mode)}`;
+    if (state === "failed") return `${this.gateReason(kind, stage)} ${this.gateStageNote(stage, postStart, cascaded)}`;
     return row.screens.generating.body;
   },
 
@@ -1559,21 +1617,23 @@ PF.save = {
     return STAGE_ROWS.find((row) => row.id === stageId) ?? null;
   },
 
-  /** Did the gate reach this stage as a CASCADE of another stage's regeneration?
-   *  Asked of the two marks the gate already carries rather than of a third one:
-   *  a mode the stamped stage does not offer can only have been stamped by an
-   *  upstream stage and carried down by `_stageGate`'s spread. */
-  _cascaded(stageId, mode) {
-    const row = this.stage(stageId);
-    return !!(mode && row && row.cascade && !row.modes?.[mode]);
-  },
-
   /** The re-attempt a press at this stage actually means. Normally `gate.mode`,
    *  which belongs to `gate.stage`; when the cascade moved the stage out from
-   *  under it, the stage's own cascade mode is what the press owes. Left alone
-   *  when neither exists, so the press refuses honestly rather than silently. */
+   *  under it — a mode the stamped row does not offer can only have been stamped
+   *  by an upstream stage and carried down by `_stageGate`'s spread — the row's
+   *  own cascade mode is what the press owes. Left alone when neither exists, so
+   *  the press refuses honestly rather than silently.
+   *
+   *  ASKED OF THE MODE, AND ONLY OF THE MODE. This is a stranded-name question,
+   *  not the state question `worldBehindBrief` answers, and keeping them apart is
+   *  what makes both correct across the same attempt's second press: by then the
+   *  mode has been rewritten to one this row DOES offer and belongs to it, while
+   *  the state — a setting sealed ahead of the world on screen — has not moved
+   *  at all. */
   _pressMode(stageId, mode) {
-    return this._cascaded(stageId, mode) ? this.stage(stageId).cascade.mode : mode;
+    const row = this.stage(stageId);
+    if (!mode || !row?.cascade || row.modes?.[mode]) return mode;
+    return row.cascade.mode;
   },
 
   /** The retry the gate's failure state offers, and the only caller is that
@@ -1719,6 +1779,28 @@ PF.save = {
     if (!this.briefCompiles(sealed)) return false;
     const theme = this._configTheme(meta) ?? "cozy-village";
     return !!PF.world.build(this._regenSeed(core, meta), theme, sealed).brieved;
+  },
+
+  /** WOULD THIS PRESS REPLACE THE WORLD IN FRONT OF THE PLAYER? The surface's
+   *  rule is that everything which does asks first, and the MODE'S NAME cannot
+   *  answer the question: `rewrite` is one pack call on the ordinary press — the
+   *  row's own words are "what its people used to say belonged to the old one" —
+   *  and the cascade's world swap on the other, over the very same button. So
+   *  the registry says which modes install whatever is standing, and the row's
+   *  cascade mode installs in exactly the state the install fork installs in.
+   *
+   *  THE THREE TERMS BELOW ARE THAT FORK'S, deliberately: the same witness, the
+   *  same `brieved` reading, and the same compile probe asked through
+   *  `canRebuild`, which reads the same seed (a forced re-attempt takes
+   *  `_regenSeed`), the same theme ladder and the same sealed brief. A confirm
+   *  that disagreed with the fork is either a warning about a swap that never
+   *  happens or a swap with no warning, and the second one is the bug this
+   *  exists for. */
+  retryReplacesWorld(core, stageId, mode) {
+    const row = this.stage(stageId);
+    if (!row?.modes?.[mode]) return false;
+    if (row.modes[mode].installs === true) return true;
+    return row.cascade?.mode === mode && this.worldBehindBrief(core) && this.canRebuild(core);
   },
 
   /** THE WORLD'S SEED, AND IT NEVER MOVES (maintainer ruling 8). The seed is the
@@ -2017,6 +2099,13 @@ PF.save = {
         // for a RE-ROLL the blob still carries a well-shaped old brief and would
         // win forever, so this is what routes it past the blob-wins arm.
         if (force === "brief" && priorBrief) this._briefSuperseded.set(chatId, PF.player.briefHashOf(priorBrief));
+        // AND THE CONSENT WITNESS BESIDE IT, on the wider term of the two: this
+        // one is recorded whether or not there was an old brief to park, because
+        // an UNREADABLE seal has nothing to park and is still a re-roll the
+        // player confirmed. From here on, everything downstream that would
+        // replace the world in front of them can tell this session's own paid
+        // press apart from a brief that simply arrived (`_briefResealed`).
+        if (force === "brief") this._briefResealed.add(chatId);
         this._cacheBrief(chatId, sealed);
         // The witness lands beside the cache and for the same reason: until the
         // host's metadata comes back carrying the copy, this is the only thing
@@ -2110,23 +2199,26 @@ PF.save = {
       // the PACK stage (`force: "pack"`), where not one of the three terms above
       // is true, and `_resumeHeldWorld` would resume the very world the player
       // paid to leave. So a FORCED post-start run installs as well when the
-      // world in front of the player was not compiled from a brief at all AND
-      // the sealed one compiles into a real one — `canRebuild`'s own single
-      // probe (build() never throws; the absence of `brieved` IS the answer),
-      // asked against the values the install would use. Both halves are
-      // load-bearing: without the second, a chat standing on a stand-in with a
-      // DEMOTED pack would rebuild a degrade over a degrade on the shipped
-      // rewrite press, severing world-bound play for nothing.
+      // setting sealed on this chat is AHEAD of the world on screen —
+      // `worldBehindBrief`, which is the same question the failure screen's
+      // sentence and the press's confirmation ask — AND that setting compiles
+      // into a real world: `canRebuild`'s own single probe (build() never
+      // throws; the absence of `brieved` IS the answer), asked here against the
+      // exact values the install would use. Every term is load-bearing. Without
+      // the compile probe, a chat standing on a stand-in with a DEMOTED pack
+      // rebuilds a degrade over a degrade and severs world-bound play for
+      // nothing; without the witness inside `worldBehindBrief`, a brief that
+      // merely ARRIVED — a second device re-rolled, this one's `chatMeta`
+      // refreshed — replaces a world nobody standing here agreed to leave.
       // `force === "pack"` rather than any force, and the narrowing is the whole
       // cost story: it is the only force that reaches this fork without having
       // already decided to install, so the probe build below never runs on a
-      // path whose answer was known a term earlier.
+      // path whose answer was known a term earlier. (It is also the only one
+      // whose seed is the STANDING world's — READ-SITE 5 gives an unforced run
+      // the wizard's, and installing at that number is precisely the reseed
+      // ruling 8 forbids.)
       const cascadeInstall =
-        postStart &&
-        force === "pack" &&
-        !!core.sim?.world &&
-        !core.sim.world.brieved &&
-        PF.world.build(seed, theme, sealed).brieved;
+        postStart && force === "pack" && this.worldBehindBrief(core) && PF.world.build(seed, theme, sealed).brieved;
       if (briefWanted || force === "brief" || core.sim?.world?.interim || cascadeInstall)
         this._installSealedWorld(core, chatId, sealed, seed, theme, postStart);
       else this._resumeHeldWorld(core, chatId, sealed);
@@ -2531,13 +2623,15 @@ PF.save = {
     // and so do the pack's two: a pack that seals after the player has left is
     // exactly the case its cache exists for.)
     //
-    // AND SO ARE THE RETRY SURFACE'S THREE (0.16 §2.10d), on the identical
+    // AND SO ARE THE RETRY SURFACE'S FOUR (0.16 §2.10d), on the identical
     // argument: `_regenPending` is what re-arms the gate for a regeneration
     // still in flight when the player comes back, `_briefSuperseded` is what
-    // stops the metadata blob a re-roll replaced from winning on the way in, and
-    // the accepted witnesses answer for PATCHes the host has taken and the
-    // arriving blob has not caught up with. Every one of them is evicted by the
-    // thing that made it — never by leaving the chat.
+    // stops the metadata blob a re-roll replaced from winning on the way in,
+    // `_briefResealed` is the consent this session's own re-roll earned and the
+    // chat it belongs to is exactly the chat being left mid-attempt, and the
+    // accepted witnesses answer for PATCHes the host has taken and the arriving
+    // blob has not caught up with. Every one of them is evicted by the thing
+    // that made it — never by leaving the chat.
     this.gate = null;
     // The in-memory quarantine bag is per-chat, exactly like the caches above:
     // restore() hydrates the arriving chat's key into it a few lines later.

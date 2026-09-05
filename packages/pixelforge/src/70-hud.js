@@ -1682,13 +1682,19 @@ PF.Hud = class {
     const confirm = this._retryConfirm;
     if (confirm) {
       // THE TWO-STEP CONFIRM, and FREE IS NOT CONSEQUENCE-FREE: the severance is
-      // identical either way, so only the cost line differs.
+      // identical for all three shapes, so the cost line and the words on the
+      // button are the only halves that differ.
+      const words = confirm.free
+        ? { title: C.confirmFreeTitle, cost: C.costFree, go: C.confirmFreeGo }
+        : confirm.cascade
+          ? { title: C.confirmCascadeTitle, cost: C.costCascade, go: C.confirmCascadeGo }
+          : { title: C.confirmTitle, cost: C.costPaid, go: C.confirmGo };
       body.replaceChildren(
-        PF.el("div", { style: "font:700 12px/1.6 inherit;", text: confirm.free ? C.confirmFreeTitle : C.confirmTitle }),
-        PF.el("div", { style: "opacity:0.9;", text: confirm.free ? C.costFree : C.costPaid }),
+        PF.el("div", { style: "font:700 12px/1.6 inherit;", text: words.title }),
+        PF.el("div", { style: "opacity:0.9;", text: words.cost }),
         PF.el("div", { style: "opacity:0.9;", text: C.keepsAndLoses }),
         PF.el("div", { style: "display:flex;gap:6px;flex-wrap:wrap;" }, [
-          this._btn(confirm.free ? C.confirmFreeGo : C.confirmGo, () => this._retryGo(confirm)),
+          this._btn(words.go, () => this._retryGo(confirm)),
           this._btn(C.confirmBack, () => {
             this._retryConfirm = null;
             this._retryKey = null;
@@ -1724,7 +1730,16 @@ PF.Hud = class {
   }
 
   /** A row button. Everything that replaces the world asks first; everything
-   *  else — a pack call, a deferral — is its own press and no more. */
+   *  else — a pack call, a deferral — is its own press and no more.
+   *
+   *  AND "EVERYTHING" IS ASKED OF THE STATE, NEVER OF THE BUTTON'S NAME. The
+   *  pack row's one priced button is a single call on the ordinary press — its
+   *  own words are "what its people used to say belonged to the old one" — and
+   *  the cascade's world swap on the other, so a branch that listed mode names
+   *  here was a rule that had quietly stopped being true: it sent a press that
+   *  severs friendships, quests, home and purchases straight through with no
+   *  confirmation at all. `retryReplacesWorld` is the same question the install
+   *  fork asks, and it is the only thing this branch may believe. */
   _retryPress(row, action) {
     const C = PF.save.RETRY_COPY;
     if (action.mode === "rebuild") {
@@ -1743,8 +1758,13 @@ PF.Hud = class {
       this._syncRetry();
       return;
     }
-    if (action.mode === "reroll") {
-      this._retryConfirm = { stage: row.stage, action, free: false };
+    if (PF.save.retryReplacesWorld(this.core, row.stage, action.mode)) {
+      // Which of the two priced shapes it is comes off the registry as well: the
+      // cascade's press spends a call on what its people say and lands the
+      // player in a setting that is already written and stored, so it may not
+      // wear the sentence that prices writing one.
+      const cascade = PF.save.stage(row.stage)?.cascade?.mode === action.mode;
+      this._retryConfirm = { stage: row.stage, action, free: false, cascade };
       this._retryKey = null;
       this._syncRetry();
       return;
@@ -2520,11 +2540,15 @@ PF.Hud = class {
     // under the reason and whether the second exit is on screen, and a flag that
     // changed without the state changing would leave the wrong screen up.
     const gatePost = gate ? PF.save.gate.postStart === true : false;
-    // WHICH RE-ATTEMPT THIS GATE IS HOLDING, in the memo key for the same reason
-    // the stage is: ruling 8's cascade can move the stage under a running
-    // attempt, and the pair — stage plus mode — is what decides both the note
-    // under the reason and what the retry button will actually press.
-    const gateMode = gate ? (PF.save.gate.mode ?? null) : null;
+    // WHETHER THE SETTING SEALED ON THIS CHAT IS AHEAD OF THE WORLD BEHIND THE
+    // SCREEN, in the memo key for the same reason the stage is: ruling 8's
+    // cascade seals a new brief mid-attempt, and from that moment the shipped
+    // post-start sentence ("the world you are standing in is untouched whatever
+    // happens here") is false. It is asked of the STATE and not of `gate.mode`,
+    // which the first press rewrites to a mode the row does offer — a note keyed
+    // on the mode reverted to that sentence on the second failure of the same
+    // attempt, over a chat whose brief was already replaced.
+    const gateCascade = gate ? PF.save.worldBehindBrief(this.core) : false;
     // …and whether there is anywhere to go if the player declines. A brief-stage
     // BOOT gate never offers it: the world under that one is the placeholder,
     // which is the one thing nobody may be left standing in. A pack-stage gate
@@ -2539,7 +2563,7 @@ PF.Hud = class {
       gateWhy !== this._gateWhy ||
       gateStage !== this._gateStage ||
       gatePost !== this._gatePost ||
-      gateMode !== this._gateMode ||
+      gateCascade !== this._gateCascade ||
       gateKeep !== this._gateKeep
     ) {
       this._mode = mode;
@@ -2548,7 +2572,7 @@ PF.Hud = class {
       this._gateWhy = gateWhy;
       this._gateStage = gateStage;
       this._gatePost = gatePost;
-      this._gateMode = gateMode;
+      this._gateCascade = gateCascade;
       this._gateKeep = gateKeep;
       const inWorld = mode === "walk" && !gate;
       this.gateEl.style.display = gate ? "flex" : "none";
@@ -2560,7 +2584,7 @@ PF.Hud = class {
       // editing branches rather than adding a row, and the strings the player
       // reads were the part nothing watched.
       this.gateTitle.textContent = PF.save.gateTitle(gateStage, gate);
-      this.gateBody.textContent = PF.save.gateBody(gateStage, gate, gateWhy, gatePost, gateMode);
+      this.gateBody.textContent = PF.save.gateBody(gateStage, gate, gateWhy, gatePost, gateCascade);
       this.topbar.style.display = gate ? "none" : "";
       // Replay: the host owns the whole screen. Combat: keep a minimal HUD —
       // the mode is inferred from the narrative gameActiveState, which can flip
