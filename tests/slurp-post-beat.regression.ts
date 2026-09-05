@@ -70,4 +70,12 @@ const reserve = read("services/slurp/slurp-reserve.operation.ts");
 assert.doesNotMatch(reserve, /format: "caption"/u, "automatic posts must not pin one format");
 assert.doesNotMatch(reserve, /noodlerPostGuide:/u, "a constant guide reads as player direction");
 
+// ── The clock must be used, not just supplied ───────────────────────────────
+// The exact date and time were already in the prompt and nothing asked the model to place the post
+// inside the character's day, so every post read as happening in the same undefined moment. For a
+// Creator with no Conversation Schedule that is the only situational anchor available.
+const timing = read("services/slurp/slurp-post-timing.ts");
+assert.match(timing, /Place this post inside the character's own day at that hour and weekday/u);
+assert.match(timing, /A Tuesday morning and a Saturday night are different posts from the same person/u);
+
 console.log("slurp post beat regression passed");
