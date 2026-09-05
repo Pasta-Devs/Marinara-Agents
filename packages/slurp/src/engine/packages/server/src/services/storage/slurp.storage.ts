@@ -74,6 +74,8 @@ import {
 } from "../slurp/slurp-wallet.js";
 import { openSlurpGoal, readSlurpGoal, slurpGoalKey, type SlurpGoal } from "../slurp/slurp-goal.js";
 import { createSlurpEventsStorage } from "./slurp-events.storage.js";
+import { createSlurpPopulationStorage } from "./slurp-population.storage.js";
+import type { SlurpFunnelStage } from "../slurp/slurp-population.js";
 import type { SlurpEventKind } from "../slurp/slurp-event-weight.js";
 import {
   earn,
@@ -5127,6 +5129,10 @@ export function createSlurpStorage(db: DB) {
             });
             await this.creditCreatorIncome(creatorAccountId, price, "subscribe");
             await this.notifyCreatorIncome(creatorAccountId, "subscribe", price, viewerAccountId);
+            await this.advanceAudienceTie(viewerAccountId, creatorAccountId, {
+              stage: "subscriber",
+              spent: price,
+            });
           }
         }
       }
@@ -5152,6 +5158,9 @@ export function createSlurpStorage(db: DB) {
         );
       // Losing a subscriber is news. A world that only reports good outcomes has no stakes.
       await this.recordCreatorEvent(creatorAccountId, "lapsed", { actorLabel: viewerAccountId });
+      await createSlurpPopulationStorage(db)
+        .lapseTie(viewerAccountId, creatorAccountId)
+        .catch(() => undefined);
     },
 
     async listSubscriptionsForViewer(viewerAccountId: string): Promise<NoodleAccountSubscription[]> {
@@ -5279,6 +5288,7 @@ export function createSlurpStorage(db: DB) {
         if (post) {
           await this.creditCreatorIncome(post.authorAccountId, price, "unlock");
           await this.notifyCreatorIncome(post.authorAccountId, "unlock", price, viewerAccountId, post.id);
+          await this.advanceAudienceTie(viewerAccountId, post.authorAccountId, { stage: "liker", spent: price });
         }
       }
       return unlock;
@@ -5357,6 +5367,7 @@ export function createSlurpStorage(db: DB) {
           await writeWallet(viewerAccountId, charged);
           await writeEarnings(creator.id, earn(recipient, "tip", amount, new Date(), `tip: ${creator.handle}`));
           await this.recordCreatorEvent(creator.id, "tip", { amount, actorLabel: viewerAccountId });
+          await this.advanceAudienceTie(viewerAccountId, creator.id, { stage: "regular", spent: amount });
           return charged;
         } catch (error) {
           // Restore the sender if the recipient write fails. The shared queue prevents concurrent
@@ -5456,6 +5467,25 @@ export function createSlurpStorage(db: DB) {
               ? "commission_accepted"
               : "unlock";
       await this.recordCreatorEvent(creatorAccountId, kind, { amount, actorLabel, subjectId });
+    },
+
+    /**
+     * Move somebody along a Creator's funnel.
+     *
+     * The funnel is what a follower count will eventually be counted from, so it has to record
+     * real actions and not only the world tick's. Wrapped like `recordCreatorEvent`: a funnel
+     * write must never roll back the payment that caused it.
+     */
+    async advanceAudienceTie(
+      memberId: string,
+      creatorAccountId: string,
+      input: { stage?: SlurpFunnelStage; spent?: number; interactions?: number },
+    ): Promise<void> {
+      try {
+        await createSlurpPopulationStorage(db).advanceTie(memberId, creatorAccountId, input);
+      } catch (error) {
+        logger.warn(error, "[slurp-population] Could not advance the tie for %s", memberId);
+      }
     },
 
     /**

@@ -17,8 +17,8 @@ first version of this plan was wrong in ways that are not obvious.
 | 1 | Creator home: legibility, goals, catch-up | **done** |
 | 2 | Notification stream | **done** |
 | 3 | Audience-initiated commissions and questions | **done** |
-| 4 | Audience population and funnel | **partly done** |
-| 5 | Reach derived from funnel state | not started |
+| 4 | Audience population and funnel | **done** |
+| 5 | Reach derived from funnel state | **next** |
 | 6 | Tiered comments, deferred generation queue, event-driven DMs | not started |
 | 7 | Fan cards, reactions, cast arcs, tone dial, world rhythm | not started |
 
@@ -427,15 +427,22 @@ Landed:
 
 `advanceTie` never lowers a stage. Churn owns that and has its own reasons.
 
-Still open, and this is what "partly" means:
+Also landed:
 
-- **Nothing reads the funnel yet.** `countAtOrAbove` and `listNamedCast` exist and are unused.
-  Follower counts still come from `slurp-reach.ts`, so the funnel is written but not yet believed.
-  That is Stage 5.
-- **No churn.** `lapseTie` exists and nothing calls it, so nobody ever drifts away.
-- Subscribe, tip, and unlock do not yet advance a tie; only the world tick's questions do.
-- The world tick still draws only from ambient accounts for commissions, because a commission
-  needs a thread and threads key on an account id. Population members act through snapshot paths.
+- Subscribe, tip, unlock, and the world tick's questions all advance a tie. Without real payments
+  moving the funnel it would record a fraction of what happened and could never be believed.
+- Unsubscribing lapses the tie, so a lost subscriber leaves the funnel as well as the feed.
+- Churn in the world tick: anyone silent for `CHURN_SILENT_DAYS` drifts out, so the named cast
+  rotates rather than freezing. Subscribers are exempt — their tie ends when the subscription does.
+- The named cast is surfaced in the Creator home as "Who is showing up", with stage, spend, and
+  traits. A name with no history is still wallpaper.
+
+Still open:
+
+- **Nothing counts from the funnel yet.** `countAtOrAbove` exists and is unused; follower counts
+  still come from `slurp-reach.ts`. The funnel is written and shown but not yet believed. Stage 5.
+- The world tick draws only from ambient accounts for commissions, because a commission needs a
+  thread and threads key on an account id. Population members act through snapshot paths.
 
 ### Stage 4 (original scope)
 

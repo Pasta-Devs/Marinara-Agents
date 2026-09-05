@@ -28,6 +28,9 @@ const TICK_KEY = "slurp.world.tick";
 /** Posts older than this are no longer worth asking about. */
 const RECENT_POST_DAYS = 7;
 
+/** Silence this long and somebody drifts out of the funnel. Churn is the cure for repetition. */
+const CHURN_SILENT_DAYS = 45;
+
 export type SlurpWorldResult = {
   status: "advanced" | "idle" | "busy";
   actions: number;
@@ -90,6 +93,19 @@ export async function advanceSlurpWorld(db: DB, until = new Date()): Promise<Slu
         openRequests: (await messages.listOpenCommissionsForCreator(account.id)).length,
       })),
     );
+
+    // Churn. Somebody who has not been near a Creator in a long time drifts out of the funnel, so
+    // the named cast rotates instead of freezing into the same thirty faces. Subscribers are left
+    // alone: their tie ends when the subscription does, which has its own path and its own event.
+    const population = createSlurpPopulationStorage(db);
+    const staleBefore = new Date(until.getTime() - CHURN_SILENT_DAYS * 86_400_000).toISOString();
+    for (const account of accounts) {
+      for (const tie of await population.listTiesForCreator(account.id)) {
+        if (tie.stage === "lapsed" || tie.stage === "stranger" || tie.stage === "subscriber") continue;
+        if (tie.lastSeenAt >= staleBefore) continue;
+        await population.lapseTie(tie.memberId, account.id).catch(() => undefined);
+      }
+    }
 
     const plan = planSlurpWorldTick({ since, until, creators, audience });
     let applied = 0;

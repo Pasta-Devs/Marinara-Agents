@@ -6726,6 +6726,49 @@ function SlurpStudioView({
                 </p>
               )}
 
+              {creator.topFans.length > 0 && (
+                <div>
+                  <h3 className="text-xs font-bold uppercase tracking-[0.12em] text-[var(--muted-foreground)]">
+                    {localizeUi("ui.slurp.studio.topFans", { defaultValue: "Who is showing up" })}
+                  </h3>
+                  <ul className="mt-2 flex flex-col divide-y divide-[var(--noodle-divider)]">
+                    {creator.topFans.map((fan) => (
+                      <li key={fan.id} className="flex items-center justify-between gap-3 py-2">
+                        <span className="min-w-0">
+                          <span className="block truncate text-xs font-semibold">
+                            {fan.displayName}
+                            {fan.handle && (
+                              <span className="ml-1 font-normal text-[var(--muted-foreground)]">@{fan.handle}</span>
+                            )}
+                          </span>
+                          {/* A name with no history is still wallpaper, so say what they have done. */}
+                          <span className="block truncate text-[0.7rem] text-[var(--muted-foreground)]">
+                            {[
+                              localizeUi(`ui.slurp.studio.stage.${fan.stage}`, { defaultValue: fan.stage }),
+                              fan.spent > 0
+                                ? localizeUi("ui.slurp.studio.fanSpent", {
+                                    defaultValue: "{{count}} coins",
+                                    count: fan.spent,
+                                  })
+                                : null,
+                              ...fan.traits,
+                            ]
+                              .filter(Boolean)
+                              .join(" · ")}
+                          </span>
+                        </span>
+                        <time
+                          dateTime={fan.firstSeenAt}
+                          className="shrink-0 text-[0.65rem] tabular-nums text-[var(--muted-foreground)]"
+                        >
+                          {formatTime(fan.firstSeenAt, i18n.language)}
+                        </time>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+
               {creator.posts.length > 0 && (
                 <div>
                   <h3 className="text-xs font-bold uppercase tracking-[0.12em] text-[var(--muted-foreground)]">

@@ -128,6 +128,7 @@ import {
 import { slurpFollowerMilestone, slurpMilestonesCrossed } from "../services/slurp/slurp-milestones.js";
 import { createSlurpEventsStorage } from "../services/storage/slurp-events.storage.js";
 import { advanceSlurpWorld } from "../services/slurp/slurp-world.operation.js";
+import { createSlurpPopulationStorage } from "../services/storage/slurp-population.storage.js";
 import { groupSlurpEvents } from "../services/slurp/slurp-event-weight.js";
 import {
   slurpGoalProgress,
@@ -1088,6 +1089,7 @@ export async function slurpRoutes(app: FastifyInstance) {
 
     const accounts = await noodle.listNoodlerAccounts();
     const operated = accounts.filter((account) => creatorBelongsToViewer(account, viewer));
+    const population = createSlurpPopulationStorage(app.db);
     const at = new Date();
     const snapshot = await readSlurpStudioSnapshot(app.db, viewer.id);
 
@@ -1145,11 +1147,30 @@ export async function slurpRoutes(app: FastifyInstance) {
             unlockCount: post.access === "locked" ? slurpPostUnlockCount(input, at) : null,
           };
         });
+        // The named cast: the payoff of the funnel. A name with no history is still wallpaper, so
+        // each row carries what that person has actually done for this Creator.
+        const cast = await Promise.all(
+          (await population.listNamedCast(account.id, 8)).map(async (entry) => ({
+            id: entry.tie.memberId,
+            displayName:
+              entry.member?.displayName ??
+              (await noodle.getViewer(entry.tie.memberId).catch(() => null))?.displayName ??
+              (await noodle.getNoodlerAccountById(entry.tie.memberId))?.displayName ??
+              null,
+            handle: entry.member?.handle ?? null,
+            traits: entry.member?.traits ?? [],
+            stage: entry.tie.stage,
+            spent: entry.tie.spent,
+            interactions: entry.tie.interactions,
+            firstSeenAt: entry.tie.firstSeenAt,
+          })),
+        );
         return {
           id: account.id,
           handle: account.handle,
           displayName: account.displayName,
           avatarUrl: account.avatarUrl,
+          topFans: cast.filter((fan) => fan.displayName),
           followers,
           subscribers: (await noodle.listSubscriptionsForCreator(account.id)).length,
           earnings,

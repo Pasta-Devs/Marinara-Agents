@@ -490,6 +490,17 @@ export type SlurpWallet = {
  * The viewer's wallet. Fetching it is what pays the daily stipend and charges due renewals on the
  * server, so the wallet page opening is also what moves the economy forward.
  */
+export type SlurpTopFan = {
+  id: string;
+  displayName: string | null;
+  handle: string | null;
+  traits: string[];
+  stage: string;
+  spent: number;
+  interactions: number;
+  firstSeenAt: string;
+};
+
 export type SlurpGoalProgress = {
   label: string;
   target: number;
@@ -526,6 +537,7 @@ export type SlurpStudioCreator = {
   };
   milestone: { reached: number | null; next: number | null; progress: number; remaining: number };
   goal: SlurpGoalProgress | null;
+  topFans: SlurpTopFan[];
   /** Null on a first visit: "no change yet" and "measured no change" are different. */
   followersDelta: number | null;
   earningsDelta: number | null;

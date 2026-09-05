@@ -94,4 +94,21 @@ assert.match(schema, /fileTable\(\s*"slurp_audience_ties"/u);
 // One tie per member per Creator, or the funnel counts the same person twice.
 assert.match(schema, /uniqueBy: \[\{ keys: \["memberId", "creatorAccountId"\] \}\]/u);
 
+// Real payments move the funnel, not only the world tick. Without this the funnel records a
+// fraction of what actually happened and could never be believed as a follower count.
+const slurpStorage = read("services/storage/slurp.storage.ts");
+assert.match(slurpStorage, /advanceAudienceTie\(viewerAccountId, creatorAccountId, \{\s*stage: "subscriber"/u);
+assert.match(slurpStorage, /advanceAudienceTie\(viewerAccountId, post\.authorAccountId, \{ stage: "liker"/u);
+assert.match(slurpStorage, /advanceAudienceTie\(viewerAccountId, creator\.id, \{ stage: "regular"/u);
+// Unsubscribing drops the tie, so a lost subscriber leaves the funnel as well as the feed.
+assert.match(slurpStorage, /\.lapseTie\(viewerAccountId, creatorAccountId\)/u);
+// A funnel write must never roll back the payment that caused it.
+assert.match(slurpStorage, /\[slurp-population\] Could not advance the tie/u);
+
+// Churn: the long-silent drift out so the named cast rotates instead of freezing.
+const world = read("services/slurp/slurp-world.operation.ts");
+assert.match(world, /CHURN_SILENT_DAYS/u);
+// Subscribers are left alone — their tie ends when the subscription does, by its own path.
+assert.match(world, /tie\.stage === "subscriber"\) continue;/u);
+
 console.log("slurp population regression passed");
