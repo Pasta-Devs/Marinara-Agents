@@ -2792,7 +2792,7 @@ export default function ReviewQueue({
                         ) : null}
                       </div>
                       <div id={panelId} hidden={!expanded}>
-                        {source?.drafts.map((item, index) => (
+                        {source?.drafts.map((item) => (
                           <button
                             key={item.draft.id}
                             type="button"
@@ -2805,14 +2805,11 @@ export default function ReviewQueue({
                             className={`flex min-h-14 w-full items-start gap-3 border-b border-[var(--border)]/70 px-8 py-3 text-left last:border-b-0 hover:bg-[var(--accent)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--ring)] ${selectedDraft?.draft.id === item.draft.id ? "bg-[var(--primary)]/10" : ""}`}
                           >
                             <span className="min-w-0 flex-1">
-                              <span className="flex items-center justify-between gap-2 text-xs font-semibold">
-                                <span>
-                                  {localizeUi("ui.longTermMemory.reviewqueue.draft")} {index + 1}
+                              <span className="flex min-w-0 items-center justify-between gap-2 text-xs font-semibold">
+                                <span className="min-w-0 truncate" title={reviewDraftTitle(item)}>
+                                  {reviewDraftTitle(item)}
                                 </span>
                                 <span className="text-[var(--muted-foreground)]">{item.draft.mutations.length}</span>
-                              </span>
-                              <span className="mt-1 block truncate text-xs text-[var(--muted-foreground)]">
-                                {reviewDraftTitle(item)}
                               </span>
                             </span>
                             <span
@@ -2842,14 +2839,23 @@ export default function ReviewQueue({
             <div data-ltm-review-workbench className="mari-editor-panel min-w-0 space-y-4 p-3 sm:p-4">
               <header className="flex flex-wrap items-start justify-between gap-3 border-b border-[var(--border)] pb-4">
                 <div className="min-w-0">
-                  <h2 data-ltm-review-draft-title className="truncate text-base font-semibold tracking-tight">
-                    {localizeUi("ui.longTermMemory.reviewqueue.sourceNote", {
-                      title: noteById.get(effectiveSourceId ?? "")?.title || missingContextTitle,
-                    })}
+                  <h2 data-ltm-review-draft-title className="text-base font-semibold tracking-tight">
+                    {selectedDraft
+                      ? reviewDraftTitle(selectedDraft)
+                      : localizeUi("ui.longTermMemory.reviewqueue.sourceNote", {
+                          title: noteById.get(effectiveSourceId ?? "")?.title || missingContextTitle,
+                        })}
                   </h2>
+                  {selectedDraft ? (
+                    <p className="mt-1 text-xs text-[var(--muted-foreground)]">
+                      {localizeUi("ui.longTermMemory.reviewqueue.sourceNote", {
+                        title: noteById.get(effectiveSourceId ?? "")?.title || missingContextTitle,
+                      })}
+                    </p>
+                  ) : null}
                   <p className="mt-1 text-xs text-[var(--muted-foreground)]">
                     {selectedDraft
-                      ? `${localizeUi("ui.longTermMemory.reviewqueue.draft")} ${Math.max(0, (selectedReviewSource?.drafts.findIndex((item) => item.draft.id === selectedDraft.draft.id) ?? 0) + 1)} - ${selectedDraft.draft.mutations.length} ${localizeUi("ui.longTermMemory.reviewqueue.mutations")}`
+                      ? `${selectedDraft.draft.mutations.length} ${localizeUi("ui.longTermMemory.reviewqueue.mutations")}`
                       : localizeUi("ui.longTermMemory.reviewqueue.noProposedMemoriesAwaitReviewForSource")}
                   </p>
                   {selectedReviewSource ? (

@@ -550,7 +550,6 @@
   "ui.longTermMemory.reviewqueue.diagnosticsOnly": "Diagnostics only",
   "ui.longTermMemory.reviewqueue.dismissing": "Dismissing...",
   "ui.longTermMemory.reviewqueue.dismissReport": "Dismiss report",
-  "ui.longTermMemory.reviewqueue.draft": "Draft",
   "ui.longTermMemory.reviewqueue.evidence": "evidence",
   "ui.longTermMemory.reviewqueue.evidence_3ef3540": "Evidence:",
   "ui.longTermMemory.reviewqueue.evidenceAndPreview": "Evidence and preview |",
