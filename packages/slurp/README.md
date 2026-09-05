@@ -10,6 +10,8 @@ Slurp uses direct Engine source references. It does not import Noodle account id
 
 All profiles, posts, subscriptions, unlocks, and audience actions are local roleplay state. Prices are fictional. They do not represent real payments, identity, or access control.
 
+Use [`UX-UI-REVIEW-GROUNDWORK.md`](UX-UI-REVIEW-GROUNDWORK.md) for a product-specific interface review. It covers creator-platform usability, visual quality, responsive behavior, accessibility, trust, required workflows, and the review output format.
+
 Rebuild and validate from the repository root:
 
 ```bash

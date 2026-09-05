@@ -1,5 +1,9 @@
 # Slurp release notes
 
+## 1.1.14 — 2026-09-05
+
+- Messages, the audience, notifications, and the world clock work again. Slurp adds its own storage tables but never told the host about them, so each of those features failed as soon as it touched storage. On an Engine too old to accept package tables, Slurp now says so once in the log instead of erroring on every scheduler run.
+
 ## 1.1.13 — 2026-09-06
 
 - World and wallet updates now stay consistent when several Slurp actions happen at once.
