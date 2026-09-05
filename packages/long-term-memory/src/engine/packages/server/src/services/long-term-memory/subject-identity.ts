@@ -5,6 +5,7 @@ import {
   getLtmScopePersonaIds,
   isGlobalLtmScope,
   isLtmSourceLikeNote,
+  matchesLtmScope,
   type LtmEvidenceUnit,
   type LtmExtractionDroppedCandidate,
   type LtmIdentityMatchBasis,
@@ -314,7 +315,11 @@ type PreparedLtmSubjectIdentityContext = {
   mode?: LtmMode;
 };
 
-export async function loadTrustedLtmSubjectCatalog(scope: LtmScope, root?: string): Promise<TrustedLtmSubjectCatalog> {
+export async function loadTrustedLtmSubjectCatalog(
+  scope: LtmScope,
+  root?: string,
+  preloadedNotes?: readonly LtmNote[],
+): Promise<TrustedLtmSubjectCatalog> {
   const persistence = getPackagePersistence();
   const resources = getPackageResources();
   const chatIds = getLtmScopeChatIds(scope);
@@ -342,10 +347,17 @@ export async function loadTrustedLtmSubjectCatalog(scope: LtmScope, root?: strin
   const [characterRows, personaRows, notes] = await Promise.all([
     resources.listCharacters(characterIds),
     resources.listPersonas(personaIds),
-    new LongTermMemoryStorage(root).listNotes({
-      scope,
-      includeGlobal: isGlobalLtmScope(scope),
-    }),
+    preloadedNotes
+      ? preloadedNotes.filter((note) =>
+          matchesLtmScope(note, {
+            scope,
+            includeGlobal: isGlobalLtmScope(scope),
+          }),
+        )
+      : new LongTermMemoryStorage(root).listNotes({
+          scope,
+          includeGlobal: isGlobalLtmScope(scope),
+        }),
   ]);
 
   const roster: RosterSubjectInput[] = [];

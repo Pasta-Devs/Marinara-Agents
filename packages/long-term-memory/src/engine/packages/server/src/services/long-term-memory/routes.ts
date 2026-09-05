@@ -687,7 +687,7 @@ export function createLongTermMemoryRoutes(runtime: {
       const localCatalogChats =
         currentChat?.mode === "roleplay" ? (includeAllChats ? eligibleChats : [currentChat]) : [];
       const localCatalogs = await Promise.all(
-        localCatalogChats.map((chat) => loadTrustedLtmSubjectCatalog(resolveChatLtmScope(chat), root)),
+        localCatalogChats.map((chat) => loadTrustedLtmSubjectCatalog(resolveChatLtmScope(chat), root, notes)),
       );
       const chatIds = new Set<string>();
       const groupIds = new Set<string>();
