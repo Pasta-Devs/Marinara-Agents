@@ -30519,6 +30519,7 @@ const fire = (node, type) => Promise.all((node.listeners[type] ?? []).map((fn) =
     S._fallbackAcceptedSealed.clear();
     S._acceptedHousekept.clear();
     S._briefSuperseded.clear();
+    S._briefResealed.clear();
     S.gate = null;
   };
   /** A core with the three optional seams `makeCore` does not ship, because the
@@ -30950,9 +30951,15 @@ const fire = (node, type) => Promise.all((node.listeners[type] ?? []).map((fn) =
           "demoted",
           "and the row says so",
         );
+        const dStanding = dCore.sim;
         assert.equal(await S.regenerateStage(dCore, "pack", "rewrite"), true, "the row's own button re-rolls it");
         await tick();
         assert.equal(packCalls, 1, "one call, and only one");
+        assert.equal(
+          dCore.sim,
+          dStanding,
+          "the world is the SAME object — a rewrite over a world built from the setting that stands replaces nothing",
+        );
         const rewritten = calls.filter((c) => c.kind === "patch" && c.patch.pixelforgePack);
         assert.equal(rewritten.length, 1, "the new pack PATCHed straight over the dead one");
         assert.equal(rewritten[0].patch.pixelforgePack.briefHash, rHash, "sealed against the world that stands");
@@ -30961,6 +30968,104 @@ const fire = (node, type) => Promise.all((node.listeners[type] ?? []).map((fn) =
           false,
           "and the era marker was never minted: a force may not read the wizard's copy",
         );
+
+        // ── THE THREE NEIGHBOURS OF THAT PRESS ────────────────────────────────
+        // The same row, the same button, the same mode — and ruling 8's cascade
+        // gave it a second job: when the setting sealed on this chat is ahead of
+        // the world on screen it installs one, closing the attempt the player
+        // paid for. Between an ordinary rewrite and a severed save there are
+        // exactly three terms, so here is the shipped answer with each of them
+        // false in turn. A leg that stopped biting is a world replaced under
+        // somebody who never asked for it.
+
+        // (i) THE WITNESS ALONE IS NOT ENOUGH. This session DID re-roll here and
+        // the install landed, so the player is standing in the world their
+        // setting describes; the pack went stale afterwards (its own storage
+        // exit leaves the old one in place). Nothing is behind anything.
+        clearRetry();
+        calls.length = 0;
+        packCalls = 0;
+        const livedMeta = {
+          ...wizard({ packWanted: true }),
+          pixelforgeBrief: rBrief,
+          pixelforgePack: { ...packFor(rBrief), briefHash: (rHash ^ 0x5f5f5f5f) >>> 0 },
+        };
+        const livedCore = makeCore("chat-lived", RSEED);
+        livedCore.host.chatMeta = livedMeta;
+        livedCore.sim = S.restore(livedMeta, "chat-lived");
+        S.mode = "metadata";
+        S._briefResealed.add("chat-lived");
+        const lived = livedCore.sim;
+        assert.equal(lived.world.brieved, true, "the fixture really is the world the sealed setting describes");
+        assert.equal(S.worldBehindBrief(livedCore), false, "so nothing is ahead of it, witness or no witness");
+        assert.equal(S.retryReplacesWorld(livedCore, "pack", "rewrite"), false, "…and the press is not a swap");
+        assert.equal(await S.regenerateStage(livedCore, "pack", "rewrite"), true, "the press runs all the same");
+        await tick();
+        assert.equal(packCalls, 1, "one call");
+        assert.equal(livedCore.sim, lived, "and the world they have been living in is the SAME object");
+
+        // (ii) THE SAME SHAPE, ARRIVED FROM SOMEWHERE ELSE. A second device
+        // re-rolled and this one's metadata refreshed to a setting nobody
+        // standing here asked for, over a stand-in this build never compiled.
+        // Every other term is true — the setting compiles now — and the missing
+        // consent is the whole difference.
+        clearRetry();
+        calls.length = 0;
+        packCalls = 0;
+        const elsewhereMeta = {
+          ...wizard({ packWanted: true }),
+          pixelforgeBrief: rBrief2,
+          pixelforgePack: packFor(rBrief),
+        };
+        const elseCore = makeCore("chat-elsewhere", RSEED);
+        elseCore.host.chatMeta = elsewhereMeta;
+        elseCore.sim = withCompileBroken(() => S.restore(elsewhereMeta, "chat-elsewhere"));
+        S.mode = "metadata";
+        const arrivedStandIn = elseCore.sim;
+        assert.ok(!arrivedStandIn.world.brieved, "the player is standing on a stand-in");
+        assert.equal(S.canRebuild(elseCore), true, "…and the setting in the metadata compiles fine on this build");
+        assert.equal(
+          S.stage("pack").derive(elsewhereMeta, arrivedStandIn.world, "chat-elsewhere"),
+          "demoted",
+          "…so the row is showing its one priced button",
+        );
+        assert.equal(S.worldBehindBrief(elseCore), false, "but nobody standing here re-rolled anything");
+        assert.equal(S.retryReplacesWorld(elseCore, "pack", "rewrite"), false, "…so the press is not a swap");
+        assert.equal(await S.regenerateStage(elseCore, "pack", "rewrite"), true, "the press runs");
+        await tick();
+        assert.equal(packCalls, 1, "one call, sealed against the setting that stands");
+        assert.equal(elseCore.sim, arrivedStandIn, "and the world is the SAME object: no confirm was ever shown");
+
+        // (iii) THIS SESSION'S OWN RE-ROLL, over a setting this build STILL
+        // cannot compile. The confirm was given and the witness is real, so the
+        // compile probe is the only thing between the player and a stand-in
+        // installed over a stand-in — world-bound play severed to arrive nowhere.
+        clearRetry();
+        calls.length = 0;
+        packCalls = 0;
+        const stuckMeta = {
+          ...wizard({ packWanted: true }),
+          pixelforgeBrief: rBrief2,
+          pixelforgePack: packFor(rBrief),
+        };
+        const stuckCore = makeCore("chat-stuck", RSEED);
+        stuckCore.host.chatMeta = stuckMeta;
+        const unbreak = breakCompile();
+        try {
+          stuckCore.sim = S.restore(stuckMeta, "chat-stuck");
+          S.mode = "metadata";
+          S._briefResealed.add("chat-stuck");
+          const stuck = stuckCore.sim;
+          assert.equal(S.worldBehindBrief(stuckCore), true, "the setting really is ahead of the world here");
+          assert.equal(S.canRebuild(stuckCore), false, "…but it does not compile, so there is nowhere to arrive");
+          assert.equal(S.retryReplacesWorld(stuckCore, "pack", "rewrite"), false, "…and the press says so too");
+          assert.equal(await S.regenerateStage(stuckCore, "pack", "rewrite"), true, "the press runs");
+          await tick();
+          assert.equal(packCalls, 1, "one call");
+          assert.equal(stuckCore.sim, stuck, "and no degrade was installed over the degrade they were standing on");
+        } finally {
+          unbreak();
+        }
       } finally {
         loadedPF.pack.generate = realPack;
         clearRetry();
@@ -31331,14 +31436,28 @@ const fire = (node, type) => Promise.all((node.listeners[type] ?? []).map((fn) =
 
       // THE SCREEN SAYS THE TRUE THING ABOUT THAT STATE. The shipped post-start
       // pack note promises the world in front of the player is untouched
-      // whatever happens here — false the moment a new brief is sealed behind it.
-      const cascadeNote = S.gateStageNote("pack", true, "reroll");
+      // whatever happens here — false the moment a new brief is sealed behind
+      // it. The condition is asked of the STATE, and that is what makes the
+      // sentence survive the press: `_pressMode` rewrites the mode to one the
+      // pack row DOES offer, so a note keyed on the mode went back to the
+      // shipped promise on the second failure of this very attempt.
+      assert.equal(S.worldBehindBrief(core), true, "the setting sealed here is ahead of the world on screen");
+      const cascadeNote = S.gateStageNote("pack", true, S.worldBehindBrief(core));
       assert.notEqual(cascadeNote, S.stage("pack").screens.postStartNote, "the cascade gets its own sentence");
       assert.ok(cascadeNote.includes("written again"), "…which says the setting was rewritten and is stored");
       assert.equal(
-        S.gateStageNote("pack", true, "retry"),
+        S.gateStageNote("pack", true, false),
         S.stage("pack").screens.postStartNote,
         "…and an ordinary post-start pack gate keeps the shipped one",
+      );
+      // AND THE PRESS IS PRICED AS THE SWAP IT IS. The row's one priced button
+      // is a single pack call ordinarily and this world swap here, so the
+      // surface has to ask before it runs — the same question the install fork
+      // below is about to answer with a new sim.
+      assert.equal(
+        S.retryReplacesWorld(core, "pack", "rewrite"),
+        true,
+        "the pack row's priced button is a world-replacing press in this state, and says so",
       );
 
       // THE PRESS ITSELF. It must not be dead, it must not re-buy the call that
@@ -31352,6 +31471,16 @@ const fire = (node, type) => Promise.all((node.listeners[type] ?? []).map((fn) =
       assert.notEqual(core.sim, standIn, "the world was replaced at last");
       assert.equal(core.sim.world.brieved, true, "…by the one the sealed brief describes");
       assert.equal(core.sim.world.seed, RSEED, "at the same seed, on this path too");
+      assert.equal(
+        S.worldBehindBrief(core),
+        false,
+        "…and nothing is ahead of anything any more: the sentence and the confirm retire with the state",
+      );
+      assert.equal(
+        S.retryReplacesWorld(core, "pack", "rewrite"),
+        false,
+        "…so the same button is an ordinary pack call again",
+      );
       assert.equal(S.gateHolds(core), false, "the gate lifted");
       assert.equal(S._regenPending.size, 0, "…with no record left behind to refuse the next press");
       const packPatch = calls.filter((c) => c.kind === "patch" && c.patch.pixelforgePack).pop();
@@ -31747,17 +31876,47 @@ const fire = (node, type) => Promise.all((node.listeners[type] ?? []).map((fn) =
       assert.ok(!postPack.body.includes("Trying again is free"), "…and the post-start pack screen does not call a paid call free");
       assert.ok(postPack.body.includes("costs one call"), "…it prices it");
       // AND THE CASCADE'S OWN SCREEN, read through the HUD like the rest: a paid
-      // re-roll that sealed its brief and failed the pack is stamped `pack` while
-      // the mode on it is still the brief's, and the shipped post-start sentence
-      // promises the world behind the screen is untouched — which the seal has
-      // already made false.
+      // re-roll that sealed its brief and failed the pack leaves the new setting
+      // stored and the OLD world in front of the player, and the shipped
+      // post-start sentence promises that world is untouched — which the seal
+      // has already made false. THE STATE IS WHAT THE SCREEN READS, so the state
+      // is what this leg builds: this session's own re-roll witness, over a
+      // world no brief ever compiled.
+      const settledSim = core.sim;
+      core.sim = new loadedPF.Sim(withCompileBroken(() => world.build(RSEED, "cozy-village", rBrief)));
+      S._briefResealed.add("chat-strings");
       const cascade = screen({ state: "failed", stage: "pack", failure: "refused", postStart: true, mode: "reroll" });
       assert.equal(cascade.title, "This world didn't finish opening.", "the title is still the stage's own");
       assert.ok(
         !cascade.body.includes("untouched whatever happens here"),
         "…but the screen does not tell them the world is untouched after their setting was replaced",
       );
-      assert.ok(cascade.body.includes("written again"), "…it says the setting was rewritten and is stored");
+      assert.equal(
+        S.stage("pack").cascade.note,
+        "Your setting was written again and it is stored, so the new world is settled — what didn't finish is what its people say. Trying again costs one call and brings you to the new world. Keep playing without it and the new world is there the next time you open this chat.",
+        "…and the sentence is pinned whole, like every other string a player reads",
+      );
+      assert.ok(
+        cascade.body.endsWith(S.stage("pack").cascade.note),
+        "…which is the sentence the screen actually ends on",
+      );
+      // IT SURVIVES THE PRESS, and that is the half a mode-keyed note lost: the
+      // first press rewrites the gate's mode to one the pack row DOES offer, so
+      // the second failure of the same attempt went back to painting the shipped
+      // promise over a chat whose brief had already been replaced. The generating
+      // screen in between is what moves the memo, so this really repaints.
+      screen({ state: "generating", stage: "pack" });
+      const again = screen({ state: "failed", stage: "pack", failure: "refused", postStart: true, mode: "rewrite" });
+      assert.equal(again.body, cascade.body, "the second failure of one attempt says the same true thing");
+      // …AND IT RETIRES WITH THE STATE. Once the world in front of the player IS
+      // the one their setting describes, the shipped sentence is true again.
+      core.sim = settledSim;
+      const arrived = screen({ state: "failed", stage: "pack", failure: "refused", postStart: true, mode: "rewrite" });
+      assert.ok(
+        arrived.body.includes("untouched whatever happens here"),
+        "…and once they are standing in it, the shipped post-start sentence is the honest one again",
+      );
+      S._briefResealed.delete("chat-strings");
       assert.equal(hud.gateKeep.style.display, "", "and the second exit is on screen where there is somewhere to go");
       screen({ state: "failed", stage: "brief", failure: "refused" });
       assert.equal(
@@ -32171,6 +32330,58 @@ const fire = (node, type) => Promise.all((node.listeners[type] ?? []).map((fn) =
         !textIn(hud.retryBody).includes("A sentence chat A's own press left behind."),
         "…and none of chat A's leftovers came with them",
       );
+
+      // THE PRICED PACK BUTTON, ON THE ONE STATE WHERE IT IS A WORLD SWAP.
+      // Ruling 8's cascade gave that button a second job — it can install the
+      // world the player's re-rolled setting describes — and the panel's rule is
+      // that everything which replaces the world asks first. Driven through the
+      // DOM, because what was wrong was the routing and not the wording: press
+      // it, and what has to appear is the confirmation, not a call.
+      core.chatId = "chat-panel-c";
+      core.host.chatMeta = {
+        ...wizard({ packWanted: true }),
+        pixelforgeBrief: rBrief2,
+        pixelforgePack: packFor(rBrief),
+      };
+      S._briefResealed.add("chat-panel-c");
+      const realRegen = S.regenerateStage;
+      let presses = 0;
+      S.regenerateStage = async () => {
+        presses += 1;
+        return true;
+      };
+      try {
+        hud.update();
+        if (!hud._retry) hud.toggleRetry();
+        const rewrite = walkNodes(hud.retryBody).find((node) => node.textContent === "Write it for this world");
+        assert.ok(rewrite, "the demoted pack row's one priced button is on the panel");
+        await fire(rewrite, "click");
+        assert.equal(presses, 0, "pressing it spends NOTHING: a press that replaces the world asks first");
+        const asked = textIn(hud.retryBody);
+        assert.ok(asked.includes(S.RETRY_COPY.confirmCascadeTitle), "…the confirmation is what came up");
+        assert.ok(asked.includes(S.RETRY_COPY.costCascade), "…priced as the one call it actually spends");
+        assert.ok(
+          !asked.includes(S.RETRY_COPY.costPaid),
+          "…and not as writing a setting that is already written and stored",
+        );
+        assert.ok(asked.includes(S.RETRY_COPY.keepsAndLoses), "…carrying the same keeps-and-loses contract");
+        const go = walkNodes(hud.retryBody).find((node) => node.textContent === S.RETRY_COPY.confirmCascadeGo);
+        assert.ok(go, "with the way through on it");
+        await fire(go, "click");
+        assert.equal(presses, 1, "…and THAT is the press that spends the call");
+
+        // …AND THE ORDINARY ONE IS STILL ONE PRESS. Same row, same button, no
+        // setting ahead of the world: nothing is replaced, so nothing asks.
+        S._briefResealed.delete("chat-panel-c");
+        hud._retryKey = null;
+        hud.update();
+        const plain = walkNodes(hud.retryBody).find((node) => node.textContent === "Write it for this world");
+        assert.ok(plain, "the button is still the row's own");
+        await fire(plain, "click");
+        assert.equal(presses, 2, "an ordinary rewrite is its own press and no more");
+      } finally {
+        S.regenerateStage = realRegen;
+      }
       hud.destroy();
     } finally {
       loadedPF.api.patchMetadata = realPatch;
