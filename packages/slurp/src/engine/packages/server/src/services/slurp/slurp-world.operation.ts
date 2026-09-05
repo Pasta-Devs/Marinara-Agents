@@ -22,6 +22,7 @@ import { tryNoodleOperation } from "./slurp-operation-lock.js";
 import { slurpCreatorReach } from "./slurp-reach.js";
 import { slurpAudienceQuestion, slurpCommissionBrief } from "./slurp-world-copy.js";
 import { planSlurpWorldTick, type SlurpWorldAction, type SlurpWorldCreator } from "./slurp-world.js";
+import { planSlurpWorldPulse, type SlurpPulseAction } from "./slurp-world-pulse.js";
 
 const TICK_KEY = "slurp.world.tick";
 
@@ -144,6 +145,30 @@ export async function advanceSlurpWorld(db: DB, until = new Date()): Promise<Slu
       })),
     );
 
+    // The pulse: likes and follows landing while the player watches. Driven by elapsed minutes
+    // rather than days, so it fires during a session, where the day-scale plan below cannot.
+    const pulse = planSlurpWorldPulse({
+      elapsedMinutes: (until.getTime() - since.getTime()) / 60_000,
+      audience,
+      seed: `${since.toISOString()}:${until.toISOString()}`,
+      targets: creators.flatMap((creator) =>
+        (postsByAccount.get(creator.id) ?? []).map((post) => ({
+          creatorAccountId: creator.id,
+          postId: post.id,
+          ageHours: (until.getTime() - Date.parse(post.createdAt)) / 3_600_000,
+          creatorReach: creator.followers,
+        })),
+      ),
+    });
+    let pulsed = 0;
+    for (const action of pulse) {
+      try {
+        if (await applyPulse(db, action, until)) pulsed += 1;
+      } catch (error) {
+        logger.warn(error, "[slurp-world] Could not apply a %s pulse", action.kind);
+      }
+    }
+
     const plan = planSlurpWorldTick({ since, until, creators, audience });
     let applied = 0;
     for (const action of plan) {
@@ -156,7 +181,10 @@ export async function advanceSlurpWorld(db: DB, until = new Date()): Promise<Slu
       }
     }
     await writeLastTick(db, until);
-    return { status: applied > 0 ? ("advanced" as const) : ("idle" as const), actions: applied };
+    return {
+      status: applied + pulsed > 0 ? ("advanced" as const) : ("idle" as const),
+      actions: applied + pulsed,
+    };
   });
   return operation.acquired ? operation.value : { status: "busy", actions: 0 };
 }
@@ -243,5 +271,45 @@ async function applyAction(db: DB, action: SlurpWorldAction, at: Date): Promise<
     subjectId: action.postId,
     actorLabel: actor.id,
   });
+  return true;
+}
+
+/**
+ * Apply one pulse reaction.
+ *
+ * Free tier: a like, no text, no model call. Both kinds write a real interaction row, so they show
+ * as named people, feed the funnel, and cost nothing. A "follow" differs only in how far it moves
+ * the tie — there is no separate follow row for a synthetic fan.
+ */
+async function applyPulse(db: DB, action: SlurpPulseAction, at: Date): Promise<boolean> {
+  const noodle = createSlurpStorage(db);
+  const actor = await resolveActor(db, action.actorAccountId);
+  if (!actor) return false;
+  const result = await noodle.createNoodlerFanInteraction(action.postId, {
+    id: newId(),
+    creatorAccountId: action.creatorAccountId,
+    actorId: actor.id,
+    actorSnapshot: {
+      id: actor.id,
+      kind: "random_user",
+      entityId: actor.entityId,
+      handle: actor.handle,
+      displayName: actor.displayName,
+      avatarUrl: actor.avatarUrl,
+      avatarCrop: null,
+    },
+    runId: `pulse:${at.toISOString()}`,
+    type: "like",
+    content: null,
+  });
+  if (!result?.created) return false;
+  const population = createSlurpPopulationStorage(db);
+  await population
+    .advanceTie(actor.id, action.creatorAccountId, {
+      stage: action.kind === "follow" ? "follower" : "liker",
+      interactions: 1,
+    })
+    .catch(() => undefined);
+  await population.touch(actor.id).catch(() => undefined);
   return true;
 }
