@@ -1798,9 +1798,14 @@ export function useSlurpThreads(personaId: string | null) {
   return useQuery({
     queryKey: messageKeys.threads(personaId),
     queryFn: () =>
-      api.get<{ threads: SlurpThread[]; unread: number }>(
-        `/slurp/messages/threads?personaId=${encodeURIComponent(personaId!)}`,
-      ),
+      api.get<{
+        threads: Array<SlurpThread & { side: "viewer" }>;
+        inbound: Array<
+          SlurpThread & { side: "creator"; counterpartName: string | null; counterpartHandle: string | null }
+        >;
+        unread: number;
+        inboundUnread: number;
+      }>(`/slurp/messages/threads?personaId=${encodeURIComponent(personaId!)}`),
     enabled: Boolean(personaId),
   });
 }

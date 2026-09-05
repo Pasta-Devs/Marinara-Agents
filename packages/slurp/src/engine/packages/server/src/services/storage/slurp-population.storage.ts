@@ -224,16 +224,6 @@ export function createSlurpPopulationStorage(db: DB) {
       }
       return counts;
     },
-
-    /** How many members sit at or above a stage for one Creator. This is a real follower count. */
-    async countAtOrAbove(creatorAccountId: string, stage: (typeof SLURP_FUNNEL_STAGES)[number]): Promise<number> {
-      const floor = SLURP_FUNNEL_STAGES.indexOf(stage);
-      const ties = await storage.listTiesForCreator(creatorAccountId);
-      return ties.filter((tie) => {
-        const index = SLURP_FUNNEL_STAGES.indexOf(tie.stage as (typeof SLURP_FUNNEL_STAGES)[number]);
-        return index >= floor && index >= 0;
-      }).length;
-    },
   };
 
   return storage;

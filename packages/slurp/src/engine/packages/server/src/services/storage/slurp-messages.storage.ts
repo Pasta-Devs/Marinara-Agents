@@ -231,6 +231,29 @@ export function createSlurpMessagesStorage(db: DB) {
     },
 
     /**
+     * Every thread addressed **to** one of these Creators, newest first.
+     *
+     * Without this the inbox only ever showed threads the player opened, so a fan who wrote to
+     * your Creator — or a commission the world opened on their behalf — created a thread nobody
+     * could ever reach. The obligation layer produced obligations that were invisible.
+     */
+    async listThreadsForCreators(creatorAccountIds: readonly string[]): Promise<SlurpThreadView[]> {
+      if (creatorAccountIds.length === 0) return [];
+      const wanted = new Set(creatorAccountIds);
+      const rows = await db.select().from(slurpThreads).orderBy(desc(slurpThreads.lastMessageAt));
+      const out: SlurpThreadView[] = [];
+      for (const row of rows) {
+        const thread = mapThread(row);
+        if (!wanted.has(thread.creatorAccountId)) continue;
+        // A thread the player opened with their own Creator would otherwise appear on both sides.
+        if (wanted.has(thread.viewerAccountId)) continue;
+        const view = await storage.viewThread(thread);
+        if (view) out.push(view);
+      }
+      return out;
+    },
+
+    /**
      * Every thread this viewer has, newest first, with the creator joined in.
      *
      * A thread whose creator is gone is dropped rather than rendered blank: a deleted source

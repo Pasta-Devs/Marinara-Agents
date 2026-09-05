@@ -123,4 +123,7 @@ assert.match(home, /function SlurpGoalEditor/u);
 const shell = read("client/src/components/slurp/SlurpShell.tsx");
 assert.match(shell, /onOpenStudio && hasOperatedCreator/u, "the studio entry needs an operated Creator");
 
+// Milestones were computed here, rendered here, and reported nowhere.
+assert.match(routes, /recordCreatorEvent\(creator\.id, "milestone", \{ amount: target \}\)/u);
+
 console.log("slurp studio regression passed");

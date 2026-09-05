@@ -8,6 +8,7 @@ import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import { createSlurpStorage } from "../services/storage/slurp.storage.js";
 import { createSlurpMessagesStorage } from "../services/storage/slurp-messages.storage.js";
+import { createSlurpPopulationStorage } from "../services/storage/slurp-population.storage.js";
 import { replyToSlurpMessage } from "../services/slurp/slurp-message.operation.js";
 import { SLURP_DM_POLICIES } from "../services/slurp/slurp-messaging.js";
 import { SLURP_DEFAULT_RAPPORT_WEIGHTS } from "../services/slurp/slurp-rapport.js";
@@ -76,6 +77,7 @@ const messagingPatchSchema = z.object({
 export async function slurpMessageRoutes(app: FastifyInstance) {
   const slurp = createSlurpStorage(app.db);
   const messages = createSlurpMessagesStorage(app.db);
+  const population = createSlurpPopulationStorage(app.db);
 
   /** Every route needs the same "is this a real persona" gate, so it lives in one helper. */
   const requireViewer = async (personaId: string) => slurp.getViewer(personaId);
@@ -101,12 +103,39 @@ export async function slurpMessageRoutes(app: FastifyInstance) {
     const viewer = await requireViewer(parsed.data.personaId);
     if (!viewer) return reply.code(404).send({ error: "Slurp persona not found" });
     const threads = await messages.listThreadsForViewer(viewer.id);
+    // Threads written *to* the Creators this persona operates. Without these the inbox showed only
+    // conversations the player started, and anything a fan or the world opened was unreachable.
+    const operated = (await slurp.listNoodlerAccounts())
+      .filter((account) => account.sourceKind === "persona" && account.sourceEntityId === viewer.id)
+      .map((account) => account.id);
+    const inbound = await messages.listThreadsForCreators(operated);
+    const inboundViews = await Promise.all(
+      inbound.map(async (thread) => ({
+        ...thread,
+        side: "creator" as const,
+        // The counterpart is the fan here, not the Creator, so name them or the row is a blank.
+        counterpartName:
+          (await population.get(thread.viewerAccountId))?.displayName ??
+          (await slurp.getNoodlerAccountById(thread.viewerAccountId))?.displayName ??
+          (await slurp.getViewer(thread.viewerAccountId).catch(() => null))?.displayName ??
+          null,
+        counterpartHandle:
+          (await population.get(thread.viewerAccountId))?.handle ??
+          (await slurp.getNoodlerAccountById(thread.viewerAccountId))?.handle ??
+          null,
+      })),
+    );
     const visibleMessages = (await messages.listMessages(thread.id)).map((message) =>
       side === "viewer" && message.kind === "ppv" && !message.unlockedAt ? { ...message, content: "" } : message,
     );
     return {
-      threads: threads.filter((thread) => thread.state !== "declined"),
+      threads: threads
+        .filter((thread) => thread.state !== "declined")
+        .map((thread) => ({ ...thread, side: "viewer" as const })),
+      inbound: inboundViews.filter((thread) => thread.state !== "declined"),
       unread: threads.reduce((sum, thread) => sum + thread.viewerUnread, 0),
+      // Unread on the Creator side is what the player owes an answer to.
+      inboundUnread: inboundViews.reduce((sum, thread) => sum + thread.creatorUnread, 0),
     };
   });
 

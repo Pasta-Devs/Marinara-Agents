@@ -111,4 +111,24 @@ assert.match(world, /CHURN_SILENT_DAYS/u);
 // Subscribers are left alone — their tie ends when the subscription does, by its own path.
 assert.match(world, /tie\.stage === "subscriber"\) continue;/u);
 
+// The world must draw from the generated population, not only the six ambient profiles.
+// allowRandomUsers governs whether ambient profiles join the feed; it is not a switch for whether
+// a Creator has an audience, and it defaults to false — gating the tick on it left the whole
+// obligation layer dark on a fresh install.
+assert.match(world, /const returning = \(await population\.listAll\(WORLD_AUDIENCE_POOL\)\)/u);
+assert.match(
+  world,
+  /const audience = \[\.\.\.returning, \.\.\.newcomers\.map\(\(member\) => member\.id\), \.\.\.ambient\]/u,
+);
+// An actor is either an ambient account row or a population member with no row at all. Resolving
+// only accounts silently dropped every population action.
+assert.match(world, /async function resolveActor/u);
+assert.match(world, /createSlurpPopulationStorage\(db\)\.get\(actorAccountId\)/u);
+
+// listAll orders by lastActiveAt, so without touch() it keeps ordering by creation time: the same
+// earliest members are redrawn forever and anybody who shows up sinks out of the pool.
+assert.match(world, /population\.touch\(actor\.id\)/u);
+const fanRun = read("services/slurp/slurp-fan-activity.operation.ts");
+assert.match(fanRun, /cast\.map\(\(member\) => population\.touch\(member\.id\)/u);
+
 console.log("slurp population regression passed");

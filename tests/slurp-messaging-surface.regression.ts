@@ -59,4 +59,14 @@ assert.match(settings, /allowRandomUsers/u, "the ambient panel must expose the p
 const draftService = read("server/src/services/slurp/slurp-invited-post-draft.service.ts");
 assert.match(draftService, /import \{ noodlerSourceText \} from "\.\/slurp-prompt-safety\.js"/u);
 
+// The inbox only ever listed threads the player opened. A fan writing to your Creator — or a
+// commission the world opened on their behalf — created a thread nobody could reach, so the whole
+// obligation layer produced obligations that were invisible.
+assert.match(messageStorage, /async listThreadsForCreators\(/u);
+assert.match(messageRoutes, /const inbound = await messages\.listThreadsForCreators\(operated\)/u);
+assert.match(messageRoutes, /counterpartName:/u, "a Creator-side row must name the fan, not the Creator");
+assert.match(messages, /ui\.slurp\.messages\.inbound/u, "the inbox must show Creator-side threads");
+// A thread the player opened with their own Creator must not appear on both sides.
+assert.match(messageStorage, /if \(wanted\.has\(thread\.viewerAccountId\)\) continue;/u);
+
 console.log("slurp messaging surface regression passed");

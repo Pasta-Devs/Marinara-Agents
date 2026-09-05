@@ -31,6 +31,9 @@ const RECENT_POST_DAYS = 7;
 /** Silence this long and somebody drifts out of the funnel. Churn is the cure for repetition. */
 const CHURN_SILENT_DAYS = 45;
 
+/** How many people the world keeps on hand to act. Small: actions per tick are capped anyway. */
+const WORLD_AUDIENCE_POOL = 24;
+
 export type SlurpWorldResult = {
   status: "advanced" | "idle" | "busy";
   actions: number;
@@ -66,13 +69,29 @@ export async function advanceSlurpWorld(db: DB, until = new Date()): Promise<Slu
     const accounts = await noodle.listNoodlerAccounts();
     const allAccounts = await noodle.listAccounts();
 
-    // The ambient roster plus the generated population. Ambient accounts are real account rows and
-    // can hold threads, so they can be commissioned from; population members act through the
-    // snapshot paths. Both are drawn from, so the world is not six faces.
+    // The generated population, plus the ambient roster when it is switched on.
+    //
+    // The population is not gated by `allowRandomUsers`. That setting governs whether ambient
+    // profiles join in as visible participants in the feed; it is not a switch for whether the
+    // Creator has an audience at all. It defaults to false, so gating the whole tick on it meant a
+    // fresh install never produced a single commission or question — the entire obligation layer
+    // was dark by default.
+    //
+    // Both kinds can hold threads: ambient profiles are account rows, and population members key
+    // their thread and wallet by id like any other viewer.
+    const population = createSlurpPopulationStorage(db);
+    const returning = (await population.listAll(WORLD_AUDIENCE_POOL)).map((member) => member.id);
+    // Top the pool up with fresh people when the world has not met many yet, so a new install has
+    // somebody to act and an old one keeps gaining faces.
+    const newcomers = await Promise.all(
+      Array.from({ length: Math.max(0, WORLD_AUDIENCE_POOL - returning.length) }, () =>
+        population.ensure(newId(), until),
+      ),
+    );
     const ambient = settings.allowRandomUsers
       ? allAccounts.filter((account) => isAmbientNoodleAccount(account)).map((account) => account.id)
       : [];
-    const audience = ambient;
+    const audience = [...returning, ...newcomers.map((member) => member.id), ...ambient];
 
     const messages = createSlurpMessagesStorage(db);
     const cutoff = new Date(until.getTime() - RECENT_POST_DAYS * 86_400_000).toISOString();
@@ -84,7 +103,6 @@ export async function advanceSlurpWorld(db: DB, until = new Date()): Promise<Slu
     // Churn. Somebody who has not been near a Creator in a long time drifts out of the funnel, so
     // the named cast rotates instead of freezing into the same thirty faces. Subscribers are left
     // alone: their tie ends when the subscription does, which has its own path and its own event.
-    const population = createSlurpPopulationStorage(db);
     const staleBefore = new Date(until.getTime() - CHURN_SILENT_DAYS * 86_400_000).toISOString();
     for (const account of accounts) {
       for (const tie of await population.listTiesForCreator(account.id)) {
@@ -136,15 +154,54 @@ export async function advanceSlurpWorld(db: DB, until = new Date()): Promise<Slu
   return operation.acquired ? operation.value : { status: "busy", actions: 0 };
 }
 
+/**
+ * Who is acting.
+ *
+ * An actor is either an ambient profile, which has a real Slurp account row, or a generated
+ * population member, which has no account row at all. Both must work: resolving accounts only
+ * silently dropped every population action and left the world back at six faces.
+ */
+async function resolveActor(
+  db: DB,
+  actorAccountId: string,
+): Promise<{ id: string; entityId: string; handle: string; displayName: string; avatarUrl: string | null } | null> {
+  const account = await createSlurpStorage(db).getNoodlerAccountById(actorAccountId);
+  if (account) {
+    return {
+      id: account.id,
+      entityId: account.entityId,
+      handle: account.handle,
+      displayName: account.displayName,
+      avatarUrl: account.avatarUrl,
+    };
+  }
+  const member = await createSlurpPopulationStorage(db).get(actorAccountId);
+  if (!member) return null;
+  return {
+    id: member.id,
+    entityId: member.id,
+    handle: member.handle,
+    displayName: member.displayName,
+    avatarUrl: null,
+  };
+}
+
 async function applyAction(db: DB, action: SlurpWorldAction, at: Date): Promise<boolean> {
   const noodle = createSlurpStorage(db);
-  const actor = await noodle.getNoodlerAccountById(action.actorAccountId);
+  const actor = await resolveActor(db, action.actorAccountId);
   if (!actor) return false;
 
   if (action.kind === "commission") {
     const messages = createSlurpMessagesStorage(db);
     const brief = slurpCommissionBrief(`${action.creatorAccountId}:${action.actorAccountId}:${at.toISOString()}`);
-    return Boolean(await messages.createCommission(action.actorAccountId, action.creatorAccountId, brief));
+    const commission = await messages.createCommission(action.actorAccountId, action.creatorAccountId, brief);
+    if (!commission) return false;
+    const population = createSlurpPopulationStorage(db);
+    await population
+      .advanceTie(actor.id, action.creatorAccountId, { stage: "viewer", interactions: 1 })
+      .catch(() => undefined);
+    await population.touch(actor.id).catch(() => undefined);
+    return true;
   }
 
   const snapshot: NoodleAuthorSnapshot = {
@@ -154,7 +211,7 @@ async function applyAction(db: DB, action: SlurpWorldAction, at: Date): Promise<
     handle: actor.handle,
     displayName: actor.displayName,
     avatarUrl: actor.avatarUrl,
-    avatarCrop: actor.avatarCrop,
+    avatarCrop: null,
   };
   const result = await noodle.createNoodlerFanInteraction(action.postId, {
     id: newId(),
@@ -167,9 +224,13 @@ async function applyAction(db: DB, action: SlurpWorldAction, at: Date): Promise<
   });
   if (!result?.created) return false;
   // Commenting is a step up the funnel, and the funnel is what a follower count is counted from.
-  await createSlurpPopulationStorage(db)
+  const population = createSlurpPopulationStorage(db);
+  await population
     .advanceTie(actor.id, action.creatorAccountId, { stage: "liker", interactions: 1 })
     .catch(() => undefined);
+  // Mark them as recently active, or `listAll` keeps ordering by creation time and the same people
+  // are drawn forever while everyone who actually shows up sinks out of the pool.
+  await population.touch(actor.id).catch(() => undefined);
   // A question is an obligation, so it is reported. An ordinary comment is not.
   await noodle.recordCreatorEvent(action.creatorAccountId, "comment", {
     subjectId: action.postId,

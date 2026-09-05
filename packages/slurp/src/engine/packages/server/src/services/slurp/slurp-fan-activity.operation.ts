@@ -237,6 +237,10 @@ export async function runNoodlerFanActivity(input: {
         ...Array.from({ length: FAN_RUN_NEWCOMERS }, () => newId()),
       ];
       const cast = await Promise.all(seeds.map((seed) => population.ensure(seed, at)));
+      // Mark the drawn cast as recently active. `listAll` orders by that column, so without this
+      // it kept ordering by creation time: the same earliest members were redrawn forever and
+      // anybody who actually showed up sank out of the pool. Regulars could never recur.
+      await Promise.all(cast.map((member) => population.touch(member.id).catch(() => undefined)));
 
       const creators = await prepareNoodlerFanCreatorCandidates({
         db: input.db,

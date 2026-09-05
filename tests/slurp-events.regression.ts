@@ -4,7 +4,6 @@ import { join } from "node:path";
 
 import {
   groupSlurpEvents,
-  isNotableSlurpEvent,
   slurpEventWeight,
   SLURP_EVENT_NOTABLE,
   type SlurpEventLike,
@@ -19,7 +18,7 @@ assert.ok(slurpEventWeight("tip") > slurpEventWeight("comment"));
 assert.ok(slurpEventWeight("message") > slurpEventWeight("unlock"));
 
 // Losing a subscriber is news. A world that only reports good outcomes has no stakes.
-assert.ok(isNotableSlurpEvent("lapsed"));
+assert.ok(slurpEventWeight("lapsed") >= SLURP_EVENT_NOTABLE);
 
 // ── Amount lifts money kinds, but on a curve ────────────────────────────────
 // A 500-coin tip is not the same news as a 5-coin one, but no single payment may crowd out a whole
@@ -31,9 +30,9 @@ assert.ok(slurpEventWeight("tip", 500) > slurpEventWeight("subscribed"));
 assert.ok(slurpEventWeight("tip", 1_000_000) < slurpEventWeight("commission_requested") * 3);
 // An ordinary small unlock must stay groupable. A first curve gave 3 coins a +12 boost and pushed
 // every routine unlock over the notable line, which is the flood this rule exists to prevent.
-assert.ok(!isNotableSlurpEvent("unlock", 3), "a routine unlock must group");
-assert.ok(!isNotableSlurpEvent("unlock", 5), "a routine unlock must group");
-assert.ok(isNotableSlurpEvent("unlock", 200), "a large unlock earns its own line");
+assert.ok(slurpEventWeight("unlock", 3) < SLURP_EVENT_NOTABLE, "a routine unlock must group");
+assert.ok(slurpEventWeight("unlock", 5) < SLURP_EVENT_NOTABLE, "a routine unlock must group");
+assert.ok(slurpEventWeight("unlock", 200) >= SLURP_EVENT_NOTABLE, "a large unlock earns its own line");
 // Attention kinds ignore amount entirely.
 assert.equal(slurpEventWeight("comment", 9_999), slurpEventWeight("comment"));
 

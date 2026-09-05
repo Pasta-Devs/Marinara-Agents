@@ -80,11 +80,6 @@ export function slurpEventWeight(kind: SlurpEventKind, amount = 0): number {
   return Math.round(base + Math.log2(1 + value / MONEY_REFERENCE) * 8);
 }
 
-/** Whether an event earns its own line rather than being grouped into a count. */
-export function isNotableSlurpEvent(kind: SlurpEventKind, amount = 0): boolean {
-  return slurpEventWeight(kind, amount) >= SLURP_EVENT_NOTABLE;
-}
-
 export type SlurpEventLike = {
   id: string;
   kind: SlurpEventKind;

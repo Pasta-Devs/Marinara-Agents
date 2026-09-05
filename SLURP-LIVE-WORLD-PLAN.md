@@ -491,6 +491,38 @@ setting. Cluster activity by hour; ambient bios already say "night-scroller" and
 Retune settle curves for session length, not calendar days. Seed a cold start so a new install is
 not empty.
 
+## Audit findings (post-1.1.5)
+
+A review pass found the obligation layer non-functional end to end, for three compounding reasons.
+All are fixed; each has a regression.
+
+1. **No Creator-side inbox.** `/messages/threads` returned only threads where the persona was the
+   *viewer*. A fan writing to your Creator — or a commission the world opened on their behalf —
+   created a thread nobody could ever reach. The notification pointed at an inbox that did not
+   contain the thing it named. Fixed with `listThreadsForCreators` and a "Written to your
+   Creators" section; a thread the player opened with their own Creator is excluded so it cannot
+   appear on both sides.
+2. **The world audience was empty by default.** The tick gated its audience on
+   `allowRandomUsers`, which defaults to `false`. So a fresh install produced no commissions and
+   no questions, ever. That setting governs whether ambient profiles join the feed as visible
+   participants; it is not a switch for whether a Creator has an audience. The tick now draws from
+   the population, ungated, and adds ambient profiles when they are switched on.
+3. **Population members could not act.** `applyAction` resolved actors through
+   `getNoodlerAccountById`, and population members have no account row, so every population action
+   was silently dropped. A `resolveActor` helper now handles both.
+
+Two more, smaller:
+
+4. **`population.touch()` was never called.** `listAll` orders by `lastActiveAt`, so the pool kept
+   ordering by creation time: the same earliest members were redrawn forever and anybody who
+   actually showed up sank out of it. "Regulars recur" did not work. Both the world tick and the
+   fan-activity run now touch the cast they draw.
+5. **Milestones were reported nowhere.** They were computed in the studio, rendered in the studio,
+   and never written to the event stream. Now recorded.
+
+Removed as dead: `countAtOrAbove` (superseded by `countFollowersForCreators`) and
+`isNotableSlurpEvent` (never used outside its own test).
+
 ## What the first pass got wrong
 
 Recorded so it is not repeated. The first version modelled reach as

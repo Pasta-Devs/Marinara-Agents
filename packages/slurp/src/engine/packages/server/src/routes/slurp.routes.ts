@@ -1199,6 +1199,15 @@ export async function slurpRoutes(app: FastifyInstance) {
       }),
     );
 
+    // Passing a milestone is the most notable thing that can happen to a Creator, and it was
+    // computed here, rendered here, and never reported anywhere. Record it so it reaches the
+    // notification stream like every other event.
+    for (const creator of creators) {
+      for (const target of creator.milestonesCrossed) {
+        await noodle.recordCreatorEvent(creator.id, "milestone", { amount: target });
+      }
+    }
+
     await writeSlurpStudioSnapshot(app.db, viewer.id, {
       at: at.toISOString(),
       creators: Object.fromEntries(

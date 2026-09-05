@@ -90,9 +90,17 @@ export function SlurpMessagesView({
     `${thread.creatorDisplayName} ${thread.creatorHandle} ${thread.lastMessagePreview}`
       .toLocaleLowerCase()
       .includes(needle);
+  const inbound = (threadsQuery.data?.inbound ?? []).filter(
+    (thread) =>
+      !needle ||
+      `${thread.counterpartName ?? ""} ${thread.counterpartHandle ?? ""} ${thread.lastMessagePreview}`
+        .toLocaleLowerCase()
+        .includes(needle),
+  );
   const requests = threads.filter((thread) => thread.state === "request" && matches(thread));
   const active = threads.filter((thread) => thread.state === "active" && matches(thread));
-  const unread = threads.reduce((total, thread) => total + thread.viewerUnread, 0);
+  const unread =
+    threads.reduce((total, thread) => total + thread.viewerUnread, 0) + (threadsQuery.data?.inboundUnread ?? 0);
   // Broadcasting is per creator, so it only makes sense once this persona owns one.
   const broadcastCreatorId = ownedCreatorAccountIds[0] ?? null;
 
@@ -126,6 +134,32 @@ export function SlurpMessagesView({
 
       {broadcastCreatorId && personaId && (
         <BroadcastPanel creatorAccountId={broadcastCreatorId} personaId={personaId} />
+      )}
+
+      {inbound.length > 0 && (
+        <section aria-labelledby="slurp-message-inbound" className="flex flex-col gap-2">
+          <h2
+            id="slurp-message-inbound"
+            className="px-1 text-xs font-bold uppercase tracking-[0.14em] text-[var(--muted-foreground)]"
+          >
+            {localizeUi("ui.slurp.messages.inbound", { defaultValue: "Written to your Creators" })}
+          </h2>
+          {inbound.map((thread) => (
+            <ThreadRow
+              key={thread.id}
+              thread={{
+                ...thread,
+                // The counterpart on this side is the fan, not the Creator, so the row names them.
+                creatorDisplayName:
+                  thread.counterpartName ?? localizeUi("ui.slurp.messages.unknownFan", { defaultValue: "Someone" }),
+                creatorAvatarUrl: null,
+                viewerUnread: thread.creatorUnread,
+              }}
+              locale={i18n.language}
+              onOpen={() => setOpenThreadId(thread.id)}
+            />
+          ))}
+        </section>
       )}
 
       {requests.length > 0 && (
