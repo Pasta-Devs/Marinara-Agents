@@ -134,8 +134,15 @@ export function planSlurpWorldTick(input: {
   creators: readonly SlurpWorldCreator[];
   /** Account ids that may act. Empty means the world stays silent. */
   audience: readonly string[];
+  /**
+   * Activity multiplier from the world-activity dial. Zero is a real off switch: somebody who
+   * wants to write undisturbed gets exactly that, not a quieter version of being interrupted.
+   */
+  activity?: number;
 }): SlurpWorldAction[] {
-  const days = slurpWorldElapsedDays(input.since, input.until);
+  const activity = Number.isFinite(input.activity) ? Math.max(0, input.activity ?? 1) : 1;
+  if (activity === 0) return [];
+  const days = slurpWorldElapsedDays(input.since, input.until) * activity;
   if (days <= 0 || input.audience.length === 0 || input.creators.length === 0) return [];
 
   const random = mulberry32(hashSeed(`${input.until.toISOString()}:${input.creators.length}`));

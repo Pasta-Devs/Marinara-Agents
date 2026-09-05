@@ -36,6 +36,12 @@
     "slurp": {
       "versions": [
         {
+          "version": "1.1.12",
+          "date": "2026-09-06",
+          "notes": "- Two new dials in Settings. \"How busy the world is\" controls how often fans ask\n  you for things and whether reactions arrive while you read — Off means nobody\n  interrupts you at all. \"How big the platform feels\" scales follower and view\n  counts, while people who actually follow, subscribe or pay stay counted exactly.",
+          "highlight": false
+        },
+        {
           "version": "1.1.11",
           "date": "2026-09-06",
           "notes": "- Regulars have a direction now, not just a standing. Somebody can be getting\n  more into your posts, drifting off, or coming back after a while away — and a\n  supporter who goes quiet reads as exactly that.\n- Notifications tell you when somebody comes back or starts paying more\n  attention. Quietly drifting off stays quiet, as it would in life.\n- Creators answer people according to where the relationship is heading, not only\n  how far along it is.",

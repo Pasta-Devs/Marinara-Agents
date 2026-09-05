@@ -1,5 +1,12 @@
 # Slurp release notes
 
+## 1.1.12 — 2026-09-06
+
+- Two new dials in Settings. "How busy the world is" controls how often fans ask
+  you for things and whether reactions arrive while you read — Off means nobody
+  interrupts you at all. "How big the platform feels" scales follower and view
+  counts, while people who actually follow, subscribe or pay stay counted exactly.
+
 ## 1.1.11 — 2026-09-06
 
 - Regulars have a direction now, not just a standing. Somebody can be getting

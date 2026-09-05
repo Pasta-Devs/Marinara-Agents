@@ -279,6 +279,8 @@ export type SlurpSettings = {
   refreshesPerDay: number;
   generationGuidance: string;
   audienceTone: "warm" | "mixed" | "unfiltered";
+  worldActivity: "off" | "quiet" | "normal" | "busy";
+  platformScale: "intimate" | "normal" | "large";
   postsPerDay: number;
   autoPostingScheduleEnabled: boolean;
   autoPostGenerationMode: "pre_generate" | "on_demand";

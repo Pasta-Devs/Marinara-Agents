@@ -74,6 +74,12 @@ import {
 } from "../slurp/slurp-wallet.js";
 import { openSlurpGoal, readSlurpGoal, slurpGoalKey, type SlurpGoal } from "../slurp/slurp-goal.js";
 import { SLURP_AUDIENCE_TONES, SLURP_DEFAULT_AUDIENCE_TONE } from "../slurp/slurp-tone.js";
+import {
+  SLURP_DEFAULT_PLATFORM_SCALE,
+  SLURP_DEFAULT_WORLD_ACTIVITY,
+  SLURP_PLATFORM_SCALE,
+  SLURP_WORLD_ACTIVITY,
+} from "../slurp/slurp-scale.js";
 import { resolveSlurpCreatorScheduleStatus } from "../slurp/slurp-creator-schedule-context.js";
 import { createSlurpEventsStorage } from "./slurp-events.storage.js";
 import { createSlurpPopulationStorage } from "./slurp-population.storage.js";
@@ -214,6 +220,8 @@ export const slurpSettingsSchema = z.object({
   refreshesPerDay: z.number().int().min(0).max(24),
   generationGuidance: z.string().max(20_000),
   audienceTone: z.enum(SLURP_AUDIENCE_TONES),
+  worldActivity: z.enum(SLURP_WORLD_ACTIVITY),
+  platformScale: z.enum(SLURP_PLATFORM_SCALE),
   generationConnectionId: z.string().nullable(),
   imageGenerationConnectionId: z.string().nullable(),
   imageGenerationPrompt: z.string(),
@@ -792,6 +800,8 @@ export const DEFAULT_SLURP_SETTINGS: SlurpSettings = {
   refreshesPerDay: 0,
   generationGuidance: NOODLER_DEFAULT_GENERATION_GUIDANCE,
   audienceTone: SLURP_DEFAULT_AUDIENCE_TONE,
+  worldActivity: SLURP_DEFAULT_WORLD_ACTIVITY,
+  platformScale: SLURP_DEFAULT_PLATFORM_SCALE,
   generationConnectionId: null,
   imageGenerationConnectionId: null,
   imageGenerationPrompt: NOODLER_DEFAULT_IMAGE_GENERATION_PROMPT,

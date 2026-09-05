@@ -93,13 +93,23 @@ function ageInDays(since: string, at: Date): number {
  * outgrows the synthetic floor instead of being drowned by it.
  */
 export function slurpCreatorReach(
-  input: { accountId: string; createdAt: string; realFollowers: number },
+  input: {
+    accountId: string;
+    createdAt: string;
+    realFollowers: number;
+    /**
+     * Platform scale. Multiplies the invented audience only — real followers are a count of things
+     * that actually happened, and scaling them would be a lie rather than a setting.
+     */
+    scale?: number;
+  },
   at: Date = new Date(),
 ): number {
   const spread = unitFor(input.accountId, "reach");
+  const scale = Number.isFinite(input.scale) && (input.scale ?? 1) > 0 ? input.scale! : 1;
   const ceiling = MIN_BASE_REACH * Math.pow(MAX_BASE_REACH / MIN_BASE_REACH, spread);
   const grown = ceiling * settle(ageInDays(input.createdAt, at), REACH_GROWTH_DAYS);
-  return Math.round(MIN_BASE_REACH + grown + Math.max(0, input.realFollowers) * REAL_FOLLOWER_WEIGHT);
+  return Math.round((MIN_BASE_REACH + grown) * scale + Math.max(0, input.realFollowers) * REAL_FOLLOWER_WEIGHT);
 }
 
 /**

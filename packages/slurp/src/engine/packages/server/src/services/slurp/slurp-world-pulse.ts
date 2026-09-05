@@ -104,7 +104,11 @@ export function planSlurpWorldPulse(input: {
   audience: readonly string[];
   /** Anything already in this pulse's window, so a pulse never re-likes the same post twice. */
   seed: string;
+  /** Activity multiplier. Zero means nothing arrives while you read, which is the point of "off". */
+  activity?: number;
 }): SlurpPulseAction[] {
+  const activity = Number.isFinite(input.activity) ? Math.max(0, input.activity ?? 1) : 1;
+  if (activity === 0) return [];
   const fresh = input.targets.filter(
     (target) =>
       Number.isFinite(target.ageHours) && target.ageHours >= 0 && target.ageHours <= SLURP_PULSE_POST_MAX_AGE_HOURS,
@@ -112,7 +116,7 @@ export function planSlurpWorldPulse(input: {
   if (fresh.length === 0 || input.audience.length === 0) return [];
 
   const totalReach = fresh.reduce((sum, target) => sum + Math.max(0, target.creatorReach), 0) / fresh.length;
-  const budget = slurpPulseBudget(input.elapsedMinutes, totalReach);
+  const budget = slurpPulseBudget(input.elapsedMinutes * activity, totalReach);
   if (budget <= 0) return [];
 
   const random = mulberry32(hashSeed(input.seed));

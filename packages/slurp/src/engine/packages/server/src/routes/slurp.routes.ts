@@ -127,6 +127,7 @@ import {
 } from "../services/slurp/slurp-reach.js";
 import { slurpFollowerMilestone, slurpMilestonesCrossed } from "../services/slurp/slurp-milestones.js";
 import { slurpPayoutAllowance } from "../services/slurp/slurp-earnings.js";
+import { slurpPlatformScaleMultiplier } from "../services/slurp/slurp-scale.js";
 import { createSlurpEventsStorage } from "../services/storage/slurp-events.storage.js";
 import { advanceSlurpWorld } from "../services/slurp/slurp-world.operation.js";
 import { drainSlurpPendingText } from "../services/slurp/slurp-pending-text.service.js";
@@ -606,6 +607,7 @@ export async function slurpRoutes(app: FastifyInstance) {
     // Real followers come from the audience funnel, and only from there. Following also moves the
     // funnel now, so adding the social following list on top would count the same person twice —
     // at 25x weight each.
+    const countsScale = slurpPlatformScaleMultiplier((await noodle.getSettings()).platformScale);
     const countsFunnel = await createSlurpPopulationStorage(app.db).countFollowersForCreators(
       creators.map((creator) => creator.id),
     );
@@ -622,6 +624,7 @@ export async function slurpRoutes(app: FastifyInstance) {
               accountId: creator.id,
               createdAt: creator.createdAt,
               realFollowers: countsFunnel.get(creator.id) ?? 0,
+              scale: countsScale,
             },
             at,
           ),
@@ -926,6 +929,7 @@ export async function slurpRoutes(app: FastifyInstance) {
     const projectedAt = new Date();
     const authorIds = [...new Set(posts.map((post) => post.authorAccountId))];
     const projectionFunnel = await createSlurpPopulationStorage(app.db).countFollowersForCreators(authorIds);
+    const projectionScale = slurpPlatformScaleMultiplier((await noodle.getSettings()).platformScale);
     const reachByAccountId = new Map(
       authorIds.map((accountId) => {
         const account = context.accountById.get(accountId);
@@ -933,7 +937,12 @@ export async function slurpRoutes(app: FastifyInstance) {
           accountId,
           account
             ? slurpCreatorReach(
-                { accountId, createdAt: account.createdAt, realFollowers: projectionFunnel.get(accountId) ?? 0 },
+                {
+                  accountId,
+                  createdAt: account.createdAt,
+                  realFollowers: projectionFunnel.get(accountId) ?? 0,
+                  scale: projectionScale,
+                },
                 projectedAt,
               )
             : 0,
@@ -1161,6 +1170,7 @@ export async function slurpRoutes(app: FastifyInstance) {
     const operated = accounts.filter((account) => creatorBelongsToViewer(account, viewer));
     const population = createSlurpPopulationStorage(app.db);
     const studioFunnel = await population.countFollowersForCreators(operated.map((account) => account.id));
+    const studioScale = slurpPlatformScaleMultiplier((await noodle.getSettings()).platformScale);
     const at = new Date();
     const snapshot = await readSlurpStudioSnapshot(app.db, viewer.id);
 
@@ -1184,6 +1194,7 @@ export async function slurpRoutes(app: FastifyInstance) {
             accountId: account.id,
             createdAt: account.createdAt,
             realFollowers: studioFunnel.get(account.id) ?? 0,
+            scale: studioScale,
           },
           at,
         );

@@ -22,6 +22,7 @@ import { tryNoodleOperation } from "./slurp-operation-lock.js";
 import { slurpCreatorReach } from "./slurp-reach.js";
 import { slurpMembersActiveAt } from "./slurp-population.js";
 import { isNotableArcChange, slurpNextArc } from "./slurp-arc.js";
+import { slurpPlatformScaleMultiplier, slurpWorldActivityMultiplier } from "./slurp-scale.js";
 import { slurpAudienceOpener, slurpAudienceQuestion, slurpCommissionBrief } from "./slurp-world-copy.js";
 import { enqueueSlurpPendingText } from "./slurp-pending-text.service.js";
 import { planSlurpWorldTick, type SlurpWorldAction, type SlurpWorldCreator } from "./slurp-world.js";
@@ -73,6 +74,8 @@ export async function advanceSlurpWorld(db: DB, until = new Date()): Promise<Slu
 
     const noodle = createSlurpStorage(db);
     const settings = await noodle.getSettings();
+    const activity = slurpWorldActivityMultiplier(settings.worldActivity);
+    const scale = slurpPlatformScaleMultiplier(settings.platformScale);
     const accounts = await noodle.listNoodlerAccounts();
     const allAccounts = await noodle.listAccounts();
 
@@ -167,6 +170,7 @@ export async function advanceSlurpWorld(db: DB, until = new Date()): Promise<Slu
             // Request rates scale with audience, so the tick has to see the same follower count
             // the player does. Passing zero here made a large Creator as quiet as a new one.
             realFollowers: tickFunnel.get(account.id) ?? 0,
+            scale,
           },
           until,
         ),
@@ -189,6 +193,7 @@ export async function advanceSlurpWorld(db: DB, until = new Date()): Promise<Slu
       elapsedMinutes: (until.getTime() - since.getTime()) / 60_000,
       audience,
       seed: `${since.toISOString()}:${until.toISOString()}`,
+      activity,
       targets: creators.flatMap((creator) =>
         (postsByAccount.get(creator.id) ?? []).map((post) => ({
           creatorAccountId: creator.id,
@@ -207,7 +212,7 @@ export async function advanceSlurpWorld(db: DB, until = new Date()): Promise<Slu
       }
     }
 
-    const plan = planSlurpWorldTick({ since, until, creators, audience });
+    const plan = planSlurpWorldTick({ since, until, creators, audience, activity });
     let applied = 0;
     for (const action of plan) {
       try {

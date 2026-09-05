@@ -2007,6 +2007,60 @@ export function SlurpSettings({
                   )}
                   <div className="space-y-3 pt-2">
                     <div>
+                      <h2 className="text-sm font-bold">{t("ui.slurp.settings.audience.activityTitle")}</h2>
+                      <p className="mt-1 text-xs leading-5 text-[var(--slurp-muted)]">
+                        {t("ui.slurp.settings.audience.activityDetail")}
+                      </p>
+                    </div>
+                    <div className="flex flex-wrap gap-2">
+                      {(["off", "quiet", "normal", "busy"] as const).map((level) => (
+                        <button
+                          key={level}
+                          type="button"
+                          onClick={() => update("worldActivity", level)}
+                          aria-pressed={settings.worldActivity === level}
+                          className={cn(
+                            "min-h-10 rounded-lg border px-3 text-xs font-semibold transition-colors",
+                            settings.worldActivity === level
+                              ? "border-[var(--noodle-accent)] bg-[var(--noodle-accent)]/10 text-[var(--noodle-accent)]"
+                              : "border-[var(--border)] hover:bg-[var(--accent)]",
+                          )}
+                        >
+                          {t(`ui.slurp.settings.audience.activity.${level}`)}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div className="space-y-3 pt-2">
+                    <div>
+                      <h2 className="text-sm font-bold">{t("ui.slurp.settings.audience.scaleTitle")}</h2>
+                      <p className="mt-1 text-xs leading-5 text-[var(--slurp-muted)]">
+                        {t("ui.slurp.settings.audience.scaleDetail")}
+                      </p>
+                    </div>
+                    <div className="flex flex-wrap gap-2">
+                      {(["intimate", "normal", "large"] as const).map((level) => (
+                        <button
+                          key={level}
+                          type="button"
+                          onClick={() => update("platformScale", level)}
+                          aria-pressed={settings.platformScale === level}
+                          className={cn(
+                            "min-h-10 rounded-lg border px-3 text-xs font-semibold transition-colors",
+                            settings.platformScale === level
+                              ? "border-[var(--noodle-accent)] bg-[var(--noodle-accent)]/10 text-[var(--noodle-accent)]"
+                              : "border-[var(--border)] hover:bg-[var(--accent)]",
+                          )}
+                        >
+                          {t(`ui.slurp.settings.audience.scale.${level}`)}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div className="space-y-3 pt-2">
+                    <div>
                       <h2 className="text-sm font-bold">{t("ui.slurp.settings.audience.toneTitle")}</h2>
                       <p className="mt-1 text-xs leading-5 text-[var(--slurp-muted)]">
                         {t("ui.slurp.settings.audience.toneDetail")}
