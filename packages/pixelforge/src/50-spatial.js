@@ -116,6 +116,13 @@ PF.spatial = {
           // can ever complete. Inside the zone-CHANGED test on purpose, so a
           // refresh that finds the party where it already was settles nothing.
           core.hud?.questFilled(PF.pack.visited(core, zoneId, saveGen));
+          // THE OTHER REAL ZONE-CHANGE CALLER'S SHARE OF THE ARRIVAL (0.16
+          // §2.3). This arm teleports without ever calling `_zoneChanged`, so
+          // the lattice would otherwise never hear about it: the cell the GM
+          // moved the player OUT of would stay the most-recently-entered one for
+          // the rest of the session, and the residency order that reads it would
+          // be describing a walk that stopped happening.
+          PF.lattice.enter(core, zoneId);
         }
         // Same class as a walked zone entry, so the same top surface: a narrated
         // arrival is the one notice most likely to print while the player is

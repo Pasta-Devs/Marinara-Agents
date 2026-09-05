@@ -64,6 +64,11 @@ PF.lattice = (() => {
      *  edge. Lane 9 pins the LITERAL and then drives the shipped export, because
      *  reading this constant back is true for every value it could hold. */
     CHUNK_MAP_EXPORT: false,
+    // ── Arrival bookkeeping ──────────────────────────────────────────────────
+    // How many recent arrivals the recency order remembers. Deliberately
+    // generous against any residency keep, so the ORDER is never what loses a
+    // cell that is still standing — the policy that reads it is what decides.
+    SEEN_MAX: 64,
     // ── Streams ──────────────────────────────────────────────────────────────
     STREAM_LABEL: "wild",
     NAME_STREAM_LABEL: "wild-name",
@@ -284,6 +289,17 @@ PF.lattice = (() => {
     // A signpost, never a verb: a gate is crossed by walking into it, so there
     // is no button to label and nothing to press.
     gate: (bearing, place) => `${bearing} — ${place}`,
+    // On the quest board's "Taken on:" idiom, and on the BOTTOM toast surface,
+    // so a discovery lands beside the arrival notice at the top rather than over
+    // it (70-hud `toast`): a landmark is two notices, ordinary country is one.
+    // The top surface is ONE node with a last-writer-wins rule, so "beside" and
+    // "the bottom" are the same sentence — and the honest cost of that is
+    // recorded rather than discovered: the bottom surface is the one the host's
+    // narration panel sits under, which is why arrivals were moved off it. A
+    // discovery fires on arrival too, so whether this line reads as a find or as
+    // a smudge across the GM's sentence is a browser question (plan §5.9), and
+    // the answer if it lands badly is a surface, not a different word.
+    found: (place) => `Found: ${place}`,
   };
 
   // ── Directions ──────────────────────────────────────────────────────────────
@@ -832,6 +848,97 @@ PF.lattice = (() => {
     }
   }
 
+  // ── Arriving somewhere ──────────────────────────────────────────────────────
+  /** Whether a cell is worth writing down: it carries a landmark. */
+  const isLandmark = (zone) => !!zone && Array.isArray(zone.features) && zone.features.length > 0;
+
+  /** WHETHER A STEP IS A WALK INSIDE THE WILDERNESS, and nothing more than that.
+   *
+   *  Pure, and it is the whole of the write governor. Every zone entry arms a
+   *  whole-shard write today, and a lattice walk crosses a boundary every six to
+   *  eight seconds of straight walking — so an unbatched twenty-minute walk is a
+   *  hundred and fifty of those, where a town session is a handful. A cell-to-
+   *  cell step therefore writes NOTHING event-shaped: the walk's position rides
+   *  the thirty-second positional autosave the frame loop already runs, which
+   *  `sim.dirty` has been feeding all along. No new timer, no second leash, and
+   *  no fork with the shared debounce the retry ladder and the rewind corrective
+   *  both hold. Everything else keeps the write it has: leaving town, arriving in
+   *  it, a discovery, a quest, a conversation.
+   *
+   *  The cost is the status quo's, stated rather than discovered: a hard browser
+   *  kill mid-walk can lose up to thirty seconds of position — a cell or two of
+   *  backtrack, in country that regenerates identically. An ordinary tab close
+   *  loses nothing at all; the teardown flush snapshots the live sim
+   *  synchronously, past the debounce and past the dedupe caches. */
+  const isChunkCrossing = (from, to) => !!parse(from) && !!parse(to) && from !== to;
+
+  /** THE LEDGER WRITE, AND IT IS SELECTIVE ON PURPOSE.
+   *
+   *  Only a LANDMARK cell is written down. `player.found` is an eighty-row
+   *  ledger shared with every future discovery consumer, and it evicts the
+   *  oldest by DAY — so a writer that filed every patch of heath would fill it
+   *  with terrain inside a day's walking and then start evicting the ruin
+   *  somebody found on day three. Worse: at a same-day tie the eviction falls
+   *  back to whichever id sorts first once a reload has re-sorted the array
+   *  (58-player `discover`), so a saturated ledger keeps what SPELLING decides.
+   *  Writing rarely is what keeps the ledger meaning something.
+   *
+   *  Two limitations, said out loud rather than left to be found: `found` is the
+   *  last eighty discoveries and not a map of everywhere you have been; and the
+   *  same-day tie-break above is a one-field fix belonging to whichever arc next
+   *  owns this ledger, not to this one.
+   *
+   *  `d` KEEPS ITS SHIPPED MEANING — the depth of a sub-zone. A cell three rings
+   *  out is `d: 0` like everything else standing on the surface: distance is not
+   *  depth, and writing one into the field named for the other would poison the
+   *  composite key for the enterables the field was minted for.
+   *
+   *  Returns whether this arrival was the FIRST one. Re-entry upserts the row
+   *  and says nothing — you do not discover a place twice. */
+  function discoverCell(core, world, zoneId) {
+    const zone = PF.own(world.zones, zoneId);
+    if (!parse(zoneId) || !isLandmark(zone)) return false;
+    const known = (PF.player.get(core)?.found?.zones ?? []).some((row) => row?.p === zoneId && !row?.e && !row?.d);
+    // Refused wholesale under the loading gate, like every other player write —
+    // so a landmark entered by a world still being generated is not a discovery
+    // that never happened.
+    if (!PF.player.discover(core, { p: zoneId, e: 0, d: 0 }, PF.save._gen ?? 0)) return false;
+    if (known) return false;
+    core.hud?.toast(COPY.found(zone.features[0]?.name || zone.name));
+    return true;
+  }
+
+  /** WHAT ARRIVING SOMEWHERE IS WORTH — the one place both real zone-change
+   *  callers meet.
+   *
+   *  TWO CALLERS, deliberately: the frame loop's `_zoneChanged` (the walked
+   *  arrival) and 50-spatial's drift arm (the narrated one, which teleports
+   *  without ever calling the first). Arrival behaviour hung off the frame loop
+   *  alone would leave the recency order believing the player was still standing
+   *  in the cell the GM moved them out of.
+   *
+   *  Returns the entry: what was entered, what had been entered before it, and
+   *  whether this arrival wrote a discovery. The caller decides what to WRITE
+   *  from that — which is how a walk through the wilderness avoids arming a
+   *  whole-shard save per cell.
+   *
+   *  The recency order is runtime-only and lives on the world object, so a world
+   *  swap starts a fresh one for free and nothing about where the player has
+   *  been reaches a save row. */
+  function enter(core, zoneId) {
+    const world = core?.sim?.world;
+    const entry = { id: typeof zoneId === "string" ? zoneId : null, from: null, discovered: false };
+    if (!world || !entry.id) return entry;
+    const seen = (world._entered ??= []);
+    entry.from = seen.length ? seen[seen.length - 1] : null;
+    const at = seen.indexOf(entry.id);
+    if (at >= 0) seen.splice(at, 1);
+    seen.push(entry.id);
+    if (seen.length > TUNE.SEEN_MAX) seen.splice(0, seen.length - TUNE.SEEN_MAX);
+    entry.discovered = discoverCell(core, world, entry.id);
+    return entry;
+  }
+
   // ── What the compiler asks for ──────────────────────────────────────────────
   /** The settlement's own gates: every spine terminal the brief's wilds did not
    *  already take. Where a wilds hangs, its shipped portal pair is the seam and
@@ -877,6 +984,8 @@ PF.lattice = (() => {
     landmarkRate,
     compileChunk,
     ensure,
-    isLandmark: (zone) => !!zone && Array.isArray(zone.features) && zone.features.length > 0,
+    isLandmark,
+    isChunkCrossing,
+    enter,
   };
 })();
