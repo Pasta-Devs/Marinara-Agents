@@ -42,6 +42,7 @@ import type { NoodleImagePromptReviewItem } from "./slurp-public-images.service.
 import { getErrorMessage } from "./slurp-public-support.js";
 import { noodleResponseFormat } from "./slurp-response-format.js";
 import { buildSlurpPostTimingContext } from "./slurp-post-timing.js";
+import { slurpPostBeat, slurpPostBeatInstruction } from "./slurp-post-beat.js";
 import { resolveSlurpCreatorScheduleContext } from "./slurp-creator-schedule.js";
 import { createChatsStorage } from "../storage/chats.storage.js";
 import { creatorAdForProfile } from "../garnish-ads/garnish-ads.service.js";
@@ -283,12 +284,22 @@ export function protectBoundedNoodlerGeneratedText(
   return protectedValue.slice(0, safeEnd).trimEnd();
 }
 
+/**
+ * Recent posts, including what each one showed.
+ *
+ * The image prompt used to be left out, so the model could not see that it had described the same
+ * desk in the same pose eight times running. It rewrote the caption each time and reinvented an
+ * identical picture, because nothing told it what the picture had been.
+ */
 function formatNoodlerPostHistory(posts: NoodlerManagedPost[], protect: (value: string) => string): string {
   if (posts.length === 0) return "No previous posts on this Slurp page.";
   return posts
     .slice()
     .reverse()
-    .map((post) => `- ${post.createdAt}: ${post.title ? `${protect(post.title)} — ` : ""}${protect(post.content)}`)
+    .map((post) => {
+      const line = `- ${post.createdAt}: ${post.title ? `${protect(post.title)} — ` : ""}${protect(post.content)}`;
+      return post.imagePrompt ? `${line}\n  (showed: ${protect(post.imagePrompt)})` : line;
+    })
     .join("\n");
 }
 
@@ -336,6 +347,8 @@ export function buildNoodlerPostMessages(input: {
   allowImagePrompt: boolean;
   generationGuidance: string;
   scheduleContext?: string;
+  /** The rotating angle for this post. Absent when the player has directed the post themselves. */
+  beatInstruction?: string;
   generatedAt?: Date;
   publicationTime?: Date;
 }): ChatMessage[] {
@@ -357,7 +370,10 @@ export function buildNoodlerPostMessages(input: {
     NOODLER_FORMAT_PROMPTS[format],
     // Tone, mood balance, and the adult flirty lean are supplied by the editable
     // generation guidance (see input.generationGuidance above), not hardcoded here.
-    "Recent posts provide continuity. Do not reuse their exact wording.",
+    // "Do not reuse their exact wording" was the only anti-repetition rule, and eight different
+    // captions about the same desk satisfy it completely. Repetition of situation is what reads as
+    // a broken feed, so that is what this constrains.
+    "Recent posts provide continuity. Do not repeat a recent post's setting, activity, framing, or wardrobe, and do not reuse its wording. If the last few posts happened in one place, this one happens somewhere else.",
     "Every post needs a title: a short specific headline of at most 80 characters, never a repeat of the body text.",
     input.allowImagePrompt
       ? "Return one JSON object with title, content, and imagePrompt. imagePrompt is required and must be a concrete visual description of one photo or image the creator would post now (subject, pose, setting, lighting, framing). Never return null or an empty imagePrompt, and never put the post text or field names in it. Do not create a poll."
@@ -381,6 +397,7 @@ export function buildNoodlerPostMessages(input: {
     "",
     "# Recent Slurp posts",
     formatNoodlerPostHistory(input.recentPosts, protect),
+    ...(input.beatInstruction ? ["", input.beatInstruction] : []),
     ...(input.request.noodlerPostGuide ? ["", "# Post direction", protect(input.request.noodlerPostGuide)] : []),
     ...(input.request.noodlerProjectWork
       ? ["", "# Project work direction", protect(input.request.noodlerProjectWork)]
@@ -481,6 +498,11 @@ export async function generateNoodlerPost(
   // Concealed modes get the same seed the stage profile draft uses; disclosure limits what may be
   // said, not who this is.
   const sourceCharacterContext = await resolveSlurpSourceCardContext(db, linkedPublicAccount, disclosureMode);
+  // The rotating angle for this post. Skipped when the player has directed the post themselves —
+  // their direction is the angle, and a second one would fight it.
+  const beat = input.request.noodlerPostGuide?.trim()
+    ? null
+    : slurpPostBeat(account.id, await noodle.countNoodlerPostsByAccount(account.id));
   const messages = buildNoodlerPostMessages({
     account,
     sourceCharacterContext,
@@ -488,7 +510,9 @@ export async function generateNoodlerPost(
     disclosureMode,
     publicIdentity,
     recentPosts,
-    request: input.request,
+    // A beat carries its own format, so an automatic post stops always being a caption.
+    request: beat ? { ...input.request, format: input.request.format ?? beat.format } : input.request,
+    beatInstruction: beat ? slurpPostBeatInstruction(beat) : undefined,
     allowImagePrompt: imagesEnabled,
     generationGuidance: settings.generationGuidance,
     scheduleContext,

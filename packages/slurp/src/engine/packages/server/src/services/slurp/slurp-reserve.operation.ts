@@ -135,9 +135,12 @@ export async function prepareNextNoodlerReservePost(db: DB, at = new Date()): Pr
         request: {
           mode: "noodler",
           targetAccountId: selectedAccount.id,
-          format: "caption",
+          // No format and no guide. Both used to be pinned here, and between them they defeated
+          // every variety mechanism on the one path that generates most posts: the format was
+          // always `caption`, and the constant guide read as player direction, which makes the
+          // generator stand its rotating beat down. The guide also said nothing the system prompt
+          // does not already say.
           access: "locked",
-          noodlerPostGuide: "Write a standalone scheduled Slurp post.",
         },
         publicationTime: new Date(selectedPublishAt),
         generatedAt: at,

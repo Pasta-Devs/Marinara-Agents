@@ -36,6 +36,12 @@
     "slurp": {
       "versions": [
         {
+          "version": "1.1.8",
+          "date": "2026-09-05",
+          "notes": "- Creators stop posting the same thing. Each post now gets a rotating angle —\n  a different place, moment, framing, and company — so the same person turns up\n  in a different part of their life instead of at the same desk in the same pose.\n- Automatic posts vary in length and shape again. They were pinned to one short\n  caption format; announcements, teasers, and long posts now appear too.\n- Creators can see what they already showed. Recent posts now carry their image\n  descriptions, so a Creator stops reinventing the same picture.",
+          "highlight": false
+        },
+        {
           "version": "1.1.7",
           "date": "2026-09-05",
           "notes": "- Fans who act through the world now appear by name in Notifications instead of\n  as \"Someone\".\n- Follower counts no longer count the same person twice. Following a Creator now\n  counts towards their audience, and unfollowing takes it away again.\n- Unfollowing somebody you never engaged with no longer records that you drifted\n  away from them.\n- Opening Slurp repeatedly is cheaper: the audience sweep only runs when enough\n  time has passed for it to find anything.",

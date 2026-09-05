@@ -3597,6 +3597,18 @@ export function createSlurpStorage(db: DB) {
       };
     },
 
+    /**
+     * How many posts this Creator has made, ever.
+     *
+     * Used as the rotation index for the post beat, so consecutive posts land on different angles.
+     * Counting rather than sampling matters: a random draw can repeat, and repetition is the whole
+     * failure being fixed.
+     */
+    async countNoodlerPostsByAccount(accountId: string): Promise<number> {
+      const rows = await db.select().from(noodlePosts).where(eq(noodlePosts.authorAccountId, accountId));
+      return rows.length;
+    },
+
     countNoodlerPostsByAccountsSince(accountIds: string[], since: string): number {
       if (accountIds.length === 0) return 0;
       return db.count(

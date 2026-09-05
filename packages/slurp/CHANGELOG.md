@@ -1,5 +1,15 @@
 # Slurp release notes
 
+## 1.1.8 — 2026-09-05
+
+- Creators stop posting the same thing. Each post now gets a rotating angle —
+  a different place, moment, framing, and company — so the same person turns up
+  in a different part of their life instead of at the same desk in the same pose.
+- Automatic posts vary in length and shape again. They were pinned to one short
+  caption format; announcements, teasers, and long posts now appear too.
+- Creators can see what they already showed. Recent posts now carry their image
+  descriptions, so a Creator stops reinventing the same picture.
+
 ## 1.1.7 — 2026-09-05
 
 - Fans who act through the world now appear by name in Notifications instead of
