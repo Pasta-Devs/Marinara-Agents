@@ -676,6 +676,7 @@ export function parseEvidenceUnitPayload(raw: unknown, expectedSourceHash: strin
       droppedCandidates.push({
         index,
         reason: "invalid_format",
+        validatorCode: "invalid_evidence_unit_format",
         message: "Dropped a malformed candidate.",
         ...(extractCandidateSnippet(candidate) ? { snippet: extractCandidateSnippet(candidate) } : {}),
         issues: parsed.error.issues.map(formatZodIssue).slice(0, 8),
@@ -1232,7 +1233,13 @@ function closeSourceEventGraph(units: LtmEvidenceUnit[], sourceNote: LtmNote, ex
         unit.bucket === "timeline_event"
           ? "Timeline event must link to its source note."
           : "Changed memory must link to a timeline event from the same source.";
-      droppedCandidates.push({ index, reason: "unsupported_bucket", message, snippet: safeSnippet(unit.text) });
+      droppedCandidates.push({
+        index,
+        reason: "unsupported_bucket",
+        validatorCode: "source_event_graph_open",
+        message,
+        snippet: safeSnippet(unit.text),
+      });
       diagnostics.push({
         severity: "error",
         code: "source_event_graph_open",

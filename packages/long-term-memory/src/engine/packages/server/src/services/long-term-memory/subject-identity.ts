@@ -1635,6 +1635,7 @@ function subjectRejection(unit: LtmEvidenceUnit, match: Exclude<SubjectMatch, { 
     dropped: {
       index,
       reason,
+      validatorCode: code,
       message,
       snippet: safeSnippet(unit.text),
       recovery: {

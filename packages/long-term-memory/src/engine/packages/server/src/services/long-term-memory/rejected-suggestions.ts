@@ -1,5 +1,4 @@
 import { createHash } from "node:crypto";
-import { unlink } from "node:fs/promises";
 import {
   ltmRejectedSuggestionSchema,
   type LtmExtractionDroppedCandidate,
@@ -27,12 +26,13 @@ function normalize(value: unknown): unknown {
 }
 
 function fingerprint(source: LtmExtractionDraft["source"], candidate: LtmExtractionDroppedCandidate) {
+  const { validatorCode: _validatorCode, ...fingerprintCandidate } = candidate;
   return createHash("sha256")
     .update(
       JSON.stringify(
         normalize({
           sourceNoteId: source.sourceNoteId,
-          candidate: { ...candidate, index: undefined },
+          candidate: { ...fingerprintCandidate, index: undefined },
         }),
       ),
     )
@@ -176,8 +176,12 @@ export async function writeRejectedSuggestions(suggestions: LtmRejectedSuggestio
   });
 }
 
-export async function deleteAllRejectedSuggestions(root = getLongTermMemoryRoot()) {
+export async function deleteRejectedSuggestionsForSource(sourceNoteId: string, root = getLongTermMemoryRoot()) {
   return withLtmVaultLock(root, async () => {
-    await unlink(ltmRejectedSuggestionsPath(root)).catch(() => {});
+    const existing = await readSuggestionsUnlocked(root);
+    const next = existing.filter((item) => item.source.sourceNoteId !== sourceNoteId);
+    const deletedCount = existing.length - next.length;
+    if (deletedCount) await writeJsonAtomic(ltmRejectedSuggestionsPath(root), next);
+    return { deletedCount, sourceNoteId };
   });
 }

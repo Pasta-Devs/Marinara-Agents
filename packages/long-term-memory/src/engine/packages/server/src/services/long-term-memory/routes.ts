@@ -52,6 +52,7 @@ import {
   ltmSourceDetailsRequestSchema,
   ltmSourceDetailsResponseSchema,
   ltmSubjectsSchema,
+  ltmRejectedSuggestionsClearResponseSchema,
   ltmRejectedSuggestionsResponseSchema,
 } from "../../../../shared/src/features/agents/long-term-memory/schema.js";
 import { clearLtmDebugLog, exportLtmDebugLog, readLtmDebugLog } from "./debug-log.js";
@@ -105,7 +106,11 @@ import {
   replaceLongTermMemoryData,
   resetLongTermMemorySettings,
 } from "./backup-restore.js";
-import { deleteRejectedSuggestion, listRejectedSuggestions } from "./rejected-suggestions.js";
+import {
+  deleteRejectedSuggestion,
+  deleteRejectedSuggestionsForSource,
+  listRejectedSuggestions,
+} from "./rejected-suggestions.js";
 
 const NOTE_BODY_LIMIT_BYTES = 512 * 1024;
 const DRAFT_BODY_LIMIT_BYTES = 512 * 1024;
@@ -370,6 +375,7 @@ const rejectedSuggestionsQuery = z
     chatId: z.string().min(1).max(120).optional(),
   })
   .strict();
+const rejectedSuggestionsDeleteQuery = rejectedSuggestionsQuery.required({ sourceNoteId: true });
 const acceptDraftBody = z
   .object({
     mutationIds: z.array(z.string().uuid()).min(1).optional(),
@@ -1307,6 +1313,12 @@ export function createLongTermMemoryRoutes(runtime: {
       const query = rejectedSuggestionsQuery.parse(request.query);
       const suggestions = await listRejectedSuggestions(query, root);
       return ltmRejectedSuggestionsResponseSchema.parse({ suggestions, total: suggestions.length });
+    });
+    app.delete<{ Querystring: unknown }>("/rejected-suggestions", async (request) => {
+      const query = rejectedSuggestionsDeleteQuery.parse(request.query);
+      return ltmRejectedSuggestionsClearResponseSchema.parse(
+        await deleteRejectedSuggestionsForSource(query.sourceNoteId, root),
+      );
     });
     app.delete<{ Params: { id: string } }>("/rejected-suggestions/:id", async (request, reply) => {
       const parsed = z.string().uuid().safeParse(request.params.id);

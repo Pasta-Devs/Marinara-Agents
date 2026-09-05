@@ -334,7 +334,7 @@ export function validateLtmEvidenceUnits({
         drop({
           candidateIndex,
           reason,
-          message: userFacingDropMessageForDiagnostic(dropDiagnostic, reason),
+          message: userFacingDropMessageForDiagnostic(dropDiagnostic),
           code: dropDiagnostic.code,
           details: dropDiagnostic.details,
         });
@@ -360,6 +360,7 @@ export function validateLtmEvidenceUnits({
     const dropped = droppedCandidate({
       candidateIndex,
       reason: "unsupported_bucket",
+      code,
       message,
       unit,
     });
@@ -674,6 +675,7 @@ function isSourceSummaryPayload(text: string) {
 
 function droppedCandidate(
   input: Required<Pick<DroppedCandidateInput, "candidateIndex" | "reason" | "message" | "unit">> & {
+    code?: string;
     snippet?: string;
   },
 ): LtmExtractionDroppedCandidate {
@@ -681,6 +683,7 @@ function droppedCandidate(
   return {
     index: input.candidateIndex,
     reason: input.reason,
+    ...(input.code ? { validatorCode: input.code } : {}),
     message: input.message,
     ...(safeSnippet(input.snippet ?? input.unit.text)
       ? { snippet: safeSnippet(input.snippet ?? input.unit.text)! }
@@ -738,7 +741,8 @@ function diagnosticToDropReason(code: string): LtmExtractionDropReason | null {
     return "placeholder_output";
   }
   if (code === "unsupported_dialogue_quote") return "quote_not_found_in_source";
-  if (code === "missing_source_note_evidence" || code === "missing_evidence") return "missing_source_evidence";
+  if (code === "missing_source_note_evidence" || code === "missing_evidence" || code === "source_hash_mismatch")
+    return "missing_source_evidence";
   if (code === "source_summary_payload") return "source_summary_payload";
   if (
     code === "unsupported_source_extraction_bucket" ||
@@ -798,11 +802,8 @@ function userFacingDropMessageForCode(code: string, reason: LtmExtractionDropRea
   return userFacingDropMessage(reason);
 }
 
-function userFacingDropMessageForDiagnostic(diagnostic: LtmExtractionDiagnostic, reason: LtmExtractionDropReason) {
-  if (diagnostic.code === "unknown_link_target" || diagnostic.code === "relationship_state_missing_caused_by") {
-    return diagnostic.message;
-  }
-  return userFacingDropMessageForCode(diagnostic.code, reason);
+function userFacingDropMessageForDiagnostic(diagnostic: LtmExtractionDiagnostic) {
+  return diagnostic.message.trim().slice(0, 240) || "The candidate did not pass validation.";
 }
 
 function userFacingDropMessage(reason: LtmExtractionDropReason) {

@@ -3622,6 +3622,28 @@ async function main() {
       } as any,
       storageService.root,
     );
+    await addRejectedSuggestions(
+      {
+        ...draft,
+        source: { sourceNoteId: "source_route_other", chatId: "chat-a" },
+        extractionOutcome: {
+          state: "partial_success",
+          totalCandidates: 3,
+          keptUnits: 2,
+          droppedUnits: 1,
+          droppedCandidates: [
+            {
+              index: 2,
+              reason: "invalid_format",
+              message: "Candidate was not valid memory data.",
+              snippet: "A rejected gate detail from another source.",
+            },
+          ],
+          droppedCandidateDetailsTruncated: false,
+        },
+      } as any,
+      storageService.root,
+    );
     const rejected = await app.inject({
       method: "GET",
       url: "/api/long-term-memory/rejected-suggestions?sourceNoteId=source_route_review&chatId=chat-a",
@@ -3630,6 +3652,49 @@ async function main() {
     assert.equal(rejected.statusCode, 200, rejected.body);
     assert.equal(rejected.json().total, 1);
     const rejectedId = rejected.json().suggestions[0].id;
+    const clearedOtherSource = await app.inject({
+      method: "DELETE",
+      url: "/api/long-term-memory/rejected-suggestions?sourceNoteId=source_route_other",
+      headers,
+    });
+    assert.equal(clearedOtherSource.statusCode, 200, clearedOtherSource.body);
+    assert.deepEqual(clearedOtherSource.json(), { deletedCount: 1, sourceNoteId: "source_route_other" });
+    const repeatedOtherSourceClear = await app.inject({
+      method: "DELETE",
+      url: "/api/long-term-memory/rejected-suggestions?sourceNoteId=source_route_other",
+      headers,
+    });
+    assert.deepEqual(repeatedOtherSourceClear.json(), { deletedCount: 0, sourceNoteId: "source_route_other" });
+    assert.equal(
+      (
+        await app.inject({
+          method: "GET",
+          url: "/api/long-term-memory/rejected-suggestions?sourceNoteId=source_route_other",
+          headers,
+        })
+      ).json().total,
+      0,
+    );
+    assert.equal(
+      (
+        await app.inject({
+          method: "DELETE",
+          url: "/api/long-term-memory/rejected-suggestions",
+          headers,
+        })
+      ).statusCode,
+      400,
+    );
+    assert.equal(
+      (
+        await app.inject({
+          method: "DELETE",
+          url: "/api/long-term-memory/rejected-suggestions?sourceNoteId=not-a-uuid",
+          headers,
+        })
+      ).statusCode,
+      400,
+    );
     const deletedRejected = await app.inject({
       method: "DELETE",
       url: `/api/long-term-memory/rejected-suggestions/${rejectedId}`,
