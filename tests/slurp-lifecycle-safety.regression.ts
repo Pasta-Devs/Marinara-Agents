@@ -317,8 +317,13 @@ assert.match(
 );
 assert.match(
   profileSurface,
-  /-mt-16 @min-\[680px\]:-mt-\[5\.333rem\] @min-\[1040px\]:-mt-24/u,
-  "Creator avatars must keep two-thirds of their changing size inside the banner",
+  /-mt-8 @min-\[680px\]:-mt-10 @min-\[1040px\]:-mt-11/u,
+  "Creator avatars must keep roughly 30% of their changing size inside the banner",
+);
+assert.match(profileSurface, /linear-gradient\(to_bottom,transparent_0%,var\(--slurp-canvas\)_3\.5rem\)/u);
+assert.match(
+  profileSurface,
+  /linear-gradient\(to_top,rgba\(8,4,10,0\.88\)_0%,rgba\(8,4,10,0\.58\)_24%,transparent_60%\)/u,
 );
 assert.match(
   profileSurface,

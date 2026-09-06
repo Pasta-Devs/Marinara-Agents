@@ -194,7 +194,7 @@ export function SlurpProfileSurface<TTab extends string = SlurpProfileTab>({
               className={cn(
                 "pointer-events-none absolute inset-0",
                 spotlight
-                  ? "bg-[radial-gradient(ellipse_at_82%_18%,color-mix(in_srgb,var(--slurp-coral)_18%,transparent),transparent_48%),linear-gradient(to_top,var(--slurp-canvas,var(--background))_0%,color-mix(in_srgb,var(--slurp-canvas,var(--background))_98%,transparent)_26%,color-mix(in_srgb,var(--slurp-canvas,var(--background))_70%,transparent)_52%,transparent_86%),linear-gradient(to_right,rgba(8,4,10,0.62),transparent_64%)]"
+                  ? "bg-[radial-gradient(ellipse_at_82%_18%,color-mix(in_srgb,var(--slurp-coral)_18%,transparent),transparent_48%),linear-gradient(to_top,rgba(8,4,10,0.88)_0%,rgba(8,4,10,0.58)_24%,transparent_60%),linear-gradient(to_right,rgba(8,4,10,0.62),transparent_64%)]"
                   : "bg-[linear-gradient(to_top,var(--slurp-canvas,var(--background))_0%,color-mix(in_srgb,var(--slurp-canvas,var(--background))_70%,transparent)_34%,transparent_72%),linear-gradient(to_right,rgba(8,4,10,0.28),transparent_55%)]",
               )}
               aria-hidden="true"
@@ -245,11 +245,11 @@ export function SlurpProfileSurface<TTab extends string = SlurpProfileTab>({
         className={cn(
           "relative px-4 pb-6 @min-[680px]:px-6 @min-[680px]:pb-7 @min-[1040px]:px-8",
           spotlight
-            ? "bg-[linear-gradient(110deg,color-mix(in_srgb,var(--slurp-canvas)_96%,transparent),color-mix(in_srgb,var(--noodle-accent)_7%,var(--slurp-canvas))_56%,color-mix(in_srgb,var(--slurp-violet)_5%,var(--slurp-canvas)))] @min-[680px]:grid @min-[680px]:grid-cols-[auto_minmax(0,1fr)] @min-[680px]:items-start @min-[680px]:gap-x-6 @min-[1040px]:gap-x-8"
+            ? "bg-[linear-gradient(to_bottom,transparent_0%,var(--slurp-canvas)_3.5rem)] @min-[680px]:grid @min-[680px]:grid-cols-[auto_minmax(0,1fr)] @min-[680px]:items-start @min-[680px]:gap-x-6 @min-[1040px]:gap-x-8"
             : "rounded-xl bg-[color-mix(in_srgb,var(--slurp-surface-raised,var(--background))_96%,transparent)] shadow-[var(--slurp-shadow-modal)] ring-1 ring-inset ring-[var(--noodle-divider)] backdrop-blur-md",
-          // Keep one-third of the 6rem avatar below the banner edge at every width. The old
-          // breakpoint-specific double negative margins made the portrait jump vertically.
-          hasBanner ? "-mt-16 @min-[680px]:-mt-[5.333rem] @min-[1040px]:-mt-24" : "mt-5",
+          // Keep roughly 30% of each responsive avatar inside the banner. The identity shares
+          // this overlap so its first line rises into the smooth bottom fade without drifting.
+          hasBanner ? "-mt-8 @min-[680px]:-mt-10 @min-[1040px]:-mt-11" : "mt-5",
         )}
         data-slurp-creator-hero
       >

@@ -1,5 +1,11 @@
 # Slurp release notes
 
+## 1.1.24 — 2026-09-06
+
+- Creator avatars now visibly overlap about 30% of the banner artwork, while
+  the identity rises into a focused dark fade that blends into the solid
+  profile header.
+
 ## 1.1.23 — 2026-09-06
 
 - Profile actions now stay directly after the Creator identity and bio at every
