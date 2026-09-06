@@ -1393,6 +1393,7 @@ export default function SourcesWorkspace({
   const [selectedLorebookId, setSelectedLorebookId] = useState<string | null>(null);
   const [requestedSourceNoteId, setRequestedSourceNoteId] = useState<string | null>(null);
   const [workspacePane, setWorkspacePane] = useState<LtmWorkspacePane>("navigator");
+  const [sourceContextKey, setSourceContextKey] = useState(props.chatId ?? "all");
   const [sourceTargetId, setSourceTargetId] = useState(props.chatId ? `chat:${props.chatId}` : "all");
   const [selectedDestinationTargetIds, setSelectedDestinationTargetIds] = useState<string[]>(
     props.chatId ? [`chat:${props.chatId}`] : [],
@@ -1569,7 +1570,8 @@ export default function SourcesWorkspace({
     scopeTargetOptions.find((target) => target.id === sourceTargetId) ??
     scopeTargetOptions.find((target) => target.id === "all") ??
     scopeTargetOptions[0];
-  const sourceTargetMatchesContext = sourceTargetId === (props.chatId ? `chat:${props.chatId}` : "all");
+  const sourceContextMatchesProps = sourceContextKey === (props.chatId ?? "all");
+  const sourceTargetResolved = Boolean(sourceTarget && scopeTargets.isSuccess);
   const destinationTargets = useMemo(
     () =>
       scopeTargetOptions.filter(
@@ -1626,7 +1628,7 @@ export default function SourcesWorkspace({
         ...(modeFilter !== "all" ? { mode: modeFilter } : {}),
         ...(sourceQuery.trim() ? { query: sourceQuery } : {}),
       }),
-    enabled: scopeTargets.isSuccess && Boolean(sourceTarget) && sourceTargetMatchesContext && source !== "lorebooks",
+    enabled: sourceContextMatchesProps && sourceTargetResolved && source !== "lorebooks",
   });
   const lorebookPreview = useQuery({
     queryKey: [...queryKeys.lorebookPreview, previewScope, modeFilter, sourceQuery],
@@ -1641,7 +1643,7 @@ export default function SourcesWorkspace({
           ...(sourceQuery.trim() ? { query: sourceQuery } : {}),
         },
       ),
-    enabled: scopeTargets.isSuccess && Boolean(sourceTarget) && sourceTargetMatchesContext && source === "lorebooks",
+    enabled: sourceContextMatchesProps && sourceTargetResolved && source === "lorebooks",
   });
   const sourceDetails = useQuery({
     queryKey: [...queryKeys.preview, "details", source, previewScope, modeFilter, focusedFlatSourceId],
@@ -1658,13 +1660,14 @@ export default function SourcesWorkspace({
     enabled:
       scopeTargets.isSuccess &&
       Boolean(sourceTarget) &&
-      sourceTargetMatchesContext &&
+      sourceContextMatchesProps &&
+      sourceTargetResolved &&
       source !== "lorebooks" &&
       focusedFlatSourceId !== null,
   });
-  const previewData = sourceTargetMatchesContext ? preview.data : undefined;
-  const lorebookPreviewData = sourceTargetMatchesContext ? lorebookPreview.data : undefined;
-  const sourceDetailsData = sourceTargetMatchesContext ? sourceDetails.data : undefined;
+  const previewData = sourceContextMatchesProps && sourceTargetResolved ? preview.data : undefined;
+  const lorebookPreviewData = sourceContextMatchesProps && sourceTargetResolved ? lorebookPreview.data : undefined;
+  const sourceDetailsData = sourceContextMatchesProps && sourceTargetResolved ? sourceDetails.data : undefined;
   const rows = [...(previewData?.samples ?? [])].sort((left, right) => {
     if (source !== "chats" || !props.chatId) return 0;
     return (
@@ -1907,6 +1910,7 @@ export default function SourcesWorkspace({
   }, [destinationTargets]);
 
   useEffect(() => {
+    setSourceContextKey(props.chatId ?? "all");
     setSourceTargetId(props.chatId ? `chat:${props.chatId}` : "all");
     setSelectedDestinationTargetIds(props.chatId ? [`chat:${props.chatId}`] : []);
   }, [props.chatId]);

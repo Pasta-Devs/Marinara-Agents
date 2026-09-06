@@ -1,5 +1,10 @@
 # Long-Term Memory changelog
 
+## 1.2.22 — 2026-09-06
+
+- Kept user-selected source targets valid while isolating parent chat context transitions.
+- Prevented stale source previews and details from rendering during scope changes.
+
 ## 1.2.21 — 2026-09-05
 
 - Reduced redundant vault scans across Review Queue, Memory Vault, and Sources loading.

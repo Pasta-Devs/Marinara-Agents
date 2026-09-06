@@ -21,13 +21,24 @@ assert.match(vault, /staleTime: 30_000/u);
 assert.match(sources, /staleTime: 30_000/u);
 
 const previewBlock = sources.slice(sources.indexOf("const preview = useQuery({"), sources.indexOf("const rows ="));
-assert.match(previewBlock, /enabled: scopeTargets\.isSuccess && Boolean\(sourceTarget\)/u);
-assert.match(previewBlock, /sourceTargetMatchesContext && source !== "lorebooks"/u);
+assert.match(previewBlock, /sourceContextMatchesProps && sourceTargetResolved && source !== "lorebooks"/u);
 assert.match(previewBlock, /const lorebookPreview = useQuery\(/u);
-assert.match(previewBlock, /sourceTargetMatchesContext && source === "lorebooks"/u);
+assert.match(previewBlock, /sourceContextMatchesProps && sourceTargetResolved && source === "lorebooks"/u);
 assert.match(previewBlock, /focusedFlatSourceId !== null/u);
-assert.match(sources, /const previewData = sourceTargetMatchesContext \? preview\.data : undefined/u);
-assert.match(sources, /const lorebookPreviewData = sourceTargetMatchesContext \? lorebookPreview\.data : undefined/u);
-assert.match(sources, /const sourceDetailsData = sourceTargetMatchesContext \? sourceDetails\.data : undefined/u);
+assert.match(sources, /const sourceContextMatchesProps = sourceContextKey === \(props\.chatId \?\? "all"\)/u);
+assert.match(sources, /const sourceTargetResolved = Boolean\(sourceTarget && scopeTargets\.isSuccess\)/u);
+assert.match(
+  sources,
+  /const previewData = sourceContextMatchesProps && sourceTargetResolved \? preview\.data : undefined/u,
+);
+assert.match(
+  sources,
+  /const lorebookPreviewData = sourceContextMatchesProps && sourceTargetResolved \? lorebookPreview\.data : undefined/u,
+);
+assert.match(
+  sources,
+  /const sourceDetailsData = sourceContextMatchesProps && sourceTargetResolved \? sourceDetails\.data : undefined/u,
+);
+assert.match(sources, /setSourceTargetId\(props\.chatId \? `chat:\$\{props\.chatId\}` : "all"\)/u);
 
 console.log("Long-Term Memory loading regression passed: shared scope-target cache and resolved-scope previews.");
