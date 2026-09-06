@@ -5213,20 +5213,34 @@ PF.world = (() => {
      *  buildings, so the gaps between them are open ground the rows have no
      *  equivalent of.
      *
-     *  MEASURED over 1,200 settlements across all five ranks, counting the ones
-     *  that drop a sealed feature the shipped harness says they should place:
-     *  26 with the crossroad centred, 26 with the rows held and the columns
-     *  floored at one (identical — the whole point), 33 with the rows floored the
-     *  same way instead, and 110 with no margin term at all. */
-    MARGIN_KEEP: 1,
+     *  SHIPPED AT ZERO, which switches the column half OFF, and the two halves
+     *  were separated by mutation rather than by argument. Take the ROW floor
+     *  away and the shipped feature-placement lane reds — an outpost places NONE
+     *  of the two features it sealed, because a southern band one row lower ends
+     *  flush with the last usable row. Take the column floor away — which is what
+     *  this value does — and nothing in this file reds, at any rank, on any seed
+     *  it drives. The rows are the whole of the protection, and they have no knob
+     *  because they are not a judgment call.
+     *
+     *  WHAT THE COLUMN FLOOR COSTS, counted off `junctionCandidates` itself
+     *  rather than quoted from a sweep nobody can re-run: a floor of one takes
+     *  the search from 4 crossroads to 3 at outpost, 18 to 9 at hamlet, 108 to 84
+     *  at village, 1,268 to 746 at town and 504 to 315 at city. A quarter to a
+     *  half of the variety this release exists for, against a fault nothing has
+     *  found. Set it back to 1 to restore the floor: the lanes read the search
+     *  rather than these numbers, so a retune is one edit and a green suite. */
+    MARGIN_KEEP: 0,
     // ── Lever 4: what the surround does to the ground the town left over ───────
     /** Two idioms, from the SHIPPED tile vocabulary and no new art (§2.6 lever 4).
      *
      *  `verge` strews stone along the arteries — a hard shoulder, which is what a
      *  road through rock gets. `meadow` thickens the grass mottle in a band
      *  inside the border ring, which is the wet ground a settlement on water
-     *  stands in. `depth` is how far the band reaches, `density` how much of it
-     *  the idiom takes.
+     *  stands in. `kind` picks which of the two BANDS is measured — the arteries
+     *  or the ring — and `tile` is what lands in it, held apart on purpose: "make
+     *  the verge gravel instead" is then this row and not the painter, which is
+     *  the whole of the tunables discipline. `depth` is how far the band reaches,
+     *  `density` how much of it the idiom takes.
      *
      *  READ HONESTLY UNDER SNOW: `SUBS.snow` substitutes grass/grass2/crop/canopy
      *  and nothing else, so a meadow keeps its two-tone mottle in a white town
@@ -5236,8 +5250,8 @@ PF.world = (() => {
      *  ground mix and the tree count, and a fifth idiom would be a fifth thing to
      *  retune before anybody has played one. */
     GROUND_IDIOM: {
-      rocky: { kind: "verge", depth: 2, density: 0.34 },
-      water: { kind: "meadow", depth: 5, density: 0.55 },
+      rocky: { kind: "verge", tile: "stone", depth: 2, density: 0.34 },
+      water: { kind: "meadow", tile: "grass2", depth: 5, density: 0.55 },
     },
   };
 
@@ -5382,7 +5396,16 @@ PF.world = (() => {
    *  town's stone on its own square). Staying inside `[2, w-3] x [2, h-3]` is
    *  what stops `fillRect` clipping the rect silently — a clipped plaza paints
    *  fewer tiles than its shape claims, which is the same main-stream shift by a
-   *  quieter route. */
+   *  quieter route.
+   *
+   *  THE TWO CLAMPS ARE NOT A MATCHED PAIR TODAY, and the sentence above reads as
+   *  if they were. `yHi` is LIVE: take it away and a square clips off the bottom
+   *  of a short map — lane 3(7) reds on it first, as a wander box that no longer
+   *  holds the square it is for. `xHi` is DEFENSIVE and currently
+   *  inert at every shipped scale — the junction's legal band stops at
+   *  `mx <= w - 13` and the widest shape is 11, so `mx + 8 <= w - 5` and the min
+   *  never reaches for its right-hand term. It stays because it is the half a
+   *  wider shape or a wider band would need, not because it is doing work now. */
   const plazaCandidates = (w, h, mx, my) => {
     const half = TOWN_TUNE.PLAZA_INSET >> 1;
     const out = [];
@@ -5415,12 +5438,13 @@ PF.world = (() => {
    *  The yield filter alone is nearly free, because the budget bites from
    *  village up: outpost 8 of 8 (it removes nothing — legality is what binds),
    *  hamlet 204 of 240, village 648 of 792, town 1,528 of 1,768, city 3,024 of
-   *  4,320. The margin term below is what actually costs candidates, and it is
-   *  paid where the map is short: outpost 3, hamlet 9, village 84, town 746,
-   *  city 315. The lanes read those numbers off this function rather than off a
-   *  comment, and the layouts multiply through anyway — 67 to 73 squares per
-   *  junction and a phase per band gives 536 plans at outpost and 2.4 million at
-   *  town, which the variety lane prints per rank on every run. */
+   *  4,320. The margin term below is what actually costs candidates, and with
+   *  its column half switched off (see `MARGIN_KEEP`) that cost is the row floor
+   *  alone: outpost 4, hamlet 18, village 108, town 1,268, city 504. The lanes
+   *  read those numbers off this function rather than off a comment, and the
+   *  layouts multiply through anyway — 67 to 73 squares per junction and a phase
+   *  per band gives 737 plans at outpost and 3.9 million at town, which the
+   *  variety lane prints per rank on every run. */
   /** MEMOIZED, because the answer is a pure function of three numbers and the
    *  search walks every tile on the map. Unmemoized it took a city compile from
    *  2.6 ms to 8.1 ms — not a number anybody would feel, and not a reason to
@@ -5445,11 +5469,12 @@ PF.world = (() => {
         // AND IT MAY NOT CLOSE THE OPEN GROUND. A junction pushed toward one edge
         // keeps its lot count by moving a band's slack to the other side, and the
         // ground it spends is the strip the feature placer falls back on when the
-        // corners are claimed. Measured before this term existed: an outpost
-        // dropped a sealed feature on 109 of 240 probe worlds against 26 with the
-        // crossroad centred, because a southern band one row lower ends flush
-        // with the last usable row and there is then no free row on the map.
-        // Rows held at their centred depth, columns floored — see MARGIN_KEEP.
+        // corners are claimed. A southern band one row lower ends flush with the
+        // last usable row and there is then no free row on the map, which is how
+        // an outpost comes to place none of the two features it sealed — the
+        // failure the shipped feature-placement lane reds on if this next line
+        // goes. The ROWS carry that; the columns are `MARGIN_KEEP`, and it ships
+        // at zero because they carried nothing. See the knob.
         const margins = outerMargins(w, h, x, y);
         if (margins.north < floors.north || margins.south < floors.south) continue;
         if (
@@ -5457,6 +5482,12 @@ PF.world = (() => {
           margins.east < Math.min(floors.east, TOWN_TUNE.MARGIN_KEEP)
         )
           continue;
+        // A junction with nowhere to stand a square is not a junction. ALSO
+        // DEFENSIVE and also inert: the band arithmetic above already implies the
+        // room, so the candidate counts are identical with this line and without
+        // it at every shipped rank. It is kept for the reason the `xHi` clamp is
+        // — the next shape set is the one that makes it bite, and a `townPlan`
+        // falling back to a centred 8x8 it never offered is a clipped square.
         if (!plazaCandidates(w, h, x, y).length) continue;
         out.push({ x, y });
       }
@@ -5532,7 +5563,7 @@ PF.world = (() => {
         if (v.ground[at] !== "grass" && v.ground[at] !== "grass2") continue;
         if (v.solid[at] || v.object[at] || v.overhead[at]) continue;
         if (roll >= idiom.density) continue;
-        v.ground[at] = idiom.kind === "verge" ? "stone" : "grass2";
+        v.ground[at] = idiom.tile;
         painted++;
       }
     }
@@ -6224,15 +6255,15 @@ PF.world = (() => {
     // the way out is not hemmed in by the trees beside it. The paint itself
     // waits until after everything else (phase two, below the wilds loop).
     //
-    // THE SPINE IS PASSED IN from 0.16 slice 4: a terminal is where the road
-    // MEETS the edge, and the road no longer runs down the middle of the map. On
-    // a centred junction this is the same four gate tiles the lattice computed
-    // for itself, which is why the argument is an addition rather than a change.
-    const seamGates = PF.lattice.settlementGates(
-      v,
-      { east: wildsPlaces.length > 0, west: wildsPlaces.length > 1 },
-      v.spine,
-    );
+    // THE SPINE IS READ OFF THE ZONE from 0.16 slice 4: a terminal is where the
+    // road MEETS the edge, and the road no longer runs down the middle of the
+    // map. `v.spine` is stamped six hundred lines above this call, so the lattice
+    // finds it for itself; on a centred junction it computes the same four gate
+    // tiles it always did, which is why this is an addition and not a change.
+    const seamGates = PF.lattice.settlementGates(v, {
+      east: wildsPlaces.length > 0,
+      west: wildsPlaces.length > 1,
+    });
     scatterTrees(
       v,
       rnd,
@@ -6871,19 +6902,34 @@ PF.world = (() => {
     const gatheringPlace = interiorPlaces.find((p) => p.kind === "gathering");
     const gatheringZoneId = gatheringPlace ? zoneIdForPlace(gatheringPlace) : null;
     const wildsZoneId = wildsPlaces.length ? zoneIdForPlace(wildsPlaces[0]) : null;
-    // CLAMPED, exactly as its sibling `streetBox` below already is. The junction
-    // is seeded from 0.16 and its legal band runs to within thirteen columns of
-    // either edge, so today's numbers still clear the border with room to spare —
-    // the clamp bites on no shipped scale, and slice 4's contract lane asserts
-    // that rather than assuming it. It is here because the NEXT tuning of the
-    // shape set or the search is the one that would find the edge, and a wander
-    // box outside the map is an NPC walked into the border ring.
-    const plazaBox = () => ({
-      x0: Math.max(2, midX - 6),
-      y0: Math.max(2, midY - 5),
-      x1: Math.min(v.w - 3, midX + 6),
-      y1: Math.min(v.h - 3, midY + 5),
-    });
+    // ON THE SQUARE, NOT ON THE CROSSROAD — and clamped, exactly as its sibling
+    // `streetBox` below already is. Lever 3 lets the square sit OFFSET around the
+    // junction: an 11x6 may span `midX - 9` to `midX + 1`, so a box centred on
+    // `midX/midY` tracked the road and not the paving — columns of the square
+    // fell outside it while it reached the same distance the other way onto lots
+    // and roofs. Centred on the rect the plaza actually took, it contains every
+    // square the shape set can offer at every rank, and lane 3(7) walks the whole
+    // candidate set to say so rather than sampling it. The clamp bites on no
+    // shipped scale — asserted there too, not assumed — and is here because the
+    // NEXT tuning of the shape set or the search is the one that would find the
+    // edge, and a wander box outside the map is an NPC walked into the ring.
+    //
+    // WHAT RE-CENTRING DOES NOT FIX, because it was never the box's doing: there
+    // is more building inside the box than there used to be. That is lever 2.
+    // Band phases spend their slack TOWARD the crossroad by design, so the lots
+    // crowd the paving; centre the phases and this box comes back to the open
+    // ground the 0.15 one had. A look to be judged by eye, and it is on the
+    // deferred-verification list rather than tuned from here.
+    const plazaBox = () => {
+      const cx = plaza.x + ((plaza.w - 1) >> 1);
+      const cy = plaza.y + ((plaza.h - 1) >> 1);
+      return {
+        x0: Math.max(2, cx - 6),
+        y0: Math.max(2, cy - 5),
+        x1: Math.min(v.w - 3, cx + 6),
+        y1: Math.min(v.h - 3, cy + 5),
+      };
+    };
     /** The stretch of street outside one door. The plaza is thirteen tiles by
      *  eleven; a thriving city now holds a hundred people, and sending all of
      *  them to the same square at noon builds a crush in the middle of an empty
@@ -8490,7 +8536,12 @@ PF.lattice = (() => {
   /** The settlement's own gates: every spine terminal the brief's wilds did not
    *  already take. Where a wilds hangs, its shipped portal pair is the seam and
    *  no gate is written at all — so a record and a gate can never both answer for
-   *  one tile, and the precedence is settled at build time. */
+   *  one tile, and the precedence is settled at build time.
+   *
+   *  `spine` is an OVERRIDE for a zone that does not carry one yet, and no
+   *  shipped caller passes it: the compiler stamps `v.spine` six hundred lines
+   *  before it asks for these gates. Kept so a caller building a settlement in
+   *  pieces has the seam available before the stamp, not because it is used. */
   const settlementGates = (v, wilds, spine) =>
     gatesFor(
       v,
