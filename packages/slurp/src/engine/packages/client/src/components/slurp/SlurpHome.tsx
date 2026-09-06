@@ -3769,11 +3769,11 @@ function StageProfileView({
           <button
             type="button"
             onClick={onBack}
-            className="absolute left-2 top-2 z-20 flex h-11 w-11 items-center justify-center rounded-lg bg-black/50 text-white backdrop-blur-sm hover:bg-black/65 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white @min-[1024px]:hidden"
+            className="absolute start-2 top-2 z-20 flex h-11 w-11 items-center justify-center rounded-lg bg-black/50 text-white backdrop-blur-sm hover:bg-black/65 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white @min-[1024px]:hidden"
             title={localizeUi("ui.slurp.profile.back")}
             aria-label={localizeUi("ui.slurp.profile.back")}
           >
-            <ChevronLeft size={22} />
+            <ChevronLeft size={22} className="rtl:-scale-x-100" />
           </button>
         }
         account={profile}
@@ -4838,30 +4838,30 @@ function ViewerHub({
         data-component="SlurpHome.StickyHeader"
       >
         <div
-          className="grid h-14 grid-cols-[5.5rem_minmax(0,1fr)_5.5rem] items-center border-b border-[var(--noodle-divider)] px-3 @min-[1024px]:px-5"
+          className="relative grid h-14 grid-cols-[5.5rem_minmax(0,1fr)_5.5rem] items-center border-b border-[var(--noodle-divider)] px-3 @min-[1024px]:px-5"
           data-component="SlurpHome.HeaderBar"
         >
           <button
             type="button"
             onClick={onRefresh}
             disabled={isRefreshing}
-            className="flex h-9 w-9 items-center justify-center rounded-full text-[var(--noodle-accent)] transition-colors hover:bg-[var(--noodle-accent)]/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--noodle-accent)] disabled:cursor-not-allowed disabled:opacity-50"
+            className="flex h-11 w-11 items-center justify-center rounded-full text-[var(--noodle-accent)] transition-colors hover:bg-[var(--noodle-accent)]/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--noodle-accent)] disabled:cursor-not-allowed disabled:opacity-50"
             title={localizeUi("ui.noodle.noodlehome.refreshTimeline")}
             aria-label={localizeUi("ui.noodle.noodlehome.refreshTimeline")}
           >
             {isRefreshing ? <Loader2 size={17} className="animate-spin" /> : <RefreshCw size={17} aria-hidden="true" />}
           </button>
-          <NoodleLogo className="mx-auto h-9 w-14" />
+          <NoodleLogo className="pointer-events-none absolute start-1/2 h-9 w-14 -translate-x-1/2 rtl:translate-x-1/2" />
           {/* ponytail: placeholder balance, wire to the real wallet when there is one. */}
           {/* The desktop sidebar carries the same balance, so it only shows where there is no sidebar. */}
           <button
             type="button"
             onClick={onOpenWallet}
-            className="justify-self-end flex h-9 items-center gap-1.5 rounded-full px-3 text-sm font-semibold tabular-nums text-[var(--muted-foreground)] ring-1 ring-inset ring-[var(--noodle-divider)] transition-colors hover:bg-[var(--accent)] hover:text-[var(--foreground)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--noodle-accent)] @min-[1024px]:hidden"
+            className="flex h-11 max-w-full items-center justify-self-end gap-1.5 overflow-hidden rounded-full px-3 text-sm font-semibold tabular-nums text-[var(--muted-foreground)] ring-1 ring-inset ring-[var(--noodle-divider)] transition-colors hover:bg-[var(--accent)] hover:text-[var(--foreground)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--noodle-accent)] @min-[1024px]:hidden"
             aria-label={localizeUi("ui.slurp.wallet.balance", { amount: walletCoins })}
             title={localizeUi("ui.slurp.wallet.balance", { amount: walletCoins })}
           >
-            {walletCoins}
+            <span className="min-w-0 truncate">{walletCoins}</span>
             <span
               className="inline-flex h-4 w-4 items-center justify-center rounded-full bg-[var(--noodle-accent)] text-[0.62rem] font-black leading-none text-white"
               aria-hidden="true"
@@ -6636,13 +6636,13 @@ function NoodlerFrame({
           <button
             type="button"
             onClick={onBack}
-            className="flex h-11 w-11 items-center justify-center rounded-full text-[var(--noodle-accent)] hover:bg-[var(--noodle-accent)]/10"
+            className="flex h-11 w-11 items-center justify-center rounded-full text-[var(--noodle-accent)] hover:bg-[var(--noodle-accent)]/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--noodle-accent)]"
             aria-label={localizeUi("ui.noodle.noodlerframe.back")}
           >
-            <ArrowLeft size={18} />
+            <ArrowLeft size={18} className="rtl:-scale-x-100" />
           </button>
         )}
-        <p className="min-w-0 flex-1 truncate text-sm font-semibold">{title}</p>
+        <h1 className="min-w-0 flex-1 truncate text-sm font-semibold">{title}</h1>
         {action ?? (
           <span className="rounded-full bg-[var(--noodle-accent)]/10 px-2.5 py-1 text-[0.65rem] font-bold text-[var(--noodle-accent)]">
             {localizeUi("ui.noodle.noodlerframe.noodler")}

@@ -1,5 +1,13 @@
 # Slurp release notes
 
+## 1.1.22 — 2026-09-06
+
+- Creator headers now keep the avatar high in the banner at every width, give
+  mobile actions room to breathe, and keep feed controls clear and touchable on
+  narrow screens.
+- Header titles, focus states, and directional controls now work consistently
+  for keyboard and right-to-left navigation.
+
 ## 1.1.21 — 2026-09-06
 
 - Creator identity now stays clear in the persona switcher, mobile menu selection has a visible marker, Creator cards have consistent keyboard and press feedback, and profiles show bios faithfully without pointless expansion controls.

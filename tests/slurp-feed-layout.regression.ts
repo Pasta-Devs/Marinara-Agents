@@ -72,6 +72,16 @@ const stickyHeader = home.slice(
   home.indexOf("<SlurpMomentsShelf"),
 );
 assert.doesNotMatch(stickyHeader, /SlurpMomentsShelf/u, "The moments strip must sit outside the sticky header");
+assert.match(stickyHeader, /h-11 w-11/u, "The mobile refresh control must keep a full touch target");
+assert.match(stickyHeader, /absolute start-1\/2[\s\S]*?-translate-x-1\/2/u, "The logo must stay geometrically centred");
+assert.match(stickyHeader, /<span className="min-w-0 truncate">\{walletCoins\}<\/span>/u);
+
+// Shared subpage headers are real page headings and retain visible keyboard focus.
+const frame = home.slice(home.indexOf("function NoodlerFrame("), home.indexOf("function SlurpStudioView("));
+assert.match(frame, /focus-visible:ring-2/u);
+assert.match(frame, /<h1 className="min-w-0 flex-1 truncate/u);
+assert.match(frame, /rtl:-scale-x-100/u);
+assert.match(home, /absolute start-2 top-2[\s\S]*?rtl:-scale-x-100/u, "The profile back control must follow direction");
 
 // One highlight, one row shape, for every destination in the app.
 assert.match(shell, /export const SLURP_ROW_ACTIVE_CLASS/u, "The shell must own the active-row highlight");

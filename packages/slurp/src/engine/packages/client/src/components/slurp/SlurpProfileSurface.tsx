@@ -133,7 +133,7 @@ export function SlurpProfileSurface<TTab extends string = SlurpProfileTab>({
   };
   const hasProfileActions = Boolean(leadingActions || followAction || secondaryActions);
   const profileActions = (
-    <div className="grid min-h-11 w-full min-w-0 grid-cols-2 gap-2 [&>button]:min-w-0 [&>button:only-child]:col-span-2 @min-[560px]:flex @min-[560px]:w-auto @min-[560px]:flex-wrap @min-[560px]:justify-start @min-[560px]:[&>button:only-child]:col-span-1 @min-[860px]:justify-end">
+    <div className="grid min-h-11 w-full min-w-0 grid-cols-4 gap-2 [&>*]:min-w-0 [&>:first-child]:col-span-1 [&>:nth-child(2)]:col-span-3 [&>:nth-child(n+3)]:col-span-2 [&>:nth-child(n+3)>button]:w-full [&>button:only-child]:col-span-4 @min-[560px]:flex @min-[560px]:w-auto @min-[560px]:flex-wrap @min-[560px]:justify-start @min-[560px]:[&>button:only-child]:col-span-1 @min-[860px]:justify-end">
       {!editor?.isEditing && leadingActions}
       {followAction ? (
         <button
@@ -204,7 +204,7 @@ export function SlurpProfileSurface<TTab extends string = SlurpProfileTab>({
               aria-hidden="true"
             />
             {banner.uploadTarget === "banner" && (
-              <span className="absolute right-2 top-2 rounded-full bg-[var(--marinara-chat-chrome-panel-bg)] px-3 py-1.5 text-xs font-semibold text-[var(--noodle-accent)] shadow-lg ring-1 ring-[var(--marinara-chat-chrome-panel-border)]">
+              <span className="absolute end-2 top-2 rounded-full bg-[var(--marinara-chat-chrome-panel-bg)] px-3 py-1.5 text-xs font-semibold text-[var(--noodle-accent)] shadow-lg ring-1 ring-[var(--marinara-chat-chrome-panel-border)]">
                 {localizeUi("ui.noodle.noodleprofilesurface.uploading")}
               </span>
             )}
@@ -245,9 +245,11 @@ export function SlurpProfileSurface<TTab extends string = SlurpProfileTab>({
         className={cn(
           "relative px-4 pb-6 @min-[680px]:px-6 @min-[680px]:pb-7 @min-[1040px]:px-8",
           spotlight
-            ? "bg-[linear-gradient(110deg,color-mix(in_srgb,var(--slurp-canvas)_96%,transparent),color-mix(in_srgb,var(--noodle-accent)_7%,var(--slurp-canvas))_56%,color-mix(in_srgb,var(--slurp-violet)_5%,var(--slurp-canvas)))] @min-[680px]:grid @min-[680px]:grid-cols-[auto_minmax(0,1fr)] @min-[680px]:items-end @min-[680px]:gap-x-6 @min-[1040px]:gap-x-8"
+            ? "bg-[linear-gradient(110deg,color-mix(in_srgb,var(--slurp-canvas)_96%,transparent),color-mix(in_srgb,var(--noodle-accent)_7%,var(--slurp-canvas))_56%,color-mix(in_srgb,var(--slurp-violet)_5%,var(--slurp-canvas)))] @min-[680px]:grid @min-[680px]:grid-cols-[auto_minmax(0,1fr)] @min-[680px]:items-start @min-[680px]:gap-x-6 @min-[1040px]:gap-x-8"
             : "rounded-xl bg-[color-mix(in_srgb,var(--slurp-surface-raised,var(--background))_96%,transparent)] shadow-[var(--slurp-shadow-modal)] ring-1 ring-inset ring-[var(--noodle-divider)] backdrop-blur-md",
-          hasBanner ? "-mt-14 @min-[680px]:-mt-20" : "mt-5",
+          // Keep one-third of the 6rem avatar below the banner edge at every width. The old
+          // breakpoint-specific double negative margins made the portrait jump vertically.
+          hasBanner ? "-mt-16 @min-[680px]:-mt-[5.333rem] @min-[1040px]:-mt-24" : "mt-5",
         )}
         data-slurp-creator-hero
       >
@@ -255,10 +257,9 @@ export function SlurpProfileSurface<TTab extends string = SlurpProfileTab>({
           className={cn(
             "relative flex items-end",
             spotlight ? "w-auto" : "w-full",
-            // The avatar rides up over the banner by roughly half its own height. It used to sit
-            // almost flush with the card edge, which read as two stacked blocks rather than one
-            // profile. `z-10` keeps it above the banner it now overlaps.
-            hasBanner ? (spotlight ? "relative z-10 -mt-20 pt-0 @min-[680px]:-mt-28" : "relative z-10 -mt-24") : "pt-5",
+            // The hero itself establishes the banner overlap. Do not add another margin here:
+            // doing so changes the grid row's height and lets the avatar drop at a breakpoint.
+            hasBanner ? "relative z-10 pt-0" : "pt-5",
           )}
         >
           {avatarUpload ? (

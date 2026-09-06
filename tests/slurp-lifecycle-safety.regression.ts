@@ -317,6 +317,27 @@ assert.match(
 );
 assert.match(
   profileSurface,
+  /-mt-16 @min-\[680px\]:-mt-\[5\.333rem\] @min-\[1040px\]:-mt-24/u,
+  "Creator avatars must keep two-thirds of their changing size inside the banner",
+);
+assert.match(
+  profileSurface,
+  /@min-\[680px\]:items-start/u,
+  "wide Creator identity rows must not lower the avatar with end alignment",
+);
+assert.doesNotMatch(profileSurface, /@min-\[680px\]:items-end/u);
+assert.doesNotMatch(
+  profileSurface,
+  /hasBanner \? \(spotlight \? "relative z-10 -mt-/u,
+  "the avatar wrapper must not apply a second breakpoint-dependent overlap",
+);
+assert.match(
+  profileSurface,
+  /grid-cols-4[\s\S]*?\[&>:first-child\]:col-span-1[\s\S]*?\[&>:nth-child\(2\)\]:col-span-3/u,
+  "narrow Creator actions must reserve room for the primary subscription action",
+);
+assert.match(
+  profileSurface,
   /@min-\[860px\]:grid-cols-\[minmax\(0,1fr\)_auto\]/u,
   "Creator Room identity and actions must use a responsive non-overlapping grid",
 );
