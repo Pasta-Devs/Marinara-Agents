@@ -1,5 +1,24 @@
 # Slurp release notes
 
+## 1.2.3 — 2026-09-06 [highlight]
+
+- Subscribing to a Creator no longer fails.
+- Ads and replies now pay their coin rewards, up to the daily cap.
+- Creators post Stories on their own now. Settings has how often and what size.
+- A Creator's message policy, first-message fee, locked-message price and weekly
+  price can now be set in Settings - Creators.
+- Locked messages and commission deliveries can carry a picture, and the paywall
+  covers the picture too.
+- A commission can now be declined by the Creator or withdrawn by the fan.
+- Removed the "Paid partnership" tag: it was stamped on posts nobody wrote as
+  adverts, and paid the Creator nothing.
+- Personas that only browse are no longer listed as Creator profiles.
+- The persona switcher shows the real balance, not 999,999 coins.
+- Unlock a post in Wallet settings now sets a locked post's price.
+- Tapping like twice no longer fails, and leaving the Creator wizard untouched no
+  longer asks to discard changes.
+- A tip or quote cannot be charged again as a paid message.
+
 ## 1.2.2 — 2026-09-06
 
 - Wallet now keeps the daily refill claim visible until it is actually claimed,

@@ -28,6 +28,10 @@ import {
   useSlurpAmbientProfiles,
   useRerollAmbientProfiles,
   useDeleteNoodlerStageProfile,
+  useSetSlurpCreatorMessaging,
+  useSetSlurpCreatorPrice,
+  useSlurpCreatorMessagingSettings,
+  type SlurpCreatorMessaging,
   useDeleteAllSlurpData,
   useDeleteUnusedSlurpData,
   useAdoptNoodlerSourceIdentity,
@@ -341,6 +345,8 @@ export function SlurpSettings({
   const refreshCreators = useRefreshTargetedNoodlerCreatorsNow();
   const updateImages = useUpdateSlurpImageConnections();
   const deleteCreator = useDeleteNoodlerStageProfile();
+  const setCreatorMessaging = useSetSlurpCreatorMessaging();
+  const setCreatorPrice = useSetSlurpCreatorPrice();
   const deleteAllData = useDeleteAllSlurpData();
   const deleteUnusedData = useDeleteUnusedSlurpData();
   const adoptSourceIdentity = useAdoptNoodlerSourceIdentity();
@@ -725,6 +731,21 @@ export function SlurpSettings({
                       />
                     </Field>
                   )}
+                  {settings.autoPostingScheduleEnabled && (
+                    <Field label={t("ui.slurp.settings.storyRate")} detail={t("ui.slurp.settings.storyRateDetail")}>
+                      <select
+                        value={settings.storyRate}
+                        disabled={updateSettings.isPending}
+                        onChange={(event) => void update("storyRate", event.target.value as SlurpSettings["storyRate"])}
+                        className="min-h-11 w-full rounded-lg border border-[var(--slurp-outline)] bg-[var(--slurp-canvas)] px-3 text-base focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--slurp-focus)] disabled:opacity-50 sm:text-sm"
+                      >
+                        <option value="off">{t("ui.slurp.settings.storyRateOff")}</option>
+                        <option value="rare">{t("ui.slurp.settings.storyRateRare")}</option>
+                        <option value="regular">{t("ui.slurp.settings.storyRateRegular")}</option>
+                        <option value="often">{t("ui.slurp.settings.storyRateOften")}</option>
+                      </select>
+                    </Field>
+                  )}
                   {settings.autoPostingScheduleEnabled ? (
                     <Toggle
                       label={t("ui.slurp.settings.quietHours")}
@@ -938,6 +959,32 @@ export function SlurpSettings({
                         min={64}
                         max={4096}
                         onSave={(value) => update("imageHeight", value)}
+                      />
+                    </Field>
+                  </div>
+                  {/* A Story is shown in its own tall frame, so it carries its own size. The
+                      composer crops an uploaded Story to this ratio too. */}
+                  <div className="grid gap-3 sm:grid-cols-2">
+                    <Field
+                      label={t("ui.slurp.settings.images.storyWidth")}
+                      detail={t("ui.slurp.settings.images.storyWidthDetail")}
+                    >
+                      <NumberSetting
+                        value={settings.storyImageWidth}
+                        min={64}
+                        max={4096}
+                        onSave={(value) => update("storyImageWidth", value)}
+                      />
+                    </Field>
+                    <Field
+                      label={t("ui.slurp.settings.images.storyHeight")}
+                      detail={t("ui.slurp.settings.images.storyHeightDetail")}
+                    >
+                      <NumberSetting
+                        value={settings.storyImageHeight}
+                        min={64}
+                        max={4096}
+                        onSave={(value) => update("storyImageHeight", value)}
                       />
                     </Field>
                   </div>
@@ -1180,6 +1227,19 @@ export function SlurpSettings({
                             </Field>
                           </SettingsGroup>
 
+                          {/* The message policy and prices had working, ownership-gated endpoints
+                              and no UI at all, so every Creator was stuck on the shipped defaults
+                              and the paid DM policy could never be chosen. Only the persona that
+                              operates a Creator may set them, which is what the routes enforce. */}
+                          {personaCreator(selectedCreator) && selectedCreator.sourceAccountId && (
+                            <CreatorMessagingGroup
+                              creatorId={selectedCreator.id}
+                              personaId={selectedCreator.sourceAccountId}
+                              setMessaging={setCreatorMessaging}
+                              setPrice={setCreatorPrice}
+                            />
+                          )}
+
                           {selectedCreator.scheduleStatus &&
                             selectedCreator.scheduleStatus.state !== "not-applicable" && (
                               <p className="text-xs leading-5 text-[var(--slurp-muted)]">
@@ -1329,6 +1389,17 @@ export function SlurpSettings({
                       min={0}
                       max={99_999}
                       onSave={(value) => update("walletStipendFloor", value)}
+                    />
+                  </Field>
+                  <Field
+                    label={t("ui.slurp.settings.wallet.dayStartHour")}
+                    detail={t("ui.slurp.settings.wallet.dayStartHourDetail")}
+                  >
+                    <NumberSetting
+                      value={settings.walletDayStartHour}
+                      min={0}
+                      max={23}
+                      onSave={(value) => update("walletDayStartHour", value)}
                     />
                   </Field>
                   <Field
@@ -1605,7 +1676,11 @@ export function SlurpSettings({
                       </button>
                       <button
                         type="button"
-                        onClick={() => void api.download("/slurp/noodler/ads/export", "slurp-ads.json")}
+                        onClick={() =>
+                          void api
+                            .download("/slurp/noodler/ads/export", "slurp-ads.json")
+                            .catch((error: unknown) => toast.error(errorMessage(error)))
+                        }
                         className="min-h-9 rounded-lg border border-[var(--slurp-outline)] px-3 text-xs font-bold hover:bg-[var(--accent)]"
                       >
                         {t("ui.slurp.settings.ads.export")}
@@ -2863,5 +2938,104 @@ function AmbientProfilesPanel({
         </ul>
       )}
     </div>
+  );
+}
+
+/**
+ * A Creator's own message policy and prices.
+ *
+ * Only rendered for a persona-owned Creator: the routes require the operating persona, and a
+ * character-sourced Creator has no owner to authorise the change.
+ */
+function CreatorMessagingGroup({
+  creatorId,
+  personaId,
+  setMessaging,
+  setPrice,
+}: {
+  creatorId: string;
+  personaId: string;
+  setMessaging: ReturnType<typeof useSetSlurpCreatorMessaging>;
+  setPrice: ReturnType<typeof useSetSlurpCreatorPrice>;
+}) {
+  const { t } = useTranslation();
+  const query = useSlurpCreatorMessagingSettings(creatorId);
+  const messaging = query.data?.messaging;
+  const busy = setMessaging.isPending || setPrice.isPending;
+  if (query.isLoading) {
+    return (
+      <div className="flex justify-center py-6 text-[var(--muted-foreground)]" role="status">
+        <Loader2 size={18} className="animate-spin" />
+      </div>
+    );
+  }
+  if (query.isError || !messaging) {
+    return (
+      <p role="alert" className="rounded-lg border border-red-400/30 p-3 text-xs">
+        {t("ui.slurp.settings.creators.messagingLoadError")}
+      </p>
+    );
+  }
+  const patch = (input: Parameters<typeof setMessaging.mutate>[0]) =>
+    setMessaging.mutate(input, { onError: (error) => toast.error(errorMessage(error)) });
+  return (
+    <SettingsGroup title={t("ui.slurp.settings.creators.messagingTitle")}>
+      <Field label={t("ui.slurp.settings.creators.dmPolicy")} detail={t("ui.slurp.settings.creators.dmPolicyDetail")}>
+        <select
+          value={messaging.dmPolicy}
+          disabled={busy}
+          onChange={(event) =>
+            patch({
+              creatorAccountId: creatorId,
+              personaId,
+              dmPolicy: event.target.value as SlurpCreatorMessaging["dmPolicy"],
+            })
+          }
+          className="min-h-11 w-full rounded-lg border border-[var(--border)] bg-[var(--slurp-canvas,var(--background))] px-3 text-base focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--noodle-accent)] disabled:opacity-50 sm:text-sm"
+        >
+          <option value="open">{t("ui.slurp.settings.creators.dmPolicyOpen")}</option>
+          <option value="subscribers">{t("ui.slurp.settings.creators.dmPolicySubscribers")}</option>
+          <option value="paid">{t("ui.slurp.settings.creators.dmPolicyPaid")}</option>
+          <option value="closed">{t("ui.slurp.settings.creators.dmPolicyClosed")}</option>
+        </select>
+      </Field>
+      {messaging.dmPolicy === "paid" && (
+        <Field
+          label={t("ui.slurp.settings.creators.requestFee")}
+          detail={t("ui.slurp.settings.creators.requestFeeDetail")}
+        >
+          <NumberSetting
+            value={messaging.requestFee}
+            min={0}
+            max={9999}
+            onSave={(value) => patch({ creatorAccountId: creatorId, personaId, requestFee: value })}
+          />
+        </Field>
+      )}
+      <Field label={t("ui.slurp.settings.creators.ppvPrice")} detail={t("ui.slurp.settings.creators.ppvPriceDetail")}>
+        <NumberSetting
+          value={messaging.ppvPrice}
+          min={0}
+          max={9999}
+          onSave={(value) => patch({ creatorAccountId: creatorId, personaId, ppvPrice: value })}
+        />
+      </Field>
+      <Field
+        label={t("ui.slurp.settings.creators.subscriptionPrice")}
+        detail={t("ui.slurp.settings.creators.subscriptionPriceDetail")}
+      >
+        <NumberSetting
+          value={query.data?.subscriptionPrice ?? 0}
+          min={0}
+          max={9999}
+          onSave={(value) =>
+            setPrice.mutate(
+              { accountId: creatorId, personaId, price: value },
+              { onError: (error) => toast.error(errorMessage(error)) },
+            )
+          }
+        />
+      </Field>
+    </SettingsGroup>
   );
 }

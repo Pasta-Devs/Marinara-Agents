@@ -12,6 +12,10 @@ import { createSlurpPopulationStorage } from "../services/storage/slurp-populati
 import { replyToSlurpMessage } from "../services/slurp/slurp-message.operation.js";
 import { SLURP_DM_POLICIES } from "../services/slurp/slurp-messaging.js";
 import { SLURP_DEFAULT_RAPPORT_WEIGHTS } from "../services/slurp/slurp-rapport.js";
+import { existsSync } from "node:fs";
+import { basename, dirname } from "node:path";
+import { generateSlurpCommissionImage } from "../services/slurp/slurp-commission-image.operation.js";
+import { resolveNoodlerMediaAbsolutePath, slurpMessageMediaUrl } from "../services/slurp/slurp-media.js";
 import { logger } from "../lib/logger.js";
 
 const personaQuerySchema = z.object({ personaId: z.string().trim().min(1) });
@@ -31,11 +35,25 @@ const tipSchema = z.object({
   note: z.string().trim().max(280).default(""),
 });
 
+/**
+ * An image a paid message carries.
+ *
+ * A same-origin Marinara path only. The message stores the reference rather than downloading the
+ * bytes, so accepting a remote URL here would let a Creator point the app at anything and would
+ * leak the viewer's IP to it on render.
+ */
+const messageImageUrlSchema = z
+  .string()
+  .trim()
+  .max(2048)
+  .refine((value) => /^\/api\/[A-Za-z0-9._~\-/%?&=]*$/u.test(value), "Use an image stored by Marinara.");
+
 const creatorMessageSchema = z.object({
   personaId: z.string().trim().min(1),
   viewerAccountId: z.string().trim().min(1),
   content: z.string().trim().min(1).max(4000),
   price: z.number().int().min(0).max(9999).default(0),
+  imageUrl: messageImageUrlSchema.nullable().optional(),
 });
 
 const broadcastSchema = creatorMessageSchema.omit({ viewerAccountId: true });
@@ -51,6 +69,9 @@ const commissionQuoteSchema = z.object({
 const commissionDeliverySchema = z.object({
   personaId: z.string().trim().min(1),
   content: z.string().trim().min(1).max(5000),
+  imageUrl: messageImageUrlSchema.nullable().optional(),
+  /** Draw the commissioned piece from the brief instead of attaching one. */
+  generateImage: z.boolean().optional(),
 });
 
 const requestDecisionSchema = z.object({
@@ -91,7 +112,9 @@ export async function slurpMessageRoutes(app: FastifyInstance) {
    */
   const visibleMessages = async (threadId: string, side: "viewer" | "creator") =>
     (await messages.listMessages(threadId)).map((message) =>
-      side === "viewer" && message.kind === "ppv" && !message.unlockedAt ? { ...message, content: "" } : message,
+      side === "viewer" && message.kind === "ppv" && !message.unlockedAt
+        ? { ...message, content: "", imageUrl: null }
+        : message,
     );
 
   /** Re-read a thread and enrich it, so every response carries the same joined shape. */
@@ -357,6 +380,7 @@ export async function slurpMessageRoutes(app: FastifyInstance) {
       content: parsed.data.content,
       kind: "ppv",
       price: parsed.data.price,
+      imageUrl: parsed.data.imageUrl ?? null,
     });
     if (!message) return reply.code(404).send({ error: "Viewer or thread not found" });
     return { message };
@@ -416,13 +440,90 @@ export async function slurpMessageRoutes(app: FastifyInstance) {
     return { commission: accepted };
   });
 
+  /** Either side may end an unpaid commission: the Creator declines it, the fan takes it back. */
+  app.post("/messages/commissions/:commissionId/decline", async (req, reply) => {
+    const parsed = personaQuerySchema.safeParse(req.body ?? {});
+    if (!parsed.success) return reply.code(400).send({ error: parsed.error.flatten() });
+    const commission = await messages.getCommission((req.params as { commissionId: string }).commissionId);
+    if (!commission) return reply.code(404).send({ error: "Commission not found" });
+    const isCreator = await ownsCreator(parsed.data.personaId, commission.creatorAccountId);
+    const isViewer = commission.viewerAccountId === parsed.data.personaId;
+    if (!isCreator && !isViewer) return reply.code(403).send({ error: "Commission not found" });
+    if (commission.state !== "brief" && commission.state !== "quoted") {
+      return reply.code(409).send({ error: "This commission can no longer be called off." });
+    }
+    return { commission: await messages.declineCommission(commission.id, isCreator ? "creator" : "viewer") };
+  });
+
   app.post("/messages/commissions/:commissionId/deliver", async (req, reply) => {
     const parsed = commissionDeliverySchema.safeParse(req.body ?? {});
     if (!parsed.success) return reply.code(400).send({ error: parsed.error.flatten() });
     const commission = await messages.getCommission((req.params as { commissionId: string }).commissionId);
     if (!commission || !(await ownsCreator(parsed.data.personaId, commission.creatorAccountId)))
       return reply.code(404).send({ error: "Commission not found" });
-    return { commission: await messages.deliverCommission(commission.id, parsed.data.content) };
+    // A commission is somebody paying for a picture, so the delivery can draw it. Generate before
+    // the message is written: a failed drawing must not leave a delivered commission with nothing
+    // in it, and the fan's coins are already spent.
+    let drawn: Awaited<ReturnType<typeof generateSlurpCommissionImage>> | null = null;
+    if (parsed.data.generateImage) {
+      try {
+        drawn = await generateSlurpCommissionImage(app.db, {
+          creatorAccountId: commission.creatorAccountId,
+          brief: commission.brief,
+        });
+      } catch (error) {
+        logger.warn(error, "[slurp-commission] Could not draw the commissioned piece");
+        return reply.code(502).send({ error: "Could not draw that commission. Try again, or attach an image." });
+      }
+      if (drawn === "unavailable") {
+        return reply.code(404).send({ error: "No image generation connection is configured." });
+      }
+    }
+    const delivered = await messages.deliverCommission(
+      commission.id,
+      parsed.data.content,
+      parsed.data.imageUrl ?? null,
+    );
+    if (!delivered || delivered.state !== "delivered" || !delivered.deliveryMessageId) {
+      if (drawn && drawn !== "unavailable") drawn.compensate();
+      return { commission: delivered };
+    }
+    if (drawn && drawn !== "unavailable") {
+      drawn.promote();
+      await messages.setMessageMedia(
+        delivered.deliveryMessageId,
+        slurpMessageMediaUrl(delivered.deliveryMessageId),
+        drawn.mediaPath,
+      );
+    }
+    return { commission: delivered };
+  });
+
+  /**
+   * The bytes of a generated message image.
+   *
+   * Gated like the post media route: only the two sides of the thread may read it, and a locked
+   * PPV message stays locked here too. Serving it from the message id alone would hand the thing
+   * being sold to anybody who guessed one.
+   */
+  app.get("/messages/:messageId/media", async (req, reply) => {
+    const parsed = personaQuerySchema.safeParse(req.query);
+    if (!parsed.success) return reply.code(400).send({ error: parsed.error.flatten() });
+    const { messageId } = req.params as { messageId: string };
+    const message = await messages.getMessageById(messageId);
+    if (!message) return reply.code(404).send({ error: "Not Found" });
+    const thread = await messages.getThreadById(message.threadId);
+    if (!thread) return reply.code(404).send({ error: "Not Found" });
+    const isViewer = thread.viewerAccountId === parsed.data.personaId;
+    const isCreator = await ownsCreator(parsed.data.personaId, thread.creatorAccountId);
+    if (!isViewer && !isCreator) return reply.code(404).send({ error: "Not Found" });
+    if (isViewer && !isCreator && message.kind === "ppv" && !message.unlockedAt) {
+      return reply.code(402).send({ error: "This message is locked." });
+    }
+    const mediaPath = message.metadata?.noodlerMediaPath;
+    const absolute = typeof mediaPath === "string" ? resolveNoodlerMediaAbsolutePath(mediaPath) : null;
+    if (!absolute || !existsSync(absolute)) return reply.code(404).send({ error: "Not Found" });
+    return reply.header("Cache-Control", "private, max-age=300").sendFile(basename(absolute), dirname(absolute));
   });
 
   app.post("/messages/threads/:threadId/request", async (req, reply) => {
@@ -433,6 +534,12 @@ export async function slurpMessageRoutes(app: FastifyInstance) {
     if (!thread) return reply.code(404).send({ error: "Thread not found" });
     if (!(await ownsCreator(parsed.data.personaId, thread.creatorAccountId)))
       return reply.code(403).send({ error: "Only the Creator's owner can answer a message request." });
+    // `resolveRequest` no-ops on a thread that is not awaiting a decision. Reporting 200 and then
+    // generating a reply made a double-tap, or answering a request the creator had already
+    // declined, look like it had just been accepted.
+    if (thread.state !== "request") {
+      return reply.code(409).send({ error: "This message request has already been answered." });
+    }
     await messages.resolveRequest(threadId, parsed.data.decision);
     let outcome: Awaited<ReturnType<typeof replyToSlurpMessage>> = { status: "ineligible" };
     if (parsed.data.decision === "accept") {
@@ -452,7 +559,12 @@ export async function slurpMessageRoutes(app: FastifyInstance) {
     const { creatorAccountId } = req.params as { creatorAccountId: string };
     if (!(await slurp.getNoodlerAccountById(creatorAccountId)))
       return reply.code(404).send({ error: "Creator not found" });
-    return { messaging: await messages.getCreatorMessaging(creatorAccountId) };
+    // The weekly price rides along: it is already public on every profile, and the Creator's own
+    // settings panel needs it beside the message prices rather than through a second request.
+    return {
+      messaging: await messages.getCreatorMessaging(creatorAccountId),
+      subscriptionPrice: await slurp.getCreatorSubscriptionPrice(creatorAccountId),
+    };
   });
 
   app.patch("/messages/creators/:creatorAccountId/settings", async (req, reply) => {

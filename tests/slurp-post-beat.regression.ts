@@ -5,7 +5,9 @@ import { join } from "node:path";
 import {
   slurpPostBeat,
   slurpPostBeatInstruction,
+  slurpStorySlots,
   SLURP_POST_FORMATS,
+  SLURP_STORY_RATE,
 } from "../packages/slurp/src/engine/packages/server/src/services/slurp/slurp-post-beat.js";
 
 // ── Consecutive posts must differ ───────────────────────────────────────────
@@ -62,7 +64,10 @@ const generation = read("services/slurp/slurp-generation.service.ts");
 assert.match(generation, /post\.imagePrompt \? .*showed:.* : line/u);
 // "Do not reuse their exact wording" is satisfied by eight captions about one desk.
 assert.match(generation, /Do not repeat a recent post's setting, activity, framing, or wardrobe/u);
-assert.match(generation, /slurpPostBeat\(account\.id, await noodle\.countNoodlerPostsByAccount\(account\.id\)\)/u);
+assert.match(
+  generation,
+  /slurpPostBeat\(account\.id, await noodle\.countNoodlerPostsByAccount\(account\.id\), settings\.storyRate\)/u,
+);
 
 // The automatic path pinned the format and passed a constant guide. Between them they defeated
 // every variety mechanism on the one path that generates most posts.
@@ -77,5 +82,55 @@ assert.doesNotMatch(reserve, /noodlerPostGuide:/u, "a constant guide reads as pl
 const timing = read("services/slurp/slurp-post-timing.ts");
 assert.match(timing, /Place this post inside the character's own day at that hour and weekday/u);
 assert.match(timing, /A Tuesday morning and a Saturday night are different posts from the same person/u);
+
+// ── Stories ────────────────────────────────────────────────────────────────
+// Automatic posting only ever produced feed posts, so the Story shelf could only be filled by hand.
+{
+  for (const creator of ["creator-a", "creator-b", "creator-c", "creator-d"]) {
+    let stories = 0;
+    for (let index = 0; index < 400; index += 1) {
+      const beat = slurpPostBeat(creator, index);
+      if (!beat.story) continue;
+      stories += 1;
+      // A Story is a picture with one line under it. An announcement or an essay is not one.
+      assert.equal(beat.format, "caption", `${creator} made a ${beat.format} a Story at ${index}`);
+    }
+    assert.ok(stories > 0, `${creator} never posts a Story`);
+    assert.ok(stories < 200, `${creator} posts too many Stories: ${stories}/400`);
+  }
+  const storyIndex = Array.from({ length: 40 }, (_, index) => index).find(
+    (index) => slurpPostBeat("creator-a", index).story,
+  );
+  assert.notEqual(storyIndex, undefined);
+  assert.match(slurpPostBeatInstruction(slurpPostBeat("creator-a", storyIndex!)), /This one is a Story/u);
+  assert.doesNotMatch(slurpPostBeatInstruction(slurpPostBeat("creator-a", storyIndex!, "off")), /This one is a Story/u);
+}
+
+// The Stories setting is a real dial: `off` means off, and the rate is monotonic.
+{
+  const share = (rate: (typeof SLURP_STORY_RATE)[number]) => {
+    let stories = 0;
+    for (const creator of ["creator-a", "creator-b", "creator-c"]) {
+      for (let index = 0; index < 400; index += 1) if (slurpPostBeat(creator, index, rate).story) stories += 1;
+    }
+    return stories;
+  };
+  assert.equal(share("off"), 0, "off must be a real off switch, not a quieter setting");
+  assert.ok(share("rare") > 0);
+  assert.ok(share("rare") < share("regular"), "rare must be rarer than regular");
+  assert.ok(share("regular") < share("often"), "often must be more than regular");
+  // Only caption slots may become Stories, whatever the rate.
+  for (const rate of SLURP_STORY_RATE) {
+    for (const slot of slurpStorySlots(rate)) assert.ok(slot % 2 === 0, `${rate} put a Story on slot ${slot}`);
+    for (const creator of ["creator-a", "creator-b"]) {
+      for (let index = 0; index < 100; index += 1) {
+        const beat = slurpPostBeat(creator, index, rate);
+        if (beat.story) assert.equal(beat.format, "caption");
+      }
+    }
+  }
+  // An unset or unknown rate must behave as the shipped default rather than silently disabling.
+  assert.deepEqual([...slurpStorySlots(undefined)], [...slurpStorySlots("regular")]);
+}
 
 console.log("slurp post beat regression passed");

@@ -36,9 +36,14 @@ import { createCharactersStorage } from "../services/storage/characters.storage.
 import { createCharacterGalleryStorage } from "../services/storage/character-gallery.storage.js";
 import { resolveNoodlerCreatorArtwork } from "../services/slurp/slurp-public-profiles.service.js";
 import { createConnectionsStorage } from "../services/storage/connections.storage.js";
-import { createSlurpStorage, slurpSettingsSchema } from "../services/storage/slurp.storage.js";
+import {
+  createSlurpStorage,
+  isSlurpViewerActorAccount,
+  slurpSettingsSchema,
+} from "../services/storage/slurp.storage.js";
 import { createSlurpMessagesStorage } from "../services/storage/slurp-messages.storage.js";
 import { NOODLER_SUBSCRIPTION_COST, noodlerUnlockPriceFromMetadata } from "../services/slurp/slurp-prices.js";
+import { slurpDayKey } from "../services/slurp/slurp-wallet.js";
 import { settleAgentJobsWithConcurrencyLimit } from "../services/agents/agent-concurrency.js";
 import { logger } from "../lib/logger.js";
 import { isFileUniqueConstraintError } from "../db/file-schema.js";
@@ -560,7 +565,9 @@ export async function slurpRoutes(app: FastifyInstance) {
     const viewer = await resolveViewerPersona(parsed.data.personaId);
     if (!viewer) return reply.code(404).send({ error: "Slurp persona not found" });
     const [wallet, settings] = await Promise.all([noodle.getWallet(viewer.id), noodle.getSettings()]);
-    const today = new Date().toISOString().slice(0, 10);
+    // The same day boundary the refill itself uses. This duplicated the UTC date and would have
+    // drifted from the configured start hour.
+    const today = slurpDayKey(new Date(), settings.walletDayStartHour);
     return {
       ...wallet,
       refillFloor: settings.walletStipendFloor,
@@ -591,11 +598,20 @@ export async function slurpRoutes(app: FastifyInstance) {
 
   /** A creator's own weekly price. `null` clears it back to the Slurp-wide default. */
   app.put("/noodler/accounts/:id/subscription-price", async (req, reply) => {
-    const parsed = z.object({ price: z.number().int().min(0).max(9999).nullable() }).safeParse(req.body);
+    const parsed = z
+      .object({ personaId: z.string().trim().min(1), price: z.number().int().min(0).max(9999).nullable() })
+      .safeParse(req.body);
     if (!parsed.success) return reply.code(400).send({ error: parsed.error.flatten() });
+    const viewer = await resolveViewerPersona(parsed.data.personaId);
+    if (!viewer) return reply.code(404).send({ error: "Slurp persona not found" });
     const { id } = req.params as { id: string };
     const creator = await noodle.getNoodlerAccountById(id);
     if (!creator) return reply.code(404).send({ error: "Stage profile not found" });
+    // The price other personas pay to subscribe. Gated like `/goal` and `/payout`: only the
+    // operating persona may set it.
+    if (!creatorBelongsToViewer(creator, viewer)) {
+      return reply.code(403).send({ error: "Only the Creator's owner can set a subscription price." });
+    }
     await noodle.setCreatorSubscriptionPrice(id, parsed.data.price);
     return { price: await noodle.getCreatorSubscriptionPrice(id) };
   });
@@ -839,7 +855,9 @@ export async function slurpRoutes(app: FastifyInstance) {
     const unlockedIds = new Set(unlocks.map((item) => item.postId));
     const profileById = new Map(profiles.map((profile) => [profile.id, projectNoodlerAudienceProfile(profile)]));
     const visibleAccounts = accounts.filter(
-      (account) => creatorBelongsToViewer(account, viewer) || !isNoodlerHiddenFromViewer(account, viewer.id),
+      (account) =>
+        !isSlurpViewerActorAccount(account) &&
+        (creatorBelongsToViewer(account, viewer) || !isNoodlerHiddenFromViewer(account, viewer.id)),
     );
     // A tip goal exists to give a fan a reason to tip, and it was only ever visible to the Creator
     // who set it. It belongs on the profile the fan is looking at.
@@ -1260,6 +1278,9 @@ export async function slurpRoutes(app: FastifyInstance) {
             handle: entry.member?.handle ?? null,
             traits: entry.member?.traits ?? [],
             stage: entry.tie.stage,
+            // The direction, not only the position. "Cooling" is a sentence about somebody; a
+            // funnel stage on its own is a database row. The column existed and never reached the UI.
+            arc: entry.tie.arc,
             spent: entry.tie.spent,
             interactions: entry.tie.interactions,
             firstSeenAt: entry.tie.firstSeenAt,
@@ -1321,7 +1342,9 @@ export async function slurpRoutes(app: FastifyInstance) {
     const accounts = await noodle.listNoodlerAccounts();
     const unseenCreatorAccountIds = noodlerUnseenCreatorAccountIds(accounts, viewer.id);
     const visibleAccounts = accounts.filter(
-      (account) => creatorBelongsToViewer(account, viewer) || !isNoodlerHiddenFromViewer(account, viewer.id),
+      (account) =>
+        !isSlurpViewerActorAccount(account) &&
+        (creatorBelongsToViewer(account, viewer) || !isNoodlerHiddenFromViewer(account, viewer.id)),
     );
     const visibleAccountIds = visibleAccounts.map((account) => account.id);
     const generationKey = [

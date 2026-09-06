@@ -95,8 +95,43 @@ const FORMAT_CYCLE: readonly SlurpPostFormat[] = [
   "long_form",
 ];
 
+/** How much of a Creator's automatic output is Stories rather than feed posts. */
+export const SLURP_STORY_RATE = ["off", "rare", "regular", "often"] as const;
+export type SlurpStoryRate = (typeof SLURP_STORY_RATE)[number];
+export const SLURP_DEFAULT_STORY_RATE: SlurpStoryRate = "regular";
+
+/**
+ * Which slots of `FORMAT_CYCLE` are published as a Story rather than a feed post.
+ *
+ * Indices into that cycle rather than a cycle of their own: a second cycle whose length divides
+ * eight resonates with it and lands on the same formats forever, which is how the first attempt at
+ * this managed to schedule exactly zero Stories. A Story is a picture with one line under it, so
+ * only caption slots (0, 2, 4, 6) may be listed — an announcement or a long_form Story is a wall of
+ * text in a tall frame.
+ *
+ * `regular` is two of the eight, roughly one Story a day at the default four posts, which is what a
+ * shelf that expires in twenty-four hours needs. `off` is a real off switch, not a quieter version.
+ */
+export function slurpStorySlots(rate: SlurpStoryRate | undefined): ReadonlySet<number> {
+  switch (rate ?? SLURP_DEFAULT_STORY_RATE) {
+    case "off":
+      return new Set();
+    case "rare":
+      return new Set([6]);
+    case "often":
+      return new Set([0, 2, 4, 6]);
+    default:
+      return new Set([2, 6]);
+  }
+}
+
 export type SlurpPostBeat = {
   format: SlurpPostFormat;
+  /**
+   * Publish this beat as a Story. Advisory: the caller must clear it when the run produces no
+   * image, because a Story with no picture is not a Story.
+   */
+  story: boolean;
   place: string;
   moment: string;
   framing: string;
@@ -112,7 +147,11 @@ export type SlurpPostBeat = {
  * The offset by creator id stops two Creators set up on the same day from marching through the
  * cycle in lockstep.
  */
-export function slurpPostBeat(creatorAccountId: string, sequence: number): SlurpPostBeat {
+export function slurpPostBeat(
+  creatorAccountId: string,
+  sequence: number,
+  storyRate: SlurpStoryRate = SLURP_DEFAULT_STORY_RATE,
+): SlurpPostBeat {
   const offset = hash(creatorAccountId);
   // Math.floor(NaN) is NaN and indexes nothing, which would hand every caller an undefined beat.
   // Third time this shape has bitten in this package; guard it at the boundary rather than trust
@@ -120,8 +159,11 @@ export function slurpPostBeat(creatorAccountId: string, sequence: number): Slurp
   const step = Number.isFinite(sequence) ? Math.max(0, Math.floor(sequence)) : 0;
   // Co-prime strides, so place, moment, framing, and company do not resynchronise into a repeating
   // combined pattern every few posts.
+  const formatSlot = (offset + step) % FORMAT_CYCLE.length;
+  const format = FORMAT_CYCLE[formatSlot]!;
   return {
-    format: FORMAT_CYCLE[(offset + step) % FORMAT_CYCLE.length]!,
+    format,
+    story: format === "caption" && slurpStorySlots(storyRate).has(formatSlot),
     place: PLACES[(offset + step) % PLACES.length]!,
     moment: MOMENTS[(offset + step * 3) % MOMENTS.length]!,
     framing: FRAMINGS[(offset + step * 5) % FRAMINGS.length]!,
@@ -138,6 +180,11 @@ export function slurpPostBeatInstruction(beat: SlurpPostBeat): string {
     `Moment: ${beat.moment}.`,
     `Framing for the image: ${beat.framing}.`,
     `Company: ${beat.company}.`,
+    ...(beat.story
+      ? [
+          "This one is a Story, not a feed post: the picture carries it and the text is one short line under it. Write for something that disappears in a day, not for the profile grid.",
+        ]
+      : []),
     "Let their own life supply the specifics. These are directions to vary along, not a scene to copy.",
   ].join("\n");
 }

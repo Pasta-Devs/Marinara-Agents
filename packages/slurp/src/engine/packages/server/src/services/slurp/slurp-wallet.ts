@@ -13,6 +13,9 @@
 /** Storage key for a viewer's wallet. Mirrors the `slurp.viewer.<id>.ads` key shape. */
 export const slurpWalletKey = (viewerAccountId: string) => `slurp.viewer.${viewerAccountId}.wallet`;
 
+/** Hour the Slurp day starts, when the caller supplies none. */
+export const SLURP_DEFAULT_DAY_START_HOUR = 8;
+
 export type SlurpEconomy = {
   /** Balance a brand-new wallet opens with. */
   startingCoins: number;
@@ -23,10 +26,15 @@ export type SlurpEconomy = {
   /** Length of one subscription period, in days. */
   subscriptionDays: number;
   /**
-   * The daily stipend tops the balance *up to* this floor rather than adding to it. A spender
+   * The daily refill tops the balance *up to* this floor rather than adding to it. A spender
    * is never stranded, and a hoarder is never paid for hoarding, so there is nothing to farm.
+   *
+   * It must stay well under one week of subscription, or the refill removes every reason to earn
+   * and every price stops being a decision.
    */
   stipendFloor: number;
+  /** Hour the Slurp day starts, in the Engine host timezone. Refill and earning caps reset on it. */
+  dayStartHour: number;
   /** Paid once per acted-on ad, up to `adDailyCap` coins per day. */
   adReward: number;
   adDailyCap: number;
@@ -47,7 +55,10 @@ export const SLURP_DEFAULT_ECONOMY: SlurpEconomy = {
   unlockCost: 3,
   subscriptionCost: 12,
   subscriptionDays: 7,
-  stipendFloor: 60,
+  // One subscription costs 12 a week. A floor of 60 paid for five of them every day, so nothing in
+  // Slurp had a price the player could feel.
+  stipendFloor: 15,
+  dayStartHour: SLURP_DEFAULT_DAY_START_HOUR,
   adReward: 2,
   adDailyCap: 12,
   engagementReward: 1,
@@ -106,7 +117,22 @@ export type SlurpWallet = {
 /** Kept short: the wallet page shows recent activity, and the blob is rewritten on every write. */
 const LEDGER_LIMIT = 60;
 
-const dayKey = (at: Date) => at.toISOString().slice(0, 10);
+/**
+ * The Slurp day one instant falls in.
+ *
+ * The day starts at `startHour` in the Engine host timezone, the same clock quiet hours use. It
+ * used to be the UTC date, so the refill and the earning caps reset in the middle of the night for
+ * most of the world, and never at a time the player chose.
+ */
+export function slurpDayKey(at: Date, startHour: number = SLURP_DEFAULT_DAY_START_HOUR): string {
+  const hour = Number.isFinite(startHour) ? Math.min(23, Math.max(0, Math.trunc(startHour))) : SLURP_DEFAULT_DAY_START_HOUR;
+  const shifted = new Date(at.getTime());
+  shifted.setHours(shifted.getHours() - hour);
+  const year = shifted.getFullYear();
+  const month = String(shifted.getMonth() + 1).padStart(2, "0");
+  const day = String(shifted.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
 
 const intOrNull = (value: unknown): number | null =>
   typeof value === "number" && Number.isInteger(value) ? value : null;
@@ -115,7 +141,7 @@ export function emptySlurpWallet(economy: SlurpEconomy = SLURP_DEFAULT_ECONOMY):
   return {
     coins: economy.startingCoins,
     ledger: [],
-    earnedOn: dayKey(new Date(0)),
+    earnedOn: slurpDayKey(new Date(0)),
     earnedToday: { ad: 0, engagement: 0 },
     stipendOn: null,
     subscriptions: {},
@@ -221,7 +247,7 @@ export function applyStipend(
   at: Date,
   economy: SlurpEconomy = SLURP_DEFAULT_ECONOMY,
 ): SlurpWallet {
-  const today = dayKey(at);
+  const today = slurpDayKey(at, economy.dayStartHour);
   if (wallet.stipendOn === today) return wallet;
   const owed = economy.stipendFloor - wallet.coins;
   const paid = { ...wallet, stipendOn: today };
@@ -229,9 +255,9 @@ export function applyStipend(
   return record({ ...paid, coins: wallet.coins + owed }, { kind: "stipend", amount: owed, at: at.toISOString() });
 }
 
-/** Reset the daily earning counters when the UTC day rolls over. */
-function rollDay(wallet: SlurpWallet, at: Date): SlurpWallet {
-  const today = dayKey(at);
+/** Reset the daily earning counters when the Slurp day rolls over. */
+function rollDay(wallet: SlurpWallet, at: Date, economy: SlurpEconomy): SlurpWallet {
+  const today = slurpDayKey(at, economy.dayStartHour);
   if (wallet.earnedOn === today) return wallet;
   return { ...wallet, earnedOn: today, earnedToday: { ad: 0, engagement: 0 } };
 }
@@ -247,7 +273,7 @@ export function earn(
   note?: string,
   economy: SlurpEconomy = SLURP_DEFAULT_ECONOMY,
 ): SlurpWallet {
-  const rolled = rollDay(wallet, at);
+  const rolled = rollDay(wallet, at, economy);
   const cap = kind === "ad" ? economy.adDailyCap : economy.engagementDailyCap;
   const reward = kind === "ad" ? economy.adReward : economy.engagementReward;
   const amount = Math.max(0, Math.min(reward, cap - rolled.earnedToday[kind]));

@@ -33,6 +33,7 @@ import { createConnectionsStorage } from "../storage/connections.storage.js";
 import { createSlurpStorage, type SlurpAccount } from "../storage/slurp.storage.js";
 import { createPromptOverridesStorage } from "../storage/prompt-overrides.storage.js";
 import { generateNoodlerPostImage } from "./slurp-images.service.js";
+import { noodlerUnlockPriceMetadata } from "./slurp-prices.js";
 import {
   persistNoodlerPostWithUploadedMedia,
   noodlerPostMediaUrl,
@@ -45,7 +46,6 @@ import { buildSlurpPostTimingContext } from "./slurp-post-timing.js";
 import { slurpPostBeat, slurpPostBeatInstruction } from "./slurp-post-beat.js";
 import { resolveSlurpCreatorScheduleContext } from "./slurp-creator-schedule.js";
 import { createChatsStorage } from "../storage/chats.storage.js";
-import { creatorAdForProfile } from "../garnish-ads/garnish-ads.service.js";
 
 export type GeneratedNoodlerPostResult = {
   post: NoodlerManagedPost;
@@ -502,7 +502,7 @@ export async function generateNoodlerPost(
   // their direction is the angle, and a second one would fight it.
   const beat = input.request.noodlerPostGuide?.trim()
     ? null
-    : slurpPostBeat(account.id, await noodle.countNoodlerPostsByAccount(account.id));
+    : slurpPostBeat(account.id, await noodle.countNoodlerPostsByAccount(account.id), settings.storyRate);
   const messages = buildNoodlerPostMessages({
     account,
     sourceCharacterContext,
@@ -603,13 +603,16 @@ export async function generateNoodlerPost(
     content: protectedContent,
   };
 
+  // A Story is a picture with a line under it, so a run that produces no image publishes an
+  // ordinary post instead. The flag is only honoured on the path that commits an image below.
+  const storyBeat = beat?.story === true && imagesEnabled;
+
   // Identity protection applies to the image prompt too, not only post text.
   const draftImagePrompt = imagesEnabled
     ? protectNoodlerGeneratedIdentity(generated.imagePrompt, disclosureMode, publicIdentity)
     : null;
 
   let lockedFollowUpPostId = input.request.lockedFollowUpPostId;
-  const creatorPromotion = creatorAdForProfile(account);
   const pendingLockedFollowUp = input.request.lockedFollowUp;
   if (lockedFollowUpPostId && pendingLockedFollowUp) {
     throw new Error("A Slurp post links either an existing follow-up or a new one, not both.");
@@ -629,19 +632,13 @@ export async function generateNoodlerPost(
     access: input.request.access,
     metadata: {
       noodlerContentFormat: input.request.format ?? "caption",
+      // Stamped at creation like a manual post, so a generated locked post honours the configured
+      // unlock price and keeps it across refreshes and edits instead of falling back to 1.
+      ...(input.request.access === "locked" ? noodlerUnlockPriceMetadata(settings.walletUnlockCost) : {}),
       ...(lockedFollowUpPostId ? { noodlerLockedFollowUpPostId: lockedFollowUpPostId } : {}),
       ...(input.request.executionId ? { noodlerWizardExecutionId: input.request.executionId } : {}),
       ...(input.request.poll ? { poll: createNoodlePoll(input.request.poll) } : {}),
       ...(input.request.imageCrop ? { imageCrop: input.request.imageCrop } : {}),
-      ...(creatorPromotion
-        ? {
-            slurpSponsoredPromotion: {
-              id: creatorPromotion.id,
-              brand: creatorPromotion.brand,
-              product: creatorPromotion.product,
-            },
-          }
-        : {}),
     },
   };
 
@@ -678,7 +675,10 @@ export async function generateNoodlerPost(
               content: pendingLockedFollowUp.content,
               source: "manual" as const,
               access: "locked" as const,
-              metadata: { noodlerContentFormat: "long_form" },
+              metadata: {
+                noodlerContentFormat: "long_form",
+                ...noodlerUnlockPriceMetadata(settings.walletUnlockCost),
+              },
             },
             main,
           ]
@@ -736,6 +736,9 @@ export async function generateNoodlerPost(
     db,
     debugMode,
     admissionMode: input.admissionMode,
+    // A Story is shown in a tall frame and cropped to portrait in the composer, so generate it at
+    // 4:5 rather than at the feed post size the player configured.
+    ...(storyBeat ? { width: settings.storyImageWidth, height: settings.storyImageHeight } : {}),
   };
 
   // Manual Guide review path: persist a pending prompt and hand back a preview for the
@@ -807,7 +810,7 @@ export async function generateNoodlerPost(
       id: postId,
       imagePrompt: draftImagePrompt,
       imageUrl: noodlerPostMediaUrl(postId),
-      metadata: image.metadata,
+      metadata: { ...image.metadata, ...(storyBeat ? { noodlerPostType: "story" } : {}) },
     });
     return { post, imagePromptReview: null };
   } catch (err) {

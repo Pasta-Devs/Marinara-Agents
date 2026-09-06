@@ -728,12 +728,14 @@ export function SlurpHome({ navigation, onNavigate }: SlurpHomeProps) {
         tone: "destructive",
       });
     }
+    // Only real work blocks navigation. Opening the wizard is not a change: the source step used to
+    // prompt "Discard profile changes?" with nothing picked, nothing typed, and nothing generated,
+    // and a `create-profile` deep link did the same on the disclosure step it lands on.
     const hasNewDraft = Boolean(
       profileDraft ||
-      creationStep === "source" ||
-      creationStep === "disclosure" ||
-      creationStep === "draft" ||
-      draftNoodleAccountId,
+      draftGuidance.trim() ||
+      generateProfileDraft.isPending ||
+      (creationStep === "source" && draftNoodleAccountId),
     );
     if (!hasNewDraft) return true;
     return showConfirmDialog({
@@ -6018,6 +6020,13 @@ function NoodlerPostComposer({
   guidePending: boolean;
 }) {
   const { t: localizeUi } = useUiTranslation();
+  // The configured Story size, as a ratio, so an uploaded Story is cropped to the same shape an
+  // automatic one is drawn at. Falls back to 4:5 before the settings query resolves.
+  const composerSettings = useSlurpSettings().data;
+  const storyAspectRatio =
+    composerSettings && composerSettings.storyImageHeight > 0
+      ? composerSettings.storyImageWidth / composerSettings.storyImageHeight
+      : 4 / 5;
   const [expanded, setExpanded] = useState(draft.postType === "story");
   const [postError, setPostError] = useState<string | null>(null);
   const [guideError, setGuideError] = useState<string | null>(null);
@@ -6553,6 +6562,9 @@ function NoodlerPostComposer({
           source={pendingImage.source}
           crop={image?.source === pendingImage.source ? image.crop : null}
           disabled={composerBusy}
+          // A Story is shown in one tall frame, so an uploaded one is cropped to the same ratio an
+          // automatic one is drawn at rather than offering square and landscape.
+          lockedRatio={postType === "story" ? storyAspectRatio : undefined}
           onCancel={discardPendingImage}
           onApply={applyImageCrop}
         />
@@ -7044,6 +7056,8 @@ function SlurpStudioView({
                           <span className="block truncate text-[0.7rem] text-[var(--muted-foreground)]">
                             {[
                               localizeUi(`ui.slurp.studio.stage.${fan.stage}`, { defaultValue: fan.stage }),
+                              // Steady is the default and says nothing worth a line.
+                              fan.arc && fan.arc !== "steady" ? localizeUi(`ui.slurp.studio.arc.${fan.arc}`) : null,
                               fan.spent > 0
                                 ? localizeUi("ui.slurp.studio.fanSpent", {
                                     defaultValue: "{{count}} coins",

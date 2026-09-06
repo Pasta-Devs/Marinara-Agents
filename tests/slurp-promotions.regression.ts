@@ -5,14 +5,17 @@ const base = readFileSync(
   "utf8",
 );
 assert.match(base, /kind: "inline"/u);
-assert.match(base, /kind: "creator"/u);
+// Creator-read promotions were removed: the one built-in sponsor was stamped onto posts the model
+// knew nothing about, including hand-written ones, and paid the Creator nothing. Inline ads, which
+// are a working feature, are untouched.
+assert.doesNotMatch(base, /kind: "creator"/u);
 assert.match(base, /contentRating: "/u, "every base ad needs a content rating for the host gate");
 
 const ads = readFileSync(
   "packages/slurp/src/engine/packages/server/src/services/garnish-ads/garnish-ads.service.ts",
   "utf8",
 );
-assert.match(ads, /function creatorAdForProfile/u);
+assert.doesNotMatch(ads, /creatorAdForProfile/u);
 // The stored state key is deliberately unchanged by the garnish-ads rename, so
 // existing hidden-ad lists survive.
 assert.match(ads, /slurp\.viewer\.\$\{subjectId\}\.ads/u);
@@ -52,7 +55,9 @@ const postCard = readFileSync(
   "packages/slurp/src/engine/packages/client/src/components/slurp/SlurpCreatorPostCard.tsx",
   "utf8",
 );
-assert.match(postCard, /Paid partnership with/u);
+// The paid-partnership label went with the creator-read promotions it described.
+assert.doesNotMatch(postCard, /Paid partnership with/u);
+assert.doesNotMatch(postCard, /slurpSponsoredPromotion/u);
 
 // The slot maths decides where ads land in the feed, and an off-by-one here silently wastes the
 // first slot. Run the real expression rather than matching its source text.

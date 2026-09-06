@@ -13,12 +13,14 @@ import {
 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { useTranslation as useUiTranslation } from "react-i18next";
+import { useSlurpMediaSrc } from "../../hooks/use-slurp-media-src";
 import { cn } from "../../lib/utils";
 import { Avatar } from "./SlurpShell";
 import { SlurpEmptyArtwork } from "./SlurpEmptyArtwork";
 import { formatTime } from "./SlurpDateTime";
 import {
   useAcceptSlurpCommission,
+  useDeclineSlurpCommission,
   useBroadcastSlurpMessage,
   useCreateSlurpCommission,
   useDeliverSlurpCommission,
@@ -35,6 +37,7 @@ import {
   useUnlockSlurpMessage,
   type SlurpCommission,
   type SlurpMessage,
+  type SlurpRapport,
   type SlurpThread,
 } from "../../hooks/use-slurp";
 
@@ -413,8 +416,11 @@ function SlurpThreadView({
           {creator && <Avatar account={creator} size="sm" />}
           <span className="min-w-0">
             <span className="block truncate text-sm font-bold">{creator?.displayName ?? ""}</span>
-            <span className="block truncate text-[0.7rem] text-[var(--muted-foreground)]">
-              @{creator?.handle ?? ""}
+            <span className="flex min-w-0 items-center gap-1.5">
+              <span className="truncate text-[0.7rem] text-[var(--muted-foreground)]">@{creator?.handle ?? ""}</span>
+              {/* Rapport decides how fast and how warmly a Creator answers. The player felt it and
+                  could never see it, so the one number the whole thread turns on was invisible. */}
+              {thread && <SlurpRapportBadge rapport={thread.rapport} ownsCreator={ownsCreator} />}
             </span>
           </span>
         </button>
@@ -635,6 +641,7 @@ function MessageBubble({
 }) {
   const { t: localizeUi } = useUiTranslation();
   const unlock = useUnlockSlurpMessage();
+  const messageImage = useSlurpMediaSrc(message.imageUrl);
   const mine = message.role === "viewer";
   if (message.kind === "tip") {
     return (
@@ -675,6 +682,21 @@ function MessageBubble({
           message.content
         )}
       </div>
+      {/* Paid messages are usually a picture. The column existed; nothing ever rendered it. */}
+      {messageImage && (
+        <img
+          src={messageImage}
+          alt={localizeUi("ui.slurp.messages.attachedImage", { defaultValue: "Attached image" })}
+          className="mt-1 max-h-72 w-auto max-w-full rounded-2xl object-contain ring-1 ring-inset ring-[var(--noodle-divider)]"
+        />
+      )}
+      {unlock.isError && (
+        <p role="alert" className="px-1 text-[0.65rem] text-red-600 dark:text-red-400">
+          {unlock.error instanceof Error
+            ? unlock.error.message
+            : localizeUi("ui.slurp.messages.unlockFailed", { defaultValue: "Unlock failed." })}
+        </p>
+      )}
       <time dateTime={message.createdAt} className="px-1 text-[0.65rem] text-[var(--muted-foreground)]">
         {formatTime(message.createdAt, locale)}
       </time>
@@ -780,6 +802,7 @@ function CreatorMessageTools({
   const [open, setOpen] = useState(false);
   const [content, setContent] = useState("");
   const [price, setPrice] = useState(defaultPpvPrice > 0 ? defaultPpvPrice : 10);
+  const [imageUrl, setImageUrl] = useState("");
   const [error, setError] = useState<string | null>(null);
 
   const submit = async () => {
@@ -787,8 +810,16 @@ function CreatorMessageTools({
     if (!body || price <= 0 || sendPpv.isPending) return;
     setError(null);
     try {
-      await sendPpv.mutateAsync({ creatorAccountId, personaId, viewerAccountId, content: body, price });
+      await sendPpv.mutateAsync({
+        creatorAccountId,
+        personaId,
+        viewerAccountId,
+        content: body,
+        price,
+        imageUrl: imageUrl.trim() || null,
+      });
       setContent("");
+      setImageUrl("");
       setOpen(false);
     } catch (cause) {
       setError(
@@ -823,6 +854,19 @@ function CreatorMessageTools({
             onChange={(event) => setContent(event.target.value)}
             placeholder={localizeUi("ui.slurp.messages.ppvPlaceholder", { defaultValue: "What they pay to see…" })}
             className="w-full resize-y rounded-lg bg-[var(--slurp-canvas,var(--background))] px-3 py-2 text-sm outline-none ring-1 ring-inset ring-[var(--noodle-divider)] focus:ring-2 focus:ring-[var(--noodle-accent)]"
+          />
+          {/* The whole point of a locked message is usually a picture, and it could not carry one. */}
+          <label className="sr-only" htmlFor="slurp-ppv-image">
+            {localizeUi("ui.slurp.messages.attachImage", { defaultValue: "Image" })}
+          </label>
+          <input
+            id="slurp-ppv-image"
+            value={imageUrl}
+            onChange={(event) => setImageUrl(event.target.value)}
+            placeholder={localizeUi("ui.slurp.messages.attachImagePlaceholder", {
+              defaultValue: "Image path stored by Marinara, optional",
+            })}
+            className="h-9 w-full rounded-lg bg-[var(--slurp-canvas,var(--background))] px-3 text-sm outline-none ring-1 ring-inset ring-[var(--noodle-divider)] focus:ring-2 focus:ring-[var(--noodle-accent)]"
           />
           <div className="flex items-center gap-2">
             <label htmlFor="slurp-ppv-price" className="text-xs font-bold text-[var(--muted-foreground)]">
@@ -936,7 +980,11 @@ function CommissionRow({
   const quote = useQuoteSlurpCommission();
   const accept = useAcceptSlurpCommission();
   const deliver = useDeliverSlurpCommission();
+  const decline = useDeclineSlurpCommission();
   const [price, setPrice] = useState(commission.price > 0 ? commission.price : 25);
+  // Only an unpaid commission can be called off; after accept the coins have moved.
+  const canEnd = commission.state === "brief" || commission.state === "quoted";
+  const [deliveryImageUrl, setDeliveryImageUrl] = useState("");
   const [delivery, setDelivery] = useState("");
   const [error, setError] = useState<string | null>(null);
   const busy = quote.isPending || accept.isPending || deliver.isPending;
@@ -992,6 +1040,27 @@ function CommissionRow({
         </div>
       )}
 
+      {/* A brief with no exit sat in the thread forever. Either side may end it until it is paid. */}
+      {canEnd && (
+        <button
+          type="button"
+          disabled={busy}
+          onClick={() =>
+            run(
+              decline.mutateAsync({ commissionId: commission.id, personaId }),
+              localizeUi("ui.slurp.messages.commissionDeclineFailed", {
+                defaultValue: "Could not end that commission.",
+              }),
+            )
+          }
+          className="mt-2 min-h-9 rounded-lg px-3 font-bold text-[var(--muted-foreground)] hover:bg-[var(--accent)] hover:text-[var(--foreground)] disabled:opacity-50"
+        >
+          {ownsCreator
+            ? localizeUi("ui.slurp.messages.commissionDecline", { defaultValue: "Decline" })
+            : localizeUi("ui.slurp.messages.commissionWithdraw", { defaultValue: "Withdraw request" })}
+        </button>
+      )}
+
       {!ownsCreator && commission.state === "quoted" && (
         <button
           type="button"
@@ -1027,14 +1096,34 @@ function CommissionRow({
             })}
             className="w-full resize-y rounded-lg bg-[var(--slurp-canvas,var(--background))] px-3 py-2 outline-none ring-1 ring-inset ring-[var(--noodle-divider)] focus:ring-2 focus:ring-[var(--noodle-accent)]"
           />
+          <label className="sr-only" htmlFor={`slurp-deliver-image-${commission.id}`}>
+            {localizeUi("ui.slurp.messages.attachImage", { defaultValue: "Image" })}
+          </label>
+          <input
+            id={`slurp-deliver-image-${commission.id}`}
+            value={deliveryImageUrl}
+            onChange={(event) => setDeliveryImageUrl(event.target.value)}
+            placeholder={localizeUi("ui.slurp.messages.attachImagePlaceholder", {
+              defaultValue: "Image path stored by Marinara, optional",
+            })}
+            className="h-9 w-full rounded-lg bg-[var(--slurp-canvas,var(--background))] px-3 outline-none ring-1 ring-inset ring-[var(--noodle-divider)] focus:ring-2 focus:ring-[var(--noodle-accent)]"
+          />
           <button
             type="button"
             disabled={busy || !delivery.trim()}
             onClick={() =>
               run(
                 deliver
-                  .mutateAsync({ commissionId: commission.id, personaId, content: delivery.trim() })
-                  .then(() => setDelivery("")),
+                  .mutateAsync({
+                    commissionId: commission.id,
+                    personaId,
+                    content: delivery.trim(),
+                    imageUrl: deliveryImageUrl.trim() || null,
+                  })
+                  .then(() => {
+                    setDelivery("");
+                    setDeliveryImageUrl("");
+                  }),
                 localizeUi("ui.slurp.messages.commissionDeliverFailed", { defaultValue: "Could not deliver that." }),
               )
             }
@@ -1051,5 +1140,27 @@ function CommissionRow({
         </p>
       )}
     </div>
+  );
+}
+
+/**
+ * How well this pair knows each other, as one word.
+ *
+ * The score itself stays hidden: a number invites the player to farm it, and the tiers gate
+ * nothing. The word is what the Creator is reacting to, so the word is what to show.
+ */
+function SlurpRapportBadge({ rapport, ownsCreator }: { rapport: SlurpRapport; ownsCreator: boolean }) {
+  const { t: localizeUi } = useUiTranslation();
+  // A stranger badge on an empty thread is noise: everybody starts there.
+  if (!rapport || rapport.tier === "stranger") return null;
+  return (
+    <span
+      title={localizeUi(
+        ownsCreator ? `ui.slurp.rapport.creatorHint.${rapport.tier}` : `ui.slurp.rapport.viewerHint.${rapport.tier}`,
+      )}
+      className="inline-flex shrink-0 items-center rounded-full bg-[var(--noodle-accent)]/15 px-2 py-0.5 text-[0.6rem] font-bold uppercase tracking-[0.08em] text-[var(--noodle-accent)]"
+    >
+      {localizeUi(`ui.slurp.rapport.tier.${rapport.tier}`)}
+    </span>
   );
 }

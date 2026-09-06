@@ -22,7 +22,11 @@ assert.match(
   /const visibleMessages = async \(threadId: string, side: "viewer" \| "creator"\)/u,
   "masking must live in one helper, not be repeated per route",
 );
-assert.match(routes, /message\.kind === "ppv" && !message\.unlockedAt \? \{ \.\.\.message, content: "" \}/u);
+// The picture is masked with the text: a locked message is usually sold on its image.
+assert.match(
+  routes,
+  /message\.kind === "ppv" && !message\.unlockedAt\s*\? \{ \.\.\.message, content: "", imageUrl: null \}/u,
+);
 
 // Every route that returns a thread's messages has to go through it.
 const raw = [...routes.matchAll(/messages: (?!await visibleMessages|thread \? await visibleMessages)[^\n]*/gu)];

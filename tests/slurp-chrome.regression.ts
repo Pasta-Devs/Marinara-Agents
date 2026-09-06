@@ -29,8 +29,10 @@ assert.doesNotMatch(surface, /mt-5 w-full space-y-3 text-left/u, "the separate e
 for (const field of ["editor.onNameChange", "editor.onHandleChange", "editor.onBioChange", "editor.onLocationChange"]) {
   assert.match(surface, new RegExp(field.replace(".", "\\."), "u"), `${field} must still be reachable`);
 }
-// The avatar overlaps the banner rather than sitting flush under it.
-assert.match(surface, /relative z-10 -mt-20 pt-0 @min-\[680px\]:-mt-28/u);
+// The avatar overlaps the banner rather than sitting flush under it. The hero owns the single
+// negative margin; the avatar row only stacks above the banner fade.
+assert.match(surface, /hasBanner \? "-mt-8 @min-\[680px\]:-mt-10 @min-\[1040px\]:-mt-11" : "mt-5"/u);
+assert.match(surface, /hasBanner \? "relative z-10 pt-0" : "pt-5"/u);
 
 // A persona that runs a Creator is known to the feed by the Creator's name and face, so the
 // switcher card leads with that and keeps the persona as a small circle beside it.

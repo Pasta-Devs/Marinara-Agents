@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { api } from "../lib/api-client";
 
 type CachedMedia = {
@@ -50,8 +50,12 @@ function releaseMedia(imageUrl: string, cached: CachedMedia): void {
   if (cached.users > 0 || cached.releaseTimer) return;
   cached.releaseTimer = setTimeout(() => {
     if (cached.users > 0) return;
-    if (cached.objectUrl) URL.revokeObjectURL(cached.objectUrl);
     mediaCache.delete(imageUrl);
+    // Revoke through the promise: a fetch still in flight when the timer fires used to resolve into
+    // an object URL on an entry nobody held any more, and that URL was never revoked.
+    void cached.promise.then((objectUrl) => {
+      if (objectUrl) URL.revokeObjectURL(objectUrl);
+    });
   }, 30_000);
 }
 
@@ -98,8 +102,13 @@ export function useNearViewportSlurpMediaSrc(
 ) {
   const [nearViewport, setNearViewport] = useState(options.eager ?? false);
   const rootMargin = options.rootMargin ?? "600px 0px";
+  // React calls a ref callback with `null` when the node detaches. Returning early there left one
+  // observer alive per card that unmounted before it ever entered the viewport.
+  const observerRef = useRef<IntersectionObserver | null>(null);
   const observe = useCallback(
     (node: HTMLElement | null) => {
+      observerRef.current?.disconnect();
+      observerRef.current = null;
       if (!node || nearViewport) return;
       if (typeof IntersectionObserver === "undefined") {
         setNearViewport(true);
@@ -110,12 +119,21 @@ export function useNearViewportSlurpMediaSrc(
           if (!entry?.isIntersecting) return;
           setNearViewport(true);
           observer.disconnect();
+          if (observerRef.current === observer) observerRef.current = null;
         },
         { rootMargin },
       );
+      observerRef.current = observer;
       observer.observe(node);
     },
     [nearViewport, rootMargin],
+  );
+  useEffect(
+    () => () => {
+      observerRef.current?.disconnect();
+      observerRef.current = null;
+    },
+    [],
   );
   const src = useSlurpMediaSrc(imageUrl, { enabled: nearViewport, width: options.width });
   return { src, observe, loading: Boolean(imageUrl && !src) };

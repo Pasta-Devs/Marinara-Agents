@@ -23,13 +23,22 @@ export function startSlurpMessageScheduler(app: FastifyInstance, registerStop?: 
     if (stopped || active) return;
     active = (async () => {
       const storage = createSlurpMessagesStorage(app.db);
+      let failed = false;
       for (const thread of await storage.listThreadsAwaitingReply()) {
         if (stopped) break;
         const latest = (await storage.listMessages(thread.id, 1))[0];
         if (latest?.role === "viewer") {
-          await replyToSlurpMessage(app.db, { threadId: thread.id, triggerMessageId: latest.id, force: true });
+          const outcome = await replyToSlurpMessage(app.db, {
+            threadId: thread.id,
+            triggerMessageId: latest.id,
+            force: true,
+          });
+          // `replyToSlurpMessage` reports a provider failure instead of rejecting. Discarding it
+          // left `consecutiveFailures` at zero, so a dead connection was retried at full rate.
+          if (outcome.status === "failed") failed = true;
         }
       }
+      if (failed) throw new Error("Queued Slurp reply generation failed");
     })();
     try {
       await active;

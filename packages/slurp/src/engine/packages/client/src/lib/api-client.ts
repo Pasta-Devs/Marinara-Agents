@@ -174,7 +174,10 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   showGenerationFallbackHeader(res);
 
   if (!res.ok) {
-    const body = await res.json().catch(() => ({ error: res.statusText }));
+    // A non-object error body (a bare `null` from a proxy, or an array) used to make `body.error`
+    // throw a TypeError that replaced the real status.
+    const parsed = await res.json().catch(() => null);
+    const body = isRecord(parsed) ? parsed : { error: res.statusText };
     throw new ApiError(res.status, getApiErrorMessage(body.error, res.statusText), body);
   }
 

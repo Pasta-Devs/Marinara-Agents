@@ -27,7 +27,6 @@ import {
 import { tryNoodlerAccountOperation } from "./slurp-account-operation-lock.js";
 import { resolveNoodlerSourceSnapshot } from "./slurp-source-resolve.js";
 import { settleAgentJobsWithConcurrencyLimit } from "../agents/agent-concurrency.js";
-import { creatorAdForProfile } from "../garnish-ads/garnish-ads.service.js";
 
 export type GenerateAndApplyNoodlerPostResult =
   | {
@@ -237,8 +236,10 @@ export async function createNoodlerPost(
   const noodle = createSlurpStorage(db);
   const locked = await tryNoodlerAccountOperation(input.targetAccountId, async () => {
     const postId = media ? newId() : undefined;
-    const account = await noodle.getNoodlerAccountById(input.targetAccountId);
-    const creatorPromotion = account ? creatorAdForProfile(account) : null;
+    // Settings → Wallet → "Unlock a post" is the default price a locked post is stamped with.
+    // Calling the helper with no argument stamped the shipped 1 instead, so the setting did
+    // nothing and every locked post cost one coin whatever the player configured.
+    const unlockPrice = (await noodle.getSettings()).walletUnlockCost;
     let lockedFollowUpPostId = input.lockedFollowUpPostId;
     const pendingLockedFollowUp = input.lockedFollowUp;
     if (lockedFollowUpPostId) {
@@ -261,7 +262,7 @@ export async function createNoodlerPost(
               access: "locked",
               metadata: {
                 noodlerContentFormat: "long_form",
-                ...noodlerUnlockPriceMetadata(),
+                ...noodlerUnlockPriceMetadata(unlockPrice),
               },
             });
             if (!followUp) return null;
@@ -279,17 +280,8 @@ export async function createNoodlerPost(
               noodlerContentFormat: input.format ?? "caption",
               noodlerPostType: input.postType ?? "post",
               ...(input.postType === "story" && input.linkedPostId ? { noodlerLinkedPostId: input.linkedPostId } : {}),
-              ...(creatorPromotion
-                ? {
-                    slurpSponsoredPromotion: {
-                      id: creatorPromotion.id,
-                      brand: creatorPromotion.brand,
-                      product: creatorPromotion.product,
-                    },
-                  }
-                : {}),
               // Stored at creation so an unlock price stays put across refreshes and edits.
-              ...(input.access === "locked" ? noodlerUnlockPriceMetadata() : {}),
+              ...(input.access === "locked" ? noodlerUnlockPriceMetadata(unlockPrice) : {}),
               ...(lockedFollowUpPostId ? { noodlerLockedFollowUpPostId: lockedFollowUpPostId } : {}),
               ...(input.poll ? { poll: createNoodlePoll(input.poll) } : {}),
               ...(input.imageCrop ? { imageCrop: input.imageCrop } : {}),

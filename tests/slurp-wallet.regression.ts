@@ -156,6 +156,9 @@ assert.match(
   );
   assert.match(scheduler, /schedule\(slurpPollBackoffMs\(POLL_MS, consecutiveFailures\)\)/u);
   assert.match(scheduler, /consecutiveFailures = 0;/u);
+  // `replyToSlurpMessage` reports a failure instead of rejecting, so the poll has to inspect the
+  // outcome. Without this the two assertions above passed while the backoff was dead code.
+  assert.match(scheduler, /if \(outcome\.status === "failed"\) failed = true;/u);
 }
 
 console.log("slurp-wallet regression passed");

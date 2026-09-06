@@ -48,12 +48,20 @@ export function PostImageCropEditor({
   source,
   crop: initialCrop = null,
   disabled = false,
+  lockedRatio,
   onCancel,
   onApply,
 }: {
   source: File | string;
   crop?: NoodlePostImageCrop | null;
   disabled?: boolean;
+  /**
+   * Pin the crop to one ratio and hide the picker. A Story is drawn and shown in one shape, so
+   * letting it be cropped square or landscape only produces a Story that does not fit its frame.
+   * Given as width / height so it can follow the configured Story size rather than being stuck to
+   * one of the four named aspects.
+   */
+  lockedRatio?: number;
   onCancel: () => void;
   onApply: (crop: NoodlePostImageCrop) => Promise<void>;
 }) {
@@ -101,14 +109,14 @@ export function PostImageCropEditor({
       return;
     }
     const initialAspect = closestAspect(sourceSize, initialCrop);
-    const base = resolveCrop(sourceSize, initialAspect, 1, { x: 0.5, y: 0.5 });
+    const base = resolveCrop(sourceSize, initialAspect, 1, { x: 0.5, y: 0.5 }, lockedRatio);
     setAspect(initialAspect);
     setZoom(clamp(Math.min(base.width / initialCrop.width, base.height / initialCrop.height), 1, 3));
     setCenter({
       x: initialCrop.x + initialCrop.width / 2,
       y: initialCrop.y + initialCrop.height / 2,
     });
-  }, [initialCrop, sourceSize]);
+  }, [initialCrop, lockedRatio, sourceSize]);
 
   useEffect(() => {
     const image = imageRef.current;
@@ -123,7 +131,7 @@ export function PostImageCropEditor({
     return () => observer.disconnect();
   }, [sourceSize]);
 
-  const crop = sourceSize ? resolveCrop(sourceSize, aspect, zoom, center) : null;
+  const crop = sourceSize ? resolveCrop(sourceSize, aspect, zoom, center, lockedRatio) : null;
   const busy = disabled || applying;
 
   const reset = () => {
@@ -273,7 +281,7 @@ export function PostImageCropEditor({
       </div>
 
       <div className="space-y-2">
-        <div className="flex flex-wrap gap-1 rounded-lg bg-[var(--background)] p-1">
+        <div className={cn("flex flex-wrap gap-1 rounded-lg bg-[var(--background)] p-1", lockedRatio && "hidden")}>
           {ASPECT_OPTIONS.map((option) => (
             <button
               key={option.value}
@@ -456,10 +464,21 @@ function resolveCrop(
   aspect: CropAspect,
   zoom: number,
   center: { x: number; y: number },
+  lockedRatio?: number,
 ): NormalizedCrop {
   const sourceRatio = size.width / size.height;
+  // A locked ratio overrides the named aspects entirely: the picker is hidden in that mode, so
+  // there is nothing for the four presets to mean.
   const targetRatio =
-    aspect === "square" ? 1 : aspect === "portrait" ? 4 / 5 : aspect === "landscape" ? 16 / 9 : sourceRatio;
+    lockedRatio && Number.isFinite(lockedRatio) && lockedRatio > 0
+      ? lockedRatio
+      : aspect === "square"
+        ? 1
+        : aspect === "portrait"
+          ? 4 / 5
+          : aspect === "landscape"
+            ? 16 / 9
+            : sourceRatio;
   const baseWidth = sourceRatio > targetRatio ? targetRatio / sourceRatio : 1;
   const baseHeight = sourceRatio > targetRatio ? 1 : sourceRatio / targetRatio;
   const width = baseWidth / zoom;

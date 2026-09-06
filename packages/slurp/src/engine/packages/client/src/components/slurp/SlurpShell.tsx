@@ -535,6 +535,8 @@ function PersonaList({
             key={account.id}
             data-noodle-persona-id={account.entityId}
             type="button"
+            // The active persona was signalled by background colour alone.
+            aria-current={selected ? "true" : undefined}
             onClick={() => onSwitch(account)}
             className={cn(
               "flex w-full items-center gap-3 rounded-xl px-2 py-2 text-left transition-colors hover:bg-[var(--accent)]",

@@ -92,6 +92,7 @@ export type SlurpSendResult =
 
 const now = () => new Date().toISOString();
 const messageUnlocks = new Map<string, Promise<SlurpMessage | null>>();
+const commissionAccepts = new Map<string, Promise<SlurpCommission | null>>();
 const int = (value: string | null | undefined, fallback = 0): number => {
   const parsed = Number(value);
   return Number.isFinite(parsed) ? Math.trunc(parsed) : fallback;
@@ -495,6 +496,9 @@ export function createSlurpMessagesStorage(db: DB) {
       const row = rows[0];
       if (!row) return null;
       const thread = await storage.getThreadById(String(row.threadId));
+      // Only a PPV message is content-locked. Without the kind check a tip or a commission quote —
+      // both stored with a price and no `unlockedAt` — could be "unlocked" and charged a second time.
+      if (String(row.kind) !== "ppv") return null;
       if (!thread || thread.viewerAccountId !== viewerAccountId || Number(row.price ?? 0) <= 0) return null;
       if (row.unlockedAt) return mapMessage(row);
       const price = int(row.price as string);
@@ -522,7 +526,13 @@ export function createSlurpMessagesStorage(db: DB) {
     async sendCreatorMessage(
       creatorAccountId: string,
       viewerAccountId: string,
-      input: { content: string; kind?: SlurpMessageKind; price?: number; metadata?: Record<string, unknown> },
+      input: {
+        content: string;
+        kind?: SlurpMessageKind;
+        price?: number;
+        imageUrl?: string | null;
+        metadata?: Record<string, unknown>;
+      },
     ): Promise<SlurpMessage | null> {
       // A counterpart is a persona, an ambient Slurp account, or a generated population member.
       // Gating on personas alone meant a fan the world sent could write to a Creator and never be
@@ -540,6 +550,7 @@ export function createSlurpMessagesStorage(db: DB) {
         content: input.content,
         kind: input.kind,
         price: input.price,
+        imageUrl: input.imageUrl ?? null,
         metadata: input.metadata,
       });
     },
@@ -657,6 +668,10 @@ export function createSlurpMessagesStorage(db: DB) {
     },
 
     async quoteCommission(id: string, price: number): Promise<SlurpCommission | null> {
+      // Re-quoting an accepted or delivered commission used to reset it to `quoted`, which made it
+      // payable a second time.
+      const existing = await storage.getCommission(id);
+      if (!existing || (existing.state !== "brief" && existing.state !== "quoted")) return existing;
       const timestamp = now();
       await db
         .update(slurpCommissions)
@@ -677,6 +692,20 @@ export function createSlurpMessagesStorage(db: DB) {
     },
 
     async acceptCommission(id: string): Promise<SlurpCommission | null> {
+      // Serialized like `unlockMessage`: the check-then-spend span is the invariant, and the
+      // financial queue only serializes each individual wallet write. Two concurrent accepts both
+      // read `quoted` and both paid.
+      const previous = commissionAccepts.get(id) ?? Promise.resolve(null);
+      const current = previous.catch(() => null).then(() => storage.acceptCommissionUnlocked(id));
+      commissionAccepts.set(id, current);
+      try {
+        return await current;
+      } finally {
+        if (commissionAccepts.get(id) === current) commissionAccepts.delete(id);
+      }
+    },
+
+    async acceptCommissionUnlocked(id: string): Promise<SlurpCommission | null> {
       const commission = await storage.getCommission(id);
       if (!commission || commission.state !== "quoted") return commission;
       const settings = await slurp.getSettings();
@@ -690,24 +719,65 @@ export function createSlurpMessagesStorage(db: DB) {
         ))
       )
         return null;
-      await slurp.creditCreatorIncome(commission.creatorAccountId, commission.price, "commission");
-      await slurp.notifyCreatorIncome(
-        commission.creatorAccountId,
-        "commission",
-        commission.price,
-        commission.viewerAccountId,
-        commission.id,
-      );
-      await db.update(slurpCommissions).set({ state: "accepted", updatedAt: now() }).where(eq(slurpCommissions.id, id));
+      try {
+        await slurp.creditCreatorIncome(commission.creatorAccountId, commission.price, "commission");
+        await slurp.notifyCreatorIncome(
+          commission.creatorAccountId,
+          "commission",
+          commission.price,
+          commission.viewerAccountId,
+          commission.id,
+        );
+        await db
+          .update(slurpCommissions)
+          .set({ state: "accepted", updatedAt: now() })
+          .where(eq(slurpCommissions.id, id));
+      } catch (error) {
+        // Same compensation as `unlockMessageUnlocked`: a failure after the debit used to strand the
+        // coins while leaving the commission payable again.
+        if (settings.walletEnabled) {
+          await slurp.refundCoins(commission.viewerAccountId, commission.price, "failed commission accept");
+          await slurp.reverseCreatorIncome(commission.creatorAccountId, commission.price, "failed commission accept");
+        }
+        throw error;
+      }
       return storage.getCommission(id);
     },
 
-    async deliverCommission(id: string, content: string): Promise<SlurpCommission | null> {
+    /**
+     * End a commission before it is paid for.
+     *
+     * The same call for both sides: a Creator declining a brief and a fan taking one back are the
+     * same state change, and `declined` is the state the schema and the localized labels already
+     * ship. Only an unpaid commission may be ended — once it is accepted the coins have moved, so
+     * ending it there would need a refund path rather than a state change.
+     */
+    async declineCommission(id: string, by: "creator" | "viewer"): Promise<SlurpCommission | null> {
+      const commission = await storage.getCommission(id);
+      if (!commission || (commission.state !== "brief" && commission.state !== "quoted")) return commission;
+      await db.update(slurpCommissions).set({ state: "declined", updatedAt: now() }).where(eq(slurpCommissions.id, id));
+      await storage.appendMessage(commission.threadId, {
+        senderAccountId: by === "creator" ? commission.creatorAccountId : commission.viewerAccountId,
+        role: by === "creator" ? "creator" : "viewer",
+        kind: "system",
+        content:
+          by === "creator" ? "The Creator declined this commission." : "The fan withdrew this commission request.",
+        metadata: { commissionId: id },
+      });
+      return storage.getCommission(id);
+    },
+
+    async deliverCommission(
+      id: string,
+      content: string,
+      imageUrl: string | null = null,
+    ): Promise<SlurpCommission | null> {
       const commission = await storage.getCommission(id);
       if (!commission || commission.state !== "accepted") return commission;
       const message = await storage.sendCreatorMessage(commission.creatorAccountId, commission.viewerAccountId, {
         content,
         kind: "commission_delivery",
+        imageUrl,
       });
       if (!message) {
         const settings = await slurp.getSettings();
@@ -895,8 +965,8 @@ export function createSlurpMessagesStorage(db: DB) {
     listCommissionsForThread: () => [],
     listOpenCommissionsForCreator: () => [],
     listThreadsAwaitingReply: () => [],
-    rapportFactsFor: () => [],
-    claimReply: () => null,
+    rapportFactsFor: () => emptySlurpRapportFacts(),
+    claimReply: () => ({ status: "busy" as const }),
   });
 }
 

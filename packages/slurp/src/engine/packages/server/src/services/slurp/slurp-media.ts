@@ -27,6 +27,11 @@ export function noodlerPostMediaUrl(postId: string): string {
 
 export const NOODLER_MEDIA_URL_PREFIX = "/api/slurp/noodler/posts/";
 
+/** Access-checked serving URL for a generated direct-message image. */
+export function slurpMessageMediaUrl(messageId: string): string {
+  return `/api/slurp/messages/${encodeURIComponent(messageId)}/media`;
+}
+
 /**
  * Bind a stored NoodleR media URL to the persona it is being served to. The media route
  * gates on the persona, so audience-facing projections must carry it; unrelated (uploaded

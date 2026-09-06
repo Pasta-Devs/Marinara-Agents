@@ -1,6 +1,5 @@
 import type { DB } from "../../db/connection.js";
 import { createAppSettingsStorage } from "../storage/app-settings.storage.js";
-import { GARNISH_BASE_ADS } from "./garnish-ads.base.js";
 import { qualityScores } from "./garnish-ads.rating.js";
 import { createGarnishAdsStorage, type GarnishAdEvent } from "./garnish-ads.storage.js";
 import {
@@ -8,7 +7,6 @@ import {
   type GarnishAd,
   type GarnishAdContext,
   type GarnishAdState,
-  type GarnishCreatorProfile,
   type GarnishPlatform,
 } from "./garnish-ads.types.js";
 
@@ -18,17 +16,6 @@ import {
  * would silently drop every existing hidden-ad list.
  */
 const stateKey = (subjectId: string) => `slurp.viewer.${subjectId}.ads`;
-
-/** Pick a creator-read ad whose categories match the creator's own words. */
-export function creatorAdForProfile(profile: GarnishCreatorProfile, platform: GarnishPlatform = "slurp") {
-  const text = `${profile.handle} ${profile.bio ?? ""}`.toLowerCase();
-  return (
-    GARNISH_BASE_ADS.find(
-      (ad) =>
-        ad.platform === platform && ad.kind === "creator" && ad.categories.some((category) => text.includes(category)),
-    ) ?? null
-  );
-}
 
 function cleanTags(tags: readonly string[] | undefined): string[] {
   return [...new Set((tags ?? []).map((tag) => tag.trim().toLowerCase()).filter(Boolean))];

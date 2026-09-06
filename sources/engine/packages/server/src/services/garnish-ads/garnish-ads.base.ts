@@ -41,17 +41,4 @@ export const GARNISH_BASE_ADS: readonly GarnishAd[] = [
     contextTags: ["night", "club", "city"],
     actionLabel: "See rooms",
   },
-  {
-    id: "velvet-skin-midnight-gloss",
-    platform: "slurp",
-    kind: "creator",
-    contentRating: "suggestive",
-    origin: "builtin",
-    brand: "Velvet Skin",
-    product: "Midnight Gloss",
-    copy: "A dark shine for late events and worse decisions.",
-    categories: ["beauty", "fashion", "night"],
-    contextTags: ["night", "date", "party"],
-    actionLabel: "View product",
-  },
 ];

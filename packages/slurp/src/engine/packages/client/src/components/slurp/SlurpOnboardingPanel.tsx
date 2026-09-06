@@ -1297,6 +1297,7 @@ export function SlurpOnboardingWizard({
                 {completion === "settingsFailed" && (
                   <button
                     type="button"
+                    disabled={pending}
                     onClick={() => {
                       void (async () => {
                         if (!(await saveSettings(createdIds.length === 0 ? "zero" : "completed"))) return;
@@ -1314,7 +1315,7 @@ export function SlurpOnboardingWizard({
                     }}
                     className="mt-5 flex min-h-10 items-center gap-2 rounded-lg border border-[var(--noodle-accent)]/40 px-4 text-sm font-bold text-[var(--noodle-accent)] disabled:opacity-50"
                   >
-                    <RefreshCw size={15} className="" />
+                    <RefreshCw size={15} className={pending ? "animate-spin" : ""} />
                     {t("ui.noodle.noodlerwizard.retrySettings")}
                   </button>
                 )}
@@ -1489,6 +1490,7 @@ export function SlurpOnboardingWizard({
             </button>
             <button
               type="button"
+              disabled={pending}
               onClick={() => {
                 setProviderConfirmationOpen(false);
                 void performFinish();

@@ -81,12 +81,16 @@ import {
   SLURP_WORLD_ACTIVITY,
 } from "../slurp/slurp-scale.js";
 import { resolveSlurpCreatorScheduleStatus } from "../slurp/slurp-creator-schedule-context.js";
+import { SLURP_DEFAULT_STORY_RATE, SLURP_STORY_RATE } from "../slurp/slurp-post-beat.js";
 import { createSlurpEventsStorage } from "./slurp-events.storage.js";
 import { createSlurpPopulationStorage } from "./slurp-population.storage.js";
 import type { SlurpFunnelStage } from "../slurp/slurp-population.js";
 import type { SlurpEventKind } from "../slurp/slurp-event-weight.js";
 import {
-  earn,
+  // `earn` is also the viewer-wallet credit above. Importing both under one name meant the last
+  // import won at runtime, so every ad and engagement reward called the creator-earnings `earn`
+  // with wallet arguments and silently paid nothing.
+  earn as earnCreatorIncome,
   payout as payoutEarnings,
   readSlurpEarnings,
   reverse as reverseEarnings,
@@ -218,6 +222,11 @@ export const slurpSettingsSchema = z.object({
   inlineAdsLorebookRevision: z.string().trim().max(64).nullable(),
   imageWidth: z.number().int().min(64).max(4096),
   imageHeight: z.number().int().min(64).max(4096),
+  /** Share of a Creator's automatic posts published as Stories. */
+  storyRate: z.enum(SLURP_STORY_RATE),
+  /** Stories are shown in their own tall frame, so they carry their own size. */
+  storyImageWidth: z.number().int().min(64).max(4096),
+  storyImageHeight: z.number().int().min(64).max(4096),
   refreshesPerDay: z.number().int().min(0).max(24),
   generationGuidance: z.string().max(20_000),
   audienceTone: z.enum(SLURP_AUDIENCE_TONES),
@@ -793,6 +802,7 @@ export const DEFAULT_SLURP_SETTINGS: SlurpSettings = {
   walletUnlockCost: SLURP_DEFAULT_ECONOMY.unlockCost,
   walletSubscriptionCost: SLURP_DEFAULT_ECONOMY.subscriptionCost,
   walletStipendFloor: SLURP_DEFAULT_ECONOMY.stipendFloor,
+  walletDayStartHour: SLURP_DEFAULT_ECONOMY.dayStartHour,
   walletAdReward: SLURP_DEFAULT_ECONOMY.adReward,
   walletAdDailyCap: SLURP_DEFAULT_ECONOMY.adDailyCap,
   walletEngagementReward: SLURP_DEFAULT_ECONOMY.engagementReward,
@@ -802,6 +812,11 @@ export const DEFAULT_SLURP_SETTINGS: SlurpSettings = {
   inlineAdsLorebookRevision: null,
   imageWidth: 1024,
   imageHeight: 1536,
+  storyRate: SLURP_DEFAULT_STORY_RATE,
+  // 4:5. The composer crops an uploaded Story to whatever ratio is configured here, so the two
+  // halves of the feature stay one shape.
+  storyImageWidth: 1024,
+  storyImageHeight: 1280,
   refreshesPerDay: 0,
   generationGuidance: NOODLER_DEFAULT_GENERATION_GUIDANCE,
   audienceTone: SLURP_DEFAULT_AUDIENCE_TONE,
@@ -853,6 +868,18 @@ export const DEFAULT_SLURP_SETTINGS: SlurpSettings = {
   nightQuiet: false,
   onboarding: "not_started",
 };
+
+/**
+ * A persona's own Slurp identity, provisioned so its likes and replies have an author.
+ *
+ * It is not a Creator: it has no stage profile, no disclosure mode, and nobody authored it. Listing
+ * it as one put every persona that ever tapped a heart into the Creator profiles list as "Setup
+ * Needed", and into every other viewer's Discover as a browsable Creator. A Creator stage profile
+ * is always written with `invited: false`; only these actor accounts are an invited persona.
+ */
+export function isSlurpViewerActorAccount(account: Pick<SlurpAccount, "invited" | "kind">): boolean {
+  return account.invited === true && account.kind === "persona";
+}
 
 export function normalizeSlurpSettings(raw: unknown): SlurpSettings {
   const rawRecord = parseRecord(raw);
@@ -1159,6 +1186,7 @@ export function createSlurpStorage(db: DB) {
     unlockCost: settings.walletUnlockCost,
     subscriptionCost: settings.walletSubscriptionCost,
     stipendFloor: settings.walletStipendFloor,
+    dayStartHour: settings.walletDayStartHour,
     adReward: settings.walletAdReward,
     adDailyCap: settings.walletAdDailyCap,
     engagementReward: settings.walletEngagementReward,
@@ -1246,7 +1274,7 @@ export function createSlurpStorage(db: DB) {
     note?: string,
   ) => {
     const current = readSlurpEarnings(await settingsStore.get(slurpEarningsKey(creatorAccountId)));
-    const next = earn(current, kind, amount, new Date(), note);
+    const next = earnCreatorIncome(current, kind, amount, new Date(), note);
     if (next !== current) await writeEarnings(creatorAccountId, next);
   };
   const getWalletNow = async (viewerAccountId: string): Promise<SlurpWallet> => {
@@ -1683,7 +1711,10 @@ export function createSlurpStorage(db: DB) {
       const wallets = await Promise.all(
         [...new Set(personaIds)].map(async (personaId) => {
           const viewer = await this.getViewer(personaId);
-          return viewer ? ([personaId, { coins: viewer.settings.wallet.coins }] as const) : null;
+          // `settings.wallet.coins` is the Engine's own field, which defaults to 999_999 and is
+          // only mirrored once Slurp first writes a wallet. Reading it showed a brand-new persona
+          // as having 999,999 coins in the switcher while the Wallet page showed the real balance.
+          return viewer ? ([personaId, { coins: (await getWalletNow(personaId)).coins }] as const) : null;
         }),
       );
       return Object.fromEntries(
@@ -2177,7 +2208,7 @@ export function createSlurpStorage(db: DB) {
     },
 
     async listNoodlerStageProfiles(): Promise<NoodlerManagedStageProfile[]> {
-      const accounts = await this.listNoodlerAccounts();
+      const accounts = (await this.listNoodlerAccounts()).filter((account) => !isSlurpViewerActorAccount(account));
       return Promise.all(
         accounts.map(async (account) => {
           const disclosureMode = account.settings.privacy.identityDisclosure ?? null;
@@ -4679,6 +4710,26 @@ export function createSlurpStorage(db: DB) {
             parentInteractionId,
             actor,
           });
+          // Liking a post that is already liked used to reach the insert and fail the unique
+          // constraint. The file store asserts uniqueness when the transaction settles rather than
+          // at the insert call, so the catch below never saw it and a repeated tap returned a 500.
+          // A toggle is idempotent by definition: hand back the row that already exists.
+          const already = (
+            await tx
+              .select()
+              .from(noodleInteractions)
+              .where(
+                and(
+                  eq(noodleInteractions.postId, postId),
+                  eq(noodleInteractions.actorAccountId, actor.id),
+                  eq(noodleInteractions.type, input.type),
+                  parentInteractionId
+                    ? eq(noodleInteractions.parentInteractionId, parentInteractionId)
+                    : isNull(noodleInteractions.parentInteractionId),
+                ),
+              )
+          )[0];
+          if (already) return mapInteraction(already);
         }
         if (parentInteractionId) {
           const parent = (
@@ -5270,7 +5321,10 @@ export function createSlurpStorage(db: DB) {
             ),
           );
         const price = settings.walletEnabled ? await this.getCreatorSubscriptionPrice(creatorAccountId) : 0;
-        const at = now();
+        // `now()` returns an ISO string. Every use below wants a Date — `at.getTime()`, `spend`,
+        // and `subscriptionPaidThrough` — so the string made the first subscribe for a viewer fail
+        // with "toISOString is not a function" and return a 500.
+        const at = new Date();
         const existingWallet = settings.walletEnabled ? await getWalletNow(viewerAccountId) : null;
         const existingPayment = existingWallet?.subscriptions[creatorAccountId];
         const existingPaymentIsValid =
@@ -5997,7 +6051,7 @@ export function createSlurpStorage(db: DB) {
     ): Promise<void> {
       const run = enqueueFinancial(async () => {
         const current = await this.getEarnings(creatorAccountId);
-        const next = earn(current, kind, amount, new Date(), note);
+        const next = earnCreatorIncome(current, kind, amount, new Date(), note);
         if (next !== current) await writeEarnings(creatorAccountId, next);
       });
       await run;

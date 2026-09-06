@@ -277,6 +277,7 @@ export function SlurpProfileSurface<TTab extends string = SlurpProfileTab>({
                   avatarUpload.uploadTarget === "avatar" && "cursor-wait opacity-80",
                 )}
                 title={avatarUpload.canEdit ? localizeUi("editor.avatar.upload") : undefined}
+                aria-label={avatarUpload.canEdit ? localizeUi("editor.avatar.upload") : undefined}
               >
                 <Avatar account={account} size="xl" />
                 {avatarUpload.uploadTarget === "avatar" && (

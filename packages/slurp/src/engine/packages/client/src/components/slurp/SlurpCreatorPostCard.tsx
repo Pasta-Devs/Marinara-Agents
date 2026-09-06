@@ -500,11 +500,6 @@ export function SlurpCreatorPostCard({
   const accountByHandle = ctx.accountByHandle ?? new Map<string, NoodleAccount>();
   const authorAccount = accountById.get(post.authorAccountId) ?? null;
   const author = authorAccount ?? post.authorSnapshot;
-  const sponsored =
-    post.metadata && typeof post.metadata.slurpSponsoredPromotion === "object"
-      ? (post.metadata.slurpSponsoredPromotion as { brand?: unknown; product?: unknown })
-      : null;
-
   // Card-owned defaults for absent capability groups. Hosts pass only the capabilities they
   // support (NoodleR omits media/replyManagement/mentions/poll/profile); the card fills the
   // rest with no-ops and empty state, and gates the corresponding UI on group presence — so
@@ -908,12 +903,6 @@ export function SlurpCreatorPostCard({
               {formatTime(post.createdAt, i18n.language)}
             </p>
           </div>
-          {sponsored && typeof sponsored.brand === "string" && (
-            <p className="mt-1 text-[0.65rem] font-bold uppercase tracking-[0.12em] text-[var(--noodle-accent)]">
-              Paid partnership with {sponsored.brand}
-              {typeof sponsored.product === "string" ? ` · ${sponsored.product}` : ""}
-            </p>
-          )}
           <div className="relative shrink-0">
             <button
               type="button"

@@ -249,7 +249,13 @@ export function useResetSlurpAds() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (personaId: string) => api.post(`/slurp/noodler/viewer/ads/reset`, { personaId }),
-    onSuccess: (_state, personaId) => queryClient.invalidateQueries({ queryKey: noodleKeys.ads(personaId) }),
+    // Ad queries are keyed by creator and context tags too, so the bare `ads(personaId)` key only
+    // ever matched the contextless variant and left every visible feed showing reset ads.
+    onSuccess: (_state, personaId) =>
+      queryClient.invalidateQueries({
+        queryKey: noodleKeys.noodlerViewers(),
+        predicate: (query) => query.queryKey.includes("ads") && query.queryKey.includes(personaId),
+      }),
   });
 }
 
@@ -269,6 +275,7 @@ export type SlurpSettings = {
   walletUnlockCost: number;
   walletSubscriptionCost: number;
   walletStipendFloor: number;
+  walletDayStartHour: number;
   walletAdReward: number;
   walletAdDailyCap: number;
   walletEngagementReward: number;
@@ -276,6 +283,9 @@ export type SlurpSettings = {
   walletCreatorRevenueSharePercent: number;
   imageWidth: number;
   imageHeight: number;
+  storyRate: "off" | "rare" | "regular" | "often";
+  storyImageWidth: number;
+  storyImageHeight: number;
   refreshesPerDay: number;
   generationGuidance: string;
   audienceTone: "warm" | "mixed" | "unfiltered";
@@ -519,6 +529,7 @@ export type SlurpTopFan = {
   handle: string | null;
   traits: string[];
   stage: string;
+  arc?: string;
   spent: number;
   interactions: number;
   firstSeenAt: string;
@@ -704,8 +715,9 @@ export function useTipSlurpCreator() {
 export function useSetSlurpCreatorPrice() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (input: { accountId: string; price: number | null }) =>
+    mutationFn: (input: { accountId: string; personaId: string; price: number | null }) =>
       api.put<{ price: number }>(`/slurp/noodler/accounts/${encodeURIComponent(input.accountId)}/subscription-price`, {
+        personaId: input.personaId,
         price: input.price,
       }),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: noodleKeys.noodlerRoot() }),
@@ -1281,7 +1293,14 @@ export function useNoodlerUnseenCount(personaId: string | null, enabled = true) 
     refetchIntervalInBackground: false,
   });
   const count = Math.max(0, Math.floor(data?.count ?? 0));
+  // The baseline belongs to one persona. Carrying it across a switch compared the new persona's
+  // count against the old one's, so the viewer feed either never refreshed or refreshed spuriously.
+  const previousPersonaId = useRef<string | null>(null);
   useEffect(() => {
+    if (previousPersonaId.current !== personaId) {
+      previousPersonaId.current = personaId;
+      previousCount.current = null;
+    }
     if (!enabled || !personaId || previousCount.current === null) {
       previousCount.current = count;
       return;
@@ -1953,6 +1972,7 @@ export function useSendSlurpCreatorPpv() {
       viewerAccountId: string;
       content: string;
       price: number;
+      imageUrl?: string | null;
     }) =>
       api.post<{ message: SlurpMessage }>(
         `/slurp/messages/creators/${encodeURIComponent(input.creatorAccountId)}/ppv`,
@@ -2007,10 +2027,23 @@ export function useAcceptSlurpCommission() {
   });
 }
 
+/** Either side ends an unpaid commission: the Creator declines, the fan withdraws. */
+export function useDeclineSlurpCommission() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (input: { commissionId: string; personaId: string }) =>
+      api.post<{ commission: SlurpCommission }>(
+        `/slurp/messages/commissions/${encodeURIComponent(input.commissionId)}/decline`,
+        input,
+      ),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: noodleKeys.noodlerRoot() }),
+  });
+}
+
 export function useDeliverSlurpCommission() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (input: { commissionId: string; personaId: string; content: string }) =>
+    mutationFn: (input: { commissionId: string; personaId: string; content: string; imageUrl?: string | null }) =>
       api.post<{ commission: SlurpCommission }>(
         `/slurp/messages/commissions/${encodeURIComponent(input.commissionId)}/deliver`,
         input,
@@ -2037,6 +2070,18 @@ export function useSlurpRapport(creatorAccountId: string | null, personaId: stri
         `/slurp/messages/creators/${encodeURIComponent(creatorAccountId!)}/rapport?personaId=${encodeURIComponent(personaId!)}`,
       ),
     enabled: Boolean(creatorAccountId && personaId),
+  });
+}
+
+/** A Creator's own message policy and prices, for the panel that edits them. */
+export function useSlurpCreatorMessagingSettings(creatorAccountId: string | null) {
+  return useQuery({
+    queryKey: [...noodleKeys.noodlerRoot(), "messages", "creator-settings", creatorAccountId ?? "none"],
+    queryFn: () =>
+      api.get<{ messaging: SlurpCreatorMessaging; subscriptionPrice: number }>(
+        `/slurp/messages/creators/${encodeURIComponent(creatorAccountId!)}/settings`,
+      ),
+    enabled: Boolean(creatorAccountId),
   });
 }
 
