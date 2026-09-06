@@ -1,5 +1,10 @@
 # Slurp release notes
 
+## 1.1.30 — 2026-09-06
+
+- Edit Profile now renders as a small tinted pill inside its full-size accessible
+  rail target instead of filling the rail's height.
+
 ## 1.1.29 — 2026-09-06
 
 - Profile controls and its chevron now recede into the rail; Edit Profile alone

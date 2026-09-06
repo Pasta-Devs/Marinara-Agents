@@ -179,6 +179,7 @@ assert.match(
   /data-slurp-creator-tools[\s\S]*?onClick=\{onEdit\}[\s\S]*?ui\.noodle\.stageprofileview\.editProfile[\s\S]*?aria-label=\{localizeUi\("ui\.slurp\.profile\.creatorTools"\)\}[\s\S]*?<ChevronDown/u,
   "Edit Profile must sit immediately before the trailing Profile controls chevron",
 );
+assert.match(home, /group\/edit flex min-h-11[\s\S]*?<span className="rounded-lg[\s\S]*?py-1\.5/u);
 // Edit Profile belongs to the same profile rail, not inside the expandable operational panel.
 assert.doesNotMatch(
   home.slice(home.indexOf('id="slurp-creator-tools-panel"'), home.indexOf("<NoodlerPostComposer")),

@@ -4083,9 +4083,11 @@ function StageProfileView({
                 <button
                   type="button"
                   onClick={onEdit}
-                  className="min-h-11 border-s border-white/[0.07] bg-[color-mix(in_srgb,var(--noodle-accent)_18%,transparent)] px-3 text-xs font-bold text-[var(--noodle-accent)] transition-[background-color,transform] hover:bg-[color-mix(in_srgb,var(--noodle-accent)_26%,transparent)] active:scale-[0.96] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--noodle-accent)] motion-reduce:transition-none motion-reduce:active:scale-100"
+                  className="group/edit flex min-h-11 items-center border-s border-white/[0.07] px-2 text-xs font-bold text-[var(--noodle-accent)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--noodle-accent)]"
                 >
-                  {localizeUi("ui.noodle.stageprofileview.editProfile")}
+                  <span className="rounded-lg bg-[color-mix(in_srgb,var(--noodle-accent)_18%,transparent)] px-2.5 py-1.5 transition-[background-color,transform] group-hover/edit:bg-[color-mix(in_srgb,var(--noodle-accent)_26%,transparent)] group-active/edit:scale-[0.96] motion-reduce:transition-none motion-reduce:group-active/edit:scale-100">
+                    {localizeUi("ui.noodle.stageprofileview.editProfile")}
+                  </span>
                 </button>
                 <button
                   type="button"
