@@ -1,5 +1,10 @@
 # Slurp release notes
 
+## 1.1.25 — 2026-09-06
+
+- The banner-to-profile fade now reaches the solid header exactly at the banner
+  edge, removing the bright seam beneath the artwork at every avatar size.
+
 ## 1.1.24 — 2026-09-06
 
 - Creator avatars now visibly overlap about 30% of the banner artwork, while

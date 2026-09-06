@@ -320,7 +320,11 @@ assert.match(
   /-mt-8 @min-\[680px\]:-mt-10 @min-\[1040px\]:-mt-11/u,
   "Creator avatars must keep roughly 30% of their changing size inside the banner",
 );
-assert.match(profileSurface, /linear-gradient\(to_bottom,transparent_0%,var\(--slurp-canvas\)_3\.5rem\)/u);
+assert.match(
+  profileSurface,
+  /var\(--slurp-canvas\)_2rem[\s\S]*?@min-\[680px\]:bg-\[linear-gradient\(to_bottom[\s\S]*?var\(--slurp-canvas\)_2\.5rem[\s\S]*?@min-\[1040px\]:bg-\[linear-gradient\(to_bottom[\s\S]*?var\(--slurp-canvas\)_2\.75rem/u,
+  "the fade must become solid at the banner edge for every responsive overlap",
+);
 assert.match(
   profileSurface,
   /linear-gradient\(to_top,rgba\(8,4,10,0\.88\)_0%,rgba\(8,4,10,0\.58\)_24%,transparent_60%\)/u,

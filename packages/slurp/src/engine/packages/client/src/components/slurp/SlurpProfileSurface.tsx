@@ -245,7 +245,7 @@ export function SlurpProfileSurface<TTab extends string = SlurpProfileTab>({
         className={cn(
           "relative px-4 pb-6 @min-[680px]:px-6 @min-[680px]:pb-7 @min-[1040px]:px-8",
           spotlight
-            ? "bg-[linear-gradient(to_bottom,transparent_0%,var(--slurp-canvas)_3.5rem)] @min-[680px]:grid @min-[680px]:grid-cols-[auto_minmax(0,1fr)] @min-[680px]:items-start @min-[680px]:gap-x-6 @min-[1040px]:gap-x-8"
+            ? "bg-[linear-gradient(to_bottom,transparent_0%,rgba(8,4,10,0.58)_1rem,var(--slurp-canvas)_2rem)] @min-[680px]:grid @min-[680px]:grid-cols-[auto_minmax(0,1fr)] @min-[680px]:items-start @min-[680px]:gap-x-6 @min-[680px]:bg-[linear-gradient(to_bottom,transparent_0%,rgba(8,4,10,0.58)_1.5rem,var(--slurp-canvas)_2.5rem)] @min-[1040px]:gap-x-8 @min-[1040px]:bg-[linear-gradient(to_bottom,transparent_0%,rgba(8,4,10,0.58)_1.75rem,var(--slurp-canvas)_2.75rem)]"
             : "rounded-xl bg-[color-mix(in_srgb,var(--slurp-surface-raised,var(--background))_96%,transparent)] shadow-[var(--slurp-shadow-modal)] ring-1 ring-inset ring-[var(--noodle-divider)] backdrop-blur-md",
           // Keep roughly 30% of each responsive avatar inside the banner. The identity shares
           // this overlap so its first line rises into the smooth bottom fade without drifting.
