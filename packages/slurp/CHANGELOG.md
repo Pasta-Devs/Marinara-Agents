@@ -1,5 +1,13 @@
 # Slurp release notes
 
+## 1.2.4 — 2026-09-06
+
+- Right rails now provide contextual content instead of repeating the main view.
+- Discover now has a compact Top creators leaderboard with Likes and Subscribers modes.
+- Open Inbox conversations show the related Creator context in the right rail.
+- Owned profiles show Creator tools, while other profiles show related Creators.
+- Wallet and Settings no longer reserve duplicate summary rails.
+
 ## 1.2.3 — 2026-09-06 [highlight]
 
 - Subscribing to a Creator no longer fails.

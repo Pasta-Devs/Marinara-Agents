@@ -6,6 +6,7 @@ import { basename, dirname } from "path";
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import { extname } from "node:path";
 import { z } from "zod";
+import { and, eq } from "../db/file-query.js";
 import {
   createNoodlePoll,
   noodleBulkNoodlerAccountCreateSchema,
@@ -32,6 +33,7 @@ import {
   type NoodlerSubscriber,
   type NoodlerPostView,
 } from "@marinara-engine/shared";
+import { noodleInteractions } from "../db/schema/slurp.js";
 import { createCharactersStorage } from "../services/storage/characters.storage.js";
 import { createCharacterGalleryStorage } from "../services/storage/character-gallery.storage.js";
 import { resolveNoodlerCreatorArtwork } from "../services/slurp/slurp-public-profiles.service.js";
@@ -42,6 +44,7 @@ import {
   slurpSettingsSchema,
 } from "../services/storage/slurp.storage.js";
 import { createSlurpMessagesStorage } from "../services/storage/slurp-messages.storage.js";
+import { newId, now } from "../utils/id-generator.js";
 import { NOODLER_SUBSCRIPTION_COST, noodlerUnlockPriceFromMetadata } from "../services/slurp/slurp-prices.js";
 import { slurpDayKey } from "../services/slurp/slurp-wallet.js";
 import { settleAgentJobsWithConcurrencyLimit } from "../services/agents/agent-concurrency.js";
@@ -80,7 +83,6 @@ import type { GarnishAd } from "../services/garnish-ads/garnish-ads.types.js";
 // generate call died with a ReferenceError that the route reported as a bare 502.
 import { generateGarnishAds, retireWeakGarnishAds } from "../services/slurp/slurp-garnish-generation.service.js";
 import { qualityScores } from "../services/garnish-ads/garnish-ads.rating.js";
-import { newId } from "../utils/id-generator.js";
 import { SLURP_GARNISH_PLATFORM, garnishContextForViewer } from "../services/slurp/slurp-garnish-context.js";
 import { generateGarnishAdImage } from "../services/slurp/slurp-garnish-image.service.js";
 import { resolveGarnishAdImageAbsolutePath, unlinkGarnishAdImage } from "../services/slurp/slurp-garnish-image.js";
@@ -978,7 +980,9 @@ export async function slurpRoutes(app: FastifyInstance) {
     return new Map(
       posts.map((post): [string, NoodlerPricedPostView] => {
         const locked = !viewablePostIds.has(post.id);
-        const allInteractions = interactionsByPostId.get(post.id) ?? [];
+        const allInteractions = (interactionsByPostId.get(post.id) ?? []).filter(
+          (interaction) => interaction.type !== "story_view",
+        );
         const visibleInteractions = allInteractions.filter(
           (interaction) => !locked || !interaction.actorAccountId.startsWith(NOODLER_FAN_IDENTITY_PREFIX),
         );
@@ -1825,6 +1829,73 @@ export async function slurpRoutes(app: FastifyInstance) {
       await noodle.earnCoins(identity.personaId, "engagement", parsed.data.type);
     }
     return reply.code(201).send(interaction);
+  });
+
+  app.post("/noodler/stories/:id/view", async (req, reply) => {
+    const parsed = noodlerViewerPersonaSchema.safeParse(req.body ?? {});
+    if (!parsed.success) return reply.code(400).send({ error: parsed.error.flatten() });
+    const { id } = req.params as { id: string };
+    const identity = await resolveViewerIdentity(parsed.data.personaId);
+    const post = await noodle.getNoodlerPostById(id);
+    if (!identity?.actor || !post || post.metadata.noodlerPostType !== "story") {
+      return reply.code(404).send({ error: "Story not found" });
+    }
+    const gated = await resolveGatedNoodlerPost(parsed.data.personaId, id);
+    if (!gated || gated.locked) return reply.code(404).send({ error: "Story not found" });
+    const existing = await app.db
+      .select()
+      .from(noodleInteractions)
+      .where(
+        and(
+          eq(noodleInteractions.postId, id),
+          eq(noodleInteractions.actorAccountId, identity.actor.id),
+          eq(noodleInteractions.type, "story_view"),
+        ),
+      );
+    if (existing[0]) return { viewed: true, duplicate: true };
+    await app.db.insert(noodleInteractions).values({
+      id: newId(),
+      postId: id,
+      parentInteractionId: null,
+      actorAccountId: identity.actor.id,
+      type: "story_view",
+      content: null,
+      imageUrl: null,
+      actorSnapshot: JSON.stringify({
+        id: identity.actor.id,
+        handle: identity.actor.handle,
+        displayName: identity.actor.displayName,
+      }),
+      createdAt: now(),
+    });
+    return { viewed: true, duplicate: false };
+  });
+
+  app.get("/noodler/stories/:id/views", async (req, reply) => {
+    const parsed = noodlerViewerPersonaSchema.safeParse(req.query);
+    if (!parsed.success) return reply.code(400).send({ error: parsed.error.flatten() });
+    const { id } = req.params as { id: string };
+    const post = await noodle.getNoodlerPostById(id);
+    if (!post || post.metadata.noodlerPostType !== "story") return reply.code(404).send({ error: "Story not found" });
+    const identity = await resolveViewerIdentity(parsed.data.personaId);
+    const creator = await noodle.getNoodlerAccountById(post.authorAccountId);
+    if (!identity?.viewer || !creator || !(await creatorBelongsToViewer(creator, identity.viewer))) {
+      return reply.code(403).send({ error: "Only the Creator owner can view Story viewers." });
+    }
+    const rows = await app.db
+      .select()
+      .from(noodleInteractions)
+      .where(and(eq(noodleInteractions.postId, id), eq(noodleInteractions.type, "story_view")));
+    return {
+      count: rows.length,
+      viewers: rows.map((row) => {
+        try {
+          return JSON.parse(row.actorSnapshot);
+        } catch {
+          return { id: row.actorAccountId, displayName: "Viewer", handle: "" };
+        }
+      }),
+    };
   });
 
   app.post("/noodler/posts/:postId/interactions/:interactionId/creator-reply", async (req, reply) => {

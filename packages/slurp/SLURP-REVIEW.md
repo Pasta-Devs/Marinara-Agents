@@ -17,6 +17,18 @@
 | Typecheck, Prettier, ESLint                                     | Executed                     |
 | Browser e2e (`tests/package-slurp.e2e.ts`)                      | See "Remaining failures"     |
 
+## Round 4 - commission delivery image generation
+
+| Area                                 | Result                                                                               |
+| ------------------------------------ | ------------------------------------------------------------------------------------ |
+| Generate image from commission brief | Implemented in `slurp-commission-image.operation.ts` and wired to the delivery route |
+| Generated media access               | Restricted to the thread viewer or Creator; locked PPV media returns 402             |
+| Media cleanup                        | Staged media is compensated when generation or delivery fails                        |
+| Client control                       | Creator delivery form has an explicit image-generation checkbox                      |
+| Regression proof                     | `tests/slurp-review-fixes.regression.ts` checks route, hook, and UI wiring           |
+
+The previous delivery flow accepted only text or a manually entered path. The new `generateImage` option sends the commission brief through the existing Slurp image pipeline. The image is promoted only after the delivery message exists. The generated image is then stored on that message and served through an access-checked route.
+
 ## Confirmed bugs and fixes
 
 | #   | Severity   | Bug                                                                                                                               | Root cause                                                                                                                                                          | Fix                                                                                                                   |
@@ -185,6 +197,7 @@ Source payloads changed, so the package was rebuilt and the version bumped by on
 | `npm run test:security`                                                 | pass                                      |
 | `git diff --check`                                                      | clean                                     |
 | All `tests/slurp-*.regression.ts`, `tests/noodle-slurp-*.regression.ts` | pass                                      |
+| Focused commission, messaging, and PPV regressions                      | pass                                      |
 | `npm run test:browser:slurp`                                            | **blocked** — see below                   |
 
 ## Remaining failures
@@ -194,6 +207,34 @@ Source payloads changed, so the package was rebuilt and the version bumped by on
 | `npm run test:browser:slurp` cannot launch a browser                                               | Playwright's bundled chromium is missing `libnspr4` and other system libraries, and `playwright install-deps` needs root. The Engine side is fine: a 2.4.5 worktree at `/home/dev/engine-slurp-review` installs and runs the package. Tested through a real browser against that instance instead. | No — machine setup.                              |
 | `tests/noodle-all-invited-reliability`, `noodle-conversation-schedule`, `noodle-generated-refresh` | `Cannot find module '@marinara-engine/shared'` — these Noodle tests need an Engine checkout on the module path.                                                                                                                                                                                    | No — pre-existing, Noodle package, out of scope. |
 | `tests/noodle-public-only`, `noodler-content-formats`, `noodler-fictional-prices`                  | Stale source-text assertions against the Noodle package.                                                                                                                                                                                                                                           | No — pre-existing, Noodle package, out of scope. |
+
+## Round 5 - commission image control
+
+The server already supported generated commission media, but the client had no way to request it. Added a labeled checkbox to the Creator delivery form. The hook now sends `generateImage`, and the route generates from the stored brief before it writes the delivery message. Manual image paths remain supported. The checkbox is disabled when a manual path is present.
+
+Focused checks passed:
+
+- `npx tsx tests/slurp-review-fixes.regression.ts`
+- `npx tsx tests/slurp-messaging-surface.regression.ts`
+- `npx tsx tests/slurp-ppv-paywall.regression.ts`
+- All `tests/slurp-*.regression.ts` and `tests/noodle-slurp-*.regression.ts`
+- `npm run check`
+- `npm run typecheck:packages`
+- Catalog, locale, release-note, and diff checks
+
+The package was rebuilt. Generated package and catalog files changed as required by repository policy.
+
+## Round 6 - Stories
+
+| Change            | Result                                                            |
+| ----------------- | ----------------------------------------------------------------- |
+| Story lifetime    | Client Story shelf window is now 72 hours                         |
+| Shelf order       | Creator groups sort by their newest active Story, newest first    |
+| Sequence playback | Stories from one Creator remain consecutive in the viewer         |
+| Viewer recording  | One view per viewer and Story is stored through a dedicated route |
+| Viewer list       | Owner-only endpoint returns count and viewer snapshots            |
+
+The Story viewer records a view when a Story opens. The write is best effort and does not block playback. Story-view rows are excluded from normal interaction counts.
 
 ## Confirmed but not fixed
 

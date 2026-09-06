@@ -300,6 +300,7 @@ assert.match(
 assert.match(messageRoutes, /commissions\/:commissionId\/decline/u);
 assert.match(messageRoutes, /if \(!isCreator && !isViewer\) return reply\.code\(403\)/u);
 const messagesView2 = read(join(client, "components/slurp/SlurpMessages.tsx"));
+const useSlurpSource = read(join(client, "hooks/use-slurp.ts"));
 assert.match(messagesView2, /ui\.slurp\.messages\.commissionWithdraw/u);
 assert.match(messagesView2, /ui\.slurp\.messages\.commissionDecline"/u);
 
@@ -317,12 +318,14 @@ assert.match(
 );
 assert.match(messagesStorage, /kind: "commission_delivery",\s*imageUrl,/u);
 assert.match(messagesView2, /const messageImage = useSlurpMediaSrc\(message\.imageUrl\)/u);
+assert.match(useSlurpSource, /generateImage\?: boolean/u);
+assert.match(messagesView2, /ui\.slurp\.messages\.generateCommissionImage/u);
+assert.match(messagesView2, /generateImage,/u);
 
 // ── Creator message policy and prices have a UI ──────────
 
 // Every one of these endpoints worked and was ownership-gated, and nothing called them: each
 // Creator was stuck on the shipped defaults and the paid DM policy could never be chosen.
-const useSlurpSource = read(join(client, "hooks/use-slurp.ts"));
 assert.match(useSlurpSource, /export function useSlurpCreatorMessagingSettings\(/u);
 assert.match(settingsUi, /function CreatorMessagingGroup\(/u);
 assert.match(settingsUi, /personaCreator\(selectedCreator\) && selectedCreator\.sourceAccountId && \(/u);

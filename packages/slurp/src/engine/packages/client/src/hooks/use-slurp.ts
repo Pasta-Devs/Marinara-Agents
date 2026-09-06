@@ -2043,12 +2043,39 @@ export function useDeclineSlurpCommission() {
 export function useDeliverSlurpCommission() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (input: { commissionId: string; personaId: string; content: string; imageUrl?: string | null }) =>
+    mutationFn: (input: {
+      commissionId: string;
+      personaId: string;
+      content: string;
+      imageUrl?: string | null;
+      generateImage?: boolean;
+    }) =>
       api.post<{ commission: SlurpCommission }>(
         `/slurp/messages/commissions/${encodeURIComponent(input.commissionId)}/deliver`,
         input,
       ),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: noodleKeys.noodlerRoot() }),
+  });
+}
+
+export function useRecordSlurpStoryView() {
+  return useMutation({
+    mutationFn: (input: { storyId: string; personaId: string }) =>
+      api.post<{ viewed: boolean; duplicate: boolean }>(
+        `/slurp/noodler/stories/${encodeURIComponent(input.storyId)}/view`,
+        { personaId: input.personaId },
+      ),
+  });
+}
+
+export function useSlurpStoryViews(storyId: string | null, personaId: string | null, enabled = true) {
+  return useQuery({
+    queryKey: [...noodleKeys.noodlerRoot(), "story-views", storyId ?? "none"],
+    queryFn: () =>
+      api.get<{ count: number; viewers: Array<{ id: string; displayName: string; handle: string }> }>(
+        `/slurp/noodler/stories/${encodeURIComponent(storyId!)}/views?personaId=${encodeURIComponent(personaId!)}`,
+      ),
+    enabled: enabled && Boolean(storyId && personaId),
   });
 }
 

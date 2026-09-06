@@ -752,6 +752,23 @@ export function createSlurpMessagesStorage(db: DB) {
      * ship. Only an unpaid commission may be ended — once it is accepted the coins have moved, so
      * ending it there would need a refund path rather than a state change.
      */
+    /**
+     * Attach generated media to a message after it exists.
+     *
+     * The serving URL contains the message id, and `appendMessage` mints that id, so the image can
+     * only be bound once the row is written.
+     */
+    async setMessageMedia(messageId: string, imageUrl: string, mediaPath: string): Promise<void> {
+      const rows = await db.select().from(slurpMessages).where(eq(slurpMessages.id, messageId));
+      const row = rows[0];
+      if (!row) return;
+      const metadata = { ...(json(row.metadata as string) ?? {}), noodlerMediaPath: mediaPath };
+      await db
+        .update(slurpMessages)
+        .set({ imageUrl, metadata: JSON.stringify(metadata) })
+        .where(eq(slurpMessages.id, messageId));
+    },
+
     async declineCommission(id: string, by: "creator" | "viewer"): Promise<SlurpCommission | null> {
       const commission = await storage.getCommission(id);
       if (!commission || (commission.state !== "brief" && commission.state !== "quoted")) return commission;

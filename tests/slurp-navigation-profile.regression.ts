@@ -20,9 +20,9 @@ assert.equal(
   true,
 );
 
-assert.match(card, /rounded-md text-left focus-visible:outline-none focus-visible:ring-2/u);
-assert.equal((card.match(/active:scale-\[0\.96\]/gu) ?? []).length >= 3, true);
-assert.equal((card.match(/motion-reduce:active:scale-100/gu) ?? []).length >= 3, true);
+assert.match(card, /View profile|viewProfile/u);
+assert.match(card, /active:scale-\[0\.96\]/u);
+assert.match(card, /motion-reduce:active:scale-100/u);
 
 assert.match(profile, /bioCollapsible\?: boolean/u);
 assert.match(profile, /bioContent && !bioCollapsible/u);

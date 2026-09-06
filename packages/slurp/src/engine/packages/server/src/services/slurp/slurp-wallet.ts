@@ -125,7 +125,9 @@ const LEDGER_LIMIT = 60;
  * most of the world, and never at a time the player chose.
  */
 export function slurpDayKey(at: Date, startHour: number = SLURP_DEFAULT_DAY_START_HOUR): string {
-  const hour = Number.isFinite(startHour) ? Math.min(23, Math.max(0, Math.trunc(startHour))) : SLURP_DEFAULT_DAY_START_HOUR;
+  const hour = Number.isFinite(startHour)
+    ? Math.min(23, Math.max(0, Math.trunc(startHour)))
+    : SLURP_DEFAULT_DAY_START_HOUR;
   const shifted = new Date(at.getTime());
   shifted.setHours(shifted.getHours() - hour);
   const year = shifted.getFullYear();

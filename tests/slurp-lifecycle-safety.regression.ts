@@ -134,8 +134,45 @@ assert.match(
   "the Home masthead must carry the wallet balance",
 );
 assert.match(home, /slurp-rail-discover-heading/u, "the desktop discovery rail must name the creators it contains");
+assert.match(home, /ui\.slurp\.discover\.topCreators/u, "Discover must show a top Creator leaderboard in its rail");
+assert.match(
+  home,
+  /useState<"likes" \| "subscribers">\("likes"\)/u,
+  "Discover ranking must expose the two requested modes",
+);
+assert.match(
+  home,
+  /aria-pressed=\{discoverRank === value\}/u,
+  "Discover ranking toggle must expose its selected state",
+);
+assert.match(
+  home,
+  /connectionCountsQuery\.data\?\.\[creator\.profile\.id\]\?\.fans/u,
+  "Subscriber ranking must use real Creator fan counts",
+);
+assert.match(
+  home,
+  /ownsSelectedProfile \? \(/u,
+  "Owned profiles must receive Creator tools instead of related creators",
+);
+assert.match(home, /ui\.slurp\.profile\.similarCreators/u, "Other profiles may show related creators in the rail");
+assert.doesNotMatch(
+  home,
+  /navigation\.view === "wallet"[\s\S]{0,180}<NoodleShell[^>]*rightRail=/u,
+  "Wallet must not duplicate itself in a right rail",
+);
+assert.doesNotMatch(
+  home,
+  /navigation\.mode === "creator-settings"[\s\S]{0,700}rightRail=/u,
+  "Settings must not add a duplicate summary rail",
+);
+assert.match(
+  home,
+  /inboxThreadContext \? \([\s\S]*?slurp-conversation-rail-heading/u,
+  "Inbox rail must appear only for an open conversation",
+);
 assert.doesNotMatch(home, /ui\.slurp\.home\.tonight/u, "the rail must not carry a heading with no content under it");
-assert.match(home, /SLURP_MOMENT_WINDOW_MS = 24 \* 60 \* 60 \* 1000/u);
+assert.match(home, /SLURP_MOMENT_WINDOW_MS = 72 \* 60 \* 60 \* 1000/u);
 assert.match(home, /data-component="SlurpHome\.Moments"/u, "Home must expose the real 24-hour Moments shelf");
 assert.match(home, /ui\.slurp\.moments\.empty/u, "Home must keep Stories discoverable when the shelf is empty");
 assert.doesNotMatch(home, /\{moments\.length > 0 && \(/u, "the Stories shelf must not disappear when it is empty");

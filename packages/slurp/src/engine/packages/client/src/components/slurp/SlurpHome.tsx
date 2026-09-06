@@ -23,7 +23,6 @@ import {
   Lock,
   MessageCircle,
   Pencil,
-  Play,
   Plus,
   RefreshCw,
   RotateCcw,
@@ -113,6 +112,8 @@ import {
   useUpdateNoodlerFanActivity,
   useUpdateNoodlerStageProfile,
   useSlurpSettings,
+  useRecordSlurpStoryView,
+  useSlurpStoryViews,
   useUpdateSlurpSettings,
   useUploadNoodlerAvatar,
   useUploadNoodlerBanner,
@@ -162,7 +163,7 @@ import {
   NOODLE_PINK,
 } from "./SlurpShell";
 import { SlurpProfileSurface } from "./SlurpProfileSurface";
-import { SlurpMessagesView } from "./SlurpMessages";
+import { SlurpMessagesView, type SlurpMessageThreadContext } from "./SlurpMessages";
 import { SlurpSettings, SlurpSettingsSidebar } from "./SlurpSettings";
 import { NoodleImageComposer } from "./SlurpImageComposer";
 import { NoodlePollComposer } from "./SlurpPollComposer";
@@ -184,7 +185,9 @@ interface SlurpHomeProps {
 const NOODLER_FEED_WINDOW_SIZE = 20;
 // Starting balance until the wallet earns or spends coins through future transactions.
 const SLURP_PLACEHOLDER_BALANCE = 1111;
-const SLURP_MOMENT_WINDOW_MS = 24 * 60 * 60 * 1000;
+// Stories stay in the shelf for three days. The server still owns post visibility; this is the
+// presentation window for the in-memory viewer projection.
+const SLURP_MOMENT_WINDOW_MS = 72 * 60 * 60 * 1000;
 const STAGE_PERSONALITY_MAX_LENGTH = 1000;
 
 const AUDIENCE_STANCE_PRESETS = [
@@ -567,6 +570,8 @@ export function SlurpHome({ navigation, onNavigate }: SlurpHomeProps) {
     setMobileDrawerOpen(false);
   };
   const [feedSearch, setFeedSearch] = useState("");
+  const [discoverRank, setDiscoverRank] = useState<"likes" | "subscribers">("likes");
+  const [inboxThreadContext, setInboxThreadContext] = useState<SlurpMessageThreadContext | null>(null);
   const discoveryInputRef = useRef<HTMLInputElement | null>(null);
   const [feedTab, setFeedTab] = useState<"following" | "all">("following");
   const [onboardingMode, setOnboardingMode] = useState<"first-run" | "add-creators" | null>(null);
@@ -1538,70 +1543,9 @@ export function SlurpHome({ navigation, onNavigate }: SlurpHomeProps) {
   } as const;
 
   if (navigation.mode === "creator-settings") {
-    const settingsRail = (
-      <aside
-        className="relative hidden w-[20rem] shrink-0 overflow-hidden px-4 py-5 @min-[1280px]:block"
-        aria-labelledby="slurp-settings-rail-heading"
-      >
-        <div className="sticky top-4 space-y-3">
-          <section className="rounded-xl bg-[var(--slurp-surface)] p-4 shadow-[var(--slurp-shadow-floating)] ring-1 ring-inset ring-[var(--noodle-divider)]">
-            <h2 id="slurp-settings-rail-heading" className="text-sm font-black">
-              {localizeUi("ui.slurp.settings.sectionSummary", { defaultValue: "Section summary" })}
-            </h2>
-            <p className="mt-1 text-xs leading-5 text-[var(--muted-foreground)]">
-              {localizeUi(`ui.slurp.settings.rail.${navigation.section ?? "overview"}`, {
-                defaultValue: "Current Slurp settings and status.",
-              })}
-            </p>
-            <dl className="mt-4 space-y-3 text-xs">
-              <div className="flex items-center justify-between gap-3">
-                <dt className="text-[var(--muted-foreground)]">
-                  {localizeUi("ui.slurp.settings.rail.publishing", { defaultValue: "Publishing" })}
-                </dt>
-                <dd className="font-black">
-                  {slurpSettingsQuery.data?.autoPostingScheduleEnabled
-                    ? localizeUi("ui.slurp.settings.rail.active", { defaultValue: "Active" })
-                    : localizeUi("ui.slurp.settings.rail.paused", { defaultValue: "Paused" })}
-                </dd>
-              </div>
-              <div className="flex items-center justify-between gap-3">
-                <dt className="text-[var(--muted-foreground)]">
-                  {localizeUi("ui.slurp.settings.rail.images", { defaultValue: "Images" })}
-                </dt>
-                <dd className="font-black">
-                  {slurpSettingsQuery.data?.enableImagePrompts
-                    ? localizeUi("ui.slurp.settings.rail.available", { defaultValue: "Available" })
-                    : localizeUi("ui.slurp.settings.rail.paused", { defaultValue: "Paused" })}
-                </dd>
-              </div>
-              <div className="flex items-center justify-between gap-3">
-                <dt className="text-[var(--muted-foreground)]">
-                  {localizeUi("ui.slurp.settings.rail.fans", { defaultValue: "Fan activity" })}
-                </dt>
-                <dd className="font-black">
-                  {slurpSettingsQuery.data?.fanActivityEnabled
-                    ? localizeUi("ui.slurp.settings.rail.active", { defaultValue: "Active" })
-                    : localizeUi("ui.slurp.settings.rail.paused", { defaultValue: "Paused" })}
-                </dd>
-              </div>
-            </dl>
-          </section>
-          <button
-            type="button"
-            onClick={() => onNavigate({ ...navigation, section: "general" })}
-            className="flex min-h-11 w-full items-center justify-center gap-2 rounded-xl bg-[var(--noodle-accent)] px-4 text-sm font-black text-zinc-950 transition-[opacity,transform] hover:opacity-90 active:scale-[0.96] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--noodle-accent)] disabled:opacity-50 motion-reduce:transition-none motion-reduce:active:scale-100"
-          >
-            <Play size={15} fill="currentColor" aria-hidden="true" />
-            {localizeUi("ui.slurp.settings.rail.openPublishing", { defaultValue: "Open publishing" })}
-          </button>
-        </div>
-      </aside>
-    );
     return (
       <NoodleShell
         {...shellProps}
-        contextualRail="populated"
-        rightRail={settingsRail}
         desktopSidebar={
           <SlurpSettingsSidebar navigation={navigation} onNavigate={onNavigate} onExit={exitToCreatorHub} />
         }
@@ -1886,63 +1830,88 @@ export function SlurpHome({ navigation, onNavigate }: SlurpHomeProps) {
   }
 
   if (selectedProfile) {
-    const profileRail = (
+    const ownsSelectedProfile = selectedProfile.sourceAccountId === viewerPersonaId;
+    const similarCreators = (viewerQuery.data?.creators ?? [])
+      .filter(
+        (creator) => creator.profile.id !== selectedProfile.id && creator.profile.sourceAccountId !== viewerPersonaId,
+      )
+      .slice(0, 2);
+    const profileRail = ownsSelectedProfile ? (
       <aside
         className="relative hidden w-[20rem] shrink-0 overflow-hidden px-4 py-5 @min-[1280px]:block"
-        aria-labelledby="slurp-profile-rail-heading"
+        aria-labelledby="slurp-creator-tools-heading"
       >
         <div className="sticky top-4 space-y-3">
-          <section className="rounded-xl bg-[var(--slurp-surface)] p-4 shadow-[var(--slurp-shadow-floating)] ring-1 ring-inset ring-[var(--noodle-divider)]">
-            <div className="flex items-center gap-3">
-              <Avatar account={selectedProfile} size="lg" />
-              <div className="min-w-0">
-                <h2 id="slurp-profile-rail-heading" className="truncate text-sm font-black">
-                  {selectedProfile.displayName}
-                </h2>
-                <p className="truncate text-xs text-[var(--muted-foreground)]">@{selectedProfile.handle}</p>
-              </div>
-            </div>
-            <div className="mt-4 grid grid-cols-2 gap-2 text-center text-xs">
-              <div className="rounded-lg bg-[var(--accent)] p-2">
-                <strong className="block text-base tabular-nums">{selectedProfile.posts?.length ?? 0}</strong>
-                <span className="text-[var(--muted-foreground)]">
-                  {localizeUi("ui.slurp.profile.posts", { defaultValue: "Posts" })}
-                </span>
-              </div>
-              <div className="rounded-lg bg-[var(--accent)] p-2">
-                <strong className="block text-base tabular-nums">{selectedViewerCreator?.subscriberCount ?? 0}</strong>
-                <span className="text-[var(--muted-foreground)]">
-                  {localizeUi("ui.slurp.profile.subscribers", { defaultValue: "Subscribers" })}
-                </span>
-              </div>
-            </div>
-          </section>
-          {selectedViewerCreator && selectedProfile.sourceAccountId !== viewerPersonaId && (
-            <section className="space-y-2 rounded-xl bg-[var(--slurp-surface)] p-4 ring-1 ring-inset ring-[var(--noodle-divider)]">
-              <p className="text-xs font-bold text-[var(--muted-foreground)]">
-                {localizeUi("ui.slurp.profile.supportCreator", { defaultValue: "Support this creator" })}
-              </p>
-              <p className="text-xs leading-5 text-[var(--muted-foreground)]">
-                {localizeUi("ui.slurp.profile.weeklyAccess", {
-                  defaultValue: "Get weekly access to locked posts and creator activity.",
-                })}
-              </p>
+          <h2
+            id="slurp-creator-tools-heading"
+            className="px-1 text-xs font-black uppercase tracking-[0.14em] text-[var(--muted-foreground)]"
+          >
+            {localizeUi("ui.slurp.profile.creatorTools", { defaultValue: "Creator tools" })}
+          </h2>
+          <section className="overflow-hidden rounded-2xl bg-[var(--slurp-surface)] shadow-[var(--slurp-shadow-floating)] ring-1 ring-inset ring-[var(--noodle-divider)]">
+            {[
+              {
+                label: localizeUi("ui.slurp.profile.editProfile", { defaultValue: "Edit profile" }),
+                icon: Pencil,
+                action: () => beginEdit(selectedProfile),
+              },
+              {
+                label: localizeUi("ui.slurp.profile.createPost", { defaultValue: "Create post" }),
+                icon: Plus,
+                action: openPostComposer,
+              },
+              {
+                label: localizeUi("ui.slurp.profile.addStory", { defaultValue: "Add story" }),
+                icon: Sparkles,
+                action: openStoryComposer,
+              },
+              {
+                label: localizeUi("ui.slurp.profile.openStudio", { defaultValue: "Open studio" }),
+                icon: LayoutGrid,
+                action: () => void goToStudio(),
+              },
+            ].map(({ label, icon: Icon, action }, index) => (
               <button
+                key={label}
                 type="button"
-                onClick={() => toggleCreatorSubscription(selectedProfile.id, selectedViewerCreator.subscribed)}
-                className="min-h-11 w-full rounded-lg bg-[var(--noodle-accent)] px-3 text-sm font-black text-zinc-950 hover:opacity-90"
+                onClick={action}
+                className={cn(
+                  "flex min-h-12 w-full items-center gap-3 px-4 text-left text-sm font-bold transition-colors hover:bg-[var(--accent)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--noodle-accent)]",
+                  index > 0 && "border-t border-[var(--noodle-divider)]",
+                )}
               >
-                {selectedViewerCreator.subscribed
-                  ? localizeUi("ui.slurp.profile.subscribed")
-                  : localizeUi("ui.slurp.profile.subscribe")}
+                <Icon size={17} className="text-[var(--noodle-accent)]" aria-hidden="true" />
+                <span className="flex-1">{label}</span>
+                <ChevronRight size={15} className="text-[var(--muted-foreground)]" aria-hidden="true" />
               </button>
-            </section>
-          )}
+            ))}
+          </section>
         </div>
       </aside>
-    );
+    ) : similarCreators.length > 0 ? (
+      <aside
+        className="relative hidden w-[20rem] shrink-0 overflow-hidden px-4 py-5 @min-[1280px]:block"
+        aria-labelledby="slurp-similar-creators-heading"
+      >
+        <div className="sticky top-4 space-y-3">
+          <h2
+            id="slurp-similar-creators-heading"
+            className="px-1 text-xs font-black uppercase tracking-[0.14em] text-[var(--muted-foreground)]"
+          >
+            {localizeUi("ui.slurp.profile.similarCreators", { defaultValue: "More creators" })}
+          </h2>
+          {similarCreators.map((creator) => (
+            <SlurpCreatorProfileCard
+              key={creator.profile.id}
+              creator={creator}
+              onOpenProfile={(accountId) => onNavigate({ mode: "creator", view: "profile", accountId })}
+            />
+          ))}
+        </div>
+      </aside>
+    ) : undefined;
     return (
-      <NoodleShell {...shellProps} contextualRail="populated" rightRail={profileRail}>
+      <NoodleShell {...shellProps} contextualRail={profileRail ? "populated" : "blank"} rightRail={profileRail}>
         <div className="h-full min-h-0 overflow-y-auto">
           <StageProfileView
             key={`${selectedProfile.id}:${shellPersonaAccount?.id ?? "no-viewer"}`}
@@ -2055,40 +2024,112 @@ export function SlurpHome({ navigation, onNavigate }: SlurpHomeProps) {
             </button>
           )}
         </label>
-        <div className="hidden pt-1 @min-[1024px]:block">
-          <SubscriptionSections
-            creators={(viewerQuery.data?.creators ?? []).filter(
-              (creator) => creator.profile.id !== mainAuthorProfile?.id && !creator.subscribed,
-            )}
-            onToggleSubscription={toggleCreatorSubscription}
-            togglePending={toggleSubscription.isPending}
-            onOpenProfile={(accountId) => onNavigate({ mode: "creator", view: "profile", accountId })}
-            embedded
-          />
-        </div>
+        {!showDiscovery && (
+          <div className="hidden pt-1 @min-[1024px]:block">
+            <SubscriptionSections
+              creators={(viewerQuery.data?.creators ?? []).filter(
+                (creator) => creator.profile.id !== mainAuthorProfile?.id && !creator.subscribed,
+              )}
+              onOpenProfile={(accountId) => onNavigate({ mode: "creator", view: "profile", accountId })}
+              embedded
+            />
+          </div>
+        )}
         {showDiscovery && (
-          <section className="rounded-xl bg-[var(--slurp-surface)] p-4 ring-1 ring-inset ring-[var(--noodle-divider)]">
-            <h2 className="text-sm font-black">
-              {localizeUi("ui.slurp.discover.trending", { defaultValue: "Trending now" })}
-            </h2>
-            <p className="mt-1 text-xs leading-5 text-[var(--muted-foreground)]">
-              {localizeUi("ui.slurp.discover.trendingDetail", {
-                defaultValue: "Creators and posts with the most recent activity.",
-              })}
-            </p>
-            <ol className="mt-3 space-y-2">
+          <section className="overflow-hidden rounded-2xl bg-[var(--slurp-surface)] shadow-[var(--slurp-shadow-floating)] ring-1 ring-inset ring-[var(--noodle-divider)]">
+            <div className="flex items-center justify-between gap-3 p-4 pb-3">
+              <div>
+                <h2 className="text-sm font-black">
+                  {localizeUi("ui.slurp.discover.topCreators", { defaultValue: "Top creators" })}
+                </h2>
+                <p className="mt-0.5 text-xs text-[var(--muted-foreground)]">
+                  {localizeUi("ui.slurp.discover.topCreatorsDetail", { defaultValue: "Who everyone is loving" })}
+                </p>
+              </div>
+              <div
+                className="flex rounded-full bg-[var(--accent)] p-1"
+                role="group"
+                aria-label={localizeUi("ui.slurp.discover.rankBy", { defaultValue: "Rank creators by" })}
+              >
+                {(
+                  [
+                    ["likes", Heart, localizeUi("ui.slurp.discover.likes", { defaultValue: "Likes" })],
+                    [
+                      "subscribers",
+                      Crown,
+                      localizeUi("ui.slurp.discover.subscribers", { defaultValue: "Subscribers" }),
+                    ],
+                  ] as const
+                ).map(([value, Icon, label]) => (
+                  <button
+                    key={value}
+                    type="button"
+                    onClick={() => setDiscoverRank(value)}
+                    aria-pressed={discoverRank === value}
+                    aria-label={label}
+                    title={label}
+                    className={cn(
+                      "flex h-8 w-8 items-center justify-center rounded-full text-[var(--muted-foreground)] transition-[background-color,color,transform] active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--noodle-accent)] motion-reduce:transition-none",
+                      discoverRank === value && "bg-[var(--noodle-accent)] text-zinc-950 shadow-sm",
+                    )}
+                  >
+                    <Icon size={14} fill={discoverRank === value ? "currentColor" : "none"} aria-hidden="true" />
+                  </button>
+                ))}
+              </div>
+            </div>
+            <ol className="border-t border-[var(--noodle-divider)]">
               {(viewerQuery.data?.creators ?? [])
                 .slice()
-                .sort((a, b) => b.posts.length - a.posts.length)
+                .sort((a, b) => {
+                  const score = (creator: typeof a) =>
+                    discoverRank === "subscribers"
+                      ? (connectionCountsQuery.data?.[creator.profile.id]?.fans ?? 0)
+                      : creator.posts.reduce((total, post) => total + (post.likeCount ?? 0), 0);
+                  return score(b) - score(a);
+                })
                 .slice(0, 5)
-                .map((creator, index) => (
-                  <li key={creator.profile.id} className="flex items-center gap-2 text-xs">
-                    <span className="w-4 shrink-0 font-black text-[var(--noodle-accent)]">{index + 1}</span>
-                    <Avatar account={creator.profile} size="xs" />
-                    <span className="min-w-0 flex-1 truncate font-semibold">{creator.profile.displayName}</span>
-                    <span className="shrink-0 text-[var(--muted-foreground)]">{creator.posts.length}</span>
-                  </li>
-                ))}
+                .map((creator, index) => {
+                  const score =
+                    discoverRank === "subscribers"
+                      ? (connectionCountsQuery.data?.[creator.profile.id]?.fans ?? 0)
+                      : creator.posts.reduce((total, post) => total + (post.likeCount ?? 0), 0);
+                  return (
+                    <li key={creator.profile.id}>
+                      <button
+                        type="button"
+                        onClick={() => onNavigate({ mode: "creator", view: "profile", accountId: creator.profile.id })}
+                        className="group flex min-h-14 w-full items-center gap-3 border-b border-[var(--noodle-divider)] px-4 text-left transition-colors last:border-b-0 hover:bg-[var(--accent)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--noodle-accent)]"
+                      >
+                        <span
+                          className={cn(
+                            "flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-[0.68rem] font-black tabular-nums",
+                            index === 0
+                              ? "bg-[var(--noodle-accent)] text-zinc-950"
+                              : "bg-[var(--accent)] text-[var(--muted-foreground)]",
+                          )}
+                        >
+                          {index + 1}
+                        </span>
+                        <Avatar account={creator.profile} size="xs" />
+                        <span className="min-w-0 flex-1">
+                          <span className="block truncate text-xs font-bold">{creator.profile.displayName}</span>
+                          <span className="block truncate text-[0.68rem] text-[var(--muted-foreground)]">
+                            @{creator.profile.handle}
+                          </span>
+                        </span>
+                        <span className="flex shrink-0 items-center gap-1 text-xs font-black tabular-nums text-[var(--noodle-accent)]">
+                          {discoverRank === "subscribers" ? (
+                            <Crown size={12} aria-hidden="true" />
+                          ) : (
+                            <Heart size={12} fill="currentColor" aria-hidden="true" />
+                          )}
+                          {score.toLocaleString()}
+                        </span>
+                      </button>
+                    </li>
+                  );
+                })}
             </ol>
           </section>
         )}
@@ -2114,9 +2155,50 @@ export function SlurpHome({ navigation, onNavigate }: SlurpHomeProps) {
     );
   }
 
+  const inboxRail = inboxThreadContext ? (
+    <aside
+      className="relative hidden w-[20rem] shrink-0 overflow-hidden px-4 py-5 @min-[1280px]:block"
+      aria-labelledby="slurp-conversation-rail-heading"
+    >
+      <div className="sticky top-4">
+        <section className="rounded-2xl bg-[var(--slurp-surface)] p-4 text-center shadow-[var(--slurp-shadow-floating)] ring-1 ring-inset ring-[var(--noodle-divider)]">
+          <div className="mx-auto w-fit rounded-full bg-[var(--slurp-canvas)] p-1 ring-1 ring-white/10">
+            <ProfileInitial
+              profile={{
+                id: inboxThreadContext.creatorAccountId,
+                displayName: inboxThreadContext.creatorDisplayName,
+                handle: inboxThreadContext.creatorHandle,
+                avatarUrl: inboxThreadContext.creatorAvatarUrl,
+              }}
+            />
+          </div>
+          <h2 id="slurp-conversation-rail-heading" className="mt-3 truncate text-sm font-black">
+            {inboxThreadContext.creatorDisplayName}
+          </h2>
+          <p className="truncate text-xs text-[var(--muted-foreground)]">@{inboxThreadContext.creatorHandle}</p>
+          <span className="mt-3 inline-flex items-center gap-1.5 rounded-full bg-[var(--accent)] px-2.5 py-1 text-[0.68rem] font-bold text-[var(--muted-foreground)]">
+            <Heart size={11} fill={inboxThreadContext.subscribed ? "currentColor" : "none"} aria-hidden="true" />
+            {inboxThreadContext.subscribed
+              ? localizeUi("ui.slurp.inbox.subscribed", { defaultValue: "Subscribed" })
+              : localizeUi("ui.slurp.inbox.conversation", { defaultValue: "Conversation" })}
+          </span>
+          <button
+            type="button"
+            onClick={() =>
+              onNavigate({ mode: "creator", view: "profile", accountId: inboxThreadContext.creatorAccountId })
+            }
+            className="mt-4 min-h-10 w-full rounded-full border border-[color-mix(in_srgb,var(--noodle-accent)_54%,var(--noodle-divider))] px-4 text-xs font-bold text-[var(--noodle-accent-foreground)] transition-colors hover:bg-[var(--noodle-accent)]/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--noodle-accent)]"
+          >
+            {localizeUi("ui.slurp.settings.creators.viewProfile")}
+          </button>
+        </section>
+      </div>
+    </aside>
+  ) : undefined;
+
   if (navigation.mode === "creator" && navigation.view === "notifications") {
     return (
-      <NoodleShell {...shellProps}>
+      <NoodleShell {...shellProps} contextualRail={inboxRail ? "populated" : "blank"} rightRail={inboxRail}>
         <SlurpInboxView
           personaId={viewerPersonaId}
           ownedCreatorAccountIds={myCreatorProfile ? [myCreatorProfile.id] : []}
@@ -2124,6 +2206,7 @@ export function SlurpHome({ navigation, onNavigate }: SlurpHomeProps) {
           initialTab="activity"
           onBack={exitToCreatorHub}
           onOpenProfile={(accountId) => onNavigate({ mode: "creator", view: "profile", accountId })}
+          onThreadContextChange={setInboxThreadContext}
         />
       </NoodleShell>
     );
@@ -2143,7 +2226,7 @@ export function SlurpHome({ navigation, onNavigate }: SlurpHomeProps) {
 
   if (navigation.mode === "creator" && navigation.view === "messages") {
     return (
-      <NoodleShell {...shellProps}>
+      <NoodleShell {...shellProps} contextualRail={inboxRail ? "populated" : "blank"} rightRail={inboxRail}>
         <SlurpInboxView
           personaId={viewerPersonaId}
           ownedCreatorAccountIds={myCreatorProfile ? [myCreatorProfile.id] : []}
@@ -2151,6 +2234,7 @@ export function SlurpHome({ navigation, onNavigate }: SlurpHomeProps) {
           initialTab="chats"
           onBack={exitToCreatorHub}
           onOpenProfile={(accountId) => onNavigate({ mode: "creator", view: "profile", accountId })}
+          onThreadContextChange={setInboxThreadContext}
         />
       </NoodleShell>
     );
@@ -2345,7 +2429,6 @@ export function SlurpHome({ navigation, onNavigate }: SlurpHomeProps) {
         discoveryInputRef={discoveryInputRef}
         tab={feedTab}
         onTabChange={setFeedTab}
-        onToggleFollow={toggleCreatorFollow}
         authorProfile={accountsQuery.isSuccess ? mainAuthorProfile : null}
         onAddStory={openStoryComposer}
         onOpenAuthorProfile={
@@ -4533,7 +4616,6 @@ function ViewerHub({
   discoveryInputRef,
   tab,
   onTabChange,
-  onToggleFollow,
   authorProfile,
   onAddStory,
   onOpenAuthorProfile,
@@ -4575,7 +4657,6 @@ function ViewerHub({
   discoveryInputRef: React.RefObject<HTMLInputElement | null>;
   tab: "following" | "all";
   onTabChange: (tab: "following" | "all") => void;
-  onToggleFollow: (creatorAccountId: string, followed: boolean) => void;
   authorProfile: NoodlerManagedStageProfile | null;
   onAddStory: () => void;
   /** Open the persona's own Creator profile from the empty feed. */
@@ -4647,14 +4728,23 @@ function ViewerHub({
   const searchable = (value: unknown) => (typeof value === "string" ? value.toLowerCase() : "");
   const followedCreatorIds = new Set(scope?.viewer.settings.social.followingAccountIds ?? []);
   const creators = scope?.creators ?? [];
+  // Keep a Creator's active Stories together. This makes one shelf tile a sequence rather than
+  // making the next tap jump to an unrelated Creator.
   const moments = creators
     .filter((creator) => tab === "all" || creator.followed)
-    .flatMap((creator) =>
-      creator.posts
+    .map((creator) => ({
+      creator,
+      posts: creator.posts
         .filter((post) => isSlurpStory(post) && new Date(post.createdAt).getTime() >= momentCutoff)
-        .map((post) => ({ creator, post })),
+        .sort((left, right) => new Date(left.createdAt).getTime() - new Date(right.createdAt).getTime()),
+    }))
+    .filter(({ posts }) => posts.length > 0)
+    .sort(
+      (left, right) =>
+        new Date(right.posts[right.posts.length - 1]!.createdAt).getTime() -
+        new Date(left.posts[left.posts.length - 1]!.createdAt).getTime(),
     )
-    .sort((left, right) => new Date(right.post.createdAt).getTime() - new Date(left.post.createdAt).getTime());
+    .flatMap(({ creator, posts }) => posts.map((post) => ({ creator, post })));
   const activeMomentIndex = activeMomentId ? moments.findIndex((moment) => moment.post.id === activeMomentId) : -1;
   const activeMoment = activeMomentIndex >= 0 ? moments[activeMomentIndex] : null;
   const feed = creators
@@ -4832,11 +4922,7 @@ function ViewerHub({
                 <SlurpCreatorProfileCard
                   key={creator.profile.id}
                   creator={creator}
-                  pending={togglePending}
                   onOpenProfile={postCardCtx.openAuthorProfile}
-                  showFollow={false}
-                  showSubscription={false}
-                  showProfileAction
                 />
               ))}
             </div>
@@ -4909,8 +4995,6 @@ function ViewerHub({
           creators={(scope?.creators ?? []).filter(
             (creator) => creator.profile.id !== authorProfile?.id && !creator.subscribed,
           )}
-          onToggleSubscription={onToggleSubscription}
-          togglePending={togglePending}
           onOpenProfile={postCardCtx.openAuthorProfile}
           compact
           collapsed={discoverCollapsed}
@@ -5091,10 +5175,7 @@ function ViewerHub({
                   {tab === "all" && !searchTerm && index === Math.min(2, visibleFeed.length - 1) && (
                     <SlurpInlineSuggestedCreators
                       creators={suggestedCreators}
-                      pending={togglePending}
                       onOpenProfile={postCardCtx.openAuthorProfile}
-                      onToggleFollow={onToggleFollow}
-                      onToggleSubscription={onToggleSubscription}
                     />
                   )}
                 </Fragment>
@@ -5140,6 +5221,8 @@ function ViewerHub({
       {activeMoment && (
         <SlurpMomentViewer
           moment={activeMoment}
+          personaId={scope?.viewer.entityId ?? null}
+          isOwner={activeMoment.creator.profile.id === scope?.viewer.id}
           index={activeMomentIndex}
           total={moments.length}
           unlockPending={unlockPending}
@@ -5164,16 +5247,10 @@ function ViewerHub({
 
 function SlurpInlineSuggestedCreators({
   creators,
-  pending,
   onOpenProfile,
-  onToggleFollow,
-  onToggleSubscription,
 }: {
   creators: SlurpViewerCreator[];
-  pending: boolean;
   onOpenProfile?: (accountId: string) => void;
-  onToggleFollow: (creatorAccountId: string, followed: boolean) => void;
-  onToggleSubscription: (creatorAccountId: string, subscribed: boolean) => void;
 }) {
   const { t: localizeUi } = useUiTranslation();
   if (creators.length === 0) return null;
@@ -5194,10 +5271,7 @@ function SlurpInlineSuggestedCreators({
           <SlurpCreatorProfileCard
             key={creator.profile.id}
             creator={creator}
-            pending={pending}
             onOpenProfile={onOpenProfile}
-            onToggleFollow={onToggleFollow}
-            onToggleSubscription={onToggleSubscription}
             className="w-64 shrink-0 snap-start"
           />
         ))}
@@ -5795,6 +5869,8 @@ function SlurpMomentsShelf({
 
 function SlurpMomentViewer({
   moment,
+  personaId,
+  isOwner,
   index,
   total,
   unlockPending,
@@ -5807,6 +5883,8 @@ function SlurpMomentViewer({
   onOpenProfile,
 }: {
   moment: SlurpMoment;
+  personaId: string | null;
+  isOwner: boolean;
   index: number;
   total: number;
   unlockPending: boolean;
@@ -5820,11 +5898,15 @@ function SlurpMomentViewer({
 }) {
   const { t: localizeUi } = useUiTranslation();
   const mediaSrc = useSlurpMediaSrc(moment.post.imageUrl, { width: 1600 });
+  const recordView = useRecordSlurpStoryView();
+  const storyViews = useSlurpStoryViews(moment.post.id, personaId, isOwner);
   const openProfile = () => {
     onClose();
     onOpenProfile?.(moment.creator.profile.id);
   };
   useEffect(() => {
+    // View recording is best effort. Opening a Story must remain usable when the write is slow.
+    void recordView.mutateAsync({ storyId: moment.post.id, personaId: personaId ?? "" }).catch(() => undefined);
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.target instanceof HTMLInputElement || event.target instanceof HTMLTextAreaElement) return;
       if (event.key === "ArrowLeft" && onPrevious) {
@@ -5837,7 +5919,7 @@ function SlurpMomentViewer({
     };
     document.addEventListener("keydown", handleKeyDown);
     return () => document.removeEventListener("keydown", handleKeyDown);
-  }, [onNext, onPrevious]);
+  }, [moment.post.id, onNext, onPrevious, personaId, recordView]);
 
   return (
     <SlurpMediaDialog
@@ -5934,6 +6016,23 @@ function SlurpMomentViewer({
           {moment.post.title && <h3 className="text-lg font-bold leading-tight">{moment.post.title}</h3>}
           {!moment.post.locked && moment.post.content && (
             <p className="text-sm leading-6 text-[var(--muted-foreground)]">{moment.post.content}</p>
+          )}
+          {isOwner && storyViews.data && (
+            <details className="rounded-lg bg-[var(--accent)] p-3 text-xs ring-1 ring-inset ring-[var(--noodle-divider)]">
+              <summary className="cursor-pointer font-bold">
+                {localizeUi("ui.slurp.moments.views", { count: storyViews.data.count })}
+              </summary>
+              {storyViews.data.viewers.length > 0 && (
+                <ul className="mt-2 space-y-1 text-[var(--muted-foreground)]">
+                  {storyViews.data.viewers.map((viewer) => (
+                    <li key={viewer.id}>
+                      {viewer.displayName}
+                      {viewer.handle ? ` @${viewer.handle}` : ""}
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </details>
           )}
           {linkedPostIdForStory(moment.post) && onOpenProfile && (
             <button
@@ -6632,8 +6731,6 @@ function NoodlerPostComposer({
 // Creator subscribe/unsubscribe suggestions for desktop layouts.
 function SubscriptionSections({
   creators,
-  onToggleSubscription,
-  togglePending,
   onOpenProfile,
   compact = false,
   embedded = false,
@@ -6641,8 +6738,6 @@ function SubscriptionSections({
   onToggleCollapsed,
 }: {
   creators: NonNullable<ReturnType<typeof useNoodlerViewer>["data"]>["creators"];
-  onToggleSubscription: (creatorAccountId: string, subscribed: boolean) => void;
-  togglePending: boolean;
   onOpenProfile?: (accountId: string) => void;
   compact?: boolean;
   embedded?: boolean;
@@ -6685,10 +6780,7 @@ function SubscriptionSections({
               <SlurpCreatorProfileCard
                 key={creator.profile.id}
                 creator={creator}
-                pending={togglePending}
                 onOpenProfile={onOpenProfile}
-                onToggleSubscription={onToggleSubscription}
-                showFollow={false}
                 className="w-64 shrink-0 snap-start"
               />
             ))}
@@ -6717,14 +6809,7 @@ function SubscriptionSections({
       {creators.length > 0 ? (
         <div className="max-h-[36rem] space-y-3 overflow-y-auto p-2 pt-1">
           {creators.map((creator) => (
-            <SlurpCreatorProfileCard
-              key={creator.profile.id}
-              creator={creator}
-              pending={togglePending}
-              onOpenProfile={onOpenProfile}
-              onToggleSubscription={onToggleSubscription}
-              showFollow={false}
-            />
+            <SlurpCreatorProfileCard key={creator.profile.id} creator={creator} onOpenProfile={onOpenProfile} />
           ))}
         </div>
       ) : (
@@ -7269,6 +7354,7 @@ function SlurpInboxView({
   initialTab,
   onBack,
   onOpenProfile,
+  onThreadContextChange,
 }: {
   personaId: string | null;
   ownedCreatorAccountIds: string[];
@@ -7276,6 +7362,7 @@ function SlurpInboxView({
   initialTab: "chats" | "activity";
   onBack: () => void;
   onOpenProfile: (accountId: string) => void;
+  onThreadContextChange: (thread: SlurpMessageThreadContext | null) => void;
 }) {
   const { t: localizeUi } = useUiTranslation();
   const [tab, setTab] = useState<"chats" | "activity">(initialTab);
@@ -7290,6 +7377,10 @@ function SlurpInboxView({
     if (tab !== "activity" || !personaId) return;
     return () => markSeen(personaId);
   }, [tab, personaId, markSeen]);
+
+  useEffect(() => {
+    if (tab === "activity") onThreadContextChange(null);
+  }, [onThreadContextChange, tab]);
 
   return (
     <NoodlerFrame
@@ -7351,6 +7442,7 @@ function SlurpInboxView({
           initialThreadId={activityThreadId}
           ownedCreatorAccountIds={ownedCreatorAccountIds}
           onOpenProfile={onOpenProfile}
+          onThreadContextChange={onThreadContextChange}
         />
       </div>
       <div id="slurp-inbox-activity-panel" role="tabpanel" hidden={tab !== "activity"} className="min-h-0 flex-1">

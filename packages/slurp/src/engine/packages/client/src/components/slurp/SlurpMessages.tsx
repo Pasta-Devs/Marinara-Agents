@@ -44,6 +44,11 @@ import {
 /** Tip amounts offered in a thread. Small enough to be a reflex, large enough to mean something. */
 const TIP_PRESETS = [5, 15, 50] as const;
 
+export type SlurpMessageThreadContext = Pick<
+  SlurpThread,
+  "id" | "creatorAccountId" | "creatorDisplayName" | "creatorHandle" | "creatorAvatarUrl" | "subscribed" | "rapport"
+>;
+
 /**
  * The Slurp inbox and one thread.
  *
@@ -56,6 +61,7 @@ export function SlurpMessagesView({
   composeWithCreatorAccountId = null,
   initialThreadId = null,
   onOpenProfile,
+  onThreadContextChange,
 }: {
   personaId: string | null;
   /** Creator profiles this persona owns, so their request trays can be answered from here. */
@@ -65,6 +71,7 @@ export function SlurpMessagesView({
   /** Set by an Activity event that points at an existing conversation. */
   initialThreadId?: string | null;
   onOpenProfile: (accountId: string) => void;
+  onThreadContextChange?: (thread: SlurpMessageThreadContext | null) => void;
 }) {
   const { t: localizeUi, i18n } = useUiTranslation();
   const [openThreadId, setOpenThreadId] = useState<string | null>(initialThreadId);
@@ -74,6 +81,12 @@ export function SlurpMessagesView({
   const [search, setSearch] = useState("");
   const threadsQuery = useSlurpThreads(personaId);
   const threads = threadsQuery.data?.threads ?? [];
+  const openThread = [...threads, ...(threadsQuery.data?.inbound ?? [])].find((thread) => thread.id === openThreadId);
+
+  useEffect(() => {
+    onThreadContextChange?.(openThread ?? null);
+    return () => onThreadContextChange?.(null);
+  }, [onThreadContextChange, openThread]);
 
   useEffect(() => {
     if (initialThreadId) {
@@ -985,6 +998,7 @@ function CommissionRow({
   // Only an unpaid commission can be called off; after accept the coins have moved.
   const canEnd = commission.state === "brief" || commission.state === "quoted";
   const [deliveryImageUrl, setDeliveryImageUrl] = useState("");
+  const [generateImage, setGenerateImage] = useState(false);
   const [delivery, setDelivery] = useState("");
   const [error, setError] = useState<string | null>(null);
   const busy = quote.isPending || accept.isPending || deliver.isPending;
@@ -1108,6 +1122,18 @@ function CommissionRow({
             })}
             className="h-9 w-full rounded-lg bg-[var(--slurp-canvas,var(--background))] px-3 outline-none ring-1 ring-inset ring-[var(--noodle-divider)] focus:ring-2 focus:ring-[var(--noodle-accent)]"
           />
+          <label className="flex min-h-9 items-center gap-2 text-[var(--muted-foreground)]">
+            <input
+              type="checkbox"
+              checked={generateImage}
+              onChange={(event) => setGenerateImage(event.target.checked)}
+              disabled={busy || Boolean(deliveryImageUrl.trim())}
+              className="size-4 accent-[var(--noodle-accent)]"
+            />
+            {localizeUi("ui.slurp.messages.generateCommissionImage", {
+              defaultValue: "Generate the commissioned image from the brief",
+            })}
+          </label>
           <button
             type="button"
             disabled={busy || !delivery.trim()}
@@ -1119,10 +1145,12 @@ function CommissionRow({
                     personaId,
                     content: delivery.trim(),
                     imageUrl: deliveryImageUrl.trim() || null,
+                    generateImage,
                   })
                   .then(() => {
                     setDelivery("");
                     setDeliveryImageUrl("");
+                    setGenerateImage(false);
                   }),
                 localizeUi("ui.slurp.messages.commissionDeliverFailed", { defaultValue: "Could not deliver that." }),
               )

@@ -12,6 +12,10 @@ import { createSlurpPopulationStorage } from "../services/storage/slurp-populati
 import { replyToSlurpMessage } from "../services/slurp/slurp-message.operation.js";
 import { SLURP_DM_POLICIES } from "../services/slurp/slurp-messaging.js";
 import { SLURP_DEFAULT_RAPPORT_WEIGHTS } from "../services/slurp/slurp-rapport.js";
+import { existsSync } from "node:fs";
+import { basename, dirname } from "node:path";
+import { generateSlurpCommissionImage } from "../services/slurp/slurp-commission-image.operation.js";
+import { resolveNoodlerMediaAbsolutePath, slurpMessageMediaUrl } from "../services/slurp/slurp-media.js";
 import { logger } from "../lib/logger.js";
 
 const personaQuerySchema = z.object({ personaId: z.string().trim().min(1) });
@@ -66,6 +70,8 @@ const commissionDeliverySchema = z.object({
   personaId: z.string().trim().min(1),
   content: z.string().trim().min(1).max(5000),
   imageUrl: messageImageUrlSchema.nullable().optional(),
+  /** Draw the commissioned piece from the brief instead of attaching one. */
+  generateImage: z.boolean().optional(),
 });
 
 const requestDecisionSchema = z.object({
@@ -455,9 +461,69 @@ export async function slurpMessageRoutes(app: FastifyInstance) {
     const commission = await messages.getCommission((req.params as { commissionId: string }).commissionId);
     if (!commission || !(await ownsCreator(parsed.data.personaId, commission.creatorAccountId)))
       return reply.code(404).send({ error: "Commission not found" });
-    return {
-      commission: await messages.deliverCommission(commission.id, parsed.data.content, parsed.data.imageUrl ?? null),
-    };
+    // A commission is somebody paying for a picture, so the delivery can draw it. Generate before
+    // the message is written: a failed drawing must not leave a delivered commission with nothing
+    // in it, and the fan's coins are already spent.
+    let drawn: Awaited<ReturnType<typeof generateSlurpCommissionImage>> | null = null;
+    if (parsed.data.generateImage) {
+      try {
+        drawn = await generateSlurpCommissionImage(app.db, {
+          creatorAccountId: commission.creatorAccountId,
+          brief: commission.brief,
+        });
+      } catch (error) {
+        logger.warn(error, "[slurp-commission] Could not draw the commissioned piece");
+        return reply.code(502).send({ error: "Could not draw that commission. Try again, or attach an image." });
+      }
+      if (drawn === "unavailable") {
+        return reply.code(404).send({ error: "No image generation connection is configured." });
+      }
+    }
+    const delivered = await messages.deliverCommission(
+      commission.id,
+      parsed.data.content,
+      parsed.data.imageUrl ?? null,
+    );
+    if (!delivered || delivered.state !== "delivered" || !delivered.deliveryMessageId) {
+      if (drawn && drawn !== "unavailable") drawn.compensate();
+      return { commission: delivered };
+    }
+    if (drawn && drawn !== "unavailable") {
+      drawn.promote();
+      await messages.setMessageMedia(
+        delivered.deliveryMessageId,
+        slurpMessageMediaUrl(delivered.deliveryMessageId),
+        drawn.mediaPath,
+      );
+    }
+    return { commission: delivered };
+  });
+
+  /**
+   * The bytes of a generated message image.
+   *
+   * Gated like the post media route: only the two sides of the thread may read it, and a locked
+   * PPV message stays locked here too. Serving it from the message id alone would hand the thing
+   * being sold to anybody who guessed one.
+   */
+  app.get("/messages/:messageId/media", async (req, reply) => {
+    const parsed = personaQuerySchema.safeParse(req.query);
+    if (!parsed.success) return reply.code(400).send({ error: parsed.error.flatten() });
+    const { messageId } = req.params as { messageId: string };
+    const message = await messages.getMessageById(messageId);
+    if (!message) return reply.code(404).send({ error: "Not Found" });
+    const thread = await messages.getThreadById(message.threadId);
+    if (!thread) return reply.code(404).send({ error: "Not Found" });
+    const isViewer = thread.viewerAccountId === parsed.data.personaId;
+    const isCreator = await ownsCreator(parsed.data.personaId, thread.creatorAccountId);
+    if (!isViewer && !isCreator) return reply.code(404).send({ error: "Not Found" });
+    if (isViewer && !isCreator && message.kind === "ppv" && !message.unlockedAt) {
+      return reply.code(402).send({ error: "This message is locked." });
+    }
+    const mediaPath = message.metadata?.noodlerMediaPath;
+    const absolute = typeof mediaPath === "string" ? resolveNoodlerMediaAbsolutePath(mediaPath) : null;
+    if (!absolute || !existsSync(absolute)) return reply.code(404).send({ error: "Not Found" });
+    return reply.header("Cache-Control", "private, max-age=300").sendFile(basename(absolute), dirname(absolute));
   });
 
   app.post("/messages/threads/:threadId/request", async (req, reply) => {
