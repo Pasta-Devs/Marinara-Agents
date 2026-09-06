@@ -34531,6 +34531,79 @@ const layoutFingerprint = (w) => {
     );
   }
 
+  // ── 5b. THE SIZES THE DOCS QUOTE FOR THIS FEATURE ─────────────────────────
+  // `player-state.md` §10 is where this package promises MEASURED numbers
+  // rather than arguments, and the lattice's half of that table was asserted
+  // nowhere: the prose row above prints its own figures, but the `player.found`
+  // row beside it was worked out by hand and nothing could tell if a digit had
+  // moved. §10.2 records what that costs — its at-cap figures were once taken
+  // on a narrower row than the per-entry figures in the same cell, so the two
+  // halves of one line disagreed and shipped that way.
+  //
+  // So both halves are taken here, on the doc's own ruler and through the
+  // shipped serializer, which is what puts `{"zones":[…]}` around the array —
+  // and the ARITHMETIC BETWEEN THEM is asserted beside the literals. A figure
+  // pinned only as a number can be re-measured wrong and re-pinned wrong in the
+  // same edit; "eighty of the row printed next to it, plus its commas and its
+  // wrapper" is the claim the table is actually making.
+  {
+    const wire = (x) => Buffer.byteLength(JSON.stringify(x), "utf8");
+    const rowFor = (p, day) => ({ p, e: 0, d: 0, day, seen: true });
+    // BOTH FIGURES COME OUT OF THE SAME CALL. The per-entry number is the row as
+    // the serializer emits it and not as the fixture wrote it, which is what
+    // makes "eighty times the row beside it" a statement about one shape rather
+    // than about two that happen to agree — the §10.2 defect, structurally.
+    const serialized = (rows) => P.serialize({ found: { zones: rows } }).found;
+    const oneRow = (row) => wire(serialized([row]).zones[0]);
+    const atCap = (row) => wire(serialized(Array.from({ length: P.CAPS.found }, () => ({ ...row }))));
+
+    // The exemplar the table quotes is an id this build really mints, so the
+    // shape being measured is the shape that reaches the wire.
+    assert.equal(L.idFor(3, -2), "w_3_-2", "§10.4's exemplar row carries an id the lattice mints");
+    const narrow = rowFor("w_3_-2", 12);
+    const widest = rowFor(L.idFor(-99, -99), 365);
+    assert.equal(oneRow(narrow), 47, `one landmark row is §10.4's 47 bytes (${oneRow(narrow)})`);
+    assert.equal(oneRow(widest), 51, `…and the widest plausible one its 51 (${oneRow(widest)})`);
+
+    // `{"zones":[]}` costs 12 and eighty rows want 79 commas, so 91 bytes sit
+    // on top of whichever row shape the table is quoting.
+    const shell = wire(serialized([])) + (P.CAPS.found - 1);
+    assert.equal(shell, 91, `the wrapper and its commas are 91 bytes (${shell})`);
+    assert.equal(atCap(narrow), P.CAPS.found * oneRow(narrow) + shell, "the cap figure is eighty of the row beside it");
+    assert.equal(atCap(widest), P.CAPS.found * oneRow(widest) + shell, "…and the widest one eighty of the widest row");
+    assert.equal(atCap(narrow), 3851, `the ledger full of cell-shaped rows is §10.4's 3,851 bytes (${atCap(narrow)})`);
+    assert.equal(atCap(widest), 4171, `…and 4,171 full of the widest (${atCap(widest)})`);
+
+    // WHAT A RE-ENTRY COSTS THE RENDERER, which §12.2 hands to the browser with
+    // a figure attached. `_composite` draws every tile's ground and then
+    // whatever object and overhead that tile happens to carry, so three layers
+    // over the whole cell is a CEILING and the real cost is however sparsely
+    // the class paints. Counted off the shipped tile arrays rather than through
+    // a canvas: the arrays are what the draw loop reads, and 40-render wants a
+    // page this harness does not have. The assertion is the ceiling claim — the
+    // band itself is printed, because it is a cost and not a contract.
+    const ceiling = TUNE.CHUNK_W * TUNE.CHUNK_H * 3;
+    const drawsIn = (zone) => {
+      let n = zone.w * zone.h;
+      for (let i = 0; i < zone.ground.length; i++) {
+        if (zone.object[i]) n++;
+        if (zone.overhead[i]) n++;
+      }
+      return n;
+    };
+    const { world: w } = wildWorld("cozy-village", 90909, { surround: "barren" });
+    for (let cx = -3; cx <= 3; cx++) for (let cy = -3; cy <= 3; cy++) L.ensure(w, L.cellZoneId(w, cx, cy));
+    const counts = chunkIds(w).map((id) => drawsIn(w.zones[id]));
+    assert.ok(counts.length >= 40, `there is a sweep of country to measure (${counts.length})`);
+    const low = Math.min(...counts);
+    const high = Math.max(...counts);
+    assert.ok(high * 2 < ceiling, `a cell's recomposite stays under half its layer ceiling (${high} of ${ceiling})`);
+    console.log(
+      `pixelforge 0.16 recomposite: ${low}-${high} tile draws per cell over ${counts.length} cells ` +
+        `(ceiling ${ceiling} = ${TUNE.CHUNK_W}×${TUNE.CHUNK_H}×3)`,
+    );
+  }
+
   // ── 6. THE WRITE GOVERNOR ─────────────────────────────────────────────────
   // Every zone entry arms a whole-shard write today, which is fine for a world
   // where crossing a boundary is an event. Out in the lattice it is what walking

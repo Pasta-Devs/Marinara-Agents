@@ -2715,8 +2715,8 @@ artifacts, plain character counts for prompt text, and a range wherever a value 
 | what | where it lands | measured |
 | ---- | -------------- | -------- |
 | one `player.found` row for a landmark cell | the **block**, in a field that was declared empty in 0.11 | **47 bytes** at `{"p":"w_3_-2","e":0,"d":0,"day":12,"seen":true}`, and **51** at the widest plausible cell id and a three-digit day. Only landmarks are written — roughly one cell in seven — so a 40-cell walk files about six rows |
-| `player.found` at its cap | the **block** | **3,981 bytes** at `CAPS.found` 80 rows of cell shape, **4,171** at 80 of the widest. The cap is 0.11's and unchanged; what changed is that something now fills it, which is why the eviction rule below is a stated limitation rather than a detail |
-| one `sim.intro.zones` entry for a landmark cell | the **envelope**, inside the existing `intro` key | **~14 bytes** (`"w_3_-2":true`) — measured at **170 bytes for 12 landmarks** over a two-ring walk. This is the release's only durable envelope growth, it is **uncapped**, and it is the one-shot flag that stops a landmark's line being injected twice |
+| `player.found` at its cap | the **block** | **3,851 bytes** at `CAPS.found` 80 rows of cell shape, **4,171** at 80 of the widest — both driven through the shipped serializer, whose `{"zones":[…]}` wrapper and 79 commas are the 91 bytes on top of the rows, and both pinned in the harness beside the per-row figures they multiply. The cap is 0.11's and unchanged; what changed is that something now fills it, which is why the eviction rule below is a stated limitation rather than a detail |
+| one `sim.intro.zones` entry for a landmark cell | the **envelope**, inside the existing `intro` key | **~14 bytes** (`"w_3_-2":true`) — measured at **170 bytes for 12 landmarks** over a three-ring walk (the lane sweeps `cx,cy ∈ [-3,3]`, which is 47 cells once the settlement and the brief's own wilds record are out of it). This is the release's only durable envelope growth, it is **uncapped**, and it is the one-shot flag that stops a landmark's line being injected twice |
 | a landmark's prose | the **prompt**, once per landmark ever entered | **≤ 140 chars** (`FLAVOR_MAX_CHARS`), and **1,015 characters across 12 landmarks** on the measured walk. Ordinary country injects **nothing** — twenty plain cells were entered in the same lane and cost the prose budget zero — so the injection bill is a function of how many landmarks exist to find, not of how far anybody walks |
 | the two accepted-fallback markers | **chat metadata**, and only when a player presses "keep the stand-in" / "keep playing without it" | **40 bytes** for `{"pixelforgeFallbackAcceptedBrief":true}` and **39** for the pack sibling, **78** for both; a cleared marker is the same 39, because the PATCH is a shallow merge with no delete convention and the key is nulled rather than removed |
 | `pixelforgeBriefPrior` | **chat metadata**, and only when a paid re-roll replaces a brief | **1,501 bytes** parked (cozy-village's shipped default brief; **1,531** for sci-fi-colony), one deep and additive — the outgoing brief rides in the *same* PATCH as the incoming one, so there is no window where the only copy is gone |
@@ -2962,12 +2962,14 @@ matters to a player is on the other side of that line.
 **0.16's own items. The first two are performance and the harness measured their floors, so what is
 owed is the browser's own number rather than a guess:**
 
-1. **Does re-entry hitch?** Walking back into a region recomposites it — on the order of **2,592
-   tile draws** for a 36×24 cell — and that is the only hitch candidate in the feature, because
-   *compiling* is not one: a whole city compiles in 2.70 ms. So if a hitch shows, it is
-   `_composite`, and the playtest should say so in those words rather than "the wilderness is
-   slow". The harness proves the recomposite is byte-identical to the first one; it cannot say what
-   it feels like at 60 fps.
+1. **Does re-entry hitch?** Walking back into a region recomposites it — **1,089 to 1,170 tile
+   draws** per cell across the harness's own three-ring sweep, against a **ceiling** of 2,592 for a
+   36×24 cell (`CHUNK_W` × `CHUNK_H` × the three layers `_composite` walks, which only a cell
+   carrying ground *and* object *and* overhead on every tile would reach) — and that is the only
+   hitch candidate in the feature, because *compiling* is not one: a whole city compiles in 2.70 ms.
+   So if a hitch shows, it is `_composite`, and the playtest should say so in those words rather
+   than "the wilderness is slow". The harness proves the recomposite is byte-identical to the first
+   one, and prints the band above on every run; it cannot say what it feels like at 60 fps.
 2. **Memory over a long walk, fair and snowy.** §10.4's **49.0 MB of composites** (18.6 settlement
    + 30.4 for nine cells) is measured in a software canvas and is the **floor**, not the browser's
    figure. What is owed is a real 40-region walk in a snowy city with interiors visited, watched in
@@ -3393,10 +3395,10 @@ trunk and canopy, so a colony's `woods` is a mast field and its `oldwall` a coll
 words match the picture.
 
 **Prose is bounded by rarity, not banned.** A landmark cell carries one line capped at
-`FLAVOR_MAX_CHARS` **140**; an ordinary cell carries none. Measured over a two-ring walk: **12 of 47
-cells carry prose, 1,015 characters in total**, and twenty plain cells entered in the same lane cost
-the prose budget nothing. The injection is one-shot per zone through the shipped `intro.zones` flag,
-which is the only durable trace a region leaves anywhere (§10.4).
+`FLAVOR_MAX_CHARS` **140**; an ordinary cell carries none. Measured over a three-ring walk: **12 of
+47 cells carry prose, 1,015 characters in total**, and twenty plain cells entered in the same lane
+cost the prose budget nothing. The injection is one-shot per zone through the shipped `intro.zones`
+flag, which is the only durable trace a region leaves anywhere (§10.4).
 
 **One landmark in seven, by design.** `LANDMARK_RATE_TARGET` is `1/7` and is stated in the tunables
 block so a lane can check the *design* rather than the arithmetic — the ring and surround pulls move
