@@ -1,5 +1,10 @@
 # Slurp release notes
 
+## 1.1.32 — 2026-09-06
+
+- Stories on Home are now an image-first memory ribbon: compact portrait previews
+  reveal each Story at a glance, while adding, unread state, and locks stay quiet.
+
 ## 1.1.31 — 2026-09-06
 
 - Removed the separators around Edit Profile and the chevron so Profile controls

@@ -32,7 +32,7 @@
   "ui.slurp.moments.title": "Stories",
   "ui.slurp.moments.detail": "Creator-Stories aus den letzten 24 Stunden.",
   "ui.slurp.moments.add": "Story hinzufügen",
-  "ui.slurp.moments.empty": "Noch keine neuen Stories. Neue Stories erscheinen hier 24 Stunden lang.",
+  "ui.slurp.moments.empty": "Noch nichts Neues.",
   "ui.slurp.moments.open": "Story von {{name}} öffnen",
   "ui.slurp.moments.new": "Neu",
   "ui.slurp.moments.fromCreator": "Story von {{name}}",

@@ -5507,6 +5507,52 @@ type SlurpMoment = {
   post: NoodlerPostView;
 };
 
+function SlurpMomentShelfTile({ moment, isNew, onOpen }: { moment: SlurpMoment; isNew: boolean; onOpen: () => void }) {
+  const { t: localizeUi } = useUiTranslation();
+  const mediaSrc = useSlurpMediaSrc(moment.post.imageUrl, { width: 320 });
+
+  return (
+    <button
+      type="button"
+      onClick={onOpen}
+      className="group relative aspect-[3/4] w-[4.75rem] shrink-0 snap-start overflow-hidden rounded-xl bg-[var(--slurp-surface-raised)] text-start shadow-[0_10px_24px_-18px_rgba(0,0,0,0.95)] outline outline-1 -outline-offset-1 outline-white/10 transition-transform active:scale-[0.96] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--noodle-accent)] @min-[1024px]:w-[5.25rem] motion-reduce:transition-none motion-reduce:active:scale-100"
+      aria-label={localizeUi("ui.slurp.moments.open", { name: moment.creator.profile.displayName })}
+    >
+      {mediaSrc ? (
+        <img
+          src={mediaSrc}
+          alt=""
+          decoding="async"
+          className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-[1.03] motion-reduce:transition-none motion-reduce:group-hover:scale-100"
+        />
+      ) : (
+        <span className="absolute inset-0 flex items-center justify-center bg-[linear-gradient(145deg,color-mix(in_srgb,var(--noodle-accent)_14%,var(--slurp-surface-raised)),var(--slurp-surface))]">
+          <ProfileInitial profile={moment.creator.profile} />
+        </span>
+      )}
+      <span
+        className="pointer-events-none absolute inset-x-0 bottom-0 h-2/3 bg-[linear-gradient(to_top,rgba(9,5,12,0.92),rgba(9,5,12,0.26)_58%,transparent)]"
+        aria-hidden="true"
+      />
+      <span
+        className={cn(
+          "absolute inset-x-2 top-2 h-0.5 rounded-full",
+          isNew ? "bg-[var(--noodle-accent)] shadow-[0_0_10px_var(--noodle-accent)]" : "bg-white/45",
+        )}
+        aria-hidden="true"
+      />
+      {moment.post.locked && (
+        <span className="absolute end-1.5 top-3.5 flex h-6 w-6 items-center justify-center rounded-full bg-black/65 text-white backdrop-blur-sm ring-1 ring-inset ring-white/15">
+          <Lock size={11} aria-hidden="true" />
+        </span>
+      )}
+      <span className="absolute inset-x-2 bottom-2 truncate text-xs font-bold text-white drop-shadow-sm">
+        {moment.creator.profile.displayName}
+      </span>
+    </button>
+  );
+}
+
 function SlurpMomentsShelf({
   moments,
   newSinceAt,
@@ -5542,76 +5588,54 @@ function SlurpMomentsShelf({
       className={cn(
         "relative isolate overflow-hidden",
         embedded
-          ? "border-b border-[var(--noodle-divider)] bg-[linear-gradient(120deg,color-mix(in_srgb,var(--noodle-accent)_7%,var(--slurp-surface-raised)),color-mix(in_srgb,var(--slurp-violet)_5%,var(--slurp-surface)))] py-3 shadow-[0_12px_28px_-26px_rgba(0,0,0,0.9)]"
+          ? "border-b border-[var(--noodle-divider)] bg-[linear-gradient(120deg,color-mix(in_srgb,var(--noodle-accent)_4%,var(--slurp-surface)),color-mix(in_srgb,var(--slurp-violet)_3%,var(--slurp-surface)))] py-3 shadow-[0_12px_28px_-26px_rgba(0,0,0,0.9)]"
           : "mx-3 mt-3 rounded-xl bg-[linear-gradient(145deg,var(--slurp-surface-raised),color-mix(in_srgb,var(--noodle-accent)_7%,var(--slurp-canvas)))] py-4 shadow-[var(--slurp-shadow-floating)] ring-1 ring-inset ring-[var(--noodle-divider)] sm:mx-4",
       )}
     >
-      <div className={cn("flex items-start justify-between gap-3 px-4", embedded && "@min-[1024px]:px-5")}>
-        <div>
-          <h2 id="slurp-moments-heading" className="text-sm font-bold tracking-tight">
-            {localizeUi("ui.slurp.moments.title")}
-          </h2>
-          <p className="mt-0.5 text-xs text-[var(--muted-foreground)]">{localizeUi("ui.slurp.moments.detail")}</p>
-        </div>
-        {onAddStory && (
-          <button
-            type="button"
-            onClick={onAddStory}
-            className="flex min-h-10 shrink-0 items-center gap-1.5 rounded-lg bg-[var(--noodle-accent)] px-3 text-xs font-black text-zinc-950 shadow-[var(--slurp-shadow-raised)] transition-[opacity,transform] hover:opacity-90 active:scale-[0.96] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--slurp-focus)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--slurp-surface)] motion-reduce:transition-none motion-reduce:active:scale-100"
-          >
-            <Plus size={15} aria-hidden="true" />
-            {localizeUi("ui.slurp.moments.add")}
-          </button>
-        )}
+      <div className={cn("px-4", embedded && "@min-[1024px]:px-5")}>
+        <h2 id="slurp-moments-heading" className="text-sm font-bold tracking-tight">
+          {localizeUi("ui.slurp.moments.title")}
+        </h2>
       </div>
-      <div
-        className={cn(
-          "flex snap-x gap-3 overflow-x-auto px-4 pb-1 pe-12 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden @min-[1024px]:px-5",
-          "mt-3",
-        )}
-      >
-        {creatorMoments.length === 0 ? (
-          <div className="flex min-h-16 items-center gap-3 text-[var(--muted-foreground)]" role="status">
-            <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full border border-dashed border-[var(--noodle-accent)]/40 bg-[var(--noodle-accent)]/[0.05]">
-              <Clock3 size={18} aria-hidden="true" />
-            </span>
-            <span className="text-xs leading-5 text-pretty">{localizeUi("ui.slurp.moments.empty")}</span>
-          </div>
-        ) : (
-          creatorMoments.map((moment) => {
-            const isNew = !Number.isNaN(seenAt) && new Date(moment.post.createdAt).getTime() > seenAt;
-            return (
-              <button
-                key={moment.creator.profile.id}
-                type="button"
-                onClick={() => onOpenMoment(moment.post.id)}
-                className="group flex min-h-20 w-[4.5rem] shrink-0 snap-start flex-col items-center rounded-xl px-1 py-1 text-center transition-transform active:scale-[0.96] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--noodle-accent)] motion-reduce:transition-none motion-reduce:active:scale-100"
-                aria-label={localizeUi("ui.slurp.moments.open", { name: moment.creator.profile.displayName })}
-              >
-                <span
-                  className={cn(
-                    "relative rounded-full p-[3px] transition-transform group-hover:scale-105 motion-reduce:transition-none motion-reduce:group-hover:scale-100",
-                    isNew
-                      ? "bg-[linear-gradient(145deg,var(--noodle-accent),var(--slurp-warm))] shadow-[0_0_0_1px_color-mix(in_srgb,var(--noodle-accent)_25%,transparent),0_8px_24px_-12px_var(--noodle-accent)]"
-                      : "bg-[var(--noodle-divider)] opacity-80",
-                  )}
-                >
-                  <span className="block rounded-full bg-[var(--slurp-canvas)] p-0.5">
-                    <ProfileInitial profile={moment.creator.profile} />
-                  </span>
-                  {moment.post.locked && (
-                    <span className="absolute -bottom-0.5 -right-0.5 flex h-5 w-5 items-center justify-center rounded-full bg-[var(--noodle-accent)] text-zinc-950 ring-2 ring-[var(--slurp-canvas)]">
-                      <Lock size={10} aria-hidden="true" />
-                    </span>
-                  )}
-                </span>
-                <span className="mt-1.5 w-full truncate text-xs font-semibold">
-                  {moment.creator.profile.displayName}
-                </span>
-              </button>
-            );
-          })
-        )}
+      <div className="relative mt-2.5">
+        <div className="pointer-events-none absolute inset-y-0 end-0 z-10 w-8 bg-[linear-gradient(to_left,var(--slurp-surface),transparent)]" />
+        <div className="flex snap-x gap-2.5 overflow-x-auto px-4 pb-1 pe-10 [scroll-padding-inline-start:1rem] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden @min-[1024px]:px-5 @min-[1024px]:[scroll-padding-inline-start:1.25rem]">
+          {onAddStory && (
+            <button
+              type="button"
+              onClick={onAddStory}
+              className="group flex aspect-[3/4] w-[4.75rem] shrink-0 snap-start flex-col items-center justify-center gap-2 rounded-xl bg-[color-mix(in_srgb,var(--noodle-accent)_7%,var(--slurp-surface-raised))] text-[var(--noodle-accent)] outline outline-1 -outline-offset-1 outline-[color-mix(in_srgb,var(--noodle-accent)_34%,transparent)] transition-[background-color,transform] hover:bg-[color-mix(in_srgb,var(--noodle-accent)_12%,var(--slurp-surface-raised))] active:scale-[0.96] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--noodle-accent)] @min-[1024px]:w-[5.25rem] motion-reduce:transition-none motion-reduce:active:scale-100"
+            >
+              <span className="flex h-9 w-9 items-center justify-center rounded-full border border-dashed border-current/70 transition-transform group-hover:scale-105 motion-reduce:transition-none motion-reduce:group-hover:scale-100">
+                <Plus size={17} strokeWidth={2} aria-hidden="true" />
+              </span>
+              <span className="px-1 text-center text-[0.68rem] font-bold leading-tight">
+                {localizeUi("ui.slurp.moments.add")}
+              </span>
+            </button>
+          )}
+          {creatorMoments.length === 0 ? (
+            <div
+              className="flex min-h-24 min-w-[12rem] max-w-xs items-center gap-2.5 text-[var(--muted-foreground)]"
+              role="status"
+            >
+              <Clock3 size={17} className="shrink-0 text-[var(--noodle-accent)]" aria-hidden="true" />
+              <span className="text-xs leading-5 text-pretty">{localizeUi("ui.slurp.moments.empty")}</span>
+            </div>
+          ) : (
+            creatorMoments.map((moment) => {
+              const isNew = !Number.isNaN(seenAt) && new Date(moment.post.createdAt).getTime() > seenAt;
+              return (
+                <SlurpMomentShelfTile
+                  key={moment.creator.profile.id}
+                  moment={moment}
+                  isNew={isNew}
+                  onOpen={() => onOpenMoment(moment.post.id)}
+                />
+              );
+            })
+          )}
+        </div>
       </div>
     </section>
   );

@@ -32,7 +32,7 @@
   "ui.slurp.moments.title": "Relacje",
   "ui.slurp.moments.detail": "Relacje twórców udostępnione w ciągu ostatnich 24 godzin.",
   "ui.slurp.moments.add": "Dodaj relację",
-  "ui.slurp.moments.empty": "Brak nowych relacji. Nowe relacje będą tu widoczne przez 24 godziny.",
+  "ui.slurp.moments.empty": "Jeszcze nic nowego.",
   "ui.slurp.moments.open": "Otwórz relację od {{name}}",
   "ui.slurp.moments.new": "Nowe",
   "ui.slurp.moments.fromCreator": "Relacja od {{name}}",
