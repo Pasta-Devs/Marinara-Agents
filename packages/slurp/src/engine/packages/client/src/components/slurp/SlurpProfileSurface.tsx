@@ -72,6 +72,7 @@ interface SlurpProfileSurfaceProps<TTab extends string = SlurpProfileTab> {
   activeTab: TTab;
   onTabChange: (tab: TTab) => void;
   preTabsContent?: ReactNode;
+  editorActionInPreTabs?: boolean;
   postList: ReactNode;
   postPanelId?: string;
   accent?: string;
@@ -104,6 +105,7 @@ export function SlurpProfileSurface<TTab extends string = SlurpProfileTab>({
   activeTab,
   onTabChange,
   preTabsContent,
+  editorActionInPreTabs = false,
   postList,
   postPanelId = "slurp-profile-panel",
   accent,
@@ -485,7 +487,7 @@ export function SlurpProfileSurface<TTab extends string = SlurpProfileTab>({
         >
           <div className="flex min-h-11 items-start">
             <div className="min-w-0 flex-1">{preTabsContent}</div>
-            {editor && (
+            {editor && (!editorActionInPreTabs || editor.isEditing) && (
               <div className="flex h-11 shrink-0 items-stretch">
                 {editor.isEditing && (
                   <button

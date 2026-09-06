@@ -174,9 +174,14 @@ assert.match(
   "Collapsed Profile controls must be one bar: actions and composer both live behind the toggle",
 );
 assert.match(englishLocale, /"ui\.slurp\.profile\.creatorTools": "Profile controls"/u);
+assert.match(
+  home,
+  /data-slurp-creator-tools[\s\S]*?onClick=\{onEdit\}[\s\S]*?ui\.noodle\.stageprofileview\.editProfile[\s\S]*?aria-label=\{localizeUi\("ui\.slurp\.profile\.creatorTools"\)\}[\s\S]*?<ChevronDown/u,
+  "Edit Profile must sit immediately before the trailing Profile controls chevron",
+);
 // Edit Profile belongs to the same profile rail, not inside the expandable operational panel.
 assert.doesNotMatch(
-  home.slice(home.indexOf("data-slurp-creator-tools"), home.indexOf("<NoodlerPostComposer")),
+  home.slice(home.indexOf('id="slurp-creator-tools-panel"'), home.indexOf("<NoodlerPostComposer")),
   /onClick=\{onEdit\}/u,
   "Profile controls must not duplicate the rail's Edit Profile action",
 );
@@ -386,6 +391,7 @@ assert.match(
 );
 assert.match(profileSurface, /flex min-h-11 items-start[\s\S]*?\{preTabsContent\}[\s\S]*?\{editor &&/u);
 assert.match(profileSurface, /rounded-e-2xl border-s[\s\S]*?ui\.noodle\.stageprofileview\.editProfile/u);
+assert.match(profileSurface, /editor && \(!editorActionInPreTabs \|\| editor\.isEditing\)/u);
 assert.match(home, /data-slurp-home-masthead/u, "Home must expose one unified lobby masthead");
 assert.doesNotMatch(
   home,

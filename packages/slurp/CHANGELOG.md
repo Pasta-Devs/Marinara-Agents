@@ -1,5 +1,10 @@
 # Slurp release notes
 
+## 1.1.28 — 2026-09-06
+
+- Edit Profile now sits inside Profile controls immediately before the trailing
+  expansion chevron, with both the label and chevron able to open the panel.
+
 ## 1.1.27 — 2026-09-06
 
 - The collapsed Profile controls rail is now a single compact 44px control:
