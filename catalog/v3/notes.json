@@ -36,6 +36,12 @@
     "slurp": {
       "versions": [
         {
+          "version": "1.2.1",
+          "date": "2026-09-06",
+          "notes": "- Inbox now keeps Chats and Activity in one polished, avatar-led destination with\n  compact rows, colorful event medallions, per-tab unread badges, and safe legacy\n  notification links.\n- Wallet now presents Creator earnings and Fan coins as connected but separate\n  pockets, with clearer transfer limits, avatar-led subscriptions, and distinct\n  Spending and Earnings histories.",
+          "highlight": true
+        },
+        {
           "version": "1.2.0",
           "date": "2026-09-06",
           "notes": "- Messages and notifications now share one Inbox with separate Chats and Activity\n  tabs, avatar-led rows, semantic event icons, and a single navigation badge.\n- Wallet now shows the active identity's unwithdrawn Creator earnings and\n  spendable Fan wallet as two connected pockets, with an explicit Move to Wallet\n  action and separate Spending and Earnings histories.",
@@ -147,12 +153,6 @@
           "version": "1.1.15",
           "date": "2026-09-05",
           "notes": "- Slurp no longer fails outright on an Engine that cannot hold its newer storage tables. The feed, profiles and settings work as before; messages, notifications and the audience simply stay empty until the Engine is updated.",
-          "highlight": false
-        },
-        {
-          "version": "1.1.14",
-          "date": "2026-09-05",
-          "notes": "- Messages, the audience, notifications, and the world clock work again. Slurp adds its own storage tables but never told the host about them, so each of those features failed as soon as it touched storage. On an Engine too old to accept package tables, Slurp now says so once in the log instead of erroring on every scheduler run.",
           "highlight": false
         }
       ]

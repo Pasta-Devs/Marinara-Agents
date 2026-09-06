@@ -37,6 +37,7 @@ import { createCharacterGalleryStorage } from "../services/storage/character-gal
 import { resolveNoodlerCreatorArtwork } from "../services/slurp/slurp-public-profiles.service.js";
 import { createConnectionsStorage } from "../services/storage/connections.storage.js";
 import { createSlurpStorage, slurpSettingsSchema } from "../services/storage/slurp.storage.js";
+import { createSlurpMessagesStorage } from "../services/storage/slurp-messages.storage.js";
 import { NOODLER_SUBSCRIPTION_COST, noodlerUnlockPriceFromMetadata } from "../services/slurp/slurp-prices.js";
 import { settleAgentJobsWithConcurrencyLimit } from "../services/agents/agent-concurrency.js";
 import { logger } from "../lib/logger.js";
@@ -1082,8 +1083,24 @@ export async function slurpRoutes(app: FastifyInstance) {
       logger.warn(error, "[slurp-pending] Drain on open failed"),
     );
     const events = createSlurpEventsStorage(app.db);
+    const messages = createSlurpMessagesStorage(app.db);
     const population = createSlurpPopulationStorage(app.db);
     const [items, unseen] = await Promise.all([events.list(viewer.id), events.listUnseen(viewer.id)]);
+    const legacyCommissionIds = [
+      ...new Set(
+        items
+          .concat(unseen)
+          .filter((event) => event.kind === "commission_requested" && event.subjectId)
+          .map((event) => event.subjectId!),
+      ),
+    ];
+    const commissionThreads = new Map<string, string>();
+    await Promise.all(
+      legacyCommissionIds.map(async (id) => {
+        const commission = await messages.getCommission(id);
+        if (commission) commissionThreads.set(id, commission.threadId);
+      }),
+    );
     // Actors are stored as ids so a renamed or departed account still renders. Resolve to display
     // names here: "abc-123 subscribed" tells the player nothing, which is the whole failure this
     // surface exists to fix.
@@ -1109,6 +1126,7 @@ export async function slurpRoutes(app: FastifyInstance) {
     const named = (list: typeof items) =>
       list.map((event) => ({
         ...event,
+        subjectId: event.subjectId ? (commissionThreads.get(event.subjectId) ?? event.subjectId) : null,
         actorLabel: event.actorLabel ? (names.get(event.actorLabel) ?? null) : null,
       }));
     return {

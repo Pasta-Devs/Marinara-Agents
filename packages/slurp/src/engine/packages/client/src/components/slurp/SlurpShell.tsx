@@ -1124,7 +1124,7 @@ export function NoodleShell({
               <button
                 type="button"
                 onClick={onOpenMessages}
-                aria-label={localizeUi("ui.slurp.navigation.messages", { defaultValue: "Messages" })}
+                aria-label={localizeUi("ui.slurp.navigation.messages", { defaultValue: "Inbox" })}
                 aria-current={activeView === "messages" ? "page" : undefined}
                 className={cn(
                   "relative flex items-center justify-center text-[var(--muted-foreground)] transition-colors hover:bg-[var(--noodle-accent)]/10 active:bg-[var(--noodle-accent)]/15 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--noodle-accent)]",

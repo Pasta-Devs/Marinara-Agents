@@ -1,5 +1,14 @@
 # Slurp release notes
 
+## 1.2.1 — 2026-09-06 [highlight]
+
+- Inbox now keeps Chats and Activity in one polished, avatar-led destination with
+  compact rows, colorful event medallions, per-tab unread badges, and safe legacy
+  notification links.
+- Wallet now presents Creator earnings and Fan coins as connected but separate
+  pockets, with clearer transfer limits, avatar-led subscriptions, and distinct
+  Spending and Earnings histories.
+
 ## 1.2.0 — 2026-09-06
 
 - Messages and notifications now share one Inbox with separate Chats and Activity

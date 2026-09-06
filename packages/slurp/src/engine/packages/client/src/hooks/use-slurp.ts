@@ -487,6 +487,7 @@ export type SlurpWalletEntry = {
 
 export type SlurpWallet = {
   coins: number;
+  stipendOn?: string;
   ledger: SlurpWalletEntry[];
   earnedToday: { ad: number; engagement: number };
   subscriptions: Record<string, { paidThroughAt: string; price: number }>;
@@ -627,7 +628,9 @@ export function useSlurpPayout() {
     onSuccess: () =>
       Promise.all([
         qc.invalidateQueries({ queryKey: [...noodleKeys.noodlerRoot(), "studio"] }),
+        qc.invalidateQueries({ queryKey: [...noodleKeys.noodlerRoot(), "wallet"] }),
         qc.invalidateQueries({ queryKey: noodleKeys.noodlerViewers() }),
+        qc.invalidateQueries({ queryKey: [...noodleKeys.noodlerRoot(), "viewer-wallets"] }),
       ]),
   });
 }
@@ -1331,6 +1334,7 @@ export function useToggleNoodlerSubscription() {
         qc.invalidateQueries({
           queryKey: noodleKeys.noodlerSubscribers(input.creatorAccountId),
         }),
+        qc.invalidateQueries({ queryKey: [...noodleKeys.noodlerRoot(), "wallet", input.personaId] }),
       ]);
     },
   });

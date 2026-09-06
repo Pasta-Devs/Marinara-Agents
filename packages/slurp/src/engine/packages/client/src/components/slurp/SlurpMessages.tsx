@@ -51,6 +51,7 @@ export function SlurpMessagesView({
   personaId,
   ownedCreatorAccountIds,
   composeWithCreatorAccountId = null,
+  initialThreadId = null,
   onOpenProfile,
 }: {
   personaId: string | null;
@@ -58,16 +59,25 @@ export function SlurpMessagesView({
   ownedCreatorAccountIds: string[];
   /** Set when Messages was opened from a Creator profile, to land straight in that chat. */
   composeWithCreatorAccountId?: string | null;
+  /** Set by an Activity event that points at an existing conversation. */
+  initialThreadId?: string | null;
   onOpenProfile: (accountId: string) => void;
 }) {
   const { t: localizeUi, i18n } = useUiTranslation();
-  const [openThreadId, setOpenThreadId] = useState<string | null>(null);
+  const [openThreadId, setOpenThreadId] = useState<string | null>(initialThreadId);
   // Opening a chat from a profile lands in it directly, and backing out returns to the inbox
   // rather than to the profile, so Messages behaves the same however you arrived.
   const [composeWith, setComposeWith] = useState<string | null>(composeWithCreatorAccountId);
   const [search, setSearch] = useState("");
   const threadsQuery = useSlurpThreads(personaId);
   const threads = threadsQuery.data?.threads ?? [];
+
+  useEffect(() => {
+    if (initialThreadId) {
+      setComposeWith(null);
+      setOpenThreadId(initialThreadId);
+    }
+  }, [initialThreadId]);
 
   if (openThreadId || composeWith) {
     return (
@@ -107,7 +117,7 @@ export function SlurpMessagesView({
   const broadcastCreatorId = ownedCreatorAccountIds[0] ?? null;
 
   return (
-    <div className="mx-auto flex w-full max-w-2xl flex-col gap-4 p-4 sm:p-5">
+    <div className="mx-auto flex w-full max-w-2xl flex-col gap-5 px-3 py-4 sm:px-5">
       <div className="flex items-center gap-2">
         <div className="relative min-w-0 flex-1">
           <Search
@@ -124,7 +134,7 @@ export function SlurpMessagesView({
             value={search}
             onChange={(event) => setSearch(event.target.value)}
             placeholder={localizeUi("ui.slurp.messages.searchPlaceholder", { defaultValue: "Search conversations…" })}
-            className="h-10 w-full rounded-xl bg-[var(--slurp-surface)] pl-9 pr-3 text-sm outline-none ring-1 ring-inset ring-[var(--noodle-divider)] focus:ring-2 focus:ring-[var(--noodle-accent)]"
+            className="h-11 w-full rounded-xl bg-[linear-gradient(135deg,var(--slurp-surface-raised),var(--slurp-surface))] pl-9 pr-3 text-base shadow-[var(--slurp-shadow-raised)] outline-none ring-1 ring-inset ring-white/[0.06] focus:ring-2 focus:ring-[var(--slurp-focus)] sm:text-sm"
           />
         </div>
         {unread > 0 && (
@@ -139,11 +149,8 @@ export function SlurpMessagesView({
       )}
 
       {inbound.length > 0 && (
-        <section aria-labelledby="slurp-message-inbound" className="flex flex-col gap-2">
-          <h2
-            id="slurp-message-inbound"
-            className="px-1 text-xs font-bold uppercase tracking-[0.14em] text-[var(--muted-foreground)]"
-          >
+        <section aria-labelledby="slurp-message-inbound" className="flex flex-col">
+          <h2 id="slurp-message-inbound" className="px-2 pb-1 text-xs font-semibold text-[var(--muted-foreground)]">
             {localizeUi("ui.slurp.messages.inbound", { defaultValue: "Written to your Creators" })}
           </h2>
           {inbound.map((thread) => (
@@ -154,6 +161,7 @@ export function SlurpMessagesView({
                 // The counterpart on this side is the fan, not the Creator, so the row names them.
                 creatorDisplayName:
                   thread.counterpartName ?? localizeUi("ui.slurp.messages.unknownFan", { defaultValue: "Someone" }),
+                creatorHandle: thread.counterpartHandle ?? "",
                 creatorAvatarUrl: null,
                 viewerUnread: thread.creatorUnread,
               }}
@@ -165,11 +173,8 @@ export function SlurpMessagesView({
       )}
 
       {requests.length > 0 && (
-        <section aria-labelledby="slurp-message-requests" className="flex flex-col gap-2">
-          <h2
-            id="slurp-message-requests"
-            className="px-1 text-xs font-bold uppercase tracking-[0.14em] text-[var(--muted-foreground)]"
-          >
+        <section aria-labelledby="slurp-message-requests" className="flex flex-col">
+          <h2 id="slurp-message-requests" className="px-2 pb-1 text-xs font-semibold text-[var(--muted-foreground)]">
             {localizeUi("ui.slurp.messages.requests", { defaultValue: "Message requests" })}
           </h2>
           {requests.map((thread) => (
@@ -184,12 +189,12 @@ export function SlurpMessagesView({
         </section>
       )}
 
-      <section aria-labelledby="slurp-message-inbox" className="flex flex-col gap-2">
+      <section aria-labelledby="slurp-message-inbox" className="flex flex-col">
         <h2 id="slurp-message-inbox" className="sr-only">
-          {localizeUi("ui.slurp.messages.inbox", { defaultValue: "Inbox" })}
+          {localizeUi("ui.slurp.messages.conversations", { defaultValue: "Conversations" })}
         </h2>
         {active.length === 0 ? (
-          <div className="relative isolate overflow-hidden rounded-xl bg-[var(--slurp-surface)] px-6 py-14 text-center ring-1 ring-inset ring-[var(--noodle-divider)]">
+          <div className="relative isolate overflow-hidden rounded-xl bg-[linear-gradient(145deg,var(--slurp-surface-raised),var(--slurp-surface))] px-6 py-9 text-center shadow-[var(--slurp-shadow-raised)] ring-1 ring-inset ring-white/[0.06]">
             <SlurpEmptyArtwork className="absolute inset-0 -z-10" />
             <MessageCircle size={28} className="mx-auto text-[var(--noodle-accent)]" />
             <p className="mt-3 text-sm font-bold">
@@ -232,11 +237,11 @@ function ThreadRow({
     <button
       type="button"
       onClick={onOpen}
-      className="flex min-h-16 w-full items-center gap-3 border-b border-[var(--noodle-divider)] px-2 py-2.5 text-left transition-colors last:border-b-0 hover:bg-[var(--noodle-accent)]/[0.06] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--noodle-accent)]"
+      className="group flex min-h-[4.5rem] w-full items-center gap-3 border-b border-white/[0.055] px-2 py-2.5 text-start transition-[background-color,transform] last:border-b-0 hover:bg-[var(--noodle-accent)]/[0.055] active:scale-[0.96] focus-visible:z-10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--slurp-focus)] motion-reduce:transition-none motion-reduce:active:scale-100"
     >
       <Avatar account={{ displayName: thread.creatorDisplayName, avatarUrl: thread.creatorAvatarUrl }} size="md" />
       <span className="flex min-w-0 flex-1 flex-col">
-        <span className="flex items-center gap-1.5">
+        <span className="flex min-w-0 items-center gap-1.5">
           <span className="truncate text-sm font-bold">{thread.creatorDisplayName}</span>
           {thread.subscribed && (
             <span className="shrink-0 rounded-full bg-[var(--noodle-accent)]/12 px-1.5 py-0.5 text-[0.6rem] font-bold text-[var(--noodle-accent)]">
@@ -249,6 +254,9 @@ function ThreadRow({
             </span>
           )}
         </span>
+        {thread.creatorHandle && (
+          <span className="truncate text-[0.7rem] text-[var(--muted-foreground)]">@{thread.creatorHandle}</span>
+        )}
         <span className="truncate text-xs text-[var(--muted-foreground)]">
           {thread.lastMessagePreview || localizeUi("ui.slurp.messages.noMessages", { defaultValue: "No messages yet" })}
         </span>
@@ -709,12 +717,12 @@ function BroadcastPanel({ creatorAccountId, personaId }: { creatorAccountId: str
   };
 
   return (
-    <section className="rounded-xl bg-[var(--slurp-surface)] ring-1 ring-inset ring-[var(--noodle-divider)]">
+    <section className="overflow-hidden rounded-xl bg-[var(--slurp-surface)]/55 shadow-[var(--slurp-shadow-raised)] ring-1 ring-inset ring-white/[0.055]">
       <button
         type="button"
         onClick={() => setOpen((value) => !value)}
         aria-expanded={open}
-        className="flex min-h-11 w-full items-center gap-2 px-3 text-left text-sm font-bold"
+        className="flex min-h-11 w-full items-center gap-2 px-3 text-start text-xs font-semibold text-[var(--muted-foreground)] transition-[background-color,transform] hover:bg-[var(--noodle-accent)]/[0.05] active:scale-[0.96] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--slurp-focus)] motion-reduce:transition-none motion-reduce:active:scale-100"
       >
         <Megaphone size={15} className="text-[var(--noodle-accent)]" aria-hidden="true" />
         {localizeUi("ui.slurp.messages.broadcast", { defaultValue: "Broadcast to subscribers" })}

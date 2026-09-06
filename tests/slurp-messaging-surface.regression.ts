@@ -39,7 +39,11 @@ for (const kind of ["messageRequest", "ppv", "commission"]) {
 }
 
 // The wallet listed subscriptions by raw creator id, which named nothing to the player.
-assert.match(home, /creatorNameById/u, "the wallet must resolve creator ids to display names");
+assert.match(
+  home,
+  /creatorById\.get\(creatorId\)\?\.displayName/u,
+  "the wallet must resolve creator ids to display names",
+);
 assert.doesNotMatch(
   home,
   /<span className="min-w-0 truncate text-xs font-semibold">\{creatorId\}<\/span>/u,

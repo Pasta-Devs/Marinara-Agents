@@ -121,7 +121,7 @@ const home = read("client/src/components/slurp/SlurpHome.tsx");
 assert.match(home, /function SlurpNotificationsView/u);
 assert.match(home, /function SlurpInboxView/u, "messages and activity must share one Inbox surface");
 assert.match(home, /initialTab: "chats" \| "activity"/u);
-assert.match(home, /tab !== "activity"[\s\S]*?markSeen\.mutate\(personaId\)/u);
+assert.match(home, /mutate: markSeen[\s\S]*?tab !== "activity"[\s\S]*?markSeen\(personaId\)/u);
 // Rows with nowhere to go are content, not fake buttons. Actionable rows retain a keyboard-visible
 // focus ring and the same restrained press feedback as the rest of Slurp.
 assert.match(home, /destination \? \([\s\S]*?<button[\s\S]*?focus-visible:ring-2[\s\S]*?: \([\s\S]*?<div/u);

@@ -86,7 +86,9 @@ function readRecord(key: string): Record<string, unknown> | null {
 function validatedPersistedState(state: Record<string, unknown>): PersistedSlurpState {
   const validated: PersistedSlurpState = {};
   if (state.navigation && typeof state.navigation === "object" && !Array.isArray(state.navigation)) {
-    if (isSlurpNavigation(state.navigation)) validated.navigation = state.navigation;
+    if (state.navigation.mode === "creator" && state.navigation.view === "notifications") {
+      validated.navigation = { mode: "creator", view: "notifications" };
+    } else if (isSlurpNavigation(state.navigation)) validated.navigation = state.navigation;
   }
   if (typeof state.viewerPersonaId === "string" || state.viewerPersonaId === null) {
     validated.viewerPersonaId = state.viewerPersonaId;

@@ -575,7 +575,7 @@ export function createSlurpMessagesStorage(db: DB) {
       // Somebody asking you to make something is the strongest thing the world can do, so it
       // outranks every other event kind.
       await slurp.recordCreatorEvent(creatorAccountId, "commission_requested", {
-        subjectId: row.id,
+        subjectId: opened.thread.id,
         actorLabel: viewerAccountId,
       });
       return mapCommission(row);
