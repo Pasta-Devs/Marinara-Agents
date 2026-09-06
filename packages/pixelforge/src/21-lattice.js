@@ -1057,7 +1057,12 @@ PF.lattice = (() => {
   /** The settlement's own gates: every spine terminal the brief's wilds did not
    *  already take. Where a wilds hangs, its shipped portal pair is the seam and
    *  no gate is written at all — so a record and a gate can never both answer for
-   *  one tile, and the precedence is settled at build time. */
+   *  one tile, and the precedence is settled at build time.
+   *
+   *  `spine` is an OVERRIDE for a zone that does not carry one yet, and no
+   *  shipped caller passes it: the compiler stamps `v.spine` six hundred lines
+   *  before it asks for these gates. Kept so a caller building a settlement in
+   *  pieces has the seam available before the stamp, not because it is used. */
   const settlementGates = (v, wilds, spine) =>
     gatesFor(
       v,

@@ -300,6 +300,26 @@ const bedFloor = (w, zone) => {
 const groundFloorId = (zoneId) => (/[ub]$/.test(zoneId) ? zoneId.slice(0, -1) : zoneId);
 /** The tile an NPC is standing on, wherever in the building they are. */
 const standingOn = (zone, npc) => zone.object[zone.w * Math.round(npc.y) + Math.round(npc.x)];
+/** The wander box a house-less NPC falls back to: the compiler's own `plazaBox`,
+ *  which from 0.16 slice 4 is centred on the SQUARE the seeded plan chose rather
+ *  than on the crossroad the square hangs off — lever 3 offsets one around the
+ *  other, so the two are not the same rect. Transcribed because `plazaBox` is a
+ *  closure inside `compile()` and the world records the box only on the NPCs that
+ *  were handed one; the transcription is TEXT-PINNED against `20-world.js` in the
+ *  slice-4 lanes, so a rewrite there cannot leave these cases checking a formula
+ *  the compiler stopped using. */
+const plazaWanderBox = (w, h, p) => {
+  const cx = p.x + ((p.w - 1) >> 1);
+  const cy = p.y + ((p.h - 1) >> 1);
+  return {
+    x0: Math.max(2, cx - 6),
+    y0: Math.max(2, cy - 5),
+    x1: Math.min(w - 3, cx + 6),
+    y1: Math.min(h - 3, cy + 5),
+  };
+};
+/** The same box for a compiled settlement: `publicGround[2]` is the square. */
+const plazaWanderOf = (v) => plazaWanderBox(v.w, v.h, v.publicGround[2]);
 
 function checkWorld(w, sealed, label) {
   assert.equal(w.startZone, "z1", `${label}: settlement is z1`);
@@ -697,13 +717,8 @@ for (const theme of ["cozy-village", "sci-fi-colony"]) {
   );
   const gad = v.npcs.find((n) => n.name === "Gad");
   assert.ok(gad, "destitute stays in the settlement");
-  const mX = v.spine.x; // the crossroad is seeded from 0.16 slice 4
-  const mY = v.spine.y;
-  assert.deepEqual(
-    gad.wander,
-    { x0: mX - 6, y0: mY - 5, x1: mX + 6, y1: mY + 5 },
-    "destitute anchors to the public center, never a house",
-  );
+  // The square is seeded from 0.16 slice 4, and so is the box centred on it.
+  assert.deepEqual(gad.wander, plazaWanderOf(v), "destitute anchors to the public center, never a house");
   assert.ok(!v.npcs.some((n) => n.name === "Wyn"), "the fringe NPC leaves the settlement for the wilds");
 
   // Walkable-spawn regression: seed 6 scatters a trunk exactly on the wilds
@@ -791,9 +806,7 @@ const wayrestCast = [
   );
   assert.equal(v.object.filter((t) => t === "table").length, 0, "a transient non-merchant lays no stall");
   assert.ok(!Object.values(w.zones).some((z) => z.mapKind === "place"), "no wilds synthesized (places is non-empty)");
-  const mX = v.spine.x; // the crossroad is seeded from 0.16 slice 4
-  const mY = v.spine.y;
-  const plaza = { x0: mX - 6, y0: mY - 5, x1: mX + 6, y1: mY + 5 };
+  const plaza = plazaWanderOf(v); // the square is seeded from 0.16 slice 4
   const wander = (name) => v.npcs.find((n) => n.name === name).wander;
   assert.deepEqual(wander("Dov"), plaza, "transient with no inn falls back to the plaza");
   assert.deepEqual(
@@ -889,9 +902,7 @@ const wayrestCast = [
   checkWorld(w, sealed, "loiter-spread");
   const v = w.zones.z1;
   const innId = Object.entries(sealed._ids.zones).find(([, n]) => n === "The Rest")?.[0];
-  const mX = v.spine.x; // the crossroad is seeded from 0.16 slice 4
-  const mY = v.spine.y;
-  const plaza = JSON.stringify({ x0: mX - 6, y0: mY - 5, x1: mX + 6, y1: mY + 5 });
+  const plaza = JSON.stringify(plazaWanderOf(v)); // the square is seeded from 0.16 slice 4
   const names = ["Vye", "Wil", "Xio"];
   const inInn = names.filter((n) => w.zones[innId].npcs.some((x) => x.name === n));
   assert.equal(inInn.length, 1, "one transient loiters inside the inn");
@@ -956,9 +967,8 @@ const wayrestCast = [
   assert.equal(v.object.filter((t) => t === "table").length, 0, "no free lot -> the transient merchant lays no stall");
   const sol = v.npcs.find((n) => n.name === "Sol");
   assert.ok(sol, "the merchant still loiters at a public spot");
-  const mX = v.spine.x; // the crossroad is seeded from 0.16 slice 4
-  const mY = v.spine.y;
-  assert.deepEqual(sol.wander, { x0: mX - 6, y0: mY - 5, x1: mX + 6, y1: mY + 5 }, "falls back to the plaza");
+  // The square is seeded from 0.16 slice 4, and so is the box centred on it.
+  assert.deepEqual(sol.wander, plazaWanderOf(v), "falls back to the plaza");
 }
 
 // 11g. A shop with an interior (a workshop) — a loitering transient browses
@@ -3774,10 +3784,11 @@ const zoneNamed = (w, name) => Object.values(w.zones).find((zone) => zone.name =
   assert.equal(plain.npc._sched.keeper, false, "an elder with no sanctuary is not a keeper");
   assert.equal(plain.zoneId, "z1", "and stays in the settlement");
   const v = plain.world.zones.z1;
-  const mx = v.spine.x; // the crossroad is seeded from 0.16 slice 4
-  const my = v.spine.y;
+  const box = plazaWanderOf(v); // the square is seeded from 0.16 slice 4
+  const px = Math.round(plain.npc.x);
+  const py = Math.round(plain.npc.y);
   assert.ok(
-    Math.abs(Math.round(plain.npc.x) - mx) <= 6 && Math.abs(Math.round(plain.npc.y) - my) <= 5,
+    px >= box.x0 && px <= box.x1 && py >= box.y0 && py <= box.y1,
     "an elder with no sanctuary still spends midday in the plaza",
   );
 
@@ -28113,13 +28124,20 @@ const layoutFingerprint = (w) => {
 
   // Taken against the 0.13.0 tree, one commit before 17-weather.js landed.
   //
-  // RE-PINNED TWICE AT 0.16, AND ONLY EVER HALF OF IT. The wilderness lattice
-  // punches gate aprons into every compiled world's border ring, and slice 4
-  // seeds the crossroad, the plaza and the lot rhythm — two deliberate, visible
-  // geometry changes — so the `defaults` and `maxBrief` rows moved on each and
-  // were taken again against the tree that landed them. Exactly forty rows moved
-  // the second time and exactly twenty did not, which is the whole of "the
-  // streets re-lay and the fallback does not" said in hashes.
+  // RE-PINNED THREE TIMES AT 0.16, AND ONLY EVER HALF OF IT. The wilderness
+  // lattice punches gate aprons into every compiled world's border ring, slice 4
+  // seeds the crossroad, the plaza and the lot rhythm, and slice 4's polish pass
+  // opened the junction search's column margin and re-centred the plaza wander
+  // box on the square — deliberate, visible geometry each time — so the
+  // `defaults` and `maxBrief` rows were taken again against the tree that landed
+  // them. Exactly twenty `legacy` rows have moved on NONE of the three, which is
+  // the whole of "the streets re-lay and the fallback does not" said in hashes.
+  //
+  // THIRTY-SIX OF THE FORTY moved on the third re-pin rather than all forty, and
+  // the four that held are a coincidence and not a claim: a wider search still
+  // hands `(rnd() * legal.length) | 0` the same plan at cozy-village 5 and 31 and
+  // at both themes' 31 maxBrief. A row that does not move is not evidence of
+  // anything here; the twenty that must not move are the evidence.
   // THE TWENTY `legacy` ROWS ARE STILL THE
   // 0.13.0 ORIGINALS, byte for byte, and that is not housekeeping: the ruling on
   // the fallback map was "no one should play in the fallback map", so it gets no
@@ -28129,65 +28147,65 @@ const layoutFingerprint = (w) => {
   // near the end of this file; this table is the coarse net under it.
   const LAYOUTS = {
     "cozy-village|1|legacy": "cf46649ec5c6b349",
-    "cozy-village|1|defaults": "364f191ef530ebc3",
-    "cozy-village|1|maxBrief": "7c99a414c2421b23",
+    "cozy-village|1|defaults": "3afa9ab99c068230",
+    "cozy-village|1|maxBrief": "a9a15adfe7e80987",
     "cozy-village|2|legacy": "b162a3091ba35899",
-    "cozy-village|2|defaults": "c467902d0682bd20",
-    "cozy-village|2|maxBrief": "1b5caed8ebe06749",
+    "cozy-village|2|defaults": "8ea0c6e131ab8bcc",
+    "cozy-village|2|maxBrief": "c8889a43126ea11d",
     "cozy-village|3|legacy": "6c978a992a9041b3",
-    "cozy-village|3|defaults": "a74800e3fe46bf38",
-    "cozy-village|3|maxBrief": "04e02bed03288218",
+    "cozy-village|3|defaults": "fa4ee59b3c6b7cd8",
+    "cozy-village|3|maxBrief": "773c02471a8d11b3",
     "cozy-village|4|legacy": "2f823c92752f9cc1",
-    "cozy-village|4|defaults": "599cacfba57b8f4b",
-    "cozy-village|4|maxBrief": "24706dc27111c06f",
+    "cozy-village|4|defaults": "ac675f31daf40b08",
+    "cozy-village|4|maxBrief": "ec53eed1186cbf0f",
     "cozy-village|5|legacy": "4f4d9fbc079dc3d8",
     "cozy-village|5|defaults": "fbdd91914eb3d0ab",
-    "cozy-village|5|maxBrief": "5943341dfc4a5b51",
+    "cozy-village|5|maxBrief": "59b06401b0e1ad77",
     "cozy-village|7|legacy": "26b1bfe2a5e5e541",
-    "cozy-village|7|defaults": "f611747fdeea7b64",
-    "cozy-village|7|maxBrief": "0b2977ee34ca7b7c",
+    "cozy-village|7|defaults": "7b9c28ac4e95b9ad",
+    "cozy-village|7|maxBrief": "cecadff0ede6fb74",
     "cozy-village|11|legacy": "34c824678792be49",
-    "cozy-village|11|defaults": "e23ac107f9fc1705",
-    "cozy-village|11|maxBrief": "f45a9e548dc89aa9",
+    "cozy-village|11|defaults": "431ef6bbadd39f9a",
+    "cozy-village|11|maxBrief": "18adf00e127383df",
     "cozy-village|31|legacy": "c2d3ffda6eb1cbd7",
     "cozy-village|31|defaults": "1f4edf74f26ebbdb",
     "cozy-village|31|maxBrief": "e1c69f125dfe36cb",
     "cozy-village|80021|legacy": "eb066c1cfea95532",
-    "cozy-village|80021|defaults": "abad4518292d3f6e",
-    "cozy-village|80021|maxBrief": "bb8bf4b241ed54e0",
+    "cozy-village|80021|defaults": "554208dbe0404de4",
+    "cozy-village|80021|maxBrief": "f9166a56ec63c004",
     "cozy-village|424242|legacy": "6292c385ef49fb4b",
-    "cozy-village|424242|defaults": "255888c4bed199be",
-    "cozy-village|424242|maxBrief": "44f9c6211d08b464",
+    "cozy-village|424242|defaults": "f2244972395aec1c",
+    "cozy-village|424242|maxBrief": "484942569245689d",
     "sci-fi-colony|1|legacy": "a319fe23cf92a4db",
-    "sci-fi-colony|1|defaults": "ee0079b06f462650",
-    "sci-fi-colony|1|maxBrief": "75d0c3fbc679e345",
+    "sci-fi-colony|1|defaults": "48a1e2bae593af8f",
+    "sci-fi-colony|1|maxBrief": "6380563218530255",
     "sci-fi-colony|2|legacy": "fb99db68144637bc",
-    "sci-fi-colony|2|defaults": "52852856294d8ccc",
-    "sci-fi-colony|2|maxBrief": "52a8741bf471c088",
+    "sci-fi-colony|2|defaults": "087598fe43312213",
+    "sci-fi-colony|2|maxBrief": "ffbb87f705fe52a8",
     "sci-fi-colony|3|legacy": "fb3a709e55da69c3",
-    "sci-fi-colony|3|defaults": "dbb6cdf792555369",
-    "sci-fi-colony|3|maxBrief": "f56d666688b5608f",
+    "sci-fi-colony|3|defaults": "c5aecb355793edde",
+    "sci-fi-colony|3|maxBrief": "acdf97fc8d0a22bc",
     "sci-fi-colony|4|legacy": "c96a0065a44541a7",
-    "sci-fi-colony|4|defaults": "724f435f963d525a",
-    "sci-fi-colony|4|maxBrief": "ef458d670a499ab0",
+    "sci-fi-colony|4|defaults": "559aae3cf021bcee",
+    "sci-fi-colony|4|maxBrief": "d8a3ccc6717414c4",
     "sci-fi-colony|5|legacy": "5dbafb5da6ed4b40",
-    "sci-fi-colony|5|defaults": "8f92a5ac281478a9",
-    "sci-fi-colony|5|maxBrief": "2b31b652f64c0f1f",
+    "sci-fi-colony|5|defaults": "7af9ac5ff0a352ee",
+    "sci-fi-colony|5|maxBrief": "59aa02a15a53cf45",
     "sci-fi-colony|7|legacy": "ce85743023c950d9",
-    "sci-fi-colony|7|defaults": "68c698fcaca25311",
-    "sci-fi-colony|7|maxBrief": "c35f8b9cef2a3eb9",
+    "sci-fi-colony|7|defaults": "0ff4dc78536a03ae",
+    "sci-fi-colony|7|maxBrief": "e8e9f2ab7f018d2a",
     "sci-fi-colony|11|legacy": "e4acc2456cf5e425",
-    "sci-fi-colony|11|defaults": "d4fd302d290fb269",
-    "sci-fi-colony|11|maxBrief": "8563d3bff1697025",
+    "sci-fi-colony|11|defaults": "bef7fd3d979545eb",
+    "sci-fi-colony|11|maxBrief": "bdca1070d634901f",
     "sci-fi-colony|31|legacy": "5bad5d9f4d0b2eeb",
-    "sci-fi-colony|31|defaults": "a3313f4f8b45f5ba",
+    "sci-fi-colony|31|defaults": "b6c54a93f00ec92c",
     "sci-fi-colony|31|maxBrief": "ea7e3c5a29cb5844",
     "sci-fi-colony|80021|legacy": "8eefc91e8551cff7",
-    "sci-fi-colony|80021|defaults": "fcfbec0100b4723a",
-    "sci-fi-colony|80021|maxBrief": "c62aad71329a4443",
+    "sci-fi-colony|80021|defaults": "6a585283955b747f",
+    "sci-fi-colony|80021|maxBrief": "f723d04d1c044fbd",
     "sci-fi-colony|424242|legacy": "cc16a560ba4863e0",
-    "sci-fi-colony|424242|defaults": "4dceb2e0d74afd2c",
-    "sci-fi-colony|424242|maxBrief": "91c908b3c88d2d6e",
+    "sci-fi-colony|424242|defaults": "198a23c4a3b396bb",
+    "sci-fi-colony|424242|maxBrief": "bfd2767ffc273d59",
   };
 
   const themes = loadedPF.art.themeIds();
@@ -33281,8 +33299,8 @@ const layoutFingerprint = (w) => {
     // levers out ON TOP of this rewrite and gets `8e666935dc3bc3f1`,
     // `3dda8c65a3ccfba0` and `deefc2f185fed000` back, byte for byte.
     for (const [theme, seed, want] of [
-      ["cozy-village", 1, "9835ee0baaf4aaca"],
-      ["sci-fi-colony", 424242, "b8d5b80ed1bf6843"],
+      ["cozy-village", 1, "0034e323aad1b51c"],
+      ["sci-fi-colony", 424242, "11f10d5bf0b14d8f"],
       ["cozy-village", 31, "6db022c5d65d7928"],
     ]) {
       assert.equal(
@@ -35528,6 +35546,24 @@ const layoutFingerprint = (w) => {
   };
   const zoneBytes = (z) =>
     `${z.ground.join(",")}|${z.object.join(",")}|${z.overhead.join(",")}|${Array.from(z.solid).join(",")}`;
+  /** `plazaBox` is a closure inside `compile()` and the world carries the box it
+   *  produced nowhere a lane can read, so `plazaWanderBox` at the top of this
+   *  file transcribes it — for the four standing cast cases as well as for these
+   *  lanes. THE PIN LIVES HERE, where the lane that cares about the formula is:
+   *  a rewrite of the real one cannot leave any of them walking a formula the
+   *  compiler stopped using. The same poor-but-honest pin the arrival hook uses. */
+  const wanderBox = plazaWanderBox;
+  /** Whether the clamp above did any work, which is what lane 3(7) counts. */
+  const clampsBox = (w, h, p) => {
+    const cx = p.x + ((p.w - 1) >> 1);
+    const cy = p.y + ((p.h - 1) >> 1);
+    return cx - 6 < 2 || cy - 5 < 2 || cx + 6 > w - 3 || cy + 5 > h - 3;
+  };
+  assert.match(
+    readFileSync(join(here, "src", "20-world.js"), "utf8"),
+    /const plazaBox = \(\) => \{\s*const cx = plaza\.x \+ \(\(plaza\.w - 1\) >> 1\);\s*const cy = plaza\.y \+ \(\(plaza\.h - 1\) >> 1\);\s*return \{\s*x0: Math\.max\(2, cx - 6\),\s*y0: Math\.max\(2, cy - 5\),\s*x1: Math\.min\(v\.w - 3, cx \+ 6\),\s*y1: Math\.min\(v\.h - 3, cy \+ 5\),/,
+    "the compiler's own plaza wander box is the one this lane transcribes: centred on the square, then clamped",
+  );
   /** Flood fill from the settlement's spawn. `checkWorld`'s pocket sweep exempts
    *  settlements outright, so the one zone this slice re-lays is the one nothing
    *  in this file was walking. */
@@ -35714,17 +35750,23 @@ const layoutFingerprint = (w) => {
             }
             assert.ok(doors > 0, `${label}: the settlement has doors to check`);
             // (7) The square's wander box — the fallback every house-less NPC in
-            //     the cast loop gets — is on the map. The clamp is a no-op across
-            //     the whole legal set today; asserted rather than assumed,
-            //     because the next retune of the search is the one that finds the
-            //     edge.
-            if (
-              v.spine.x - 6 < 2 ||
-              v.spine.y - 5 < 2 ||
-              v.spine.x + 6 > v.w - 3 ||
-              v.spine.y + 5 > v.h - 3
-            )
-              clamped++;
+            //     the cast loop gets — holds the square it is named for. It is
+            //     centred on the PLAZA and not on the crossroad, because lever 3
+            //     offsets one around the other: an 11x6 square sits up to five
+            //     columns off the junction, and a box centred there is five
+            //     columns of road and lot instead of the paving it means. Swept
+            //     exhaustively in (7b); this is the shipped world's own instance.
+            {
+              const box = wanderBox(v.w, v.h, plaza);
+              assert.ok(
+                box.x0 <= plaza.x &&
+                  box.y0 <= plaza.y &&
+                  box.x1 >= plaza.x + plaza.w - 1 &&
+                  box.y1 >= plaza.y + plaza.h - 1,
+                `${label}: the wander box ${box.x0},${box.y0}-${box.x1},${box.y1} does not hold its own square`,
+              );
+              if (clampsBox(v.w, v.h, plaza)) clamped++;
+            }
             // (8) The well and the market boards stand ON the square and never in
             //     the road: the quadrants are read off the plaza rect now, and
             //     both arteries carry through traffic.
@@ -35749,6 +35791,46 @@ const layoutFingerprint = (w) => {
       `the contract sweep ran (${checked})`,
     );
     assert.equal(clamped, 0, `the square's wander box never needed the clamp (${clamped} of ${checked} did)`);
+
+    // (7b) …AND OVER EVERY SQUARE THE SEARCH CAN OFFER, not the thirty above.
+    //      The box is pure arithmetic off the plaza rect, so the whole product —
+    //      every junction at every rank, times every square that junction can
+    //      hold — is walkable outright rather than sampled, and the sampling is
+    //      exactly what would let one rank's offset shape hide. Two claims: the
+    //      box holds its square whole (an NPC sent to the square is sent to
+    //      paving, never to the lots five columns over), and its centre IS the
+    //      square's, to the half tile an even side rounds by. The clamp is
+    //      counted too and is still inert, which is the (7) assertion widened
+    //      from the shipped draws to the offer.
+    {
+      let boxes = 0;
+      let clampedAll = 0;
+      let worstOffset = 0;
+      for (const scale of SCALES) {
+        const spec = SPEC[scale];
+        for (const c of T.junctionCandidates(spec.w, spec.h, spec.buildings)) {
+          for (const p of T.plazaCandidates(spec.w, spec.h, c.x, c.y)) {
+            const box = wanderBox(spec.w, spec.h, p);
+            assert.ok(
+              box.x0 <= p.x && box.y0 <= p.y && box.x1 >= p.x + p.w - 1 && box.y1 >= p.y + p.h - 1,
+              `${scale}: the wander box for the ${p.w}x${p.h} square at ${p.x},${p.y} does not hold it`,
+            );
+            const off = Math.max(
+              Math.abs((box.x0 + box.x1) / 2 - (p.x + (p.w - 1) / 2)),
+              Math.abs((box.y0 + box.y1) / 2 - (p.y + (p.h - 1) / 2)),
+            );
+            worstOffset = Math.max(worstOffset, off);
+            if (clampsBox(spec.w, spec.h, p)) clampedAll++;
+            boxes++;
+          }
+        }
+      }
+      // The sweep is the whole offer and not a corner of it: ~138k boxes, which
+      // is the product the variety lane's plan space is built out of.
+      assert.ok(boxes > 100000, `the wander-box sweep walked the whole candidate set (${boxes} boxes)`);
+      assert.equal(worstOffset, 0.5, `the box's centre is the square's to half a tile (worst ${worstOffset})`);
+      assert.equal(clampedAll, 0, `no square the search offers needs the box clamped (${clampedAll} of ${boxes})`);
+    }
   }
 
   // ── LANE 4: ANTI-SAMENESS, CALIBRATED PER SCALE ──────────────────────────
@@ -35756,7 +35838,7 @@ const layoutFingerprint = (w) => {
   // the identical town around it is precisely the failure this design was
   // written to avoid, and it is what a junction-position histogram would miss.
   // The thresholds come off the search's own candidate sets rather than being
-  // invented — an outpost has three legal junctions and two hundred-odd plans in
+  // invented — an outpost has four legal junctions and seven hundred-odd plans in
   // all, so two hundred seeds collide by arithmetic and a flat "nine seeds in ten
   // differ" would fail it for doing exactly what it should.
   {
@@ -35805,8 +35887,8 @@ const layoutFingerprint = (w) => {
       // HOW MANY PLANS THERE ARE TO DRAW, counted off the search itself: every
       // junction, times its squares, times the phases each band is allowed. The
       // threshold below is derived from this rather than picked, because 200
-      // draws from 201 plans collide by arithmetic and an outpost would fail a
-      // flat "nine in ten seeds differ" while doing exactly what it should.
+      // draws from a few hundred plans collide by arithmetic and an outpost would
+      // fail a flat "nine in ten seeds differ" while doing exactly what it should.
       let space = 0;
       for (const c of legal) {
         let plans = T.plazaCandidates(spec.w, spec.h, c.x, c.y).length;

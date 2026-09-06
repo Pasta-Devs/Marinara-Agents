@@ -2982,12 +2982,24 @@ owed is the browser's own number rather than a guess:**
    on them. **Plus 0.16's own new ground inside the settlement**: a stone verge stays bare under
    snow exactly as `scree` does, and a water town's thickened grass mottle keeps its two tones —
    which is what the substitution table promises and nobody has looked at.
-4. **The retry popup in a real browser**, narrowed to what the shim genuinely cannot reach: real
+4. **The stone verge in `sci-fi-colony`, on a FAIR day, and this one is not about snow.** Rasterised
+   through the Tier-1 painters, `stone` and `path` sit a mean RGB distance of **7** apart in the
+   colony theme against **60** in cozy-village. The verge only paints on tiles that were grass, so
+   the likely colony reading is not a road with a hard shoulder but a road that looks about five
+   tiles wide with ragged edges. It is clearly distinct from grass (88) and very clearly distinct
+   under snow (176), so the idiom is not invisible — the question is whether the *shoulder* reads
+   as one. If it does not, C15's sanctioned one-tile escape is the remedy.
+5. **The square, at noon, at village scale and up.** 0.16's band phases spend the lot grid's
+   centring slack toward the crossroad by design, so the buildings stand closer to the paving than
+   they did and the open ground around the square is smaller. The wander box tracks the square
+   itself, so nobody is sent to stand in a wall — this is a look, not a fault. Does a busy square
+   read as a market or as a crush?
+6. **The retry popup in a real browser**, narrowed to what the shim genuinely cannot reach: real
    **z-order against the host's narration panel** (the one playtest-caught bug in this class), real
    focus behaviour, the legibility of the topbar chip, and the felt cadence of an auto-open. Mount,
    unmount, Escape routing, the once-a-visit memo and hide-under-gate are all driven in the harness
    through a real `Hud` on the DOM shim and are **not** on this list.
-5. **The signpost chip at width.** "North — The Tangled Thicket" is a derived string of unbounded
+7. **The signpost chip at width.** "North — The Tangled Thicket" is a derived string of unbounded
    length beside the clock and the purse, and nothing has drawn it at a real topbar width with a
    long landmark name in it.
 
@@ -3059,10 +3071,14 @@ rounds are expected rather than a failure.
 - **Does a compiled world read as a place?** The release's real question, and the one nothing in
   this repository can answer. Everything below is a detail of it.
 - **Did the sameness die?** Three or four seeds side by side. The harness proves junction spread and
-  layout-fingerprint distinctness at every rank (171 of 200 distinct layouts at outpost, 200 of 200
-  from village up); only an eye says "a different town". Worth knowing before the session: **the
-  legacy village is still the legacy village** — the fallback map gets no variety and no
-  wilderness, by ruling, and its players get the retry surface instead.
+  layout-fingerprint distinctness at every rank (175 of 200 distinct layouts at outpost, 200 of 200
+  from hamlet up); only an eye says "a different town". Two things worth knowing before the session:
+  **the legacy village is still the legacy village** — the fallback map gets no variety and no
+  wilderness, by ruling, and its players get the retry surface instead — and **at outpost and hamlet
+  the crossroad only slides sideways.** Those maps hold exactly one legal band depth, so the
+  horizontal road sits on the same row in every one of them; what varies there is the square, the
+  lot rhythm and the ground. If an outpost still reads as "the same village", that is the reason,
+  and it is a scale-table question rather than a lever that failed.
 - **Is walking out worth doing?** Six terrain classes at density, **both themes** — and the colony
   half is a taste verdict the package cannot give itself: a mast field, a sintered pan and a
   collapsed outstation are the same tiles as a wood, a heath and a ruin, re-skinned and re-named.
