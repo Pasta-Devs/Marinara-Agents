@@ -34745,4 +34745,595 @@ const layoutFingerprint = (w) => {
   }
 }
 
+// ═══ THE WILDERNESS LATTICE — SLICE 3, RESIDENCY AND EVICTION (0.16) ═══════
+// Slice 1 made the country and slice 2 made it walkable; neither of them ever
+// gave a cell back. A resident cell is its tile arrays plus the renderer's two
+// composites — and the composites are where the megabytes are — so on a lattice
+// with no edge, walking is a leak at walking pace.
+//
+// Seven lanes, and the two that carry the slice are the two nothing already in
+// this file could see. Lane 5 drives the SOFTWARE CANVAS, because a `delete`
+// that does not also drop the picture is the same leak with the zone's name
+// filed off: the renderer has carried `invalidateZone` with no runtime caller
+// since the day it was written, and this is the release that calls it. Lane 2
+// walks a cell back after it was let go and hashes what came back — dropping
+// country is only free because the country returns identical, and "identical"
+// has to include the gates and the feature rows a tile hash cannot see.
+{
+  const L = loadedPF.lattice;
+  const TUNE = L.TUNE;
+  const KEEP = TUNE.RESIDENCY_KEEP;
+  const S = loadedPF.save;
+  const P = loadedPF.player;
+
+  /** A compiled world with a wilderness hanging off it. */
+  const wildWorld = (theme, seed, over) => {
+    const draft = loadedPF.brief.defaults(theme, seed);
+    Object.assign(draft, over ?? {});
+    const sealed = loadedPF.brief.validate(draft, { theme, seed });
+    const built = loadedPF.world.build(seed, theme, sealed);
+    assert.equal(built.brieved, true, `the fixture at ${theme}/${seed} compiled rather than degrading`);
+    return { world: built, sealed, meta: { pixelforgeBrief: sealed } };
+  };
+  const chunkIds = (w) => Object.keys(w.zones).filter((id) => L.parse(id));
+  /** Everything that is NOT a cell: the settlement, the places, the dwellings,
+   *  the floors, the insides. None of it is a cache entry and none of it is ever
+   *  evictable — which is a claim each lane below re-checks rather than trusts. */
+  const namedIds = (w) => Object.keys(w.zones).filter((id) => !L.parse(id));
+
+  const PUSH = { N: { up: true }, E: { right: true }, S: { down: true }, W: { left: true } };
+
+  /** Slice 2's walk, unchanged: stand one tile inside an edge and walk into it
+   *  through the real step loop, at the real speed, one fixed frame at a time. */
+  const walkOut = (sim, dir, ticks = 240) => {
+    const zone = sim.zone();
+    const gate = (zone.gates ?? []).find((g) => g.dir === dir);
+    assert.ok(gate, `${zone.id} has a ${dir} edge to walk into`);
+    const inset = L.insetOf(zone, gate);
+    sim.teleport(zone.id, inset.x, inset.y);
+    const from = zone.id;
+    for (let tick = 0; tick < ticks; tick++) {
+      const res = sim.step(1 / 60, PUSH[dir]);
+      if (res.zoneChanged) return { from, id: sim.zoneId, res, ticks: tick + 1 };
+    }
+    return { from, id: null, res: { zoneChanged: false }, ticks };
+  };
+
+  /** The frame loop's own arrival, driven against a core of the lane's choosing
+   *  — the shipped method rather than a copy of it. Eviction hangs off this and
+   *  off 50-spatial's drift arm, and lane 7 drives the other one. */
+  const arrive = (core) => loadedPF.core._zoneChanged.call(core);
+
+  const makeCore = (chatId, sim, meta, render) => {
+    const toasts = [];
+    return {
+      chatId,
+      sim,
+      toasts,
+      render: render ?? null,
+      host: { chatMeta: meta ?? {} },
+      hud: {
+        toast: (msg, kind) => toasts.push({ msg, kind: kind ?? "" }),
+        refreshChips() {},
+        questFilled() {},
+      },
+      markDirty() {
+        S.markDirty(this);
+      },
+    };
+  };
+
+  /** Slice 1's cell fingerprint, because "it came back the same" has to mean
+   *  more than the tiles: a duplicated gate and a duplicated feature row are
+   *  exactly what an evict-and-rebuild cycle accumulates, and a tile hash is
+   *  blind to both. The portal list rides along for the same reason. */
+  const cellFingerprint = (z) => {
+    const h = createHash("sha256");
+    h.update(`${z.id}|${z.name}|${z.w}x${z.h}|${z.mapKind}|${z.mapExport}|${z.terrain ?? ""}`);
+    h.update(`\ng ${z.ground.join(",")}`);
+    h.update(`\no ${z.object.join(",")}`);
+    h.update(`\nc ${z.overhead.join(",")}`);
+    h.update(`\ns ${Array.from(z.solid).join(",")}`);
+    h.update(`\nG ${(z.gates ?? []).map((g) => `${g.dir}${g.x},${g.y}`).join(";")}`);
+    h.update(`\nF ${(z.features ?? []).map((f) => `${f.id}|${f.tag}|${f.name}|${f.rect.x},${f.rect.y}`).join(";")}`);
+    h.update(`\nP ${(z.portals ?? []).map((p) => `${p.x},${p.y}>${p.toZone}`).join(";")}`);
+    h.update(`\nL ${(z.lights ?? []).map((l) => `${l.x},${l.y}`).join(";")}`);
+    return h.digest("hex").slice(0, 16);
+  };
+
+  /** A composite's own pixels, hashed natively. One chunk canvas is 576×384×4 =
+   *  884 KB, and joining that into a string per comparison would be this lane's
+   *  entire runtime. */
+  const canvasHash = (c) =>
+    createHash("sha256")
+      .update(Buffer.from(c._data.buffer, c._data.byteOffset, c._data.byteLength))
+      .digest("hex")
+      .slice(0, 16);
+
+  // ── 1. THE POLICY, AND THE LONGER LIST OF WHAT IT REFUSES TO TAKE ─────────
+  // `residency` is a READ: a world and a standpoint in, ids out, nothing
+  // touched. Every refusal below is a zone that would be a bug to drop, and the
+  // order the survivors come back in is the only thing that decides which cell
+  // pays when the count is over — so both halves are asserted, not inspected.
+  {
+    const { world: w } = wildWorld("cozy-village", 40404, { surround: "woods" });
+    // A straight column north of the settlement: (0,±1) are anchors, (0,-n) is
+    // open country all the way out, so the fixture is twelve cells and no
+    // special cases.
+    const column = [];
+    for (let cy = -1; cy >= -12; cy--) {
+      const id = L.cellZoneId(w, 0, cy);
+      assert.ok(L.ensure(w, id), `the fixture compiled ${id}`);
+      column.push(id);
+    }
+    w._entered = [...column]; // oldest first, exactly as a walk out would leave it
+    const here = column.at(-1);
+
+    // THE ORDER. Four kept means eight let go, oldest first — the list is the
+    // walk read backwards, and a policy that returned it any other way would be
+    // evicting the ground behind the player instead of the country they left.
+    assert.deepEqual(L.residency(w, here, 4), column.slice(0, 8), "the eight oldest cells go, oldest first");
+    assert.deepEqual(
+      L.residency(w, here),
+      column.slice(0, column.length - KEEP),
+      "…and with no count given, the keep from the tunables is the count",
+    );
+
+    // PURE. Asking does not answer.
+    const zonesBefore = Object.keys(w.zones).join(",");
+    const seenBefore = w._entered.join(",");
+    assert.deepEqual(L.residency(w, here, 4), L.residency(w, here, 4), "asking twice is the same answer");
+    assert.equal(Object.keys(w.zones).join(","), zonesBefore, "…and asking evicted nothing");
+    assert.equal(w._entered.join(","), seenBefore, "…and moved nothing in the order it read");
+
+    // A CELL NOTHING EVER ENTERED IS THE OLDEST THING THERE IS — the reload's
+    // case: a save row naming a cell compiles it before any arrival is recorded.
+    // Ties among them break on the id, so the answer is a function of the
+    // world's content rather than of the order somebody compiled it in.
+    const strays = [L.cellZoneId(w, 4, 4), L.cellZoneId(w, 3, 3), L.cellZoneId(w, 5, 5)];
+    for (const id of strays) L.ensure(w, id);
+    assert.deepEqual(
+      L.residency(w, here, 12).slice(0, 3),
+      [...strays].sort(),
+      "cells nothing has entered are the first to go, in id order",
+    );
+    for (const id of strays) delete w.zones[id];
+
+    // THE REFUSALS, every one of them at keep = 0 — the setting that would take
+    // everything it is allowed to take.
+    const everything = L.residency(w, here, 0);
+    assert.equal(everything.includes(here), false, "the cell the player is standing in is never taken");
+    assert.equal(everything.length, column.length - 1, "…and it is the only cell of the column that survives");
+    for (const id of namedIds(w)) {
+      assert.equal(everything.includes(id), false, `${id} is a place with a name, not a cache entry`);
+    }
+    assert.ok(
+      namedIds(w).some((id) => w.zones[id].mapKind === "building"),
+      "the fixture really does have insides to refuse",
+    );
+    assert.ok(
+      Object.values(w.latticeAnchors ?? {}).every((id) => !everything.includes(id)),
+      "…and the wilds the brief named are refused with them",
+    );
+
+    // AN ID THAT IS NOT A CELL ID, PARKED IN `zones`. `w_007_0` is not canonical
+    // and `w_1_0` names a cell this world has anchored to the brief's own wilds:
+    // neither is a zone this module would ever mint, so neither is a zone it
+    // gets to destroy.
+    const impostors = ["w_007_0", L.idFor(1, 0)];
+    for (const id of impostors) w.zones[id] = w.zones[column[0]];
+    const withImpostors = L.residency(w, here, 0);
+    for (const id of impostors) {
+      assert.equal(withImpostors.includes(id), false, `"${id}" is not a cell this world speaks for`);
+      delete w.zones[id];
+    }
+
+    // A CELL WITH SOMEBODY IN IT. Vacuous today — C6 puts no residents in the
+    // country — and load-bearing the day it stops being: a schedule handle whose
+    // zone was dropped is a person who stops existing mid-errand.
+    w.zones[column[0]].npcs.push({ id: "wanderer", name: "A wanderer" });
+    assert.equal(
+      L.residency(w, here, 0).includes(column[0]),
+      false,
+      "the oldest cell in the world stays if somebody is standing in it",
+    );
+    w.zones[column[0]].npcs.pop();
+    assert.equal(L.residency(w, here, 0).includes(column[0]), true, "…and goes again the moment they are gone");
+
+    // THE SETTLEMENT, BY NAME AND NOT ONLY BY SPELLING. `cellZoneId` answers
+    // (0,0) with `world.startZone`, so a world whose start zone were spelled
+    // like a cell would be evictable on the id test alone. The refusal is
+    // explicit for exactly that reason, and this is the fixture that reaches it.
+    const doctored = { ...w, startZone: column[3] };
+    const taken = L.residency(doctored, here, 0);
+    assert.equal(taken.includes(column[3]), false, "the start zone is refused whatever it is called");
+    assert.equal(taken.includes(column[4]), true, "…while the cell beside it is not");
+
+    // AND THE FALLBACK MAP GETS NOTHING, HERE TOO (ruling 4). No cells, no
+    // policy, no throw — the same nothing slice 1's gate lane asserts.
+    const legacy = loadedPF.world.build(31415, "cozy-village", null);
+    assert.notEqual(legacy.brieved, true, "the fixture really is the fallback world");
+    assert.deepEqual(L.residency(legacy, legacy.startZone, 0), [], "the fallback map has no residency to police");
+  }
+
+  // ── 2. THE ROUND TRIP ─────────────────────────────────────────────────────
+  // The claim that makes eviction free rather than lossy: a cell walked back
+  // into is the cell that was let go, down to the byte. And the failure this
+  // catches is not a wrong tile — it is ACCUMULATION. An evict-and-rebuild cycle
+  // is exactly where a design that wired records between neighbours would push a
+  // second portal into every survivor, and where a builder that appended to a
+  // shared array would grow a second set of gates. Both are invisible to a tile
+  // hash and both are in the fingerprint.
+  await withSavePath(async () => {
+    const { world: w, meta } = wildWorld("cozy-village", 51015, { surround: "woods" });
+    const sim = new loadedPF.Sim(w);
+    const core = makeCore("chat-roundtrip", sim, meta);
+    const OUT = KEEP + 5;
+    const townPrint = cellFingerprint(w.zones[w.startZone]);
+    const townPortals = w.zones[w.startZone].portals.length;
+
+    const trail = [];
+    const prints = new Map();
+    for (let i = 0; i < OUT; i++) {
+      const hop = walkOut(sim, "N");
+      assert.ok(L.parse(hop.id), `hop ${i} walked into country (${hop.from}→${hop.id})`);
+      arrive(core);
+      trail.push(hop.id);
+      prints.set(hop.id, cellFingerprint(w.zones[hop.id]));
+    }
+
+    const dropped = trail.filter((id) => !w.zones[id]);
+    assert.deepEqual(dropped, trail.slice(0, OUT - KEEP), "the walk let go of exactly the country it left behind");
+    assert.equal(chunkIds(w).length, KEEP, `…and holds the keep (${chunkIds(w).length})`);
+
+    // AND BACK. Every arrival is compared, and the ones that were REBUILT are
+    // counted separately — a lane where nothing had actually been dropped would
+    // pass every comparison and prove nothing.
+    let rebuilt = 0;
+    for (let i = OUT - 1; i >= 0; i--) {
+      const want = i === 0 ? w.startZone : trail[i - 1];
+      const wasGone = !w.zones[want];
+      const hop = walkOut(sim, "S");
+      assert.equal(hop.id, want, `the walk home crosses back into ${want}`);
+      arrive(core);
+      if (i === 0) continue;
+      if (wasGone) rebuilt++;
+      assert.equal(cellFingerprint(w.zones[want]), prints.get(want), `${want} came back the same country it was`);
+    }
+    assert.equal(rebuilt, OUT - KEEP, `…and ${rebuilt} of them really were rebuilt from nothing on the way`);
+
+    // NOTHING DUPLICATED AND NOTHING DANGLING, over the whole world after the
+    // round trip — including the settlement, which was standing there the whole
+    // time while the country came and went around it.
+    for (const zone of Object.values(w.zones)) {
+      for (const portal of zone.portals) {
+        assert.equal(L.parse(portal.toZone), null, `${zone.id} wrote a portal record into the cell ${portal.toZone}`);
+        assert.ok(w.zones[portal.toZone], `${zone.id}'s record still points at a zone that exists`);
+      }
+      const gates = zone.gates ?? [];
+      const spelled = gates.map((g) => `${g.dir}${g.x},${g.y}`);
+      assert.equal(new Set(spelled).size, gates.length, `${zone.id} carries each of its gates exactly once`);
+      if (L.parse(zone.id)) {
+        assert.equal(gates.length, L.DIRS.length * TUNE.GATE_SPAN, `${zone.id} has its four edges and no more`);
+      }
+    }
+    const town = w.zones[w.startZone];
+    assert.equal(town.portals.length, townPortals, "the settlement's records are the ones it was built with");
+    assert.equal(cellFingerprint(town), townPrint, "…and the settlement itself never moved");
+  });
+
+  // ── 3. NO DEAD GATE ───────────────────────────────────────────────────────
+  // The reason the gate branch ensures before it teleports, asserted at the
+  // crossing where it matters: an edge whose far side has been evicted is not a
+  // door that stops working. Eviction is safe BY CONSTRUCTION rather than by
+  // policy — there is no record to dangle, so re-entry is the same arithmetic as
+  // first entry.
+  await withSavePath(async () => {
+    const { world: w, meta } = wildWorld("cozy-village", 60606, { surround: "fields" });
+    const sim = new loadedPF.Sim(w);
+    const core = makeCore("chat-deadgate", sim, meta);
+    for (let i = 0; i < KEEP + 3; i++) {
+      walkOut(sim, "N");
+      arrive(core);
+    }
+
+    let crossedIntoNothing = 0;
+    for (let i = 0; i < KEEP + 2; i++) {
+      const zone = sim.zone();
+      const gate = (zone.gates ?? []).find((g) => g.dir === "S");
+      const target = L.gateTargetId(w, zone, gate);
+      const absent = !w.zones[target];
+      const hop = walkOut(sim, "S");
+      assert.equal(hop.id, target, `the south edge of ${zone.id} leads where the arithmetic says`);
+      assert.equal(hop.res.zoneChanged, true, "…and the step says the player really went through it");
+      if (absent) {
+        crossedIntoNothing++;
+        assert.ok(w.zones[target], `${target} was gone and the step that walked into it built it back`);
+      }
+      arrive(core);
+    }
+    assert.ok(crossedIntoNothing >= 1, `the walk really did step onto an evicted edge (${crossedIntoNothing})`);
+  });
+
+  // ── 4. BOUNDED, AND BOUNDED THE WHOLE WAY ─────────────────────────────────
+  // Forty crossings, which is the twenty-minute walk the write governor is
+  // measured over. The ceiling is checked at BOTH points of every crossing: the
+  // step materializes the far side and the arrival is what evicts, so the honest
+  // peak is the keep plus the one cell the player has just walked into.
+  await withSavePath(async () => {
+    const { world: w, meta } = wildWorld("cozy-village", 80808, { surround: "barren" });
+    const sim = new loadedPF.Sim(w);
+    const core = makeCore("chat-bounded", sim, meta);
+    const named = namedIds(w).sort();
+    let peak = 0;
+    for (let i = 0; i < 40; i++) {
+      walkOut(sim, "N");
+      peak = Math.max(peak, chunkIds(w).length);
+      assert.ok(chunkIds(w).length <= KEEP + 1, `crossing ${i} peaks at the keep plus the cell just stepped into`);
+      arrive(core);
+      assert.ok(chunkIds(w).length <= KEEP, `…and settles back to the keep (${chunkIds(w).length})`);
+    }
+    assert.equal(peak, KEEP + 1, "the peak really was reached, so the ceiling is measured rather than assumed");
+    assert.equal(chunkIds(w).length, KEEP, "a forty-cell walk holds nine cells, not forty");
+    assert.deepEqual(namedIds(w).sort(), named, "and every zone the brief named is still standing");
+  });
+
+  // ── 5. THE PICTURE GOES WITH THE ZONE ─────────────────────────────────────
+  // The half of the memory model that lives in the renderer, driven over the
+  // software canvas rather than deferred to somebody's eye. `_zoneCache` holds
+  // two composites per zone per weather class and NOTHING prunes it at runtime;
+  // a `delete world.zones[id]` on its own would leave both canvases alive under
+  // a key nothing will ever ask for again — the same leak, with the zone's name
+  // filed off. And the byte comparison at the foot is the whole justification
+  // for dropping anything: the picture that comes back is the picture that left.
+  await withSavePath(async () => {
+    const { world: w, meta } = wildWorld("cozy-village", 70707, { surround: "woods" });
+    withCanvas(() => {
+      const render = new loadedPF.Render(shimCanvas(loadedPF.VW, loadedPF.VH));
+      const sim = new loadedPF.Sim(w);
+      const core = makeCore("chat-cache", sim, meta, render);
+      const FAIR = { word: "fair", intensity: null };
+      const SNOW = { word: "snow", intensity: "light" };
+      /** The shipped draw path, over a stand-in the way the weather lanes do it:
+       *  the composite is what this lane measures, not the camera. */
+      const stand = (zone, sky) => ({
+        x: zone.w * 8,
+        y: zone.h * 8,
+        facing: 0,
+        phase: 0,
+        moving: false,
+        nearNpc: null,
+        mode: "walk",
+        zone: () => zone,
+        darkness: () => 0,
+        weather: () => sky,
+      });
+      const paint = (zone) => {
+        render.draw(stand(zone, FAIR), { frame: false });
+        render.draw(stand(zone, SNOW), { frame: false });
+      };
+      const keysFor = (id) => [...render._zoneCache.keys()].filter((k) => k.startsWith(`${id}|`));
+      const chunkKeys = () => [...render._zoneCache.keys()].filter((k) => L.parse(k.slice(0, k.indexOf("|"))));
+
+      paint(w.zones[w.startZone]);
+      const townKeys = keysFor(w.startZone).length;
+      assert.ok(townKeys >= 1, "the settlement composited");
+
+      const first = walkOut(sim, "N");
+      arrive(core);
+      paint(w.zones[first.id]);
+      const painted = keysFor(first.id);
+      // TWO CLASSES, side by side — a cell with grass in it composites once for
+      // fair weather and once for snow, which is the whole reason the drop is a
+      // PREFIX delete: taking the bare id would take nothing and taking one
+      // class would leave the other standing, stale, waiting for a thaw that
+      // never comes.
+      assert.deepEqual(painted, [`${first.id}|base`, `${first.id}|snow`], "the cell caches under both classes");
+      // …and the memo the renderer hangs ON the zone, which is the other half of
+      // "the picture goes with the zone": it is a field of the object, so it
+      // dies with the object rather than needing a second clear.
+      assert.equal(typeof w.zones[first.id]._snowable, "boolean", "the snowable answer is memoised on the zone");
+      const was = painted.map((k) => {
+        const c = render._zoneCache.get(k);
+        return `${k}:${canvasHash(c.base)}/${canvasHash(c.overhead)}`;
+      });
+
+      for (let i = 0; i < KEEP + 4; i++) {
+        walkOut(sim, "N");
+        arrive(core);
+        paint(sim.zone());
+      }
+
+      // GONE, BOTH WAYS. The zone object and every composite class it had.
+      assert.equal(w.zones[first.id], undefined, `${first.id} was let go`);
+      assert.deepEqual(keysFor(first.id), [], "…and its composites went with it");
+      // AND NOTHING ELSE IS HOLDING A PICTURE OF SOMEWHERE THAT NO LONGER EXISTS.
+      for (const k of chunkKeys()) {
+        assert.ok(w.zones[k.slice(0, k.indexOf("|"))], `${k} is cached for a cell that is still standing`);
+      }
+      assert.ok(
+        chunkKeys().length <= 2 * (KEEP + 1),
+        `the cache is bounded by residency, not by the walk (${chunkKeys().length})`,
+      );
+      // THE SETTLEMENT'S OWN PICTURE IS UNTOUCHED — the additive half of the
+      // memory story, said as a fact rather than as a comparison: a walk pays
+      // for the country ON TOP OF the town it left, which is still cached and
+      // still costing what it always cost.
+      assert.equal(keysFor(w.startZone).length, townKeys, "the settlement kept its composites the whole way out");
+
+      // AND THE PICTURE THAT COMES BACK IS THE PICTURE THAT LEFT.
+      for (let i = 0; i < KEEP + 5; i++) {
+        walkOut(sim, "S");
+        arrive(core);
+        if (sim.zoneId === first.id) break;
+      }
+      assert.equal(sim.zoneId, first.id, "the walk home reached the cell that was dropped");
+      assert.equal(w.zones[first.id]._snowable, undefined, "the cell that came back carries no memo from the last one");
+      paint(w.zones[first.id]);
+      const now = keysFor(first.id).map((k) => {
+        const c = render._zoneCache.get(k);
+        return `${k}:${canvasHash(c.base)}/${canvasHash(c.overhead)}`;
+      });
+      assert.deepEqual(now, was, "…and it composited back to the same pixels, under the same classes");
+    });
+  });
+
+  // ── 6. WHAT EVICTION IS NOT ALLOWED TO TAKE ───────────────────────────────
+  // A cell is geometry and geometry is free. What the PLAYER did out there is
+  // not: the discovery ledger rides the save envelope and the prose flag rides
+  // `intro`, and both are keyed by the zone id of a cell that eviction is about
+  // to delete. Losing either would turn a walk home into news — the same
+  // landmark discovered twice, the same line of flavor injected twice.
+  await withSavePath(async ({ tick }) => {
+    S.mode = "metadata";
+    const { world: w, meta } = wildWorld("cozy-village", 90210, { surround: "woods" });
+    const sim = new loadedPF.Sim(w);
+    const core = makeCore("chat-keeps", sim, meta);
+
+    // Walk until the walk finds something worth writing down.
+    let landmark = null;
+    const trail = [];
+    for (let i = 0; i < 30 && !landmark; i++) {
+      const hop = walkOut(sim, "N");
+      arrive(core);
+      trail.push(hop.id);
+      if (L.isLandmark(w.zones[hop.id])) landmark = hop.id;
+    }
+    assert.ok(landmark, `the walk passed something worth finding (${trail.length} cells)`);
+    const prefix = sim.composePrefix(null);
+    sim.commitIntro();
+    assert.ok(prefix.includes(`[${w.zones[landmark].name}:`), "…and the cell said its one line");
+    // Row by row rather than as one blob: the walk that carries the player past
+    // the keep passes more landmarks on the way, so the claim is that nothing is
+    // LOST, not that nothing is added.
+    const rows = () => (P.get(core)?.found?.zones ?? []).map((r) => `${r.p}|${r.e}|${r.d}|${r.day}`);
+    const found = rows();
+    const intro = JSON.stringify(sim.intro.zones);
+    const filed = found.some((row) => row.startsWith(`${landmark}|`));
+    assert.ok(filed, "the ledger holds the landmark");
+    assert.ok(intro.includes(landmark), "…and the prose flag is burned for it");
+
+    for (let i = 0; i < KEEP + 2; i++) {
+      walkOut(sim, "N");
+      arrive(core);
+    }
+    assert.equal(w.zones[landmark], undefined, "the landmark cell was evicted like any other");
+    const kept = rows();
+    for (const row of found) assert.ok(kept.includes(row), `${row} did not go with the country it names`);
+    assert.equal(JSON.stringify(sim.intro.zones), intro, "…nor did the prose flag");
+
+    // AND WALKING BACK IN IS AN ARRIVAL, NOT NEWS.
+    L.ensure(w, landmark);
+    sim.teleport(landmark, w.zones[landmark].spawn.x, w.zones[landmark].spawn.y);
+    core.toasts.length = 0;
+    arrive(core);
+    assert.equal(core.toasts.length, 1, "walking back into a cell you found is one notice, not two");
+    assert.deepEqual(rows(), kept, "…and writes no second row");
+    assert.equal(sim.composePrefix(null).includes(`[${w.zones[landmark].name}:`), false, "…and injects nothing twice");
+    await tick();
+  });
+
+  // ── 7. THE SUM, AND BOTH DOORS IT IS REACHED THROUGH ──────────────────────
+  // Two things the read-verify cannot do on its own. First the honest figure for
+  // the deferred browser check (plan §5.6): chunks are ADDITIVE, not
+  // substitutive, so the peak is the town's canvases PLUS the resident country's
+  // — measured here in the software canvas's own bytes rather than estimated.
+  // Second, the other real zone-change caller: 50-spatial's drift arm teleports
+  // the player when the GM narrates a move and never calls `_zoneChanged`, so an
+  // eviction hung off the frame loop alone would simply stop happening for
+  // anyone playing through the story rather than through the keyboard.
+  await withSavePath(async () => {
+    const { world: w, meta } = wildWorld("cozy-village", 24680, { surround: "woods" });
+    const sim = new loadedPF.Sim(w);
+    const core = makeCore("chat-sum", sim, meta);
+    for (let i = 0; i < KEEP + 6; i++) {
+      walkOut(sim, "N");
+      arrive(core);
+    }
+    assert.equal(chunkIds(w).length, KEEP, "the walk is at its ceiling before anything is painted");
+
+    let townBytes = 0;
+    let cellBytes = 0;
+    withCanvas(() => {
+      const render = new loadedPF.Render(shimCanvas(loadedPF.VW, loadedPF.VH));
+      const stand = (zone, sky) => ({
+        x: zone.w * 8,
+        y: zone.h * 8,
+        facing: 0,
+        phase: 0,
+        moving: false,
+        nearNpc: null,
+        mode: "walk",
+        zone: () => zone,
+        darkness: () => 0,
+        weather: () => sky,
+      });
+      const paint = (zone) => {
+        render.draw(stand(zone, { word: "fair", intensity: null }), { frame: false });
+        render.draw(stand(zone, { word: "snow", intensity: "light" }), { frame: false });
+      };
+      for (const id of Object.keys(w.zones)) paint(w.zones[id]);
+      for (const [key, comp] of render._zoneCache) {
+        const bytes = comp.base._data.length + comp.overhead._data.length;
+        if (L.parse(key.slice(0, key.indexOf("|")))) cellBytes += bytes;
+        else townBytes += bytes;
+      }
+      assert.ok(
+        render._zoneCache.size >= Object.keys(w.zones).length,
+        "every standing zone composited, so the sum is over the whole session",
+      );
+    });
+    const mb = (bytes) => (bytes / (1024 * 1024)).toFixed(1);
+    assert.ok(cellBytes > 0 && townBytes > 0, "both halves of the peak were measured");
+    // The wording the plan insists on: a walk costs the country ON TOP OF the
+    // world it hangs off, and the ceiling is the keep — not the walk.
+    assert.ok(
+      cellBytes <= KEEP * 2 * 2 * TUNE.CHUNK_W * TUNE.CHUNK_H * loadedPF.TILE * loadedPF.TILE * 4,
+      `the country's share is bounded by the keep (${mb(cellBytes)} MB)`,
+    );
+    console.log(
+      `pixelforge 0.16 residency: ${mb(townBytes)} MB of settlement and insides + ` +
+        `${mb(cellBytes)} MB of ${KEEP} resident cells = ${mb(townBytes + cellBytes)} MB of composites ` +
+        `(fair + snow, software canvas; the browser's own figure is plan §5.6)`,
+    );
+
+    // THE OTHER DOOR. Driven through the shipped refresh, exactly as slice 2's
+    // arrival lane drives it — the GM narrates a move indoors while the country
+    // is at its ceiling, and the arrival that follows is an arrival like any
+    // other, right down to what it lets go of.
+    const prevGetSpatial = loadedPF.api.getSpatial;
+    try {
+      loadedPF.spatial.reset();
+      loadedPF.api.getSpatial = async () => ({
+        definition: { revision: 1 },
+        currentLocationId: "loc-town",
+        breadcrumb: [{ name: "Town" }],
+        destinations: [],
+      });
+      await loadedPF.spatial.refresh(core);
+      const indoors = namedIds(w).find((id) => w.zones[id].mapKind === "building");
+      w.bindings["loc-inside"] = indoors;
+      loadedPF.api.getSpatial = async () => ({
+        definition: { revision: 1 },
+        currentLocationId: "loc-inside",
+        breadcrumb: [{ name: "Inside" }],
+        destinations: [],
+      });
+      // One more cell than the keep can hold, materialized behind the player's
+      // back the way a rehydrate would: the frame loop is not going to run, so
+      // if the drift arm does not evict, nothing will.
+      const stray = L.cellZoneId(w, 6, 6);
+      L.ensure(w, stray);
+      assert.equal(chunkIds(w).length, KEEP + 1, "the world is over its ceiling with the frame loop idle");
+      await loadedPF.spatial.refresh(core);
+      assert.equal(sim.zoneId, indoors, "the drift arm moved the player");
+      assert.equal(w.zones[stray], undefined, "…and the arrival it never told the frame loop about still evicted");
+      assert.equal(chunkIds(w).length, KEEP, "…back to the ceiling");
+    } finally {
+      loadedPF.api.getSpatial = prevGetSpatial;
+      loadedPF.spatial.reset();
+    }
+  });
+}
+
 console.log("brief validator + compiler: all cases passed");
