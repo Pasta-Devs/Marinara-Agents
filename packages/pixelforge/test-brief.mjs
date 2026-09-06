@@ -34363,7 +34363,12 @@ const layoutFingerprint = (w) => {
     const sim = new loadedPF.Sim(w);
     const core = makeCore("chat-found", sim, meta);
     const enterCell = (id) => {
-      const zone = w.zones[id];
+      // ENSURE, THEN STAND IN IT — the gate branch's own order, and after slice
+      // 3 it is the only order that works: this lane walks through more country
+      // than residency holds, so a cell the sweep compiled at the top may well
+      // have been let go by the time the walk reaches it. Recompiling it is the
+      // shipped answer and it is byte-identical.
+      const zone = L.ensure(w, id);
       sim.teleport(id, zone.spawn.x, zone.spawn.y);
       core.toasts.length = 0;
       arrive(core);
@@ -34646,7 +34651,14 @@ const layoutFingerprint = (w) => {
       // counting starts — otherwise the walk's first step would be measured as a
       // step out of wherever the player was standing three legs ago, which is
       // exactly what the predicate is supposed to notice.
-      sim.teleport(doorstep.id, doorstep.spawn.x, doorstep.spawn.y);
+      //
+      // ENSURED AGAIN, because the leg above walked back into town and residency
+      // then let the doorstep cell go: forty crossings ago is the oldest thing
+      // in the order, and the country the player is not in is exactly what slice
+      // 3 drops. `ensure` hands back a resident cell untouched, so this line is
+      // right whichever it is.
+      const stand = L.ensure(w, doorstep.id);
+      sim.teleport(stand.id, stand.spawn.x, stand.spawn.y);
       arrive(core);
       fresh();
       let ledgeredAgain = 0;

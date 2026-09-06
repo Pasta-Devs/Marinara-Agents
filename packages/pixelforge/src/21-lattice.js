@@ -69,6 +69,13 @@ PF.lattice = (() => {
     // generous against any residency keep, so the ORDER is never what loses a
     // cell that is still standing — the policy that reads it is what decides.
     SEEN_MAX: 64,
+    // ── Residency ────────────────────────────────────────────────────────────
+    // HOW MANY CELLS STAND AT ONCE (C5): the one the player is in plus the eight
+    // around it. Everything past that is dropped least-recently-entered first
+    // and recompiled byte-identically the moment it is walked back into, so this
+    // is a MEMORY knob and never a world one — no number in this block can
+    // change what the country IS, only how much of it is holding canvases.
+    RESIDENCY_KEEP: 9,
     // ── Streams ──────────────────────────────────────────────────────────────
     STREAM_LABEL: "wild",
     NAME_STREAM_LABEL: "wild-name",
@@ -908,6 +915,86 @@ PF.lattice = (() => {
     return true;
   }
 
+  // ── Residency ───────────────────────────────────────────────────────────────
+  /** WHICH CELLS SHOULD STOP STANDING. Pure: it reads a world and answers with
+   *  ids, it changes nothing, and asking twice gives the same list.
+   *
+   *  A resident cell costs its tile arrays and — the megabytes — the renderer's
+   *  two composites, and the cost is ADDITIVE: the settlement keeps its own
+   *  canvases the whole time, so a walk pays for the town it left plus every
+   *  patch of country it has crossed. On a lattice with no edge that is a leak
+   *  with a walking pace, which is why the policy is a hard count.
+   *
+   *  THE REFUSALS COME FIRST, because the list this must never take is longer
+   *  than the list it takes:
+   *   - the zone the player is standing in — dropping it is a frame that draws
+   *     `undefined`;
+   *   - the settlement, checked by name as well as by id: `cellZoneId` answers
+   *     (0,0) with `world.startZone`, so a world whose start zone were somehow
+   *     spelled like a cell would otherwise be evictable;
+   *   - anything the brief named, every interior, every floor, every dwelling —
+   *     a place with a name, a `rel` row, a quest handle or a portal record
+   *     pointing at it is not a cache entry, and none of those ids are cell ids;
+   *   - a cell holding an NPC. Vacuous today (C6: no cell has residents) and
+   *     load-bearing the day one does — a schedule handle whose zone was dropped
+   *     is a person who stops existing mid-errand.
+   *
+   *  Then RECENCY and only recency: the `keep` most-recently-entered cells stand
+   *  and the rest go, oldest first. A cell nothing ever entered — one a reload
+   *  compiled to stand the player in, say — ranks oldest of all. Ties break on
+   *  the id, so the answer is a function of the world's CONTENT rather than of
+   *  the order somebody happened to compile it in.
+   *
+   *  Refused cells past the budget are simply kept, which is where the ceiling's
+   *  slack comes from: residency is `keep` cells, plus whatever cannot be taken,
+   *  plus the one a step has just materialized and not yet arrived in. */
+  function residency(world, currentZoneId, keep) {
+    if (!world || !world.zones) return [];
+    const limit = Number.isSafeInteger(keep) && keep >= 0 ? keep : TUNE.RESIDENCY_KEEP;
+    const seen = Array.isArray(world._entered) ? world._entered : [];
+    const cells = Object.keys(world.zones).filter((id) => {
+      const cell = parse(id);
+      // The id this world would MINT for that cell, so a chunk standing under an
+      // id the world has since anchored elsewhere is never counted as one.
+      if (!cell || cellZoneId(world, cell.cx, cell.cy) !== id) return false;
+      return PF.own(world.zones, id)?.mapKind === TUNE.CHUNK_MAP_KIND;
+    });
+    const rank = (id) => seen.lastIndexOf(id);
+    const held = (id) => id === currentZoneId || id === world.startZone || !!PF.own(world.zones, id)?.npcs?.length;
+    // ONE total order, oldest first, and the budget is taken off the young end:
+    // the `keep` newest cells stand and everything before them goes, in the
+    // order it went stale. Refusals are applied AFTER the count, so a cell that
+    // cannot be taken keeps its place in the budget instead of pushing an
+    // innocent neighbour out to make room for itself.
+    const oldestFirst = cells.sort((a, b) => rank(a) - rank(b) || (a < b ? -1 : 1));
+    return oldestFirst.slice(0, Math.max(0, oldestFirst.length - limit)).filter((id) => !held(id));
+  }
+
+  /** THE EFFECT, and the only thing in this module that destroys anything.
+   *
+   *  Two clears per cell, and both are load-bearing. The zone object takes the
+   *  tile arrays with it and the `_snowable` memo hung off it; the renderer's
+   *  composites are cached under `<id>|base` and `<id>|snow` and are where the
+   *  memory actually is, so a delete without `invalidateZone` would be the same
+   *  leak with the zone's name filed off — the picture outliving its world, and
+   *  a stale one waiting for whatever zone is next given that id. The renderer
+   *  has carried `invalidateZone` with no runtime caller since the day it was
+   *  written; this is the caller.
+   *
+   *  Nothing here is saved and nothing here is a decision: a cell walked back
+   *  into recompiles byte-identically from the same four inputs, which is what
+   *  makes dropping it free rather than lossy. The recency order KEEPS the ids
+   *  of cells it has let go — it remembers further back than residency holds, so
+   *  a cell that comes back is not treated as somewhere new. */
+  function evict(core, world, currentZoneId) {
+    const gone = residency(world, currentZoneId, TUNE.RESIDENCY_KEEP);
+    for (const id of gone) {
+      delete world.zones[id];
+      core?.render?.invalidateZone(id);
+    }
+    return gone;
+  }
+
   /** WHAT ARRIVING SOMEWHERE IS WORTH — the one place both real zone-change
    *  callers meet.
    *
@@ -917,17 +1004,22 @@ PF.lattice = (() => {
    *  alone would leave the recency order believing the player was still standing
    *  in the cell the GM moved them out of.
    *
-   *  Returns the entry: what was entered, what had been entered before it, and
-   *  whether this arrival wrote a discovery. The caller decides what to WRITE
-   *  from that — which is how a walk through the wilderness avoids arming a
-   *  whole-shard save per cell.
+   *  Returns the entry: what was entered, what had been entered before it,
+   *  whether this arrival wrote a discovery, and which cells it let go of. The
+   *  caller decides what to WRITE from that — which is how a walk through the
+   *  wilderness avoids arming a whole-shard save per cell.
    *
    *  The recency order is runtime-only and lives on the world object, so a world
    *  swap starts a fresh one for free and nothing about where the player has
    *  been reaches a save row. */
   function enter(core, zoneId) {
     const world = core?.sim?.world;
-    const entry = { id: typeof zoneId === "string" ? zoneId : null, from: null, discovered: false };
+    const entry = {
+      id: typeof zoneId === "string" ? zoneId : null,
+      from: null,
+      discovered: false,
+      evicted: [],
+    };
     if (!world || !entry.id) return entry;
     const seen = (world._entered ??= []);
     entry.from = seen.length ? seen[seen.length - 1] : null;
@@ -936,6 +1028,10 @@ PF.lattice = (() => {
     seen.push(entry.id);
     if (seen.length > TUNE.SEEN_MAX) seen.splice(0, seen.length - TUNE.SEEN_MAX);
     entry.discovered = discoverCell(core, world, entry.id);
+    // LAST, and after the arrival has been counted: the cell just walked into is
+    // the most recent thing in the order, so the policy reading it can never
+    // decide to drop the ground under the player.
+    entry.evicted = evict(core, world, entry.id);
     return entry;
   }
 
@@ -986,6 +1082,7 @@ PF.lattice = (() => {
     ensure,
     isLandmark,
     isChunkCrossing,
+    residency,
     enter,
   };
 })();
