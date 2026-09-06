@@ -36,6 +36,12 @@
     "slurp": {
       "versions": [
         {
+          "version": "1.2.2",
+          "date": "2026-09-06",
+          "notes": "- Wallet now keeps the daily refill claim visible until it is actually claimed,\n  and explains the balance threshold when the refill is unavailable.\n- Spending history now names known Creator handles and hides opaque internal IDs.",
+          "highlight": false
+        },
+        {
           "version": "1.2.1",
           "date": "2026-09-06",
           "notes": "- Inbox now keeps Chats and Activity in one polished, avatar-led destination with\n  compact rows, colorful event medallions, per-tab unread badges, and safe legacy\n  notification links.\n- Wallet now presents Creator earnings and Fan coins as connected but separate\n  pockets, with clearer transfer limits, avatar-led subscriptions, and distinct\n  Spending and Earnings histories.",
@@ -147,12 +153,6 @@
           "version": "1.1.16",
           "date": "2026-09-05",
           "notes": "- The inbox opens again. Listing conversations and opening one both failed outright.\n- A locked message stays locked. Its text was being sent to the browser before it was paid for, and the inbox row quoted the opening line of it.",
-          "highlight": false
-        },
-        {
-          "version": "1.1.15",
-          "date": "2026-09-05",
-          "notes": "- Slurp no longer fails outright on an Engine that cannot hold its newer storage tables. The feed, profiles and settings work as before; messages, notifications and the audience simply stay empty until the Engine is updated.",
           "highlight": false
         }
       ]

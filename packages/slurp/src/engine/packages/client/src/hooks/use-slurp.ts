@@ -488,6 +488,8 @@ export type SlurpWalletEntry = {
 export type SlurpWallet = {
   coins: number;
   stipendOn?: string;
+  refillFloor?: number;
+  refillAvailable?: boolean;
   ledger: SlurpWalletEntry[];
   earnedToday: { ad: number; engagement: number };
   subscriptions: Record<string, { paidThroughAt: string; price: number }>;

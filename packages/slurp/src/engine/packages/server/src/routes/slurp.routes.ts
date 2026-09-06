@@ -559,7 +559,14 @@ export async function slurpRoutes(app: FastifyInstance) {
     if (!parsed.success) return reply.code(400).send({ error: parsed.error.flatten() });
     const viewer = await resolveViewerPersona(parsed.data.personaId);
     if (!viewer) return reply.code(404).send({ error: "Slurp persona not found" });
-    return noodle.getWallet(viewer.id);
+    const [wallet, settings] = await Promise.all([noodle.getWallet(viewer.id), noodle.getSettings()]);
+    const today = new Date().toISOString().slice(0, 10);
+    return {
+      ...wallet,
+      refillFloor: settings.walletStipendFloor,
+      refillAvailable:
+        settings.walletEnabled && wallet.stipendOn !== today && wallet.coins < settings.walletStipendFloor,
+    };
   });
 
   app.post("/noodler/viewer/wallet/daily-refill", async (req, reply) => {

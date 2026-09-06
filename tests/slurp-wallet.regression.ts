@@ -107,6 +107,16 @@ assert.match(storage, /await writeWallet\(viewerAccountId, \{ \.\.\.wallet, subs
 // An install that already stored `false` keeps it, because `normalizeSlurpSettings` only falls
 // back to the default for a key it has no stored value for.
 assert.match(storage, /walletEnabled: true/u, "the economy is on by default");
+assert.match(
+  storage,
+  /const renewal = renewSubscriptions\(stored, at\)/u,
+  "wallet reads must still renew subscriptions",
+);
+assert.match(
+  storage,
+  /async claimWalletRefill\(viewerAccountId: string\)/u,
+  "daily refill must remain an explicit action",
+);
 
 // Every other wallet field falls back on bad input; the ledger used to be cast straight from
 // JSON, so a hand-edited or imported blob put entries the wallet page reads unconditionally

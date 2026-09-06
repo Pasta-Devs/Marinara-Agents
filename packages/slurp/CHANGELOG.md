@@ -1,5 +1,11 @@
 # Slurp release notes
 
+## 1.2.2 — 2026-09-06
+
+- Wallet now keeps the daily refill claim visible until it is actually claimed,
+  and explains the balance threshold when the refill is unavailable.
+- Spending history now names known Creator handles and hides opaque internal IDs.
+
 ## 1.2.1 — 2026-09-06 [highlight]
 
 - Inbox now keeps Chats and Activity in one polished, avatar-led destination with

@@ -5641,9 +5641,8 @@ export function createSlurpStorage(db: DB) {
     },
 
     /**
-     * The viewer's wallet, with the daily stipend paid and any due subscription renewals charged.
-     * Reading is what drives the economy forward: there is no scheduler to keep alive, and a
-     * wallet nobody looked at had no reason to bill.
+     * The viewer's wallet, with any due subscription renewals charged. The daily refill stays an
+     * explicit action, so opening Wallet never claims it before the player can see it.
      *
      * A creator the viewer could not pay for is unsubscribed here, which is the whole consequence
      * of running out of coins.
@@ -5651,10 +5650,8 @@ export function createSlurpStorage(db: DB) {
     /**
      * A generated audience member is not a player, so they never receive a daily stipend.
      *
-     * `getWallet` tops any id up to the stipend floor on read, which meant every population member
-     * the world touched accumulated coins they can never spend and a mirrored settings row nobody
-     * reads. They still hold a balance — they need one to pay a request fee — it simply stops
-     * growing on its own.
+     * They still hold a balance — they need one to pay a request fee — but only a real persona can
+     * claim the daily refill route.
      */
     isSyntheticWalletHolder(accountId: string): boolean {
       return accountId.startsWith("slurp-fan:");
@@ -5663,13 +5660,12 @@ export function createSlurpStorage(db: DB) {
     async getWallet(viewerAccountId: string): Promise<SlurpWallet> {
       return enqueueFinancial(async () => {
         const settings = await this.getSettings();
-        const economy = economyFrom(settings);
         const stored = await getWalletNow(viewerAccountId);
         if (!settings.walletEnabled || this.isSyntheticWalletHolder(viewerAccountId)) return stored;
         const previousWalletValue = await settingsStore.get(slurpWalletKey(viewerAccountId));
         const previousViewerSettingsValue = await settingsStore.get(slurpViewerSettingsKey(viewerAccountId));
         const at = new Date();
-        const renewal = renewSubscriptions(applyStipend(stored, at, economy), at);
+        const renewal = renewSubscriptions(stored, at);
         if (renewal.wallet === stored) return stored;
         const previousEarnings = new Map<string, string | null>();
         try {

@@ -5245,6 +5245,7 @@ function SlurpWalletView({
   // so join the managed profiles the same way every other Slurp surface names a creator.
   const creatorsQuery = useNoodlerAccounts();
   const creatorById = new Map((creatorsQuery.data ?? []).map((profile) => [profile.id, profile]));
+  const creatorByHandle = new Map((creatorsQuery.data ?? []).map((profile) => [profile.handle, profile]));
   const wallet = walletQuery.data;
   const creator = studioQuery.data?.creators[0] ?? null;
   const coins = wallet?.coins ?? fallbackCoins;
@@ -5253,13 +5254,20 @@ function SlurpWalletView({
   const spent = (wallet?.ledger ?? []).reduce((total, entry) => total + (entry.amount < 0 ? -entry.amount : 0), 0);
   const earned = (wallet?.ledger ?? []).reduce((total, entry) => total + (entry.amount > 0 ? entry.amount : 0), 0);
   const weeklyOutgoing = subscriptions.reduce((total, [, subscription]) => total + subscription.price, 0);
-  const nextRefillAt = wallet?.stipendOn ? new Date(`${wallet.stipendOn}T00:00:00.000Z`).getTime() + 86_400_000 : null;
-  const refillReady = !wallet?.stipendOn || (nextRefillAt !== null && nextRefillAt <= Date.now());
+  const refillReady = wallet?.refillAvailable === true;
   const entryLabel = (kind: string) =>
     ledgerMode === "earnings"
       ? localizeUi(`ui.slurp.earnings.entry.${kind}`, { defaultValue: kind })
       : localizeUi(`ui.slurp.wallet.entry.${kind}`, { defaultValue: kind });
   const activityEntries = ledgerMode === "earnings" ? (creator?.earnings.ledger ?? []) : (wallet?.ledger ?? []);
+  const entryNote = (kind: string, note?: string) => {
+    if (!note) return null;
+    const normalized = note.replace(/^(?:payout|renew|subscribe|tip):\s*/u, "");
+    const profile = creatorById.get(normalized) ?? creatorByHandle.get(normalized);
+    if (profile) return profile.displayName;
+    if (kind === "unlock" || kind === "ppv" || /^[A-Za-z0-9_-]{16,}$/u.test(normalized)) return null;
+    return normalized;
+  };
   const entryAppearance = (kind: string): { icon: LucideIcon; tone: string } => {
     if (kind === "tip" || kind === "income") return { icon: Coins, tone: "bg-emerald-500/14 text-emerald-300" };
     if (kind === "unlock" || kind === "ppv") return { icon: Lock, tone: "bg-violet-500/14 text-violet-300" };
@@ -5376,6 +5384,14 @@ function SlurpWalletView({
               </button>
             )}
           </div>
+          {!refillReady && wallet?.refillFloor !== undefined && (
+            <p className="px-4 pb-4 text-[0.68rem] text-[var(--muted-foreground)] sm:px-6">
+              {localizeUi("ui.slurp.wallet.refillThreshold", {
+                defaultValue: "Daily refill is available on a new day when your balance is below {{amount}} coins.",
+                amount: wallet.refillFloor,
+              })}
+            </p>
+          )}
         </section>
 
         {creator && (
@@ -5523,12 +5539,15 @@ function SlurpWalletView({
                       <EntryIcon size={17} strokeWidth={2} aria-hidden="true" />
                     </span>
                     <span className="min-w-0 flex-1">
-                      <span className="block text-sm font-bold">{entryLabel(entry.kind)}</span>
+                      <span className="block text-sm font-bold">
+                        {entry.kind === "topUp" && entry.note?.startsWith("payout:")
+                          ? localizeUi("ui.slurp.wallet.entry.payout", {
+                              defaultValue: "Moved from Creator earnings",
+                            })
+                          : entryLabel(entry.kind)}
+                      </span>
                       <span className="block truncate text-[0.7rem] text-[var(--muted-foreground)]">
-                        {[
-                          creatorById.get(entry.note ?? "")?.displayName ?? entry.note,
-                          formatTime(entry.at, i18n.language),
-                        ]
+                        {[entryNote(entry.kind, entry.note), formatTime(entry.at, i18n.language)]
                           .filter(Boolean)
                           .join(" · ")}
                       </span>
