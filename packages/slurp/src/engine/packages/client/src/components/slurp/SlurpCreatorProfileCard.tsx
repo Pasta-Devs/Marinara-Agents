@@ -81,7 +81,7 @@ export function SlurpCreatorProfileCard({
           type="button"
           onClick={openProfile}
           disabled={!openProfile}
-          className="min-w-0 text-left disabled:cursor-default"
+          className="min-w-0 rounded-md text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--noodle-accent)] disabled:cursor-default"
         >
           <span className="block truncate text-base font-bold">{creator.profile.displayName}</span>
           <span className="block truncate text-xs text-[var(--muted-foreground)]">@{creator.profile.handle}</span>
@@ -98,7 +98,7 @@ export function SlurpCreatorProfileCard({
                 type="button"
                 disabled={pending}
                 onClick={() => onToggleFollow(creator.profile.id, creator.followed)}
-                className="min-h-11 rounded-lg border border-[var(--noodle-divider)] px-3 text-xs font-bold hover:bg-[var(--accent)] disabled:opacity-50"
+                className="min-h-11 rounded-lg border border-[var(--noodle-divider)] px-3 text-xs font-bold transition-[background-color,transform] hover:bg-[var(--accent)] active:scale-[0.96] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--noodle-accent)] motion-reduce:transition-none motion-reduce:active:scale-100 disabled:opacity-50"
               >
                 {creator.followed ? localizeUi("ui.slurp.profile.following") : localizeUi("ui.slurp.profile.follow")}
               </button>
@@ -108,7 +108,7 @@ export function SlurpCreatorProfileCard({
                 type="button"
                 disabled={pending}
                 onClick={() => onToggleSubscription(creator.profile.id, creator.subscribed)}
-                className="min-h-11 rounded-lg bg-[var(--noodle-accent)] px-3 text-xs font-bold text-zinc-950 hover:opacity-90 disabled:opacity-50"
+                className="min-h-11 rounded-lg bg-[var(--noodle-accent)] px-3 text-xs font-bold text-zinc-950 transition-[opacity,transform] hover:opacity-90 active:scale-[0.96] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--noodle-accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--slurp-surface)] motion-reduce:transition-none motion-reduce:active:scale-100 disabled:opacity-50"
               >
                 {creator.subscribed
                   ? localizeUi("ui.slurp.profile.subscribed")
@@ -119,7 +119,7 @@ export function SlurpCreatorProfileCard({
               <button
                 type="button"
                 onClick={openProfile}
-                className="min-h-11 flex-1 rounded-lg border border-[var(--noodle-divider)] px-3 text-xs font-bold text-[var(--foreground)] hover:bg-[var(--accent)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--noodle-accent)]"
+                className="min-h-11 flex-1 rounded-lg border border-[var(--noodle-divider)] px-3 text-xs font-bold text-[var(--foreground)] transition-[background-color,transform] hover:bg-[var(--accent)] active:scale-[0.96] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--noodle-accent)] motion-reduce:transition-none motion-reduce:active:scale-100"
               >
                 {localizeUi("ui.noodle.noodlehome.profile")}
               </button>

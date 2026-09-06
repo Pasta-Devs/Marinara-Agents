@@ -80,6 +80,7 @@ interface SlurpProfileSurfaceProps<TTab extends string = SlurpProfileTab> {
   status?: "online" | "away" | "offline";
   stats?: { followers: number; subscribers: number; likes: number };
   bioQuote?: ReactNode;
+  bioCollapsible?: boolean;
 }
 
 export function SlurpProfileSurface<TTab extends string = SlurpProfileTab>({
@@ -111,6 +112,7 @@ export function SlurpProfileSurface<TTab extends string = SlurpProfileTab>({
   status = "away",
   stats,
   bioQuote,
+  bioCollapsible = true,
 }: SlurpProfileSurfaceProps<TTab>) {
   const { t: localizeUi } = useUiTranslation();
   const hasBanner = Boolean(banner) || decorativeBanner;
@@ -412,7 +414,7 @@ export function SlurpProfileSurface<TTab extends string = SlurpProfileTab>({
                 {bioQuote && (
                   <span className="mb-1 block border-s-2 border-[var(--noodle-accent)]/50 ps-3 italic">{bioQuote}</span>
                 )}
-                {bioContent && (
+                {bioContent && bioCollapsible && (
                   <details className="group/bio">
                     <summary className="list-none cursor-pointer outline-none focus-visible:ring-2 focus-visible:ring-[var(--noodle-accent)]">
                       <div className="line-clamp-4">{bioContent}</div>
@@ -426,6 +428,7 @@ export function SlurpProfileSurface<TTab extends string = SlurpProfileTab>({
                     </span>
                   </details>
                 )}
+                {bioContent && !bioCollapsible && <div>{bioContent}</div>}
               </div>
             )}
             {!editor?.isEditing && contentActions}

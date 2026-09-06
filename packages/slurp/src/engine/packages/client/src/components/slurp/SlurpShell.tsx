@@ -636,6 +636,7 @@ export function NoodleShell({
   const slurpActive = resolvedAppMode === "slurp";
   const resolvedContextualRail = contextualRail ?? (rightRail ? "populated" : "spanning");
   const reserveContextualRail = slurpActive && resolvedContextualRail !== "spanning";
+  const switcherIdentity = creatorIdentity ?? personaAccount;
   const homeLabel = noodlerActive
     ? localizeUi("ui.noodle.noodleshell.hub")
     : slurpActive
@@ -711,7 +712,7 @@ export function NoodleShell({
                     ref={mobileDrawerCloseRef}
                     type="button"
                     onClick={() => onMobileDrawerOpenChange(false)}
-                    className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-[var(--noodle-accent)] transition-colors hover:bg-[var(--noodle-accent)]/10"
+                    className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-[var(--noodle-accent)] transition-colors hover:bg-[var(--noodle-accent)]/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--noodle-accent)]"
                     title={localizeUi("capabilities.actions.close")}
                     aria-label={
                       slurpActive
@@ -737,8 +738,8 @@ export function NoodleShell({
                       onClick={onOpenNotifications}
                       aria-current={activeView === "notifications" ? "page" : undefined}
                       className={cn(
-                        "flex min-h-12 w-full items-center gap-4 rounded-xl px-2 text-left text-base font-bold transition-colors hover:bg-[var(--accent)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--noodle-accent)]",
-                        activeView === "notifications" && "bg-[var(--noodle-accent)]/10",
+                        "relative flex min-h-12 w-full items-center gap-4 overflow-hidden rounded-xl px-2 text-left text-base font-bold transition-colors hover:bg-[var(--accent)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--noodle-accent)]",
+                        activeView === "notifications" && SLURP_ROW_ACTIVE_CLASS,
                       )}
                     >
                       <Bell size={23} />
@@ -756,8 +757,8 @@ export function NoodleShell({
                       onClick={onOpenStudio}
                       aria-current={activeView === "studio" ? "page" : undefined}
                       className={cn(
-                        "flex min-h-12 w-full items-center gap-4 rounded-xl px-2 text-left text-base font-bold transition-colors hover:bg-[var(--accent)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--noodle-accent)]",
-                        activeView === "studio" && "bg-[var(--noodle-accent)]/10",
+                        "relative flex min-h-12 w-full items-center gap-4 overflow-hidden rounded-xl px-2 text-left text-base font-bold transition-colors hover:bg-[var(--accent)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--noodle-accent)]",
+                        activeView === "studio" && SLURP_ROW_ACTIVE_CLASS,
                       )}
                     >
                       <ChartNoAxesColumn size={23} />
@@ -770,8 +771,8 @@ export function NoodleShell({
                       onClick={onOpenWallet}
                       aria-current={activeView === "wallet" ? "page" : undefined}
                       className={cn(
-                        "flex min-h-12 w-full items-center gap-4 rounded-xl px-2 text-left text-base font-bold transition-colors hover:bg-[var(--accent)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--noodle-accent)]",
-                        activeView === "wallet" && "bg-[var(--noodle-accent)]/10",
+                        "relative flex min-h-12 w-full items-center gap-4 overflow-hidden rounded-xl px-2 text-left text-base font-bold transition-colors hover:bg-[var(--accent)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--noodle-accent)]",
+                        activeView === "wallet" && SLURP_ROW_ACTIVE_CLASS,
                       )}
                     >
                       <Wallet size={23} />
@@ -783,8 +784,8 @@ export function NoodleShell({
                     onClick={onOpenSettings}
                     aria-current={activeView === "settings" ? "page" : undefined}
                     className={cn(
-                      "flex min-h-12 w-full items-center gap-4 rounded-xl px-2 text-left text-base font-bold transition-colors hover:bg-[var(--accent)]",
-                      activeView === "settings" && "bg-[var(--noodle-accent)]/10",
+                      "relative flex min-h-12 w-full items-center gap-4 overflow-hidden rounded-xl px-2 text-left text-base font-bold transition-colors hover:bg-[var(--accent)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--noodle-accent)]",
+                      activeView === "settings" && SLURP_ROW_ACTIVE_CLASS,
                     )}
                   >
                     <Settings2 size={23} />
@@ -1014,23 +1015,41 @@ export function NoodleShell({
                     className="flex min-h-16 w-full items-center gap-3 rounded-lg border border-[var(--noodle-divider)] bg-[var(--slurp-surface-raised,var(--accent))] px-3 text-left shadow-sm transition-[background-color,border-color] hover:border-[var(--noodle-accent)]/45 hover:bg-[var(--accent)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--noodle-accent)]"
                     title={localizeUi("ui.noodle.noodleshell.switchAccount")}
                   >
-                    {personaAccount ? (
-                      <Avatar account={personaAccount} />
+                    {switcherIdentity ? (
+                      <span className="relative shrink-0">
+                        <Avatar account={switcherIdentity} />
+                        {creatorIdentity && personaAccount && (
+                          <span
+                            className="absolute -bottom-1 -end-1 rounded-full ring-2 ring-[var(--slurp-surface-raised,var(--accent))]"
+                            title={personaAccount.displayName}
+                          >
+                            <Avatar account={personaAccount} size="xs" />
+                          </span>
+                        )}
+                      </span>
                     ) : (
                       <AtSign size={28} className="!text-[var(--noodle-accent)]" />
                     )}
                     <div className="min-w-0 flex-1">
                       <p className="truncate text-sm font-semibold">
-                        {personaAccount?.displayName ??
+                        {switcherIdentity?.displayName ??
                           localizeUi(slurpActive ? "ui.slurp.account.title" : "ui.noodle.noodleshell.noodleAccount")}
                       </p>
                       <p className="truncate text-xs text-[var(--muted-foreground)]">
-                        {personaAccount
+                        {switcherIdentity
                           ? localizeUi("ui.noodle.noodlehome.value1_0a5edda", {
-                              value1: personaAccount.handle,
+                              value1: switcherIdentity.handle,
                             })
                           : localizeUi("ui.noodle.noodleshell.pickAPersona")}
                       </p>
+                      {creatorIdentity && personaAccount && (
+                        <p className="truncate text-[0.68rem] text-[var(--muted-foreground)]">
+                          {localizeUi("ui.slurp.account.asPersona", {
+                            defaultValue: "as {{persona}}",
+                            persona: personaAccount.displayName,
+                          })}
+                        </p>
+                      )}
                     </div>
                     <ChevronDown
                       size={18}

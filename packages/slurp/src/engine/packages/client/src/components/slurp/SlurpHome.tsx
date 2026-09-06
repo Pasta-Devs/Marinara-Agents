@@ -3518,9 +3518,7 @@ function StageProfileView({
         ? "away"
         : "offline";
   const profileLocation = (profile as NoodlerManagedStageProfile & { location?: string }).location ?? "";
-  const profileBioLines = profile.bio.split("\n");
-  const profileBioQuote = profileBioLines[0]?.trim() ?? "";
-  const profileBioBody = profileBioLines.slice(1).join("\n").trim();
+  const profileBioBody = profile.bio.trim();
   const accent = profileAccent(profile.id);
   const viewingOwnCreator = profile.sourceAccountId === viewerAccount?.entityId;
   const personaBackedCreator = viewerAccounts.some((account) => account.id === profile.sourceAccountId);
@@ -4012,8 +4010,8 @@ function StageProfileView({
         status={creatorStatus}
         stats={{ followers: followerTotal, subscribers: subscriberTotal, likes: profileLikeTotal }}
         location={profileLocation}
-        bioQuote={profileBioQuote ? <span>{profileBioQuote}</span> : null}
         bioContent={profileBioBody ? <p className="whitespace-pre-wrap text-sm leading-6">{profileBioBody}</p> : null}
+        bioCollapsible={profileBioBody.length > 280 || profileBioBody.split("\n").length > 4}
         contentActions={null}
         tabs={[
           {

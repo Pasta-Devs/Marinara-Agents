@@ -1,5 +1,9 @@
 # Slurp release notes
 
+## 1.1.21 — 2026-09-06
+
+- Creator identity now stays clear in the persona switcher, mobile menu selection has a visible marker, Creator cards have consistent keyboard and press feedback, and profiles show bios faithfully without pointless expansion controls.
+
 ## 1.1.20 — 2026-09-06
 
 - Stories now have a distinct Home shelf and an Add Story action that opens the Story composer directly.
