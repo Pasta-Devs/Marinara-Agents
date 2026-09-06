@@ -16,6 +16,7 @@ const home = read("packages/slurp/src/engine/packages/client/src/components/slur
 const storage = read("packages/slurp/src/engine/packages/server/src/services/storage/slurp.storage.ts");
 const settings = read("packages/slurp/src/engine/packages/client/src/components/slurp/SlurpSettings.tsx");
 const profileSurface = read("packages/slurp/src/engine/packages/client/src/components/slurp/SlurpProfileSurface.tsx");
+const englishLocale = read("packages/slurp/src/engine/packages/client/src/localization/locales/en.json");
 const creatorPostCard = read("packages/slurp/src/engine/packages/client/src/components/slurp/SlurpCreatorPostCard.tsx");
 const creatorProfileCard = read(
   "packages/slurp/src/engine/packages/client/src/components/slurp/SlurpCreatorProfileCard.tsx",
@@ -170,13 +171,14 @@ assert.match(
 assert.match(
   home,
   /data-slurp-creator-tools[\s\S]*?aria-expanded=\{creatorToolsOpen\}[\s\S]*?hidden=\{!creatorToolsOpen\}[\s\S]*?setAccessSettingsOpen\(true\)[\s\S]*?setAutomationOpen\(true\)[\s\S]*?<NoodlerPostComposer/u,
-  "Collapsed Creator Tools must be one bar: actions and composer both live behind the toggle",
+  "Collapsed Profile controls must be one bar: actions and composer both live behind the toggle",
 );
-// Edit belongs to the profile header, next to Follow and Subscribe. It must not come back here.
+assert.match(englishLocale, /"ui\.slurp\.profile\.creatorTools": "Profile controls"/u);
+// Edit Profile belongs to the same profile rail, not inside the expandable operational panel.
 assert.doesNotMatch(
   home.slice(home.indexOf("data-slurp-creator-tools"), home.indexOf("<NoodlerPostComposer")),
   /onClick=\{onEdit\}/u,
-  "Creator Tools must not duplicate the header's Edit action",
+  "Profile controls must not duplicate the rail's Edit Profile action",
 );
 assert.match(home, /ui\.slurp\.discover\.title/u);
 assert.match(home, /sm:grid-cols-2/u, "Discover must present creators as adaptive cards");
@@ -380,8 +382,9 @@ assert.doesNotMatch(
 assert.match(
   profileSurface,
   /\(preTabsContent \|\| editor\) && \(/u,
-  "Creator Tools must remain separate from public profile content",
+  "Profile controls and Edit Profile must share the same rail before public profile content",
 );
+assert.match(profileSurface, /flex min-h-12 items-start gap-2[\s\S]*?\{preTabsContent\}[\s\S]*?\{editor &&/u);
 assert.match(home, /data-slurp-home-masthead/u, "Home must expose one unified lobby masthead");
 assert.doesNotMatch(
   home,

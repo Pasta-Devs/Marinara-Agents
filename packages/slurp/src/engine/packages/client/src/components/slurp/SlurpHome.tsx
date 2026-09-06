@@ -4059,10 +4059,7 @@ function StageProfileView({
               </div>
             </section>
           ) : managedCreator && !editing ? (
-            <section
-              data-slurp-creator-tools
-              className="border-b border-[var(--noodle-divider)] bg-[var(--slurp-surface)]"
-            >
+            <section data-slurp-creator-tools className="min-w-0">
               {/* Collapsed, this is one thin line under the header — the tools are the creator's
                   own business, not the first thing anyone reads on the profile. */}
               <button
@@ -4071,7 +4068,7 @@ function StageProfileView({
                 aria-expanded={creatorToolsOpen}
                 aria-controls="slurp-creator-tools-panel"
                 title={localizeUi("ui.slurp.profile.creatorToolsDetail")}
-                className="flex min-h-10 w-full items-center gap-2 px-3 text-start text-xs font-semibold text-[var(--muted-foreground)] transition-colors hover:bg-[var(--accent)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--noodle-accent)] @min-[760px]:px-4"
+                className="flex min-h-10 w-full items-center gap-2 rounded-xl px-3 text-start text-xs font-semibold text-[var(--muted-foreground)] transition-colors hover:bg-[var(--accent)] hover:text-[var(--foreground)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--noodle-accent)]"
               >
                 <Sparkles size={13} className="shrink-0 text-[var(--noodle-accent)]" aria-hidden="true" />
                 <span className="min-w-0 flex-1 truncate">{localizeUi("ui.slurp.profile.creatorTools")}</span>
@@ -4092,7 +4089,7 @@ function StageProfileView({
               <div
                 id="slurp-creator-tools-panel"
                 hidden={!creatorToolsOpen}
-                className="border-t border-[var(--noodle-divider)] bg-[var(--background)]"
+                className="mt-1 rounded-xl bg-[var(--background)] shadow-inner ring-1 ring-inset ring-[var(--noodle-divider)]"
               >
                 {/* Edit lives on the profile header with Follow and Subscribe. It used to be
                     duplicated here too, which gave the same action two homes and made this panel

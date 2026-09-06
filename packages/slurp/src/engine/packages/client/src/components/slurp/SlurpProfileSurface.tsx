@@ -477,21 +477,21 @@ export function SlurpProfileSurface<TTab extends string = SlurpProfileTab>({
       {(preTabsContent || editor) && (
         <div
           className={cn(
-            "mx-3 overflow-hidden @min-[680px]:mx-5 @min-[1040px]:mx-8",
+            "mx-3 overflow-hidden p-1 @min-[680px]:mx-5 @min-[1040px]:mx-8",
             spotlight
-              ? "mt-2 rounded-xl border-y border-white/[0.055] bg-[linear-gradient(110deg,color-mix(in_srgb,var(--noodle-accent)_6%,transparent),color-mix(in_srgb,var(--slurp-violet)_4%,transparent)_64%,transparent)]"
+              ? "mt-2 rounded-2xl bg-[color-mix(in_srgb,var(--slurp-surface)_82%,transparent)] shadow-[var(--slurp-shadow-raised)] ring-1 ring-inset ring-white/[0.07] backdrop-blur-xl"
               : "mt-4 rounded-xl shadow-[var(--slurp-shadow-floating)] ring-1 ring-inset ring-[var(--noodle-divider)]",
           )}
         >
-          <div className="flex items-center gap-2 border-b border-[var(--noodle-divider)] px-3 @min-[760px]:px-4">
+          <div className="flex min-h-12 items-start gap-2">
             <div className="min-w-0 flex-1">{preTabsContent}</div>
             {editor && (
-              <div className="flex shrink-0 items-center gap-2 py-2">
+              <div className="flex shrink-0 items-center gap-2 pe-1 pt-1">
                 {editor.isEditing && (
                   <button
                     type="button"
                     onClick={editor.onCancel}
-                    className="min-h-10 rounded-lg border border-[var(--noodle-divider)] px-3 text-xs font-bold hover:bg-[var(--accent)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--noodle-accent)]"
+                    className="min-h-10 rounded-xl px-3 text-xs font-bold text-[var(--muted-foreground)] transition-colors hover:bg-[var(--accent)] hover:text-[var(--foreground)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--noodle-accent)]"
                   >
                     {localizeUi("ui.slurp.creatorForm.cancel")}
                   </button>
@@ -500,7 +500,7 @@ export function SlurpProfileSurface<TTab extends string = SlurpProfileTab>({
                   type="button"
                   onClick={() => (editor.isEditing ? editor.onSave() : editor.onStartEditing())}
                   disabled={editor.isEditing ? !editor.canSave || editor.isSaving : false}
-                  className="min-h-10 rounded-lg bg-[var(--noodle-accent)] px-4 text-xs font-black text-zinc-950 hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--noodle-accent)] disabled:opacity-50"
+                  className="min-h-10 rounded-xl bg-[var(--noodle-accent)] px-4 text-xs font-black text-zinc-950 transition-[opacity,transform] hover:opacity-90 active:scale-[0.96] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--noodle-accent)] disabled:opacity-50 motion-reduce:transition-none motion-reduce:active:scale-100"
                 >
                   {editor.isEditing
                     ? editor.isSaving

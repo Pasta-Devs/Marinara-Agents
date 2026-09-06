@@ -1,5 +1,11 @@
 # Slurp release notes
 
+## 1.1.26 — 2026-09-06
+
+- Creator tools are now Profile controls: a quieter unified rail that keeps Edit
+  Profile inside it and reveals publishing, access, and automation only when
+  expanded.
+
 ## 1.1.25 — 2026-09-06
 
 - The banner-to-profile fade now reaches the solid header exactly at the banner
