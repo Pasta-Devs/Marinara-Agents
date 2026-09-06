@@ -35,10 +35,22 @@ schedule bias the town answers with; §7.10 specifies the dialogue window; §7.6
 the region's effect on the bite. Both new subsections sit at the end of §7 rather than as a new
 top-level section so that §10, §11 and §12 keep the numbers other documents cite them by.
 
+**0.16 adds no key to the block and none to the envelope either, and it is the release where that
+sentence had to be defended rather than observed.** Two features that look like storage are not:
+the **wilderness lattice** (§14) stores nothing at all — a region is a pure function of
+`(seed, theme, axes, surround, cell)`, so walking is free and a region walked back into recompiles
+byte-identically — and the **generation retry surface** (§15) keeps its three durable records in
+**chat metadata**, on the content pack's own precedent, so neither the per-row cap nor the keepalive
+pair quota moves. What 0.16 does write into the block is one field that has been sitting empty since
+0.11: `player.found` gets its **first writer**, and only for landmarks. §10.4 measures all of it,
+§6.7 specifies the post-start gate the retry surface re-arms, and §3.6's retirement clause is
+revoked because the swap is `transplant()`'s second permanent caller.
+
 Companion documents: `brief-schema.md` (the world brief, which the block's stamps hash — the feature
-register the fishing verb aims at since 0.12, and the two optional climate axes since 0.14) and
-`ROADMAP.md` (why S5 led 0.11, what it gates, and what the 0.12, 0.13 and 0.14 rulings put on the
-list).
+register the fishing verb aims at since 0.12, the two optional climate axes since 0.14, and §8's
+0.16 note that a compiler-minted wilderness cell never claims a World Maps row) and `ROADMAP.md`
+(why S5 led 0.11, what it gates, and what the 0.12 through 0.16 rulings put on the list — including
+S8, the persistence umbrella this release's limitations point at).
 
 ---
 
@@ -56,6 +68,12 @@ list).
 | the mint stamp the block compares against                           | `src/20-world.js` (`mintStampOf`, `MINT_V`) |
 | the feature register the fishing verb aims at                       | `src/20-world.js` (`recordFeature`)         |
 | the board fixture every settlement gets                             | `src/20-world.js` (`BOARD_FEATURE_ID`)      |
+| the wilderness lattice: cells, gates, terrain, residency (§14)      | `src/21-lattice.js` (`PF.lattice`)          |
+| the gate crossing that reaches a cell, at step time                 | `src/30-sim.js` (`step` — `gateTargetId`/`ensure`/`arrivalFor`) |
+| the arrival both zone-change callers share                          | `src/21-lattice.js` (`enter`) — called from `90-element.js` `_zoneChanged` and `50-spatial.js`'s drift arm |
+| the generation retry surface: registry, states, copy, modes (§15)   | `src/60-save.js` (`STAGES`, `RETRY_COPY`, `regenerateStage`) |
+| its three durable chat-metadata keys                                | `src/60-save.js` (`RETRY_KEYS`)             |
+| the popup, its chip and the two-step confirmation                   | `src/70-hud.js` (`retryRows`/`_renderRetry`/`_retryPress`) |
 | the block's default-init on a fresh sim                             | `src/30-sim.js` (`new PF.Sim`)              |
 | the clock movers, the wrap-up marker, the tell                      | `src/30-sim.js` (`advanceMinutes`, `stageLedgerOwed`, `_composeLedger`) |
 | the fourth proximity read the board button gates on                 | `src/30-sim.js` (`nearBoard`, inside `step`) |
@@ -545,8 +563,18 @@ quarantine, so the transplant re-applies the same `min(flushedDay, minSeveredLin
 and a restored line at or below it is one the flush would never tell.
 
 `bought` does **not** cross. For a _gated_ chat the block is a fresh default and the split moves
-nothing, which is the point: the safety net costs nothing once the gate has done its job. The path
-retires one release after the gate.
+nothing, which is the point: the safety net costs nothing once the gate has done its job.
+
+**The retirement clause is REVOKED (0.16).** This section used to end "the path retires one release
+after the gate", and that was written when the compat shim was its only caller. It is not: the
+generation retry surface's **world swap** (§15) runs the same transplant on a chat that has been
+played in — a paid re-roll compiles a new world under a living player and has to carry the same
+world-free half across and park the same world-bound half — so `transplant()` is now a **permanent
+primitive with two callers**, the pre-gate shim and the swap. Nothing about its contract changed for
+the shim; what changed is that it may no longer be deleted, and that its second caller runs against
+a block with real play in it rather than a fresh default (which is why §4.2's merge, not
+first-loss-wins, is the rule that matters there — a second severance merges into a bag that already
+holds one).
 
 ---
 
@@ -867,9 +895,10 @@ the interim playable world outright: a player must never invest in a world that 
 discarded. A long loading screen is the accepted cost.
 
 `PF.save.gate` is `null` while the chat plays, otherwise
-`{ chatId, state: "generating" | "failed", attempts, failure }`. It is chat-scoped twice over — by
-`reset()` and by the id it carries — because a stale async completion must not lift or fail the gate
-of the chat you arrived at.
+`{ chatId, state: "generating" | "failed", attempts, failure }` — plus `stage`, `mode` and
+`postStart` since 0.16, which §6.7 specifies. It is chat-scoped twice over — by `reset()` and by the
+id it carries — because a stale async completion must not lift or fail the gate of the chat you
+arrived at.
 
 ### 6.1 Who arms it, and who never does
 
@@ -996,6 +1025,84 @@ throw that turned the lift into a retry screen.
 **Sealed worlds only.** A default world is not a world beginning — it is the world that has always
 been there. That is what keeps the purse off every legacy and declined chat, and what makes two chats
 standing in the identical default world hold the same money whichever door they came through.
+
+**0.16 adds a third payer and it is the same predicate doing the same job.** The retry surface's
+free rebuild installs a world with **no gate held**, so `_liftGate` no-ops through `gateHolds` and
+the lift's tail never runs — the install path therefore pays the purse itself. Idempotence is what
+makes the third site safe rather than a second grant: a player who has been earning on the stand-in
+keeps their earnings and is paid nothing, which is the ruled behaviour and is in the confirmation
+copy ("There's no second starting purse; you keep what you've earned").
+
+### 6.7 The post-start hold (0.16)
+
+**The gate learns one new shape rather than growing a second gate.** Everything in §6.1-§6.6 was
+written for a gate armed at boot, over a **placeholder** world nobody has entered. The generation
+retry surface (§15) re-arms the same gate **mid-session**, over a world the player has been living
+in, and the literal grows three fields to say so:
+
+```
+{ chatId, state: "generating" | "failed", attempts, failure,
+  stage,        // "brief" | "pack" — which artifact is owed (0.13-era, now registry-keyed)
+  mode,         // the re-attempt this gate is running: "rebuild" | "reroll" | "retry" | "rewrite"
+  postStart }   // TRUE only on a mid-session re-attempt; undefined on every boot arm
+```
+
+`postStart` and `mode` are written at exactly **two** construction sites — `regenerateStage`'s own
+arm and `armGate`'s re-arm — and carried everywhere else by the `...this.gate` spreads in
+`_stageGate`, `_failGate` and `retryGeneration`. `armGate`'s ordinary boot literal is deliberately
+spread-free, so its `postStart` is `undefined` **by that statement rather than by luck**, and every
+refusal below reads it that way.
+
+**The write path is EXEMPT from a post-start hold; the rewind ladder is NOT.** `gateHolds(core)`
+keeps its exact meaning and every §6.2 row still asks it — except **four** sites, which ask
+`_gateBlocksWrites(core)` (`gateHolds(core) && gate.postStart !== true`) instead. Three are the
+writes: `markDirty`, `_pendingWrite` (the chokepoint covering the debounce, the retry ladder, the
+chat-switch capture and the last-detach flush) and `flushTeardown`. `captureFlush` has no refusal of
+its own to condition. **The fourth is `_adoptNow`'s probe**, and it is there for the re-arm rather
+than for the write: a post-start visit has a world with real play in it and its adopt must run now,
+against the standing pre-re-attempt row, exactly as any boot probe would.
+
+**What the exemption is actually for, stated precisely because the obvious answer is wrong.** It is
+NOT walking: under any hold the tick returns above `sim.step` and above the positional governor, so
+a held world accrues no position at all and there is nothing of a walk to lose. It is a **completed
+GM turn** — the host's turn-end arm and the in-flight turn's own un-gated continuations (rel rows,
+quest completions) keep running, and on a **failed** re-attempt the player goes straight back to
+playing that very world, so what those wrote has to be capturable.
+
+**And the exemption stops at the write.** Exempting `_pendingWrite` re-opens `_precheck` →
+`_applyRewind`, whose row-4 and row-7 arms `_rebuild` the sim wholesale — a checkpoint load landing
+mid-re-attempt would replace the world behind the freeze, at the one seam the gate's own rewind
+refusal was written to protect. Both `_rebuild` arms therefore keep refusing under a post-start
+hold, through their own predicate: **`_rewindHeld(core)` reads the re-arm record as well as the
+gate**, because the gate is not up for the whole press — every mode awaits an ordinary flush before
+arming, and the free rebuild arms no gate at all, so in both of those windows the sim is still
+stepping and nothing else refuses. A rewind landing there would rebuild the very world the press is
+about to replace, and the player would read "The world rewound with the story." immediately before
+"The world takes shape." A moved row is applied by the first turn edge after the hold clears,
+through the shipped path.
+
+**`_regenPending`: how a hold survives a chat switch.** `reset()` nulls the gate unconditionally and
+`armGate` arms only on `briefExpected ∨ packExpected` — both false by construction once a brief is
+sealed — so without a record a post-start gate would die on any chat switch and let an install land
+on a live walking world. The record is a session `Map<chatId, {stage, mode, gated}>` kept beside
+`_generating`, deliberately **not** cleared by `reset()`, and `armGate`'s new first term re-arms
+from it. Two properties of it are load-bearing and easy to get wrong:
+
+- **it is written before the precondition and cleared in `regenerateStage`'s own `finally`**, never
+  the callee's — the ladder's `finally` sits below an early-out the guarded paths take, and a leaked
+  record refuses every later press and re-freezes every later visit;
+- **the re-arm does not swallow the visit's adopt.** `armGate`'s boolean means "defer adopt to
+  `_liftGate`", which is right at boot and wrong here: the visit has a world with real play in it
+  and its adopt must run NOW. So the post-start branch arms the gate and returns **false**, the
+  visit adopts against the standing pre-re-attempt row exactly as any boot probe would, and when the
+  install later lands `_liftGate`'s adopt no-ops on `mode !== null` — the shipped protection doing
+  its shipped job.
+
+**One asymmetry, recorded rather than smoothed over.** After a pack retry that fails while the
+player is away, the accepted marker has already been cleared, so the next visit arms a
+**boot-shaped** gate over a world that has been played. Nothing accrues under it (the tick freeze
+covers that), but "boot gates refuse writes" now covers a state that can hold real play, which is
+worth knowing before reading §6.2's table as absolute.
 
 ---
 
@@ -2591,6 +2698,56 @@ connection charges, and the live half is owed on the deferred list (§12.2).
 envelope did not grow, and the metadata key — like the content pack before it — never enters
 `snapshot()`, so it counts against neither the per-row cap nor the keepalive pair quota.
 
+### 10.4 What 0.16 added to the wire, measured
+
+**No new key in the block and no new field in the envelope**, for the third release running — but
+0.16 is the first one where that sentence is not the whole story, and the difference is worth
+leading with rather than burying. Two existing, long-empty fields **get their first real traffic**:
+`player.found`, declared in 0.11 and never written until now, and `sim.intro.zones`, which has
+carried the brief's own zones since 0.4 and now carries landmark cells too. Everything else the
+release built stores nothing: the lattice writes no row anywhere (a region is recomputed from
+`(seed, theme, axes, surround, cell)` on every load, exactly like the settlement it hangs off), and
+the retry surface's three durable records are **chat metadata**, on the content pack's precedent.
+
+**The ruler is §10.3's**, unchanged: `Buffer.byteLength(JSON.stringify(x), "utf8")` for stored
+artifacts, plain character counts for prompt text, and a range wherever a value varies.
+
+| what | where it lands | measured |
+| ---- | -------------- | -------- |
+| one `player.found` row for a landmark cell | the **block**, in a field that was declared empty in 0.11 | **47 bytes** at `{"p":"w_3_-2","e":0,"d":0,"day":12,"seen":true}`, and **51** at the widest plausible cell id and a three-digit day. Only landmarks are written — roughly one cell in seven — so a 40-cell walk files about six rows |
+| `player.found` at its cap | the **block** | **3,981 bytes** at `CAPS.found` 80 rows of cell shape, **4,171** at 80 of the widest. The cap is 0.11's and unchanged; what changed is that something now fills it, which is why the eviction rule below is a stated limitation rather than a detail |
+| one `sim.intro.zones` entry for a landmark cell | the **envelope**, inside the existing `intro` key | **~14 bytes** (`"w_3_-2":true`) — measured at **170 bytes for 12 landmarks** over a two-ring walk. This is the release's only durable envelope growth, it is **uncapped**, and it is the one-shot flag that stops a landmark's line being injected twice |
+| a landmark's prose | the **prompt**, once per landmark ever entered | **≤ 140 chars** (`FLAVOR_MAX_CHARS`), and **1,015 characters across 12 landmarks** on the measured walk. Ordinary country injects **nothing** — twenty plain cells were entered in the same lane and cost the prose budget zero — so the injection bill is a function of how many landmarks exist to find, not of how far anybody walks |
+| the two accepted-fallback markers | **chat metadata**, and only when a player presses "keep the stand-in" / "keep playing without it" | **40 bytes** for `{"pixelforgeFallbackAcceptedBrief":true}` and **39** for the pack sibling, **78** for both; a cleared marker is the same 39, because the PATCH is a shallow merge with no delete convention and the key is nulled rather than removed |
+| `pixelforgeBriefPrior` | **chat metadata**, and only when a paid re-roll replaces a brief | **1,501 bytes** parked (cozy-village's shipped default brief; **1,531** for sci-fi-colony), one deep and additive — the outgoing brief rides in the *same* PATCH as the incoming one, so there is no window where the only copy is gone |
+| a wilderness cell's tiles, gates, name and landmark | **nowhere** | **0 bytes.** A cell is a cache fill; residency drops the object and the renderer's two composites, and the cell recompiles byte-identically on return |
+| the recency order (`world._entered`) | **nowhere** | **0 bytes.** Runtime-only, on the world object, capped at `SEEN_MAX` 64 — so a world swap starts a fresh one for free and nothing about where the player has been reaches a save row |
+
+**The two save walls at the top of §10 are untouched.** The block grew by a bounded 4 KB worst case
+in a field that was already declared; the envelope grew by an uncapped ~14 bytes per landmark
+actually visited; and the three metadata keys — like the content pack and the weather row before
+them — never enter `snapshot()`, so they count against neither the per-row cap nor the keepalive
+pair quota. For scale on the uncapped row: 262,144 characters is about **eighteen thousand**
+landmark entries, which is on the order of a hundred and thirty thousand regions walked.
+
+**And the number that is not a save size at all: memory.** A resident region costs its tile arrays
+and — where the megabytes are — the renderer's two composites. Measured in the harness's own
+software canvas, in the shipped keep-9 configuration: **18.6 MB of settlement and its insides plus
+30.4 MB of nine resident cells = 49.0 MB of composites** (fair and snow classes both). It is
+**additive and not instead-of**: the settlement keeps its own canvases the whole way out, which is
+why the residency policy is a hard count rather than a heuristic. The browser's own figure is
+§12.2's to answer; this is the floor under it, measured rather than estimated.
+
+**On the write path, since 0.16 is the release that changed it.** A cell-to-cell step writes
+**nothing event-shaped** — it rides the shipped thirty-second positional autosave the frame loop
+already runs — because out in the lattice crossing a boundary is not an event, it is what walking
+is: a boundary every six to eight seconds, where a town session sees a handful all day. Everything
+else keeps the write it had (leaving town, arriving in it, a discovery, a quest, a conversation).
+The cost is the status quo's and is stated rather than discovered: a hard browser kill mid-walk can
+lose up to thirty seconds of position — a cell or two of backtrack, in country that regenerates
+identically. An ordinary tab close loses nothing; the teardown flush snapshots the live sim
+synchronously.
+
 ---
 
 ## 11. Accepted limitations
@@ -2687,6 +2844,24 @@ turns three long-standing shapes into things a player can reach:
 | **the ask ladder's served set is shared across speakers.** It is keyed by (day, BRANCH) and never by person (0.14's memo shape), so a friend's presses spend lines an acquaintance standing in the same square would otherwise have been served. The stranger-path "byte for byte" claim is therefore scoped: it holds exactly in a town where **nobody** is a friend, and the harness's own friend-register case has to order its assertions around the shared pool | **by design**, inherited from 0.14 and unchanged; recorded now that a second register can spend from the same pool |
 | **the one-per-day reload exploit pays triple what it did.** The day's fill receipt is sim-resident and not saved (0.13's row above), so a reload forgets it and the same template can be filled again — and since 0.15 that refill pays **3 rapport** as well as the money, which is a real rung every few reloads rather than a tally | **inherited and unchanged**; the alternative is still a save field for a one-day rule |
 
+Added by 0.16 — the wilderness and the retry surface. Two of these are the release's headline
+limitations and are in the release notes as such, rather than being findable only here:
+
+| limitation (0.16) | status |
+| ----------------- | ------ |
+| **the wilderness does not remember you.** A region is a total function of `(seed, theme, axes, surround, cell)` and nothing about it is stored, so a cell walked out of is destroyed and rebuilt identically on return. Nothing can be felled, gathered, moved or left behind out there — the anti-scope refuses world mutation of every kind — and that refusal is exactly what makes a walk of any length cost the same as a walk of one step | **by design, and the roadmap's next ruled item**: the persistence umbrella (ROADMAP **S8**) is what answers it, with layout pinning, remembered mutations and natural regrowth/decay as its three facets |
+| **`player.found` is the last eighty discoveries, not a map of everywhere you have been.** Only landmarks are written (roughly one cell in seven) and the cap evicts the oldest by DAY — so a long enough career of finding things does lose the earliest ones. Writing rarely is what keeps eighty rows meaning something | **by design**; the alternative is a ledger that fills with terrain inside a day's walking |
+| **the same-day tie-break is spelling.** When the cap evicts and several rows share the oldest day, the victim falls to whichever id sorts first after a reload has re-ordered the array by `(p,e,d)`. Reachable only on a saturated ledger with a same-day tie | **recorded, not fixed** — a one-field change (an insertion ordinal) belonging to whichever arc next owns this ledger |
+| **`sim.intro.zones` is uncapped**, and 0.16 gave it a source that can grow without a natural bound: one ~14-byte entry per landmark cell ever entered, permanently, so the one-shot prose flag never re-fires. §10.4 puts the scale at ~18,000 entries against the row cap | accepted; the alternative is re-injecting a landmark's line every time somebody walks back through it |
+| **a cell that will not compile leaves an inert tile.** `ensure` catches, warns **once per id per page load** and returns null; the player walks away from an edge that did nothing. The frame still finishes, so every other proximity read is recomputed rather than skipped | **by design** — the alternative is a throw inside a frame loop that would pump the fault sixty times a second |
+| **the fallback map gets no wilderness at all** — no cell, no gate, no anchor table, no `surround`, and `ensure` refuses it outright | **maintainer ruling 4** ("no one should play in the fallback map"); the retry surface is the way out, not geometry |
+| **the accepted-fallback marker can fail to land.** Three PATCH attempts, and if all three fail — or on a second device that never saw the metadata — the next boot re-arms the pack gate and runs the deferred call. That is a bounded loss of **one call** | **accepted**; the alternative is a boot gate that asks first, which is a loading-gate redesign this release declines |
+| **a reload mid-re-attempt spends the call and says nothing.** The server aborts a generation when its client disconnects, the page state dies with the page, nothing resumes and nothing is announced. A durable pre-call record is refused on the same argument as the durable failure log | **accepted**, same class as the marker row above |
+| **the failure KIND does not survive a reload.** `PF.save.gate` is session-only, so the failing session's screen says *why* and a later visit says only the durable fact. No failure log is written, deliberately: it would have to be written from a code path whose own write may be the thing failing — a log that lies exactly when it matters | **by design**; derivation cannot lie |
+| **maps exported from a stand-in world outlive it.** A world swap severs the block but the World Maps route is additive with no delete, so rows posted from the replaced world stay in the player's collection as records of a place that no longer exists — and always under the same `pf.<fnv32(seed)>` prefix, since the seed never moves | **stated in the confirmation copy**, not hidden: "maps you exported stay in your collection" |
+| **a re-attempt resets the one-shot prose injections.** A world swap builds a fresh `PF.Sim`, so the setting line, zone flavour and NPC personas re-enter the GM's context on later turns. The claim everywhere is "zero **generation** calls", never "spends nothing" | recorded honestly rather than rounded to free |
+| **a brief feature the settlement cannot fit is still dropped silently.** The specials loop stops when the ground runs out, with no log and no notice, exactly as it always has. 0.16 was asked whether such a feature should spill into the wilderness and the answer was no | **maintainer ruling 7**; the drop itself remains **unowned** — it is not what MEGASTRUCTURES (ROADMAP W11) is for, and the roadmap says so |
+
 **On the packless row, and it is a posture rather than a debt.** The compatibility window **rolls
 with the game**: legacy grows as the game grows, old-alpha worlds are never re-supported, and at
 full release the floor reaches back at most to late-Beta worlds. So a world-compat row in this
@@ -2723,8 +2898,16 @@ cannot reach, gathered in one place instead of scattered across commit messages.
 such list in this document.** Nothing on it is checked off here: these are somebody's outstanding
 items, and every entry says whose.
 
-Rebuilt for 0.14. Items the release answered are recorded as answered rather than deleted, because
-"what was owed and how it came out" is the half a reader cannot reconstruct.
+**Rebuilt for 0.16**, and this is the rebuild the list was waiting for: 0.16 is the release the
+maintainer has committed to playtest (*"I will playtest, yes. After these decisions"*), so what
+follows is a **playtest agenda** rather than a wish. Items earlier releases answered are recorded
+as answered rather than deleted, because "what was owed and how it came out" is the half a reader
+cannot reconstruct. Where a 0.12, 0.13 or 0.14 item is still outstanding it says so and stays.
+
+**One item sits above all of the others and is not a question about a feature.** *Does the compiled
+path work at all on the maintainer's machine?* Every row below assumes it does. If it does not —
+if generation lands on the degrade — then the retry surface's rows (§12.3's last three) are the
+whole agenda and everything else waits for the next session.
 
 ### 12.1 The live generation ladder — PARTLY ANSWERED, and the answer changed the design
 
@@ -2759,6 +2942,14 @@ Beside it, the **per-session token cost of the permanent header words**. The cha
 measurement ships in §10.3 (14-24 chars); what a live session is actually billed for two extra words
 on every turn is the half a real connection has to answer.
 
+**And 0.16 adds a second live-run question of its own, which is about calls rather than content.**
+The retry surface's whole claim is that a re-attempt re-runs **only what never succeeded** — a pack
+retry spends one call and leaves the world byte-untouched, a paid re-roll spends its own call plus
+the one the cascade owes downstream. The harness counts those calls against mock generation; only a
+real connection says whether the *felt* cost matches (a re-roll is two calls, the same two a fresh
+game spends, and the confirmation says so before the press). Cheapest to answer at the same sitting
+as the row above, since both want one real creation.
+
 **Owed by:** the maintainer, at the first live 0.14 creation. Not a code gate — the first thing a
 real chat does.
 
@@ -2768,7 +2959,37 @@ The harness DOM shim has no layout, no scroll, no focus and no animation frame. 
 asserted only as far as the **write** — that the package sets the property — and the part that
 matters to a player is on the other side of that line.
 
-**0.14's own items, and the flagship surface is most of them:**
+**0.16's own items. The first two are performance and the harness measured their floors, so what is
+owed is the browser's own number rather than a guess:**
+
+1. **Does re-entry hitch?** Walking back into a region recomposites it — on the order of **2,592
+   tile draws** for a 36×24 cell — and that is the only hitch candidate in the feature, because
+   *compiling* is not one: a whole city compiles in 2.70 ms. So if a hitch shows, it is
+   `_composite`, and the playtest should say so in those words rather than "the wilderness is
+   slow". The harness proves the recomposite is byte-identical to the first one; it cannot say what
+   it feels like at 60 fps.
+2. **Memory over a long walk, fair and snowy.** §10.4's **49.0 MB of composites** (18.6 settlement
+   + 30.4 for nine cells) is measured in a software canvas and is the **floor**, not the browser's
+   figure. What is owed is a real 40-region walk in a snowy city with interiors visited, watched in
+   a memory profile, against a policy that holds nine regions and drops the rest. The in-harness
+   proof is that the count is bounded and the drops actually happen; the megabytes are the
+   browser's to report.
+3. **Snow, by eye, in both themes — and specifically the classes with no snow vocabulary.** `scree`
+   and `oldwall` are bare rock in a white world, `fen` keeps liquid water, `outfield` takes
+   `cropSnow`. All four are the accepted reading rather than an oversight, and all four want an eye
+   on them. **Plus 0.16's own new ground inside the settlement**: a stone verge stays bare under
+   snow exactly as `scree` does, and a water town's thickened grass mottle keeps its two tones —
+   which is what the substitution table promises and nobody has looked at.
+4. **The retry popup in a real browser**, narrowed to what the shim genuinely cannot reach: real
+   **z-order against the host's narration panel** (the one playtest-caught bug in this class), real
+   focus behaviour, the legibility of the topbar chip, and the felt cadence of an auto-open. Mount,
+   unmount, Escape routing, the once-a-visit memo and hide-under-gate are all driven in the harness
+   through a real `Hud` on the DOM shim and are **not** on this list.
+5. **The signpost chip at width.** "North — The Tangled Thicket" is a derived string of unbounded
+   length beside the clock and the purse, and nothing has drawn it at a real topbar width with a
+   long landmark name in it.
+
+**0.14's own items, still owed, and the flagship surface is most of them:**
 
 1. **The dialogue window's shape and placement.** It is a partial panel with constraints the design
    fixed — clear of the topbar, the action rail and the d-pad — but the look is a browser
@@ -2822,9 +3043,69 @@ the strip.
 **Owed by:** whoever runs the browser lane before the release goes out — the maintainer, or a
 contributor doing it on their behalf. This package ships no browser test that covers any of it.
 
-### 12.3 The maintainer's playtest — 0.12's still outstanding, and 0.14 adds its own
+### 12.3 The maintainer's playtest — 0.16 is the one that was promised
 
-**Two 0.12 rulings are still PROVISIONAL, and now three releases have built on them.** The fishing
+**This is the first procedural playtest in the project's history, and that is not a figure of
+speech.** Every release since 0.4 has generated worlds; none of them has been walked through by the
+maintainer with the generation actually running. Ruling 2 of the 0.16 round settled it — *"I will
+playtest, yes. After these decisions. If another round is needed after playtesting too, that's
+fine"* — so the questions below are an agenda with a date rather than a list of hopes, and further
+rounds are expected rather than a failure.
+
+**The headline questions, in the order a session would meet them:**
+
+- **Does a compiled world read as a place?** The release's real question, and the one nothing in
+  this repository can answer. Everything below is a detail of it.
+- **Did the sameness die?** Three or four seeds side by side. The harness proves junction spread and
+  layout-fingerprint distinctness at every rank (171 of 200 distinct layouts at outpost, 200 of 200
+  from village up); only an eye says "a different town". Worth knowing before the session: **the
+  legacy village is still the legacy village** — the fallback map gets no variety and no
+  wilderness, by ruling, and its players get the retry surface instead.
+- **Is walking out worth doing?** Six terrain classes at density, **both themes** — and the colony
+  half is a taste verdict the package cannot give itself: a mast field, a sintered pan and a
+  collapsed outstation are the same tiles as a wood, a heath and a ruin, re-skinned and re-named.
+  If it reads as thin, C15's atlas headroom (seven free slots, "append and re-bake at 128×80") is
+  the sanctioned escape.
+- **Can you find your way home from three or four regions out**, on gate labels and memory alone?
+  If not, that is a map-surface feature request (ROADMAP W6) rather than a tuning row.
+- **The brief's own wilds, now with three new edges.** A place a model asked for, which used to be a
+  dead end, is now a junction. Does it still read as the place the brief named, or as a corridor?
+- **Toast cadence.** Ordinary country is one notice; a landmark is two (arrival plus discovery). Is
+  two right for a find, and is one-per-region too chatty on a long walk?
+- **Fishing in a fen.** The offer appears out in the country and the rate is the settlement's own,
+  by design. Does "same rate anywhere" feel right, or does walking out deserve a bite bonus — a
+  tuning row for 0.17, not a redesign.
+- **First entry at city scale**, where a city `z1` and a fresh region composite in the same session.
+
+**And the retry surface, which has three felt questions of its own:**
+
+- **Does a re-attempt read as honest progress or as a hang?** A pack retry blocks play for one call
+  behind the shipped gate screen. Is the clock visibly frozen while it holds, and does "keep playing
+  without it" land as a real answer rather than as giving up? **Including the imported failure
+  mode:** press a re-attempt while the GM is mid-turn and the result is a wait ending in a
+  busy-shaped failure screen — does "that attempt is already running" carry it, and is re-pressing
+  obvious?
+- **The world-swap moment.** A worldgen retry that succeeds replaces the map under a player
+  mid-session: severance notice, arrival at the new world's door, "The world takes shape." Does the
+  confirmation's keeps-and-loses contract match what the player then experiences, and does the
+  quarantine notice read as fair rather than punitive? **And the free rebuild first**: does "Try
+  building it again (free)" read as the obvious first try; does its sub-line about an update having
+  fixed the builder land as honesty rather than as a shrug; and does a rebuilt world arriving in
+  milliseconds feel like an answer or like a glitch?
+- **The recorded limitation, out loud.** *The wilderness does not remember you.* Living with it in
+  hand rather than reading it in a table: acceptable for 0.16, or an argument for moving the
+  persistence umbrella (ROADMAP S8) up the 0.17 queue? This is the one item on the list whose answer
+  changes what gets built next.
+
+**Provisional by ruling, and therefore re-openable at this session:** every one of the smaller 0.16
+calls. The maintainer's words were *"All the smaller calls are fine for playtest but don't hardcode
+any of that as most if not all of that is likely to be changed later on"*, which is why region size,
+the keep-9 residency, the six terrain classes, the id format, the landmark rate and the settlement's
+own levers all live in three named tunable blocks (`LATTICE_TUNE`, `RETRY_TUNE`, `TOWN_TUNE`) and
+the lanes read those blocks rather than restating their values. A retune after this playtest is one
+edit and a green suite, which is the shape the ruling asked for.
+
+**Two 0.12 rulings are still PROVISIONAL, and now four releases have built on them.** The fishing
 **trigger UX** (M5 — a proximity-gated button rather than a verb menu) and the **journal panel's
 shape** (M11) were ruled provisionally, to be settled at a playtest that has not yet happened.
 0.13's board button copies M5's pattern; 0.13's tab strip lives inside M11's panel; and 0.14's
@@ -2893,7 +3174,35 @@ and a reshape after either is a scheduled cost rather than a regression.
 
 ### 12.4 Release prep — nothing currently owed
 
-**This section flipped for 0.14 and has flipped back: the rebuild ran in-cycle rather than being
+**0.16's bake ran in-cycle, like 0.14's and 0.15's, and its headline is a NON-event: no art
+moved.** The release adds a whole terrain vocabulary and it is painted entirely out of the shipped
+tile set, so the anti-scope's "no new art by default" is not a claim here — it is a checked fact, in
+both places the assets live:
+
+- **Both theme tile sheets and `atlas.json` are byte-unchanged**, verified by sha256 before and
+  after the bake in **`packages/pixelforge/` (the shipped copies) and `build/assets/` (regenerated
+  from scratch every bake)** — the second location is the one that matters, because it is rebuilt
+  rather than left alone. `manifest.json` moved **three lines**: the version, and `client.js`'s
+  sha256/bytes pair. Every asset row in it is untouched, which is the same fact stated by the file
+  that would have had to change if it were not true.
+- **`client.js` at 1,387,737 bytes over nineteen modules** (eighteen in 0.14; `21-lattice.js` is the
+  nineteenth), and the figure was reproduced independently of the build: concatenating the modules
+  and the wrapper by hand predicts 1,387,737 exactly — 1,386,939 bytes of source plus 798 of banner
+  and IIFE. That is the check the 0.11.0 CRLF incident is the reason for.
+- **The `0.16.0` artifact zip at 1,399,573 bytes**, new; the `0.15.0` zip is untouched, as is every
+  older one. **Three bakes over the same tree produced byte-identical output** — the same zip hash,
+  the same `client.js`, the same manifest — so the artifact is reproducible rather than merely
+  deterministic-by-design.
+- **No catalog entry moved, and that is correct**: Pixelforge is in `INCOMPLETE_PACKAGE_IDS` and
+  appears in no published catalog. `scripts/validate-catalog.mjs` prints its own witness for that —
+  *"Uncatalogued package manifests valid: pixelforge"* — beside 35 catalogued packages, and the
+  release-notes gate is what forces `CHANGELOG.md` to lead with the version the manifest publishes.
+- **The `?v=` cache key moved with the version**, as it does every release. With the art unchanged
+  that buys nothing this time and costs one re-fetch of identical bytes, which is the honest reading
+  rather than a benefit worth claiming.
+
+**Older prep, kept because it is the record of how this went the last two times.** **This section
+flipped for 0.14 and has flipped back: the rebuild ran in-cycle rather than being
 deferred.** The 0.14 arc was source-only by convention, exactly as 0.12 and 0.13 were — six slices
 edited `src/` and `build/build-art.mjs` and left the build output for one rebuild at the end — and
 that rebuild is committed. What it moved, and what was checked:
@@ -3033,3 +3342,435 @@ composer the errands go through, so a turn that also settles a delivery says bot
   over a thin pack just serve the same two lines in a warmer register? The generation
   guidance widened for it; whether it is enough is a live-run question, the same one
   0.14 left open for the topic branches.
+
+## 14. The wilderness lattice — 0.16's country, and why none of it is saved
+
+Everything in `src/21-lattice.js` (`PF.lattice`). It is in this document for one reason: it is the
+largest thing 0.16 built and it adds **not one byte to the wire**, which is a claim that has to be
+argued rather than asserted, because a world with no edge is exactly where a save format goes to
+die.
+
+**The architecture line at the top of this document is the whole design.** The world is a pure
+function of `(seed, theme, brief, clock)`; 0.16 extends that function's domain rather than its
+storage. A region is a pure function of `(seed, theme, climate axes, surround, cell)` — so
+materialising one is a **cache fill, not a decision**, and a region walked back into recompiles
+byte-identically from the same inputs. That is what makes dropping one free rather than lossy, and
+it is why the residency policy below can be a hard count instead of a heuristic.
+
+### 14.1 Addressing: the cell, and the three that are not chunks
+
+The settlement stands at cell **(0,0)**; every other integer pair is country. Ids are
+`w_<cx>_<cy>` (`idFor`), and the test for whether a string names a cell is **round-trip
+canonicality**, not a specimen list: `parse(id)` accepts only when spelling the parsed cell back
+produces the identical string, which refuses `w_007_0`, `w_-0_0`, `w_1e3_0` and every other aliasing
+spelling **by construction** rather than by whichever hostile form somebody thought to enumerate.
+Two ids naming one place would be two zones for one region — a save row pointing at the twin, a gate
+that never comes home, and a residency policy that evicts one of them forever.
+
+`cellZoneId(world, cx, cy)` is the map from cell to zone id, and **three cells are not chunks at
+all**: (0,0) answers `world.startZone`, and (±1,0) answer the brief's own wilds when it has them,
+through a `world.latticeAnchors` table the compiler stamps (runtime-only, like the climate axes —
+no save row, re-minted on every compile). None of those ids match the chunk pattern, which is why
+`ensure` hands a **resident** zone straight back before it parses anything: an ensure that parsed
+first would refuse the single most-walked transition in the feature — the walk home — and leave
+every inward gate inert.
+
+**On a world with no compiled brief, `cellZoneId` answers null and there is no lattice.** That is
+where maintainer ruling 4 lives in code: *"no one should play in the fallback map"*, so the fallback
+gets no cell, no gate, no anchor table, no `surround`, and `ensure` refuses it outright.
+
+### 14.2 What a region is made of
+
+One table, not six scatterings: `LATTICE_TUNE.CLASSES` holds the six terrain classes — `woods`,
+`heath`, `scree`, `fen`, `outfield`, `oldwall` — each a ground id, a mottle, an optional dress pass
+(pools for a fen, furrows for an outfield), a scatter object and the landmark it may carry. Weights
+come off the world's **stamped climate axes**, its **stamped `surround`** (attenuated per ring, so
+the country a town stands in is felt hardest in the ring you can see from it) and how far out the
+cell sits. Every class paints from the **shipped tile vocabulary**, which is what makes "no new art"
+true of both themes at once — and the reading is honest rather than pretended: `10-art` re-skins
+trunk and canopy, so a colony's `woods` is a mast field and its `oldwall` a collapsed bulkhead, and
+`LATTICE_TUNE.WORDS` gives each class its own per-theme adjective/noun pair and landmark name so the
+words match the picture.
+
+**Prose is bounded by rarity, not banned.** A landmark cell carries one line capped at
+`FLAVOR_MAX_CHARS` **140**; an ordinary cell carries none. Measured over a two-ring walk: **12 of 47
+cells carry prose, 1,015 characters in total**, and twenty plain cells entered in the same lane cost
+the prose budget nothing. The injection is one-shot per zone through the shipped `intro.zones` flag,
+which is the only durable trace a region leaves anywhere (§10.4).
+
+**One landmark in seven, by design.** `LANDMARK_RATE_TARGET` is `1/7` and is stated in the tunables
+block so a lane can check the *design* rather than the arithmetic — the ring and surround pulls move
+the realised rate, and `LANDMARK_RATE_BAND` is how far either is allowed to move it, because a
+surround that doubled the ruins would be a bias that had stopped being a bias.
+
+### 14.3 Gates are arithmetic, never records
+
+A lattice edge is `zone.gates` — border tiles carrying a direction — and where one **leads** is
+computed at step time from the cell the zone stands in (`gateAt` to `gateTargetId` to `ensure` to
+`arrivalFor`, driven from `30-sim.js`'s `step`). **Nothing is ever written into `zone.portals`.**
+Three consequences, and each is why the rule exists:
+
+- the shipped "every portal's target exists" contract needs **no relaxation**, so the whole existing
+  world-contract sweep keeps its exact meaning;
+- there is **nothing to dangle** when a neighbour is evicted, and **nothing to duplicate** when it
+  comes back — re-entering an evicted region is the same branch as entering it the first time;
+- where a record and a gate could both answer for one tile — the settlement's east terminal on a
+  world whose brief hung a wilds there — **the record wins and no gate is written at all**
+  (`settlementGates`), so precedence is settled at build time rather than arbitrated while somebody
+  is walking.
+
+**Gates are punched in two phases**, and the ordering is load-bearing rather than tidy.
+`reservationsFor` computes the apron positions **before** a zone's tree scatter and reserves against
+it; `punchGates` paints **after** everything else; and the pocket seal now runs after the paint
+rather than two hundred lines before it. The late punch is not taste: the `struggling` scuffing loop
+draws the main tile stream once per painted path tile, so a seam laid with the road block would
+re-roll every world that already exists. The moved seal is the fix for a softlock class the builder
+already carries a paragraph about — a sweep that ran first would leave the newly opened ring walkable
+but unswept. The seal draws no RNG, so moving it moves no world.
+
+**The signpost, and the world-identity hazard it walked into**, which belongs in this document
+because it is the stamps' own problem wearing a HUD hat. Standing beside a gate reads
+`gateLabel(world, zone, gate)` — a bearing and the name of the country over the edge, computed from
+the **cell** rather than from a resident zone, so it says the same words whether or not the
+neighbour happens to be standing. The chip memoises that label, and the natural memo key
+(`<zoneId>|<direction>`) **names an edge without naming the world it is an edge of** — and zone ids
+are not world-unique: every compiled world's settlement is literally `z1` and every cell is
+`w_<cx>_<cy>`. The package builds exactly one `Hud` and **every** world-replacing path keeps it
+(`_switchChat`, `_installSealedWorld`, `_rebuild` all swap the sim underneath a HUD none of them
+rebuilds), so a chat switch between two saves both parked at a north edge showed the arriving chat
+the country of the chat it left. The memo is therefore dropped at `refreshChips`, the one HUD door
+all three of those paths already knock on — the same rule the renderer states for its own
+zone-id-keyed cache one field along.
+
+### 14.4 Materialisation, and the two joins
+
+`ensure(world, zoneId)` is the whole entry point: resident zone means hand it back; not a cell means
+null; a cell this world would not itself mint means null; otherwise compile, install and return. A
+builder that throws is caught, warned **once per id per page load**, and returns null — the caller
+leaves an inert tile the player walks away from, because a throw inside a frame loop would pump the
+fault sixty times a second and a throw inside a restore would cost the save.
+
+Two callers matter to this document. **`30-sim.js`'s step** runs the gate branch *after* the shipped
+portal loop and never instead of it, computing its own `zoneChanged` rather than borrowing that
+loop's unconditional one. And **`60-save.js`'s rehydrate** calls `ensure` above its `hasZone` test,
+which is what makes "a session that ended in the woods reloads in the woods" answerable at all: a
+region is a cache fill rather than a zone the compiler built, so before 0.16 a save row naming one
+resolved to nothing and the shipped arm dropped the player at the start zone with the saved position
+discarded on purpose. Every refusal still falls through to exactly that shipped degrade.
+
+### 14.5 Arriving, and what gets written down
+
+`enter(core, zoneId)` is where both **real** zone-change callers meet: the frame loop's
+`_zoneChanged` (the walked arrival) and `50-spatial.js`'s drift arm (the narrated one, which
+teleports when the GM moves the player and never calls the first). Arrival behaviour hung off the
+frame loop alone would leave the recency order believing the player was still standing where the GM
+moved them out of.
+
+**The ledger write is selective on purpose.** Only a **landmark** cell files a `player.found` row.
+`found` is an eighty-row ledger shared with every future discovery consumer and it evicts the oldest
+by day, so a writer that filed every patch of heath would fill it with terrain inside a day's
+walking and then start evicting the ruin somebody found on day three. Two properties of the row are
+worth stating because they are easy to get wrong later: it is refused wholesale under the loading
+gate like every other player write (so a landmark entered by a world still being generated is not a
+discovery that never happened), and **`d` keeps its shipped meaning** — a region three rings out is
+`d: 0` like everything else on the surface. Distance is not depth, and writing one into the field
+named for the other would poison the composite key the field was minted for.
+
+`enter` returns `{ id, from, discovered, evicted }` and the **caller** decides what to write from
+it, which is how a walk through the wilderness avoids arming a whole-shard save per region (§14.7).
+**Two of those four fields have no reader today** — `discovered` and `evicted` are reported for a
+caller that wants them and nothing currently does, since the discovery's own toast is fired inside
+`discoverCell` and eviction needs no announcement. Recorded rather than trimmed: they are the two
+facts an arrival knows that nothing else can recover afterwards. The recency order itself
+(`world._entered`, capped at `SEEN_MAX` 64) lives on the world object and is never serialized, so a
+world swap starts a fresh one for free.
+
+### 14.6 Residency, and the only thing here that destroys anything
+
+`residency(world, currentZoneId, keep)` is **pure**: a world and a standpoint in, ids out, nothing
+touched, the same answer twice. The refusals come first, because the list it must never take is
+longer than the list it takes — the zone the player is standing in; the settlement, refused **by
+name as well as by spelling** (a start zone that happened to look like a cell id would otherwise
+pass the id test); everything the brief named, every place, dwelling, floor and interior; and any
+cell holding an NPC, which is vacuous today and load-bearing the day it is not, because a schedule
+handle whose zone was dropped is a person who stops existing mid-errand.
+
+Then **recency and only recency**: the `RESIDENCY_KEEP` **9** most-recently-entered cells stand and
+everything older goes, oldest first. Nine is the player's cell plus the eight around it. Ties break
+on the id so the answer is a function of the world's content rather than of the order somebody
+happened to compile it in, and the whole thing is deterministic — no clock, no RNG, nothing that
+could make two players' walks diverge. A cell nothing has ever entered ranks oldest of all, which is
+the reload's case.
+
+`evict` runs from `enter` **after** the arrival has been counted, so the region just walked into is
+the most recent thing in the order and the policy can never take the ground out from under the
+player. **Two clears per evicted cell, and both are load-bearing**: `delete world.zones[id]` takes
+the tile arrays and the `_snowable` memo hung off the zone object, and `render.invalidateZone(id)`
+takes both composite classes. A delete without the second would be the same leak with the zone's
+name filed off — the picture outliving its world, and a stale one waiting for whatever zone is next
+given that id. (`invalidateZone` had carried no runtime caller since the day it was written; this is
+the caller.)
+
+**`RESIDENCY_KEEP` is a memory knob and never a world one**, which is the sentence that makes the
+whole tunables block safe to retune at a playtest: no value in it can change what the country *is*,
+only how much of it is holding canvases.
+
+### 14.7 The write governor
+
+`isChunkCrossing(from, to)` is pure and is the whole of it. Every zone entry arms a whole-shard
+write, which is right for a world where crossing a boundary is an event; out here it is what walking
+IS — a boundary every six to eight seconds, so an unbatched twenty-minute walk is a hundred and
+fifty of them where a town session is a handful. A cell-to-cell step therefore writes **nothing
+event-shaped** and rides the shipped thirty-second positional autosave the frame loop already runs
+(no new timer, no second leash, and no fork with the shared debounce the retry ladder and the rewind
+corrective both hold). Everything else keeps the write it had: leaving town, arriving in it, a
+discovery, a quest, a conversation. The cost is §10.4's, stated rather than discovered.
+
+### 14.8 What the lattice deliberately does not touch
+
+- **No World Maps row, ever** (`CHUNK_MAP_EXPORT: false`) — the one entry in the tunables block that
+  is **not** a playtest knob, and it is crash-safety rather than taste. `brief-schema.md` §8 carries
+  the argument; the short version is that the route is additive with no delete and its planner
+  dereferences zones across its awaits, so an exported-then-evicted cell is a crash and an exported
+  cell is a permanent row per patch of wilderness a player ever crossed.
+- **No NPCs in cells.** The residency refusal for a cell holding one exists ahead of the feature
+  precisely so it cannot be forgotten when the feature arrives.
+- **No world mutation of any kind**, which is §11's headline limitation and ROADMAP **S8**'s
+  subject.
+- **No new save field, no envelope field, no brief-schema change and no `briefVersion` bump.**
+
+## 15. The generation retry surface — 0.16's way out of a half-written world
+
+Everything in `src/60-save.js` (`STAGES`, `RETRY_KEYS`, `RETRY_COPY`, `regenerateStage` and the
+predicates around them) plus the panel in `src/70-hud.js`. §6.7 specifies the gate shape it re-arms;
+this section specifies the surface.
+
+**The ruling it answers, and the shape of the answer.** Maintainer ruling 4 refused to make the
+fallback map livable — *"I don't think we need to add anything to the fallback map since no one
+should play in the fallback map"* — and asked for a way out instead: *"there needs to be a way to
+attempt to recreate worldgen, which would save them time and tokens assuming everything else
+generated successfully."* So the surface's job is **re-run exactly what failed and keep what
+succeeded**, and its correctness condition is the token bill.
+
+### 15.1 The stage registry
+
+`PF.save.STAGES` is an ordered table with one row per pre-game generation stage, each a
+self-contained bundle of `derive` + re-attemptable `modes` + the `screens`/`rows` strings its
+surfaces read. The gate's own hardcoded brief-vs-pack ternaries moved in here, so **one table now
+runs the gate, the registry and the popup**, and the shipped strings stay byte-identical for the
+boot-armed states they were written for.
+
+`historygen` and `storyboard` are **reserved ids with no rows shipped** (`RESERVED_STAGES`), and
+deliberately: history generation is designed to *reduce* connection dependency and may fail like the
+content pack's substance floor rather than like a network call, and GM storyboarding has zero repo
+footprint — it was named for the first time in the ruling. The registry accommodates them **by
+shape**, not by guessing a failure vocabulary neither has yet. ROADMAP **S9** carries the open half.
+
+### 15.2 Derivation, never a log
+
+`derive(meta, world, chatId)` is **pure and PATCH-free**, and answers one of seven states: `ok`,
+`fallback`, `unreadable`, `demoted`, `pending`, `declined`, `n/a`. Only the three in
+`RETRY_POPUP_STATES` are rows a player can act on.
+
+**Nothing is logged, and that is the design rather than an omission.** A durable failure record
+would have to be written from a code path whose own PATCH may be the thing failing — a log that lies
+exactly when it matters — so the surface derives what is standing every time it is asked. The cost
+is stated in §11: the failure **kind** does not survive a reload. The failing session's gate screen
+says why; a later visit says the durable fact without claiming to remember the cause.
+
+| stage | state | derived from |
+| ----- | ----- | ------------ |
+| brief | `fallback` | a sealed brief that passes `build()`'s own five-field admission gate, on a world that is not `interim` and carries no `brieved` mark — i.e. the compile degraded. This is the state ruling 4 is aimed at |
+| brief | `unreadable` | the brief key is present, is not shaped `{skipped:true}`, and **fails** that admission gate — a truncated or foreign seal. Paid re-roll offered, **no free rebuild**: there is nothing `build()` will compile, so the free press could only ever fail |
+| brief | `declined` | keyed **by shape** (`top.skipped === true`), never by "anything that is not a brief" — otherwise a truncated PATCH would vanish into "the player said no" and play the fallback forever with no gate and no row |
+| pack | `fallback` | a pack is owed by **seal-side** evidence and none is sealed, via `packDeferred()` — deliberately not `packExpected`, which the accepted marker turns false, so a row written on it would be unsatisfiable exactly when it is meant to show |
+| pack | `demoted` | a sealed pack exists but its `briefHash` does not answer for the brief this session actually reads. A pack is sealed **against a brief**, so "a pack exists" is not "ok" |
+
+### 15.3 The one new signal family, and what each key is for
+
+`RETRY_KEYS` — three durable chat-metadata keys, **flat scalars rather than one map at one key**,
+because the metadata PATCH is a queued *shallow* merge and a map would be a read-modify-write whose
+lost-update window grows with every stage reserved.
+
+- **`pixelforgeFallbackAcceptedPack`** — "the player chose to keep playing on this stage's fallback
+  for now". Its term lives **inside `packExpected`** itself, one predicate with four consumers, so
+  `armGate`, `wantPack` and the ladder's guard all fall out for free and the boot gate genuinely
+  stops holding a chat whose player said "later". Written by a row's own explicit button — never by
+  a failure, and **never by a mere dismissal**.
+- **`pixelforgeFallbackAcceptedBrief`** — the same key shape for the brief stage, and its job is
+  narrower than its sibling's, which is worth stating plainly because the symmetry invites a wrong
+  reading: **it gates nothing.** `briefExpected` is deliberately given no twin term — an unsealed
+  brief always gates, nobody plays the placeholder, and `_liftGate`'s interim refusal keeps its
+  exact meaning. What the brief marker does is **suppress the nag**: an accepted row still shows in
+  the panel (the chip and the panel are the standing way back to it) but no longer re-opens the
+  popup on arrival. A player who has decided to live on a stand-in is not asked again.
+- **`pixelforgeBriefPrior`** — the outgoing brief, parked beside the new one **in the same PATCH**
+  when a paid re-roll replaces it. One deep, additive, atomic; every other destroy-the-only-copy
+  path in the module parks first, and a degraded brief is exactly the shape a newer build wrote and
+  this one cannot compile.
+
+Writes go through the seal PATCH's own ladder — `RETRY_TUNE.STORE_ATTEMPTS` **3** at
+`STORE_BACKOFF_MS` **500** times (attempt+1) — so a storage failure reads on the **shipped storage
+screen** rather than inventing a second vocabulary. A stage that derives `ok` drops its marker as
+best-effort housekeeping (`_forgetAccepted`), and the chip derives strictly from live rows either
+way, so a healed world never keeps saying "part stand-in". §11 carries the marker's failure mode.
+
+### 15.4 The modes, cheapest first
+
+| mode | stage | costs | what it does |
+| ---- | ----- | ----- | ------------ |
+| `rebuild` | brief | **zero generation calls** | One synchronous **same-seed** compile. No ladder, no gate, no in-flight hold. Deterministic, so it succeeds only once a package or engine update has fixed the compile bug — and the copy says so **before** the press rather than after it |
+| `retry` | pack | one call | Clears the accepted marker **durably first** (without that, `packExpected` stays false and the dispatch falls through the ladder's nothing-to-generate branch into the bare lift, spending nothing), then re-enters the ladder. Only call two runs, against the already-sealed brief, and it lands in the resume path: no sim replacement, no transplant, the world byte-untouched |
+| `rewrite` | pack | one call | For a **demoted** pack: a scoped force, on the strength of the sealed-but-stale pack object itself — durable, seal-side, paid-for evidence, never the wizard config — and the new pack PATCHes over the dead one |
+| `reroll` | brief | one call, **two** when a pack is owed | The paid re-roll: a scoped force through the ladder, the new brief PATCHed with the old one parked beside it, and the pack re-run downstream (§15.5). Installs a new world under the player |
+
+**The seed never moves, on any of them** (`_regenSeed`: the live world's seed first, then the
+wizard's, then the chat-id hash — the ladder `simFromSaved` already agrees on). That is maintainer
+ruling 8, and it is the reason the free rebuild is a *same-seed* rebuild rather than the fresh-seed
+one an earlier design had: *"seed change on worldgen reroll isn't okay, since historygen should be
+affected by worldgen and it may not make sense if historygen is made from a different world."*
+
+**"Zero generation calls" is not "spends nothing"**, and the claim is made in exactly those words
+everywhere: a world swap builds a fresh `PF.Sim`, so the one-shot setting, flavour and persona
+injections re-enter the GM's context on later turns (§11).
+
+### 15.5 The cascade — ruling 8's law made mechanical
+
+**A regenerated stage re-runs everything downstream of it and may never orphan an artifact derived
+from its old value.** A paid re-roll therefore re-runs the content pack its new brief would
+otherwise strand, and the consequence the design had to absorb is that **the gate's stage moves
+downstream mid-attempt**: a re-roll whose brief seals and whose pack then fails is standing at the
+pack stage still carrying the brief's mode name — a mode the pack row does not offer.
+
+Three things follow, and all three are built rather than assumed:
+
+- **the row says what a press owes at its own stage.** `cascade: { mode: "rewrite", note }` on the
+  pack row, asked through `_pressMode`. Resolved against `gate.mode` alone, the press would find no
+  descriptor, refuse having touched nothing, and report success — a dead button on the one screen
+  built around it, over a world the freeze is still holding.
+- **the stranded world is installed rather than abandoned.** The install sits below the pack's
+  failure exit, so a re-roll that seals and then fails leaves the new brief stored and the old
+  stand-in on screen. A forced post-start run installs when the world in front of the player was not
+  compiled from a brief at all **and** the sealed one compiles into a real one — the free rebuild's
+  own single probe, asked against the values the install would use, so a chat standing on a stand-in
+  with a merely demoted pack still resumes rather than rebuilding a degrade over a degrade.
+- **the screen carries its own sentence for that state**, because the shipped one promises the world
+  the player is standing in is untouched whatever happens here, which the seal has already made
+  false.
+
+### 15.6 One predicate for "would this press replace the world"
+
+**Everything that replaces the world asks first, free presses included** — free is not
+consequence-free, the severance is identical either way, and only the cost line differs. The rule is
+held up by `retryReplacesWorld(core, stageId, mode)` and **not** by a list of mode names, because a
+mode's name cannot answer the question: `rewrite` is one content call on the ordinary press and a
+world swap on the cascade's, over the same button. The registry says which modes **install whatever
+is standing** (`modes[mode].installs === true`), and the cascade's mode installs in exactly the
+state the install fork installs in — the same witness, the same `brieved` reading, and the same
+compile probe through `canRebuild`. A confirm that disagreed with the fork is either a warning about
+a swap that never happens or a swap with no warning, and the second one is the bug this exists for.
+
+**Three confirmation shapes, one contract.** Paid ("Write the world again?"), free ("Build this
+world again?") and cascade ("Move into the new world?") differ only in the **cost line** and the
+button words; all three carry the same keeps-and-loses sentence, because the severance is identical
+whichever is on screen: money, items, skills and the clock come across; friendships, quests,
+discoveries, home and anything bought on the old map are severed to the quarantine stamp slot,
+permanently, because the fallback world can never match stamps again.
+
+**One Maps sentence belongs here and is in the copy.** Rows exported from a stand-in world are
+additive and permanent, so a swap orphans them as records of a place that no longer exists — always
+under the same `pf.<fnv32(seed)>` prefix, since the seed never moves.
+
+**The install is scoped by an explicit post-start flag** that only `regenerateStage`'s two
+world-replacing paths pass, so the boot and compat-shim behaviour is byte-identical. Behind that
+flag: the open conversation closes; the clock and day cross **and the schedules are re-placed after
+the carry** (carrying 23:00 into a town standing at its 08:00 anchors is the bug the source comment
+documents); the weather override is re-read; the quarantine park's refusal is handled and the
+severance is said out loud; the generation fence bumps so the old world's in-flight writes go stale;
+the swap forces its own write; and a swap with no gate to lift runs the lift's own tail itself
+(§6.6).
+
+### 15.7 The popup, and why nothing nags
+
+Built on the package's one safe window pattern: a boolean-latched overlay in `closePanels()`'s
+mutual-exclusion set, deliberately **not** an `aria-modal` dialog, sitting **under** the gate —
+because a re-attempt in flight re-arms that gate and the gate is then the surface. Membership in the
+exclusion set is what gets it Escape for free, which is why the whole feature required no
+`90-element.js` edit.
+
+**It auto-opens once per chat visit, and the auto-open WAITS.** A member of the mutual-exclusion set
+that popped over an open journal would *close* it — a surface vanishing under somebody mid-read, for
+a popup they did not ask for at that moment — so the auto-open is suppressed while the journal, the
+character sheet, the board menu or a conversation is open, and **the once-a-visit memo is spent only
+when the panel actually mounts**. It waits rather than being skipped. After that it is the topbar
+chip, which derives strictly from live rows so a world that healed stops saying "part stand-in" on
+its own.
+
+**Closing spends no choice.** `closePanels` is a blunt close-everything with no "why" channel, so
+only a row's own button records anything. Dismissal is not acceptance, and neither is opening a
+journal.
+
+**The panel's own strings are chat-keyed and repaint-memoised.** The latch, the confirmation and the
+per-row note map all reset inside the per-frame reconcile when `core.chatId` changes, and every
+press carries the chat id it was made in — so a note written after a chat switch is dropped rather
+than landing on somebody else's screen about a press nobody there made.
+
+### 15.8 Failure, its two exits, and what a sentence is allowed to say
+
+`_failGate` paints the shipped failed screen. **Two exits:**
+
+- **Try again**, which knows where it is: on a boot gate it is byte-untouched shipped behaviour
+  (re-stamp and re-enter the ladder, which always runs); on a post-start gate it **mutates nothing**
+  and delegates whole to `regenerateStage`, because a pre-mutation there would paint a spinner
+  before anything was asked — a refused press leaving "writing…" on screen with nothing behind it
+  and the retry button hidden. It also reports the delegate's own answer instead of a `true` that
+  makes a spent press and a dead one look the same.
+- **Keep playing without it**, and its **visibility rule is "only where there is somewhere to go"**:
+  it is shown whenever a playable non-interim world stands behind the gate, which excludes a
+  boot-armed **brief** gate outright, because the world behind that one is the placeholder nobody
+  may be left standing in. On a post-start gate it is a bare un-arm (the world was already adopted
+  and played, so `_liftGate`'s adopt and purse tail must not re-run) plus dropping the re-arm
+  record; on a boot-armed **pack** gate it records the deferral durably and re-enters the ladder,
+  where the marker has just made `packExpected` false and the nothing-to-generate branch is
+  genuinely the code that runs.
+
+**A storage failure is a GATE SCREEN, not a sentence under a row.** When the pack retry's
+marker-clearing write does not go through after three attempts, nothing is dispatched — the marker
+still stands, so the ladder would have found nothing to generate — and the shipped storage screen
+says the true thing ("The work was written, but saving it to this chat did not go through"). The
+panel adds no sentence of its own for it; it clears the one an earlier press left, because a stale
+note under a row is the same false-in-this-state copy the sub-line above it was fixed for.
+
+**Every clause of every sentence has to be true in every state its stage can be in**, which is a
+discipline the shipped copy already stated and 0.16 had to actually pay for. Two consequences are
+visible in the registry: rows carry `postStart` string variants where the shipped sentence would lie
+(the brief stage's *"no stand-in world was settled on this chat"* is a denial of what is on screen
+during a post-start failure), and the free rebuild's sub-line is a **state question** rather than a
+constant — `actionNote` picks between "this works once an update has fixed the builder" and "it
+builds right now" off the same probe the press itself makes, so the sentence and the button can
+never disagree.
+
+**And one sentence the plan specified was DELETED rather than shipped — recorded here because a
+reader following the plan will look for it.** A "second failure" line (*"if this happens again, the
+problem is likely the setting, not luck"*) was designed to appear under a row on a re-press after a
+failed re-roll. It cannot fire, and the reason is structural rather than incidental:
+`regenerateStage` answers **true the moment a call goes out**, so a call that comes back badly
+paints the gate's own failure screen and never reaches the panel's note map at all. The only presses
+that *can* reach it are presses that never reached a call — a pack retry turned away by the storage
+precondition above, and a press abandoned by a chat switch — which is the wrong stage and the wrong
+cause both times. The failure screen already says the specific true thing at the right moment in the
+stage's own words, so the line was removed rather than re-routed, and the two refusals that leave no
+screen behind them keep their own words (`pressInFlight`, and the storage screen). **Making it fire
+would need a session-only per-stage failure witness, and that is a maintainer call rather than a
+fix-round one** — this paragraph is the disclosure, not the decision.
+
+### 15.9 Deferred to the playtest
+
+The mechanics above are driven end to end in the harness — the derivation truth table, both paid
+retries with call counts, the free rebuild in both directions of the update that fixes the builder,
+the re-arm through a real chat switch, the write path under a post-start hold, and the panel through
+a real `Hud` on the DOM shim. What is **not** provable here is how any of it feels: §12.2 carries the
+browser items (z-order against the host's narration panel, focus, the chip, the felt auto-open
+cadence) and §12.3 carries the felt ones (does a re-attempt read as progress or as a hang; does the
+world-swap moment match the contract the confirmation promised; does a free rebuild arriving in
+milliseconds feel like an answer or like a glitch).
