@@ -372,27 +372,35 @@ PF.lattice = (() => {
   }
 
   // ── Gate geometry ───────────────────────────────────────────────────────────
-  // A gate is a border TILE with a direction. The span is centred on the zone's
-  // own middle, which puts a settlement's gates exactly on its spine terminals
-  // and a wilds' east/west gates on its approach-road band — the two places the
-  // shipped geometry already leads to. The N/S columns are two clear of a
-  // `water-crossing` wilds' stream (laid at x = 20-21), so no apron ever lands
-  // in guaranteed water.
-  const spanStart = (extent) => ((extent / 2) | 0) - (TUNE.GATE_SPAN >> 1);
+  // A gate is a border TILE with a direction. The span is centred on the SPINE
+  // the caller names, and on the zone's own middle when it names none — which
+  // puts a wilds' east/west gates on its approach-road band and a chunk's on its
+  // own hub corridor. The N/S columns are two clear of a `water-crossing` wilds'
+  // stream (laid at x = 20-21), so no apron ever lands in guaranteed water.
+  //
+  // A SETTLEMENT NAMES ITS SPINE from 0.16 slice 4, and this is the whole of what
+  // "the terminals move with the junction" costs: the crossroad is seeded now, so
+  // the road reaches the border two columns and two rows of the compiler's
+  // choosing rather than the map's middle, and a terminal that stayed centred
+  // would be a gate the road does not arrive at. On a centred junction the two
+  // answers are identical, which is why every existing caller keeps its result.
+  const spanStart = (extent, centre) => (Number.isInteger(centre) ? centre : (extent / 2) | 0) - (TUNE.GATE_SPAN >> 1);
 
-  /** The gate tiles for one direction. */
-  function gateTiles(zone, dir) {
+  /** The gate tiles for one direction, about an optional `{x, y}` spine. */
+  function gateTiles(zone, dir, spine) {
     const out = [];
+    const cx = spine?.x;
+    const cy = spine?.y;
     for (let i = 0; i < TUNE.GATE_SPAN; i++) {
-      if (dir === "N") out.push({ x: spanStart(zone.w) + i, y: 0, dir });
-      else if (dir === "S") out.push({ x: spanStart(zone.w) + i, y: zone.h - 1, dir });
-      else if (dir === "E") out.push({ x: zone.w - 1, y: spanStart(zone.h) + i, dir });
-      else out.push({ x: 0, y: spanStart(zone.h) + i, dir });
+      if (dir === "N") out.push({ x: spanStart(zone.w, cx) + i, y: 0, dir });
+      else if (dir === "S") out.push({ x: spanStart(zone.w, cx) + i, y: zone.h - 1, dir });
+      else if (dir === "E") out.push({ x: zone.w - 1, y: spanStart(zone.h, cy) + i, dir });
+      else out.push({ x: 0, y: spanStart(zone.h, cy) + i, dir });
     }
     return out;
   }
 
-  const gatesFor = (zone, dirs) => dirs.flatMap((dir) => gateTiles(zone, dir));
+  const gatesFor = (zone, dirs, spine) => dirs.flatMap((dir) => gateTiles(zone, dir, spine));
 
   /** The tiles one gate owns: itself and the apron reaching inward. Written as
    *  one list because the two phases consume the SAME list — phase one reserves
@@ -1040,10 +1048,11 @@ PF.lattice = (() => {
    *  already take. Where a wilds hangs, its shipped portal pair is the seam and
    *  no gate is written at all — so a record and a gate can never both answer for
    *  one tile, and the precedence is settled at build time. */
-  const settlementGates = (v, wilds) =>
+  const settlementGates = (v, wilds, spine) =>
     gatesFor(
       v,
       DIRS.filter((dir) => !(dir === "E" && wilds.east) && !(dir === "W" && wilds.west)),
+      spine ?? v.spine,
     );
 
   /** A brief wilds' gates: its three OUTWARD edges. The fourth is the portal pair

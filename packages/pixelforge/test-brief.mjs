@@ -414,8 +414,11 @@ function checkWorld(w, sealed, label) {
   {
     const v = w.zones.z1;
     if (v && v.mapKind === "settlement") {
-      const midX = (v.w / 2) | 0;
-      const midY = (v.h / 2) | 0;
+      // THE CROSSROAD IS SEEDED (0.16 slice 4), so the arteries are read off the
+      // zone's own stamped spine rather than recomputed from the map's middle. The
+      // fallback is the legacy village, which carries no spine and never moves.
+      const midX = v.spine ? v.spine.x : (v.w / 2) | 0;
+      const midY = v.spine ? v.spine.y : (v.h / 2) | 0;
       for (let y = 0; y < v.h; y++) {
         for (let x = 0; x < v.w; x++) {
           const at = v.w * y + x;
@@ -694,8 +697,8 @@ for (const theme of ["cozy-village", "sci-fi-colony"]) {
   );
   const gad = v.npcs.find((n) => n.name === "Gad");
   assert.ok(gad, "destitute stays in the settlement");
-  const mX = (v.w / 2) | 0;
-  const mY = (v.h / 2) | 0;
+  const mX = v.spine.x; // the crossroad is seeded from 0.16 slice 4
+  const mY = v.spine.y;
   assert.deepEqual(
     gad.wander,
     { x0: mX - 6, y0: mY - 5, x1: mX + 6, y1: mY + 5 },
@@ -788,8 +791,8 @@ const wayrestCast = [
   );
   assert.equal(v.object.filter((t) => t === "table").length, 0, "a transient non-merchant lays no stall");
   assert.ok(!Object.values(w.zones).some((z) => z.mapKind === "place"), "no wilds synthesized (places is non-empty)");
-  const mX = (v.w / 2) | 0;
-  const mY = (v.h / 2) | 0;
+  const mX = v.spine.x; // the crossroad is seeded from 0.16 slice 4
+  const mY = v.spine.y;
   const plaza = { x0: mX - 6, y0: mY - 5, x1: mX + 6, y1: mY + 5 };
   const wander = (name) => v.npcs.find((n) => n.name === name).wander;
   assert.deepEqual(wander("Dov"), plaza, "transient with no inn falls back to the plaza");
@@ -886,8 +889,8 @@ const wayrestCast = [
   checkWorld(w, sealed, "loiter-spread");
   const v = w.zones.z1;
   const innId = Object.entries(sealed._ids.zones).find(([, n]) => n === "The Rest")?.[0];
-  const mX = (v.w / 2) | 0;
-  const mY = (v.h / 2) | 0;
+  const mX = v.spine.x; // the crossroad is seeded from 0.16 slice 4
+  const mY = v.spine.y;
   const plaza = JSON.stringify({ x0: mX - 6, y0: mY - 5, x1: mX + 6, y1: mY + 5 });
   const names = ["Vye", "Wil", "Xio"];
   const inInn = names.filter((n) => w.zones[innId].npcs.some((x) => x.name === n));
@@ -953,8 +956,8 @@ const wayrestCast = [
   assert.equal(v.object.filter((t) => t === "table").length, 0, "no free lot -> the transient merchant lays no stall");
   const sol = v.npcs.find((n) => n.name === "Sol");
   assert.ok(sol, "the merchant still loiters at a public spot");
-  const mX = (v.w / 2) | 0;
-  const mY = (v.h / 2) | 0;
+  const mX = v.spine.x; // the crossroad is seeded from 0.16 slice 4
+  const mY = v.spine.y;
   assert.deepEqual(sol.wander, { x0: mX - 6, y0: mY - 5, x1: mX + 6, y1: mY + 5 }, "falls back to the plaza");
 }
 
@@ -3771,8 +3774,8 @@ const zoneNamed = (w, name) => Object.values(w.zones).find((zone) => zone.name =
   assert.equal(plain.npc._sched.keeper, false, "an elder with no sanctuary is not a keeper");
   assert.equal(plain.zoneId, "z1", "and stays in the settlement");
   const v = plain.world.zones.z1;
-  const mx = (v.w / 2) | 0;
-  const my = (v.h / 2) | 0;
+  const mx = v.spine.x; // the crossroad is seeded from 0.16 slice 4
+  const my = v.spine.y;
   assert.ok(
     Math.abs(Math.round(plain.npc.x) - mx) <= 6 && Math.abs(Math.round(plain.npc.y) - my) <= 5,
     "an elder with no sanctuary still spends midday in the plaza",
@@ -8580,8 +8583,8 @@ const SNOW_IDS = ["grassSnow", "grassSnow2", "cropSnow", "canopySnow"];
         // Never on the crossroad or the arrival tile. Those two rows and two
         // columns are the settlement's through-traffic, and the spawn sits on
         // one of them — a well there blocks the way in on the first frame.
-        const midX = (v.w / 2) | 0;
-        const midY = (v.h / 2) | 0;
+        const midX = v.spine.x; // the crossroad is seeded from 0.16 slice 4
+        const midY = v.spine.y;
         for (const [x, y] of [
           [midX, midY],
           [midX - 1, midY],
@@ -8621,8 +8624,8 @@ const SNOW_IDS = ["grassSnow", "grassSnow2", "cropSnow", "canopySnow"];
   // TILES rather than a bookkeeping array, so a ward recorded but never painted
   // does not pass.
   const wardWells = (v) => {
-    const midX = (v.w / 2) | 0;
-    const midY = (v.h / 2) | 0;
+    const midX = v.spine.x; // the crossroad is seeded from 0.16 slice 4
+    const midY = v.spine.y;
     let found = 0;
     v.object.forEach((tile, index) => {
       if (tile !== "well") return;
@@ -8651,8 +8654,8 @@ const SNOW_IDS = ["grassSnow", "grassSnow2", "cropSnow", "canopySnow"];
   const sim = new loadedPF.Sim({ zones: { z1: city }, startZone: "z1" });
   sim.clockMin = 12 * 60;
   sim.resolveSchedules();
-  const midX = (city.w / 2) | 0;
-  const midY = (city.h / 2) | 0;
+  const midX = city.spine.x; // the crossroad is seeded from 0.16 slice 4
+  const midY = city.spine.y;
   const outdoors = city.npcs.length;
   const plaza = city.npcs.filter((n) => Math.abs(n.x - midX) <= 6 && Math.abs(n.y - midY) <= 5).length;
   const onWard = city.npcs.filter((n) => {
@@ -28110,10 +28113,14 @@ const layoutFingerprint = (w) => {
 
   // Taken against the 0.13.0 tree, one commit before 17-weather.js landed.
   //
-  // RE-PINNED ONCE, AT 0.16, AND ONLY HALF OF IT. The wilderness lattice punches
-  // gate aprons into every compiled world's border ring — a deliberate, visible
-  // geometry change — so the `defaults` and `maxBrief` rows moved and were taken
-  // again against the tree that landed it. THE TWENTY `legacy` ROWS ARE STILL THE
+  // RE-PINNED TWICE AT 0.16, AND ONLY EVER HALF OF IT. The wilderness lattice
+  // punches gate aprons into every compiled world's border ring, and slice 4
+  // seeds the crossroad, the plaza and the lot rhythm — two deliberate, visible
+  // geometry changes — so the `defaults` and `maxBrief` rows moved on each and
+  // were taken again against the tree that landed them. Exactly forty rows moved
+  // the second time and exactly twenty did not, which is the whole of "the
+  // streets re-lay and the fallback does not" said in hashes.
+  // THE TWENTY `legacy` ROWS ARE STILL THE
   // 0.13.0 ORIGINALS, byte for byte, and that is not housekeeping: the ruling on
   // the fallback map was "no one should play in the fallback map", so it gets no
   // lattice, no gates and no wilderness, and twenty frozen hashes older than the
@@ -28122,65 +28129,65 @@ const layoutFingerprint = (w) => {
   // near the end of this file; this table is the coarse net under it.
   const LAYOUTS = {
     "cozy-village|1|legacy": "cf46649ec5c6b349",
-    "cozy-village|1|defaults": "7433afe97b102045",
-    "cozy-village|1|maxBrief": "67619f1e137e49b0",
+    "cozy-village|1|defaults": "364f191ef530ebc3",
+    "cozy-village|1|maxBrief": "7c99a414c2421b23",
     "cozy-village|2|legacy": "b162a3091ba35899",
-    "cozy-village|2|defaults": "61358f3c5e5ec783",
-    "cozy-village|2|maxBrief": "41150a44d9524d28",
+    "cozy-village|2|defaults": "c467902d0682bd20",
+    "cozy-village|2|maxBrief": "1b5caed8ebe06749",
     "cozy-village|3|legacy": "6c978a992a9041b3",
-    "cozy-village|3|defaults": "aa9f7731ee6f8f1c",
-    "cozy-village|3|maxBrief": "074b6da3d15b3697",
+    "cozy-village|3|defaults": "a74800e3fe46bf38",
+    "cozy-village|3|maxBrief": "04e02bed03288218",
     "cozy-village|4|legacy": "2f823c92752f9cc1",
-    "cozy-village|4|defaults": "68ccaddfa71f8bdd",
-    "cozy-village|4|maxBrief": "3dc18451a03d2964",
+    "cozy-village|4|defaults": "599cacfba57b8f4b",
+    "cozy-village|4|maxBrief": "24706dc27111c06f",
     "cozy-village|5|legacy": "4f4d9fbc079dc3d8",
-    "cozy-village|5|defaults": "9f83a1bc20e27e68",
-    "cozy-village|5|maxBrief": "3bd620d518fad6a8",
+    "cozy-village|5|defaults": "fbdd91914eb3d0ab",
+    "cozy-village|5|maxBrief": "5943341dfc4a5b51",
     "cozy-village|7|legacy": "26b1bfe2a5e5e541",
-    "cozy-village|7|defaults": "0c855920fe9b1c8b",
-    "cozy-village|7|maxBrief": "517910f5cd6b63ed",
+    "cozy-village|7|defaults": "f611747fdeea7b64",
+    "cozy-village|7|maxBrief": "0b2977ee34ca7b7c",
     "cozy-village|11|legacy": "34c824678792be49",
-    "cozy-village|11|defaults": "a7a7789cc9ee2923",
-    "cozy-village|11|maxBrief": "065240fe12ba277c",
+    "cozy-village|11|defaults": "e23ac107f9fc1705",
+    "cozy-village|11|maxBrief": "f45a9e548dc89aa9",
     "cozy-village|31|legacy": "c2d3ffda6eb1cbd7",
-    "cozy-village|31|defaults": "2c52aa59789f8678",
-    "cozy-village|31|maxBrief": "cd8f69eb27aad9f6",
+    "cozy-village|31|defaults": "1f4edf74f26ebbdb",
+    "cozy-village|31|maxBrief": "e1c69f125dfe36cb",
     "cozy-village|80021|legacy": "eb066c1cfea95532",
-    "cozy-village|80021|defaults": "96476929f8e23f8b",
-    "cozy-village|80021|maxBrief": "1283b72bd02b82ff",
+    "cozy-village|80021|defaults": "abad4518292d3f6e",
+    "cozy-village|80021|maxBrief": "bb8bf4b241ed54e0",
     "cozy-village|424242|legacy": "6292c385ef49fb4b",
-    "cozy-village|424242|defaults": "86cff06f08f6fdd3",
-    "cozy-village|424242|maxBrief": "a12a0f81465093c2",
+    "cozy-village|424242|defaults": "255888c4bed199be",
+    "cozy-village|424242|maxBrief": "44f9c6211d08b464",
     "sci-fi-colony|1|legacy": "a319fe23cf92a4db",
-    "sci-fi-colony|1|defaults": "e606175d444c58c6",
-    "sci-fi-colony|1|maxBrief": "3d415f51fa9f93b9",
+    "sci-fi-colony|1|defaults": "ee0079b06f462650",
+    "sci-fi-colony|1|maxBrief": "75d0c3fbc679e345",
     "sci-fi-colony|2|legacy": "fb99db68144637bc",
-    "sci-fi-colony|2|defaults": "5ccaf5f83d5c7566",
-    "sci-fi-colony|2|maxBrief": "b59f4fa30b498643",
+    "sci-fi-colony|2|defaults": "52852856294d8ccc",
+    "sci-fi-colony|2|maxBrief": "52a8741bf471c088",
     "sci-fi-colony|3|legacy": "fb3a709e55da69c3",
-    "sci-fi-colony|3|defaults": "2321ff912ca0f9de",
-    "sci-fi-colony|3|maxBrief": "100f8f47ec1439f8",
+    "sci-fi-colony|3|defaults": "dbb6cdf792555369",
+    "sci-fi-colony|3|maxBrief": "f56d666688b5608f",
     "sci-fi-colony|4|legacy": "c96a0065a44541a7",
-    "sci-fi-colony|4|defaults": "c3a7286d5095db04",
-    "sci-fi-colony|4|maxBrief": "d417b120a954259c",
+    "sci-fi-colony|4|defaults": "724f435f963d525a",
+    "sci-fi-colony|4|maxBrief": "ef458d670a499ab0",
     "sci-fi-colony|5|legacy": "5dbafb5da6ed4b40",
-    "sci-fi-colony|5|defaults": "becbc33a5bd7ec57",
-    "sci-fi-colony|5|maxBrief": "fb93f74aae5c0f97",
+    "sci-fi-colony|5|defaults": "8f92a5ac281478a9",
+    "sci-fi-colony|5|maxBrief": "2b31b652f64c0f1f",
     "sci-fi-colony|7|legacy": "ce85743023c950d9",
-    "sci-fi-colony|7|defaults": "5f444a322fc96e1c",
-    "sci-fi-colony|7|maxBrief": "f9f3986180cb1e2b",
+    "sci-fi-colony|7|defaults": "68c698fcaca25311",
+    "sci-fi-colony|7|maxBrief": "c35f8b9cef2a3eb9",
     "sci-fi-colony|11|legacy": "e4acc2456cf5e425",
-    "sci-fi-colony|11|defaults": "3473edd43fa15501",
-    "sci-fi-colony|11|maxBrief": "08bb932f8d14bc66",
+    "sci-fi-colony|11|defaults": "d4fd302d290fb269",
+    "sci-fi-colony|11|maxBrief": "8563d3bff1697025",
     "sci-fi-colony|31|legacy": "5bad5d9f4d0b2eeb",
-    "sci-fi-colony|31|defaults": "a3270b34854df91c",
-    "sci-fi-colony|31|maxBrief": "b3f0fc1f5dc5119a",
+    "sci-fi-colony|31|defaults": "a3313f4f8b45f5ba",
+    "sci-fi-colony|31|maxBrief": "ea7e3c5a29cb5844",
     "sci-fi-colony|80021|legacy": "8eefc91e8551cff7",
-    "sci-fi-colony|80021|defaults": "3374b31e0282829d",
-    "sci-fi-colony|80021|maxBrief": "1b3aea264c8a7790",
+    "sci-fi-colony|80021|defaults": "fcfbec0100b4723a",
+    "sci-fi-colony|80021|maxBrief": "c62aad71329a4443",
     "sci-fi-colony|424242|legacy": "cc16a560ba4863e0",
-    "sci-fi-colony|424242|defaults": "94748f4bf311c217",
-    "sci-fi-colony|424242|maxBrief": "8ebd6295114f84f5",
+    "sci-fi-colony|424242|defaults": "4dceb2e0d74afd2c",
+    "sci-fi-colony|424242|maxBrief": "91c908b3c88d2d6e",
   };
 
   const themes = loadedPF.art.themeIds();
@@ -33222,10 +33229,9 @@ const layoutFingerprint = (w) => {
   //
   // The baseline is the tree WITHOUT the seam, rebuilt by rewriting the four
   // call sites out of 20-world and putting the two pocket seals back where they
-  // used to run. That rebuild is held to three of the side-stream pin's own
-  // frozen 0.13.0 fingerprints, so "the baseline is the shipped compiler" is
-  // proven rather than asserted — and so is the claim that moving a seal which
-  // draws no RNG moves no world.
+  // used to run. That rebuild is held to three pinned fingerprints, so "the
+  // baseline is the shipped compiler" is proven rather than asserted — and so is
+  // the claim that moving a seal which draws no RNG moves no world.
   {
     const SEAM_EDITS = [
       ["PF.lattice.reservationsFor(v, seamGates)", "[]"],
@@ -33267,13 +33273,17 @@ const layoutFingerprint = (w) => {
     // state where only phase one can have kept it clear.
     const unpunched = rewritten(SEAM_EDITS.filter(([from]) => from.startsWith("PF.lattice.punchGates")));
 
-    // THE BASELINE IS THE SHIPPED COMPILER. Three of the frozen 0.13.0 hashes,
-    // quoted from the pin above: if the rewrite reconstructed anything other
-    // than the pre-slice tree, these are what says so.
+    // THE BASELINE IS THE SHIPPED COMPILER MINUS THE SEAM, and from slice 4 that
+    // is no longer the 0.13.0 tree: the crossroad, the plaza and the lot rhythm
+    // are seeded now, so a seam-free rebuild lays 0.16's streets rather than
+    // 0.13's. These three are that rebuild, and the 0.13.0 anchor they used to
+    // carry did not go anywhere — slice 4's own reversibility lane rewrites the
+    // levers out ON TOP of this rewrite and gets `8e666935dc3bc3f1`,
+    // `3dda8c65a3ccfba0` and `deefc2f185fed000` back, byte for byte.
     for (const [theme, seed, want] of [
-      ["cozy-village", 1, "8e666935dc3bc3f1"],
-      ["sci-fi-colony", 424242, "3dda8c65a3ccfba0"],
-      ["cozy-village", 31, "deefc2f185fed000"],
+      ["cozy-village", 1, "9835ee0baaf4aaca"],
+      ["sci-fi-colony", 424242, "b8d5b80ed1bf6843"],
+      ["cozy-village", 31, "6db022c5d65d7928"],
     ]) {
       assert.equal(
         layoutFingerprint(preSeam.world.build(seed, theme, preSeam.brief.defaults(theme, seed))),
@@ -35334,6 +35344,888 @@ const layoutFingerprint = (w) => {
       loadedPF.spatial.reset();
     }
   });
+}
+
+
+// ═══ THE SETTLEMENT VARIES — SLICE 4 (0.16) ════════════════════════════════
+// The felt complaint this release exists for is "always the same main village
+// map", and the four levers that answer it — a seeded junction, seeded band
+// phases, a seeded plaza and the surround's own ground — all move the geometry
+// the rest of the compiler measures itself from. So the lanes are shaped around
+// what a layout change is allowed to COST rather than around the levers.
+//
+// LANE 1 IS THE REST OF THIS FILE. Every `checkWorld` site, every sweep and
+// every frozen fingerprint above ran against moved streets before these lanes
+// existed; the forty layout rows that moved and the twenty `legacy` rows that
+// did not are the coarse statement of what this slice changed and what it did
+// not touch.
+//
+// The two that carry the slice are lanes 2 and 7. Lane 2 is the merge gate:
+// `slots.length` is a supply cap the mint hangs off, so a junction yielding one
+// lot fewer re-mints the roster, moves `mintStamp` and severs every saved `rel`
+// row in the world. Lane 7 is the tripwire: the plaza paints two lines before
+// the `struggling` scuffing loop draws the main stream once per painted path
+// tile, and a square that paints a different count re-rolls the wilds.
+{
+  const T = loadedPF.world.town;
+  const TT = T.TUNE;
+  const L = loadedPF.lattice;
+  const SPEC = loadedPF.brief.SCALES;
+  const SCALES = ["outpost", "hamlet", "village", "town", "city"];
+  const SURROUNDS = ["woods", "fields", "rocky", "water", "barren"];
+  const PROSPERITIES = ["struggling", "modest", "thriving"];
+  const THEMES = ["cozy-village", "sci-fi-colony"];
+
+  /** A settlement, shaped by whichever knobs a lane wants to vary. `full` adds
+   *  the places and the cast the allocator actually has to divide ground
+   *  between: a defaults brief exercises almost none of the count arithmetic
+   *  lane 2 is about. */
+  const townWorld = (PF, theme, seed, over, shape) => {
+    const draft = PF.brief.defaults(theme, seed);
+    Object.assign(draft, over ?? {});
+    if (shape === "full") {
+      draft.places = [
+        { kind: "gathering", name: "The Amber Hearth" },
+        { kind: "workshop", name: "The Long Water Yard" },
+        { kind: "sanctuary", name: "St. Ilde's" },
+        { kind: "wilds", name: "The Whisperwood" },
+      ];
+      draft.cast = Array.from({ length: 8 }, (_, i) => ({
+        name: `Personage ${String(i).padStart(2, "0")}`,
+        role: "understudy",
+        kind: ["leader", "folk", "merchant", "maker", "elder", "folk", "folk", "folk"][i],
+        household: i + 1,
+        home: i === 3 ? "St. Ilde's" : draft.name,
+        standing: i === 7 ? "transient" : "resident",
+      }));
+    }
+    const sealed = PF.brief.validate(draft, { theme, seed });
+    const built = PF.world.build(seed, theme, sealed);
+    assert.equal(built.brieved, true, `the fixture at ${theme}/${seed} compiled rather than degrading`);
+    return { world: built, sealed };
+  };
+
+  /** The package rebuilt with 20-world rewritten — the seam lane's own idiom,
+   *  and the only way to stand a BEFORE beside an AFTER when the thing under
+   *  test is the shipped compiler's own geometry. */
+  const rewritten = (edits) => {
+    const source = MODULES.map((name) => {
+      let text = readFileSync(join(here, "src", name), "utf8");
+      if (name !== "20-world.js") return text;
+      for (const [from, to] of edits) {
+        const next = text.replace(from, to);
+        assert.notEqual(next, text, `the slice-4 rewrite still names 20-world's "${from.trim().slice(0, 48)}"`);
+        text = next;
+      }
+      return text;
+    }).join("\n");
+    const PF = new Function(`"use strict";\n${source}\nreturn PF;`)();
+    PF.api.postSpatialLocations = async () => ({ ok: false, status: 404, body: null });
+    PF.api.patchMetadata = async () => {};
+    return PF;
+  };
+
+  /** THE LEVERS, SWITCHED OFF — two call sites, and that is the claim: every
+   *  tile this slice moves goes through the seeded plan or the ground idiom, so
+   *  putting the centred plan the compiler used to compute inline back in has to
+   *  reconstruct the previous release's world exactly. Lane 7(c) asserts that;
+   *  lanes 2, 5 and 8 use these builds as their BEFORE. */
+  const IDIOM_EDIT = ["paintGroundIdiom(v, brief.surround, streetRnd);", "void streetRnd;"];
+  const LEVER_EDITS = [
+    [
+      "const plan = townPlan(v.w, v.h, scale.buildings, streetRnd);",
+      "const plan = { spine: { x: (v.w / 2) | 0, y: (v.h / 2) | 0 }, plaza: { x: ((v.w / 2) | 0) - 4, y: ((v.h / 2) | 0) - 4, w: 8, h: 8 }, phases: {} };",
+    ],
+    IDIOM_EDIT,
+  ];
+  const preLevers = rewritten(LEVER_EDITS);
+  const preIdiom = rewritten([IDIOM_EDIT]);
+
+  const inRect = (r, x, y) => x >= r.x && x < r.x + r.w && y >= r.y && y < r.y + r.h;
+  const onPublic = (v, x, y) => v.publicGround.some((r) => inRect(r, x, y));
+  const zoneKeys = (w) => Object.keys(w.zones).sort();
+  /** What a lane means by "the layout": where the crossroad is, where the square
+   *  is, and where every front door ended up. Doors are the honest proxy for the
+   *  lot grid — they are the tiles a player walks up to. */
+  const layoutOf = (v) => {
+    const doors = [];
+    for (let at = 0; at < v.object.length; at++) if (v.object[at] === "door") doors.push(at);
+    const p = v.publicGround[2];
+    return `${v.spine.x},${v.spine.y}|${p.x},${p.y},${p.w}x${p.h}|${doors.join(",")}`;
+  };
+  const zoneBytes = (z) =>
+    `${z.ground.join(",")}|${z.object.join(",")}|${z.overhead.join(",")}|${Array.from(z.solid).join(",")}`;
+  /** Flood fill from the settlement's spawn. `checkWorld`'s pocket sweep exempts
+   *  settlements outright, so the one zone this slice re-lays is the one nothing
+   *  in this file was walking. */
+  const reachableFrom = (v, start) => {
+    const seen = new Uint8Array(v.w * v.h);
+    const queue = [start.y * v.w + start.x];
+    seen[queue[0]] = 1;
+    for (let head = 0; head < queue.length; head++) {
+      const at = queue[head];
+      const x = at % v.w;
+      const y = (at / v.w) | 0;
+      for (const [dx, dy] of [
+        [1, 0],
+        [-1, 0],
+        [0, 1],
+        [0, -1],
+      ]) {
+        const nx = x + dx;
+        const ny = y + dy;
+        if (nx < 0 || ny < 0 || nx >= v.w || ny >= v.h) continue;
+        const nat = ny * v.w + nx;
+        if (seen[nat] || v.solid[nat]) continue;
+        seen[nat] = 1;
+        queue.push(nat);
+      }
+    }
+    return seen;
+  };
+
+  // ── LANE 2: THE INVARIANCE GATE — the slice's merge condition ─────────────
+  // Every allocator downstream of the street grid is COUNT-driven: places slice
+  // on a count, specials gate on a count, households round-robin on a count. So
+  // a junction that keeps `slots.length` keeps `lotsForHouses`, the household
+  // target, the minted roster, `mintStamp` AND every dwelling, place and
+  // workplace zone id — which is what lets a save reload onto a re-laid town
+  // with its `rel` rows and its quest handles intact.
+  //
+  // Asserted against the compiler with the levers rewritten out, so BEFORE is
+  // the shipped arithmetic rather than a transcription of it.
+  {
+    let checked = 0;
+    let moved = 0;
+    for (const theme of THEMES) {
+      for (const scale of SCALES) {
+        for (const shape of ["defaults", "full"]) {
+          for (const seed of [1, 2, 3, 5, 7, 11, 31, 4242, 80021, 424242]) {
+            const prosperity = PROSPERITIES[seed % PROSPERITIES.length];
+            const over = { scale, prosperity, surround: SURROUNDS[seed % SURROUNDS.length] };
+            const label = `${theme}/${scale}/${shape}/${prosperity}/${seed}`;
+            const before = townWorld(preLevers, theme, seed, over, shape).world;
+            const after = townWorld(loadedPF, theme, seed, over, shape).world;
+            assert.equal(after.mintStamp, before.mintStamp, `${label}: the streets re-laid and the mint did not`);
+            assert.deepEqual(zoneKeys(after), zoneKeys(before), `${label}: the same zone ids compiled`);
+            // Every zone's NAME too. A dwelling keys on the lowest household
+            // number and a workplace on the owner's cast ordinal, so an id set
+            // that matched while the names moved would be the roster shifting
+            // under stable keys — the severance this lane refuses, wearing the
+            // right ids.
+            for (const id of zoneKeys(after))
+              assert.equal(after.zones[id].name, before.zones[id].name, `${label}: ${id} is still the same place`);
+            checked++;
+            if (layoutOf(after.zones.z1) !== layoutOf(before.zones.z1)) moved++;
+          }
+        }
+      }
+    }
+    assert.equal(checked, THEMES.length * SCALES.length * 2 * 10, `the invariance sweep ran (${checked})`);
+    // AND IT IS NOT VACUOUS. A lane that proved the ids stable because nothing
+    // moved would be the quietest possible way for this whole slice to ship as a
+    // no-op, and it is the shape the first draft of this lane actually had.
+    assert.ok(moved >= checked * 0.8, `…over worlds that genuinely re-laid (${moved} of ${checked})`);
+  }
+
+  // ── LANE 3: THE CONTRACT — what a moved crossroad may not break ───────────
+  {
+    let checked = 0;
+    let clamped = 0;
+    for (const theme of THEMES) {
+      for (let step = 0; step < SCALES.length; step++) {
+        for (const prosperity of PROSPERITIES) {
+          for (const surround of SURROUNDS) {
+            const scale = SCALES[step];
+            const seed = 90001 + step * 977 + surround.length * 31 + prosperity.length;
+            const label = `${theme}/${scale}/${surround}/${prosperity}/${seed}`;
+            const { world: w, sealed } = townWorld(loadedPF, theme, seed, { scale, prosperity, surround }, "full");
+            // The shipped whole-world invariants first, including the paint
+            // contract's roofline checks, now read off the stamped spine.
+            checkWorld(w, sealed, `slice4-${label}`);
+            const v = w.zones.z1;
+            const spec = SPEC[scale];
+
+            // (1) The junction came out of the search rather than from anywhere.
+            const legal = T.junctionCandidates(spec.w, spec.h, spec.buildings);
+            assert.ok(
+              legal.some((c) => c.x === v.spine.x && c.y === v.spine.y),
+              `${label}: the crossroad at ${v.spine.x},${v.spine.y} is one the search offered`,
+            );
+            // (2) …and so did its square.
+            const plaza = v.publicGround[2];
+            assert.ok(
+              T.plazaCandidates(spec.w, spec.h, v.spine.x, v.spine.y).some(
+                (p) => p.x === plaza.x && p.y === plaza.y && p.w === plaza.w && p.h === plaza.h,
+              ),
+              `${label}: the ${plaza.w}x${plaza.h} square at ${plaza.x},${plaza.y} is one the search offered`,
+            );
+            // (3) FOUR EDGE TERMINALS, each where the road now meets the ring: a
+            //     lattice gate where the lattice owns the edge, the shipped wilds
+            //     portal pair where a brief wilds does. Never neither.
+            for (const dir of ["N", "E", "S", "W"]) {
+              const gates = (v.gates ?? []).filter((g) => g.dir === dir);
+              const spineTiles = dir === "N" || dir === "S" ? [v.spine.x - 1, v.spine.x] : [v.spine.y - 1, v.spine.y];
+              if (gates.length) {
+                assert.equal(gates.length, 2, `${label}: the ${dir} terminal is the road's own two tiles`);
+                assert.deepEqual(
+                  gates.map((g) => (dir === "N" || dir === "S" ? g.x : g.y)),
+                  spineTiles,
+                  `${label}: the ${dir} terminal sits on the spine`,
+                );
+              } else {
+                const edgeX = dir === "W" ? 0 : v.w - 1;
+                const pair = v.portals.filter(
+                  (p) => (dir === "E" || dir === "W") && p.x === edgeX && spineTiles.includes(p.y),
+                );
+                assert.equal(pair.length, 2, `${label}: the ${dir} edge is a wilds portal pair or a gate, never bare`);
+              }
+            }
+            // (4) THE TERRITORY RULE, half (a): no roofline lies over recorded
+            //     public ground on a tile a player could stand on. A building's
+            //     own body may stand on the square's outer ring — the allocator's
+            //     business, not a paint fault — so the solid tiles are excluded
+            //     and the OVERHANG is what is asserted. This is the shipped
+            //     roofline check widened from the two arteries to all three
+            //     rects, which is the half a moved plaza could newly break.
+            for (let at = 0; at < v.overhead.length; at++) {
+              const roof = v.overhead[at] === "roof" || v.overhead[at] === "roofEdge";
+              if (!roof || v.solid[at]) continue;
+              assert.ok(
+                !onPublic(v, at % v.w, (at / v.w) | 0),
+                `${label}: a roofline overhangs recorded public ground at ${at % v.w},${(at / v.w) | 0}`,
+              );
+            }
+            // (5) THE TERRITORY RULE, half (b): every road tile strictly inside
+            //     the border ring lies in a recorded rect, a lattice gate apron
+            //     or a wilds portal apron. The two aprons are deliberately
+            //     outside `publicGround` — that is the shipped wilds precedent
+            //     the seam copied, and it is what keeps `eaveMayCover`'s
+            //     jurisdiction exactly where it was at the map edge.
+            //
+            //     ASKED OF THE THREE LOOSE RANKS, where it is exactly true. A
+            //     town and a city turn their leftover lots into PARKS, and a
+            //     park paints a path cross through its own 8x5 — genuinely
+            //     unrecorded road, laid by a placer, and none of slice 4's
+            //     business. A rule that had to carve those out would be a rule
+            //     about parks.
+            if (scale === "outpost" || scale === "hamlet" || scale === "village") {
+              const apron = new Set();
+              for (const gate of v.gates ?? [])
+                for (const tile of L.apronTiles(v, gate)) apron.add(tile.y * v.w + tile.x);
+              for (const p of v.portals) {
+                if (p.x !== 0 && p.x !== v.w - 1) continue; // an interior door, not the edge
+                for (const dx of [0, 1, -1]) {
+                  const x = p.x + dx;
+                  if (x >= 0 && x < v.w) apron.add(p.y * v.w + x);
+                }
+              }
+              for (let at = 0; at < v.ground.length; at++) {
+                const g = v.ground[at];
+                if (g !== "path" && g !== "dirt") continue;
+                const x = at % v.w;
+                const y = (at / v.w) | 0;
+                if (x === 0 || y === 0 || x === v.w - 1 || y === v.h - 1) continue;
+                if (apron.has(at)) continue;
+                assert.ok(onPublic(v, x, y), `${label}: road at ${x},${y} is in no recorded rect`);
+              }
+            }
+            // (6) Every door is still walked up to.
+            const seen = reachableFrom(v, v.spawn);
+            let doors = 0;
+            for (let at = 0; at < v.object.length; at++) {
+              if (v.object[at] !== "door") continue;
+              doors++;
+              const step = at + v.w;
+              assert.ok(seen[step], `${label}: the doorstep at ${step % v.w},${(step / v.w) | 0} is walled off`);
+            }
+            assert.ok(doors > 0, `${label}: the settlement has doors to check`);
+            // (7) The square's wander box — the fallback every house-less NPC in
+            //     the cast loop gets — is on the map. The clamp is a no-op across
+            //     the whole legal set today; asserted rather than assumed,
+            //     because the next retune of the search is the one that finds the
+            //     edge.
+            if (
+              v.spine.x - 6 < 2 ||
+              v.spine.y - 5 < 2 ||
+              v.spine.x + 6 > v.w - 3 ||
+              v.spine.y + 5 > v.h - 3
+            )
+              clamped++;
+            // (8) The well and the market boards stand ON the square and never in
+            //     the road: the quadrants are read off the plaza rect now, and
+            //     both arteries carry through traffic.
+            for (let at = 0; at < v.object.length; at++) {
+              if (v.object[at] !== "well" && v.object[at] !== "table") continue;
+              const x = at % v.w;
+              const y = (at / v.w) | 0;
+              if (!inRect(plaza, x, y)) continue; // a ward's well or a market lot, not the square's
+              assert.ok(
+                !inRect(v.publicGround[0], x, y) && !inRect(v.publicGround[1], x, y),
+                `${label}: the square's ${v.object[at]} stands in the road at ${x},${y}`,
+              );
+            }
+            checked++;
+          }
+        }
+      }
+    }
+    assert.equal(
+      checked,
+      THEMES.length * SCALES.length * PROSPERITIES.length * SURROUNDS.length,
+      `the contract sweep ran (${checked})`,
+    );
+    assert.equal(clamped, 0, `the square's wander box never needed the clamp (${clamped} of ${checked} did)`);
+  }
+
+  // ── LANE 4: ANTI-SAMENESS, CALIBRATED PER SCALE ──────────────────────────
+  // The metric is the LAYOUT, not the junction: moving the crossroad and laying
+  // the identical town around it is precisely the failure this design was
+  // written to avoid, and it is what a junction-position histogram would miss.
+  // The thresholds come off the search's own candidate sets rather than being
+  // invented — an outpost has three legal junctions and two hundred-odd plans in
+  // all, so two hundred seeds collide by arithmetic and a flat "nine seeds in ten
+  // differ" would fail it for doing exactly what it should.
+  {
+    const SEEDS = 200;
+    const rows = [];
+    // THE SEARCH IS CACHED, so ask it in one order and then the other: a cache
+    // keyed on anything less than (width, height, budget) hands one rank's
+    // crossroads to another, and every later assertion in this lane would then be
+    // checking the wrong rank against itself and passing.
+    {
+      const first = SCALES.map((scale) => T.junctionCandidates(SPEC[scale].w, SPEC[scale].h, SPEC[scale].buildings));
+      const again = [...SCALES]
+        .reverse()
+        .map((scale) => T.junctionCandidates(SPEC[scale].w, SPEC[scale].h, SPEC[scale].buildings))
+        .reverse();
+      SCALES.forEach((scale, i) => {
+        assert.deepEqual(again[i], first[i], `${scale}: the junction search answers the same twice`);
+        assert.ok(first[i].length > 0, `${scale}: …with something in it`);
+      });
+      assert.equal(new Set(first.map((set) => set.length)).size, SCALES.length, "and no two ranks share an answer");
+      // AND THE BUDGET IS PART OF THE KEY. No two shipped ranks share a width and
+      // a height, so an order swap alone cannot see a key that forgot the budget
+      // — the third input has to be varied on its own. A budget of one makes
+      // every legal junction yield-neutral, which is a different and much larger
+      // answer for the same map.
+      const city = SPEC.city;
+      assert.notEqual(
+        T.junctionCandidates(city.w, city.h, 1).length,
+        T.junctionCandidates(city.w, city.h, city.buildings).length,
+        "the junction search keys its cache on the budget as well as the map",
+      );
+    }
+    for (const scale of SCALES) {
+      const spec = SPEC[scale];
+      const legal = T.junctionCandidates(spec.w, spec.h, spec.buildings);
+      const spines = new Set();
+      const squares = new Set();
+      const layouts = new Set();
+      for (let seed = 1; seed <= SEEDS; seed++) {
+        const v = townWorld(loadedPF, "cozy-village", seed, { scale }, "full").world.zones.z1;
+        spines.add(`${v.spine.x},${v.spine.y}`);
+        const p = v.publicGround[2];
+        squares.add(`${p.x},${p.y},${p.w}x${p.h}`);
+        layouts.add(layoutOf(v));
+      }
+      // HOW MANY PLANS THERE ARE TO DRAW, counted off the search itself: every
+      // junction, times its squares, times the phases each band is allowed. The
+      // threshold below is derived from this rather than picked, because 200
+      // draws from 201 plans collide by arithmetic and an outpost would fail a
+      // flat "nine in ten seeds differ" while doing exactly what it should.
+      let space = 0;
+      for (const c of legal) {
+        let plans = T.plazaCandidates(spec.w, spec.h, c.x, c.y).length;
+        for (const band of ["north", "south", "west", "east"]) {
+          const range = T.phaseRange(band, spec.w, spec.h, c.x, c.y);
+          plans *= range.hi - range.lo + 1;
+        }
+        space += plans;
+      }
+      // What a uniform draw of 200 from `space` plans is expected to turn up.
+      const expect = space * (1 - Math.pow(1 - 1 / space, SEEDS));
+      rows.push({ scale, legal: legal.length, space, spines: spines.size, squares: squares.size, layouts: layouts.size });
+      // The search is exercised and not merely consulted: over 200 seeds a rank
+      // reaches all of a small legal set and a wide spread of a large one.
+      const reach = Math.min(legal.length, 25);
+      assert.ok(
+        spines.size >= reach,
+        `${scale}: the seeded junction reached ${spines.size} of ${legal.length} legal crossroads (wanted ${reach})`,
+      );
+      assert.ok(squares.size >= 20, `${scale}: the square moves too (${squares.size} distinct rects)`);
+      // Enough plans that the rank is not one town wearing hats. Two hundred is
+      // more seeds than a playtest will ever see of one rank.
+      assert.ok(space >= SEEDS, `${scale}: the search offers ${space} plans, which is fewer than the seeds asked for`);
+      // And the town around it is genuinely different, which is the complaint —
+      // held to four fifths of what a uniform draw would give, so a lever quietly
+      // collapsing to one value fails here even when the others still vary.
+      assert.ok(
+        layouts.size >= expect * 0.8,
+        `${scale}: ${layouts.size} distinct layouts in ${SEEDS} seeds, against ${expect.toFixed(0)} expected from ${space} plans`,
+      );
+    }
+    console.log(
+      `pixelforge 0.16 settlement variety: ${rows
+        .map(
+          (r) => `${r.scale} ${r.spines}/${r.legal} junctions, ${r.squares} squares, ${r.layouts}/${SEEDS} layouts of ${r.space} plans`,
+        )
+        .join(" · ")}`,
+    );
+  }
+
+  // ── LANE 5: THE SETTLEMENT POCKET BUDGET ─────────────────────────────────
+  // A sealed pocket is ground the map reads as open and the player can never
+  // reach: `sealPockets` walls it off rather than leaving a hole, and the
+  // settlement is the one zone the shipped sweep exempts outright. Re-laying its
+  // streets is exactly the kind of change that makes new ones.
+  //
+  // MEASURED EXACTLY, not by a proxy: the same worlds are built with the two
+  // settlement-side seals rewritten OUT, and the pocket count is the set of
+  // tiles the seal closed. A proxy ("solid with nothing standing on it") was the
+  // first version of this lane and it could not tell a pocket from a pool.
+  {
+    const SEAL_OUT = [
+      ["    v.cell = { cx: 0, cy: 0 };\n    sealPockets(v, v.spawn);", "    v.cell = { cx: 0, cy: 0 };"],
+      [
+        "      sealPockets(zone, zone.spawn);\n      // (the west spawn is set above",
+        "      void 0;\n      // (the west spawn is set above",
+      ],
+    ];
+    // THE INSTRUMENT FIRST, because this lane's honest answer today is ZERO and
+    // a zero from a blind instrument says nothing at all. One tile, ringed by
+    // four trunks, through the shipped sweep itself.
+    {
+      const prims = loadedPF.world.prims;
+      const probe = prims.makeZone("pocket-probe", "Probe", 9, 9, "grass");
+      for (const [x, y] of [
+        [3, 4],
+        [5, 4],
+        [4, 3],
+        [4, 5],
+      ])
+        prims.put(probe, x, y, "object", "trunk", true);
+      assert.equal(prims.sealPockets(probe, { x: 0, y: 0 }), 1, "the pocket sweep sees a ringed tile");
+      assert.equal(probe.solid[4 * 9 + 4], 1, "…and closes it");
+    }
+
+    const sealed = rewritten(SEAL_OUT);
+    const sealedLevers = rewritten([...SEAL_OUT, ...LEVER_EDITS]);
+    const pockets = (open, shut) => {
+      let n = 0;
+      for (let at = 0; at < shut.solid.length; at++) if (shut.solid[at] && !open.solid[at]) n++;
+      return n;
+    };
+    let worlds = 0;
+    let was = 0;
+    let now = 0;
+    let worst = 0;
+    for (const theme of THEMES) {
+      for (let step = 0; step < SCALES.length; step++) {
+        for (const prosperity of PROSPERITIES) {
+          for (const surround of SURROUNDS) {
+            const seed = 60013 + step * 613 + prosperity.length * 17 + surround.length;
+            const over = { scale: SCALES[step], prosperity, surround };
+            const before = pockets(
+              townWorld(sealedLevers, theme, seed, over, "full").world.zones.z1,
+              townWorld(preLevers, theme, seed, over, "full").world.zones.z1,
+            );
+            const after = pockets(
+              townWorld(sealed, theme, seed, over, "full").world.zones.z1,
+              townWorld(loadedPF, theme, seed, over, "full").world.zones.z1,
+            );
+            was += before;
+            now += after;
+            worst = Math.max(worst, after);
+            worlds++;
+          }
+        }
+      }
+    }
+    assert.equal(worlds, THEMES.length * SCALES.length * PROSPERITIES.length * SURROUNDS.length, `the sweep ran (${worlds})`);
+    assert.ok(
+      now <= was,
+      `the re-laid settlements close no ground the centred ones left open (${now} tiles vs ${was} over ${worlds} exteriors)`,
+    );
+    console.log(
+      `pixelforge 0.16 settlement pockets: ${now} tiles closed across ${worlds} exteriors (was ${was}; worst single map ${worst})`,
+    );
+  }
+
+  // ── LANE 6: THE SEAM, RE-RUN UNDER MOVED TERMINALS ───────────────────────
+  // Slice 1's gate contract asked its questions of a road that ran down the
+  // middle of the map. Every one of them is asked again here, at every rank, of
+  // terminals the compiler now chooses: the doorway is clear and laid, the gate
+  // is reachable from where the player actually spawns, the neighbour holds the
+  // gate back, and the arrival tile is standable.
+  {
+    let gates = 0;
+    for (const theme of THEMES) {
+      for (let step = 0; step < SCALES.length; step++) {
+        for (const prosperity of PROSPERITIES) {
+          const scale = SCALES[step];
+          const seed = 70001 + step * 811 + prosperity.length;
+          const { world: w } = townWorld(
+            loadedPF,
+            theme,
+            seed,
+            { scale, prosperity, surround: SURROUNDS[step] },
+            "full",
+          );
+          const v = w.zones.z1;
+          const label = `${theme}/${scale}/${prosperity}/${seed}`;
+          const seen = reachableFrom(v, v.spawn);
+          assert.ok((v.gates ?? []).length > 0, `${label}: the settlement has terminals to walk out of`);
+          for (const gate of v.gates) {
+            gates++;
+            const at = gate.y * v.w + gate.x;
+            assert.equal(v.solid[at], 0, `${label}: its own ${gate.dir} gate is walkable`);
+            assert.ok(seen[at], `${label}: the ${gate.dir} gate is reachable from the spawn`);
+            for (const tile of L.apronTiles(v, gate)) {
+              const tat = tile.y * v.w + tile.x;
+              assert.equal(v.object[tat], null, `${label}: the ${gate.dir} doorway is clear`);
+              assert.equal(v.ground[tat], "path", `${label}: the ${gate.dir} doorway is laid`);
+            }
+            const targetId = L.gateTargetId(w, v, gate);
+            const dest = L.ensure(w, targetId);
+            assert.ok(dest, `${label}: the ${gate.dir} gate's ${targetId} materializes`);
+            assert.ok(
+              (dest.gates ?? []).some((g) => g.dir === L.opposite(gate.dir)),
+              `${label}: ${targetId} holds the gate back`,
+            );
+            const arrival = L.arrivalFor(dest, gate.dir);
+            assert.ok(arrival, `${label}: the ${gate.dir} gate lands the player somewhere`);
+            assert.equal(dest.solid[arrival.y * dest.w + arrival.x], 0, `${label}: …and it is standable`);
+          }
+        }
+      }
+    }
+    assert.ok(gates >= 60, `the moved-terminal sweep really ran (${gates} gates)`);
+  }
+
+  // ── LANE 7: MAIN-STREAM INTEGRITY, AND THE LEVERS ARE REVERSIBLE ─────────
+  {
+    // (a) THE ARITHMETIC, EXHAUSTIVELY. Every shape at every offset for every
+    //     junction the search offers, at every rank — the design's own claim,
+    //     checked against a tile-by-tile union rather than the formula the claim
+    //     is made of.
+    let candidates = 0;
+    for (const scale of SCALES) {
+      const spec = SPEC[scale];
+      const roads = 2 * (spec.w - 4) + 2 * (spec.h - 4) - 4;
+      const half = TT.PLAZA_INSET >> 1;
+      for (const spine of T.junctionCandidates(spec.w, spec.h, spec.buildings)) {
+        const shapes = new Set();
+        for (const p of T.plazaCandidates(spec.w, spec.h, spine.x, spine.y)) {
+          shapes.add(`${p.w}x${p.h}`);
+          assert.equal(
+            (p.w - 2) * (p.h - 2),
+            TT.PLAZA_INTERIOR,
+            `${scale}: ${p.w}x${p.h} contributes ${TT.PLAZA_INTERIOR} tiles`,
+          );
+          // Wholly inside the arteries' own extent: a clipped `fillRect` paints
+          // fewer tiles than the shape claims, which is the same stream shift by
+          // a quieter route.
+          assert.ok(
+            p.x >= 2 && p.y >= 2 && p.x + p.w - 1 <= spec.w - 3 && p.y + p.h - 1 <= spec.h - 3,
+            `${scale}: the square at ${p.x},${p.y} is inside the map`,
+          );
+          // Contains the paved inset, which is what pins the overlap term at
+          // 2w + 2h - 4 and keeps a thriving town's stone on its own square.
+          assert.ok(
+            p.x <= spine.x - half &&
+              p.x + p.w - 1 >= spine.x + half - 1 &&
+              p.y <= spine.y - half &&
+              p.y + p.h - 1 >= spine.y + half - 1,
+            `${scale}: the square at ${p.x},${p.y} holds the paved inset`,
+          );
+          const painted = new Set();
+          for (let x = 2; x < spec.w - 2; x++) for (const y of [spine.y - 1, spine.y]) painted.add(y * spec.w + x);
+          for (let y = 2; y < spec.h - 2; y++) for (const x of [spine.x - 1, spine.x]) painted.add(y * spec.w + x);
+          for (let x = p.x; x < p.x + p.w; x++) for (let y = p.y; y < p.y + p.h; y++) painted.add(y * spec.w + x);
+          assert.equal(
+            painted.size,
+            roads + TT.PLAZA_INTERIOR,
+            `${scale}: ${p.w}x${p.h} at ${p.x},${p.y} paints the baseline path count`,
+          );
+          candidates++;
+        }
+        assert.equal(
+          shapes.size,
+          TT.PLAZA_SHAPES.length,
+          `${scale}: every shape is reachable at ${spine.x},${spine.y} — so pinning one moves no junction`,
+        );
+      }
+    }
+    assert.ok(candidates > 10000, `the square arithmetic sweep ran (${candidates} candidates)`);
+
+    // (b) AND THE CONSEQUENCE, ON REAL WORLDS. One build per shape, with the set
+    //     pinned to that shape IN SOURCE: same seed, same junction, same phases,
+    //     a different square — and every zone but the settlement byte-identical,
+    //     `struggling` included. That is the wilds not re-rolling, which is the
+    //     whole of what "the streets re-lay" is allowed to mean.
+    for (const prosperity of PROSPERITIES) {
+      const seed = 51001 + prosperity.length;
+      const over = { scale: "village", prosperity, surround: "woods" };
+      const free = townWorld(loadedPF, "cozy-village", seed, over, "full").world;
+      const held = new Map();
+      const squares = new Set();
+      for (const shape of TT.PLAZA_SHAPES) {
+        const forced = rewritten([
+          [
+            "    PLAZA_SHAPES: [",
+            `    PLAZA_SHAPES: [{ w: ${shape.w}, h: ${shape.h} }],\n    PLAZA_SHAPES_UNPINNED: [`,
+          ],
+        ]);
+        const w = townWorld(forced, "cozy-village", seed, over, "full").world;
+        const v = w.zones.z1;
+        const label = `${prosperity}/${shape.w}x${shape.h}`;
+        assert.equal(`${v.publicGround[2].w}x${v.publicGround[2].h}`, `${shape.w}x${shape.h}`, `${label}: the pin took`);
+        assert.deepEqual(v.spine, free.zones.z1.spine, `${label}: the junction did not move with the square`);
+        squares.add(`${v.publicGround[2].x},${v.publicGround[2].y}`);
+        const roads = 2 * (v.w - 4) + 2 * (v.h - 4) - 4;
+        const painted = new Set();
+        for (const r of v.publicGround)
+          for (let x = r.x; x < r.x + r.w; x++) for (let y = r.y; y < r.y + r.h; y++) painted.add(y * v.w + x);
+        assert.equal(
+          painted.size,
+          roads + TT.PLAZA_INTERIOR,
+          `${label}: the road block is the same size under every square`,
+        );
+        for (const id of Object.keys(w.zones)) {
+          if (id === "z1") continue;
+          const bytes = zoneBytes(w.zones[id]);
+          if (!held.has(id)) held.set(id, bytes);
+          else
+            assert.equal(bytes, held.get(id), `${label}: ${id} moved when only the square did — the main stream shifted`);
+        }
+      }
+      assert.ok(held.size > 0, `${prosperity}: there were other zones to hold still`);
+      assert.equal(squares.size, TT.PLAZA_SHAPES.length, `${prosperity}: the three pins really built three squares`);
+    }
+
+    // (c) AND THE WHOLE PLAN, NOT JUST THE SQUARE. Every lever draws from the
+    //     side stream and the road block's tile count is constant, so the main
+    //     stream's draw sequence is untouched from the first tile to the last —
+    //     which means the zones compiled AFTER the settlement come out byte for
+    //     byte the same as they did before the streets moved. That is what makes
+    //     "the streets re-lay" literally true rather than a euphemism for "the
+    //     world was re-rolled": a `struggling` village's wilds is the same wood
+    //     it was, down to the trunk.
+    //
+    //     Their PORTAL RECORDS do move — a wilds delivers the player onto the
+    //     road home, and the road home is where the crossroad now is — so the
+    //     comparison is the tiles, and the records are checked by the reciprocity
+    //     sweeps that already walk them.
+    {
+      let zones = 0;
+      for (const theme of THEMES) {
+        for (const scale of SCALES) {
+          for (const prosperity of PROSPERITIES) {
+            for (const surround of ["woods", "water"]) {
+              const seed = 82301 + scale.length * 131 + prosperity.length * 7 + surround.length;
+              const over = { scale, prosperity, surround };
+              const before = townWorld(preLevers, theme, seed, over, "full").world;
+              const after = townWorld(loadedPF, theme, seed, over, "full").world;
+              assert.notEqual(
+                zoneBytes(after.zones.z1),
+                zoneBytes(before.zones.z1),
+                `${theme}/${scale}/${prosperity}/${surround}: the settlement itself re-laid, or this proves nothing`,
+              );
+              for (const id of Object.keys(after.zones)) {
+                if (id === "z1") continue;
+                assert.equal(
+                  zoneBytes(after.zones[id]),
+                  zoneBytes(before.zones[id]),
+                  `${theme}/${scale}/${prosperity}/${surround}: ${id} was re-rolled by the re-lay`,
+                );
+                zones++;
+              }
+            }
+          }
+        }
+      }
+      assert.ok(zones >= 300, `the re-lay held ${zones} zones still outside the settlement`);
+    }
+
+    // (d) THE LEVERS ARE EXACTLY REVERSIBLE. Rewriting the two call sites out
+    //     reconstructs the tree slices 1-3 pinned, byte for byte; rewriting the
+    //     lattice seam out on top of that reconstructs the frozen 0.13.0 tree the
+    //     side-stream pin was taken against. So everything this slice changed it
+    //     changed THROUGH its levers — and the 0.13.0 anchor the seam lane used
+    //     to quote is still standing, one rewrite further back.
+    for (const [theme, seed, want] of [
+      ["cozy-village", 1, "7433afe97b102045"],
+      ["sci-fi-colony", 424242, "94748f4bf311c217"],
+      ["cozy-village", 31, "2c52aa59789f8678"],
+    ]) {
+      assert.equal(
+        layoutFingerprint(preLevers.world.build(seed, theme, preLevers.brief.defaults(theme, seed))),
+        want,
+        `the levers-off rebuild at ${theme}/${seed} IS the world slices 1-3 pinned`,
+      );
+    }
+    const bare = rewritten([
+      ["PF.lattice.reservationsFor(v, seamGates)", "[]"],
+      ["PF.lattice.reservationsFor(zone, wildsGates)", "[]"],
+      ["PF.lattice.punchGates(zone, wildsGates);", "void wildsGates;"],
+      ["PF.lattice.punchGates(v, seamGates);", "void seamGates;"],
+      [
+        "      sealPockets(zone, zone.spawn);\n      // (the west spawn is set above",
+        "      void 0;\n      // (the west spawn is set above",
+      ],
+      [
+        "      // (the seal used to run HERE, and now runs after the punches below)",
+        "      sealPockets(zone, zone.spawn);",
+      ],
+      ["    v.cell = { cx: 0, cy: 0 };\n    sealPockets(v, v.spawn);", "    v.cell = { cx: 0, cy: 0 };"],
+      ["    zones.z1 = v;", "    sealPockets(v, v.spawn);\n    zones.z1 = v;"],
+      ...LEVER_EDITS,
+    ]);
+    for (const [theme, seed, want] of [
+      ["cozy-village", 1, "8e666935dc3bc3f1"],
+      ["sci-fi-colony", 424242, "3dda8c65a3ccfba0"],
+      ["cozy-village", 31, "deefc2f185fed000"],
+    ]) {
+      assert.equal(
+        layoutFingerprint(bare.world.build(seed, theme, bare.brief.defaults(theme, seed))),
+        want,
+        `the seam-free, lever-free rebuild at ${theme}/${seed} IS the frozen 0.13.0 tree`,
+      );
+    }
+  }
+
+  // ── LANE 8: THE GROUND IDIOM — the surround says something, and only that ─
+  // Lever 4 draws from the side stream, paints only bare grass and touches no
+  // solidity, so it cannot move anything the passes before it decided. What it
+  // moves is what the ground LOOKS like from the first frame, which is the whole
+  // job. Held against the same worlds with the idiom pass alone rewritten out.
+  {
+    let painted = 0;
+    for (const theme of THEMES) {
+      for (const scale of ["hamlet", "village", "town"]) {
+        for (const surround of SURROUNDS) {
+          const seed = 41001 + scale.length * 7 + surround.length;
+          const over = { scale, surround };
+          const label = `${theme}/${scale}/${surround}`;
+          const w = townWorld(loadedPF, theme, seed, over, "full").world;
+          const plain = townWorld(preIdiom, theme, seed, over, "full").world;
+          const v = w.zones.z1;
+          const p = plain.zones.z1;
+          const idiom = loadedPF.own(TT.GROUND_IDIOM, surround);
+          // Whatever else it did, it did it to z1 alone: a side stream cannot
+          // move the main one, and every other zone is compiled from it.
+          for (const id of Object.keys(w.zones)) {
+            if (id === "z1") continue;
+            assert.equal(zoneBytes(w.zones[id]), zoneBytes(plain.zones[id]), `${label}: ${id} moved under the idiom`);
+          }
+          const changed = [];
+          for (let at = 0; at < v.ground.length; at++) if (v.ground[at] !== p.ground[at]) changed.push(at);
+          // Neither the objects, the roofs nor the solidity: this is a GROUND
+          // pass and the pocket seal, the scatter and the paint contract all ran
+          // before it.
+          assert.equal(v.object.join(","), p.object.join(","), `${label}: the idiom stood nothing up`);
+          assert.equal(v.overhead.join(","), p.overhead.join(","), `${label}: the idiom roofed nothing`);
+          assert.equal(Array.from(v.solid).join(","), Array.from(p.solid).join(","), `${label}: the idiom walled nothing`);
+          if (!idiom) {
+            // Three surrounds get none, deliberately: a fifth idiom is a fifth
+            // thing to retune before anybody has played one.
+            assert.equal(changed.length, 0, `${label}: no idiom, no paint (${changed.length} tiles)`);
+            continue;
+          }
+          assert.ok(changed.length > 0, `${label}: the ${idiom.kind} idiom actually painted something`);
+          painted += changed.length;
+          const want = idiom.kind === "verge" ? "stone" : "grass2";
+          for (const at of changed) {
+            const x = at % v.w;
+            const y = (at / v.w) | 0;
+            assert.equal(v.ground[at], want, `${label}: the idiom laid ${v.ground[at]} at ${x},${y}`);
+            assert.ok(
+              p.ground[at] === "grass" || p.ground[at] === "grass2",
+              `${label}: the idiom took ${p.ground[at]} at ${x},${y} — it may only take bare grass`,
+            );
+            assert.ok(!onPublic(v, x, y), `${label}: the idiom paved recorded public ground at ${x},${y}`);
+            // And it stayed where its own shape says it lives: a verge beside the
+            // arteries, a water meadow in the band inside the border ring.
+            const near =
+              idiom.kind === "verge"
+                ? Math.min(Math.abs(y - (v.spine.y - 1)), Math.abs(y - v.spine.y)) <= idiom.depth ||
+                  Math.min(Math.abs(x - (v.spine.x - 1)), Math.abs(x - v.spine.x)) <= idiom.depth
+                : Math.min(x - 1, y - 1, v.w - 2 - x, v.h - 2 - y) < idiom.depth;
+            assert.ok(near, `${label}: the ${idiom.kind} strayed to ${x},${y}`);
+          }
+        }
+      }
+    }
+    assert.ok(painted > 0, "the idiom sweep painted something somewhere");
+
+    // THE DRAW COUNT IS GEOMETRY, AND ONLY GEOMETRY — the fault this slice's own
+    // mutation testing turned up, pinned so it cannot come back. The idiom rolls
+    // for every tile in its band and refuses AFTER the roll, so the number of
+    // values it takes off the side stream is a function of the spine and the
+    // map's edges. Deciding first and rolling after keys the roll INDEX to the
+    // object layer instead — and the object layer is exactly what a tree scatter
+    // and a gate reservation move, so one trunk in a different place would
+    // re-roll every idiom tile after it. Nothing else in this file could see
+    // that: the seam-diff lane passes either way on the shipped plan, and only
+    // a centred-junction mutation happened to expose it.
+    //
+    // Asked by MOVING THE TREES and nothing else. Where a tile is bare in both
+    // builds, the idiom must have made the same decision about it.
+    {
+      // A HEAVIER SCATTER is the perturbation, because it is guaranteed to land:
+      // the tree count is a main-stream consumer and the idiom's own stream is a
+      // side one, so this moves the object layer under the idiom and moves
+      // nothing else about the plan. (Rewriting the gate reservation out was the
+      // first attempt and it moved no trunk at all in these fixtures — the punch
+      // covers for it, which is what its own comment already says.)
+      const SCATTER_UP = [
+        [
+          "{ woods: 26, fields: 8, rocky: 10, water: 12, barren: 5 }[brief.surround] ?? 12,",
+          "({ woods: 26, fields: 8, rocky: 10, water: 12, barren: 5 }[brief.surround] ?? 12) + 9,",
+        ],
+      ];
+      const shifted = rewritten(SCATTER_UP);
+      const shiftedPlain = rewritten([...SCATTER_UP, IDIOM_EDIT]);
+      const bare = (z, at) =>
+        (z.ground[at] === "grass" || z.ground[at] === "grass2") && !z.solid[at] && !z.object[at] && !z.overhead[at];
+      let compared = 0;
+      let treesMoved = 0;
+      for (const surround of ["rocky", "water"]) {
+        for (const scale of ["village", "town"]) {
+          const seed = 43007 + scale.length * 11 + surround.length;
+          const over = { scale, surround };
+          const a = townWorld(loadedPF, "cozy-village", seed, over, "full").world.zones.z1;
+          const aPlain = townWorld(preIdiom, "cozy-village", seed, over, "full").world.zones.z1;
+          const b = townWorld(shifted, "cozy-village", seed, over, "full").world.zones.z1;
+          const bPlain = townWorld(shiftedPlain, "cozy-village", seed, over, "full").world.zones.z1;
+          for (let at = 0; at < a.object.length; at++) if (aPlain.object[at] !== bPlain.object[at]) treesMoved++;
+          for (let at = 0; at < a.ground.length; at++) {
+            if (!bare(aPlain, at) || !bare(bPlain, at)) continue;
+            compared++;
+            assert.equal(
+              a.ground[at] !== aPlain.ground[at],
+              b.ground[at] !== bPlain.ground[at],
+              `${scale}/${surround}: the idiom changed its mind at ${at % a.w},${(at / a.w) | 0} because a tree moved`,
+            );
+          }
+        }
+      }
+      // Both halves have to be real: trees that did not move would make the
+      // comparison vacuous, and no shared bare ground would make it empty.
+      assert.ok(treesMoved > 0, `the heavier scatter actually moved the object layer (${treesMoved} tiles)`);
+      assert.ok(compared > 500, `…over ground both builds left bare (${compared} tiles)`);
+    }
+    // THE SNOW READING, PINNED RATHER THAN DESCRIBED. `SUBS.snow` substitutes
+    // grass, grass2, crop and canopy and nothing else, so a water meadow keeps
+    // its two-tone mottle in a white town while a stone verge stays bare rock —
+    // the same accepted class as `scree` and `oldwall`, and the reason §5's
+    // browser pass looks at a snowy rocky town on purpose.
+    const SUBS = loadedPF.weather.SUBS.snow;
+    assert.equal(SUBS.grass2, "grassSnow2", "a meadow still reads as a meadow under snow");
+    assert.equal(SUBS.grass, "grassSnow", "…against its own paler neighbour");
+    assert.equal(SUBS.stone, undefined, "and a stone verge stays bare rock, which is the accepted reading");
+  }
 }
 
 console.log("brief validator + compiler: all cases passed");
