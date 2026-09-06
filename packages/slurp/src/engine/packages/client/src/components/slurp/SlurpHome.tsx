@@ -4072,10 +4072,10 @@ function StageProfileView({
                   title={localizeUi("ui.slurp.profile.creatorToolsDetail")}
                   className="flex min-w-0 flex-1 items-center gap-2 rounded-s-2xl px-3 text-start text-xs font-semibold text-[var(--muted-foreground)] transition-colors hover:bg-[var(--accent)] hover:text-[var(--foreground)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--noodle-accent)]"
                 >
-                  <Sparkles size={13} className="shrink-0 text-[var(--noodle-accent)]" aria-hidden="true" />
+                  <Sparkles size={13} className="shrink-0 text-[var(--muted-foreground)]" aria-hidden="true" />
                   <span className="min-w-0 flex-1 truncate">{localizeUi("ui.slurp.profile.creatorTools")}</span>
                   {viewingOwnCreator && (
-                    <span className="hidden shrink-0 text-[0.68rem] font-semibold text-[var(--noodle-accent)] lg:inline">
+                    <span className="hidden shrink-0 text-[0.68rem] font-semibold text-[var(--muted-foreground)] lg:inline">
                       {localizeUi("ui.noodle.stageprofileview.yourProfile")}
                     </span>
                   )}
@@ -4083,7 +4083,7 @@ function StageProfileView({
                 <button
                   type="button"
                   onClick={onEdit}
-                  className="min-h-11 border-s border-black/10 bg-[var(--noodle-accent)] px-3 text-xs font-black text-zinc-950 transition-[opacity,transform] hover:opacity-90 active:scale-[0.96] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-white motion-reduce:transition-none motion-reduce:active:scale-100"
+                  className="min-h-11 border-s border-white/[0.07] bg-[color-mix(in_srgb,var(--noodle-accent)_18%,transparent)] px-3 text-xs font-bold text-[var(--noodle-accent)] transition-[background-color,transform] hover:bg-[color-mix(in_srgb,var(--noodle-accent)_26%,transparent)] active:scale-[0.96] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--noodle-accent)] motion-reduce:transition-none motion-reduce:active:scale-100"
                 >
                   {localizeUi("ui.noodle.stageprofileview.editProfile")}
                 </button>
@@ -4093,13 +4093,13 @@ function StageProfileView({
                   aria-expanded={creatorToolsOpen}
                   aria-controls="slurp-creator-tools-panel"
                   aria-label={localizeUi("ui.slurp.profile.creatorTools")}
-                  className="flex w-11 shrink-0 items-center justify-center rounded-e-2xl border-s border-black/10 bg-[var(--noodle-accent)] !text-zinc-950 transition-colors hover:brightness-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-white"
+                  className="flex w-11 shrink-0 items-center justify-center rounded-e-2xl border-s border-white/[0.07] text-[var(--muted-foreground)] transition-colors hover:bg-[var(--accent)] hover:text-[var(--foreground)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--noodle-accent)]"
                 >
                   <ChevronDown
                     size={16}
                     strokeWidth={2.5}
                     className={cn(
-                      "!text-zinc-950 transition-transform motion-reduce:transition-none",
+                      "transition-transform motion-reduce:transition-none",
                       creatorToolsOpen && "rotate-180",
                     )}
                     aria-hidden="true"

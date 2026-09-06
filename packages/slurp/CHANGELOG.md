@@ -1,5 +1,10 @@
 # Slurp release notes
 
+## 1.1.29 — 2026-09-06
+
+- Profile controls and its chevron now recede into the rail; Edit Profile alone
+  keeps a restrained pink tint instead of sharing a loud solid accent block.
+
 ## 1.1.28 — 2026-09-06
 
 - Edit Profile now sits inside Profile controls immediately before the trailing
