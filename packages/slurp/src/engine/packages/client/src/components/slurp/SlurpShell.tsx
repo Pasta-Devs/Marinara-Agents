@@ -5,7 +5,6 @@
 // ──────────────────────────────────────────────
 import {
   AtSign,
-  Bell,
   ChartNoAxesColumn,
   ChevronDown,
   Home,
@@ -372,8 +371,7 @@ export interface NoodleShellProps {
   /** Omit on surfaces with no scoped equivalent. */
   onOpenWallet?: () => void;
   onOpenStudio?: () => void;
-  onOpenNotifications?: () => void;
-  /** Unseen events, shown as a badge on the notifications entry. */
+  /** Unseen activity, shown on the unified Inbox entry. */
   notificationCount?: number;
   /** The studio only exists for a persona that operates a Creator. */
   hasOperatedCreator?: boolean;
@@ -613,7 +611,6 @@ export function NoodleShell({
   onOpenMessages,
   onOpenWallet,
   onOpenStudio,
-  onOpenNotifications,
   notificationCount = 0,
   hasOperatedCreator = false,
   walletBalanceLabel,
@@ -732,25 +729,6 @@ export function NoodleShell({
                       : localizeUi("ui.noodle.noodleshell.noodleAccountNavigation")
                   }
                 >
-                  {onOpenNotifications && (
-                    <button
-                      type="button"
-                      onClick={onOpenNotifications}
-                      aria-current={activeView === "notifications" ? "page" : undefined}
-                      className={cn(
-                        "relative flex min-h-12 w-full items-center gap-4 overflow-hidden rounded-xl px-2 text-left text-base font-bold transition-colors hover:bg-[var(--accent)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--noodle-accent)]",
-                        activeView === "notifications" && SLURP_ROW_ACTIVE_CLASS,
-                      )}
-                    >
-                      <Bell size={23} />
-                      {localizeUi("ui.slurp.navigation.notifications", { defaultValue: "Notifications" })}
-                      {notificationCount > 0 && (
-                        <span className="ml-auto inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-[var(--noodle-accent)] px-1.5 text-[0.65rem] font-black tabular-nums text-zinc-950">
-                          {notificationCount}
-                        </span>
-                      )}
-                    </button>
-                  )}
                   {onOpenStudio && hasOperatedCreator && (
                     <button
                       type="button"
@@ -901,19 +879,8 @@ export function NoodleShell({
                         className={cn(SLURP_ROW_CLASS, activeView === "messages" && SLURP_ROW_ACTIVE_CLASS)}
                       >
                         <MessageCircle size={22} className="!text-[var(--noodle-accent)]" />
-                        {localizeUi("ui.slurp.navigation.messages", { defaultValue: "Messages" })}
-                      </button>
-                    )}
-                    {onOpenNotifications && (
-                      <button
-                        type="button"
-                        onClick={onOpenNotifications}
-                        aria-current={activeView === "notifications" ? "page" : undefined}
-                        className={cn(SLURP_ROW_CLASS, activeView === "notifications" && SLURP_ROW_ACTIVE_CLASS)}
-                      >
-                        <Bell size={22} className="!text-[var(--noodle-accent)]" />
                         <span className="min-w-0 flex-1">
-                          {localizeUi("ui.slurp.navigation.notifications", { defaultValue: "Notifications" })}
+                          {localizeUi("ui.slurp.navigation.messages", { defaultValue: "Inbox" })}
                         </span>
                         {notificationCount > 0 && (
                           <span className="inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-[var(--noodle-accent)] px-1.5 text-[0.65rem] font-black tabular-nums text-zinc-950">
@@ -1165,6 +1132,11 @@ export function NoodleShell({
                 )}
               >
                 <MessageCircle size={22} className="!text-[var(--muted-foreground)]" />
+                {notificationCount > 0 && (
+                  <span className="absolute end-[22%] top-1.5 min-w-4 rounded-full bg-[var(--noodle-accent)] px-1 text-center text-[0.6rem] font-black leading-4 text-zinc-950">
+                    {notificationCount > 99 ? "99+" : notificationCount}
+                  </span>
+                )}
                 {activeView === "messages" && (
                   <span className="absolute top-1 h-1 w-1 rounded-full bg-[var(--noodle-accent)]" />
                 )}

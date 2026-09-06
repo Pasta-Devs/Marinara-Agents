@@ -119,17 +119,16 @@ assert.match(routes, /names\.get\(event\.actorLabel\)/u);
 
 const home = read("client/src/components/slurp/SlurpHome.tsx");
 assert.match(home, /function SlurpNotificationsView/u);
-// Marking seen follows the actual navigation state rather than only the page's back button. Any
-// shell destination must clear the badge after the person has had a chance to read the catch-up.
-assert.match(home, /previous\.open[\s\S]*?!notificationsOpen[\s\S]*?markNotificationsSeen\(previous\.personaId\)/u);
+assert.match(home, /function SlurpInboxView/u, "messages and activity must share one Inbox surface");
+assert.match(home, /initialTab: "chats" \| "activity"/u);
+assert.match(home, /tab !== "activity"[\s\S]*?markSeen\.mutate\(personaId\)/u);
 // Rows with nowhere to go are content, not fake buttons. Actionable rows retain a keyboard-visible
 // focus ring and the same restrained press feedback as the rest of Slurp.
 assert.match(home, /destination \? \([\s\S]*?<button[\s\S]*?focus-visible:ring-2[\s\S]*?: \([\s\S]*?<div/u);
 
 const shell = read("client/src/components/slurp/SlurpShell.tsx");
 const desktopNav = shell.slice(shell.indexOf("data-slurp-desktop-frame"), shell.indexOf("<main"));
-assert.match(desktopNav, /onOpenNotifications/u, "desktop navigation must expose the notification stream");
-assert.match(desktopNav, /activeView === "notifications"/u, "desktop navigation must show the selected destination");
-assert.match(desktopNav, /notificationCount/u, "desktop navigation must expose the unseen count");
+assert.doesNotMatch(desktopNav, /onOpenNotifications/u, "activity must not remain a second navigation destination");
+assert.match(desktopNav, /onOpenMessages[\s\S]*?notificationCount/u, "Inbox must expose the unseen activity count");
 
 console.log("slurp events regression passed");

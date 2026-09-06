@@ -1,5 +1,13 @@
 # Slurp release notes
 
+## 1.2.0 — 2026-09-06
+
+- Messages and notifications now share one Inbox with separate Chats and Activity
+  tabs, avatar-led rows, semantic event icons, and a single navigation badge.
+- Wallet now shows the active identity's unwithdrawn Creator earnings and
+  spendable Fan wallet as two connected pockets, with an explicit Move to Wallet
+  action and separate Spending and Earnings histories.
+
 ## 1.1.33 — 2026-09-06
 
 - Removed the visible Stories heading so the Home memory ribbon begins directly

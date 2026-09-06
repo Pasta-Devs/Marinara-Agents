@@ -185,10 +185,7 @@ export function SlurpMessagesView({
       )}
 
       <section aria-labelledby="slurp-message-inbox" className="flex flex-col gap-2">
-        <h2
-          id="slurp-message-inbox"
-          className="px-1 text-xs font-bold uppercase tracking-[0.14em] text-[var(--muted-foreground)]"
-        >
+        <h2 id="slurp-message-inbox" className="sr-only">
           {localizeUi("ui.slurp.messages.inbox", { defaultValue: "Inbox" })}
         </h2>
         {active.length === 0 ? (
@@ -235,7 +232,7 @@ function ThreadRow({
     <button
       type="button"
       onClick={onOpen}
-      className="flex min-h-16 w-full items-center gap-3 rounded-xl bg-[var(--slurp-surface)] px-3 py-2.5 text-left ring-1 ring-inset ring-[var(--noodle-divider)] transition-colors hover:bg-[var(--noodle-accent)]/[0.06] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--noodle-accent)]"
+      className="flex min-h-16 w-full items-center gap-3 border-b border-[var(--noodle-divider)] px-2 py-2.5 text-left transition-colors last:border-b-0 hover:bg-[var(--noodle-accent)]/[0.06] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--noodle-accent)]"
     >
       <Avatar account={{ displayName: thread.creatorDisplayName, avatarUrl: thread.creatorAvatarUrl }} size="md" />
       <span className="flex min-w-0 flex-1 flex-col">

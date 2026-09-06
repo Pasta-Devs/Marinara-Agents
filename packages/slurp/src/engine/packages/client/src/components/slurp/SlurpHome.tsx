@@ -1,6 +1,9 @@
 import {
   ArrowLeft,
+  ArrowDown,
   ArrowRight,
+  BadgeDollarSign,
+  Bell,
   Bookmark,
   BookmarkCheck,
   Check,
@@ -9,6 +12,8 @@ import {
   ChevronRight,
   Clock3,
   Eye,
+  Gift,
+  Heart,
   LayoutGrid,
   Link,
   List,
@@ -25,6 +30,7 @@ import {
   Trash2,
   TriangleAlert,
   Upload,
+  WalletCards,
   UserRound,
   X,
 } from "lucide-react";
@@ -73,7 +79,6 @@ import {
   useSlurpWallet,
   useClaimSlurpDailyRefill,
   useTipSlurpCreator,
-  type SlurpWalletEntry,
   useNoodlerViewerWallets,
   useNoodlerSubscribers,
   useNoodlerUnseenCount,
@@ -782,11 +787,6 @@ export function SlurpHome({ navigation, onNavigate }: SlurpHomeProps) {
     onNavigate({ mode: "creator", view: "wallet" });
     setMobileDrawerOpen(false);
   };
-  const goToNotifications = async () => {
-    if (!(await prepareNavigationAwayFromProfileEditor())) return;
-    onNavigate({ mode: "creator", view: "notifications" });
-    setMobileDrawerOpen(false);
-  };
   const goToStudio = async () => {
     if (!(await prepareNavigationAwayFromProfileEditor())) return;
     onNavigate({ mode: "creator", view: "studio" });
@@ -1448,7 +1448,7 @@ export function SlurpHome({ navigation, onNavigate }: SlurpHomeProps) {
                 : navigation.mode === "creator" && navigation.view === "studio"
                   ? ("studio" as const)
                   : navigation.mode === "creator" && navigation.view === "notifications"
-                    ? ("notifications" as const)
+                    ? ("messages" as const)
                     : ("noodler" as const),
     contextualRail:
       // Every destination reserves the same rail column, so the content column does not
@@ -1500,7 +1500,6 @@ export function SlurpHome({ navigation, onNavigate }: SlurpHomeProps) {
     onOpenMessages: goToMessages,
     onOpenWallet: goToWallet,
     onOpenStudio: goToStudio,
-    onOpenNotifications: goToNotifications,
     notificationCount: notificationsQuery.data?.unseenCount ?? 0,
     // The studio is only meaningful for a persona that operates a Creator.
     hasOperatedCreator: Boolean(myCreatorProfile),
@@ -2113,10 +2112,12 @@ export function SlurpHome({ navigation, onNavigate }: SlurpHomeProps) {
   if (navigation.mode === "creator" && navigation.view === "notifications") {
     return (
       <NoodleShell {...shellProps}>
-        <SlurpNotificationsView
+        <SlurpInboxView
           personaId={viewerPersonaId}
+          ownedCreatorAccountIds={myCreatorProfile ? [myCreatorProfile.id] : []}
+          composeWithCreatorAccountId={null}
+          initialTab="activity"
           onBack={exitToCreatorHub}
-          onOpenMessages={() => onNavigate({ mode: "creator", view: "messages" })}
           onOpenProfile={(accountId) => onNavigate({ mode: "creator", view: "profile", accountId })}
         />
       </NoodleShell>
@@ -2138,15 +2139,14 @@ export function SlurpHome({ navigation, onNavigate }: SlurpHomeProps) {
   if (navigation.mode === "creator" && navigation.view === "messages") {
     return (
       <NoodleShell {...shellProps}>
-        <NoodlerFrame onBack={exitToCreatorHub} title={localizeUi("ui.slurp.navigation.messages")} action={<span />}>
-          <SlurpMessagesView
-            key={navigation.creatorAccountId ?? "inbox"}
-            personaId={viewerPersonaId}
-            composeWithCreatorAccountId={navigation.creatorAccountId ?? null}
-            ownedCreatorAccountIds={myCreatorProfile ? [myCreatorProfile.id] : []}
-            onOpenProfile={(accountId) => onNavigate({ mode: "creator", view: "profile", accountId })}
-          />
-        </NoodlerFrame>
+        <SlurpInboxView
+          personaId={viewerPersonaId}
+          ownedCreatorAccountIds={myCreatorProfile ? [myCreatorProfile.id] : []}
+          composeWithCreatorAccountId={navigation.creatorAccountId ?? null}
+          initialTab="chats"
+          onBack={exitToCreatorHub}
+          onOpenProfile={(accountId) => onNavigate({ mode: "creator", view: "profile", accountId })}
+        />
       </NoodleShell>
     );
   }
@@ -5227,161 +5227,211 @@ function SlurpWalletView({
 }) {
   const { t: localizeUi, i18n } = useUiTranslation();
   const walletQuery = useSlurpWallet(personaId);
+  const studioQuery = useSlurpStudio(personaId);
   const claimRefill = useClaimSlurpDailyRefill();
+  const payout = useSlurpPayout();
   const toggleSubscription = useToggleNoodlerSubscription();
+  const [ledgerMode, setLedgerMode] = useState<"spending" | "earnings">("spending");
   // The wallet stores subscriptions by creator id. Rendering the raw id told the player nothing,
   // so join the managed profiles the same way every other Slurp surface names a creator.
   const creatorsQuery = useNoodlerAccounts();
   const creatorNameById = new Map((creatorsQuery.data ?? []).map((creator) => [creator.id, creator.displayName]));
   const wallet = walletQuery.data;
+  const creator = studioQuery.data?.creators[0] ?? null;
   const coins = wallet?.coins ?? fallbackCoins;
   const subscriptions = wallet ? Object.entries(wallet.subscriptions) : [];
   // A spend/earn split is the one number the ledger cannot show at a glance.
   const spent = (wallet?.ledger ?? []).reduce((total, entry) => total + (entry.amount < 0 ? -entry.amount : 0), 0);
   const earned = (wallet?.ledger ?? []).reduce((total, entry) => total + (entry.amount > 0 ? entry.amount : 0), 0);
   const weeklyOutgoing = subscriptions.reduce((total, [, subscription]) => total + subscription.price, 0);
-  const refillFloor = 60;
-  const refillProgress = Math.min(100, Math.round((coins / Math.max(1, refillFloor)) * 100));
   const nextRefillAt = wallet?.stipendOn ? new Date(`${wallet.stipendOn}T00:00:00.000Z`).getTime() + 86_400_000 : null;
   const refillReady = !wallet?.stipendOn || (nextRefillAt !== null && nextRefillAt <= Date.now());
-  const entryLabel = (kind: SlurpWalletEntry["kind"]) =>
-    localizeUi(`ui.slurp.wallet.entry.${kind}`, { defaultValue: kind });
+  const entryLabel = (kind: string) =>
+    ledgerMode === "earnings"
+      ? localizeUi(`ui.slurp.earnings.entry.${kind}`, { defaultValue: kind })
+      : localizeUi(`ui.slurp.wallet.entry.${kind}`, { defaultValue: kind });
+  const activityEntries = ledgerMode === "earnings" ? (creator?.earnings.ledger ?? []) : (wallet?.ledger ?? []);
   return (
     <NoodlerFrame onBack={onBack} title={localizeUi("ui.slurp.navigation.wallet")} action={<span />}>
       <div className="mx-auto flex w-full max-w-2xl flex-col gap-4 p-4 sm:p-5">
-        <section className="relative isolate overflow-hidden rounded-xl bg-[var(--slurp-hero)] p-5 text-white shadow-[var(--slurp-shadow-modal)]">
-          <p className="text-xs font-bold uppercase tracking-[0.16em] text-white/75">
-            {localizeUi("ui.slurp.wallet.title")}
-          </p>
-          <p className="mt-2 flex items-center gap-2 text-4xl font-black tabular-nums">
-            {coins}
-            <span
-              className="inline-flex h-7 w-7 items-center justify-center rounded-full bg-white/20 text-base font-black leading-none"
-              aria-hidden="true"
-            >
-              C
-            </span>
-          </p>
-          {personaName && <p className="mt-1 text-sm text-white/80">{personaName}</p>}
-          {wallet && (
-            <p className="mt-2 text-xs text-white/75">
-              {localizeUi("ui.slurp.wallet.earnedToday", {
-                defaultValue: "Earned today: {{ads}} from ads, {{engagement}} from posting.",
-                ads: wallet.earnedToday.ad,
-                engagement: wallet.earnedToday.engagement,
-              })}
+        <div className="flex items-center gap-3 px-1">
+          <Avatar
+            account={{ displayName: creator?.displayName ?? personaName, avatarUrl: creator?.avatarUrl ?? null }}
+            size="lg"
+          />
+          <div className="min-w-0">
+            <p className="truncate text-lg font-black">{creator?.displayName ?? personaName}</p>
+            <p className="text-xs text-[var(--muted-foreground)]">
+              {creator
+                ? localizeUi("ui.slurp.wallet.creatorIdentity", { defaultValue: "Creator · Fan" })
+                : localizeUi("ui.slurp.wallet.fanIdentity", { defaultValue: "Fan wallet" })}
             </p>
-          )}
-        </section>
+          </div>
+        </div>
 
-        <section
-          aria-labelledby="slurp-wallet-refill"
-          className="rounded-xl bg-[var(--slurp-surface)] p-4 ring-1 ring-inset ring-[var(--noodle-divider)]"
-        >
-          <div className="flex items-start justify-between gap-3">
+        <section className="relative overflow-hidden rounded-2xl bg-[var(--slurp-surface)] shadow-[var(--slurp-shadow-floating)] ring-1 ring-inset ring-[var(--noodle-divider)]">
+          {creator && (
+            <div className="grid grid-cols-[1fr_auto] items-center gap-4 p-4 sm:p-5">
+              <div className="min-w-0">
+                <p className="flex items-center gap-2 text-xs font-bold text-[var(--muted-foreground)]">
+                  <BadgeDollarSign size={16} className="text-[var(--noodle-accent)]" aria-hidden="true" />
+                  {localizeUi("ui.slurp.wallet.creatorEarnings", { defaultValue: "Creator earnings" })}
+                </p>
+                <p className="mt-1 text-3xl font-black tabular-nums">{creator.earnings.coins.toLocaleString()}</p>
+                <p className="mt-0.5 text-[0.7rem] text-[var(--muted-foreground)]">
+                  {localizeUi("ui.slurp.wallet.notSpendable", { defaultValue: "Not spendable yet" })}
+                </p>
+              </div>
+              <div className="text-end">
+                <p className="text-[0.68rem] text-[var(--muted-foreground)]">
+                  {localizeUi("ui.slurp.wallet.availableToday", { defaultValue: "Available today" })}
+                </p>
+                <p className="text-xl font-black tabular-nums text-[var(--noodle-accent)]">
+                  {creator.payoutAllowance.toLocaleString()}
+                </p>
+              </div>
+            </div>
+          )}
+          {creator && (
+            <div className="relative flex justify-center border-y border-[var(--noodle-divider)] py-2">
+              <button
+                type="button"
+                disabled={!personaId || payout.isPending || creator.payoutAllowance <= 0}
+                onClick={() =>
+                  personaId &&
+                  payout.mutate(
+                    { creatorAccountId: creator.id, personaId, amount: creator.payoutAllowance },
+                    { onError: (error) => toast.error(errorMessage(error)) },
+                  )
+                }
+                className="flex min-h-11 items-center gap-2 rounded-full bg-[var(--noodle-accent)] px-4 text-xs font-black text-zinc-950 transition-[opacity,transform] active:scale-[0.96] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--slurp-focus)] disabled:opacity-45 motion-reduce:transition-none motion-reduce:active:scale-100"
+              >
+                <ArrowDown size={16} aria-hidden="true" />
+                {payout.isPending
+                  ? localizeUi("ui.slurp.wallet.moving", { defaultValue: "Moving…" })
+                  : localizeUi("ui.slurp.wallet.moveToWallet", { defaultValue: "Move to Wallet" })}
+              </button>
+            </div>
+          )}
+          <div className="flex items-center justify-between gap-4 p-4 sm:p-5">
             <div>
-              <h2 id="slurp-wallet-refill" className="text-sm font-bold">
-                {localizeUi("ui.slurp.wallet.dailyRefill", { defaultValue: "Daily refill" })}
-              </h2>
-              <p className="mt-1 text-xs text-[var(--muted-foreground)]">
-                {localizeUi("ui.slurp.wallet.dailyRefillDetail", {
-                  defaultValue: "Claim once per day when your balance is low.",
-                })}
+              <p className="flex items-center gap-2 text-xs font-bold text-[var(--muted-foreground)]">
+                <WalletCards size={16} className="text-[var(--noodle-accent)]" aria-hidden="true" />
+                {localizeUi("ui.slurp.wallet.fanWallet", { defaultValue: "Fan wallet" })}
+              </p>
+              <p className="mt-1 flex items-center gap-2 text-3xl font-black tabular-nums">
+                {coins.toLocaleString()}
+                <span
+                  className="inline-flex h-5 w-5 items-center justify-center rounded-full bg-[var(--noodle-accent)] text-[0.65rem] font-black leading-none text-white"
+                  aria-hidden="true"
+                >
+                  C
+                </span>
               </p>
             </div>
-            <span className="text-xs font-bold tabular-nums text-[var(--muted-foreground)]">{refillProgress}%</span>
-          </div>
-          <div
-            className="mt-3 h-2 overflow-hidden rounded-full bg-[var(--accent)]"
-            aria-label={`${coins} of ${refillFloor} coins`}
-          >
-            <div
-              className="h-full rounded-full bg-[var(--noodle-accent)] transition-[width] motion-reduce:transition-none"
-              style={{ width: `${refillProgress}%` }}
-            />
-          </div>
-          <div className="mt-3 flex flex-wrap items-center justify-between gap-3">
-            <p className="text-xs text-[var(--muted-foreground)]">
-              {refillReady
-                ? localizeUi("ui.slurp.wallet.refillReady", { defaultValue: "Your refill is ready." })
-                : localizeUi("ui.slurp.wallet.refillNext", { defaultValue: "Available after the next daily reset." })}
-            </p>
-            <button
-              type="button"
-              disabled={!personaId || claimRefill.isPending || !refillReady}
-              onClick={() => personaId && claimRefill.mutate({ personaId })}
-              className="min-h-10 rounded-lg bg-[var(--noodle-accent)] px-4 text-xs font-bold text-zinc-950 transition-[opacity,transform] hover:opacity-90 active:scale-[0.96] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--noodle-accent)] motion-reduce:transition-none motion-reduce:active:scale-100 disabled:opacity-50"
-            >
-              {claimRefill.isPending
-                ? localizeUi("ui.slurp.wallet.refilling", { defaultValue: "Claiming..." })
-                : localizeUi("ui.slurp.wallet.claimRefill", { defaultValue: "Claim daily refill" })}
-            </button>
+            {refillReady && (
+              <button
+                type="button"
+                disabled={!personaId || claimRefill.isPending}
+                onClick={() => personaId && claimRefill.mutate({ personaId })}
+                className="flex min-h-11 items-center gap-2 rounded-xl bg-[var(--noodle-accent)]/12 px-3 text-xs font-bold text-[var(--noodle-accent)] transition-[background-color,transform] hover:bg-[var(--noodle-accent)]/18 active:scale-[0.96] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--noodle-accent)] disabled:opacity-50 motion-reduce:transition-none motion-reduce:active:scale-100"
+              >
+                <Gift size={16} aria-hidden="true" />
+                {claimRefill.isPending
+                  ? localizeUi("ui.slurp.wallet.refilling", { defaultValue: "Claiming…" })
+                  : localizeUi("ui.slurp.wallet.dailyRefill", { defaultValue: "Daily refill" })}
+              </button>
+            )}
           </div>
         </section>
 
-        <section
-          aria-labelledby="slurp-wallet-subscriptions"
-          className="rounded-xl bg-[var(--slurp-surface)] p-4 ring-1 ring-inset ring-[var(--noodle-divider)]"
-        >
-          <div className="flex items-baseline justify-between gap-3">
-            <h2 id="slurp-wallet-subscriptions" className="text-sm font-bold">
-              {localizeUi("ui.slurp.wallet.subscriptions", { defaultValue: "Subscriptions" })}
-            </h2>
-            {weeklyOutgoing > 0 && (
-              <span className="text-xs font-bold tabular-nums text-[var(--muted-foreground)]">
-                {localizeUi("ui.slurp.wallet.weeklyOutgoing", {
-                  defaultValue: "{{amount}} / week",
-                  amount: weeklyOutgoing,
-                })}
-              </span>
-            )}
+        {creator && (
+          <div className="grid grid-cols-2 rounded-full bg-[var(--slurp-surface-raised)] p-1" role="tablist">
+            {(["spending", "earnings"] as const).map((mode) => (
+              <button
+                key={mode}
+                type="button"
+                role="tab"
+                aria-selected={ledgerMode === mode}
+                onClick={() => setLedgerMode(mode)}
+                className={cn(
+                  "min-h-10 rounded-full px-3 text-xs font-bold text-[var(--muted-foreground)] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--noodle-accent)]",
+                  ledgerMode === mode && "bg-[var(--noodle-accent)]/14 text-[var(--noodle-accent)]",
+                )}
+              >
+                {mode === "spending"
+                  ? localizeUi("ui.slurp.wallet.spending", { defaultValue: "Spending" })
+                  : localizeUi("ui.slurp.wallet.earnings", { defaultValue: "Earnings" })}
+              </button>
+            ))}
           </div>
-          {subscriptions.length > 0 ? (
-            <ul className="mt-3 space-y-2">
-              {subscriptions.map(([creatorId, subscription]) => (
-                <li
-                  key={creatorId}
-                  className="flex items-center justify-between gap-3 rounded-lg bg-[var(--accent)] p-3"
-                >
-                  <span className="flex min-w-0 flex-col">
-                    <span className="truncate text-xs font-semibold">
-                      {creatorNameById.get(creatorId) ??
-                        localizeUi("ui.slurp.wallet.unknownCreator", { defaultValue: "Unavailable Creator" })}
+        )}
+
+        {ledgerMode === "spending" && (
+          <section
+            aria-labelledby="slurp-wallet-subscriptions"
+            className="rounded-xl bg-[var(--slurp-surface)] p-4 ring-1 ring-inset ring-[var(--noodle-divider)]"
+          >
+            <div className="flex items-baseline justify-between gap-3">
+              <h2 id="slurp-wallet-subscriptions" className="text-sm font-bold">
+                {localizeUi("ui.slurp.wallet.subscriptions", { defaultValue: "Subscriptions" })}
+              </h2>
+              {weeklyOutgoing > 0 && (
+                <span className="text-xs font-bold tabular-nums text-[var(--muted-foreground)]">
+                  {localizeUi("ui.slurp.wallet.weeklyOutgoing", {
+                    defaultValue: "{{amount}} / week",
+                    amount: weeklyOutgoing,
+                  })}
+                </span>
+              )}
+            </div>
+            {subscriptions.length > 0 ? (
+              <ul className="mt-3 space-y-2">
+                {subscriptions.map(([creatorId, subscription]) => (
+                  <li
+                    key={creatorId}
+                    className="flex items-center justify-between gap-3 rounded-lg bg-[var(--accent)] p-3"
+                  >
+                    <span className="flex min-w-0 flex-col">
+                      <span className="truncate text-xs font-semibold">
+                        {creatorNameById.get(creatorId) ??
+                          localizeUi("ui.slurp.wallet.unknownCreator", { defaultValue: "Unavailable Creator" })}
+                      </span>
+                      <span className="text-[0.7rem] text-[var(--muted-foreground)]">
+                        {localizeUi("ui.slurp.wallet.renewsOn", {
+                          defaultValue: "Renews {{date}}",
+                          date: formatTime(subscription.paidThroughAt, i18n.language),
+                        })}
+                      </span>
                     </span>
-                    <span className="text-[0.7rem] text-[var(--muted-foreground)]">
-                      {localizeUi("ui.slurp.wallet.renewsOn", {
-                        defaultValue: "Renews {{date}}",
-                        date: formatTime(subscription.paidThroughAt, i18n.language),
-                      })}
+                    <span className="flex shrink-0 items-center gap-2">
+                      <span className="text-xs tabular-nums text-[var(--muted-foreground)]">
+                        {subscription.price} / week
+                      </span>
+                      <button
+                        type="button"
+                        disabled={!personaId || toggleSubscription.isPending}
+                        onClick={() =>
+                          personaId &&
+                          toggleSubscription.mutate({ creatorAccountId: creatorId, personaId, subscribed: true })
+                        }
+                        className="min-h-8 rounded-lg px-2 text-[0.7rem] font-bold text-[var(--muted-foreground)] ring-1 ring-inset ring-[var(--noodle-divider)] transition-colors hover:text-[var(--foreground)] disabled:opacity-50"
+                      >
+                        {localizeUi("ui.slurp.wallet.unsubscribe", { defaultValue: "Cancel" })}
+                      </button>
                     </span>
-                  </span>
-                  <span className="flex shrink-0 items-center gap-2">
-                    <span className="text-xs tabular-nums text-[var(--muted-foreground)]">
-                      {subscription.price} / week
-                    </span>
-                    <button
-                      type="button"
-                      disabled={!personaId || toggleSubscription.isPending}
-                      onClick={() =>
-                        personaId &&
-                        toggleSubscription.mutate({ creatorAccountId: creatorId, personaId, subscribed: true })
-                      }
-                      className="min-h-8 rounded-lg px-2 text-[0.7rem] font-bold text-[var(--muted-foreground)] ring-1 ring-inset ring-[var(--noodle-divider)] transition-colors hover:text-[var(--foreground)] disabled:opacity-50"
-                    >
-                      {localizeUi("ui.slurp.wallet.unsubscribe", { defaultValue: "Cancel" })}
-                    </button>
-                  </span>
-                </li>
-              ))}
-            </ul>
-          ) : (
-            <p className="mt-2 text-xs text-[var(--muted-foreground)]">
-              {localizeUi("ui.slurp.wallet.noSubscriptions", {
-                defaultValue: "Your active subscriptions will appear here.",
-              })}
-            </p>
-          )}
-        </section>
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <p className="mt-2 text-xs text-[var(--muted-foreground)]">
+                {localizeUi("ui.slurp.wallet.noSubscriptions", {
+                  defaultValue: "Your active subscriptions will appear here.",
+                })}
+              </p>
+            )}
+          </section>
+        )}
 
         <section
           aria-labelledby="slurp-wallet-activity"
@@ -5391,7 +5441,7 @@ function SlurpWalletView({
             <h2 id="slurp-wallet-activity" className="text-sm font-bold">
               {localizeUi("ui.slurp.wallet.activity", { defaultValue: "Recent activity" })}
             </h2>
-            {(spent > 0 || earned > 0) && (
+            {ledgerMode === "spending" && (spent > 0 || earned > 0) && (
               <span className="text-xs font-bold tabular-nums text-[var(--muted-foreground)]">
                 {localizeUi("ui.slurp.wallet.spentEarned", {
                   defaultValue: "-{{spent}} / +{{earned}}",
@@ -5401,9 +5451,9 @@ function SlurpWalletView({
               </span>
             )}
           </div>
-          {wallet && wallet.ledger.length > 0 ? (
+          {activityEntries.length > 0 ? (
             <ul className="mt-3 flex flex-col divide-y divide-[var(--noodle-divider)]">
-              {wallet.ledger.map((entry, index) => (
+              {activityEntries.map((entry, index) => (
                 <li key={`${entry.at}-${index}`} className="flex items-center justify-between gap-3 py-2">
                   <span className="min-w-0">
                     <span className="block text-xs font-semibold">{entryLabel(entry.kind)}</span>
@@ -7093,6 +7143,77 @@ function SlurpGoalEditor({ creator, personaId }: { creator: SlurpStudioCreator; 
   );
 }
 
+function SlurpInboxView({
+  personaId,
+  ownedCreatorAccountIds,
+  composeWithCreatorAccountId,
+  initialTab,
+  onBack,
+  onOpenProfile,
+}: {
+  personaId: string | null;
+  ownedCreatorAccountIds: string[];
+  composeWithCreatorAccountId: string | null;
+  initialTab: "chats" | "activity";
+  onBack: () => void;
+  onOpenProfile: (accountId: string) => void;
+}) {
+  const { t: localizeUi } = useUiTranslation();
+  const [tab, setTab] = useState<"chats" | "activity">(initialTab);
+  const markSeen = useMarkSlurpNotificationsSeen();
+
+  useEffect(() => {
+    if (tab !== "activity" || !personaId) return;
+    return () => markSeen.mutate(personaId);
+  }, [tab, personaId, markSeen]);
+
+  return (
+    <NoodlerFrame
+      onBack={onBack}
+      title={localizeUi("ui.slurp.navigation.messages", { defaultValue: "Inbox" })}
+      action={<span />}
+    >
+      <div className="mx-auto grid w-full max-w-2xl grid-cols-2 border-b border-[var(--noodle-divider)] px-4 pt-1 sm:px-5">
+        {(["chats", "activity"] as const).map((option) => (
+          <button
+            key={option}
+            type="button"
+            role="tab"
+            aria-selected={tab === option}
+            onClick={() => setTab(option)}
+            className={cn(
+              "relative min-h-11 px-3 text-sm font-bold text-[var(--muted-foreground)] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--noodle-accent)]",
+              tab === option &&
+                "text-[var(--foreground)] after:absolute after:inset-x-5 after:bottom-0 after:h-0.5 after:rounded-full after:bg-[var(--noodle-accent)]",
+            )}
+          >
+            {option === "chats"
+              ? localizeUi("ui.slurp.inbox.chats", { defaultValue: "Chats" })
+              : localizeUi("ui.slurp.inbox.activity", { defaultValue: "Activity" })}
+          </button>
+        ))}
+      </div>
+      {tab === "chats" ? (
+        <SlurpMessagesView
+          key={composeWithCreatorAccountId ?? "inbox"}
+          personaId={personaId}
+          composeWithCreatorAccountId={composeWithCreatorAccountId}
+          ownedCreatorAccountIds={ownedCreatorAccountIds}
+          onOpenProfile={onOpenProfile}
+        />
+      ) : (
+        <SlurpNotificationsView
+          personaId={personaId}
+          onBack={onBack}
+          onOpenMessages={() => setTab("chats")}
+          onOpenProfile={onOpenProfile}
+          embedded
+        />
+      )}
+    </NoodlerFrame>
+  );
+}
+
 /**
  * The notification stream, and what happened while you were away.
  *
@@ -7109,11 +7230,13 @@ function SlurpNotificationsView({
   onBack,
   onOpenMessages,
   onOpenProfile,
+  embedded = false,
 }: {
   personaId: string | null;
   onBack: () => void;
   onOpenMessages: () => void;
   onOpenProfile: (accountId: string) => void;
+  embedded?: boolean;
 }) {
   const { t: localizeUi, i18n } = useUiTranslation();
   const notificationsQuery = useSlurpNotifications(personaId);
@@ -7137,6 +7260,14 @@ function SlurpNotificationsView({
     });
   };
 
+  const eventIcon = (kind: string) => {
+    if (kind === "message" || kind === "commission_requested") return MessageCircle;
+    if (kind === "comment" || kind === "returned") return Heart;
+    if (kind === "tip" || kind === "unlock" || kind === "ppv_unlock") return BadgeDollarSign;
+    if (kind === "subscribed" || kind === "milestone") return Gift;
+    return Bell;
+  };
+
   const render = (groups: SlurpEventGroup[]) =>
     groups.map((group) => {
       const key = group.type === "single" ? group.event.id : `${group.kind}-${group.ids.length}`;
@@ -7145,9 +7276,15 @@ function SlurpNotificationsView({
         group.type === "single" && (group.event.kind === "message" || group.event.kind === "commission_requested");
       const creatorId = group.type === "single" ? group.event.creatorAccountId : null;
       const destination = actionable ? onOpenMessages : creatorId ? () => onOpenProfile(creatorId) : null;
+      const EventIcon = eventIcon(group.type === "single" ? group.event.kind : group.kind);
       const content = (
         <>
-          <span className="min-w-0 text-xs">{describe(group)}</span>
+          <span className="flex min-w-0 items-start gap-2.5">
+            <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-[var(--noodle-accent)]/10 text-[var(--noodle-accent)]">
+              <EventIcon size={15} aria-hidden="true" />
+            </span>
+            <span className="min-w-0 pt-1.5 text-xs leading-5">{describe(group)}</span>
+          </span>
           <time dateTime={at} className="shrink-0 text-[0.65rem] tabular-nums text-[var(--muted-foreground)]">
             {formatTime(at, i18n.language)}
           </time>
@@ -7170,45 +7307,49 @@ function SlurpNotificationsView({
       );
     });
 
-  return (
-    <NoodlerFrame onBack={onBack} title={localizeUi("ui.slurp.navigation.notifications")} action={<span />}>
-      <div className="mx-auto flex w-full max-w-2xl flex-col gap-4 p-4 sm:p-5">
-        {unseen.length > 0 && (
-          <section
-            aria-labelledby="slurp-catch-up"
-            className="rounded-xl bg-[var(--slurp-surface)] p-3 ring-1 ring-inset ring-[var(--noodle-accent)]/30"
-          >
-            <h2
-              id="slurp-catch-up"
-              className="px-2 text-xs font-bold uppercase tracking-[0.14em] text-[var(--noodle-accent)]"
-            >
-              {localizeUi("ui.slurp.events.whileAway", { defaultValue: "While you were away" })}
-            </h2>
-            <ul className="mt-1 flex flex-col">{render(unseen)}</ul>
-          </section>
-        )}
-
+  const content = (
+    <div className="mx-auto flex w-full max-w-2xl flex-col gap-4 p-4 sm:p-5">
+      {unseen.length > 0 && (
         <section
-          aria-labelledby="slurp-all-events"
-          className="rounded-xl bg-[var(--slurp-surface)] p-3 ring-1 ring-inset ring-[var(--noodle-divider)]"
+          aria-labelledby="slurp-catch-up"
+          className="rounded-xl bg-[var(--slurp-surface)] p-3 ring-1 ring-inset ring-[var(--noodle-accent)]/30"
         >
           <h2
-            id="slurp-all-events"
-            className="px-2 text-xs font-bold uppercase tracking-[0.14em] text-[var(--muted-foreground)]"
+            id="slurp-catch-up"
+            className="px-2 text-xs font-bold uppercase tracking-[0.14em] text-[var(--noodle-accent)]"
           >
-            {localizeUi("ui.slurp.events.all", { defaultValue: "Everything" })}
+            {localizeUi("ui.slurp.events.whileAway", { defaultValue: "While you were away" })}
           </h2>
-          {items.length === 0 ? (
-            <p className="px-2 py-6 text-center text-xs text-[var(--muted-foreground)]">
-              {localizeUi("ui.slurp.events.empty", {
-                defaultValue: "Nothing has happened yet. Post something and give the audience a reason.",
-              })}
-            </p>
-          ) : (
-            <ul className="mt-1 flex flex-col">{render(items)}</ul>
-          )}
+          <ul className="mt-1 flex flex-col">{render(unseen)}</ul>
         </section>
-      </div>
+      )}
+
+      <section
+        aria-labelledby="slurp-all-events"
+        className="rounded-xl bg-[var(--slurp-surface)] p-3 ring-1 ring-inset ring-[var(--noodle-divider)]"
+      >
+        <h2
+          id="slurp-all-events"
+          className="px-2 text-xs font-bold uppercase tracking-[0.14em] text-[var(--muted-foreground)]"
+        >
+          {localizeUi("ui.slurp.events.all", { defaultValue: "Everything" })}
+        </h2>
+        {items.length === 0 ? (
+          <p className="px-2 py-6 text-center text-xs text-[var(--muted-foreground)]">
+            {localizeUi("ui.slurp.events.empty", {
+              defaultValue: "Nothing has happened yet. Post something and give the audience a reason.",
+            })}
+          </p>
+        ) : (
+          <ul className="mt-1 flex flex-col">{render(items)}</ul>
+        )}
+      </section>
+    </div>
+  );
+  if (embedded) return content;
+  return (
+    <NoodlerFrame onBack={onBack} title={localizeUi("ui.slurp.navigation.notifications")} action={<span />}>
+      {content}
     </NoodlerFrame>
   );
 }
