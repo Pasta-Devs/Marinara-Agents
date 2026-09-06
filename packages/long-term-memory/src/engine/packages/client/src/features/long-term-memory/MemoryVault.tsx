@@ -40,7 +40,7 @@ import {
   getLtmScopePersonaIds,
   normalizeLtmScope,
 } from "../../../../shared/src/features/agents/long-term-memory/scope.js";
-import { invalidateLtmQueries, queryKeys, request, requestAllNotes } from "./api";
+import { invalidateLtmQueries, ltmScopeTargetsKey, queryKeys, request, requestAllNotes } from "./api";
 import { Button, ClickSurface, IconButton, InfoPopover, inputClass, StatusSurface } from "./shared-controls";
 import type { LongTermMemoryDestinationProps } from "./types";
 import {
@@ -1333,7 +1333,8 @@ export default function MemoryVault({
   });
 
   const scopeTargets = useQuery({
-    queryKey: [...queryKeys.scopeTargets(props.chatId), "all-chats"],
+    queryKey: ltmScopeTargetsKey(props.chatId),
+    staleTime: 30_000,
     queryFn: () =>
       request<ScopeTargets>(
         `/scope-targets?includeAllChats=true${props.chatId ? `&chatId=${encodeURIComponent(props.chatId)}` : ""}`,

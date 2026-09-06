@@ -41,7 +41,7 @@ import type {
   LtmScope,
   LtmExtractSourceNoteResponse,
 } from "../../../../shared/src/features/agents/long-term-memory/schema.js";
-import { invalidateLtmQueries, queryKeys, request } from "./api";
+import { invalidateLtmQueries, ltmScopeTargetsKey, queryKeys, request } from "./api";
 import { Button, ClickSurface, IconButton, InfoPopover, StatusSurface, inputClass } from "./shared-controls";
 import { humanizeLabel, labelKeys, localizedLabel, noteTypeLabel } from "./display-labels";
 import type { LongTermMemoryDestinationProps, SourceTab } from "./types";
@@ -1483,7 +1483,8 @@ export default function SourcesWorkspace({
           : "";
 
   const scopeTargets = useQuery({
-    queryKey: [...queryKeys.scopeTargetsRoot, "all-chats", props.chatId],
+    queryKey: ltmScopeTargetsKey(props.chatId),
+    staleTime: 30_000,
     queryFn: () =>
       request<ScopeTargets>(
         `/scope-targets?includeAllChats=true${props.chatId ? `&chatId=${encodeURIComponent(props.chatId)}` : ""}`,
@@ -1568,6 +1569,7 @@ export default function SourcesWorkspace({
     scopeTargetOptions.find((target) => target.id === sourceTargetId) ??
     scopeTargetOptions.find((target) => target.id === "all") ??
     scopeTargetOptions[0];
+  const sourceTargetMatchesContext = sourceTargetId === (props.chatId ? `chat:${props.chatId}` : "all");
   const destinationTargets = useMemo(
     () =>
       scopeTargetOptions.filter(
@@ -1624,7 +1626,7 @@ export default function SourcesWorkspace({
         ...(modeFilter !== "all" ? { mode: modeFilter } : {}),
         ...(sourceQuery.trim() ? { query: sourceQuery } : {}),
       }),
-    enabled: source !== "lorebooks",
+    enabled: scopeTargets.isSuccess && Boolean(sourceTarget) && sourceTargetMatchesContext && source !== "lorebooks",
   });
   const lorebookPreview = useQuery({
     queryKey: [...queryKeys.lorebookPreview, previewScope, modeFilter, sourceQuery],
@@ -1639,7 +1641,7 @@ export default function SourcesWorkspace({
           ...(sourceQuery.trim() ? { query: sourceQuery } : {}),
         },
       ),
-    enabled: source === "lorebooks",
+    enabled: scopeTargets.isSuccess && Boolean(sourceTarget) && sourceTargetMatchesContext && source === "lorebooks",
   });
   const sourceDetails = useQuery({
     queryKey: [...queryKeys.preview, "details", source, previewScope, modeFilter, focusedFlatSourceId],
@@ -1653,9 +1655,17 @@ export default function SourcesWorkspace({
         ...(previewScope ? { sourceScope: previewScope } : {}),
         ...(modeFilter !== "all" ? { mode: modeFilter } : {}),
       }),
-    enabled: source !== "lorebooks" && focusedFlatSourceId !== null,
+    enabled:
+      scopeTargets.isSuccess &&
+      Boolean(sourceTarget) &&
+      sourceTargetMatchesContext &&
+      source !== "lorebooks" &&
+      focusedFlatSourceId !== null,
   });
-  const rows = [...(preview.data?.samples ?? [])].sort((left, right) => {
+  const previewData = sourceTargetMatchesContext ? preview.data : undefined;
+  const lorebookPreviewData = sourceTargetMatchesContext ? lorebookPreview.data : undefined;
+  const sourceDetailsData = sourceTargetMatchesContext ? sourceDetails.data : undefined;
+  const rows = [...(previewData?.samples ?? [])].sort((left, right) => {
     if (source !== "chats" || !props.chatId) return 0;
     return (
       Number(!left.sourceId.startsWith(`${props.chatId}:`)) - Number(!right.sourceId.startsWith(`${props.chatId}:`))
@@ -1678,7 +1688,7 @@ export default function SourcesWorkspace({
   const lorebookRefreshSelectionKey = `${selectionKey}:lorebook-refresh`;
   const selectedLorebookImportIds = new Set(selections[lorebookImportSelectionKey] ?? []);
   const selectedLorebookRefreshIds = new Set(selections[lorebookRefreshSelectionKey] ?? []);
-  const selectedLorebook = lorebookPreview.data?.books.find((book) => book.id === selectedLorebookId) ?? null;
+  const selectedLorebook = lorebookPreviewData?.books.find((book) => book.id === selectedLorebookId) ?? null;
   const selectedBookImportIds =
     selectedLorebook?.entries
       .flatMap((entry) => entry.candidates)
@@ -1700,7 +1710,7 @@ export default function SourcesWorkspace({
   const activeFlatAllSelected = activeFlatRows.length > 0 && activeFlatSelectedIds.length === activeFlatRows.length;
   const focusedFlatRow = rows.find((row) => row.sourceId === focusedFlatSourceId) ?? null;
   const focusedFlatDetail =
-    sourceDetails.data?.details.find((detail) => detail.sourceId === focusedFlatSourceId) ?? null;
+    sourceDetailsData?.details.find((detail) => detail.sourceId === focusedFlatSourceId) ?? null;
   const openLorebookEntry = selectedLorebook?.entries.find((entry) => entry.id === openLorebookEntryId);
   const openLorebookSourceIds = openLorebookEntry?.candidates.map((candidate) => candidate.sourceId) ?? [];
   const lorebookDetails = useQuery({
@@ -1717,7 +1727,7 @@ export default function SourcesWorkspace({
       }),
     enabled: source === "lorebooks" && openLorebookSourceIds.length > 0,
   });
-  const allLorebooks = lorebookPreview.data?.books ?? [];
+  const allLorebooks = lorebookPreviewData?.books ?? [];
   const activeLorebooks = allLorebooks.filter((book) =>
     sourceStatusFilter === "all"
       ? true
@@ -2582,18 +2592,18 @@ export default function SourcesWorkspace({
         aria-live="polite"
       >
         {source === "lorebooks"
-          ? lorebookPreview.data
+          ? lorebookPreviewData
             ? localizeUi("ui.longTermMemory.sourcesworkspace.value1LorebooksValue2EntriesValue3Imported", {
-                value1: lorebookPreview.data.counts.books,
-                value2: lorebookPreview.data.counts.entries,
-                value3: lorebookPreview.data.counts.imported,
+                value1: lorebookPreviewData.counts.books,
+                value2: lorebookPreviewData.counts.entries,
+                value3: lorebookPreviewData.counts.imported,
               })
             : localizeUi("ui.longTermMemory.sourcesworkspace.loadingLorebooks")
-          : preview.data
+          : previewData
             ? localizeUi("ui.longTermMemory.sourcesworkspace.value1ScannedValue2PendingValue3Imported", {
-                value1: preview.data.scanned,
-                value2: preview.data.draftable,
-                value3: preview.data.importedCount,
+                value1: previewData.scanned,
+                value2: previewData.draftable,
+                value3: previewData.importedCount,
               })
             : localizeUi("ui.longTermMemory.sourcesworkspace.loadingSourcePreview")}
       </p>
@@ -2682,7 +2692,7 @@ export default function SourcesWorkspace({
                         </Button>
                       </div>
                     </div>
-                    {lorebookPreview.data?.truncated ? (
+                    {lorebookPreviewData?.truncated ? (
                       <p role="note" className="text-xs text-[var(--marinara-editor-warning)]">
                         {localizeUi("ui.longTermMemory.sourcesworkspace.moreThan100Matches")}
                       </p>
@@ -2742,7 +2752,7 @@ export default function SourcesWorkspace({
                       {(["all", "ready", "imported"] as const).map((filter) => {
                         const count =
                           filter === "all"
-                            ? (lorebookPreview.data?.books.length ?? 0)
+                            ? (lorebookPreviewData?.books.length ?? 0)
                             : allLorebooks.filter((book) =>
                                 filter === "ready"
                                   ? book.totals.pending > 0
@@ -3051,9 +3061,9 @@ export default function SourcesWorkspace({
                       <p>{localizeUi("ui.longTermMemory.sourcesworkspace.selectALorebookToInspectItsEntries")}</p>
                       <p>
                         {localizeUi("ui.longTermMemory.sourcesworkspace.readyToImport")} (
-                        {lorebookPreview.data?.counts.pending ?? 0}) ·{" "}
+                        {lorebookPreviewData?.counts.pending ?? 0}) ·{" "}
                         {localizeUi("ui.longTermMemory.sourcesworkspace.alreadyImported")} (
-                        {lorebookPreview.data?.counts.imported ?? 0})
+                        {lorebookPreviewData?.counts.imported ?? 0})
                       </p>
                     </div>
                   )}
@@ -3129,7 +3139,7 @@ export default function SourcesWorkspace({
                       </h2>
                       <div className="flex items-center gap-2">
                         <span className="text-xs text-[var(--muted-foreground)]">
-                          {preview.data?.totals.matches ?? activeFlatRows.length}
+                          {previewData?.totals.matches ?? activeFlatRows.length}
                         </span>
                         <Button className="mari-editor-action--compact" onClick={() => void toggleSelectionMode()}>
                           {localizeUi(
@@ -3140,7 +3150,7 @@ export default function SourcesWorkspace({
                         </Button>
                       </div>
                     </div>
-                    {preview.data?.truncated ? (
+                    {previewData?.truncated ? (
                       <p role="note" className="text-xs text-[var(--marinara-editor-warning)]">
                         {localizeUi("ui.longTermMemory.sourcesworkspace.moreThan100Matches")}
                       </p>
@@ -3200,10 +3210,10 @@ export default function SourcesWorkspace({
                       {(["all", "ready", "imported"] as const).map((filter) => {
                         const count =
                           filter === "all"
-                            ? (preview.data?.totals.matches ?? rows.length)
+                            ? (previewData?.totals.matches ?? rows.length)
                             : filter === "ready"
-                              ? (preview.data?.totals.ready ?? selectableRows.length)
-                              : (preview.data?.totals.imported ?? importedRows.length);
+                              ? (previewData?.totals.ready ?? selectableRows.length)
+                              : (previewData?.totals.imported ?? importedRows.length);
                         const labelKey =
                           filter === "all"
                             ? "ui.longTermMemory.sourcesworkspace.all"
@@ -3312,7 +3322,7 @@ export default function SourcesWorkspace({
                         >
                           <summary className="cursor-pointer list-none border-b border-[var(--border)] bg-[var(--secondary)]/25 px-3 py-3 text-xs font-semibold">
                             {localizeUi("ui.longTermMemory.sourcesworkspace.readyToImport")} (
-                            {preview.data?.totals.ready ?? selectableRows.length})
+                            {previewData?.totals.ready ?? selectableRows.length})
                           </summary>
                           <div className="divide-y divide-[var(--border)]">
                             {selectableRows.map(renderFlatSourceRow)}
@@ -3331,7 +3341,7 @@ export default function SourcesWorkspace({
                         >
                           <summary className="cursor-pointer list-none bg-[var(--secondary)]/25 px-3 py-3 text-xs font-semibold">
                             {localizeUi("ui.longTermMemory.sourcesworkspace.alreadyImported")} (
-                            {preview.data?.totals.imported ?? importedRows.length})
+                            {previewData?.totals.imported ?? importedRows.length})
                           </summary>
                           <div className="divide-y divide-[var(--border)]">{importedRows.map(renderFlatSourceRow)}</div>
                         </details>
@@ -3383,7 +3393,7 @@ export default function SourcesWorkspace({
                             </summary>
                             {row ? (
                               <p className="whitespace-pre-wrap px-3 pb-3 text-xs text-[var(--muted-foreground)]">
-                                {sourceDetails.data?.details.find((detail) => detail.sourceId === row.sourceId)
+                                {sourceDetailsData?.details.find((detail) => detail.sourceId === row.sourceId)
                                   ?.content ?? row.snippet}
                               </p>
                             ) : null}
@@ -3511,9 +3521,9 @@ export default function SourcesWorkspace({
                       <p>{localizeUi("ui.longTermMemory.sourcesworkspace.selectASourceToInspect")}</p>
                       <p>
                         {localizeUi("ui.longTermMemory.sourcesworkspace.readyToImport")} (
-                        {preview.data?.totals.ready ?? 0}) ·{" "}
+                        {previewData?.totals.ready ?? 0}) ·{" "}
                         {localizeUi("ui.longTermMemory.sourcesworkspace.alreadyImported")} (
-                        {preview.data?.totals.imported ?? 0})
+                        {previewData?.totals.imported ?? 0})
                       </p>
                     </div>
                   )}

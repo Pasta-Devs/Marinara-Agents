@@ -27,6 +27,9 @@ export const queryKeys = {
   lastInjection: (chatId: string | null | undefined) => ["long-term-memory", "last-injection", chatId] as const,
 } as const;
 
+export const ltmScopeTargetsKey = (chatId: string | null | undefined) =>
+  [...queryKeys.scopeTargets(chatId), "all-chats"] as const;
+
 function getAdminSecretHeader(): Record<string, string> {
   if (typeof window === "undefined") return {};
   try {
