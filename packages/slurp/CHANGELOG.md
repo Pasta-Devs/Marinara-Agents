@@ -1,5 +1,10 @@
 # Slurp release notes
 
+## 1.1.31 — 2026-09-06
+
+- Removed the separators around Edit Profile and the chevron so Profile controls
+  reads as one uninterrupted rail.
+
 ## 1.1.30 — 2026-09-06
 
 - Edit Profile now renders as a small tinted pill inside its full-size accessible

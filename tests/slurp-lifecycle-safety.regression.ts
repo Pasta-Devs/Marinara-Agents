@@ -180,6 +180,11 @@ assert.match(
   "Edit Profile must sit immediately before the trailing Profile controls chevron",
 );
 assert.match(home, /group\/edit flex min-h-11[\s\S]*?<span className="rounded-lg[\s\S]*?py-1\.5/u);
+assert.doesNotMatch(
+  home.slice(home.indexOf("data-slurp-creator-tools"), home.indexOf('id="slurp-creator-tools-panel"')),
+  /border-s/u,
+  "the compact Profile controls rail must not be split by segment dividers",
+);
 // Edit Profile belongs to the same profile rail, not inside the expandable operational panel.
 assert.doesNotMatch(
   home.slice(home.indexOf('id="slurp-creator-tools-panel"'), home.indexOf("<NoodlerPostComposer")),
