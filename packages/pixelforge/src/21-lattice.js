@@ -38,7 +38,7 @@ PF.lattice = (() => {
    *  landmark rate anywhere else in this file is a defect by that ruling. The
    *  lanes read these values rather than restating them, so a retune is one edit
    *  and a green suite instead of a hunt. */
-  const TUNE = {
+  const LATTICE_TUNE = {
     // ── Shape ────────────────────────────────────────────────────────────────
     CHUNK_W: 36, // the shipped wilds literal (20-world's wilds builder)
     CHUNK_H: 24,
@@ -320,8 +320,8 @@ PF.lattice = (() => {
   const delta = (dir) => PF.own(DELTA, dir) ?? null;
 
   // ── Ids ─────────────────────────────────────────────────────────────────────
-  const CHUNK_ID_RE = new RegExp(`^${TUNE.CHUNK_ID_PREFIX}_(-?\\d+)_(-?\\d+)$`);
-  const idFor = (cx, cy) => `${TUNE.CHUNK_ID_PREFIX}_${cx}_${cy}`;
+  const CHUNK_ID_RE = new RegExp(`^${LATTICE_TUNE.CHUNK_ID_PREFIX}_(-?\\d+)_(-?\\d+)$`);
+  const idFor = (cx, cy) => `${LATTICE_TUNE.CHUNK_ID_PREFIX}_${cx}_${cy}`;
 
   /** A cell, or null — and the test is ROUND-TRIP CANONICALITY, not a specimen
    *  list. An id is a cell iff spelling that cell back gives the identical
@@ -384,14 +384,14 @@ PF.lattice = (() => {
   // choosing rather than the map's middle, and a terminal that stayed centred
   // would be a gate the road does not arrive at. On a centred junction the two
   // answers are identical, which is why every existing caller keeps its result.
-  const spanStart = (extent, centre) => (Number.isInteger(centre) ? centre : (extent / 2) | 0) - (TUNE.GATE_SPAN >> 1);
+  const spanStart = (extent, centre) => (Number.isInteger(centre) ? centre : (extent / 2) | 0) - (LATTICE_TUNE.GATE_SPAN >> 1);
 
   /** The gate tiles for one direction, about an optional `{x, y}` spine. */
   function gateTiles(zone, dir, spine) {
     const out = [];
     const cx = spine?.x;
     const cy = spine?.y;
-    for (let i = 0; i < TUNE.GATE_SPAN; i++) {
+    for (let i = 0; i < LATTICE_TUNE.GATE_SPAN; i++) {
       if (dir === "N") out.push({ x: spanStart(zone.w, cx) + i, y: 0, dir });
       else if (dir === "S") out.push({ x: spanStart(zone.w, cx) + i, y: zone.h - 1, dir });
       else if (dir === "E") out.push({ x: zone.w - 1, y: spanStart(zone.h, cy) + i, dir });
@@ -410,7 +410,7 @@ PF.lattice = (() => {
     const step = delta(gate.dir);
     if (!step) return [];
     const out = [];
-    for (let i = 0; i < TUNE.GATE_APRON; i++) {
+    for (let i = 0; i < LATTICE_TUNE.GATE_APRON; i++) {
       const x = gate.x - step.cx * i;
       const y = gate.y - step.cy * i;
       if (x < 0 || y < 0 || x >= zone.w || y >= zone.h) break;
@@ -524,17 +524,17 @@ PF.lattice = (() => {
    *  outfields and thicken the ruins. */
   function classWeights(world, atRing) {
     const axes = PF.weather.axesOf(world);
-    const surround = PF.own(TUNE.SURROUND_BIAS, world?.surround) ? world.surround : null;
-    const nearness = 1 / (1 + Math.max(0, atRing - 1) * TUNE.SURROUND_FALLOFF);
-    const wildness = Math.min(TUNE.RING_WILDNESS * atRing, TUNE.RING_WILDNESS_CAP);
+    const surround = PF.own(LATTICE_TUNE.SURROUND_BIAS, world?.surround) ? world.surround : null;
+    const nearness = 1 / (1 + Math.max(0, atRing - 1) * LATTICE_TUNE.SURROUND_FALLOFF);
+    const wildness = Math.min(LATTICE_TUNE.RING_WILDNESS * atRing, LATTICE_TUNE.RING_WILDNESS_CAP);
     const out = {};
-    for (const [cls, spec] of Object.entries(TUNE.CLASSES)) {
+    for (const [cls, spec] of Object.entries(LATTICE_TUNE.CLASSES)) {
       let weight = spec.weight;
-      weight *= biasOf(TUNE.LATITUDE_BIAS, axes.latitude, cls);
-      weight *= biasOf(TUNE.PRECIP_BIAS, axes.precipitation, cls);
-      if (surround) weight *= 1 + (biasOf(TUNE.SURROUND_BIAS, surround, cls) - 1) * nearness;
+      weight *= biasOf(LATTICE_TUNE.LATITUDE_BIAS, axes.latitude, cls);
+      weight *= biasOf(LATTICE_TUNE.PRECIP_BIAS, axes.precipitation, cls);
+      if (surround) weight *= 1 + (biasOf(LATTICE_TUNE.SURROUND_BIAS, surround, cls) - 1) * nearness;
       weight *= Math.max(0, 1 + spec.wildness * wildness);
-      out[cls] = Math.max(TUNE.WEIGHT_FLOOR, weight);
+      out[cls] = Math.max(LATTICE_TUNE.WEIGHT_FLOOR, weight);
     }
     return out;
   }
@@ -547,8 +547,8 @@ PF.lattice = (() => {
     let landmarks = 0;
     for (const [cls, weight] of Object.entries(weights)) {
       total += weight;
-      const feature = TUNE.CLASSES[cls].feature;
-      if (feature) landmarks += weight * (feature.always ? 1 : TUNE.LANDMARK_ODDS);
+      const feature = LATTICE_TUNE.CLASSES[cls].feature;
+      if (feature) landmarks += weight * (feature.always ? 1 : LATTICE_TUNE.LANDMARK_ODDS);
     }
     return total > 0 ? landmarks / total : 0;
   }
@@ -569,12 +569,12 @@ PF.lattice = (() => {
     return last;
   };
 
-  const themeWords = (world) => PF.own(TUNE.WORDS, world?.theme) ?? TUNE.WORDS["cozy-village"];
+  const themeWords = (world) => PF.own(LATTICE_TUNE.WORDS, world?.theme) ?? LATTICE_TUNE.WORDS["cozy-village"];
 
   /** The class a cell is, without building it. Every consumer that wants to know
    *  what is out there without paying for tiles asks here. */
   function classFor(world, cx, cy) {
-    const stream = PF.rng(PF.hashStr(`${(world?.seed ?? 0) >>> 0}|${TUNE.STREAM_LABEL}|${cx}|${cy}`));
+    const stream = PF.rng(PF.hashStr(`${(world?.seed ?? 0) >>> 0}|${LATTICE_TUNE.STREAM_LABEL}|${cx}|${cy}`));
     return pickWeighted(classWeights(world, ring(cx, cy)), stream());
   }
 
@@ -584,7 +584,7 @@ PF.lattice = (() => {
    *  would make a name depend on where the player had been. */
   function nameFor(world, cx, cy, cls) {
     const book = PF.own(themeWords(world), cls);
-    const stream = PF.rng(PF.hashStr(`${(world?.seed ?? 0) >>> 0}|${TUNE.NAME_STREAM_LABEL}|${cx}|${cy}`));
+    const stream = PF.rng(PF.hashStr(`${(world?.seed ?? 0) >>> 0}|${LATTICE_TUNE.NAME_STREAM_LABEL}|${cx}|${cy}`));
     const noun = book.noun[(stream() * book.noun.length) | 0];
     const taken = new Set(
       Object.values(world?.zones ?? {})
@@ -671,12 +671,12 @@ PF.lattice = (() => {
   const DRESS = {
     pools(zone, rnd, reserved) {
       const prims = PF.world.prims;
-      for (let i = 0; i < TUNE.POOLS.count; i++) {
+      for (let i = 0; i < LATTICE_TUNE.POOLS.count; i++) {
         const rect = {
-          x: 2 + ((rnd() * (zone.w - 4 - TUNE.POOLS.w)) | 0),
-          y: 2 + ((rnd() * (zone.h - 4 - TUNE.POOLS.h)) | 0),
-          w: TUNE.POOLS.w,
-          h: TUNE.POOLS.h,
+          x: 2 + ((rnd() * (zone.w - 4 - LATTICE_TUNE.POOLS.w)) | 0),
+          y: 2 + ((rnd() * (zone.h - 4 - LATTICE_TUNE.POOLS.h)) | 0),
+          w: LATTICE_TUNE.POOLS.w,
+          h: LATTICE_TUNE.POOLS.h,
         };
         if (!rectFree(zone, rect, reserved)) continue;
         prims.fillRect(zone, rect.x, rect.y, rect.w, rect.h, "ground", "water", true);
@@ -684,9 +684,9 @@ PF.lattice = (() => {
     },
     furrows(zone, rnd, reserved) {
       const prims = PF.world.prims;
-      const top = TUNE.FURROWS.inset + ((rnd() * TUNE.FURROWS.gap) | 0);
-      for (let row = 0; row < TUNE.FURROWS.rows; row++) {
-        const y = top + row * TUNE.FURROWS.gap;
+      const top = LATTICE_TUNE.FURROWS.inset + ((rnd() * LATTICE_TUNE.FURROWS.gap) | 0);
+      for (let row = 0; row < LATTICE_TUNE.FURROWS.rows; row++) {
+        const y = top + row * LATTICE_TUNE.FURROWS.gap;
         if (y >= zone.h - 2) break;
         for (let x = 2; x < zone.w - 2; x++) {
           if (reserved.has(key(zone, x, y))) continue;
@@ -705,7 +705,7 @@ PF.lattice = (() => {
    *  reads as a way through the trees rather than a road somebody laid. */
   function corridorTiles(zone, gates, rnd) {
     const band = (extent) =>
-      Math.round(extent * TUNE.HUB_BAND.lo) + ((rnd() * (extent * (TUNE.HUB_BAND.hi - TUNE.HUB_BAND.lo))) | 0);
+      Math.round(extent * LATTICE_TUNE.HUB_BAND.lo) + ((rnd() * (extent * (LATTICE_TUNE.HUB_BAND.hi - LATTICE_TUNE.HUB_BAND.lo))) | 0);
     const hub = { x: band(zone.w), y: band(zone.h) };
     const out = [];
     const line = (x0, y0, x1, y1) => {
@@ -744,16 +744,16 @@ PF.lattice = (() => {
     const prims = PF.world.prims;
     const id = idFor(cx, cy);
     const seed = (world?.seed ?? 0) >>> 0;
-    const rnd = PF.rng(PF.hashStr(`${seed}|${TUNE.STREAM_LABEL}|${cx}|${cy}`));
+    const rnd = PF.rng(PF.hashStr(`${seed}|${LATTICE_TUNE.STREAM_LABEL}|${cx}|${cy}`));
     const cls = pickWeighted(classWeights(world, ring(cx, cy)), rnd());
-    const spec = TUNE.CLASSES[cls];
+    const spec = LATTICE_TUNE.CLASSES[cls];
     const book = PF.own(themeWords(world), cls);
 
-    const zone = prims.makeZone(id, nameFor(world, cx, cy, cls), TUNE.CHUNK_W, TUNE.CHUNK_H, spec.ground);
+    const zone = prims.makeZone(id, nameFor(world, cx, cy, cls), LATTICE_TUNE.CHUNK_W, LATTICE_TUNE.CHUNK_H, spec.ground);
     zone.cell = { cx, cy };
     zone.terrain = cls; // the word the word book used, for the HUD and the lanes
-    zone.mapKind = TUNE.CHUNK_MAP_KIND;
-    zone.mapExport = TUNE.CHUNK_MAP_EXPORT;
+    zone.mapKind = LATTICE_TUNE.CHUNK_MAP_KIND;
+    zone.mapExport = LATTICE_TUNE.CHUNK_MAP_EXPORT;
     for (let i = 0; i < zone.ground.length; i++) if (rnd() < spec.mottle.rate) zone.ground[i] = spec.mottle.tile;
     prims.borderTrees(zone);
 
@@ -770,9 +770,9 @@ PF.lattice = (() => {
     // The landmark, if this cell carries one. Anchored against the reservation
     // exactly as the wilds anchors against its road: a feature with nowhere safe
     // is dropped, which reads out here as a plainer wood.
-    if (spec.feature && (spec.feature.always || rnd() < TUNE.LANDMARK_ODDS)) {
-      const size = TUNE.FEATURE_RECTS[spec.feature.tag];
-      for (let attempt = 0; attempt < TUNE.FEATURE_TRIES; attempt++) {
+    if (spec.feature && (spec.feature.always || rnd() < LATTICE_TUNE.LANDMARK_ODDS)) {
+      const size = LATTICE_TUNE.FEATURE_RECTS[spec.feature.tag];
+      for (let attempt = 0; attempt < LATTICE_TUNE.FEATURE_TRIES; attempt++) {
         const rect = {
           x: 2 + ((rnd() * (zone.w - 4 - size.w)) | 0),
           y: 2 + ((rnd() * (zone.h - 4 - size.h)) | 0),
@@ -816,7 +816,7 @@ PF.lattice = (() => {
     // Flavor rides RARITY: a landmark cell injects one line on first entry and an
     // ordinary cell costs nothing at all, so the prose budget is a function of
     // how many landmarks exist to find rather than of how far anybody walks.
-    if (zone.features.length && book.flavor) zone.flavor = book.flavor.slice(0, TUNE.FLAVOR_MAX_CHARS);
+    if (zone.features.length && book.flavor) zone.flavor = book.flavor.slice(0, LATTICE_TUNE.FLAVOR_MAX_CHARS);
     prims.sealPockets(zone, zone.spawn);
     return zone;
   }
@@ -958,14 +958,14 @@ PF.lattice = (() => {
    *  plus the one a step has just materialized and not yet arrived in. */
   function residency(world, currentZoneId, keep) {
     if (!world || !world.zones) return [];
-    const limit = Number.isSafeInteger(keep) && keep >= 0 ? keep : TUNE.RESIDENCY_KEEP;
+    const limit = Number.isSafeInteger(keep) && keep >= 0 ? keep : LATTICE_TUNE.RESIDENCY_KEEP;
     const seen = Array.isArray(world._entered) ? world._entered : [];
     const cells = Object.keys(world.zones).filter((id) => {
       const cell = parse(id);
       // The id this world would MINT for that cell, so a chunk standing under an
       // id the world has since anchored elsewhere is never counted as one.
       if (!cell || cellZoneId(world, cell.cx, cell.cy) !== id) return false;
-      return PF.own(world.zones, id)?.mapKind === TUNE.CHUNK_MAP_KIND;
+      return PF.own(world.zones, id)?.mapKind === LATTICE_TUNE.CHUNK_MAP_KIND;
     });
     const rank = (id) => seen.lastIndexOf(id);
     const held = (id) => id === currentZoneId || id === world.startZone || !!PF.own(world.zones, id)?.npcs?.length;
@@ -995,7 +995,7 @@ PF.lattice = (() => {
    *  of cells it has let go — it remembers further back than residency holds, so
    *  a cell that comes back is not treated as somewhere new. */
   function evict(core, world, currentZoneId) {
-    const gone = residency(world, currentZoneId, TUNE.RESIDENCY_KEEP);
+    const gone = residency(world, currentZoneId, LATTICE_TUNE.RESIDENCY_KEEP);
     for (const id of gone) {
       delete world.zones[id];
       core?.render?.invalidateZone(id);
@@ -1034,7 +1034,7 @@ PF.lattice = (() => {
     const at = seen.indexOf(entry.id);
     if (at >= 0) seen.splice(at, 1);
     seen.push(entry.id);
-    if (seen.length > TUNE.SEEN_MAX) seen.splice(0, seen.length - TUNE.SEEN_MAX);
+    if (seen.length > LATTICE_TUNE.SEEN_MAX) seen.splice(0, seen.length - LATTICE_TUNE.SEEN_MAX);
     entry.discovered = discoverCell(core, world, entry.id);
     // LAST, and after the arrival has been counted: the cell just walked into is
     // the most recent thing in the order, so the policy reading it can never
@@ -1064,7 +1064,7 @@ PF.lattice = (() => {
     );
 
   return {
-    TUNE,
+    TUNE: LATTICE_TUNE,
     DIRS,
     CHUNK_ID_RE,
     idFor,
