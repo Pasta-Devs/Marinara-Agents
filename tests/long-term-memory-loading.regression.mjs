@@ -24,7 +24,13 @@ const previewBlock = sources.slice(sources.indexOf("const preview = useQuery({")
 assert.match(previewBlock, /sourceContextMatchesProps && sourceTargetResolved && source !== "lorebooks"/u);
 assert.match(previewBlock, /const lorebookPreview = useQuery\(/u);
 assert.match(previewBlock, /sourceContextMatchesProps && sourceTargetResolved && source === "lorebooks"/u);
-assert.match(previewBlock, /focusedFlatSourceId !== null/u);
+const sourceDetailsBlock = sources.slice(
+  sources.indexOf("const sourceDetails = useQuery({"),
+  sources.indexOf("const previewData ="),
+);
+assert.match(sourceDetailsBlock, /scopeTargets\.isSuccess/u);
+assert.match(sourceDetailsBlock, /sourceContextMatchesProps/u);
+assert.match(sourceDetailsBlock, /focusedFlatSourceId !== null/u);
 assert.match(sources, /const sourceContextMatchesProps = sourceContextKey === \(props\.chatId \?\? "all"\)/u);
 assert.match(sources, /const sourceTargetResolved = Boolean\(sourceTarget && scopeTargets\.isSuccess\)/u);
 assert.match(
@@ -40,5 +46,9 @@ assert.match(
   /const sourceDetailsData = sourceContextMatchesProps && sourceTargetResolved \? sourceDetails\.data : undefined/u,
 );
 assert.match(sources, /setSourceTargetId\(props\.chatId \? `chat:\$\{props\.chatId\}` : "all"\)/u);
+assert.match(sources, /scopeTargetOptions\.find\(\(target\) => target\.id === sourceTargetId\)/u);
+assert.match(sources, /setSourceTargetId\(next\)/u);
+assert.match(sources, /if \(scopeTargets\.isError\) \{/u);
+assert.match(sources, /scopeTargets\.refetch\(\)/u);
 
 console.log("Long-Term Memory loading regression passed: shared scope-target cache and resolved-scope previews.");

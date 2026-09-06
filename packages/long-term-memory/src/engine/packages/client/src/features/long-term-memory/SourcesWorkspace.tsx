@@ -2520,6 +2520,22 @@ export default function SourcesWorkspace({
       ? "[&>:not([data-ltm-source-task-result-workbench])]:hidden"
       : "";
 
+  if (scopeTargets.isError) {
+    return (
+      <section data-ltm-surface="sources" className="space-y-4">
+        <StatusSurface tone="danger">
+          {scopeTargets.error instanceof Error
+            ? scopeTargets.error.message
+            : localizeUi("ui.longTermMemory.sourcesworkspace.scopeTargetsCouldNotLoad")}
+          <Button onClick={() => void scopeTargets.refetch()}>
+            <RefreshCw aria-hidden="true" size="0.75rem" />
+            {localizeUi("ui.longTermMemory.activityview.retry")}
+          </Button>
+        </StatusSurface>
+      </section>
+    );
+  }
+
   return (
     <section
       data-ltm-surface="sources"

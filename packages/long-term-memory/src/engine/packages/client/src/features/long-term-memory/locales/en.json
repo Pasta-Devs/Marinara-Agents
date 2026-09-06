@@ -701,6 +701,7 @@
   "ui.longTermMemory.sourcesworkspace.sourceMemory": "Source note:",
   "ui.longTermMemory.sourcesworkspace.sourceParts": "source parts",
   "ui.longTermMemory.sourcesworkspace.sourcePreviewCouldNotLoad": "Source preview could not load.",
+  "ui.longTermMemory.sourcesworkspace.scopeTargetsCouldNotLoad": "Source scopes could not load.",
   "ui.longTermMemory.sourcesworkspace.sourceStatus": "Source status",
   "ui.longTermMemory.sourcesworkspace.sourceTypes": "Source types",
   "ui.longTermMemory.sourcesworkspace.refreshSelectedSources": "Refresh selected sources",
