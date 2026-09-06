@@ -329,13 +329,7 @@ export function SlurpProfileSurface<TTab extends string = SlurpProfileTab>({
           )}
         </div>
 
-        <div
-          className={cn(
-            "mt-4 grid w-full min-w-0 items-start gap-4 text-left @min-[680px]:mt-0",
-            hasProfileActions &&
-              "@min-[860px]:grid-cols-[minmax(0,1fr)_auto] @min-[860px]:items-center @min-[860px]:gap-8",
-          )}
-        >
+        <div className="mt-4 grid w-full min-w-0 items-start gap-4 text-left @min-[680px]:mt-0">
           <div className="flex min-w-0 flex-col items-start">
             {identityEyebrow && (
               <div className="mb-1.5 text-[0.68rem] font-bold uppercase tracking-[0.14em] text-[var(--noodle-accent)]">
@@ -477,7 +471,7 @@ export function SlurpProfileSurface<TTab extends string = SlurpProfileTab>({
               </div>
             )}
           </div>
-          {hasProfileActions && <div className="min-w-0 @min-[860px]:max-w-[28rem]">{profileActions}</div>}
+          {hasProfileActions && <div className="mt-1 min-w-0">{profileActions}</div>}
         </div>
       </div>
       {(preTabsContent || editor) && (

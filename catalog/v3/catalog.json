@@ -1524,7 +1524,7 @@
         "schemaVersion": 1,
         "id": "slurp",
         "name": "Slurp",
-        "version": "1.1.22",
+        "version": "1.1.23",
         "description": "The standalone successor to NoodleR: create a local Creator profile from an Engine character or persona, publish public or locked posts, and simulate subscriptions and audience activity. Install it, restart Marinara Engine when prompted, then open Home → Slurp.",
         "localizations": {
           "de": {
@@ -1589,8 +1589,8 @@
           },
           {
             "path": "client.js",
-            "sha256": "9266d2355f6cea9466263f5e430a35f31e2cb1d501509cdf6dc976cc29e80b05",
-            "bytes": 2659693
+            "sha256": "dd68276b228cccadc57e7ac3c211ef42d6e7651b2fd96aeea11e7f282f6c4fe3",
+            "bytes": 2659302
           },
           {
             "path": "slurp-logo.png",
@@ -1615,9 +1615,9 @@
       "category": "misc",
       "iconUrl": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artwork/agent-covers/slurp.png",
       "artifact": {
-        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/slurp-1.1.22.zip",
-        "sha256": "1dbdf413cf519ac3e33ad7f100a0f0506305d757ca730c958aac3b6c9011085b",
-        "bytes": 4693220
+        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/slurp-1.1.23.zip",
+        "sha256": "72de228831620f598f8b49f98cbbdbfa07028f4b946096d71e279fdf72b28abe",
+        "bytes": 4692829
       },
       "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Agents/blob/main/packages/slurp/README.md"
     },

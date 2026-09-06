@@ -1,5 +1,10 @@
 # Slurp release notes
 
+## 1.1.23 — 2026-09-06
+
+- Profile actions now stay directly after the Creator identity and bio at every
+  width, before the Creator tools and content tabs.
+
 ## 1.1.22 — 2026-09-06
 
 - Creator headers now keep the avatar high in the banner at every width, give

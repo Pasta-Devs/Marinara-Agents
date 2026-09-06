@@ -336,11 +336,12 @@ assert.match(
   /grid-cols-4[\s\S]*?\[&>:first-child\]:col-span-1[\s\S]*?\[&>:nth-child\(2\)\]:col-span-3/u,
   "narrow Creator actions must reserve room for the primary subscription action",
 );
-assert.match(
+assert.doesNotMatch(
   profileSurface,
   /@min-\[860px\]:grid-cols-\[minmax\(0,1fr\)_auto\]/u,
-  "Creator Room identity and actions must use a responsive non-overlapping grid",
+  "profile actions must not move beside the identity content on wide screens",
 );
+assert.match(profileSurface, /hasProfileActions && <div className="mt-1 min-w-0">\{profileActions\}<\/div>/u);
 assert.match(profileSurface, /className="@container/u, "Creator Rooms must respond to their actual canvas width");
 assert.match(
   shell,
