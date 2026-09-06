@@ -4068,7 +4068,7 @@ function StageProfileView({
                 aria-expanded={creatorToolsOpen}
                 aria-controls="slurp-creator-tools-panel"
                 title={localizeUi("ui.slurp.profile.creatorToolsDetail")}
-                className="flex min-h-10 w-full items-center gap-2 rounded-xl px-3 text-start text-xs font-semibold text-[var(--muted-foreground)] transition-colors hover:bg-[var(--accent)] hover:text-[var(--foreground)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--noodle-accent)]"
+                className="flex min-h-11 w-full items-center gap-2 rounded-s-2xl px-3 text-start text-xs font-semibold text-[var(--muted-foreground)] transition-colors hover:bg-[var(--accent)] hover:text-[var(--foreground)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--noodle-accent)]"
               >
                 <Sparkles size={13} className="shrink-0 text-[var(--noodle-accent)]" aria-hidden="true" />
                 <span className="min-w-0 flex-1 truncate">{localizeUi("ui.slurp.profile.creatorTools")}</span>

@@ -1,5 +1,11 @@
 # Slurp release notes
 
+## 1.1.27 — 2026-09-06
+
+- The collapsed Profile controls rail is now a single compact 44px control:
+  Edit Profile is integrated into its trailing edge instead of appearing as a
+  separate button beside it.
+
 ## 1.1.26 — 2026-09-06
 
 - Creator tools are now Profile controls: a quieter unified rail that keeps Edit

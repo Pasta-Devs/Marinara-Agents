@@ -384,7 +384,8 @@ assert.match(
   /\(preTabsContent \|\| editor\) && \(/u,
   "Profile controls and Edit Profile must share the same rail before public profile content",
 );
-assert.match(profileSurface, /flex min-h-12 items-start gap-2[\s\S]*?\{preTabsContent\}[\s\S]*?\{editor &&/u);
+assert.match(profileSurface, /flex min-h-11 items-start[\s\S]*?\{preTabsContent\}[\s\S]*?\{editor &&/u);
+assert.match(profileSurface, /rounded-e-2xl border-s[\s\S]*?ui\.noodle\.stageprofileview\.editProfile/u);
 assert.match(home, /data-slurp-home-masthead/u, "Home must expose one unified lobby masthead");
 assert.doesNotMatch(
   home,
