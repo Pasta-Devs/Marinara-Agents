@@ -3187,14 +3187,23 @@ both places the assets live:
   rather than left alone. `manifest.json` moved **three lines**: the version, and `client.js`'s
   sha256/bytes pair. Every asset row in it is untouched, which is the same fact stated by the file
   that would have had to change if it were not true.
-- **`client.js` at 1,387,737 bytes over nineteen modules** (eighteen in 0.14; `21-lattice.js` is the
+- **`client.js` at 1,387,996 bytes over nineteen modules** (eighteen in 0.14; `21-lattice.js` is the
   nineteenth), and the figure was reproduced independently of the build: concatenating the modules
-  and the wrapper by hand predicts 1,387,737 exactly — 1,386,939 bytes of source plus 798 of banner
+  and the wrapper by hand predicts 1,387,996 exactly — 1,387,198 bytes of source plus 798 of banner
   and IIFE. That is the check the 0.11.0 CRLF incident is the reason for.
-- **The `0.16.0` artifact zip at 1,399,573 bytes**, new; the `0.15.0` zip is untouched, as is every
+- **The `0.16.0` artifact zip at 1,399,832 bytes**, new; the `0.15.0` zip is untouched, as is every
   older one. **Three bakes over the same tree produced byte-identical output** — the same zip hash,
   the same `client.js`, the same manifest — so the artifact is reproducible rather than merely
   deterministic-by-design.
+- **The cycle carries TWO bake commits, and the second one is the point of this bullet.** The first
+  baked a `src/21-lattice.js` that `npm run check` refuses. Renaming the tunables block `TUNE` →
+  `LATTICE_TUNE` pushed exactly three statements past Prettier's 120-column width, and the arc
+  validated with the package harness alone — which loads `src/` and never looks at how it is
+  wrapped — so nothing said so. Bisected to the rename commit; every lattice commit before it is
+  Prettier-clean. The repair is whitespace only (`prettier --write` rewrapping those three
+  statements) and the harness is green and byte-stable across it, but it moved `client.js` and
+  therefore the manifest and the zip. **A bake is only as good as the check that ran before it** —
+  worth more than the 259 bytes it cost.
 - **No catalog entry moved, and that is correct**: Pixelforge is in `INCOMPLETE_PACKAGE_IDS` and
   appears in no published catalog. `scripts/validate-catalog.mjs` prints its own witness for that —
   *"Uncatalogued package manifests valid: pixelforge"* — beside 35 catalogued packages, and the

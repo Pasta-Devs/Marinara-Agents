@@ -16,9 +16,11 @@
 //  2. GATES ARE ARITHMETIC, NEVER RECORDS. A lattice edge is `zone.gates`, a
 //     list of border tiles with a direction, and where it LEADS is computed at
 //     step time from the cell the zone stands in. Nothing is ever written into
-//     `zone.portals`, so the shipped "every portal's target exists" contract
-//     (43 harness sites) needs no relaxation, and there is nothing to dangle
-//     when a neighbour is evicted.
+//     `zone.portals`, so the shipped "every portal's target exists" contract —
+//     the one `checkWorld` asserts over every world the harness hands it — needs
+//     no relaxation, and there is nothing to dangle when a neighbour is evicted.
+//     (A hand-count of those call sites stood here and went stale inside one
+//     arc, which is why the claim names the checker instead of counting it.)
 //  3. GATES ARE PUNCHED IN TWO PHASES. Positions are computed BEFORE a zone's
 //     tree scatter and reserved against it; the paint lands AFTER everything
 //     else, and the pocket seal runs after the paint. Both halves are load-
@@ -384,7 +386,8 @@ PF.lattice = (() => {
   // choosing rather than the map's middle, and a terminal that stayed centred
   // would be a gate the road does not arrive at. On a centred junction the two
   // answers are identical, which is why every existing caller keeps its result.
-  const spanStart = (extent, centre) => (Number.isInteger(centre) ? centre : (extent / 2) | 0) - (LATTICE_TUNE.GATE_SPAN >> 1);
+  const spanStart = (extent, centre) =>
+    (Number.isInteger(centre) ? centre : (extent / 2) | 0) - (LATTICE_TUNE.GATE_SPAN >> 1);
 
   /** The gate tiles for one direction, about an optional `{x, y}` spine. */
   function gateTiles(zone, dir, spine) {
@@ -705,7 +708,8 @@ PF.lattice = (() => {
    *  reads as a way through the trees rather than a road somebody laid. */
   function corridorTiles(zone, gates, rnd) {
     const band = (extent) =>
-      Math.round(extent * LATTICE_TUNE.HUB_BAND.lo) + ((rnd() * (extent * (LATTICE_TUNE.HUB_BAND.hi - LATTICE_TUNE.HUB_BAND.lo))) | 0);
+      Math.round(extent * LATTICE_TUNE.HUB_BAND.lo) +
+      ((rnd() * (extent * (LATTICE_TUNE.HUB_BAND.hi - LATTICE_TUNE.HUB_BAND.lo))) | 0);
     const hub = { x: band(zone.w), y: band(zone.h) };
     const out = [];
     const line = (x0, y0, x1, y1) => {
@@ -749,7 +753,13 @@ PF.lattice = (() => {
     const spec = LATTICE_TUNE.CLASSES[cls];
     const book = PF.own(themeWords(world), cls);
 
-    const zone = prims.makeZone(id, nameFor(world, cx, cy, cls), LATTICE_TUNE.CHUNK_W, LATTICE_TUNE.CHUNK_H, spec.ground);
+    const zone = prims.makeZone(
+      id,
+      nameFor(world, cx, cy, cls),
+      LATTICE_TUNE.CHUNK_W,
+      LATTICE_TUNE.CHUNK_H,
+      spec.ground,
+    );
     zone.cell = { cx, cy };
     zone.terrain = cls; // the word the word book used, for the HUD and the lanes
     zone.mapKind = LATTICE_TUNE.CHUNK_MAP_KIND;
