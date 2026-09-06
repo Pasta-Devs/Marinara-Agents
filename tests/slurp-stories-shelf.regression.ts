@@ -8,6 +8,8 @@ assert.match(home, /updateNoodlerPostDraft\(mainAuthorProfile\.id, \{ postType: 
 assert.match(home, /useState\(draft\.postType === "story"\)/u);
 assert.match(home, /ui\.slurp\.moments\.add/u);
 assert.doesNotMatch(home, /localizeUi\("ui\.slurp\.moments\.detail"\)/u);
+assert.match(home, /aria-label=\{localizeUi\("ui\.slurp\.moments\.title"\)\}/u);
+assert.doesNotMatch(home, /id="slurp-moments-heading"/u, "The rail must not spend a visible row on a heading");
 assert.match(home, /border-b border-\[var\(--noodle-divider\)\].*slurp-surface-raised/u);
 assert.match(home, /function SlurpMomentShelfTile/u);
 assert.match(home, /aspect-\[3\/4\]/u, "Story shelf items must preview the Story rather than only its avatar");

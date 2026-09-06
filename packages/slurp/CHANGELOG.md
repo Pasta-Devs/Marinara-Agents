@@ -1,5 +1,10 @@
 # Slurp release notes
 
+## 1.1.33 — 2026-09-06
+
+- Removed the visible Stories heading so the Home memory ribbon begins directly
+  with its visual create and preview tiles.
+
 ## 1.1.32 — 2026-09-06
 
 - Stories on Home are now an image-first memory ribbon: compact portrait previews

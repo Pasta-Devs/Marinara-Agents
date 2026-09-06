@@ -36,6 +36,12 @@
     "slurp": {
       "versions": [
         {
+          "version": "1.1.33",
+          "date": "2026-09-06",
+          "notes": "- Removed the visible Stories heading so the Home memory ribbon begins directly\n  with its visual create and preview tiles.",
+          "highlight": false
+        },
+        {
           "version": "1.1.32",
           "date": "2026-09-06",
           "notes": "- Stories on Home are now an image-first memory ribbon: compact portrait previews\n  reveal each Story at a glance, while adding, unread state, and locks stay quiet.",
@@ -147,12 +153,6 @@
           "version": "1.1.13",
           "date": "2026-09-06",
           "notes": "- World and wallet updates now stay consistent when several Slurp actions happen at once.\n- World activity can be turned off without changing the audience or relationship state.\n- Existing subscriptions recover their payment record or lapse when the wallet cannot renew them.\n- World interactions verify the stored audience identity before they are accepted.",
-          "highlight": false
-        },
-        {
-          "version": "1.1.12",
-          "date": "2026-09-06",
-          "notes": "- Two new dials in Settings. \"How busy the world is\" controls how often fans ask\n  you for things and whether reactions arrive while you read — Off means nobody\n  interrupts you at all. \"How big the platform feels\" scales follower and view\n  counts, while people who actually follow, subscribe or pay stay counted exactly.",
           "highlight": false
         }
       ]

@@ -5584,7 +5584,7 @@ function SlurpMomentsShelf({
   return (
     <section
       data-component="SlurpHome.Moments"
-      aria-labelledby="slurp-moments-heading"
+      aria-label={localizeUi("ui.slurp.moments.title")}
       className={cn(
         "relative isolate overflow-hidden",
         embedded
@@ -5592,12 +5592,7 @@ function SlurpMomentsShelf({
           : "mx-3 mt-3 rounded-xl bg-[linear-gradient(145deg,var(--slurp-surface-raised),color-mix(in_srgb,var(--noodle-accent)_7%,var(--slurp-canvas)))] py-4 shadow-[var(--slurp-shadow-floating)] ring-1 ring-inset ring-[var(--noodle-divider)] sm:mx-4",
       )}
     >
-      <div className={cn("px-4", embedded && "@min-[1024px]:px-5")}>
-        <h2 id="slurp-moments-heading" className="text-sm font-bold tracking-tight">
-          {localizeUi("ui.slurp.moments.title")}
-        </h2>
-      </div>
-      <div className="relative mt-2.5">
+      <div className="relative">
         <div className="pointer-events-none absolute inset-y-0 end-0 z-10 w-8 bg-[linear-gradient(to_left,var(--slurp-surface),transparent)]" />
         <div className="flex snap-x gap-2.5 overflow-x-auto px-4 pb-1 pe-10 [scroll-padding-inline-start:1rem] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden @min-[1024px]:px-5 @min-[1024px]:[scroll-padding-inline-start:1.25rem]">
           {onAddStory && (
