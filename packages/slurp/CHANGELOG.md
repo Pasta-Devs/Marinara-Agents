@@ -1,5 +1,9 @@
 # Slurp release notes
 
+## 1.2.6 — 2026-09-07
+
+- Fixed Slurp failing to load when wallet settings were normalized.
+
 ## 1.2.5 — 2026-09-07
 
 - Background audience activity no longer reacts to draft posts.

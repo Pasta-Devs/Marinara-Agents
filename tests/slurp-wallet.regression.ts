@@ -11,6 +11,15 @@ import {
   spend,
   subscriptionPaidThrough,
 } from "../packages/slurp/src/engine/packages/server/src/services/slurp/slurp-wallet.ts";
+const storageSource = readFileSync(
+  "packages/slurp/src/engine/packages/server/src/services/storage/slurp.storage.ts",
+  "utf8",
+);
+assert.match(
+  storageSource,
+  /slurpSettingsSchema = z\.object\(\{[\s\S]*?walletDayStartHour: z\.number\(\)\.int\(\)\.min\(0\)\.max\(23\)/u,
+  "the wallet day-start default must have a schema entry before settings normalization indexes it",
+);
 
 const day1 = new Date("2026-01-01T10:00:00.000Z");
 const day2 = new Date("2026-01-02T10:00:00.000Z");

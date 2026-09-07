@@ -281,6 +281,7 @@ export const slurpSettingsSchema = z.object({
   walletSubscriptionCost: z.number().int().min(0).max(9999),
   /** Daily stipend tops the balance up to this floor. Zero disables the stipend. */
   walletStipendFloor: z.number().int().min(0).max(99_999),
+  walletDayStartHour: z.number().int().min(0).max(23),
   walletAdReward: z.number().int().min(0).max(999),
   walletAdDailyCap: z.number().int().min(0).max(9999),
   walletEngagementReward: z.number().int().min(0).max(999),
