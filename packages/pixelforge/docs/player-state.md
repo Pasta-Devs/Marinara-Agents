@@ -3203,11 +3203,11 @@ both places the assets live:
   rather than left alone. `manifest.json` moved **three lines**: the version, and `client.js`'s
   sha256/bytes pair. Every asset row in it is untouched, which is the same fact stated by the file
   that would have had to change if it were not true.
-- **`client.js` at 1,387,996 bytes over nineteen modules** (eighteen in 0.14; `21-lattice.js` is the
+- **`client.js` at 1,396,090 bytes over nineteen modules** (eighteen in 0.14; `21-lattice.js` is the
   nineteenth), and the figure was reproduced independently of the build: concatenating the modules
-  and the wrapper by hand predicts 1,387,996 exactly — 1,387,198 bytes of source plus 798 of banner
+  and the wrapper by hand predicts 1,396,090 exactly — 1,395,292 bytes of source plus 798 of banner
   and IIFE. That is the check the 0.11.0 CRLF incident is the reason for.
-- **The `0.16.0` artifact zip at 1,399,832 bytes**, new; the `0.15.0` zip is untouched, as is every
+- **The `0.16.0` artifact zip at 1,407,926 bytes**, new; the `0.15.0` zip is untouched, as is every
   older one. **Three bakes over the same tree produced byte-identical output** — the same zip hash,
   the same `client.js`, the same manifest — so the artifact is reproducible rather than merely
   deterministic-by-design.
