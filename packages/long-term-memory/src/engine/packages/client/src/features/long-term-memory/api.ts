@@ -22,8 +22,10 @@ export const queryKeys = {
   lorebookPreview: ["long-term-memory", "lorebook-import-preview"] as const,
   activity: ["long-term-memory", "activity"] as const,
   scopeTargetsRoot: ["long-term-memory", "scope-targets"] as const,
+  localCharactersRoot: ["long-term-memory", "local-characters"] as const,
   lastInjectionRoot: ["long-term-memory", "last-injection"] as const,
   scopeTargets: (chatId: string | null | undefined) => ["long-term-memory", "scope-targets", chatId] as const,
+  localCharacters: (chatId: string | null | undefined) => ["long-term-memory", "local-characters", chatId] as const,
   lastInjection: (chatId: string | null | undefined) => ["long-term-memory", "last-injection", chatId] as const,
 } as const;
 

@@ -684,11 +684,6 @@ export function createLongTermMemoryRoutes(runtime: {
       const eligibleResources = resources.filter((resource) => resource.id !== PROFESSOR_MARI_CHARACTER_ID);
       const chatById = new Map(eligibleChats.map((chat) => [chat.id, chat]));
       const currentChat = chatId ? (chatById.get(chatId) ?? null) : null;
-      const localCatalogChats =
-        currentChat?.mode === "roleplay" ? (includeAllChats ? eligibleChats : [currentChat]) : [];
-      const localCatalogs = await Promise.all(
-        localCatalogChats.map((chat) => loadTrustedLtmSubjectCatalog(resolveChatLtmScope(chat), root, notes)),
-      );
       const chatIds = new Set<string>();
       const groupIds = new Set<string>();
       const characterIds = new Set<string>();
@@ -757,26 +752,6 @@ export function createLongTermMemoryRoutes(runtime: {
           })
           .sort((left, right) => left.label.localeCompare(right.label) || left.id.localeCompare(right.id)),
       );
-      const localCharacters = numberDuplicateLabels(
-        [
-          ...new Map(
-            localCatalogs.flatMap((catalog) => catalog.entries).map((entry) => [entry.subject.key, entry]),
-          ).values(),
-        ]
-          .flatMap((entry) =>
-            entry.subject.ref?.kind === "local_character" && entry.familyId
-              ? [
-                  {
-                    id: entry.subject.ref.id,
-                    label: entry.name,
-                    comment: `Roleplay family ${entry.familyId}`,
-                    familyId: entry.familyId,
-                  },
-                ]
-              : [],
-          )
-          .sort((left, right) => left.label.localeCompare(right.label) || left.id.localeCompare(right.id)),
-      );
       return {
         currentScope: currentChat ? resolveChatLtmScope(currentChat) : null,
         chats: namedChats,
@@ -795,7 +770,7 @@ export function createLongTermMemoryRoutes(runtime: {
             .sort((left, right) => left.label.localeCompare(right.label) || left.id.localeCompare(right.id)),
         ),
         characters: namedCharacters,
-        localCharacters,
+        localCharacters: [],
         personas: numberDuplicateLabels(
           [...(includeAllChats ? personas : personas.filter((persona) => personaIds.has(persona.id)))]
             .filter((persona) => persona.id !== PROFESSOR_MARI_CHARACTER_ID)
@@ -810,6 +785,41 @@ export function createLongTermMemoryRoutes(runtime: {
             .sort((left, right) => left.label.localeCompare(right.label) || left.id.localeCompare(right.id)),
         ),
       };
+    });
+    app.get<{ Querystring: unknown }>("/local-characters", async (request) => {
+      const { chatId, includeAllChats } = scopeTargetsQuery.parse(request.query);
+      const [notes, chats] = await Promise.all([storage.listNotes(), getPackagePersistence().listChats()]);
+      const eligibleChats = chats.filter(
+        (chat) => !normalizeLtmChatCharacterIds(chat.characterIds).includes(PROFESSOR_MARI_CHARACTER_ID),
+      );
+      const currentChat = chatId ? eligibleChats.find((chat) => chat.id === chatId) : undefined;
+      const catalogChats =
+        chatId === undefined && includeAllChats
+          ? eligibleChats.filter((chat) => chat.mode === "roleplay")
+          : currentChat?.mode === "roleplay"
+            ? includeAllChats
+              ? eligibleChats.filter((chat) => chat.mode === "roleplay")
+              : [currentChat]
+            : [];
+      if (!catalogChats.length) return [];
+      const catalogScope = {
+        chatIds: catalogChats.map((chat) => chat.id),
+        groupIds: [...new Set(catalogChats.flatMap((chat) => (chat.groupId ? [chat.groupId] : [])))],
+        characterIds: [...new Set(catalogChats.flatMap((chat) => normalizeLtmChatCharacterIds(chat.characterIds)))],
+        personaIds: [...new Set(catalogChats.flatMap((chat) => (chat.personaId ? [chat.personaId] : [])))],
+      };
+      const catalog = await loadTrustedLtmSubjectCatalog(catalogScope, root, notes);
+      return numberDuplicateLabels(
+        catalog.entries
+          .filter((entry) => entry.subject.ref?.kind === "local_character" && entry.familyId)
+          .map((entry) => ({
+            id: entry.subject.ref!.id,
+            label: entry.name,
+            comment: `Roleplay family ${entry.familyId}`,
+            familyId: entry.familyId!,
+          }))
+          .sort((left, right) => left.label.localeCompare(right.label) || left.id.localeCompare(right.id)),
+      );
     });
     app.get<{ Params: { id: string } }>("/notes/:id/derived", async (request, reply) => {
       const sourceNoteId = ltmNoteIdSchema.parse(request.params.id);

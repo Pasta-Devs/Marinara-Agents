@@ -4,6 +4,12 @@
     "long-term-memory": {
       "versions": [
         {
+          "version": "1.2.23",
+          "date": "2026-09-06",
+          "notes": "- Restored responsive Memory Vault and Sources loading by deferring local-character discovery.\n- Reused one aggregate local-character catalog and kept its loading and retry state visible.",
+          "highlight": true
+        },
+        {
           "version": "1.2.22",
           "date": "2026-09-06",
           "notes": "- Kept user-selected source targets valid while isolating parent chat context transitions.\n- Prevented stale source previews and details from rendering during scope changes.",

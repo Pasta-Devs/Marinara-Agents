@@ -1189,12 +1189,19 @@ async function main() {
       true,
       JSON.stringify(scopeTargets.json().characters),
     );
+    assert.deepEqual(scopeTargets.json().localCharacters, []);
+    const localCharacters = await app.inject({
+      method: "GET",
+      url: "/api/long-term-memory/local-characters?chatId=chat-a",
+      headers,
+    });
+    assert.equal(localCharacters.statusCode, 200, localCharacters.body);
     assert.equal(
-      scopeTargets.json().localCharacters.some((character: any) => character.id === `${observatoryFamilyId}:mara`),
+      localCharacters.json().some((character: any) => character.id === `${observatoryFamilyId}:mara`),
       true,
     );
     assert.equal(
-      scopeTargets.json().localCharacters.some((character: any) => character.id === `${archiveChatFamilyId}:mara`),
+      localCharacters.json().some((character: any) => character.id === `${archiveChatFamilyId}:mara`),
       false,
     );
     const gameScopeTargets = await app.inject({
@@ -1204,6 +1211,13 @@ async function main() {
     });
     assert.equal(gameScopeTargets.statusCode, 200, gameScopeTargets.body);
     assert.deepEqual(gameScopeTargets.json().localCharacters, []);
+    const gameLocalCharacters = await app.inject({
+      method: "GET",
+      url: "/api/long-term-memory/local-characters?chatId=game-a&includeAllChats=true",
+      headers,
+    });
+    assert.equal(gameLocalCharacters.statusCode, 200, gameLocalCharacters.body);
+    assert.deepEqual(gameLocalCharacters.json(), []);
     const activeChatScopePreview = await app.inject({
       method: "POST",
       url: "/api/long-term-memory/import/preview",
@@ -1297,19 +1311,47 @@ async function main() {
         .characters.some((character: any) => character.id === "character-nyra" && character.label === "Nyra"),
       true,
     );
+    assert.deepEqual(allScopeTargets.json().localCharacters, []);
     assert.equal(
-      allScopeTargets.json().localCharacters.some((character: any) => character.id === `${archiveChatFamilyId}:mara`),
-      true,
-      JSON.stringify(allScopeTargets.json().localCharacters),
-    );
-    assert.equal(
-      [
-        ...allScopeTargets.json().characters,
-        ...allScopeTargets.json().personas,
-        ...allScopeTargets.json().localCharacters,
-      ].some((target: any) => target.label === "Game NPC"),
+      [...allScopeTargets.json().characters, ...allScopeTargets.json().personas].some(
+        (target: any) => target.label === "Game NPC",
+      ),
       false,
     );
+    const allLocalCharacters = await app.inject({
+      method: "GET",
+      url: "/api/long-term-memory/local-characters?chatId=chat-a&includeAllChats=true",
+      headers,
+    });
+    assert.equal(allLocalCharacters.statusCode, 200, allLocalCharacters.body);
+    assert.equal(
+      allLocalCharacters.json().some((character: any) => character.id === `${archiveChatFamilyId}:mara`),
+      true,
+      JSON.stringify(allLocalCharacters.json()),
+    );
+    assert.equal(
+      allLocalCharacters.json().some((character: any) => character.label === "Game NPC"),
+      false,
+      JSON.stringify(allLocalCharacters.json()),
+    );
+    const allLocalCharactersWithoutChat = await app.inject({
+      method: "GET",
+      url: "/api/long-term-memory/local-characters?includeAllChats=true",
+      headers,
+    });
+    assert.equal(allLocalCharactersWithoutChat.statusCode, 200, allLocalCharactersWithoutChat.body);
+    assert.equal(
+      allLocalCharactersWithoutChat.json().some((character: any) => character.id === `${archiveChatFamilyId}:mara`),
+      true,
+      JSON.stringify(allLocalCharactersWithoutChat.json()),
+    );
+    const unknownChatLocalCharacters = await app.inject({
+      method: "GET",
+      url: "/api/long-term-memory/local-characters?chatId=missing-chat&includeAllChats=true",
+      headers,
+    });
+    assert.equal(unknownChatLocalCharacters.statusCode, 200, unknownChatLocalCharacters.body);
+    assert.deepEqual(unknownChatLocalCharacters.json(), []);
     assert.deepEqual(
       allScopeTargets.json().groups.find((group: any) => group.id === "observatory-branches"),
       {

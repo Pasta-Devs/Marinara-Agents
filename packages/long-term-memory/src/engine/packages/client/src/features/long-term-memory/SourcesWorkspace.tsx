@@ -1997,6 +1997,7 @@ export default function SourcesWorkspace({
     await invalidateLtmQueries(client, [
       queryKeys.notes,
       queryKeys.scopeTargetsRoot,
+      queryKeys.localCharactersRoot,
       queryKeys.status,
       queryKeys.integrity,
       queryKeys.review,

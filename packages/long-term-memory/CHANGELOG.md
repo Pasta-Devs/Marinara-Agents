@@ -1,5 +1,10 @@
 # Long-Term Memory changelog
 
+## 1.2.23 — 2026-09-06 [highlight]
+
+- Restored responsive Memory Vault and Sources loading by deferring local-character discovery.
+- Reused one aggregate local-character catalog and kept its loading and retry state visible.
+
 ## 1.2.22 — 2026-09-06
 
 - Kept user-selected source targets valid while isolating parent chat context transitions.

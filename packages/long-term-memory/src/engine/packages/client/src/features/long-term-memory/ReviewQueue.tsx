@@ -1961,6 +1961,7 @@ export default function ReviewQueue({
           queryKeys.review,
           queryKeys.pendingDrafts,
           queryKeys.scopeTargetsRoot,
+          queryKeys.localCharactersRoot,
           ...(action === "accept" ? [queryKeys.notes, queryKeys.status, queryKeys.integrity, queryKeys.preview] : []),
         ]);
       }
