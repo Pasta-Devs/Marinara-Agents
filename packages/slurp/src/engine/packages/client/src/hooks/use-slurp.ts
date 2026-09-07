@@ -1730,6 +1730,38 @@ export function useRefreshTargetedNoodlerCreatorsNow() {
   });
 }
 
+export type NoodlerFirstPostJob = {
+  id: string;
+  executionId: string;
+  accountId: string;
+  status: "queued" | "running" | "generated" | "failed";
+  attempts: number;
+  postId: string | null;
+  error: string | null;
+};
+
+export function useEnqueueNoodlerFirstPosts() {
+  return useMutation({
+    mutationFn: (input: { executionId: string; accountIds: string[] }) =>
+      api.post<{ jobs: NoodlerFirstPostJob[] }>("/slurp/noodler/first-posts/enqueue", input),
+  });
+}
+
+export function useNoodlerFirstPostStatus(executionId: string | null, enabled = true) {
+  return useQuery({
+    queryKey: [...noodleKeys.noodlerRoot(), "first-posts", executionId ?? "none"],
+    queryFn: () =>
+      api.get<{ jobs: NoodlerFirstPostJob[]; complete: boolean }>(
+        `/slurp/noodler/first-posts/status?executionId=${encodeURIComponent(executionId!)}`,
+      ),
+    enabled: enabled && Boolean(executionId),
+    staleTime: 0,
+    refetchInterval: enabled && executionId ? 2_000 : false,
+    refetchIntervalInBackground: false,
+    retry: false,
+  });
+}
+
 export function useRefreshNoodlerFanActivityNow() {
   const qc = useQueryClient();
   return useMutation({

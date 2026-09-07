@@ -66,6 +66,7 @@ import {
   updateNoodlerPostWithMedia,
 } from "../services/slurp/slurp-post.operation.js";
 import { tryNoodlerAccountOperation } from "../services/slurp/slurp-account-operation-lock.js";
+import { createSlurpFirstPostQueue } from "../services/slurp/slurp-first-post-queue.service.js";
 import { trySlurpDataDeletion, trySlurpWrite } from "../services/slurp/slurp-operation-lock.js";
 import { removeAllNoodlerMedia } from "../services/slurp/slurp-media.js";
 import { clearNoodlerImageConnections } from "../services/slurp/slurp-image-connections.js";
@@ -432,6 +433,7 @@ export async function slurpRoutes(app: FastifyInstance) {
   const connections = createConnectionsStorage(app.db);
   const noodlerImages = createNoodlerNoodleImagesService(app.db);
   const ads = createGarnishAds(app.db);
+  const firstPostQueue = createSlurpFirstPostQueue(app.db);
   const garnishAdInputSchema = z.object({
     id: z.string().trim().min(1).max(120).optional(),
     kind: z.enum(["creator", "inline"]).default("inline"),
@@ -3064,6 +3066,23 @@ export async function slurpRoutes(app: FastifyInstance) {
     );
     if (result.status === "disabled") return reply.code(404).send({ error: "Not Found" });
     return { outcomes: result.outcomes };
+  });
+
+  app.post("/noodler/first-posts/enqueue", async (req, reply) => {
+    const parsed = z
+      .object({
+        executionId: z.string().trim().min(1).max(128),
+        accountIds: z.array(z.string().trim().min(1).max(64)).min(1).max(24),
+      })
+      .safeParse(req.body ?? {});
+    if (!parsed.success) return reply.code(400).send({ error: parsed.error.flatten() });
+    return { jobs: await firstPostQueue.enqueue(parsed.data.executionId, parsed.data.accountIds) };
+  });
+
+  app.get("/noodler/first-posts/status", async (req, reply) => {
+    const parsed = z.object({ executionId: z.string().trim().min(1).max(128) }).safeParse(req.query);
+    if (!parsed.success) return reply.code(400).send({ error: parsed.error.flatten() });
+    return firstPostQueue.status(parsed.data.executionId);
   });
 
   app.post("/noodler/refresh/images", async (req, reply) => {

@@ -8,6 +8,7 @@ import { startSlurpWorldScheduler } from "./slurp-world-scheduler.service.js";
 import { createSlurpActivationLifecycle } from "./slurp-activation-lifecycle.js";
 import { createSlurpStorage } from "../storage/slurp.storage.js";
 import * as slurpSchema from "../../db/schema/slurp.js";
+import { createSlurpFirstPostQueue } from "./slurp-first-post-queue.service.js";
 
 const lifecycle = createSlurpActivationLifecycle();
 
@@ -51,6 +52,9 @@ export async function activate({
         pause: async <T>(run: () => Promise<T>) => run(),
       }),
     );
+    const firstPostQueue = createSlurpFirstPostQueue(app.db);
+    firstPostQueue.start();
+    addTeardown(() => firstPostQueue.stop());
     startNoodleAutoPostScheduler(app, addTeardown);
     startNoodlerFanActivityScheduler(app, addTeardown);
     startNoodleRefreshScheduler(app, addTeardown, api.runInternalRoute);

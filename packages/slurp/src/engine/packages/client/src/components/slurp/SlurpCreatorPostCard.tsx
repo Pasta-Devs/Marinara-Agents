@@ -65,6 +65,7 @@ import {
 import { NoodleAnchoredPopover } from "./NoodleAnchoredPopover";
 import { NoodlePollComposer } from "./SlurpPollComposer";
 import { PostImageFrame } from "./PostImageCropEditor";
+import { SlurpSparkleVeil } from "./SlurpSparkleVeil";
 
 export function LockedSlurpPostCard({
   post,
@@ -234,7 +235,7 @@ export function LockedSlurpPostCard({
                   // Real locked images are already reduced and blurred on the server. Never blur
                   // those bytes a second time: the extra client filter erased the silhouette and
                   // made a working preview look like an empty card.
-                  revealed ? "scale-100" : "scale-110 blur-[14px] saturate-[0.78]",
+                  revealed ? "scale-100" : "scale-[1.04] blur-[8px] saturate-[0.78]",
                 )}
               />
             ) : requestedMediaUrl ? (
@@ -274,12 +275,7 @@ export function LockedSlurpPostCard({
                 aria-hidden="true"
               />
             )}
-            {!revealed && shownMediaSrc && (
-              <span
-                className="slurp-privacy-noise pointer-events-none absolute -inset-6 opacity-[0.16] motion-reduce:animate-none"
-                aria-hidden="true"
-              />
-            )}
+            {!revealed && shownMediaSrc && <SlurpSparkleVeil />}
             {!revealed && shownMediaSrc && (
               <span className="absolute left-3 top-3 rounded-full bg-black/55 px-2.5 py-1 text-[0.65rem] font-bold uppercase tracking-[0.12em] text-white backdrop-blur-sm ring-1 ring-white/15">
                 {localizeUi("ui.slurp.locked.blurredPreview")}
@@ -418,22 +414,6 @@ export function LockedSlurpPostCard({
           </button>
         </div>
       </Modal>
-      <style>{`
-        @keyframes slurp-privacy-drift {
-          0% { transform: translate3d(-2%, -1%, 0); }
-          33% { transform: translate3d(1%, 2%, 0); }
-          66% { transform: translate3d(2%, -2%, 0); }
-          100% { transform: translate3d(-2%, -1%, 0); }
-        }
-        .slurp-privacy-noise {
-          background-image:
-            repeating-linear-gradient(0deg, transparent 0 3px, rgba(255,255,255,.16) 3px 4px),
-            radial-gradient(circle at 20% 30%, rgba(255,255,255,.42) 0 1px, transparent 1.5px),
-            radial-gradient(circle at 72% 64%, rgba(255,255,255,.28) 0 1px, transparent 1.5px);
-          background-size: 100% 7px, 19px 23px, 29px 31px;
-          animation: slurp-privacy-drift 1.8s steps(3, end) infinite;
-        }
-      `}</style>
     </article>
   );
 }

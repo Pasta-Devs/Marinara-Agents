@@ -178,6 +178,23 @@ export const noodleRefreshRuns = fileTable("slurp_refresh_runs", {
   updatedAt: text("updated_at").notNull(),
 });
 
+export const noodlerFirstPostJobs = fileTable(
+  "slurp_first_post_jobs",
+  {
+    id: text("id").primaryKey(),
+    executionId: text("execution_id").notNull(),
+    creatorAccountId: text("creator_account_id").notNull(),
+    status: text("status").notNull().default("queued"),
+    attempts: text("attempts").notNull().default("0"),
+    nextAttemptAt: text("next_attempt_at").notNull(),
+    postId: text("post_id"),
+    error: text("error"),
+    createdAt: text("created_at").notNull(),
+    updatedAt: text("updated_at").notNull(),
+  },
+  { uniqueBy: [{ keys: ["executionId", "creatorAccountId"] }] },
+);
+
 // ──────────────────────────────────────────────
 // Direct messages
 // ──────────────────────────────────────────────

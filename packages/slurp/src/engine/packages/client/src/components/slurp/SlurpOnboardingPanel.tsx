@@ -30,7 +30,9 @@ import { useTranslation as useUiTranslation } from "react-i18next";
 import { toast } from "sonner";
 import {
   useBulkCreateNoodlerStageProfiles,
+  useEnqueueNoodlerFirstPosts,
   useNoodlerEligibleAccounts,
+  useNoodlerFirstPostStatus,
   useRefreshTargetedNoodlerCreatorsNow,
   useSlurpConnections,
   useSlurpSettings,
@@ -119,6 +121,7 @@ export function SlurpOnboardingWizard({
   const eligible = useNoodlerEligibleAccounts("", "character", open);
   const bulkCreate = useBulkCreateNoodlerStageProfiles();
   const refreshTargeted = useRefreshTargetedNoodlerCreatorsNow();
+  const enqueueFirstPosts = useEnqueueNoodlerFirstPosts();
   const updateSlurpSettings = useUpdateSlurpSettings();
   const connectionsQuery = useSlurpConnections(open);
   const settingsQuery = useSlurpSettings();
@@ -151,6 +154,7 @@ export function SlurpOnboardingWizard({
   const [outcomes, setOutcomes] = useState<NoodlerRefreshNowOutcome[]>([]);
   const [completion, setCompletion] = useState<CompletionKind | null>(null);
   const [executionId, setExecutionId] = useState("");
+  const [firstPostsQueued, setFirstPostsQueued] = useState(false);
   const [providerConfirmationOpen, setProviderConfirmationOpen] = useState(false);
   const completionHeadingRef = useRef<HTMLHeadingElement>(null);
   const demoProfile: NoodlerStageProfile = {
@@ -198,7 +202,10 @@ export function SlurpOnboardingWizard({
     setOutcomes([]);
     setCompletion(null);
     setExecutionId(generateClientId());
+    setFirstPostsQueued(false);
   }, [open, selectionOnly]);
+
+  const firstPostStatus = useNoodlerFirstPostStatus(executionId, step === 5 && firstPostsQueued);
 
   useEffect(() => {
     if (!open || settingsSeeded || !settingsQuery.data || !connectionsQuery.data) return;
@@ -282,6 +289,15 @@ export function SlurpOnboardingWizard({
     );
     setStep(5);
   };
+  useEffect(() => {
+    if (!firstPostsQueued || !firstPostStatus.data?.complete) return;
+    const next = firstPostStatus.data.jobs.map((job) => ({
+      accountId: job.accountId,
+      status: job.status === "generated" ? ("generated" as const) : ("error" as const),
+    }));
+    setFirstPostsQueued(false);
+    finalizeOutcomes(next, creationFailures, createdIds.length);
+  }, [createdIds.length, creationFailures, firstPostStatus.data, firstPostsQueued]);
   const runGeneration = async (ids: string[], createFailures = creationFailures) => {
     const retriedIds = new Set(ids);
     const kept = outcomes.filter((outcome) => !retriedIds.has(outcome.accountId));
@@ -383,11 +399,11 @@ export function SlurpOnboardingWizard({
       return;
     }
     try {
-      const result = await refreshTargeted.mutateAsync({
-        accountIds: newIds,
-        executionId,
-      });
-      finalizeOutcomes(result.outcomes, createFailureCount, newIds.length, settingsSaved);
+      await enqueueFirstPosts.mutateAsync({ accountIds: newIds, executionId });
+      setFirstPostsQueued(true);
+      setOutcomes([]);
+      setCompletion(settingsSaved ? "partial" : "settingsFailed");
+      setStep(5);
       if (settingsSaved) onComplete?.();
     } catch {
       // The profiles exist; only generation fell over, so every one of them is retryable.
@@ -407,7 +423,8 @@ export function SlurpOnboardingWizard({
     }
     void performFinish();
   };
-  const pending = bulkCreate.isPending || updateSlurpSettings.isPending || refreshTargeted.isPending;
+  const pending =
+    bulkCreate.isPending || updateSlurpSettings.isPending || refreshTargeted.isPending || enqueueFirstPosts.isPending;
   const summaries =
     setupLane === "easy"
       ? [
@@ -1453,9 +1470,9 @@ export function SlurpOnboardingWizard({
             </div>
             {/* Creating profiles then writing first posts can take a while; say which half we are in. */}
             <p aria-live="polite" className="mt-2 min-h-4 text-xs text-[var(--slurp-muted)] max-sm:mt-1">
-              {bulkCreate.isPending
+              {bulkCreate.isPending || enqueueFirstPosts.isPending
                 ? t("ui.noodle.noodlerwizard.progressCreating")
-                : refreshTargeted.isPending
+                : refreshTargeted.isPending || firstPostsQueued
                   ? t("ui.noodle.noodlerwizard.progressWriting")
                   : ""}
             </p>

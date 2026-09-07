@@ -145,6 +145,7 @@ import {
 } from "./SlurpPostCard";
 import { NoodleAnchoredPopover } from "./NoodleAnchoredPopover";
 import { LockedSlurpPostCard, SlurpCreatorPostCard } from "./SlurpCreatorPostCard";
+import { SlurpSparkleVeil } from "./SlurpSparkleVeil";
 import { ChatImageLightbox } from "../chat/ChatImageLightbox";
 import { useNearViewportSlurpMediaSrc, useSlurpMediaSrc } from "../../hooks/use-slurp-media-src";
 import { SlurpOnboardingWizard } from "./SlurpOnboardingPanel";
@@ -6013,7 +6014,7 @@ function SlurpMomentViewer({
               }
               className={cn(
                 "h-full w-full object-cover",
-                moment.post.locked && "scale-110 blur-[14px] saturate-[0.78]",
+                moment.post.locked && "scale-[1.04] blur-[8px] saturate-[0.78]",
               )}
             />
           ) : (
@@ -6022,6 +6023,7 @@ function SlurpMomentViewer({
               aria-hidden="true"
             />
           )}
+          {moment.post.locked && mediaSrc && <SlurpSparkleVeil />}
           <div
             className="absolute inset-x-3 top-3 z-10 flex gap-1"
             role="progressbar"

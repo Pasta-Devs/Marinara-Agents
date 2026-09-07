@@ -1,5 +1,10 @@
 # Slurp release notes
 
+## 1.2.7 — 2026-09-07
+
+- First Creator posts now run through a durable background queue with bounded retries.
+- The onboarding screen can show Creator setup before first-post generation finishes.
+
 ## 1.2.6 — 2026-09-07
 
 - Fixed Slurp failing to load when wallet settings were normalized.
