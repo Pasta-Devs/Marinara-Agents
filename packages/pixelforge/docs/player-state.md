@@ -3230,11 +3230,17 @@ both places the assets live:
 - **`client.js` at 1,396,090 bytes over nineteen modules** (eighteen in 0.14; `21-lattice.js` is the
   nineteenth), and the figure was reproduced independently of the build: concatenating the modules
   and the wrapper by hand predicts 1,396,090 exactly — 1,395,292 bytes of source plus 798 of banner
-  and IIFE. That is the check the 0.11.0 CRLF incident is the reason for.
-- **The `0.16.0` artifact zip at 1,407,926 bytes**, new; the `0.15.0` zip is untouched, as is every
-  older one. **Three bakes over the same tree produced byte-identical output** — the same zip hash,
-  the same `client.js`, the same manifest — so the artifact is reproducible rather than merely
-  deterministic-by-design.
+  and IIFE. That is the check the 0.11.0 CRLF incident is the reason for. **Those were the figures
+  of the bake this cycle committed; they are not the figures shipping under the `0.16.0` version
+  today.** The GM-verbs merge landed after this record was written and re-baked in place without a
+  version bump — `62-gm.js` is a twentieth module — so the `0.16.0` actually on `staging` is
+  **1,411,873 bytes over twenty modules**. The paragraphs above stay as written because they are the
+  record of *this* cycle's bake; this sentence is the pointer that the version's final shape is the
+  verbs merge's, not this one.
+- **The `0.16.0` artifact zip at 1,407,926 bytes as this cycle baked it — 1,425,322 after the verbs
+  re-bake**; the `0.15.0` zip is untouched, as is every older one. **Three bakes over the same tree
+  produced byte-identical output** — the same zip hash, the same `client.js`, the same manifest — so
+  the artifact is reproducible rather than merely deterministic-by-design.
 - **The cycle carries TWO bake commits, and the second one is the point of this bullet.** The first
   baked a `src/21-lattice.js` that `npm run check` refuses. Renaming the tunables block `TUNE` →
   `LATTICE_TUNE` pushed exactly three statements past Prettier's 120-column width, and the arc
@@ -3251,6 +3257,14 @@ both places the assets live:
 - **The `?v=` cache key moved with the version**, as it does every release. With the art unchanged
   that buys nothing this time and costs one re-fetch of identical bytes, which is the honest reading
   rather than a benefit worth claiming.
+
+**The 0.16.1 bake.** A one-module release — `80-setup.js` is the only source file the patch
+touches — over the twenty-module post-verbs tree: **`client.js` at 1,426,358 bytes, the
+`0.16.1` artifact zip at 1,439,807**, art byte-identical again (both theme sheets and `atlas.json`
+sha256-matched before and after, in both the shipped copies and the regenerated `build/assets/`),
+`manifest.json` moved the same three lines a source-only release moves, and **two bakes over the
+same tree were byte-identical**. Every older artifact zip — the re-baked `0.16.0` included — is
+untouched.
 
 **Older prep, kept because it is the record of how this went the last two times.** **This section
 flipped for 0.14 and has flipped back: the rebuild ran in-cycle rather than being
