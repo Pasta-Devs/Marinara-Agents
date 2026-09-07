@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { mkdtemp, readFile, rm, stat } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { runRegressionToCompletion } from "./regression-helpers.ts";
 
 async function main() {
   const { LTM_DEBUG_MAX_EVENT_BYTES, LTM_DEBUG_MAX_LOG_BYTES, readLtmDebugLog, recordLtmDebugEvent } =
@@ -91,7 +92,7 @@ async function main() {
   process.stdout.write("Long-Term Memory debug log regression: bounds, rotation, and filters ok\n");
 }
 
-void main().catch((error) => {
+void runRegressionToCompletion("long-term-memory-debug-log", main).catch((error) => {
   console.error(error);
   process.exitCode = 1;
 });

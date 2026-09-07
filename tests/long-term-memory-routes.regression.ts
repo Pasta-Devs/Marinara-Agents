@@ -5,6 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { dirname } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
+import { runRegressionToCompletion } from "./regression-helpers.ts";
 
 async function main() {
   const engineRoot =
@@ -3065,6 +3066,23 @@ async function main() {
               modelCalls += 1;
               completionOptions.push(options);
               if (failGameRefine) throw new Error("Fixture refine failure");
+              if (abortInFlight) {
+                abortReachedChatComplete = true;
+                notifyAbortChatComplete?.();
+                return new Promise((_resolve, reject) => {
+                  if (options.signal?.aborted) {
+                    reject(new Error("aborted"));
+                    return;
+                  }
+                  options.signal?.addEventListener(
+                    "abort",
+                    () => {
+                      reject(new Error("aborted"));
+                    },
+                    { once: true },
+                  );
+                });
+              }
               return {
                 content: JSON.stringify({
                   summary: "Extracted Moon Vault discovery.",
@@ -3523,11 +3541,25 @@ async function main() {
         limit: 100,
         importConcurrency: 1,
         destinationScope: { chatId: "chat-a", chatIds: ["chat-a"] },
+        extract: true,
       },
       storageService.root,
       inFlightController.signal,
     );
-    await chatCompleteEntered;
+    let cancellationTimeout: ReturnType<typeof setTimeout> | undefined;
+    try {
+      await Promise.race([
+        chatCompleteEntered,
+        new Promise((_, reject) => {
+          cancellationTimeout = setTimeout(
+            () => reject(new Error("Timed out waiting for in-flight cancellation to enter chatComplete")),
+            10_000,
+          );
+        }),
+      ]);
+    } finally {
+      if (cancellationTimeout) clearTimeout(cancellationTimeout);
+    }
     inFlightController.abort();
     const inFlightResult = await inFlightImport;
     abortInFlight = false;
@@ -4735,7 +4767,7 @@ async function main() {
   );
 }
 
-void main().catch((error) => {
+void runRegressionToCompletion("long-term-memory-routes", main).catch((error) => {
   console.error(error);
   process.exitCode = 1;
 });

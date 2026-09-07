@@ -23,3 +23,5 @@ export async function runWithSafeCleanup(
   }
   if (cleanupError) throw cleanupError;
 }
+
+export { runRegressionToCompletion } from "./regression-helpers.mjs";
