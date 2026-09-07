@@ -24444,11 +24444,14 @@ const fire = (node, type) => Promise.all((node.listeners[type] ?? []).map((fn) =
     await settle(); // the connections/characters load is an async IIFE
     const nodes = walkNodes(el);
     const checkboxes = nodes.filter((node) => node.type === "checkbox");
-    assert.equal(checkboxes.length, 1, "with no characters to pick, the only checkbox is the generation toggle");
+    assert.equal(
+      checkboxes.length,
+      1,
+      "the generation toggle is the only checkbox on the form (0.16.2: no party rows)",
+    );
     return {
       launches,
       nameIn: nodes.find((node) => node.tagName === "INPUT" && node.value === "Hearthvale"),
-      themeSel: nodes.find((node) => node.children.some((option) => option.attrs.value === "sci-fi-colony")),
       launchBtn: nodes.find((node) => node.tagName === "BUTTON" && String(node.textContent).startsWith("Begin in")),
       generateIn: checkboxes[0],
       generateLabel: nodes.find((node) => String(node.textContent).startsWith("Generate a unique world")),
@@ -24456,14 +24459,17 @@ const fire = (node, type) => Promise.all((node.listeners[type] ?? []).map((fn) =
   };
   try {
     const asked = await mountWizard();
-    assert.ok(asked.nameIn && asked.themeSel && asked.launchBtn, "the wizard mounted its name, theme and launch");
-    assert.equal(asked.launchBtn.textContent, "Begin in Hearthvale", "the label starts at the active preset's name");
-    asked.themeSel.value = "sci-fi-colony";
-    await fire(asked.themeSel, "change");
-    assert.equal(asked.launchBtn.textContent, "Begin in Meridian Base", "a theme change carries it");
+    assert.ok(asked.nameIn && asked.launchBtn, "the wizard mounted its name and its launch");
+    assert.equal(asked.launchBtn.textContent, "Begin in Hearthvale", "the label starts at the default world name");
+    // THE THEME-CHANGE LEG IS RETIRED ON PURPOSE (0.16.2), not lost: it drove the
+    // dropdown and asserted the label followed it, and the ruling is that the
+    // theme "should be determined by the player in Game Mode setup via freestyle
+    // input, not a selector". With no control to change, the label answers to the
+    // name field alone — which is what the two lines below have always asserted,
+    // and they are the half of this leg that still has a subject.
     asked.nameIn.value = "Anchorage Nine";
     await fire(asked.nameIn, "input");
-    assert.equal(asked.launchBtn.textContent, "Begin in Anchorage Nine", "and the player's own name wins over both");
+    assert.equal(asked.launchBtn.textContent, "Begin in Anchorage Nine", "and the player's own name is what it says");
 
     assert.equal(asked.generateIn.checked, true, "generation is offered checked — it is what the package is for");
     // HOW MANY CALLS THE TICK COSTS, VERBATIM. The player is the one who pays for
@@ -24551,16 +24557,15 @@ const fire = (node, type) => Promise.all((node.listeners[type] ?? []).map((fn) =
     },
     { id: "conn-art", name: "pictures", provider: "image_generation", isDefault: "false" },
   ];
-  // …and the `/characters` rows the same way: the characters TABLE has no `name`
-  // column at all and keeps the V2 card in `data` as a JSON STRING, so the
-  // wizard's `c.name ?? c.data?.name ?? id` chain fell through to the id for
-  // 100% of rows and the party list was a column of nanoids.
-  const CHARACTERS = [
-    { id: "char-7f3a", data: JSON.stringify({ name: "Wren Ash", description: "a miller" }), comment: "the miller" },
-    { id: "char-bad", data: "{ this is not json", comment: "" },
-  ];
-  loadedPF.api.getJson = async (path) =>
-    path === "/connections" ? CONNECTIONS : path === "/characters" ? CHARACTERS : [];
+  // THE `/characters` FIXTURE IS GONE WITH THE PICKER IT FED (0.16.2). It staged
+  // the raw rows the party list read — the characters TABLE has no `name` column
+  // and keeps the V2 card in `data` as a JSON STRING — and it was the only
+  // regression pin on 0.16.1's parse of that string. The picker is deleted, so
+  // the parse is deleted, so the pin has nothing left to hold: the party belongs
+  // to Game Mode's own setup and this form never asks for it. What replaces the
+  // pin is the opposite assertion, one banner down — the route is never fetched
+  // at all.
+  loadedPF.api.getJson = async (path) => (path === "/connections" ? CONNECTIONS : []);
   const settle = async () => {
     for (let i = 0; i < 16; i++) await Promise.resolve();
   };
@@ -24576,15 +24581,7 @@ const fire = (node, type) => Promise.all((node.listeners[type] ?? []).map((fn) =
       nameIn: nodes.find((node) => node.tagName === "INPUT" && node.value === "Hearthvale"),
       seedIn: nodes.find((node) => node.tagName === "INPUT" && /^\d+$/.test(String(node.value ?? ""))),
       settingIn: nodes.find((node) => node.tagName === "TEXTAREA"),
-      themeSel: nodes.find((node) => node.children.some((option) => option.attrs.value === "sci-fi-colony")),
       connSel: nodes.find((node) => node.children.some((option) => option.attrs.value === "conn-default")),
-      // The one node whose children are ALL party rows: the generate toggle is a
-      // label of the same shape, so "contains one" would match its parent too.
-      partyBox: nodes.find(
-        (node) =>
-          node.children.length > 0 &&
-          node.children.every((child) => child.tagName === "LABEL" && child.children[0]?.type === "checkbox"),
-      ),
       launchBtn: nodes.find((node) => node.tagName === "BUTTON" && String(node.textContent).startsWith("Begin in")),
     };
   };
@@ -24595,9 +24592,20 @@ const fire = (node, type) => Promise.all((node.listeners[type] ?? []).map((fn) =
 
     // ── (1) THE PRESET IS A PLACEHOLDER AND NEVER A VALUE ─────────────────────
     assert.equal(w.settingIn.value, "", "the Setting box starts EMPTY, so an untouched form instructs nothing");
+    // AND THE SUGGESTION UNDER IT NAMES NOBODY (0.16.2). 0.16.1 asserted the
+    // opposite — the placeholder WAS the cozy preset's paragraph, which was
+    // honest while a dropdown could swap it for the colony's. That listener died
+    // with the dropdown, so the same string would have shown village prose to a
+    // player describing a space station, permanently and with no control to
+    // change it. It is a question now, and the question asks for the words the
+    // resolver reads.
     assert.ok(
-      w.settingIn.placeholder.includes("Hearthvale") && w.settingIn.placeholder.includes("Mira"),
-      "…with the theme's prose shown as the suggestion it always was, in the same place and carrying none of it",
+      !/Hearthvale|Mira|Tam|Rook|Amber Hearth|Meridian/.test(w.settingIn.placeholder),
+      "the placeholder names no place and no person the player did not type",
+    );
+    assert.ok(
+      w.settingIn.placeholder.startsWith("Describe the place"),
+      "…and it is still a prompt rather than a blank box: this is now the only place the player's own words exist",
     );
 
     // ── (3) THE CONNECTION LIST, READ AS RAW ROWS ─────────────────────────────
@@ -24619,13 +24627,14 @@ const fire = (node, type) => Promise.all((node.listeners[type] ?? []).map((fn) =
       'the preselection honours the user\'s actual default: `isDefault` is TEXT, `"false"` is truthy, and the old test matched the most-recently-edited row every time',
     );
 
-    // ── (7) THE PARTY LIST NAMES PEOPLE, NOT IDS ──────────────────────────────
-    const partyLabels = w.partyBox.children.map((row) => row.children[1]?.textContent);
-    assert.deepEqual(
-      partyLabels,
-      ["Wren Ash", "char-bad"],
-      "the V2 card is parsed out of the `data` STRING the way the Engine's own picker parses it, with the id surviving only for a card that will not parse",
-    );
+    // ── (7) THE PARTY LIST IS GONE, AND WITH IT ITS ONE REGRESSION PIN ────────
+    // This leg drove the `data`-is-a-JSON-string parse: the party rows rendered
+    // as a column of nanoids until 0.16.1 parsed the card the way the Engine's
+    // own picker does. 0.16.2 deletes the picker — the party belongs to Game
+    // Mode's setup, and this Experience never duplicates or overrides what that
+    // setup collects — so the parse it pinned is deleted too. The replacement is
+    // in the next banner and it is the negative: no party checkboxes mount, and
+    // `/characters` is never fetched.
 
     // ── (2) THE NAME THE PLAYER TYPED REACHES THE GENERATORS ──────────────────
     w.nameIn.value = "Pallet Town";
@@ -24642,11 +24651,19 @@ const fire = (node, type) => Promise.all((node.listeners[type] ?? []).map((fn) =
       "A cozy pixel village called Pallet Town.",
       "an empty Setting composes ONE honest line from what the player DID give — the host's `z.string().min(1)` is satisfied and no cast is invented",
     );
-    assert.ok(cfg.playerGoals.includes("Pallet Town"), "the goals are about the world the player named");
-    assert.ok(cfg.spatialMapInstructions.includes("Pallet Town"), "…and so is the World Map's root location");
+    // 0.16.1 asserted that the goals and the map's root location were about the
+    // world the player NAMED, which was the right fix for a template that named
+    // Hearthvale. 0.16.2 asks the prior question and answers it differently:
+    // nobody asked the player for a goal, and the package does not know enough
+    // about their setting to assert a shape on it.
+    assert.equal(
+      cfg.playerGoals,
+      "",
+      "no goal is written on the player's behalf — the schema's own default is the truthful answer",
+    );
     assert.ok(
-      !cfg.spatialMapInstructions.includes("Children:"),
-      "…which no longer lists four buildings the brief has not invented yet",
+      !("spatialMapInstructions" in cfg),
+      'the map-guidance field is ABSENT, not empty: "the GM should never intend to keep the player bound to a location and the world need not be compact and walkable necessarily" — both halves of what this used to say',
     );
     // THE NEGATIVE IS THE POINT OF THE WHOLE RELEASE, so it is asserted over
     // every field of the config at once rather than one at a time: not one of the
@@ -24656,9 +24673,10 @@ const fire = (node, type) => Promise.all((node.listeners[type] ?? []).map((fn) =
     for (const name of ["Hearthvale", "Mira", "Tam's", "Rook"]) {
       assert.ok(!wire.includes(name), `nothing in the launched config says ${name}`);
     }
-    assert.ok(
-      cfg.genre.startsWith("Cozy pixel-art village RPG"),
-      "the genre stays theme-derived — it names a kind of game, not a place",
+    assert.equal(
+      cfg.genre,
+      "A tile-based pixel-art RPG.",
+      "the genre claims only the renderer: it named a kind of game the player never chose, in a required field that reaches the GM every turn, and the real genre is in `setting` two lines below it",
     );
     assert.equal(
       cfg.experienceConfig.worldName,
@@ -24673,18 +24691,12 @@ const fire = (node, type) => Promise.all((node.listeners[type] ?? []).map((fn) =
       "emitted explicitly, because every engine gate reads `!== false` and an absent key was YES at all five of them",
     );
 
-    // ── THE OTHER THEME COMPOSES ITS OWN LINE, off the same two answers ───────
-    const colony = await mountWizard();
-    colony.themeSel.value = "sci-fi-colony";
-    await fire(colony.themeSel, "change");
-    assert.ok(
-      colony.settingIn.placeholder.startsWith("Meridian Base"),
-      "a theme change swaps the placeholder unconditionally — a placeholder is never the player's text, so there is nothing to trample",
-    );
-    assert.equal(colony.settingIn.value, "", "…and the box the player has not touched is still empty");
-    await fire(colony.launchBtn, "click");
-    assert.equal(colony.launches[0].config.setting, "A small frontier colony called Meridian Base.");
-    assert.ok(colony.launches[0].config.playerGoals.includes("Meridian Base"));
+    // ── THE OTHER THEME'S LEG MOVES TO WHERE THE THEME NOW COMES FROM ─────────
+    // This drove the dropdown to sci-fi-colony and asserted the composed line and
+    // the placeholder followed it. There is no dropdown, and the second kit is
+    // now reached the only way the ruling allows — by what the player typed — so
+    // the leg lands in the next banner as the colony-shaped Setting case, where
+    // it also proves the thing this one could not: that the words decide.
 
     // ── A SETTING THE PLAYER ACTUALLY WROTE STILL WINS, unchanged ─────────────
     const typed = await mountWizard();
@@ -24763,6 +24775,263 @@ const fire = (node, type) => Promise.all((node.listeners[type] ?? []).map((fn) =
       }
     });
   });
+}
+
+// ── THE WIZARD STOPS ASKING WHAT IT SHOULD NEVER HAVE ASKED (0.16.2) ─────────
+// 0.16.1 made this form honest. 0.16.2 makes it SMALLER, and every deletion is a
+// question the package had no business putting or an answer it had no business
+// writing:
+//
+//   the theme dropdown  — "theme should be determined by the player in Game Mode
+//                          setup via freestyle input, not a selector."
+//   the party picker    — the party belongs to Game Mode's own setup; this
+//                          Experience carries only its own parameters and never
+//                          duplicates or overrides what that setup collected.
+//   `genre`/`playerGoals` — preset prose the player never typed, in fields that
+//                          reach the GM's per-turn prompt.
+//   the map guidance    — "the GM should never intend to keep the player bound to
+//                          a location and the world need not be compact and
+//                          walkable necessarily." The FIELD, not the sentence.
+//
+// Deleting the dropdown opens exactly one hole, and it is the reason these lanes
+// exist rather than a diff being enough: a DECLINED world never mints a brief, so
+// no model ever answers `artTheme`, and `PF.world.build(seed, theme, null)` still
+// needs a theme. `themeFromWords` is what fills it — the player's own words,
+// read RAW, before anything is composed from them.
+{
+  const realGetJson = loadedPF.api.getJson;
+  const CONNECTIONS = [{ id: "conn-1", name: "Main", model: "m", isDefault: "true" }];
+  const asked = [];
+  loadedPF.api.getJson = async (path) => {
+    asked.push(path);
+    return path === "/connections" ? CONNECTIONS : [];
+  };
+  const settle = async () => {
+    for (let i = 0; i < 16; i++) await Promise.resolve();
+  };
+  const mountWizard = async () => {
+    const el = new FakeNode("div");
+    const launches = [];
+    loadedPF.mountSetup(el, { onLaunch: async (config, name) => void launches.push({ config, name }) });
+    await settle();
+    const nodes = walkNodes(el);
+    const checkboxes = nodes.filter((node) => node.type === "checkbox");
+    return {
+      launches,
+      nodes,
+      checkboxes,
+      selects: nodes.filter((node) => node.tagName === "SELECT"),
+      nameIn: nodes.find((node) => node.tagName === "INPUT" && node.value === "Hearthvale"),
+      seedIn: nodes.find((node) => node.tagName === "INPUT" && /^\d+$/.test(String(node.value ?? ""))),
+      settingIn: nodes.find((node) => node.tagName === "TEXTAREA"),
+      connSel: nodes.find((node) => node.children.some((option) => option.attrs.value === "conn-1")),
+      generateIn: checkboxes[0],
+      launchBtn: nodes.find((node) => node.tagName === "BUTTON" && String(node.textContent).startsWith("Begin in")),
+    };
+  };
+  try {
+    // ── (1) THE FORM ASKS WHAT ONLY IT CAN ASK ────────────────────────────────
+    // The control census, read off the mounted DOM rather than off the source,
+    // because the way a deleted control actually bites is a dangling DOM
+    // reference: the row that MOUNTED the theme select is a different line from
+    // the one that built it, and leaving it behind throws inside mountSetup and
+    // the setup view does not render at all.
+    const form = await mountWizard();
+    assert.ok(form.nameIn && form.seedIn && form.settingIn && form.connSel && form.launchBtn, "the form mounted");
+    assert.equal(form.checkboxes.length, 1, "one checkbox: the generation toggle. No party rows.");
+    assert.equal(
+      form.selects.filter((node) => node.children.some((option) => option.attrs.value === "sci-fi-colony")).length,
+      0,
+      "NO THEME SELECT. The kit is not a question this form puts any more",
+    );
+    assert.equal(
+      form.selects.length,
+      4,
+      "…and the four selects left are tone, difficulty, rating and the GM connection",
+    );
+    assert.ok(!asked.includes("/characters"), "and `/characters` is never fetched — there is no list to fill");
+
+    form.nameIn.value = "Pallet Town";
+    form.seedIn.value = "4242";
+    await fire(form.launchBtn, "click");
+    const cfg = form.launches[0].config;
+    assert.deepEqual(cfg.partyCharacterIds, [], "the launch carries an empty party, explicitly");
+    assert.ok(!("spatialMapInstructions" in cfg), "no map-guidance key is emitted at all, on any path");
+    assert.equal(cfg.playerGoals, "", "no goal is written on the player's behalf");
+    assert.equal(cfg.genre, "A tile-based pixel-art RPG.", "and the genre claims the renderer and nothing else");
+
+    // ── (3) NOTHING IN THE LAUNCHED CONFIG NAMES A PLACE THE PLAYER DID NOT ───
+    // 0.16.1's own sweep, kept because in 0.16.2 the package still authors this
+    // text, and widened to the colony's names — which used to be unreachable
+    // without picking the colony from a dropdown and are now reachable by typing.
+    const wire = JSON.stringify(cfg);
+    for (const name of ["Hearthvale", "Mira", "Tam's", "Rook", "Meridian", "Amber Hearth"]) {
+      assert.ok(!wire.includes(name), `nothing in the launched config says ${name}`);
+    }
+    // THE LEG THE CONFIG SWEEP CANNOT SEE. The placeholder is DOM, not config, so
+    // every assertion above passes while a player describing a space station is
+    // shown a paragraph about Mira's inn. It is the one leak deleting the
+    // theme-swap listener opens, and it is where a reader looks first.
+    for (const name of ["Hearthvale", "Mira", "Tam", "Rook", "Meridian", "Amber Hearth"]) {
+      assert.ok(!form.settingIn.placeholder.includes(name), `and neither does the placeholder: ${name}`);
+    }
+
+    // ── (4) A DECLINED WORLD IS THE KIT THE PLAYER'S WORDS ASKED FOR ──────────
+    // The hole deleting the dropdown opens, closed and then walked into. A
+    // declined chat mints no brief, so no model ever answers `artTheme`; without
+    // a resolver over the player's own words every declined world would be a cozy
+    // village forever, whatever they wrote.
+    const colony = await mountWizard();
+    colony.settingIn.value =
+      "A sealed hab ring in orbit above a frozen moon. The crew keeps the reactor and the hydroponics bay alive.";
+    colony.generateIn.checked = false;
+    await fire(colony.launchBtn, "click");
+    const declinedCfg = colony.launches[0].config;
+    assert.equal(
+      declinedCfg.experienceConfig.theme,
+      "sci-fi-colony",
+      "the words decide the kit, and they are the ONLY thing that decides it now",
+    );
+    assert.equal(declinedCfg.experienceConfig.generate, false, "…on a world that declined the call");
+    const legacy = loadedPF.world.build(declinedCfg.experienceConfig.seed, declinedCfg.experienceConfig.theme, null);
+    assert.equal(legacy.theme, "sci-fi-colony", "and the world the player actually walks into is painted in that kit");
+    assert.equal(legacy.zones.village.name, "Meridian Base", "…down to the name of the settlement it stands up");
+
+    // The box is a `rows="3"` textarea, so multi-line is its DESIGNED shape and
+    // not an edge case. A reader that took only the first line would answer
+    // cozy-village here — measured, and it is why the resolver reads the whole
+    // raw value rather than a line of it.
+    const multi = await mountWizard();
+    multi.settingIn.value =
+      "A quiet place at the edge of things.\nThe dome is cracked and the airlock sticks.\nEverybody here is a colonist.";
+    await fire(multi.launchBtn, "click");
+    assert.equal(
+      multi.launches[0].config.experienceConfig.theme,
+      "sci-fi-colony",
+      "the whole box votes, not its first line",
+    );
+
+    // ── (5) AN EMPTY BOX IS AN HONEST DEFAULT, NOT A LAUNDERED PRESET ─────────
+    // The lane exists to pin WHICH INPUT the resolver was handed, not which
+    // answer came out — because the answer is `cozy-village` either way and that
+    // is exactly how the bug would hide. `settingOf` composes "A cozy pixel
+    // village called Hearthvale." for an untouched box, and that sentence ships
+    // as the config's `setting`; a resolver reading it would be counting the
+    // wizard's own preset words — "cozy pixel village" is a literal in this file
+    // — as the player's evidence.
+    const seen = [];
+    const realResolver = loadedPF.setup.themeFromWords;
+    let empty;
+    try {
+      loadedPF.setup.themeFromWords = (text) => {
+        seen.push(text);
+        return realResolver(text);
+      };
+      empty = await mountWizard();
+      await fire(empty.launchBtn, "click");
+    } finally {
+      loadedPF.setup.themeFromWords = realResolver;
+    }
+    assert.deepEqual(seen, [""], "the resolver was handed the RAW box, once, and the raw box was empty");
+    assert.equal(
+      empty.launches[0].config.experienceConfig.theme,
+      "cozy-village",
+      "…so the answer is the honest default rather than a preset that answered for them",
+    );
+    // …AND THE COMPOSED SENTENCE STILL SHIPS, which is the half that makes the
+    // above worth asserting: the host declares `setting` as `z.string().min(1)`,
+    // so an empty one is a 400. It ships and it does not vote.
+    assert.equal(
+      empty.launches[0].config.setting,
+      "A cozy pixel village called Hearthvale.",
+      "the composed line is what satisfies the host's min(1) — it is downstream of the resolver, never upstream",
+    );
+
+    // The same trap one field over: `nameIn` ships PRE-FILLED with a real value,
+    // so a player who never touches it still hands `settingOf` a name — and a
+    // colony-shaped campaign name must not be able to vote for a colony kit
+    // through the composed sentence.
+    const named = await mountWizard();
+    named.nameIn.value = "Orbital Station Nine";
+    await fire(named.nameIn, "input");
+    await fire(named.launchBtn, "click");
+    assert.equal(
+      named.launches[0].config.experienceConfig.theme,
+      "cozy-village",
+      "the campaign name is not evidence about the setting, however sci-fi it sounds",
+    );
+    assert.equal(
+      loadedPF.save._configTheme({ gameSetupConfig: named.launches[0].config }),
+      "cozy-village",
+      "…and the reader that hands the theme to the brief call agrees with the wizard that wrote it",
+    );
+
+    // ── (7) THE CONFIG THE PACKAGE HANDS BACK IS BOUNDED ──────────────────────
+    // `/game/create`'s chooser nests the package's whole returned config inside
+    // itself (`experienceConfig: cfg`) and the route's refine measures THAT
+    // nested copy against 32,000 characters, while `setting` is declared
+    // `z.string().min(1)` with no maximum. So the object this leg measures is the
+    // package's own config — one copy, exactly what the refine sees — and the
+    // Setting box is the only field that can push it over.
+    const huge = await mountWizard();
+    huge.settingIn.value = "riverstone ".repeat(4_000); // 44,000 characters
+    await fire(huge.launchBtn, "click");
+    const bounded = huge.launches[0].config;
+    assert.equal(bounded.setting.length, 8_000, "the Setting the package emits is capped at 8,000 characters");
+    assert.ok(
+      JSON.stringify(bounded).length < 32_000,
+      "…which keeps the nested copy inside the cap that would otherwise 400 the launch on a field the player never sees",
+    );
+    // The doubled shape the chooser actually builds, kept as a strictly LOOSER
+    // second leg: it is larger than the object the refine measures, so it cannot
+    // false-pass, and it is what a reader of NewGameExperienceChooser expects to
+    // see checked.
+    assert.ok(
+      JSON.stringify({ ...bounded, experienceConfig: bounded }).length < 32_000,
+      "…and so does the doubled shape the chooser hands the route",
+    );
+  } finally {
+    loadedPF.api.getJson = realGetJson;
+    loadedPF.save.reset();
+  }
+}
+
+// ── (6) A PRE-0.16.2 CHAT STILL READS ITS OWN THEME ──────────────────────────
+// `_configTheme` is deliberately NOT migrated: a chat created before this release
+// has a dropdown's answer stored, a chat created after has a derived one, and
+// both are strings at the same two nesting depths. The reader cannot tell them
+// apart and must not try.
+{
+  const stored = (theme) => ({ gameSetupConfig: { experienceConfig: { theme } } });
+  const nested = (theme) => ({ gameSetupConfig: { experienceConfig: { experienceConfig: { theme } } } });
+  assert.equal(loadedPF.save._configTheme(stored("sci-fi-colony")), "sci-fi-colony", "the outer depth reads");
+  assert.equal(loadedPF.save._configTheme(nested("sci-fi-colony")), "sci-fi-colony", "…and so does the nested one");
+  assert.equal(loadedPF.save._configTheme(stored("cozy-village")), "cozy-village", "for either shipped kit");
+  assert.equal(loadedPF.save._configTheme({}), null, "and a chat with no config at all still answers null");
+}
+
+// ── (8) THE RESOLVER CAN REACH EVERY SHIPPED KIT ─────────────────────────────
+// The resolver's lexicons are hand-written per kit, so they are the one thing
+// that can silently fall behind a third theme: an id can reach PF.art and the
+// brief schema while remaining unreachable through here, and the failure is
+// invisible — the enum names a kit the wizard can never choose. This is the same
+// check the brief schema gets, pointed at the OTHER decider: the resolver is what
+// answers for the declined world, the interim world, and the rung the model's own
+// answer has to beat.
+{
+  const kits = loadedPF.setup.kitIds();
+  for (const id of loadedPF.art.themeIds()) {
+    assert.ok(kits.includes(id), `the resolver has words for ${id} — every shipped kit is reachable from the box`);
+  }
+  assert.ok(
+    loadedPF.setup.themeFromWords("") === "cozy-village" && loadedPF.setup.themeFromWords(null) === "cozy-village",
+    "…and no input at all is the honest default rather than a throw",
+  );
+  assert.ok(
+    kits.includes(loadedPF.setup.themeFromWords("a village orchard by the mill")) &&
+      loadedPF.art.themeIds().includes(loadedPF.setup.themeFromWords("a village orchard by the mill")),
+    "whatever it returns is a kit that ships — `_configTheme` and the brief's own fold both assume it",
+  );
 }
 
 // ── THE CONTENT PACK: THE SCHEMA IS THE CONTRACT (0.13 slice 1) ──────────────
