@@ -40,7 +40,8 @@
         "sprites/mira.png",
         "sprites/tam.png",
         "sprites/rook.png",
-        "sprites/fen.png"
+        "sprites/fen.png",
+        "gm-verbs.json"
       ]
     }
   },
@@ -52,8 +53,8 @@
     },
     {
       "path": "client.js",
-      "sha256": "9c1944e5a8c674a5eefdd26eb82de5b2f08edfc55af638045d39aec3c150a730",
-      "bytes": 1396090
+      "sha256": "49942ac150339a9ed21fd198a32224028c450cb9f7b14cd66fd434b70693eebc",
+      "bytes": 1411873
     },
     {
       "path": "tiles.png",
@@ -99,6 +100,11 @@
       "path": "sprites/fen.png",
       "sha256": "5c27a49f7942c46a55e0c162112fdf9d6563a513e3c125df5c1fddf637676bf4",
       "bytes": 423
+    },
+    {
+      "path": "gm-verbs.json",
+      "sha256": "4fcc82a8d1342c3f8bd4101db17314f8659316825427bcb5e85dedea79b89a12",
+      "bytes": 1338
     }
   ],
   "permissions": [
