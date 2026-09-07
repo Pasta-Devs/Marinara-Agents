@@ -51,7 +51,7 @@ node "$PWD/../Marinara-Agents/tests/long-term-memory-chat-settings-ui.regression
 The completion watchdog proof is a direct Node test:
 
 ```bash
-node tests/regression-helpers.regression.mjs
+node "$PWD/../Marinara-Agents/tests/regression-helpers.regression.mjs"
 ```
 
 The lifecycle fixture compiles Engine's `globals.css` with Engine's installed

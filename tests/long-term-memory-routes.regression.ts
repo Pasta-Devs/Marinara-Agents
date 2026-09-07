@@ -1404,7 +1404,7 @@ async function main() {
       method: "POST",
       url: "/api/long-term-memory/import/preview",
       headers,
-      payload: { source: "chats", limit: 20 },
+      payload: { source: "chats", limit: 10 },
     });
     assert.equal(professorMariChatPreview.statusCode, 200);
     assert.equal(
