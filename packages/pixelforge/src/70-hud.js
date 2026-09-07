@@ -2694,6 +2694,14 @@ PF.Hud = class {
     // and so does any post-start gate, which is holding a world the player has
     // already been living in.
     const gateKeep = gate === "failed" && (gateStage === "pack" || (gatePost && !!sim.world && !sim.world.interim));
+    // WHICH WORLD THE SCREEN IS WRITING (0.16.1) — the name the player typed in
+    // the wizard, or "" for a chat created before there was anywhere to store one.
+    // In the memo key for the same reason every field above it is, and for one
+    // more that is particular to it: this method is the HUD of whichever chat is
+    // mounted, and the name is the one gate input that differs between two chats
+    // holding gates in the same state. Without it the second chat's screen would
+    // keep the first chat's world's name.
+    const gateName = gate ? PF.save.gateWorldName(this.core) : "";
     if (
       mode !== this._mode ||
       spatialAvail !== this._spatialAvail ||
@@ -2702,7 +2710,8 @@ PF.Hud = class {
       gateStage !== this._gateStage ||
       gatePost !== this._gatePost ||
       gateCascade !== this._gateCascade ||
-      gateKeep !== this._gateKeep
+      gateKeep !== this._gateKeep ||
+      gateName !== this._gateName
     ) {
       this._mode = mode;
       this._spatialAvail = spatialAvail;
@@ -2712,6 +2721,7 @@ PF.Hud = class {
       this._gatePost = gatePost;
       this._gateCascade = gateCascade;
       this._gateKeep = gateKeep;
+      this._gateName = gateName;
       const inWorld = mode === "walk" && !gate;
       this.gateEl.style.display = gate ? "flex" : "none";
       this.gateRetry.style.display = gate === "failed" ? "" : "none";
@@ -2721,8 +2731,8 @@ PF.Hud = class {
       // package a string cannot be pinned without a DOM — so a third stage meant
       // editing branches rather than adding a row, and the strings the player
       // reads were the part nothing watched.
-      this.gateTitle.textContent = PF.save.gateTitle(gateStage, gate);
-      this.gateBody.textContent = PF.save.gateBody(gateStage, gate, gateWhy, gatePost, gateCascade);
+      this.gateTitle.textContent = PF.save.gateTitle(gateStage, gate, gateName);
+      this.gateBody.textContent = PF.save.gateBody(gateStage, gate, gateWhy, gatePost, gateCascade, gateName);
       this.topbar.style.display = gate ? "none" : "";
       // Replay: the host owns the whole screen. Combat: keep a minimal HUD —
       // the mode is inferred from the narrative gameActiveState, which can flip

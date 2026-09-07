@@ -833,7 +833,16 @@ PF.brief = (() => {
       `- prosperity: one of ${PROSPERITY.join(" | ")}.`,
       `- latitude (optional): one of ${PF.weather.LATITUDES.join(" | ")} — set it only when the setting's identity demands it; omit to let the world roll its own.`,
       `- precipitation (optional): one of ${PF.weather.PRECIPS.join(" | ")} — set it only when the setting's identity demands it; omit to let the world roll its own.`,
-      "- name: the settlement's name, <=24 characters.",
+      // THE NAME IS THE PLAYER'S WHEN THE PLAYER GAVE ONE (0.16.1). The wizard's
+      // first field is the world's name and the payload now leads with it, so the
+      // one thing this call must not do is invent a second name for a place that
+      // already has one. The 24-char cap is the schema's and outranks the ask,
+      // which is why the instruction says shorten rather than "use it exactly" —
+      // a rule the model cannot obey is a rule it is free to ignore entirely.
+      // `DEFAULT_NAMES` is untouched and stays what it was: the seeded fallback a
+      // NAMELESS response lands on, which is the degraded path and not this one.
+      "- name: the settlement's name, <=24 characters. When the preferences give a world name that IS the",
+      "  settlement's name — keep it, and shorten it only if it does not fit. Choose one only when none was given.",
       "- flavor: ONE sentence of arrival atmosphere, <=140 characters.",
       "- situation: ONE sentence, <=240 characters — the unresolved thing happening right now.",
       "  Name a cause and a person, not a mood.",

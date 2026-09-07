@@ -263,9 +263,19 @@ const STAGE_ROWS = [
      *  it in exactly one state, which is `retryReplacesWorld`'s job to know. */
     modes: { rebuild: { gated: false, installs: true }, reroll: { gated: true, installs: true } },
     screens: {
+      /** THE SCREEN SAYS WHICH WORLD IT IS WRITING (0.16.1). The static pair below
+       *  is what an older chat still reads — there is no stored name on one — and
+       *  the `*Named` pair is what a chat created by a 0.16.1 wizard gets, because
+       *  by then the player has typed a name and the whole point of this release
+       *  is that the name is not decoration. Two forms rather than one templated
+       *  string with an empty slot: "Writing …" with nothing in it is worse than
+       *  the sentence it replaced. */
       generating: {
         title: "Writing your world…",
+        titleNamed: (name) => `Writing ${name}…`,
         body: "One generation call is shaping the settlement, its people and the places in it. This can take a minute.",
+        bodyNamed: (name) =>
+          `One generation call is shaping ${name} — its people, and the places in it. This can take a minute.`,
       },
       failed: { title: "The world didn't finish being written." },
       // The sentence AFTER the reason, and every clause of it has to be true in
@@ -372,7 +382,10 @@ const STAGE_ROWS = [
     screens: {
       generating: {
         title: "Writing what your world has to say…",
+        titleNamed: (name) => `Writing what ${name} has to say…`,
         body: "The settlement is written. One more call is filling in what its people say and the work they have to offer.",
+        bodyNamed: (name) =>
+          `${name} is written. One more call is filling in what its people say and the work they have to offer.`,
       },
       failed: { title: "This world didn't finish opening." },
       note: "Your setting is written and settled — the world comes out exactly as written, however many times you try. What did not finish is downstream of it: the work posted in this world, or the last of opening the world itself. Trying again is free: it picks up whatever is still owed and leaves everything already written alone.",
@@ -1628,15 +1641,23 @@ PF.save = {
    *  the HUD, which is the one place in this package a string cannot be pinned
    *  without a DOM — so a stage added there was a stage whose screen nothing
    *  watched. `state` is the gate's own: "generating" or "failed". */
-  gateTitle(stage, state) {
+  gateTitle(stage, state, worldName) {
     const row = this.stage(stage) ?? this.stage("brief");
-    return state === "failed" ? row.screens.failed.title : row.screens.generating.title;
+    if (state === "failed") return row.screens.failed.title;
+    const named = typeof worldName === "string" ? worldName.trim() : "";
+    return named ? row.screens.generating.titleNamed(named) : row.screens.generating.title;
   },
 
-  gateBody(stage, state, kind, postStart, cascaded) {
+  /** THE FAILURE ARM TAKES NO NAME, and that is a decision rather than an
+   *  omission: the failure screen's whole job is the reason and the note under it
+   *  — what did not finish and what it costs to try again — and dropping the
+   *  world's name into a sentence about a call that was refused buys nothing the
+   *  title above does not already say. */
+  gateBody(stage, state, kind, postStart, cascaded, worldName) {
     const row = this.stage(stage) ?? this.stage("brief");
     if (state === "failed") return `${this.gateReason(kind, stage)} ${this.gateStageNote(stage, postStart, cascaded)}`;
-    return row.screens.generating.body;
+    const named = typeof worldName === "string" ? worldName.trim() : "";
+    return named ? row.screens.generating.bodyNamed(named) : row.screens.generating.body;
   },
 
   /** THE REGISTRY, exposed (0.16 §2.10a). One ordered table: the gate reads its
@@ -2099,7 +2120,17 @@ PF.save = {
       let seed = force ? this._regenSeed(core, meta) : this._configSeed(meta);
       if (seed === null) seed = PF.hashStr(String(chatId));
       const setup = meta.gameSetupConfig && typeof meta.gameSetupConfig === "object" ? meta.gameSetupConfig : {};
+      // THE WORLD'S NAME LEADS THE PAYLOAD (0.16.1). The brief call asks the model
+      // for `name: the settlement's name` and the player had already answered that
+      // question in the wizard's first field — but the name went to the chat and
+      // nowhere near this payload, so the model was asked to invent one while
+      // being handed a Setting paragraph that named somewhere else. Named first
+      // because the guidance's naming rule now points at this line: given a name,
+      // keep it. Omitted entirely for a chat created before 0.16.1, where there is
+      // no stored name to keep and the model chooses exactly as it always did.
+      const worldName = this._configWorldName(meta);
       const preferences = [
+        worldName ? `World name: ${worldName}` : "",
         setup.setting ? `Setting: ${setup.setting}` : "",
         setup.tone ? `Tone: ${setup.tone}` : "",
         setup.difficulty ? `Difficulty: ${setup.difficulty}` : "",
@@ -2322,6 +2353,56 @@ PF.save = {
       if (typeof candidate === "string" && candidate) return candidate;
     }
     return null;
+  },
+
+  /** THE NAME THE PLAYER TYPED IN THE WIZARD (0.16.1), from the same
+   *  double-nested config home as the seed and the theme.
+   *
+   *  It reads back rather than being derived because the host has nowhere else to
+   *  put it: `gameSetupConfigSchema` has no world-name field, the CHAT carries the
+   *  name and the chat's name is not on this props object, and every generator on
+   *  both sides reads the setup config. So the wizard writes it into the one
+   *  object on that config the package owns (`experienceConfig.worldName`) and
+   *  this is the reader.
+   *
+   *  ABSENT ON EVERY CHAT CREATED BEFORE 0.16.1, which is not a migration: both
+   *  callers below fall back to the wording they shipped with, so an older world
+   *  reads exactly as it always did.
+   *
+   *  CLIPPED, and the clip belongs to the READER rather than to the writer. The
+   *  stored copy is what the player typed, byte for byte; what a 400-character
+   *  game name must never do is take over a loading-screen title or a line of a
+   *  generation prompt. Grapheme-aware, because it lands on a player-visible
+   *  surface (58-player `graphemes`). */
+  WORLD_NAME_CHARS: 60,
+
+  _configWorldName(meta) {
+    const setup =
+      meta && typeof meta.gameSetupConfig === "object" && meta.gameSetupConfig !== null ? meta.gameSetupConfig : null;
+    const outer =
+      setup && typeof setup.experienceConfig === "object" && setup.experienceConfig !== null
+        ? setup.experienceConfig
+        : null;
+    const inner =
+      outer && typeof outer.experienceConfig === "object" && outer.experienceConfig !== null
+        ? outer.experienceConfig
+        : null;
+    for (const candidate of [inner?.worldName, outer?.worldName]) {
+      if (typeof candidate !== "string") continue;
+      const trimmed = candidate.replace(/\s+/g, " ").trim();
+      if (!trimmed) continue;
+      const units = PF.player.graphemes(trimmed);
+      return units.length <= this.WORLD_NAME_CHARS ? trimmed : units.slice(0, this.WORLD_NAME_CHARS).join("");
+    }
+    return null;
+  },
+
+  /** The loading gate's copy asks for this one directly, off the host's own
+   *  metadata — the same blob every other read-site in this file starts from. */
+  gateWorldName(core) {
+    const meta =
+      core?.host && typeof core.host.chatMeta === "object" && core.host.chatMeta !== null ? core.host.chatMeta : null;
+    return this._configWorldName(meta) ?? "";
   },
 
   /** Build a sim from a save object (route state or the metadata key). */
