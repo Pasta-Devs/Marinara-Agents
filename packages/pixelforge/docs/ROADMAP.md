@@ -63,6 +63,24 @@ down to 10; the falling pass is in, with `performance.now()` as a declared deter
 and the sky moves the fishing **bite rate** rather than the catch mix. The groups, the three 2026-08-21
 rulings and the sequencing shape are untouched.
 
+**Updated 2026-09-06, the 0.16 pass.** A progress pass and a ruling pass, and the ruling half is the
+larger one. Progress: **W2's lazily-compiled sub-zones shipped, amended** — at *wilderness* grain
+rather than at the enterables grain the item describes, cell-addressed rather than
+`hash(seed, edgeId, depth)`, so the entry carries an as-built section and keeps its open half
+(enterable ruins and lookouts are still nobody's); W2's stale "the snapshot has no discovery field"
+clause is **corrected** (the field shipped in 0.11 and 0.16 is its first writer), and its prose
+companion shipped in bounded form. The settlement itself learned to vary with its seed, which is
+**W7's texture question answered from a direction W7 did not name** — not more venues, but a town
+whose streets are not the last town's. Open question **2**'s discovery residual is closed by
+construction and says so. Rulings, all maintainer, 2026-09-05, and three of them open entries:
+wilderness and town variety ship now while **multiple settlements wait for 0.17** (recorded as a
+companion on W1, with the two concrete things a second settlement breaks); the fallback map gets
+**nothing** and a **generation retry surface** instead, which shipped and opens **S9**; layout
+freezing once a region has been loaded, plus the world remembering what you did and regenerating or
+dying on its own, become **one entry** — **S8**, the persistence umbrella; and single structures
+spanning multiple maps open **W11**. The 0.16 release row records what landed. No group, no
+sequencing decision and none of the three 2026-08-21 rulings moved.
+
 **Inspirations — the games checked first (maintainer, 2026-08-28).** When the maintainer asks for a
 feature, these are the games whose systems get looked at before anything is designed. **THE
 REGISTER IS BINDING, and it is the one the Dwarf Fortress direction was already stated in:
@@ -90,10 +108,15 @@ system means taking the *shape* of it and leaving that behind.
   is:** reflex minigames are on the Will Not Build list and stay there (Ruling 2 — RNG tables with
   skill and equipment inputs instead), because Stardew built reflex layers to fill the place a
   narrator occupies here.
-- **Minecraft — chunk-style, region-lazy world generation.** Compile the region when somebody walks
-  into it, deterministically from the seed and the edge, rather than up front. Already recorded as
-  the mechanism in **W2**'s lazily-compiled sub-zones, and the same idea at settlement grain is
-  what **W3**'s districts want.
+- **Minecraft — chunk-style, region-lazy world generation. SHIPPED in 0.16, and the reference grew
+  a second half in the same ruling round.** Compile the region when somebody walks into it,
+  deterministically from the seed, rather than up front: that is the wilderness lattice (**W2**,
+  as-built), and the same idea at settlement grain is still what **W3**'s districts want. The
+  second half is the **save model** rather than the generator — *"once a chunk is loaded in, it
+  stays that layout so that save files across updates that potentially affect seeds or the way
+  things generate in the world don't get horribly messed up"* — which is **S8**(a), and it is the
+  part of the reference that has to land before the first release that moves a generator under a
+  world somebody is living in.
 - **Pokémon-style and turn-based 5e / V20 combat.** The maintainer's long-held combat plans, and
   they are an **engine-side track** — see the Will Not Build entry, which records the substance:
   the engine owns combat, the package hands off and freezes. 5e and V20 turn up on this roadmap in
@@ -124,6 +147,8 @@ A reader should see the arc: each release made the world *more specific* without
 | **0.13** | **Settlements post work.** **E1's content pack:** a second sealed artifact per world — one generation call behind the same loading gate as the brief, fed a digest of the sealed cast and places, floor-checked for substance (an under-floor answer reports as *thin*: retry free, nothing sealed, never dressed up as a refusal), salvaged from truncation when the templates survive the cut; a hand-authored default pack serves skipped and legacy worlds; and the read door re-applies the seal's own grain and verb rules — one authority, so a stored pack cannot smuggle in what the seal would have refused. **P4's board:** a compiler fixture in every settlement, anchored at the gathering place, then the green or the market, then the spine road by spawn; daily offers deterministic per (seed, day) over the surviving templates; accept and turn-in at the board; **a day's work fills once** (a completed template re-offers tomorrow); a packless world's board says "no work posted here" and nothing else. **The lifecycle:** catch N, deliver-as-errand (one GM call, spent at the greeting — the family's only one), visit — progress event-driven at the verb sites, never swept; rewards **money and rapport only**, per the reward ruling: quests never grant skill experience, the completion passes no verb to `award()`, and a boot fence keeps the quest path from ever minting a skills ladder. **The tab:** the journal grows a strip of `{label, render, memoSync}` triples — P8's extended view lands later without surgery — and the quest tab shares the board's own row renderer, holds the done-work tallies in two labelled groups (this world's / travels with you), and carries the per-row set-aside behind a one-press confirm. *(Pre-0.13 worlds stay packless — the rolling-compat posture; a 0.14 opt-in regeneration is recorded as a convenience, never an obligation.)* |
 | **0.14** | **The sky, the year, and somebody to talk to.** **L2, whole and then wider:** every world is minted a **climate** on two axes — latitude (`equatorial`/`tropical`/`temperate`/`subpolar`/`polar`) and precipitation (`arid`/`moderate`/`wet`) — each rolled on its own named side stream from a per-theme distribution, so *every existing seed keeps its exact layout and gains a climate*, and a brief may pin either axis. On top of it a **365-day calendar whose phase is the world's own** (which subsumes the hemisphere question: "southern" and "day 1 lands in autumn" are one offset), with the season SET taken from the latitude — two seasons in the tropics, four poleward. From those, **one continuous derivation** replaces every hand-written per-climate table: temperature is spent as a magnitude through two clamped ramps, snow is a *share* of the wet mass rather than a separate roll, and a storm gate keyed on genuine warmth is why a polar year cannot produce a thunderstorm at any precipitation in any season. Walked whole at boot — all **48** latitude × precipitation × season rows, the count asserted, plus a degeneracy clause so five bands buy five skies. **Five weather words** (`fair`/`overcast`/`rain`/`storm`/`snow`) with **light/heavy** as a second, smaller axis on rain and snow only: it reaches the header label, the rain tint and the falling pass and stops — the catch tables, the schedule bias and the ground swap all stay five-valued. On screen: tints that compound with the night ramp, a falling pass at 45 streaks (light) / 120 (heavy) whose phase is `performance.now()` — **the one declared determinism exception in the package** — and a **snow ground substitution** that is a paint-time rename read by the renderer and nobody else, so a compiled world holds `grass` in January exactly as it does in July. Paths, roads, stone and dirt stay bare; water stays water. **Zero save fields**, exactly as schedules do. **The town answers the sky** (the 2026-08-24 amendment, redesigned): on rain, storm or snow anyone the schedule would have standing outdoors is sent to **their own fireside** — capacity-neutral by construction, because the wet 07:00 pass is the dusk relocation run early — keyed on **interior-zone membership** rather than roofedness, with `post` (the watch, the grower, the keeper, the stall) exempt. A first snow or an incoming storm files a ledger line, but only when a **live** clock mover crosses a day, so a reload is silent. **P3's promised modifier, ruled and rebuilt:** grey and wet skies move the **bite rate**, not the catch mix — `×2` chances under overcast, rain, snow and storm, composed as a hazard exponent so the ruling's "still RNG determined" survives (≈1.7× catches per window at the curve floor, never a guaranteed cast) — and the *base* rate derives from the world's own precipitation (arid ×0.7 / moderate ×1.0 / wet ×1.3), so an arid world fishes sparse without losing a single species. Two of 0.12's four weather columns were provably inert and all four are gone; **storm alone** keeps a mix lean, because it is the only one that ever moved the draw (rare share 4.5% → 10.5%). **E7's `Ask` tree, as the interact press:** pressing E beside somebody opens a window that **stops the clock while the player stays mobile** and the town keeps milling — a conversation must never burn the afternoon — offering the compiled record's own answers ("what do you do", "where do you live" — free for a minted resident, no generated word needed), up to four pack topics (rumors, work, this place, passing the time), the escalation pair, a hand-over row per live errand, and the two doors to the GM: "Just talk" and a Say field that is deliberately uncapped. It opens inside 26px and closes at 32 — one tile of slack, derived rather than tuned — and it is mutually exclusive with all three panels in both directions. **Always stranger** (Ruling 4): the friend register is written, sealed and unread, because friendship is P2's and a stopgap would be a promotion nobody earned. **A branch with no line does not render**, which produces an inversion the release ships with knowingly: the enriched default packs (32 → 56 lines a theme, **8,705**/**8,844** bytes) render all four branches on a legacy world, while a thin sealed pack renders one or two — so the world that paid two GM calls meets the thinnest window. The answer to that is a wider generation, not a merge: the pack call now asks for four topics, a sky tag and mostly-stranger lines, gets the world's climate in its digest (+2 rows), and the substance floor came down **12 → 10** to match. Under it all: **not one new save field, in the block or the envelope** — the wire literal does not move by a byte, and the header's two new words (14-24 chars a turn) are the release's only permanent per-turn cost. *(**The week layer did not ship** — see L2b.)* |
 | **0.15** | **The town starts knowing you.** **P2's heuristic layer, whole:** the disposition ladder stored since 0.11 finally moves — a rung is EARNED when the encounter count crosses its line (acquainted 3 / friendly 10 / close 25, `docs/player-state.md` §13), weights live at the verb sites (talk, purchase and berth stay one; **a finished job counts three** — the reward ruling's rapport cashing out as movement), and each site declares a **verb class**: small talk builds the count forever but can never leave a row above **acquainted**, while a job, a berth and a purchase — doing something for somebody, or being their business — may cross any line. A press moves the row **at most one rung**, and the explicit-`d` setter stays the setter, so S1's future precise arm is rate-limited rather than fought. **The friend register serves** at the friendly rung, friend-first at every relaxation of the ask ladder, per SPEAKER — the same bench answers a friend and a stranger differently in the same hour, everyone short of friendly meets 0.14's stranger-only window byte for byte in a town with no friends in it (the served set is per branch and shared across speakers, so a friend's presses spend from the same day's pool), and the generation guidance stops promising "a later release" and says who reads a friend line now. **The standing shows everywhere the person does**: the turn header's near clause (`near: Alder Vance (hedge-mayor, friendly)` — a stranger stays wordless, 0.14's cost discipline), the window title (`· friendly`, hostile outranking the rung), and a rise on 0.12's level-toast precedent, **composed into the receipt of the press that earned it** ("Handed in to Alder — 6 coins · they know you now.") rather than said beside it, because one surface with one timer means two toasts in a tick is one toast — and never re-announced, since nothing is stored to re-announce. **Zero new save fields** — the block held all of it since 0.11. *(Not shipped, recorded on the entries: gifts await a give verb; demotion and `h` writers are S1's; L4/E4 threshold reads now have a ladder to read.)* |
+
+| **0.16** | **The wilderness opens, and no two towns share a map.** **W2's lazily-compiled sub-zones, at wilderness grain (`src/21-lattice.js`):** the settlement stands at cell **(0,0)** of a lattice with no edge, and every other cell already HAS a definition — terrain, name, whatever landmark it carries — whether or not a zone for it has ever been built, so materialising one is a **cache fill, not a decision** (`compileChunk`/`ensure`). Three rules carry it: **one cell, one stream** (every cell draws from `hash(seed,"wild",cx,cy)` and from nothing else, so compiling the cell east of you cannot move a tile in the cell north of you, in the town, or depend on which you walked into first); **gates are arithmetic, never records** (an edge is `zone.gates`, where it leads is computed at step time, nothing is written into `zone.portals` — so the shipped "every portal's target exists" contract needs no relaxation, there is nothing to dangle when a neighbour is evicted and nothing to duplicate when it comes back, and where a brief's own wilds already holds a cell the RECORD wins and no gate is written at all); and **gates are punched in two phases** (positions reserved before the tree scatter, painted after everything else, with the pocket seal moved to run after the paint — the late punch is not taste: the `struggling` scuffing loop draws the main stream once per painted path tile, so a seam laid with the road block would re-lay every world that already exists). **Six terrain classes** — `woods`, `heath`, `scree`, `fen`, `outfield`, `oldwall` — composed from the **shipped tile vocabulary with zero new art**, weighted by the world's stamped climate axes, its stamped `surround` (felt hardest in ring 1 and let go further out) and how far out the cell sits; both themes ship and the reading is honest, since 10-art re-skins trunk and canopy so a colony's `woods` is a mast field and its `oldwall` a collapsed bulkhead, with a per-theme word book that says so in the colony's own words. **~1 landmark in 7 cells (C12)** — the two classes that always carry one (`fen`, `oldwall`) plus a 12% roll on the two that may (`heath`, `scree`); `woods` and `outfield` carry none — and a landmark is the only thing written down: `player.found` is an eighty-row ledger that evicts the oldest by day, so filing every patch of heath would fill it with terrain inside a day's walking. **Residency (C5):** the nine most-recently-entered cells stand and everything older is dropped least-recently-first, refusals first (the zone under the player, the settlement by name as well as by id, everything the brief named, any cell holding an NPC — vacuous today, load-bearing the day it is not), with **two clears per eviction** because the megabytes are the renderer's two composites, not the tile arrays (`render.invalidateZone`, which had carried no runtime caller since it was written). Dropping country is free rather than lossy for exactly one reason: **a cell walked back into recompiles byte-identically**. **The walk is free too:** a cell-to-cell step writes nothing event-shaped and rides the shipped thirty-second positional autosave, because out here crossing a boundary is not an event, it is what walking IS — everything else keeps the write it had. **A signpost, not a verb:** standing beside an edge reads the bearing and the name of the country over it, computed from the cell rather than from a resident zone. **C10 held and given a lane of its own:** no cell ever claims a World Maps row (`mapExport = false`) — crash-safety rather than taste, since that route is additive with no delete and its planner dereferences zones across its awaits. **The fallback map gets nothing** (ruling 4): no cell, no gate, no anchor table, no surround, and `ensure` refuses it outright. **The town stops being the last town's town (C2 ruled):** four levers, all off one side stream keyed like the mint's, in one fixed order — the **junction** (searched, never formula'd: candidates are enumerated against the lot allocator's own emptiness arithmetic and filtered to the centred yield, because `slots.length` is the supply cap the whole roster hangs off and a junction yielding one lot fewer would re-mint the town and sever every saved `rel` row in it), its **square** (a SET of shapes — 8×8, 11×6, 6×11 — pinned on `(w−2)(h−2)`, which is what keeps the scuff loop's draw count constant so everything downstream of the settlement comes out byte for byte the same), the four **band phases** (spending the allocator's centring slack toward the crossroad and never toward the trees, so they are yield-neutral by construction), and the **surround's own ground** (a stone verge along a rocky town's arteries, a thickened grass mottle inside a water town's ring — shipped tiles, and honest under snow, where a verge stays bare rock exactly as `scree` does). Terminals move with the crossroad because a terminal is where the road meets the edge; the legacy map is untouched and twenty frozen layout fingerprints prove it. Measured plan space: **737** layouts at outpost, 51,246 at hamlet, 227,760 at village, peaking at **3.9 million** at town, and 919,800 at city. The ladder is **not monotone**, and the city figure is written down rather than left off so nobody infers that bigger always means more: the margin the junction search keeps leaves a city **504** surviving candidates against a town's **1,268**, and the variety lane prints all five ranks on every run. **And one thing the small ranks do not do, said here rather than found in a playtest:** at outpost and hamlet the crossroad moves only sideways — every outpost that will ever compile puts its horizontal road on the same row, and so does every hamlet, because those maps have room for exactly one legal band depth. The road's silhouette is fixed at those two ranks and the variety there is the square, the band phases and the ground idiom; from village up the junction moves on both axes. **And a way out of a world that half-generated (ruling 4's replacement for the fallback-map question):** an ordered **stage registry** — brief, pack, with `historygen` and `storyboard` reserved by shape — where each row DERIVES what is standing every time it is asked rather than reading a log, because a durable failure record would have to be written from a code path whose own write may be the thing failing. A popup lists what did not finish and offers per-stage re-attempts: a **free same-seed rebuild**, a paid re-roll that **cascades** to everything downstream of it, a pack retry, a pack rewrite, and "keep playing" as a real answer that is remembered. **Ruling 8 is the law under all of it: no path ever moves the world's seed** — the seed is the world's identity for the life of the chat, because historygen and every future downstream stage must derive from the world that stands, so a regenerated stage re-runs what came after it instead of orphaning it. Everything that replaces the world **asks first, free presses included**, and the confirmation carries the whole keeps-and-loses contract. **Zero new keys in the player block and none in the save envelope**: the retry surface's three keys are chat metadata (**40**, **39** and a parked brief at ~**1.5 KB**), the lattice stores nothing at all, and a landmark costs the wire **47 bytes**. *(Not shipped, stated rather than implied: the wilderness does not remember you — S8; no NPCs in cells; a brief feature the town cannot fit is still silently dropped; and multiple settlements are 0.17's, see W1.)* |
 
 ---
 
@@ -171,7 +196,7 @@ The gaps the roadmap exists to close, in order of how much they matter for *this
 
 ## S — Substrate (load-bearing)
 
-These five gate more of the roadmap than everything else combined. Marked **LOAD-BEARING** with what each gates. **S6 and S7 are deliberately *not* among the five** — neither gates anything. They live here because both are about the seam between the package and its host rather than about the game: S6 is the channel every other item's configuration arrives through, and S7 is a channel the host is already using that this surface has never answered.
+These five gate more of the roadmap than everything else combined. Marked **LOAD-BEARING** with what each gates. **S6 through S9 are deliberately *not* among the five.** S6 and S7 are about the seam between the package and its host rather than about the game: S6 is the channel every other item's configuration arrives through, and S7 is a channel the host is already using that this surface has never answered. S8 and S9 arrived by maintainer ruling in 0.16 and sit here for a different reason — both are about **what a save owes across time**, which is S5's subject matter, and neither gates a feature so much as a promise (S8 the promise that a world you know stays the world you know; S9 the promise that a half-written world is recoverable rather than disposable).
 
 ### S1. The GM write-back channel — LOAD-BEARING
 
@@ -287,6 +312,77 @@ The window matters at both ends. World-derived ids — a discovered sub-zone, a 
 
 **Depends on:** nothing to suppress — and suppressing is the only one of the three that also closes the prep modal, since a chat carrying no widgets never opens it. Rendering wants no engine change (the metadata is already on the props) but leaves the modal promising rails that never arrive, so it wants an engine-side gate on those three mounts as a companion. Mapping wants P7's decision and probably S1's channel. **Companion:** whichever is chosen, say it in the package README, because the surface currently makes a promise about "your own HUD" that the setup step contradicts to the player's face on the way in.
 
+### S8. World persistence — what a loaded region owes the next update *(new — maintainer ruling, 2026-09-05)*
+
+**What, in the ruling's own frame, and it is one item rather than three because the maintainer
+answered "both, actually":** once a region has been loaded, **its layout stays that layout** across
+updates that change seeds or generation — *"Minecraft's system … so that save files across updates
+that potentially affect seeds or the way things generate in the world don't get horribly messed
+up"* — **and** the world remembers what the player did in it, **and** it regenerates or dies
+naturally on its own. Three facets, one umbrella:
+
+- **(a) Layout pinning once loaded.** A region that has been visited keeps its geometry, so a later
+  generator change never reshapes a place somebody already knows. **The settlement exterior is in
+  scope, not only the wilderness** — the ruling's stated worry is save files across updates, not
+  chunks specifically, and 0.16 made `z1`'s own layout seed-varied, so a later change to the
+  junction search or the plaza set would reshape an existing town in exactly the way described.
+- **(b) The world remembers what you did.** Felled trees, gathered nodes, cleared ruins, placed
+  markers, doors left open — the mutations 0.16's anti-scope refuses wholesale, because a lattice
+  with no edge and nothing stored is what makes the walk free.
+- **(c) Natural regeneration and decay**, in the ruling's own hedged words: the world *"needs to
+  regenerate or die naturally as well, **ideally**"*, for *"pretty much any resource that isn't
+  non-living like minerals **I suppose**"*. Living resources — trees, fish, plants — regrow or die
+  on their own; non-living ones deplete permanently. Recorded as a direction with its hedges
+  attached; it is not yet a design.
+
+**Meanwhile, seed instability across updates is explicitly accepted** — *"Right now I don't really
+care if seed changes can alter already existing worlds and saves because it may make playtesting a
+bit simpler"* — which is what let 0.16 re-lay every existing compiled town, and 0.16 paid the one
+premium that keeps that safe: the layout search may never change how many building plots a town
+has, so a re-laid world keeps its people, its zone ids and every saved row that names them.
+
+**Pillar:** consequence — this is the largest single piece of it the roadmap has never had.
+**Secondary tags:** world aliveness, ownership. **Ruled as the 0.17 candidate.** *(One reading here
+is the package author's and is marked as such: whatever shape this takes has to be S5's, because
+all three facets are things a save has to hold, and (b) in particular would be the first
+player-authored world state the block has ever carried. The maintainer ruled the facets, not that
+framing.)* **Depends on:** S5's block for (b); nothing for (a) beyond deciding what a pinned layout
+is stored AS — the honest fork is "store the geometry" versus "store the generator version and keep
+every old generator", and they have very different costs. **Companion:** decide (a) before the next
+release that moves a generator, because every release that moves one without it spends exactly the
+goodwill this entry exists to protect.
+
+### S9. The generation retry surface — the stages it does not have yet *(shipped in 0.16 — maintainer ruling 4, 2026-09-05)*
+
+**What shipped**, and the entry exists for what it deliberately left empty. Ruling 4 refused to put
+anything on the fallback map — *"no one should play in the fallback map"* — and asked for a way out
+of it instead: *"if anything failed (like map/worldgen, historygen, GM storyboarding, or whatever
+else is generated before game start that fails or uses fallback appears on a popup window? Then the
+user can decide if they want to regenerate that one specific thing or just leave and generate a new
+game)"* — quoted as written, unbalanced paren and all, because every other ruling on this page is
+character-exact and a tidied one would be the odd entry out. 0.16 built it as an **ordered stage
+registry** where each row is a self-contained bundle of derive, re-attemptable modes and the
+sentences its screens read — so adding a stage is adding a row, not editing three call sites.
+
+**Two stage ids are RESERVED with no rows shipped, and that is the open half:** `historygen` and
+`storyboard`, both named by the ruling. Neither has a failure vocabulary yet — **W10**'s history
+generation is *designed to reduce* connection dependency, so it may fail like the content pack's
+substance floor rather than like a network call, and GM storyboarding has zero repo footprint and
+was named here for the first time. The registry accommodates them **by shape**, and a row is owed
+whenever either lands.
+
+**The law the surface is built under is ruling 8's**, and it binds every stage added later: *"seed
+change on worldgen reroll isn't okay, since historygen should be affected by worldgen and it may not
+make sense if historygen is made from a different world."* Generalised: **a regenerated stage must
+cascade downstream and may never orphan an artifact derived from its old value** — which is why the
+seed is immutable for the life of the chat, and why the paid world re-roll re-runs the content pack
+its new setting would otherwise strand. A stage that cannot say what is downstream of it is not
+ready for a row.
+
+**Pillar:** call economy — the whole point is re-running only what never succeeded, so a half-failed
+creation costs one call rather than a new game. **Secondary tag:** legibility. **Depends on:** W10
+for the `historygen` row; an engine-side answer for `storyboard`, which the package cannot see.
+
 ---
 
 ## L — The living settlement
@@ -373,7 +469,13 @@ The window matters at both ends. World-derived ids — a discovered sub-zone, a 
 
 **The seam that exists: the notice band.** 0.12 gave the journal a band that sits outside the day groups and answers "what happened to the world itself, rather than in your days in it" — severances, losses, a save coming home. Its framing sentence and its five writer-site strings were reviewed under a maintainer amendment (M3) that asked each of them to name **its kind's relationship to the player**, and the band was written to receive one more field it does not have yet: **an actor**. A notice that can say *who* did the thing is the difference between "the mill burned" and "the Hearth Guild burned the mill", and the band is the surface that sentence lands on. Nothing in 0.12 can produce an actor, which is stated in the code rather than implied — a faction is what fills that field in.
 
-**Pillar:** Consequence; world agency. **Secondary tags:** world-aliveness, world variety. **Unlocks:** the strongest reason yet to return to a settlement; quest hooks that write themselves (P4); a source of S1-shaped world flags that is not the GM, which is worth noticing — this and S1 want the same closed vocabulary of world mutations and should not invent two. **Depends on:** the world-persistence decision in S5, and it is the item that makes deferring that decision expensive. Reads well with W4's specialization axis (a mining town has something a faction wants) and W3's districts (a faction holds a ward).
+**0.16 did not move this and did make its dependency concrete.** The wilderness ships as a **total
+function with no memory** — a region the player walks out of is destroyed and rebuilt identically on
+return — which is the exact opposite of what a faction needs, and deliberately so for one release.
+The world-persistence decision this entry has been waiting on now has an entry of its own, ruled
+and named: **S8**. Read the dependency below as pointing there.
+
+**Pillar:** Consequence; world agency. **Secondary tags:** world-aliveness, world variety. **Unlocks:** the strongest reason yet to return to a settlement; quest hooks that write themselves (P4); a source of S1-shaped world flags that is not the GM, which is worth noticing — this and S1 want the same closed vocabulary of world mutations and should not invent two. **Depends on:** the world-persistence decision in S5, now carried by **S8**, and it is the item that makes deferring that decision expensive. Reads well with W4's specialization axis (a mining town has something a faction wants) and W3's districts (a faction holds a ward).
 
 ---
 
@@ -573,19 +675,71 @@ The last row is the ruling's own, and it is a permanent exclusion rather than a 
 
 **What:** gate travel by quest, vehicle, fee, or rapport — a gate must accept more than one key (see P4's covenant).
 
+**Companion — the second settlement, and what it breaks (0.17; C1 ruled 2026-09-05).** The
+maintainer approved wilderness and town variety for 0.16 on a stated condition that holds: *"if the
+seeding system already does not account for multiple settlements in one game currently"* — it does
+not. The brief has one settlement and no way to address a second, so multi-settlement worlds are
+0.17's, and the two concrete things a second settlement breaks are written down here rather than
+rediscovered: **(1)** the World Maps export syncs a world **once** and then holds it in a `WeakSet`
+of finished worlds (`55-maps-export.js` `_done`) that `maybeSync` returns early on, so a settlement
+materialised *after* that sync is invisible to the map forever; and **(2)** the lattice's residency
+policy refuses to evict anything the brief named, so a second settlement a player walked away from
+days ago stays resident permanently (`21-lattice.js` `residency`) — the refusal is correct for one
+town and wrong for a world of them. Both are cheap to fix deliberately and expensive to discover.
+
 **Pillar:** the unknown. **Companions:** **somewhere to go** (W2 — a gate with nothing behind it is a wall) and **the vehicle as a themed feature**: every theme names its vehicle in the placer registry — dock/boat, pad/shuttle, bus-stop/bicycle — one gating system, three skins; sailing generalized. The sailing case lives here: the boat is a travel key *and* a fishing multiplier *and* an exploration verb. **Depends on:** W2 for payoff; S3 for fees/tickets.
 
-### W2. Enterables and the expedition ladder *(old 19 + new)*
+### W2. Enterables and the expedition ladder *(old 19 + new — the lazy-compile half SHIPPED in 0.16, amended)*
 
 **What:** enterable ruins and lookouts — plus the reason to enter: **lazily-compiled sub-zones** chained off wilds edges and enterable features (the cave behind the ruin, deeper woods, a derelict deck below the hull), deterministic from `hash(seed, edgeId, depth)`, compiled on first entry. The unknown *exists without pre-existing*; the sealed brief stays sealed.
 
-**Pillar:** the unknown — the missing half of exploration: destinations that don't exist yet. **Unlocks:** W1 gets something behind the gate; P3's mining/foraging get places that feel earned; sailing gets shores worth landing on. **Companions:** the S2 once-per-feature flavor injection, so first entry always lands prose — and **discovery state**, which needs saying precisely because it is a promise the save format cannot currently keep. A found place staying found is save data, and the snapshot has no discovery field; `simFromSaved` restores none. So either it rides the versioned player block of Open Question 2 (rehydrated after `PF.world.build` and before `saved.zone` resolves), or **discovery is session-only and W2 must say so out loud**. Do not ship the ladder with the stronger promise implied and the weaker behaviour built. **Depends on:** S2; benefits from 0.10's room vocabulary; deliberately sequenced late because its payoff multiplies with what's coming — the one deferral justified by dependency, not art.
+**As built in 0.16 — the lazy-compile mechanism, at a grain this entry did not name.** What shipped
+is the **wilderness lattice**: an unbounded grid of regions around the settlement, materialised on
+arrival and dropped again when the player walks far enough away. Three amendments to the text
+above, each recorded rather than quietly absorbed:
+
+- **The grain is the wilderness, not the enterable.** The item chains sub-zones off *wilds edges and
+  enterable features*; 0.16 chains them off **every edge of every region**, and the enterable half —
+  the cave behind the ruin, the deck below the hull — is untouched. A landmark out in the country
+  is a thing to find and stand on, not yet a thing to go inside. **That half of this item is still
+  open**, and it is now the half with the shorter road: the substrate under it exists.
+- **The address is the cell, not `hash(seed, edgeId, depth)`.** A generalisation rather than a
+  substitution: a chain keyed on the edge you came through is order-dependent by construction (east
+  then north and north then east are two different edge chains), so what shipped keys on the
+  **cell** — `hash(seed, "wild", cx, cy)` — which makes the two orders name the same place and makes
+  a region a **total function** rather than a walk history. Depth survives as ring distance for the
+  terrain mix and nothing else.
+- **"The snapshot has no discovery field" is out of date and was already out of date.** That clause
+  is corrected rather than argued with: `player.found` **shipped in 0.11** as part of S5, was
+  declared and empty for five releases, and **0.16 is its first writer** — a landmark cell files a
+  row, an ordinary one files nothing. So the entry's own fork resolved in the stronger direction:
+  discovery is durable, not session-only, and the item never had to choose.
+
+**And the companion shipped in bounded form.** The once-per-feature flavor injection this entry
+asked for is live for the wilderness: a **landmark** cell carries one line of prose capped at 140
+characters and an ordinary cell carries none, so the injection budget is a function of **how many
+landmarks exist to find** rather than of how far anybody walks (measured: 12 of 47 cells carry prose
+across a three-ring walk, 1,015 characters in total). The **per-feature** injection S2 owns is still
+S2's.
+
+**What is still open here:** enterable ruins, lookouts and hulls; anything to *do* in a region
+(0.16's anti-scope refuses world mutation wholesale — see **S8**); and depth as a real ladder rather
+than as a distance term.
+
+**Pillar:** the unknown — the missing half of exploration: destinations that don't exist yet. **Unlocks:** W1 gets something behind the gate; P3's mining/foraging get places that feel earned; sailing gets shores worth landing on. **Companions:** the S2 once-per-feature flavor injection, so first entry always lands prose — and **discovery state**, which is settled rather than forked, and settled in the stronger direction (see the third amendment above). A found place staying found is save data, and the durable field is **`player.found`**: `21-lattice.js`'s `discoverCell` files a landmark cell through `58-player.js`'s `discover`, `PF.player.serialize` writes the rows into the versioned player block, and the restore's own player pass rehydrates them — eighty rows deep, evicting the oldest by day. So the ladder gets built on the stronger promise rather than against it, and **what is still open here is the enterables half above and nothing about the save format**. **Depends on:** S2; benefits from 0.10's room vocabulary; deliberately sequenced late because its payoff multiplies with what's coming — the one deferral justified by dependency, not art.
 
 ### W3. Cities and districts *(old 17 — the density half shipped in 0.10; districts remain)*
 
 **What:** the `city` scale shipped in 0.9 at 96×72; **0.10 shipped the density half** — the map raised to 104×72 with 80 lots, population derived from rank and prosperity (~120 souls measured), minted residents, round-robin households, parks on the lots nobody claimed, and day anchors spread so a quarter of the town keeps the square while the rest hold the street outside their own doors. What remains is **districts with their own gravity** — a ward `public` handle per district (the anchor spread stops the plaza crush, but "the street outside your own door" is a stopgap, not a neighbourhood; one plaza serving 104×72 is still a village in a coat), district market days (L2), and district names in the header. 0.10 turned this from polish into a due bill: at 80 lots and 120 souls the single-`public` town is visibly under-articulated. **A note on `backgroundPopulation`:** 0.10 gave the §9 reserved field its first consumer — it moves a settlement *within* its rank's band and can never set the band — so "cashed out as ambient walker density per district" is no longer the field's first job, but it survives as the district-grain second consumer if districts want it.
 
 **Companion — apartments as a choice, not only a fallback.** Round-robin sharing exists as over-subscription behaviour; a dense rank could *choose* to stack households — a tenement row, a hab block — and spend the ground it frees on district squares, markets and parks. The leftover-lot machinery already knows what to do with ground nobody built on; this hands it more of it, on purpose.
+
+**0.16 did not move this, and it is worth saying which half it did not move.** The release re-laid
+every settlement's streets from its own seed — the crossroad, the square, the band phases and the
+ground — so two cities no longer share a map. **A district is still not a thing**: one `public`
+handle still serves 104×72, the anchor spread is still the stopgap it was, and a varied layout with
+one centre is a differently-shaped village in a coat. If anything the bill is louder now, because a
+city's plaza can sit anywhere and there is still only one of it.
 
 **Pillar:** world variety. **Depends on:** L2 for district calendars; W6's map surface stops being optional at this scale.
 
@@ -612,6 +766,13 @@ The last row is the ruling's own, and it is a permanent exclusion rather than a 
 **What:** a generated settlement reads as a grid of homes plus a farm. The vocabulary is already richer than what reaches the ground — `gathering`, `workshop`, `hall` and `sanctuary` are sealed place-kinds today — but a settlement only gets one if the model names it, and the repair layer's floor is a single wilds. Three parts. **Named venues surfaced more aggressively:** a floor per rank rather than only a ceiling, so a village whose brief named no places still has somewhere that is not somebody's house. **District naming:** W3's remaining half is a gravity well, and this is the other one — a ward is a name in the header before it is an anchor spread. **Discoverability:** a player standing in the street should be able to find the inn, by the map surface (W6), by a sign the second verb can read (S2), or by the travel list naming what a zone *is* and not only what it is called.
 
 **Pillar:** world variety. **Secondary tag:** legibility. **Relationship to W3 and W5, said plainly so nobody builds it twice:** W3 owns the district *machinery* (per-district `public` handles, district market days) and W5 owns *new* place-kinds with their schedule columns; W7 is the texture pass over both — floors and surfacing for the kinds that already exist, and names for the wards W3 carves. **Depends on:** nothing to start (the floor is a repair-layer change and a lot budget); W6 for the map half; S2 for the sign half.
+
+**0.16 answered part of the complaint this entry is about, from a direction it does not name.** The
+playtest note behind W7 is that a generated settlement reads as a grid of homes plus a farm; 0.16
+made *where those homes are* a function of the world's seed, so the sameness that ran across worlds
+is gone. **All three parts of this entry survive it untouched** — a venue floor per rank, district
+names, and being able to find the inn — because a town laid differently is not a town with more in
+it, and none of the three is a layout question.
 
 **The bug half is closed; this is the feature half.** 0.11 found the case where a settlement could seal with a keeper and *no gathering at all* — the §4.3 host synthesis ran against the model's draft cast, one pass before the quality floor topped a host up from stock, so a brief whose cast failed validation outright compiled fifteen zones of homes with no inn in them. The post-condition now runs against the sealed cast. That was a defect, and fixing it does not make a settlement varied; everything above still wants doing.
 
@@ -650,6 +811,13 @@ caveat that is part of the reference and not a footnote — DF's scope is fantas
 fiction, and a colony's founding is not a dwarven age. There is no copy target here and no feature
 list; the entry exists so the direction is on the record with the register attached.
 
+**0.16 did not touch this item and did two things to its surroundings.** It is the largest
+procedural mint the package has done — six terrain classes, per-cell naming and a landmark rate,
+all off the seed and costing the connection nothing, which is this pillar's argument made again at
+a larger scale — and it **reserved `historygen` a stage id** in the retry surface's registry
+(**S9**), so whenever history generation lands it inherits a recovery story rather than needing
+one. History itself remains unwritten and undesigned.
+
 **Pillar:** Call economy — this is the pillar's largest unclaimed territory, because everything the
 package can mint is something the connection is not asked to write. **Secondary tags:** world
 variety, world coherence. **Nearest thing to a precedent, and it is 0.14's:** the two climate axes
@@ -662,6 +830,35 @@ reads best beside **L7**'s world-state decision (a history is what a faction's p
 somebody has decided which surface tells the player any of it. **Companion:** decide up front what
 history is *for* — GM fuel, place names, or a thing the player can ask about — because those are
 three different artifacts, and only the last one wants E7's window.
+
+### W11. Megastructures — one structure across many maps *(new — maintainer ruling 7, 2026-09-05)*
+
+**What, in the ruling's own words:** *"megastructures, like cities, dungeons, etc, that are one
+structure but may span multiple maps."* A single coherent place that is larger than a zone — not a
+city rendered as one big grid, and not a dungeon rendered as a corridor of unrelated rooms, but one
+structure whose parts are laid out across several of them and hold together as a thing.
+
+**The enabling mechanism is cross-chunk structure generation, and 0.16 laid its substrate.** The
+wilderness lattice makes "the region east of here" addressable and deterministic before anyone has
+been there, which is the precondition: a structure that spans maps has to be able to decide what it
+puts in a region the player has not reached, and be right about it when they arrive from the other
+side. What 0.16 does *not* have is any generator that writes across cells — every cell is a pure
+function of itself, deliberately (`hash(seed,"wild",cx,cy)` and nothing else), and that is the
+constraint a megastructure generator has to break on purpose and carefully.
+
+**Provenance, and one thing it is NOT.** This entry was spawned by a question about brief features a
+settlement has no room for — should an unplaceable smithy spill into the woods? The answer was no,
+plus this. So the entry inherits the ruling but **not** the drop problem: a dropped brief feature is
+a smithy the town had no lot for, and that is a placement failure, not a dungeon. **The silent drop
+remains unanswered and unowned** — a settlement that cannot fit a sealed feature still drops it with
+no log and no notice, exactly as it always has — and it should be filed against whichever item takes
+placement up, not quietly assumed to have a home here.
+
+**Pillar:** the unknown. **Secondary tags:** world variety, world coherence. **Depends on:** the
+lattice (shipped) for addressing; **S8**'s layout pinning, hard — a structure spanning regions is
+precisely the thing a generator change must never re-lay under a player halfway through it;
+**W3**'s districts, which are the same problem at settlement grain and should be designed with this
+in view rather than twice.
 
 ---
 
@@ -772,6 +969,7 @@ What it serves, in the order the item asked for it: **name, occupation and where
 - **0.12 — in progress: S4 + P3's fishing vertical + P5, plus the bridge.** S4's ladder and skills, fishing with all four parts of P3's stack (target, yield, receipt, modifier), P5's Sleep + two-field flush + journal panel, and — falling out of the water the verb needed — the **bridge tile treatment** that lets a road cross a water rect instead of refusing the placement, which is what finally puts a `water-feature` in the wilds. Plus the **character sheet**, which is P8's seam shipped as a working panel. **L2 does NOT ride** (maintainer ruling): daypart is the only live modifier and the weather column is built and empty.
 - **0.13 — shipped: P4 + E1's pack + the board + the log tab**, which is the committed bullet delivered whole. The board is a compiler fixture in every settlement, proximity-gated on a new fourth `nearBoard` read; the pack is a **second generation call** at creation, sealed at its own metadata key, folded per world at read and demoted to the shipped default pack when the brief under it changes; the three offline-verifiable verbs complete at their own sites through one completion path; and the log lands as **tab two of 0.12's journal panel** on a strip built for N tabs, P8's extended view being the committed third occupant. Deliberately NOT earlier: a quest log before P4 renders an empty list — the same decoration-before-behavior rule that deferred room purposes in 0.8. It stays the *mechanical* log per Ruling 1's surviving design rule: quest state binds tiles and tables, never the GM's prose. **Three things in the bullet did not land as written**, each ruled and each recorded above: rewards are money and rapport only (P4, and the reward-class table under P13), selling is deferred to P7's conversation, and the pack's dialogue half ships with no reader until E7 (E1). **Two 0.12 rulings it built on are still provisional** — the proximity trigger and the journal panel's shape — pending the maintainer playtest 0.12 is still owed.
 - **0.14 — shipped: L2 + E7 + the season layer.** The suggestion said weather and the Ask tree; the record is those two plus more calendar than the item asked for and less than it listed. L2 landed **whole and then wider** — two minted climate axes, a 365-day per-world year, one continuous derivation instead of any per-climate table, five words with light/heavy on rain and snow, the ground swap, the falling pass, and the hearth-first schedule bias the 2026-08-24 amendment added — and **the week did not land**, which is L2b now rather than a sentence inside a shipped item. E7 landed as the talk window: the interact press itself, the clock stopped while the player stays mobile, the compiled record answering for minted residents, four pack topics, and both convergence doors always rendered. P3 got the modifier column L2 was held for in 0.12, and it is **not** the column that was built: the sky moves the bite RATE, the region's water sets its base, and the catch mix keeps only its storm lean. **Five things in the bullet did not land as written**, each ruled and each recorded above: the week (L2b), the "fills the inn" destination (it fills the hearths), `(seed, day, clockMin)` (the sky is day-grain), the outdoor-job flag the bias wanted (there is none; `post` is the proxy), and E1's friend register (written, sealed, and served to nobody). **The engine ask is filed rather than deferred** (M14): S1's channel now carries four vocabularies in one feature request, and the weather half of it is read-complete and writer-less in the shipped package.
+- **0.16 — shipped: W2's lazy-compile half + the settlement's own variety + ruling 4's retry surface.** No suggestion bullet preceded it; the release came out of a maintainer question ("always the same main village map") and seven judgment calls answered in one round. What landed: the wilderness lattice at region grain (W2, amended — see the entry), a settlement whose crossroad, square, band phases and ground are all functions of its own seed, and a per-stage recovery surface for a world that half-generated. **What was ruled OUT of it and is worth reading beside what shipped:** no wilderness on the fallback map (nobody should be living there — the retry surface is the way out instead), no overflow of unplaceable brief features into the woods (that spawned **W11** rather than a placement rule), no second settlement (**W1**'s companion says what one breaks), and — the ruling that killed a designed feature outright — **no reseed on any recovery path**, because a regenerated world would orphan everything derived from the old one. **Two things shipped as limitations rather than as features**, stated in the release notes rather than discovered: the wilderness does not remember you (**S8**), and a town that cannot fit a sealed feature still drops it silently (unowned, recorded on **W11**).
 - **S1 lands whenever the engine channel does** — slot its first consumers (shelter, boarded door) into whichever release that is. **The 0.14 pass sharpened this into a filed ask**: four vocabularies, one channel, one validation split, with the size question answered while it was cheap. See S1.
 
 ---
@@ -793,7 +991,7 @@ Kept deliberately, so old bad ideas are not re-litigated every few months. **Att
 Flagged so a future session doesn't rediscover them the hard way.
 
 1. **The S1 channel's shape.** Custom tool call? Tracker/state-patch? A capability-API addition? This is an *engine* conversation and the roadmap's only hard external dependency. Decide the vocabulary's size cap and the validation story (flags are untrusted model output — same repair discipline as the brief).
-2. **The player block's shape** *(the "whether" is settled — see S5, and so is the migration policy: migrate on read, own nested version, unknown keys preserved. This is what remains)*. Open: whether the relationship ledger's "last thing between you" line is worth its bytes (0.15 added a third writer on every finished job and did not answer the question — the line names the board row's own title, so a completion is at least distinguishable from another completion, but the 30-line cap is shared across the whole block and the busiest writer still crowds the others out); and how discovery state keys sub-zones so a re-seeded world does not resurrect a place that no longer compiles. ~~*whether quest state stores completions only or full in-progress objectives*~~ — **answered by 0.13, and the answer is both.** `quests.active` carries full in-progress objectives (an eight-field row with `have`/`n` on it, so a half-finished job survives a reload showing 2 of 5) and the two completion maps carry tallies keyed by TEMPLATE rather than by instance, so two carp orders a week apart are one counter at two. The cost is measured and small: ten active rows and both maps full is ~3.4 KB, 1.3% of the row cap (`docs/player-state.md` §10.2). The shape held additively — 0.13 added **no new key** to the block, because 0.11 declared all three empty.
+2. **The player block's shape** *(the "whether" is settled — see S5, and so is the migration policy: migrate on read, own nested version, unknown keys preserved. This is what remains)*. Open: whether the relationship ledger's "last thing between you" line is worth its bytes (0.15 added a third writer on every finished job and did not answer the question — the line names the board row's own title, so a completion is at least distinguishable from another completion, but the 30-line cap is shared across the whole block and the busiest writer still crowds the others out); ~~*and how discovery state keys sub-zones so a re-seeded world does not resurrect a place that no longer compiles*~~ — **answered by 0.16, and by construction rather than by a rule.** A wilderness cell is a **total function of the world** (`hash(seed,"wild",cx,cy)` plus the stamped axes and surround), so a discovery row naming `w_3_-2` cannot resurrect anything: on a world where that cell still exists the row names the place it always named, and on a world where it does not — a different seed, or a chat whose world was replaced — the row is severed with the rest of the block by the shipped stamps, exactly like every other world-bound field. There is no key to design, because there is no record to dangle: the lattice writes **no portal, no anchor and no id** anywhere a save can reach it, and the ids it does mint are canonical-round-trip (`w_007_0` is refused as a spelling, so two ids can never name one place). The residual the question was really about — the *enterables* ladder, whose sub-zones would be chained rather than addressed — is still ahead, and W2 now carries it. ~~*whether quest state stores completions only or full in-progress objectives*~~ — **answered by 0.13, and the answer is both.** `quests.active` carries full in-progress objectives (an eight-field row with `have`/`n` on it, so a half-finished job survives a reload showing 2 of 5) and the two completion maps carry tallies keyed by TEMPLATE rather than by instance, so two carp orders a week apart are one counter at two. The cost is measured and small: ten active rows and both maps full is ~3.4 KB, 1.3% of the row cap (`docs/player-state.md` §10.2). The shape held additively — 0.13 added **no new key** to the block, because 0.11 declared all three empty.
 3. **Brief schema v2 timing.** E3 (kind split, agenda), E6 (ties), and possibly W4 (specialization) all want brief changes — and 0.10 already made one without a bump: `backgroundPopulation` stopped being pure narrative texture and became the `householdTarget` input `20-world.js` reads, moving minted residents, dwellings and doors within the rank's band (it cannot change the rank, nor the guest wing, which is keyed on scale + prosperity). That is a MEANING change under the §1 rule. It went unbumped deliberately, because nothing reads `briefVersion` and the bundle below had not opened. Bundle them all into one `briefVersion` bump with one migration, and decide what happens to sealed v1 briefs (presumably: compile exactly as today — the 0.8 elder precedent), including whether a v1 brief's `backgroundPopulation` keeps leaning the mint or is ignored. **Two 0.14 additions to the bundle, and one 0.14 precedent for how the window should behave.** The addition: **`feature.flavor`** joins the list — S2's once-per-feature flavor injection needs a field on the feature item that does not exist, and that is a brief change like the rest. The precedent: 0.14 added `latitude` and `precipitation` **without a bump and without a migration**, because they are strictly additive and **absent-preserving** — an unset axis is not defaulted, it is left out, so a pre-0.14 brief seals and loads byte-for-byte as it always did and simply rolls its climate from the seed. That is the shape a v2 field should take wherever it can: a MEANING change needs the bump, a genuinely optional new field does not, and mixing the two is what makes a migration hard to reason about.
 4. **Travel keys vs. forced questing.** W1's "by quest" key must never conscript slice-of-life players — codified in P4 as multiple-keys, but each gate's key *set* is a design decision per gate type. Who decides — brief, theme, or wizard?
 5. **Skill/XP visibility.** Numbers on screen serve the grind audience; diegetic prose ("your casts feel surer") serves the RP audience. Both? A HUD toggle? Decide before S4 ships, not after. *(0.12 answered it in practice and not in principle: a level change is toasted the moment it happens and the level then lives on the character sheet, while the xp behind it is sheet-only — so the one number that reaches a player who never opens a panel is the level, on the cast that earned it. That is a defensible default and not the full answer — nothing yet writes the diegetic register, and P8's ruleset descriptors are where a "prose spread" would live if anybody wants one.)*

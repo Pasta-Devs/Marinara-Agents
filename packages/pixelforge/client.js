@@ -1,5 +1,5 @@
-// Pixelforge 0.15.0 — Marinara Engine game-surface Experience (single-file client bundle)
-// Built from packages/pixelforge/src (18 modules) by scripts/build-pixelforge-package.mjs. Do not edit; edit src/ and rebuild.
+// Pixelforge 0.16.0 — Marinara Engine game-surface Experience (single-file client bundle)
+// Built from packages/pixelforge/src (19 modules) by scripts/build-pixelforge-package.mjs. Do not edit; edit src/ and rebuild.
 (() => {
 "use strict";
 // ===== 00-prelude.js =====
@@ -5152,6 +5152,443 @@ PF.world = (() => {
     shop: (w, h) => ({ x0: 3, y0: h - 4, x1: w - 5, y1: h - 4 }),
   };
 
+  // ── THE SETTLEMENT'S OWN TUNABLES (0.16 §2.6) ───────────────────────────────
+  /** PROVISIONAL — maintainer ruling 2026-09-05: playtest values, expected to
+   *  change; one edit here changes code and lanes together.
+   *
+   *  Every number the town's LAYOUT VARIETY invents lives here, because the town
+   *  is what gets playtested and "most if not all of that is likely to be changed
+   *  later on". A literal shape, density or stream label in the four levers is a
+   *  defect by that ruling. The lanes read these values rather than restating
+   *  them, so a retune is one edit and a green suite.
+   *
+   *  THREE OF THE FOUR LEVERS HAVE KNOBS, and the fourth having none is worth
+   *  saying out loud rather than inventing one for symmetry: the BAND PHASES take
+   *  no tuning at all. Their range is the slack `runOf` was already spending on
+   *  centring, halved so it is spent toward the crossroad and never toward the
+   *  trees, and that is a consequence of the two margins rather than a
+   *  preference. Most of the junction search is the same kind of thing — its
+   *  legal set is `runOf`'s own emptiness arithmetic and its yield filter is
+   *  today's centred yield — and `MARGIN_KEEP` is the one judgment call in it. */
+  const TOWN_TUNE = {
+    // The one side stream all four levers draw from, in the order the plan lays
+    // them out: junction, plaza, the four band phases, then the ground idiom.
+    // Named like the mint's ("residents"), keyed on seed and settlement name.
+    STREET_STREAM_LABEL: "streets",
+    // ── Lever 3: the plaza's shape set ────────────────────────────────────────
+    /** THE PATH-COUNT INVARIANT, and the reason the set is a set at all.
+     *
+     *  The `struggling` scuffing loop draws the MAIN tile stream once per painted
+     *  path tile, three lines after the plaza lands, so a shape that paints a
+     *  different number of tiles shifts every downstream main-stream consumer —
+     *  and unlike a lattice terminal a plaza cannot be punched late, because the
+     *  scuff is what makes a poor town's square look poor. A plaza that fully
+     *  contains both junction rows and both junction columns overlaps the two
+     *  arteries on exactly `2w + 2h - 4` tiles, so its NET contribution is
+     *  `(w - 2)(h - 2)` — pin that product and every shape draws the same count.
+     *  Every shape here is `(w-2)(h-2) === PLAZA_INTERIOR`. */
+    PLAZA_INTERIOR: 36,
+    PLAZA_SHAPES: [
+      { w: 8, h: 8 }, // the shipped square
+      { w: 11, h: 6 }, // a market street running east-west
+      { w: 6, h: 11 }, // and the same square turned on its side
+    ],
+    // The paved middle a `thriving` settlement lays, centred on the junction. It
+    // is what pins the shape set's offsets: every candidate must contain it, so
+    // the stone always lands on paving and its own -16 path tiles are constant
+    // too. Even, because it straddles the two-tile arteries.
+    PLAZA_INSET: 4,
+    // ── Lever 1: the open ground a junction may not close ─────────────────────
+    /** How much of the settlement's outer margin a junction must leave on the
+     *  EAST and WEST, wherever the centred junction leaves that much. The north
+     *  and south margins are held at their full centred depth and have no knob,
+     *  and the asymmetry is the map's, not a preference:
+     *
+     *  THE HORIZONTAL ARTERY SPANS THE WHOLE WIDTH. Between it, the border ring
+     *  and the two lot bands, a settlement's rows are completely spoken for —
+     *  every open row is above the north band or below the south one, and a
+     *  junction that moves either band outward closes the only ground a tall
+     *  feature could ever stand on. The vertical artery divides COLUMNS the same
+     *  way, but the lot columns are laid on a nine-tile pitch for eight-tile
+     *  buildings, so the gaps between them are open ground the rows have no
+     *  equivalent of.
+     *
+     *  SHIPPED AT ZERO, which switches the column half OFF, and the two halves
+     *  were separated by mutation rather than by argument. Take the ROW floor
+     *  away and the shipped feature-placement lane reds — an outpost places NONE
+     *  of the two features it sealed, because a southern band one row lower ends
+     *  flush with the last usable row. Take the column floor away — which is what
+     *  this value does — and nothing in this file reds, at any rank, on any seed
+     *  it drives. The rows are the whole of the protection, and they have no knob
+     *  because they are not a judgment call.
+     *
+     *  WHAT THE COLUMN FLOOR COSTS, counted off `junctionCandidates` itself
+     *  rather than quoted from a sweep nobody can re-run: a floor of one takes
+     *  the search from 4 crossroads to 3 at outpost, 18 to 9 at hamlet, 108 to 84
+     *  at village, 1,268 to 746 at town and 504 to 315 at city. A quarter to a
+     *  half of the variety this release exists for, against a fault nothing has
+     *  found. Set it back to 1 to restore the floor: the lanes read the search
+     *  rather than these numbers, so a retune is one edit and a green suite. */
+    MARGIN_KEEP: 0,
+    // ── Lever 4: what the surround does to the ground the town left over ───────
+    /** Two idioms, from the SHIPPED tile vocabulary and no new art (§2.6 lever 4).
+     *
+     *  `verge` strews stone along the arteries — a hard shoulder, which is what a
+     *  road through rock gets. `meadow` thickens the grass mottle in a band
+     *  inside the border ring, which is the wet ground a settlement on water
+     *  stands in. `kind` picks which of the two BANDS is measured — the arteries
+     *  or the ring — and `tile` is what lands in it, held apart on purpose: "make
+     *  the verge gravel instead" is then this row and not the painter, which is
+     *  the whole of the tunables discipline. `depth` is how far the band reaches,
+     *  `density` how much of it the idiom takes.
+     *
+     *  READ HONESTLY UNDER SNOW: `SUBS.snow` substitutes grass/grass2/crop/canopy
+     *  and nothing else, so a meadow keeps its two-tone mottle in a white town
+     *  (grassSnow beside grassSnow2) while a stone verge stays bare rock — the
+     *  same accepted class as `scree` and `oldwall`. Woods, fields and barren get
+     *  no idiom deliberately: three surrounds already spend their variety on the
+     *  ground mix and the tree count, and a fifth idiom would be a fifth thing to
+     *  retune before anybody has played one. */
+    GROUND_IDIOM: {
+      rocky: { kind: "verge", tile: "stone", depth: 2, density: 0.34 },
+      water: { kind: "meadow", tile: "grass2", depth: 5, density: 0.55 },
+    },
+  };
+
+  // ── THE LOT GRID'S ARITHMETIC ───────────────────────────────────────────────
+  // Hoisted out of compile() so the junction search can ASK the grid what a
+  // candidate would yield without laying a tile. The search's whole claim —
+  // "this junction mints the same roster as the centred one" — is `runOf`'s
+  // count, and a search running its own copy of that arithmetic would be a
+  // second source of truth for the number the mint's stability rests on.
+  const BUILDING_H = 5; // the tallest a lot is ever painted (a named place)
+  const LOT_PITCH_Y = BUILDING_H + 3; // overhang above, apron below, one to breathe
+  const LOT_PITCH_X = 9;
+  const MAX_LOT_W = 8; // the widest building() ever draws
+  /** A run of lot origins inside [lo, hi], CENTRED on that span — or, given a
+   *  `phase`, shifted within the slack the centring was spending (lever 2).
+   *
+   *  A fixed pitch marching from one end leaves whatever does not divide
+   *  evenly in one lump at the other end, and the lump is always on the same
+   *  side, so a town came out with its lots hard against the western trees and
+   *  eleven empty columns down the east. Splitting the remainder puts the same
+   *  number of lots on the same pitch with a margin at both ends, which is
+   *  what a laid-out settlement looks like instead of a shunted one.
+   *
+   *  `lo` and `hi` are the first and last tile the lot may OCCUPY, so a lot at
+   *  `start` ends at `start + size - 1` and that must not pass `hi`.
+   *
+   *  THE PHASE IS YIELD-NEUTRAL BY CONSTRUCTION, which is the whole reason this
+   *  lever is free: `count` is decided before the phase is read, and the slack is
+   *  by definition the ground that could not hold another lot. Shifting inside it
+   *  moves the rhythm and never the roster. Out of range clamps rather than
+   *  throwing — a phase is a seeded index, and a world is not a thing to lose
+   *  over one. */
+  const runOf = (lo, hi, size, pitch, phase) => {
+    const span = hi - lo + 1;
+    if (span < size) return [];
+    const count = 1 + (((span - size) / pitch) | 0);
+    const used = size + (count - 1) * pitch;
+    const slack = span - used;
+    const offset = phase === undefined ? (slack / 2) | 0 : PF.clamp(phase | 0, 0, slack);
+    const start = lo + offset;
+    return Array.from({ length: count }, (_, index) => start + index * pitch);
+  };
+  /** How many lots a run offers, and how much room it has to shuffle them in —
+   *  `runOf`'s own two numbers, without the array. */
+  const runCount = (lo, hi, size, pitch) => {
+    const span = hi - lo + 1;
+    return span < size ? 0 : 1 + (((span - size) / pitch) | 0);
+  };
+  const runSlack = (lo, hi, size, pitch) => {
+    const count = runCount(lo, hi, size, pitch);
+    return count ? hi - lo + 1 - (size + (count - 1) * pitch) : 0;
+  };
+
+  // ── THE FOUR BANDS A JUNCTION MAKES ─────────────────────────────────────────
+  // Row 4, not 3: a sanctuary lifts its facade by up to two rows above the lot,
+  // so the top band needs headroom for the eave above THAT or it paints into
+  // the border ring.
+  //
+  // The band's last usable row is midY - 2: a body starting at y ends at
+  // y + BUILDING_H - 1, and it clears a road at midY - 1.
+  //
+  // The band below starts one row under the road, not three: a building's SOLID
+  // body must clear the street, but its overhang is an overhead tile and may
+  // hang over it exactly as a real eave does.
+  //
+  // West stops before the road; east starts after it. The east band may reach
+  // w - 4: the border ring is the last column and the two inside it are verge.
+  const SIDES = ["north", "south", "west", "east"];
+  const BANDS = {
+    north: (w, h, mx, my) => [4, my - 2, BUILDING_H, LOT_PITCH_Y],
+    south: (w, h, mx, my) => [my + 1, h - 4, BUILDING_H, LOT_PITCH_Y],
+    west: (w, h, mx, my) => [4, mx - 2, MAX_LOT_W, LOT_PITCH_X],
+    east: (w, h, mx, my) => [mx + 1, w - 4, MAX_LOT_W, LOT_PITCH_X],
+  };
+  const bandCounts = (w, h, mx, my) => ({
+    north: runCount(...BANDS.north(w, h, mx, my)),
+    south: runCount(...BANDS.south(w, h, mx, my)),
+    west: runCount(...BANDS.west(w, h, mx, my)),
+    east: runCount(...BANDS.east(w, h, mx, my)),
+  });
+  /** The lots a junction offers before the budget caps them: rows times columns,
+   *  which is exactly what compile() pushes into `slots`. */
+  const gridYield = (w, h, mx, my) => {
+    const b = bandCounts(w, h, mx, my);
+    return (b.north + b.south) * (b.west + b.east);
+  };
+  /** THE SETTLEMENT'S OPEN GROUND, on each of the four sides: the gap between the
+   *  outermost lot a band lays and the last row or column inside the border ring.
+   *
+   *  This is where a settlement keeps everything that is not a building — the
+   *  features the brief named, the greens, the crop plots, the scan the feature
+   *  placer falls back on when the corners are claimed. A settlement is not just
+   *  its lot count, and a junction that kept the lot count while paving over the
+   *  last free row would be yield-neutral and still cost the brief its ruin.
+   *
+   *  Read off `runOf`'s actual output rather than off the slack formula, because
+   *  the run is the thing that lays the lots and a second derivation of it is a
+   *  second thing to keep true. */
+  const outerMargins = (w, h, mx, my) => {
+    const north = runOf(...BANDS.north(w, h, mx, my));
+    const south = runOf(...BANDS.south(w, h, mx, my));
+    const west = runOf(...BANDS.west(w, h, mx, my));
+    const east = runOf(...BANDS.east(w, h, mx, my));
+    return {
+      north: north.length ? north[0] - 4 : 0,
+      south: south.length ? h - 4 - (south[south.length - 1] + BUILDING_H - 1) : 0,
+      west: west.length ? west[0] - 4 : 0,
+      east: east.length ? w - 4 - (east[east.length - 1] + MAX_LOT_W - 1) : 0,
+    };
+  };
+  /** The phases a band may take WITHOUT spending that margin (lever 2).
+   *
+   *  The slack a band centres in has two ends and they are not worth the same:
+   *  the inner end abuts the crossroad, where the arteries already forbid a
+   *  feature, and the outer end is the settlement's open ground. So a phase
+   *  spends its slack TOWARD the road and never toward the trees — half the
+   *  range, all of the rhythm, and the margins exactly where centring left them.
+   *
+   *  It is also what lets the lever work at EVERY rank, an outpost included, with
+   *  no floor on how many lots a band has to hold. A band with one lot has no
+   *  spacing to vary, only a building to slide — but sliding it INWARD is always
+   *  at least as safe as centring it, so there is no case to exclude and no knob
+   *  to write for excluding it. Measured: the 1,200-settlement feature sweep
+   *  places identically whether one-lot bands are phased or left centred. */
+  const phaseRange = (band, w, h, mx, my) => {
+    const slack = runSlack(...BANDS[band](w, h, mx, my));
+    const centred = (slack / 2) | 0;
+    // north and west measure their margin from the LOW end, so their phase may
+    // only grow; south and east measure it from the high end, so theirs may only
+    // shrink. Both ranges contain the centred value, which is why "no phase" and
+    // "phase at the centre" are the same lot grid.
+    return band === "north" || band === "west" ? { lo: centred, hi: slack } : { lo: 0, hi: centred };
+  };
+
+  /** Every plaza a junction could stand in: each shape in the set, at every
+   *  offset that keeps the paved inset inside the rect AND the whole rect inside
+   *  the arteries' own extent.
+   *
+   *  BOTH HALVES ARE THE PATH-COUNT INVARIANT, not tidiness. Containing the inset
+   *  is what pins the overlap term at `2w + 2h - 4` (it is strictly stronger than
+   *  containing the two junction rows and columns, and it also keeps a thriving
+   *  town's stone on its own square). Staying inside `[2, w-3] x [2, h-3]` is
+   *  what stops `fillRect` clipping the rect silently — a clipped plaza paints
+   *  fewer tiles than its shape claims, which is the same main-stream shift by a
+   *  quieter route.
+   *
+   *  THE TWO CLAMPS ARE NOT A MATCHED PAIR TODAY, and the sentence above reads as
+   *  if they were. `yHi` is LIVE: take it away and a square clips off the bottom
+   *  of a short map — lane 3(7) reds on it first, as a wander box that no longer
+   *  holds the square it is for. `xHi` is DEFENSIVE and currently
+   *  inert at every shipped scale — the junction's legal band stops at
+   *  `mx <= w - 13` and the widest shape is 11, so `mx + 8 <= w - 5` and the min
+   *  never reaches for its right-hand term. It stays because it is the half a
+   *  wider shape or a wider band would need, not because it is doing work now. */
+  const plazaCandidates = (w, h, mx, my) => {
+    const half = TOWN_TUNE.PLAZA_INSET >> 1;
+    const out = [];
+    for (const shape of TOWN_TUNE.PLAZA_SHAPES) {
+      const xLo = Math.max(2, mx + half - shape.w);
+      const xHi = Math.min(mx - half, w - 3 - (shape.w - 1));
+      const yLo = Math.max(2, my + half - shape.h);
+      const yHi = Math.min(my - half, h - 3 - (shape.h - 1));
+      for (let x = xLo; x <= xHi; x++) for (let y = yLo; y <= yHi; y++) out.push({ x, y, w: shape.w, h: shape.h });
+    }
+    return out;
+  };
+
+  /** THE JUNCTION SEARCH (§2.6 lever 1): enumerated, then filtered, then picked.
+   *
+   *  ENUMERATED rather than banded off a fraction, because the binding constraint
+   *  is absolute pitch-and-size arithmetic and not a proportion of the map: an
+   *  outpost has exactly EIGHT legal junctions (a 4-wide by 2-tall window), and a
+   *  fraction band that looked reasonable at city scale would either shrink that
+   *  to nothing or hand back junctions with no northern band at all.
+   *
+   *  FILTERED TO YIELD-NEUTRALITY, which is what makes this lever free. `slots
+   *  .length` is `min(rows * cols, budget)`, and every downstream allocator is
+   *  COUNT-driven — places slice on a count, specials gate on a count, households
+   *  round-robin on a count — so a junction that keeps `slots.length` keeps
+   *  `lotsForHouses`, `householdTarget`, the minted roster, `mintStamp` AND the
+   *  whole dwelling/place/workplace zone-id set. A save that reloads onto a
+   *  re-laid town keeps every `rel` row and every quest handle it had.
+   *
+   *  The yield filter alone is nearly free, because the budget bites from
+   *  village up: outpost 8 of 8 (it removes nothing — legality is what binds),
+   *  hamlet 204 of 240, village 648 of 792, town 1,528 of 1,768, city 3,024 of
+   *  4,320. The margin term below is what actually costs candidates, and with
+   *  its column half switched off (see `MARGIN_KEEP`) that cost is the row floor
+   *  alone: outpost 4, hamlet 18, village 108, town 1,268, city 504. The lanes
+   *  read those numbers off this function rather than off a comment, and the
+   *  layouts multiply through anyway — 67 to 73 squares per junction and a phase
+   *  per band gives 737 plans at outpost and 3.9 million at town, which the
+   *  variety lane prints per rank on every run. */
+  /** MEMOIZED, because the answer is a pure function of three numbers and the
+   *  search walks every tile on the map. Unmemoized it took a city compile from
+   *  2.6 ms to 8.1 ms — not a number anybody would feel, and not a reason to
+   *  spend it either: the shipped scale table has five rows, so this cache fills
+   *  once per process and never grows. The array it hands back is shared and is
+   *  READ-ONLY by contract; every caller here and in the lanes indexes it. */
+  const junctionCache = new Map();
+  const junctionCandidates = (w, h, budget) => {
+    const key = `${w}|${h}|${budget}`;
+    const hit = junctionCache.get(key);
+    if (hit) return hit;
+    const cx = (w / 2) | 0;
+    const cy = (h / 2) | 0;
+    const centred = Math.min(gridYield(w, h, cx, cy), budget);
+    const floors = outerMargins(w, h, cx, cy);
+    const out = [];
+    for (let y = 2; y < h - 2; y++) {
+      for (let x = 2; x < w - 2; x++) {
+        const b = bandCounts(w, h, x, y);
+        if (!b.north || !b.south || !b.west || !b.east) continue;
+        if (Math.min((b.north + b.south) * (b.west + b.east), budget) !== centred) continue;
+        // AND IT MAY NOT CLOSE THE OPEN GROUND. A junction pushed toward one edge
+        // keeps its lot count by moving a band's slack to the other side, and the
+        // ground it spends is the strip the feature placer falls back on when the
+        // corners are claimed. A southern band one row lower ends flush with the
+        // last usable row and there is then no free row on the map, which is how
+        // an outpost comes to place none of the two features it sealed — the
+        // failure the shipped feature-placement lane reds on if this next line
+        // goes. The ROWS carry that; the columns are `MARGIN_KEEP`, and it ships
+        // at zero because they carried nothing. See the knob.
+        const margins = outerMargins(w, h, x, y);
+        if (margins.north < floors.north || margins.south < floors.south) continue;
+        if (
+          margins.west < Math.min(floors.west, TOWN_TUNE.MARGIN_KEEP) ||
+          margins.east < Math.min(floors.east, TOWN_TUNE.MARGIN_KEEP)
+        )
+          continue;
+        // A junction with nowhere to stand a square is not a junction. ALSO
+        // DEFENSIVE and also inert: the band arithmetic above already implies the
+        // room, so the candidate counts are identical with this line and without
+        // it at every shipped rank. It is kept for the reason the `xHi` clamp is
+        // — the next shape set is the one that makes it bite, and a `townPlan`
+        // falling back to a centred 8x8 it never offered is a clipped square.
+        if (!plazaCandidates(w, h, x, y).length) continue;
+        out.push({ x, y });
+      }
+    }
+    junctionCache.set(key, out);
+    return out;
+  };
+
+  /** The whole of a settlement's seeded exterior geometry, drawn in ONE fixed
+   *  order from ONE side stream so the order is a thing a lane can read: the
+   *  junction, then its plaza, then the four band phases. The idiom pass draws
+   *  from the same stream afterwards and must stay last.
+   *
+   *  Falls back to the centred junction if the search comes back empty, which no
+   *  shipped scale does — but a future scale table is one edit away from a map
+   *  too small to hold four bands, and a settlement is not a thing to lose to an
+   *  empty array inside build()'s silent degrade.
+   *
+   *  AND THE PLAZA FALLBACK IS DERIVED RATHER THAN TRANSCRIBED. It used to spell
+   *  the first shape and its offset as `w: 8, h: 8` at `spine - 4`, which is the
+   *  shipped tunables written out as literals: a retune of `PLAZA_SHAPES` would
+   *  move every square on every map EXCEPT this one, and leave the degrade
+   *  drawing a rect the shape set no longer offers — the clipped square the
+   *  junction search's own comment warns about, arrived at from the other side.
+   *
+   *  The offset is the MIDPOINT of the band `plazaCandidates` would have handed
+   *  back for that shape, which is why it is the shape's half-extent and not the
+   *  inset: the legal x runs `[mx + half - shape.w, mx - half]` for
+   *  `half = PLAZA_INSET >> 1`, and its middle is `mx - shape.w / 2` for any
+   *  inset at all. So the inset moves that band's ends and not its centre, and
+   *  the fallback stays exactly as legal as the shape set is — it contains the
+   *  paved inset whenever the shape is at least as big as one, which is the same
+   *  condition that makes the shape offerable in the first place. */
+  const townPlan = (w, h, budget, rnd) => {
+    const legal = junctionCandidates(w, h, budget);
+    const spine = legal.length ? legal[(rnd() * legal.length) | 0] : { x: (w / 2) | 0, y: (h / 2) | 0 };
+    const plazas = plazaCandidates(w, h, spine.x, spine.y);
+    const first = TOWN_TUNE.PLAZA_SHAPES[0];
+    const plaza = plazas.length
+      ? plazas[(rnd() * plazas.length) | 0]
+      : { x: spine.x - (first.w >> 1), y: spine.y - (first.h >> 1), w: first.w, h: first.h };
+    // ONE DRAW PER BAND, in a fixed order, so the stream position after the plan
+    // is a function of the plan's shape alone — which is what lets the ground
+    // idiom draw from the same stream five hundred lines further down.
+    const phases = {};
+    for (const band of SIDES) {
+      const range = phaseRange(band, w, h, spine.x, spine.y);
+      phases[band] = range.lo + ((rnd() * (range.hi - range.lo + 1)) | 0);
+    }
+    return { spine, plaza, phases, legal: legal.length, plazas: plazas.length };
+  };
+
+  /** LEVER 4: the surround's own ground, laid on what the town left over.
+   *
+   *  Runs LATE — after the buildings, the features, the greens and the stalls,
+   *  before the lattice seam paints its aprons — and touches only bare grass, so
+   *  it can perturb nothing that has already been decided. It draws no main
+   *  stream at all (the side stream above), it paints no road tile (both idioms
+   *  refuse anything that is not `grass`/`grass2`), and it changes no solidity,
+   *  so the path count, the scuff loop, the tree scatter and the pocket seal all
+   *  see exactly what they saw before it existed.
+   *
+   *  What it DOES change is what the ground looks like from the first frame, and
+   *  that is the lever's whole job: two towns with the same brief and different
+   *  surrounds read differently before the player has walked anywhere. */
+  const paintGroundIdiom = (v, surround, rnd) => {
+    const idiom = PF.own(TOWN_TUNE.GROUND_IDIOM, surround) ? TOWN_TUNE.GROUND_IDIOM[surround] : null;
+    if (!idiom) return 0;
+    const spine = v.spine;
+    let painted = 0;
+    for (let y = 1; y < v.h - 1; y++) {
+      for (let x = 1; x < v.w - 1; x++) {
+        // THE BAND FIRST, AND THE DRAW BEFORE THE REFUSAL. The band is pure
+        // geometry — the spine and the map's own edges — so the number of values
+        // this pass takes off the side stream is a function of the plan and
+        // nothing else. Deciding first and drawing after would key the draw
+        // COUNT to the object layer, and the object layer is what a tree scatter
+        // and a gate reservation move: one trunk in a different place would
+        // re-roll every idiom tile after it, which is the same shifted-stream
+        // class the seam is punched late to avoid. Found by mutation-testing
+        // this slice, not by reading it.
+        const near =
+          idiom.kind === "verge"
+            ? Math.min(Math.abs(y - (spine.y - 1)), Math.abs(y - spine.y)) <= idiom.depth ||
+              Math.min(Math.abs(x - (spine.x - 1)), Math.abs(x - spine.x)) <= idiom.depth
+            : Math.min(x - 1, y - 1, v.w - 2 - x, v.h - 2 - y) < idiom.depth;
+        if (!near) continue;
+        const roll = rnd();
+        const at = idx(v, x, y);
+        // Bare ground only, and bare means bare: no wall, no trunk, no eave, no
+        // paving. A tile the town is using is a tile the idiom has no opinion on.
+        if (v.ground[at] !== "grass" && v.ground[at] !== "grass2") continue;
+        if (v.solid[at] || v.object[at] || v.overhead[at]) continue;
+        if (roll >= idiom.density) continue;
+        v.ground[at] = idiom.tile;
+        painted++;
+      }
+    }
+    return painted;
+  };
+
   function compile(brief, seed) {
     const activeTheme = PF.art.setTheme ? PF.art.setTheme(brief.theme) : brief.theme;
     const rnd = PF.rng(seed);
@@ -5201,13 +5638,37 @@ PF.world = (() => {
     const groundMix = { woods: 0.3, fields: 0.22, rocky: 0.2, water: 0.25, barren: 0.35 }[brief.surround] ?? 0.25;
     for (let i = 0; i < v.ground.length; i++) if (rnd() < groundMix) v.ground[i] = "grass2";
     borderTrees(v);
-    // Paths: a crossroad through a central plaza, scaled to the grid.
-    const midY = (v.h / 2) | 0;
-    const midX = (v.w / 2) | 0;
+    // Paths: a crossroad through a plaza, and from 0.16 BOTH ARE SEEDED (§2.6).
+    //
+    // A side stream, keyed like the mint's, for the reason the mint's exists: the
+    // ground cover above has already drawn from the main stream and the scuffing
+    // below is about to, so a layout drawing from the main stream would move the
+    // grass under every world that laid one. Four levers come off this stream in
+    // ONE fixed order — junction, plaza, the four band phases, and last of all
+    // the ground idiom, five hundred lines down — and nothing else ever draws
+    // from it.
+    //
+    // WHAT THE JUNCTION MAY NOT DO is shrink the town: `slots.length` is the
+    // supply cap the whole roster hangs off, so the search only ever offers
+    // junctions that yield exactly what the centred one does (junctionCandidates,
+    // above). A re-laid town mints the same people into the same zone ids.
+    const streetRnd = PF.rng(PF.hashStr(`${seed >>> 0}|${TOWN_TUNE.STREET_STREAM_LABEL}|${brief.name}`));
+    const plan = townPlan(v.w, v.h, scale.buildings, streetRnd);
+    const midY = plan.spine.y;
+    const midX = plan.spine.x;
+    // Stamped, exactly like the climate axes and the lattice cell: runtime-only,
+    // no save row, re-derived on every compile. Every consumer that used to
+    // recompute the crossroad from `w/2` reads this instead — including the
+    // harness, which is why it is a property and not a local.
+    v.spine = { x: midX, y: midY };
+    const plaza = plan.plaza;
     fillRect(v, 2, midY - 1, v.w - 4, 2, "ground", "path");
     fillRect(v, midX - 1, 2, 2, v.h - 4, "ground", "path");
-    fillRect(v, midX - 4, midY - 4, 8, 8, "ground", "path");
-    if (brief.prosperity === "thriving") fillRect(v, midX - 2, midY - 2, 4, 4, "ground", "stone");
+    fillRect(v, plaza.x, plaza.y, plaza.w, plaza.h, "ground", "path");
+    if (brief.prosperity === "thriving") {
+      const inset = TOWN_TUNE.PLAZA_INSET;
+      fillRect(v, midX - (inset >> 1), midY - (inset >> 1), inset, inset, "ground", "stone");
+    }
     if (brief.prosperity === "struggling") {
       for (let i = 0; i < v.ground.length; i++) if (v.ground[i] === "path" && rnd() < 0.18) v.ground[i] = "dirt";
     }
@@ -5218,7 +5679,7 @@ PF.world = (() => {
     v.publicGround = [
       { x: 2, y: midY - 1, w: v.w - 4, h: 2 },
       { x: midX - 1, y: 2, w: 2, h: v.h - 4 },
-      { x: midX - 4, y: midY - 4, w: 8, h: 8 },
+      { x: plaza.x, y: plaza.y, w: plaza.w, h: plaza.h },
     ];
     v.spawn = { x: midX, y: midY + 2 };
     // Injection-discipline prose (§7) rides the world so the runtime never
@@ -5304,54 +5765,23 @@ PF.world = (() => {
     // The two rows were the other half: every door in a 96x72 city landed in
     // rows 25-43, leaving 65% of the map as lawn nobody had a reason to cross.
     // Rows now come from the height the map actually has.
-    const BUILDING_H = 5; // the tallest a lot is ever painted (a named place)
-    const LOT_PITCH_Y = BUILDING_H + 3; // overhang above, apron below, one to breathe // overhang above, apron below, one to breathe
-    const LOT_PITCH_X = 9;
-    const MAX_LOT_W = 8; // the widest building() ever draws
-    // A row must clear the border and its own overhang above, and the horizontal
-    // road plus its apron below. Bands are computed from those, not guessed.
-    /** A run of lot origins inside [lo, hi], CENTRED on that span.
-     *
-     *  A fixed pitch marching from one end leaves whatever does not divide
-     *  evenly in one lump at the other end, and the lump is always on the same
-     *  side, so a town came out with its lots hard against the western trees and
-     *  eleven empty columns down the east. Splitting the remainder puts the same
-     *  number of lots on the same pitch with a margin at both ends, which is
-     *  what a laid-out settlement looks like instead of a shunted one.
-     *
-     *  `lo` and `hi` are the first and last tile the lot may OCCUPY, so a lot at
-     *  `start` ends at `start + size - 1` and that must not pass `hi`. */
-    const runOf = (lo, hi, size, pitch) => {
-      const span = hi - lo + 1;
-      if (span < size) return [];
-      const count = 1 + (((span - size) / pitch) | 0);
-      const used = size + (count - 1) * pitch;
-      const start = lo + (((span - used) / 2) | 0);
-      return Array.from({ length: count }, (_, index) => start + index * pitch);
-    };
-    // Row 4, not 3: a sanctuary lifts its facade by up to two rows above the lot,
-    // so the top band needs headroom for the eave above THAT or it paints into
-    // the border ring. The old two-row allocator carried the same floor as a
-    // Math.max, and it was load-bearing rather than decorative.
+    // The lot constants and `runOf` itself are module-level now (see BANDS
+    // above), because the junction search has to ask the grid what a candidate
+    // would yield BEFORE this line runs — and asking it with a second copy of the
+    // arithmetic would put the mint's stability on two sources of truth.
     //
-    // The band's last usable row is midY - 2: a body starting at y ends at
-    // y + BUILDING_H - 1, and it clears a road at midY - 1. One too strict and an
-    // outpost loses its whole northern band — which is most of what "an outpost
-    // is two buildings" turned out to be.
-    //
-    // The band below starts one row under the road, not three: a building's SOLID
-    // body must clear the street, but its overhang is an overhead tile and may
-    // hang over it exactly as a real eave does. Requiring three cost the outpost
-    // its entire southern row.
+    // LEVER 2 lands here and costs nothing: each band is laid at its own seeded
+    // PHASE inside the slack `runOf` was already spending on centring. The count
+    // is decided before the phase is read, so the rhythm of the street moves and
+    // the roster does not.
     const rowYs = [
-      ...runOf(4, midY - 2, BUILDING_H, LOT_PITCH_Y),
-      ...runOf(midY + 1, v.h - 4, BUILDING_H, LOT_PITCH_Y),
+      ...runOf(...BANDS.north(v.w, v.h, midX, midY), plan.phases.north),
+      ...runOf(...BANDS.south(v.w, v.h, midX, midY), plan.phases.south),
     ];
-    // Columns, per side. West stops before the road; east starts after it. The
-    // road is never tested against a lot because a lot is never laid across it.
-    // The east band may reach v.w - 4: the border ring is the last column and the
-    // two inside it are verge.
-    const colXs = [...runOf(4, midX - 2, MAX_LOT_W, LOT_PITCH_X), ...runOf(midX + 1, v.w - 4, MAX_LOT_W, LOT_PITCH_X)];
+    const colXs = [
+      ...runOf(...BANDS.west(v.w, v.h, midX, midY), plan.phases.west),
+      ...runOf(...BANDS.east(v.w, v.h, midX, midY), plan.phases.east),
+    ];
     for (const rowY of rowYs) for (const x of colXs) slots.push({ x, y: rowY });
     // ── Claim order: OUTWARD FROM THE PLAZA ───────────────────────────────────
     // Row-major order filled the northernmost row first, which put a small
@@ -5836,6 +6266,23 @@ PF.world = (() => {
     const wildsArrivals = wildsPlaces.flatMap((_, index) =>
       [midY - 1, midY].map((y) => ({ x: index === 0 ? v.w - 2 : 1, y })),
     );
+    // THE LATTICE SEAM, PHASE ONE (21-lattice). Every spine terminal a brief
+    // wilds did not already take becomes a gate onto the open country, and its
+    // apron is reserved HERE — before the scatter — for the same reason the
+    // wilds arrivals above are: nothing is allowed to stand in a doorway, and
+    // the shipped reserve test keeps the tiles either side of one clear too, so
+    // the way out is not hemmed in by the trees beside it. The paint itself
+    // waits until after everything else (phase two, below the wilds loop).
+    //
+    // THE SPINE IS READ OFF THE ZONE from 0.16 slice 4: a terminal is where the
+    // road MEETS the edge, and the road no longer runs down the middle of the
+    // map. `v.spine` is stamped six hundred lines above this call, so the lattice
+    // finds it for itself; on a centred junction it computes the same four gate
+    // tiles it always did, which is why this is an addition and not a change.
+    const seamGates = PF.lattice.settlementGates(v, {
+      east: wildsPlaces.length > 0,
+      west: wildsPlaces.length > 1,
+    });
     scatterTrees(
       v,
       rnd,
@@ -5845,6 +6292,7 @@ PF.world = (() => {
         stallReserved,
         shopFrontReserved,
         wildsArrivals,
+        PF.lattice.reservationsFor(v, seamGates),
       ),
     );
     // ── Open ground ────────────────────────────────────────────────────────────
@@ -5958,11 +6406,24 @@ PF.world = (() => {
     // somebody's front room, and one refusal used to leave the smallest
     // settlements — the ones that can least afford a bare square — with no well
     // at all.
+    // Read off the PLAZA rather than off the crossroad from 0.16: the square is a
+    // seeded rect now and may sit offset around its junction, so the four corners
+    // a well or a market board wants are the square's own, not a fixed radius
+    // from the middle of the road. Clamped INTO the rect on both axes and held
+    // OFF both arteries by construction — the plaza always contains the paved
+    // inset, so `midX - 2`/`midX + 1` are inside it and every column outside the
+    // two road columns. On the shipped centred 8x8 this is the same four tiles in
+    // the same order it always was.
+    const half = TOWN_TUNE.PLAZA_INSET >> 1;
+    const qWest = Math.max(plaza.x, midX - half - 1);
+    const qEast = Math.min(plaza.x + plaza.w - 1, midX + half);
+    const qNorth = Math.max(plaza.y, midY - half - 1);
+    const qSouth = Math.min(plaza.y + plaza.h - 1, midY + half);
     const QUADRANTS = [
-      [midX + 2, midY - 3],
-      [midX - 3, midY - 3],
-      [midX + 2, midY + 2],
-      [midX - 3, midY + 2],
+      [qEast, qNorth],
+      [qWest, qNorth],
+      [qEast, qSouth],
+      [qWest, qSouth],
     ];
     const well = QUADRANTS.find(([x, y]) => squareTile(x, y, "well"));
     if (well) v.lights.push({ x: well[0], y: well[1] });
@@ -6112,10 +6573,8 @@ PF.world = (() => {
         rect: { x: boardAt.x, y: boardAt.y, w: 1, h: 1 },
       });
     }
-    // Last thing done to the settlement's tiles, so it sees the trees, the
-    // buildings, the stalls, the features and the greens together — a pocket is
-    // usually made by two of them meeting, not by either alone.
-    sealPockets(v, v.spawn);
+    // (the settlement's pocket seal used to run HERE, and now runs after the
+    // seam is punched, below the wilds loop — see the comment on it)
     zones.z1 = v;
 
     // ── Interior zones ──
@@ -6197,6 +6656,12 @@ PF.world = (() => {
     }
 
     // ── Wilds zones, hung off alternating map edges ──
+    // WHICH LATTICE CELLS ARE ALREADY SPOKEN FOR. The settlement is (0,0) and a
+    // brief wilds takes (1,0) east or (-1,0) west, so those cells resolve to the
+    // zone the brief already named rather than to a compiled cell — the walk out
+    // of town and the walk back are the SAME ids they always were. Runtime-only,
+    // like the climate stamp: no save row, re-derived on every load.
+    const latticeAnchors = {};
     wildsPlaces.forEach((place, index) => {
       const id = zoneIdForPlace(place);
       if (!id) return;
@@ -6284,27 +6749,39 @@ PF.world = (() => {
           break;
         }
       }
+      // THE LATTICE SEAM, PHASE ONE (21-lattice). A brief wilds keeps its portal
+      // pair home and gains gates on its other three edges, so the country does
+      // not stop at the edge of the brief's own wood. Aprons reserved beside the
+      // arrival tiles below, for the same reason and against the same scatter;
+      // the N/S gate columns sit two clear of the `water-crossing` stream this
+      // builder lays at x = 20-21, so no apron is ever asked to stand in water.
+      const wildsGates = PF.lattice.wildsGates(zone, east);
       // Reserve BOTH sides' arrival tiles and spawns — the west-hung wilds'
       // arrival used to land inside scattered trunks on some seeds.
-      scatterTrees(zone, rnd, tags.has("dense-growth") ? 70 : 45, [
-        { x: 1, y: wMidY },
-        { x: 1, y: wMidY + 1 },
-        { x: 2, y: wMidY },
-        { x: 3, y: wMidY },
-        { x: 20, y: wMidY },
-        { x: 21, y: wMidY + 1 },
-        { x: zone.w - 2, y: wMidY },
-        { x: zone.w - 2, y: wMidY + 1 },
-        { x: zone.w - 3, y: wMidY },
-        { x: zone.w - 4, y: wMidY },
-      ]);
+      scatterTrees(
+        zone,
+        rnd,
+        tags.has("dense-growth") ? 70 : 45,
+        [
+          { x: 1, y: wMidY },
+          { x: 1, y: wMidY + 1 },
+          { x: 2, y: wMidY },
+          { x: 3, y: wMidY },
+          { x: 20, y: wMidY },
+          { x: 21, y: wMidY + 1 },
+          { x: zone.w - 2, y: wMidY },
+          { x: zone.w - 2, y: wMidY + 1 },
+          { x: zone.w - 3, y: wMidY },
+          { x: zone.w - 4, y: wMidY },
+        ].concat(PF.lattice.reservationsFor(zone, wildsGates)),
+      );
       // Set BEFORE the pockets are closed, not after. The west wilds moves its
       // spawn to the far side further down, and sealing from the east side first
       // would mark the west half — the future spawn and the tile the portal
       // actually delivers the player onto — solid whenever the scatter happens to
       // separate the two.
       zone.spawn = east ? { x: 3, y: wMidY } : { x: zone.w - 4, y: wMidY };
-      sealPockets(zone, zone.spawn);
+      // (the seal used to run HERE, and now runs after the punches below)
       // Two-tile edge portals: east edge of the settlement for the first wilds,
       // west edge for the second.
       const vx = east ? v.w - 1 : 0;
@@ -6332,11 +6809,44 @@ PF.world = (() => {
           label: `Back to ${brief.name}`,
         });
       }
+      // THE LATTICE SEAM, PHASE TWO. Punched here, beside the portal punch above
+      // and after every pass that draws on the main tile stream, because the
+      // `struggling` scuffing loop draws that stream once per painted path tile —
+      // a seam laid with the road block shifts every downstream consumer of it,
+      // measured at 73 changed settlement tiles and a re-rolled wilds against 8
+      // when the punch waits.
+      PF.lattice.punchGates(zone, wildsGates);
+      zone.gates = wildsGates;
+      zone.cell = { cx: east ? 1 : -1, cy: 0 };
+      latticeAnchors[`${zone.cell.cx},0`] = id;
+      // AND ONLY NOW THE SEAL, which used to run before both punches. The punch
+      // opens ring tiles that were solid when the sweep passed them, so a sweep
+      // running first leaves newly-cleared ground walkable-but-unswept and any
+      // pocket behind a gate unsealed — the measured softlock class this builder
+      // already carries a paragraph about. The sweep draws no RNG, so moving it
+      // moves no stream.
+      sealPockets(zone, zone.spawn);
       // (the west spawn is set above, before sealPockets reads it)
       zone.flavor = place.flavor;
       zone.mapKind = "place"; // World Maps export kind (spec §8)
       zones[id] = zone;
     });
+
+    // The settlement's own seam, punched after the wilds loop for the same
+    // reason and in the same phase — and the settlement's pocket seal after
+    // that, which is where it moved from its old home two hundred lines up. It
+    // now sees the trees, the buildings, the stalls, the features, the greens
+    // AND every hole punched in the border ring together; a pocket is usually
+    // made by two of them meeting, not by either alone.
+    // LEVER 4, laid on the ground the town left over and nothing else — after
+    // every pass that could still claim a tile, before the seam paints its
+    // aprons over whatever it likes. Side stream, bare grass only, no solidity
+    // touched: the pocket seal below sees exactly the map it saw before.
+    paintGroundIdiom(v, brief.surround, streetRnd);
+    PF.lattice.punchGates(v, seamGates);
+    v.gates = seamGates;
+    v.cell = { cx: 0, cy: 0 };
+    sealPockets(v, v.spawn);
 
     // ── Dwelling and workplace interiors ──
     // Until now a dwelling was a facade with nothing behind it, so a resident the
@@ -6411,7 +6921,34 @@ PF.world = (() => {
     const gatheringPlace = interiorPlaces.find((p) => p.kind === "gathering");
     const gatheringZoneId = gatheringPlace ? zoneIdForPlace(gatheringPlace) : null;
     const wildsZoneId = wildsPlaces.length ? zoneIdForPlace(wildsPlaces[0]) : null;
-    const plazaBox = () => ({ x0: midX - 6, y0: midY - 5, x1: midX + 6, y1: midY + 5 });
+    // ON THE SQUARE, NOT ON THE CROSSROAD — and clamped, exactly as its sibling
+    // `streetBox` below already is. Lever 3 lets the square sit OFFSET around the
+    // junction: an 11x6 may span `midX - 9` to `midX + 1`, so a box centred on
+    // `midX/midY` tracked the road and not the paving — columns of the square
+    // fell outside it while it reached the same distance the other way onto lots
+    // and roofs. Centred on the rect the plaza actually took, it contains every
+    // square the shape set can offer at every rank, and lane 3(7) walks the whole
+    // candidate set to say so rather than sampling it. The clamp bites on no
+    // shipped scale — asserted there too, not assumed — and is here because the
+    // NEXT tuning of the shape set or the search is the one that would find the
+    // edge, and a wander box outside the map is an NPC walked into the ring.
+    //
+    // WHAT RE-CENTRING DOES NOT FIX, because it was never the box's doing: there
+    // is more building inside the box than there used to be. That is lever 2.
+    // Band phases spend their slack TOWARD the crossroad by design, so the lots
+    // crowd the paving; centre the phases and this box comes back to the open
+    // ground the 0.15 one had. A look to be judged by eye, and it is on the
+    // deferred-verification list rather than tuned from here.
+    const plazaBox = () => {
+      const cx = plaza.x + ((plaza.w - 1) >> 1);
+      const cy = plaza.y + ((plaza.h - 1) >> 1);
+      return {
+        x0: Math.max(2, cx - 6),
+        y0: Math.max(2, cy - 5),
+        x1: Math.min(v.w - 3, cx + 6),
+        y1: Math.min(v.h - 3, cy + 5),
+      };
+    };
     /** The stretch of street outside one door. The plaza is thirteen tiles by
      *  eleven; a thriving city now holds a hundred people, and sending all of
      *  them to the same square at noon builds a crush in the middle of an empty
@@ -6884,6 +7421,15 @@ PF.world = (() => {
       theme: activeTheme,
       latitude: axes.latitude,
       precipitation: axes.precipitation,
+      // THE SURROUND, STAMPED BESIDE THE AXES and for exactly the same reason.
+      // `brief.surround` is read once, up at the ground-cover roll, and was never
+      // kept — so the wilderness, which is a function of the country a settlement
+      // stands in, had no way to read the country from the world it hangs off.
+      // Runtime-only, zero save bytes, re-minted on every load; the legacy and
+      // degraded paths leave it undefined and the weight table's neutral fallback
+      // covers them.
+      surround: brief.surround,
+      latticeAnchors,
       brieved: true, // marks a compiled world (saves still carry only seed/theme/zone)
       situation: brief.situation,
       zones,
@@ -6907,11 +7453,1160 @@ PF.world = (() => {
     return null;
   }
 
+  /** THE ZONE PRIMITIVES, handed out to the wilderness lattice (21-lattice).
+   *
+   *  A wilderness cell is a zone like any other — the same three layers, the same
+   *  solidity map, the same reachability sweep, the same feature register — and
+   *  the bake concatenates every module into one scope with no imports, so the
+   *  only way a second module builds one is for this one to hand its own tools
+   *  over. Every entry here is already used by the builders above: the lattice
+   *  adds no zone shape, no painter and no sweep of its own, which is what keeps
+   *  "a chunk is a zone" true rather than aspirational. Handed out DELIBERATELY
+   *  narrow — the placement passes, the arithmetic and the tables stay private,
+   *  because a second builder reaching into those is the drift this export
+   *  exists to prevent. */
+  const prims = { makeZone, put, fillRect, borderTrees, sealPockets, PLACERS };
+
   // The board's reserved key and tag ride out with the builder because they are
   // the JOIN between the compiler and its consumers: 30-sim finds the register
   // row by this id, and the harness holds the tag to the promise that no brief
   // vocabulary contains it.
-  return { build, idx, BOARD_FEATURE_ID, BOARD_FEATURE_TAG };
+  // THE TOWN PLANNER, handed out PURE (0.16 slice 4). The variety levers make
+  // claims about arithmetic — "every legal junction yields what the centred one
+  // does", "every plaza shape paints the same number of tiles" — and a lane that
+  // could only sample compiled worlds would be checking a consequence rather than
+  // the design. These are the functions the compiler itself calls, so a lane
+  // asserting on them is asserting on the shipped decision.
+  const town = {
+    TUNE: TOWN_TUNE,
+    runOf,
+    runCount,
+    runSlack,
+    BANDS,
+    bandCounts,
+    gridYield,
+    outerMargins,
+    phaseRange,
+    plazaCandidates,
+    junctionCandidates,
+    plan: townPlan,
+  };
+
+  return { build, idx, BOARD_FEATURE_ID, BOARD_FEATURE_TAG, prims, town };
+})();
+
+// ===== 21-lattice.js =====
+// ── The wilderness lattice ────────────────────────────────────────────────────
+// What is past the settlement's edge, as a TOTAL FUNCTION over cells rather than
+// a set of places somebody built. The settlement stands at cell (0,0); every
+// other cell has a definition whether or not a zone for it has ever existed, and
+// materializing one is a CACHE FILL, not a decision. Nothing here is saved: a
+// chunk is recomputed byte-identically from (seed, theme, axes, surround, cell)
+// on every load, exactly like the settlement it hangs off.
+//
+// THREE RULES HOLD THE WHOLE MODULE UP, and every one of them is a lane:
+//
+//  1. ONE CELL, ONE STREAM. Every chunk draws from `hash(seed,"wild",cx,cy)` and
+//     from nothing else — never the compiler's main stream, never visit order,
+//     never another system's side stream. So materializing the cell east of you
+//     cannot move a tile in the cell north of you, cannot move a tile in the
+//     town, and cannot depend on which one you walked into first.
+//  2. GATES ARE ARITHMETIC, NEVER RECORDS. A lattice edge is `zone.gates`, a
+//     list of border tiles with a direction, and where it LEADS is computed at
+//     step time from the cell the zone stands in. Nothing is ever written into
+//     `zone.portals`, so the shipped "every portal's target exists" contract —
+//     the one `checkWorld` asserts over every world the harness hands it — needs
+//     no relaxation, and there is nothing to dangle when a neighbour is evicted.
+//     (A hand-count of those call sites stood here and went stale inside one
+//     arc, which is why the claim names the checker instead of counting it.)
+//  3. GATES ARE PUNCHED IN TWO PHASES. Positions are computed BEFORE a zone's
+//     tree scatter and reserved against it; the paint lands AFTER everything
+//     else, and the pocket seal runs after the paint. Both halves are load-
+//     bearing and neither is optional — see `reservationsFor` and `punchGates`.
+//
+// The lattice is COMPILED-WORLDS-ONLY. `buildLegacy` writes no gates, carries no
+// cell and gets no wilderness: nobody should be playing on the fallback map, and
+// a way out of it is the retry surface's business, not geometry's.
+PF.lattice = (() => {
+  /** PROVISIONAL — maintainer ruling 2026-09-05: playtest values, expected to
+   *  change; one edit here changes code and lanes together.
+   *
+   *  Every number the wilderness invents lives in this one block, including the
+   *  terrain table, because the ruling that approved the smaller calls approved
+   *  them FOR PLAYTEST: "don't hardcode any of that as most if not all of that is
+   *  likely to be changed later on". A literal chunk width, keep count or
+   *  landmark rate anywhere else in this file is a defect by that ruling. The
+   *  lanes read these values rather than restating them, so a retune is one edit
+   *  and a green suite instead of a hunt. */
+  const LATTICE_TUNE = {
+    // ── Shape ────────────────────────────────────────────────────────────────
+    CHUNK_W: 36, // the shipped wilds literal (20-world's wilds builder)
+    CHUNK_H: 24,
+    GATE_SPAN: 2, // gate tiles per edge — the shipped wilds portal pair's width
+    GATE_APRON: 2, // how deep the cleared, path-laid apron reaches inward
+    // The four corridors a chunk reserves against its own scatter meet at a
+    // seeded hub inside this band of the zone, so the clearing is not the same
+    // plus-sign in every cell. Fractions of the zone's own width/height.
+    HUB_BAND: { lo: 0.34, hi: 0.66 },
+    // ── Ids ──────────────────────────────────────────────────────────────────
+    // Underscores, never dots: World Maps composes `pf.<hash>.<zoneId>` and the
+    // harness splits those rows on ".". No chunk ever gets a row (CHUNK_MAP_EXPORT
+    // below), but the separator costs nothing and removes the landmine.
+    CHUNK_ID_PREFIX: "w",
+    CHUNK_MAP_KIND: "wild", // deliberately not "settlement": the pocket sweep skips those
+    /** THE ONE ENTRY IN THIS BLOCK THAT IS NOT A PLAYTEST KNOB. C10 is anti-scope
+     *  and it is crash-safety rather than taste: the World Maps route is ADDITIVE
+     *  WITH NO DELETE, and the export planner dereferences `world.zones[zoneId]`
+     *  across its awaits while its staleness check never asks whether a zone
+     *  survived — so a cell that exported and was then evicted is a crash, and a
+     *  cell that exported at all is a permanent row on a real player's map, one
+     *  per patch of wilderness they ever walked through, on a lattice with no
+     *  edge. Lane 9 pins the LITERAL and then drives the shipped export, because
+     *  reading this constant back is true for every value it could hold. */
+    CHUNK_MAP_EXPORT: false,
+    // ── Arrival bookkeeping ──────────────────────────────────────────────────
+    // How many recent arrivals the recency order remembers. Deliberately
+    // generous against any residency keep, so the ORDER is never what loses a
+    // cell that is still standing — the policy that reads it is what decides.
+    SEEN_MAX: 64,
+    // ── Residency ────────────────────────────────────────────────────────────
+    // HOW MANY CELLS STAND AT ONCE (C5): the one the player is in plus the eight
+    // around it. Everything past that is dropped least-recently-entered first
+    // and recompiled byte-identically the moment it is walked back into, so this
+    // is a MEMORY knob and never a world one — no number in this block can
+    // change what the country IS, only how much of it is holding canvases.
+    RESIDENCY_KEEP: 9,
+    // ── Streams ──────────────────────────────────────────────────────────────
+    STREAM_LABEL: "wild",
+    NAME_STREAM_LABEL: "wild-name",
+    // ── Terrain mix ──────────────────────────────────────────────────────────
+    // How much a far ring runs wilder than a near one, and the ceiling on it.
+    RING_WILDNESS: 0.16,
+    RING_WILDNESS_CAP: 0.9,
+    // How fast the settlement's own surround stops being felt, per ring out.
+    SURROUND_FALLOFF: 0.45,
+    WEIGHT_FLOOR: 0.01, // no class is ever weighted to exactly zero
+    // The odds a class that only SOMETIMES carries a landmark carries one. The
+    // classes that always do (`fen`, `oldwall`) say so in the table.
+    LANDMARK_ODDS: 0.12,
+    // What the weights add up to BEFORE the ring and the surround pull on them,
+    // stated so the lane can check the design and not just the arithmetic: ~1
+    // landmark in 7 cells (C12). The two pulls move it, and the band is how far
+    // either is allowed to — a surround that doubled the ruins would be a knob
+    // that had stopped being a bias.
+    LANDMARK_RATE_TARGET: 1 / 7,
+    LANDMARK_RATE_TOLERANCE: 0.01,
+    LANDMARK_RATE_BAND: 2,
+    FLAVOR_MAX_CHARS: 140,
+    FEATURE_TRIES: 6, // anchors a landmark tries before the cell goes plain
+    // The shipped placer footprints, restated here because `FEATURE_RECTS` is a
+    // local of the settlement compiler's own placement pass and a chunk anchors
+    // against its own reservations, not against a town's lots.
+    FEATURE_RECTS: {
+      ruin: { w: 6, h: 5 },
+      lookout: { w: 4, h: 4 },
+      "landmark-stone": { w: 3, h: 3 },
+      "water-feature": { w: 8, h: 5 },
+    },
+    /** THE SIX TERRAIN CLASSES, composed from the shipped tile vocabulary — one
+     *  table, not six scatterings (C7).
+     *
+     *  `ground`/`mottle` are the class's two ground ids; `dress` is the optional
+     *  band or pool pass that gives a class its shape; `scatter` is the object
+     *  the class strews; `feature` is the landmark it may carry, from the shipped
+     *  FEATURE_TAGS vocabulary; `wildness` is how much a far ring wants more of
+     *  it (negative = the ring nearest the town wants it most).
+     *
+     *  BOTH THEMES SHIP AND THE READING IS HONEST: the atlas is shared, so all
+     *  six paint in a colony with zero new art — but 10-art re-skins trunk/canopy
+     *  as mast and antenna and recolours the stone, so a colony `woods` is a mast
+     *  thicket and a colony `oldwall` is a collapsed bulkhead. The word book says
+     *  so in the colony's own words rather than pretending the picture is the
+     *  same one. */
+    CLASSES: {
+      woods: {
+        weight: 32,
+        wildness: 0.25,
+        ground: "grass",
+        mottle: { tile: "grass2", rate: 0.34 },
+        scatter: { tile: "trunk", overhead: "canopy", count: 54 },
+        feature: null,
+      },
+      heath: {
+        weight: 22,
+        wildness: 0,
+        ground: "grass2",
+        mottle: { tile: "grass", rate: 0.3 },
+        scatter: { tile: "trunk", overhead: "canopy", count: 12 },
+        feature: { tag: "landmark-stone", always: false },
+      },
+      scree: {
+        weight: 14,
+        wildness: 0.5,
+        ground: "stone",
+        mottle: { tile: "dirt", rate: 0.32 },
+        scatter: { tile: "wallStone", overhead: null, count: 16 },
+        feature: { tag: "lookout", always: false },
+      },
+      fen: {
+        weight: 5,
+        wildness: 0,
+        ground: "grass",
+        mottle: { tile: "grass2", rate: 0.46 },
+        dress: "pools",
+        scatter: { tile: "trunk", overhead: "canopy", count: 18 },
+        feature: { tag: "water-feature", always: true },
+      },
+      outfield: {
+        weight: 22,
+        wildness: -1,
+        ground: "grass",
+        mottle: { tile: "dirt", rate: 0.18 },
+        dress: "furrows",
+        scatter: { tile: "trunk", overhead: "canopy", count: 8 },
+        feature: null,
+      },
+      oldwall: {
+        weight: 5,
+        wildness: 1,
+        ground: "grass",
+        mottle: { tile: "dirt", rate: 0.3 },
+        scatter: { tile: "trunk", overhead: "canopy", count: 14 },
+        feature: { tag: "ruin", always: true },
+      },
+    },
+    // How much of a `fen` is standing water, and how wide a furrow band is on an
+    // `outfield`. Both are drawn on the cell's own stream.
+    POOLS: { count: 3, w: 5, h: 3 },
+    FURROWS: { rows: 4, gap: 3, inset: 4 },
+    // ── Climate and surround pull ────────────────────────────────────────────
+    // Multipliers on a class's base weight. A band a table does not name pulls
+    // nothing (×1), which is what a legacy or degraded world gets for free.
+    LATITUDE_BIAS: {
+      equatorial: { woods: 1.4, outfield: 1.2, scree: 0.7 },
+      tropical: { woods: 1.35, fen: 1.3, scree: 0.75 },
+      subpolar: { woods: 0.6, outfield: 0.5, scree: 1.6, heath: 1.3 },
+      polar: { woods: 0.35, outfield: 0.25, scree: 2, heath: 1.2, fen: 0.5 },
+    },
+    PRECIP_BIAS: {
+      arid: { fen: 0.2, woods: 0.5, scree: 2, heath: 1.4, outfield: 0.7 },
+      wet: { fen: 3, woods: 1.4, scree: 0.5, heath: 0.8 },
+    },
+    SURROUND_BIAS: {
+      woods: { woods: 2.2, heath: 0.7 },
+      fields: { outfield: 2.4, woods: 0.7 },
+      rocky: { scree: 2.6, woods: 0.6, outfield: 0.6 },
+      water: { fen: 2.8, woods: 1.2, scree: 0.6 },
+      barren: { scree: 1.8, heath: 1.8, woods: 0.4, outfield: 0.4, oldwall: 1.4 },
+    },
+    /** THE WORD BOOK. `<article> <adjective> <noun>` per theme per class, plus
+     *  the one line of prose a LANDMARK cell carries and an ordinary one does
+     *  not — flavor is bounded by RARITY, not banned (C12), so the injection
+     *  budget is a function of how many landmarks exist to find and not of how
+     *  far anybody walks. */
+    WORDS: {
+      "cozy-village": {
+        woods: {
+          adj: ["Whispering", "Tangled", "Elder", "Rook's"],
+          noun: ["Wood", "Thicket", "Copse", "Hollow"],
+          feature: "",
+          flavor: "",
+        },
+        heath: {
+          adj: ["Windward", "Bare", "Gorse", "Long"],
+          noun: ["Heath", "Common", "Moor", "Reach"],
+          feature: "The Leaning Stone",
+          flavor: "A single stone leans out of the gorse, older than the road that forgot to pass it.",
+        },
+        scree: {
+          adj: ["Broken", "Grey", "Falling", "Cold"],
+          noun: ["Scree", "Screes", "Slip", "Shoulder"],
+          feature: "The Watchpoint",
+          flavor: "Loose rock the whole way up, and at the top a flat place somebody once kept watch from.",
+        },
+        fen: {
+          adj: ["Sunken", "Still", "Green", "Mirefoot"],
+          noun: ["Fen", "Marsh", "Sump", "Waters"],
+          feature: "The Still Water",
+          flavor: "The ground gives underfoot until it stops being ground, and the water lies there not moving.",
+        },
+        outfield: {
+          adj: ["Far", "Fallow", "Old", "Low"],
+          noun: ["Outfield", "Furlong", "Acres", "Strips"],
+          feature: "",
+          flavor: "",
+        },
+        oldwall: {
+          adj: ["Fallen", "Nameless", "Mossed", "Last"],
+          noun: ["Wall", "Ruin", "Steading", "Foundations"],
+          feature: "The Fallen Steading",
+          flavor: "Somebody built here once. Three courses of wall are left, and grass in the doorway.",
+        },
+      },
+      "sci-fi-colony": {
+        woods: {
+          adj: ["Standing", "Dead", "Outer", "Rusted"],
+          noun: ["Mast Field", "Antenna Farm", "Pylons", "Array"],
+          feature: "",
+          flavor: "",
+        },
+        heath: {
+          adj: ["Windward", "Bare", "Sintered", "Long"],
+          noun: ["Flats", "Scrub", "Pan", "Reach"],
+          feature: "The Marker",
+          flavor: "A survey marker stands alone on the pan, still numbered, its claim long since lapsed.",
+        },
+        scree: {
+          adj: ["Broken", "Grey", "Sliding", "Cold"],
+          noun: ["Talus", "Scarp", "Slip", "Shoulder"],
+          feature: "The Relay Post",
+          flavor: "Bad footing all the way up, and a relay post on the crest with its dish still aimed somewhere.",
+        },
+        fen: {
+          adj: ["Sunken", "Still", "Cooling", "Seep"],
+          noun: ["Basin", "Sump", "Catchment", "Pools"],
+          feature: "The Catchment",
+          flavor: "Runoff pools in the low ground and stays there, flat and unmoving, going nowhere.",
+        },
+        outfield: {
+          adj: ["Far", "Fallow", "Old", "Low"],
+          noun: ["Plots", "Terraces", "Beds", "Strips"],
+          feature: "",
+          flavor: "",
+        },
+        oldwall: {
+          adj: ["Collapsed", "Unlisted", "Buried", "Last"],
+          noun: ["Bulkhead", "Ruin", "Outstation", "Footings"],
+          feature: "The Collapsed Outstation",
+          flavor: "An outstation nobody logged. The bulkhead is down and the floor plates are under dust.",
+        },
+      },
+    },
+  };
+
+  /** THE WORDS THE WILDERNESS SAYS OUT LOUD, in one place — the retry surface's
+   *  `RETRY_COPY` idiom. A bearing, a signpost and a notice: the whole of what
+   *  this feature ever writes on screen.
+   *
+   *  Plain words on purpose. "Cell", "chunk" and "lattice" are how the code
+   *  talks about the country; what the player reads is which way it goes and
+   *  what is over there. */
+  const COPY = {
+    BEARINGS: { N: "North", E: "East", S: "South", W: "West" },
+    // A signpost, never a verb: a gate is crossed by walking into it, so there
+    // is no button to label and nothing to press.
+    gate: (bearing, place) => `${bearing} — ${place}`,
+    // On the quest board's "Taken on:" idiom, and on the BOTTOM toast surface,
+    // so a discovery lands beside the arrival notice at the top rather than over
+    // it (70-hud `toast`): a landmark is two notices, ordinary country is one.
+    // The top surface is ONE node with a last-writer-wins rule, so "beside" and
+    // "the bottom" are the same sentence — and the honest cost of that is
+    // recorded rather than discovered: the bottom surface is the one the host's
+    // narration panel sits under, which is why arrivals were moved off it. A
+    // discovery fires on arrival too, so whether this line reads as a find or as
+    // a smudge across the GM's sentence is a browser question (plan §5.9), and
+    // the answer if it lands badly is a surface, not a different word.
+    found: (place) => `Found: ${place}`,
+  };
+
+  // ── Directions ──────────────────────────────────────────────────────────────
+  // Cell arithmetic and nothing else: north is -y in tiles AND -1 in cells, so
+  // east-then-north and north-then-east name the same cell, which is the whole
+  // reason the lattice can be a graph with no geometry to reconcile.
+  const DIRS = ["N", "E", "S", "W"];
+  const DELTA = { N: { cx: 0, cy: -1 }, E: { cx: 1, cy: 0 }, S: { cx: 0, cy: 1 }, W: { cx: -1, cy: 0 } };
+  const OPPOSITE = { N: "S", E: "W", S: "N", W: "E" };
+  const opposite = (dir) => PF.own(OPPOSITE, dir) ?? null;
+  const delta = (dir) => PF.own(DELTA, dir) ?? null;
+
+  // ── Ids ─────────────────────────────────────────────────────────────────────
+  const CHUNK_ID_RE = new RegExp(`^${LATTICE_TUNE.CHUNK_ID_PREFIX}_(-?\\d+)_(-?\\d+)$`);
+  const idFor = (cx, cy) => `${LATTICE_TUNE.CHUNK_ID_PREFIX}_${cx}_${cy}`;
+
+  /** A cell, or null — and the test is ROUND-TRIP CANONICALITY, not a specimen
+   *  list. An id is a cell iff spelling that cell back gives the identical
+   *  string, which refuses `w_007_0`, `w_-0_0`, `w_1e3_0`, `w_ 1_0` and every
+   *  other aliasing spelling by construction rather than by whichever hostile
+   *  form somebody thought to enumerate. Two ids that name one cell would be two
+   *  zones for one place: a save row pointing at the twin, a gate that never
+   *  comes home, and a residency policy that evicts one of them forever. */
+  function parse(id) {
+    if (typeof id !== "string") return null;
+    const match = CHUNK_ID_RE.exec(id);
+    if (!match) return null;
+    const cx = Number(match[1]);
+    const cy = Number(match[2]);
+    // A 4 KB run of digits parses to a float, not an integer, and `w_1e21_0`
+    // would spell back in exponent form. Both are refused here rather than at
+    // the round trip, so the arithmetic below never sees a non-integer.
+    if (!Number.isSafeInteger(cx) || !Number.isSafeInteger(cy)) return null;
+    if (idFor(cx, cy) !== id) return null;
+    return { cx, cy };
+  }
+
+  /** The cell a lattice-participating zone stands in, or null. Written by the
+   *  compiler for `z1` and the brief's wilds, and by `compileChunk` for the rest;
+   *  runtime-only, like every other derived field on a zone. */
+  const cellOf = (zone) =>
+    zone && zone.cell && Number.isSafeInteger(zone.cell.cx) && Number.isSafeInteger(zone.cell.cy) ? zone.cell : null;
+
+  /** WHICH ZONE A CELL IS — and three cells are not chunks at all.
+   *
+   *  (0,0) is the settlement and (±1,0) are the brief's own wilds when it has
+   *  them (east is `wildsPlaces[0]`, matching the shipped `index === 0`). None of
+   *  those ids match the chunk pattern, which is exactly why `ensure` passes a
+   *  resident id straight back before it parses anything: a canonical-parse-first
+   *  ensure would refuse the single most-walked transition in the feature — the
+   *  walk home — and leave every inward gate inert.
+   *
+   *  Null on a world with no compiled brief behind it. The fallback map gets no
+   *  wilderness at all (maintainer ruling: "no one should play in the fallback
+   *  map"), and this is where that refusal lives. */
+  function cellZoneId(world, cx, cy) {
+    if (!world || world.brieved !== true) return null;
+    if (!Number.isSafeInteger(cx) || !Number.isSafeInteger(cy)) return null;
+    if (cx === 0 && cy === 0) return typeof world.startZone === "string" ? world.startZone : null;
+    const anchor = PF.own(world.latticeAnchors ?? null, `${cx},${cy}`);
+    if (typeof anchor === "string") return anchor;
+    return idFor(cx, cy);
+  }
+
+  // ── Gate geometry ───────────────────────────────────────────────────────────
+  // A gate is a border TILE with a direction. The span is centred on the SPINE
+  // the caller names, and on the zone's own middle when it names none — which
+  // puts a wilds' east/west gates on its approach-road band and a chunk's on its
+  // own hub corridor. The N/S columns are two clear of a `water-crossing` wilds'
+  // stream (laid at x = 20-21), so no apron ever lands in guaranteed water.
+  //
+  // A SETTLEMENT NAMES ITS SPINE from 0.16 slice 4, and this is the whole of what
+  // "the terminals move with the junction" costs: the crossroad is seeded now, so
+  // the road reaches the border two columns and two rows of the compiler's
+  // choosing rather than the map's middle, and a terminal that stayed centred
+  // would be a gate the road does not arrive at. On a centred junction the two
+  // answers are identical, which is why every existing caller keeps its result.
+  const spanStart = (extent, centre) =>
+    (Number.isInteger(centre) ? centre : (extent / 2) | 0) - (LATTICE_TUNE.GATE_SPAN >> 1);
+
+  /** The gate tiles for one direction, about an optional `{x, y}` spine. */
+  function gateTiles(zone, dir, spine) {
+    const out = [];
+    const cx = spine?.x;
+    const cy = spine?.y;
+    for (let i = 0; i < LATTICE_TUNE.GATE_SPAN; i++) {
+      if (dir === "N") out.push({ x: spanStart(zone.w, cx) + i, y: 0, dir });
+      else if (dir === "S") out.push({ x: spanStart(zone.w, cx) + i, y: zone.h - 1, dir });
+      else if (dir === "E") out.push({ x: zone.w - 1, y: spanStart(zone.h, cy) + i, dir });
+      else out.push({ x: 0, y: spanStart(zone.h, cy) + i, dir });
+    }
+    return out;
+  }
+
+  const gatesFor = (zone, dirs, spine) => dirs.flatMap((dir) => gateTiles(zone, dir, spine));
+
+  /** The tiles one gate owns: itself and the apron reaching inward. Written as
+   *  one list because the two phases consume the SAME list — phase one reserves
+   *  it against the scatter, phase two paints it — and a reservation that did not
+   *  match the paint is precisely the bug the two-phase rule exists to prevent. */
+  function apronTiles(zone, gate) {
+    const step = delta(gate.dir);
+    if (!step) return [];
+    const out = [];
+    for (let i = 0; i < LATTICE_TUNE.GATE_APRON; i++) {
+      const x = gate.x - step.cx * i;
+      const y = gate.y - step.cy * i;
+      if (x < 0 || y < 0 || x >= zone.w || y >= zone.h) break;
+      out.push({ x, y });
+    }
+    return out;
+  }
+
+  /** The tile the player LANDS on coming through a gate: one step inside it. */
+  function insetOf(zone, gate) {
+    const step = delta(gate.dir);
+    if (!step) return null;
+    return { x: gate.x - step.cx, y: gate.y - step.cy };
+  }
+
+  /** Every tile a set of gates needs kept clear, as the POINT list the shipped
+   *  `scatterTrees` reserve argument takes.
+   *
+   *  PHASE ONE OF THE TWO-PHASE RULE. The shipped wilds punch clears the object
+   *  layer on the RING COLUMN only and `fillRect(…,"ground","path")` touches no
+   *  trunk, so an apron nobody reserved keeps its standing tree with `solid =
+   *  true` under fresh paint — a doorway with a tree in it. The shipped arrival
+   *  tiles are reserved for exactly that reason, and their own comment names the
+   *  failure: "the walk home arrived inside a tree".
+   *
+   *  MEASURED, so the claim is honest about what each half buys: `punchGates`
+   *  below clears the whole apron rather than the ring alone, so removing this
+   *  reservation on its own does NOT put a tree in a doorway — the punch would
+   *  eat it. What the reservation uniquely buys is the ±1x/±2y shadow the shipped
+   *  reserve test casts: the doorway is not hemmed in by the trunks standing
+   *  beside it, and no neighbouring tree loses its crown to a punch that clears
+   *  an overhead the tree below still owns. The lane asserts phase one directly,
+   *  against a build with the punch rewritten out, rather than leaning on a
+   *  consequence phase two happens to cover too. */
+  const reservationsFor = (zone, gates) => gates.flatMap((gate) => apronTiles(zone, gate));
+
+  /** PHASE TWO: open the ring and lay the apron. Runs LATE — after the scatter,
+   *  after the features, where the shipped wilds punch already sits — because the
+   *  compiler's `struggling` scuffing loop draws its MAIN stream once per painted
+   *  path tile, so a terminal painted with the road block shifts every downstream
+   *  main-stream consumer (measured at 73 changed settlement tiles plus a
+   *  re-rolled wilds zone, against 8 when punched late).
+   *
+   *  Clears the object AND the overhead: a border trunk carries its canopy on its
+   *  own tile, and a scattered one carries it a row above, so an apron tile that
+   *  gave up a trunk gives up that trunk's crown too — otherwise a canopy hangs
+   *  over nothing, which is a shipped paint-fault class with its own assertion. */
+  function punchGates(zone, gates) {
+    const prims = PF.world.prims;
+    for (const gate of gates) {
+      for (const tile of apronTiles(zone, gate)) {
+        const at = tile.y * zone.w + tile.x;
+        const hadTrunk = zone.object[at] === "trunk";
+        prims.put(zone, tile.x, tile.y, "object", null, false);
+        prims.put(zone, tile.x, tile.y, "overhead", null);
+        if (hadTrunk && tile.y > 0 && zone.object[(tile.y - 1) * zone.w + tile.x] !== "trunk") {
+          prims.put(zone, tile.x, tile.y - 1, "overhead", null);
+        }
+        prims.put(zone, tile.x, tile.y, "ground", "path");
+      }
+    }
+  }
+
+  /** The gate under a tile, if any. */
+  const gateAt = (zone, x, y) => (zone?.gates ?? []).find((gate) => gate.x === x && gate.y === y) ?? null;
+
+  /** WHERE A GATE LEADS — pure cell arithmetic, resolved at step time.
+   *
+   *  This is the whole of the edge contract. There is no portal record to write,
+   *  none to dangle when a neighbour is evicted, and none to duplicate when it is
+   *  materialized again; re-entering an evicted cell is the same branch as
+   *  entering it the first time. Where a record and a gate could BOTH answer for
+   *  one tile — the settlement's east terminal on a world whose brief hung a
+   *  wilds there — the record wins and no gate is ever written, so the precedence
+   *  never has to be arbitrated at runtime. */
+  function gateTargetId(world, zone, gate) {
+    const cell = cellOf(zone);
+    const step = gate && delta(gate.dir);
+    if (!cell || !step) return null;
+    return cellZoneId(world, cell.cx + step.cx, cell.cy + step.cy);
+  }
+
+  /** Where a player coming through `dir` stands when they arrive: the inset of
+   *  the destination's own gate facing back the way they came. Null when the
+   *  destination holds no such gate, which the caller reads as "do not move". */
+  function arrivalFor(dest, dir) {
+    const back = opposite(dir);
+    const gate = (dest?.gates ?? []).find((g) => g.dir === back);
+    if (!gate) return null;
+    const inset = insetOf(dest, gate);
+    if (!inset) return null;
+    if (dest.solid[inset.y * dest.w + inset.x]) return null;
+    return inset;
+  }
+
+  // ── Terrain ─────────────────────────────────────────────────────────────────
+  const ring = (cx, cy) => Math.max(Math.abs(cx), Math.abs(cy));
+  const biasOf = (table, band, cls) => {
+    const row = PF.own(table, band);
+    const pull = row ? PF.own(row, cls) : undefined;
+    return typeof pull === "number" ? pull : 1;
+  };
+
+  /** The class weights at a given ring, for this world's sky and its surround.
+   *
+   *  Pure and exported, because the "one landmark in seven cells" claim is a
+   *  property of these numbers and the lane checks the numbers rather than
+   *  counting a sample and hoping. The surround's pull FADES with distance — the
+   *  ring the town can see is the ring the town's own country shows in — while
+   *  the ring term itself runs the other way: the far cells thin out the
+   *  outfields and thicken the ruins. */
+  function classWeights(world, atRing) {
+    const axes = PF.weather.axesOf(world);
+    const surround = PF.own(LATTICE_TUNE.SURROUND_BIAS, world?.surround) ? world.surround : null;
+    const nearness = 1 / (1 + Math.max(0, atRing - 1) * LATTICE_TUNE.SURROUND_FALLOFF);
+    const wildness = Math.min(LATTICE_TUNE.RING_WILDNESS * atRing, LATTICE_TUNE.RING_WILDNESS_CAP);
+    const out = {};
+    for (const [cls, spec] of Object.entries(LATTICE_TUNE.CLASSES)) {
+      let weight = spec.weight;
+      weight *= biasOf(LATTICE_TUNE.LATITUDE_BIAS, axes.latitude, cls);
+      weight *= biasOf(LATTICE_TUNE.PRECIP_BIAS, axes.precipitation, cls);
+      if (surround) weight *= 1 + (biasOf(LATTICE_TUNE.SURROUND_BIAS, surround, cls) - 1) * nearness;
+      weight *= Math.max(0, 1 + spec.wildness * wildness);
+      out[cls] = Math.max(LATTICE_TUNE.WEIGHT_FLOOR, weight);
+    }
+    return out;
+  }
+
+  /** The share of cells at this ring that carry a landmark. The design's own
+   *  arithmetic, exposed so it can be asserted rather than asserted about. */
+  function landmarkRate(world, atRing) {
+    const weights = classWeights(world, atRing);
+    let total = 0;
+    let landmarks = 0;
+    for (const [cls, weight] of Object.entries(weights)) {
+      total += weight;
+      const feature = LATTICE_TUNE.CLASSES[cls].feature;
+      if (feature) landmarks += weight * (feature.always ? 1 : LATTICE_TUNE.LANDMARK_ODDS);
+    }
+    return total > 0 ? landmarks / total : 0;
+  }
+
+  /** One weighted draw, in the table's own key order — which is insertion order
+   *  for these words, so the pick is a function of the weights and the roll and
+   *  never of how the object was built. */
+  const pickWeighted = (weights, roll) => {
+    let total = 0;
+    for (const cls of Object.keys(weights)) total += weights[cls];
+    let cursor = roll * total;
+    let last = null;
+    for (const cls of Object.keys(weights)) {
+      last = cls;
+      cursor -= weights[cls];
+      if (cursor < 0) return cls;
+    }
+    return last;
+  };
+
+  const themeWords = (world) => PF.own(LATTICE_TUNE.WORDS, world?.theme) ?? LATTICE_TUNE.WORDS["cozy-village"];
+
+  /** The class a cell is, without building it. Every consumer that wants to know
+   *  what is out there without paying for tiles asks here. */
+  function classFor(world, cx, cy) {
+    const stream = PF.rng(PF.hashStr(`${(world?.seed ?? 0) >>> 0}|${LATTICE_TUNE.STREAM_LABEL}|${cx}|${cy}`));
+    return pickWeighted(classWeights(world, ring(cx, cy)), stream());
+  }
+
+  /** A chunk's display name. Deduped against the names the BRIEF minted and
+   *  never against resident chunks: the brief's zones are the same set for the
+   *  whole session, and deduping against a set that changes as cells are evicted
+   *  would make a name depend on where the player had been. */
+  function nameFor(world, cx, cy, cls) {
+    const book = PF.own(themeWords(world), cls);
+    const stream = PF.rng(PF.hashStr(`${(world?.seed ?? 0) >>> 0}|${LATTICE_TUNE.NAME_STREAM_LABEL}|${cx}|${cy}`));
+    const noun = book.noun[(stream() * book.noun.length) | 0];
+    const taken = new Set(
+      Object.values(world?.zones ?? {})
+        .filter((zone) => !parse(zone.id))
+        .map((zone) => zone.name),
+    );
+    const first = (stream() * book.adj.length) | 0;
+    for (let i = 0; i < book.adj.length; i++) {
+      const name = `The ${book.adj[(first + i) % book.adj.length]} ${noun}`;
+      if (!taken.has(name)) return name;
+    }
+    return `The ${book.adj[first]} ${noun}`;
+  }
+
+  /** WHAT THE SIGNPOST SAYS — a bearing and the name of the place the gate
+   *  leads to.
+   *
+   *  NAMED WITHOUT BUILDING. A cell's name is a total function of the same
+   *  (seed, cell) the tiles are, so the country over the edge can be read for
+   *  two hashes and no zone at all. That matters twice: the label costs nothing
+   *  to compute for a neighbour nobody has walked into, and it says the SAME
+   *  words whether or not that neighbour happens to be resident — a signpost
+   *  that changed its mind when a cell was evicted would be worse than no
+   *  signpost, and finding the way home from four rings out is exactly what
+   *  these words are for.
+   *
+   *  The three anchor cells are named the other way round, off the zones the
+   *  compiler built: the settlement and the brief's own wilds have names a brief
+   *  wrote, and inventing wilderness words for them would tell the player the
+   *  town was somewhere else. */
+  function gateLabel(world, zone, gate) {
+    const bearing = PF.own(COPY.BEARINGS, gate?.dir);
+    const cell = cellOf(zone);
+    const step = gate && delta(gate.dir);
+    if (!bearing || !cell || !step) return "";
+    const cx = cell.cx + step.cx;
+    const cy = cell.cy + step.cy;
+    const id = cellZoneId(world, cx, cy);
+    if (!id) return "";
+    const place = parse(id) ? nameFor(world, cx, cy, classFor(world, cx, cy)) : PF.own(world.zones, id)?.name;
+    return place ? COPY.gate(bearing, place) : "";
+  }
+
+  // ── Building a chunk ────────────────────────────────────────────────────────
+  const key = (zone, x, y) => y * zone.w + x;
+
+  /** Strew one object across a cell, honouring the reservation.
+   *
+   *  A near-copy of the compiler's `scatterTrees` on purpose, with the one
+   *  difference that matters: the shipped one only ever plants on `grass`,
+   *  because a settlement's non-grass ground is road, plaza and crop and a tree
+   *  in any of them is a fault. Out here the class table owns the ground — a
+   *  heath is `grass2` and a scree is `stone` — and a heath with no gorse on it
+   *  because the ground was the wrong word would be six classes that all look
+   *  like an empty field. Reservation is by exact tile rather than the shipped
+   *  ±1x/±2y box: the corridors this reserves are two tiles wide, so a trunk
+   *  standing beside one narrows nothing. */
+  function scatter(zone, rnd, spec, reserved) {
+    const prims = PF.world.prims;
+    for (let i = 0; i < spec.count; i++) {
+      const x = 1 + ((rnd() * (zone.w - 2)) | 0);
+      const y = 2 + ((rnd() * (zone.h - 3)) | 0);
+      const at = key(zone, x, y);
+      if (zone.solid[at] || zone.object[at] || reserved.has(at)) continue;
+      prims.put(zone, x, y, "object", spec.tile, true);
+      if (spec.overhead) prims.put(zone, x, y - 1, "overhead", spec.overhead);
+    }
+  }
+
+  const rectFree = (zone, rect, reserved) => {
+    if (rect.x < 1 || rect.y < 1 || rect.x + rect.w > zone.w - 1 || rect.y + rect.h > zone.h - 1) return false;
+    for (let y = rect.y; y < rect.y + rect.h; y++) {
+      for (let x = rect.x; x < rect.x + rect.w; x++) {
+        if (reserved.has(key(zone, x, y)) || zone.solid[key(zone, x, y)]) return false;
+      }
+    }
+    return true;
+  };
+
+  /** The class's own dressing: what makes a fen a fen and a furlong a furlong.
+   *  Both spellings are the shipped vocabulary and the shipped idiom — the wilds
+   *  builder lays its stream with exactly this `fillRect(…, "water", true)` — so
+   *  no painter is added and no atlas slot is spent. */
+  const DRESS = {
+    pools(zone, rnd, reserved) {
+      const prims = PF.world.prims;
+      for (let i = 0; i < LATTICE_TUNE.POOLS.count; i++) {
+        const rect = {
+          x: 2 + ((rnd() * (zone.w - 4 - LATTICE_TUNE.POOLS.w)) | 0),
+          y: 2 + ((rnd() * (zone.h - 4 - LATTICE_TUNE.POOLS.h)) | 0),
+          w: LATTICE_TUNE.POOLS.w,
+          h: LATTICE_TUNE.POOLS.h,
+        };
+        if (!rectFree(zone, rect, reserved)) continue;
+        prims.fillRect(zone, rect.x, rect.y, rect.w, rect.h, "ground", "water", true);
+      }
+    },
+    furrows(zone, rnd, reserved) {
+      const prims = PF.world.prims;
+      const top = LATTICE_TUNE.FURROWS.inset + ((rnd() * LATTICE_TUNE.FURROWS.gap) | 0);
+      for (let row = 0; row < LATTICE_TUNE.FURROWS.rows; row++) {
+        const y = top + row * LATTICE_TUNE.FURROWS.gap;
+        if (y >= zone.h - 2) break;
+        for (let x = 2; x < zone.w - 2; x++) {
+          if (reserved.has(key(zone, x, y))) continue;
+          prims.put(zone, x, y, "ground", "crop");
+        }
+      }
+    },
+  };
+
+  /** The corridors a cell keeps clear between its four gates.
+   *
+   *  Reachability is a CONSTRUCTION here, not a measurement: every apron runs to
+   *  a seeded hub, so the pocket seal can never wall a gate off from the spawn no
+   *  matter how the scatter falls. The hub moves per cell, so the clearing is not
+   *  the same plus-sign in every chunk — and nothing is PAINTED, so a corridor
+   *  reads as a way through the trees rather than a road somebody laid. */
+  function corridorTiles(zone, gates, rnd) {
+    const band = (extent) =>
+      Math.round(extent * LATTICE_TUNE.HUB_BAND.lo) +
+      ((rnd() * (extent * (LATTICE_TUNE.HUB_BAND.hi - LATTICE_TUNE.HUB_BAND.lo))) | 0);
+    const hub = { x: band(zone.w), y: band(zone.h) };
+    const out = [];
+    const line = (x0, y0, x1, y1) => {
+      for (let y = Math.min(y0, y1); y <= Math.max(y0, y1); y++) {
+        for (let x = Math.min(x0, x1); x <= Math.max(x0, x1); x++) {
+          if (x >= 0 && y >= 0 && x < zone.w && y < zone.h) out.push({ x, y });
+        }
+      }
+    };
+    for (const gate of gates) {
+      const inset = insetOf(zone, gate);
+      if (!inset) continue;
+      if (gate.dir === "N" || gate.dir === "S") {
+        line(inset.x, inset.y, inset.x, hub.y);
+        line(inset.x, hub.y, hub.x, hub.y);
+      } else {
+        line(inset.x, inset.y, hub.x, inset.y);
+        line(hub.x, inset.y, hub.x, hub.y);
+      }
+    }
+    return out;
+  }
+
+  /** Build the cell. A pure function of (seed, theme, axes, surround, cell), on
+   *  the cell's own side stream and no other.
+   *
+   *  Order is the two-phase rule spelled out: ground and border first, the gate
+   *  positions and their corridors computed and RESERVED second, the class's
+   *  dressing and its landmark placed against that reservation, the scatter run
+   *  against it too, the spawn CHOSEN out of the reserved arrival set rather than
+   *  asserted, and only then the punch and the seal. `sealPockets` throws when a
+   *  spawn is solid; choosing the spawn out of ground the reservation guarantees
+   *  is clear is what makes that throw structurally unreachable instead of
+   *  runtime-reachable. */
+  function compileChunk(world, cx, cy) {
+    const prims = PF.world.prims;
+    const id = idFor(cx, cy);
+    const seed = (world?.seed ?? 0) >>> 0;
+    const rnd = PF.rng(PF.hashStr(`${seed}|${LATTICE_TUNE.STREAM_LABEL}|${cx}|${cy}`));
+    const cls = pickWeighted(classWeights(world, ring(cx, cy)), rnd());
+    const spec = LATTICE_TUNE.CLASSES[cls];
+    const book = PF.own(themeWords(world), cls);
+
+    const zone = prims.makeZone(
+      id,
+      nameFor(world, cx, cy, cls),
+      LATTICE_TUNE.CHUNK_W,
+      LATTICE_TUNE.CHUNK_H,
+      spec.ground,
+    );
+    zone.cell = { cx, cy };
+    zone.terrain = cls; // the word the word book used, for the HUD and the lanes
+    zone.mapKind = LATTICE_TUNE.CHUNK_MAP_KIND;
+    zone.mapExport = LATTICE_TUNE.CHUNK_MAP_EXPORT;
+    for (let i = 0; i < zone.ground.length; i++) if (rnd() < spec.mottle.rate) zone.ground[i] = spec.mottle.tile;
+    prims.borderTrees(zone);
+
+    // PHASE ONE. Every tile the seam will need, before anything can stand on it.
+    const gates = gatesFor(zone, DIRS);
+    const reserved = new Set(
+      reservationsFor(zone, gates)
+        .concat(corridorTiles(zone, gates, rnd))
+        .map((tile) => key(zone, tile.x, tile.y)),
+    );
+
+    if (spec.dress) DRESS[spec.dress](zone, rnd, reserved);
+
+    // The landmark, if this cell carries one. Anchored against the reservation
+    // exactly as the wilds anchors against its road: a feature with nowhere safe
+    // is dropped, which reads out here as a plainer wood.
+    if (spec.feature && (spec.feature.always || rnd() < LATTICE_TUNE.LANDMARK_ODDS)) {
+      const size = LATTICE_TUNE.FEATURE_RECTS[spec.feature.tag];
+      for (let attempt = 0; attempt < LATTICE_TUNE.FEATURE_TRIES; attempt++) {
+        const rect = {
+          x: 2 + ((rnd() * (zone.w - 4 - size.w)) | 0),
+          y: 2 + ((rnd() * (zone.h - 4 - size.h)) | 0),
+          w: size.w,
+          h: size.h,
+        };
+        if (!rectFree(zone, rect, reserved)) continue;
+        prims.PLACERS[spec.feature.tag](zone, rect.x, rect.y);
+        // A lit landmark is a landmark you can find after dark, and `zone.lights`
+        // costs nothing to carry. The stone's own placer already lights itself;
+        // the other two are lit on a stone the placer actually stood, never on
+        // bare ground.
+        if (zone.object[key(zone, rect.x, rect.y)] === "wallStone") zone.lights.push({ x: rect.x, y: rect.y });
+        zone.features.push({
+          // The reserved-id shape, on the quest board's precedent: an id that is
+          // visibly not a brief ordinal, because no brief wrote this.
+          id: `wild:${id}:${zone.features.length + 1}`,
+          tag: spec.feature.tag,
+          name: book.feature,
+          rect,
+        });
+        break;
+      }
+    }
+
+    scatter(zone, rnd, spec.scatter, reserved);
+
+    // CHOSEN, never asserted: the west gate's own arrival tile, which the
+    // reservation has kept clear and the punch is about to lay path on.
+    const home = insetOf(
+      zone,
+      gates.find((gate) => gate.dir === "W"),
+    );
+    zone.spawn = { x: home.x, y: home.y };
+
+    // PHASE TWO, and then the seal — in that order, because the punch opens ring
+    // tiles that were solid when a seal running before it swept the zone, and
+    // those tiles would ship walkable-but-unswept with a pocket behind them.
+    punchGates(zone, gates);
+    zone.gates = gates;
+    // Flavor rides RARITY: a landmark cell injects one line on first entry and an
+    // ordinary cell costs nothing at all, so the prose budget is a function of
+    // how many landmarks exist to find rather than of how far anybody walks.
+    if (zone.features.length && book.flavor) zone.flavor = book.flavor.slice(0, LATTICE_TUNE.FLAVOR_MAX_CHARS);
+    prims.sealPockets(zone, zone.spawn);
+    return zone;
+  }
+
+  // ── Materialization ─────────────────────────────────────────────────────────
+  const warned = new Set();
+
+  /** THE ZONE FOR AN ID, MATERIALIZING IT IF IT HAS TO — and the first arm is the
+   *  walk home.
+   *
+   *  RESIDENT PASSTHROUGH COMES FIRST, for any id at all. A gate can name `z1`,
+   *  it can name either of the brief's wilds, and it can name a chunk that is
+   *  already standing; none of the first two match the chunk pattern, so an
+   *  ensure that parsed before it looked would refuse the most-walked transition
+   *  in the whole feature and leave every inward gate an inert tile. Parsing and
+   *  building apply to ABSENT ids only.
+   *
+   *  Never throws. A builder bug degrades to a gate tile that does nothing — a
+   *  quiet non-event the player can walk away from — rather than a throw inside
+   *  the frame loop, which re-arms its own animation frame before the throw and
+   *  would pump the fault sixty times a second, or inside a restore, which would
+   *  cost the save. */
+  function ensure(world, zoneId) {
+    if (!world || typeof zoneId !== "string") return null;
+    const resident = PF.own(world.zones, zoneId);
+    if (resident) return resident;
+    const cell = parse(zoneId);
+    if (!cell) return null;
+    // The id has to be the id this world would MINT for that cell. On a world
+    // whose brief hung a wilds at (1,0) the string `w_1_0` names a cell that is
+    // spoken for, and building a second zone for it would put a chunk nobody can
+    // reach beside the wilds everybody can.
+    if (cellZoneId(world, cell.cx, cell.cy) !== zoneId) return null;
+    try {
+      const zone = compileChunk(world, cell.cx, cell.cy);
+      world.zones[zoneId] = zone;
+      return zone;
+    } catch (err) {
+      if (!warned.has(zoneId)) {
+        warned.add(zoneId);
+        console.warn(`pixelforge: could not compile wilderness cell ${zoneId}`, err);
+      }
+      return null;
+    }
+  }
+
+  // ── Arriving somewhere ──────────────────────────────────────────────────────
+  /** Whether a cell is worth writing down: it carries a landmark. */
+  const isLandmark = (zone) => !!zone && Array.isArray(zone.features) && zone.features.length > 0;
+
+  /** WHETHER A STEP IS A WALK INSIDE THE WILDERNESS, and nothing more than that.
+   *
+   *  Pure, and it is the whole of the write governor. Every zone entry arms a
+   *  whole-shard write today, and a lattice walk crosses a boundary every six to
+   *  eight seconds of straight walking — so an unbatched twenty-minute walk is a
+   *  hundred and fifty of those, where a town session is a handful. A cell-to-
+   *  cell step therefore writes NOTHING event-shaped: the walk's position rides
+   *  the thirty-second positional autosave the frame loop already runs, which
+   *  `sim.dirty` has been feeding all along. No new timer, no second leash, and
+   *  no fork with the shared debounce the retry ladder and the rewind corrective
+   *  both hold. Everything else keeps the write it has: leaving town, arriving in
+   *  it, a discovery, a quest, a conversation.
+   *
+   *  The cost is the status quo's, stated rather than discovered: a hard browser
+   *  kill mid-walk can lose up to thirty seconds of position — a cell or two of
+   *  backtrack, in country that regenerates identically. An ordinary tab close
+   *  loses nothing at all; the teardown flush snapshots the live sim
+   *  synchronously, past the debounce and past the dedupe caches. */
+  const isChunkCrossing = (from, to) => !!parse(from) && !!parse(to) && from !== to;
+
+  /** THE LEDGER WRITE, AND IT IS SELECTIVE ON PURPOSE.
+   *
+   *  Only a LANDMARK cell is written down. `player.found` is an eighty-row
+   *  ledger shared with every future discovery consumer, and it evicts the
+   *  oldest by DAY — so a writer that filed every patch of heath would fill it
+   *  with terrain inside a day's walking and then start evicting the ruin
+   *  somebody found on day three. Worse: at a same-day tie the eviction falls
+   *  back to whichever id sorts first once a reload has re-sorted the array
+   *  (58-player `discover`), so a saturated ledger keeps what SPELLING decides.
+   *  Writing rarely is what keeps the ledger meaning something.
+   *
+   *  Two limitations, said out loud rather than left to be found: `found` is the
+   *  last eighty discoveries and not a map of everywhere you have been; and the
+   *  same-day tie-break above is a one-field fix belonging to whichever arc next
+   *  owns this ledger, not to this one.
+   *
+   *  `d` KEEPS ITS SHIPPED MEANING — the depth of a sub-zone. A cell three rings
+   *  out is `d: 0` like everything else standing on the surface: distance is not
+   *  depth, and writing one into the field named for the other would poison the
+   *  composite key for the enterables the field was minted for.
+   *
+   *  Returns whether this arrival was the FIRST one. Re-entry upserts the row
+   *  and says nothing — you do not discover a place twice. */
+  function discoverCell(core, world, zoneId) {
+    const zone = PF.own(world.zones, zoneId);
+    if (!parse(zoneId) || !isLandmark(zone)) return false;
+    const known = (PF.player.get(core)?.found?.zones ?? []).some((row) => row?.p === zoneId && !row?.e && !row?.d);
+    // Refused wholesale under the loading gate, like every other player write —
+    // so a landmark entered by a world still being generated is not a discovery
+    // that never happened.
+    if (!PF.player.discover(core, { p: zoneId, e: 0, d: 0 }, PF.save._gen ?? 0)) return false;
+    if (known) return false;
+    core.hud?.toast(COPY.found(zone.features[0]?.name || zone.name));
+    return true;
+  }
+
+  // ── Residency ───────────────────────────────────────────────────────────────
+  /** WHICH CELLS SHOULD STOP STANDING. Pure: it reads a world and answers with
+   *  ids, it changes nothing, and asking twice gives the same list.
+   *
+   *  A resident cell costs its tile arrays and — the megabytes — the renderer's
+   *  two composites, and the cost is ADDITIVE: the settlement keeps its own
+   *  canvases the whole time, so a walk pays for the town it left plus every
+   *  patch of country it has crossed. On a lattice with no edge that is a leak
+   *  with a walking pace, which is why the policy is a hard count.
+   *
+   *  THE REFUSALS COME FIRST, because the list this must never take is longer
+   *  than the list it takes:
+   *   - the zone the player is standing in — dropping it is a frame that draws
+   *     `undefined`;
+   *   - the settlement, checked by name as well as by id: `cellZoneId` answers
+   *     (0,0) with `world.startZone`, so a world whose start zone were somehow
+   *     spelled like a cell would otherwise be evictable;
+   *   - anything the brief named, every interior, every floor, every dwelling —
+   *     a place with a name, a `rel` row, a quest handle or a portal record
+   *     pointing at it is not a cache entry, and none of those ids are cell ids;
+   *   - a cell holding an NPC. Vacuous today (C6: no cell has residents) and
+   *     load-bearing the day one does — a schedule handle whose zone was dropped
+   *     is a person who stops existing mid-errand.
+   *
+   *  Then RECENCY and only recency: the `keep` most-recently-entered cells stand
+   *  and the rest go, oldest first. A cell nothing ever entered — one a reload
+   *  compiled to stand the player in, say — ranks oldest of all. Ties break on
+   *  the id, so the answer is a function of the world's CONTENT rather than of
+   *  the order somebody happened to compile it in.
+   *
+   *  Refused cells past the budget are simply kept, which is where the ceiling's
+   *  slack comes from: residency is `keep` cells, plus whatever cannot be taken,
+   *  plus the one a step has just materialized and not yet arrived in. */
+  function residency(world, currentZoneId, keep) {
+    if (!world || !world.zones) return [];
+    const limit = Number.isSafeInteger(keep) && keep >= 0 ? keep : LATTICE_TUNE.RESIDENCY_KEEP;
+    const seen = Array.isArray(world._entered) ? world._entered : [];
+    const cells = Object.keys(world.zones).filter((id) => {
+      const cell = parse(id);
+      // The id this world would MINT for that cell, so a chunk standing under an
+      // id the world has since anchored elsewhere is never counted as one.
+      if (!cell || cellZoneId(world, cell.cx, cell.cy) !== id) return false;
+      return PF.own(world.zones, id)?.mapKind === LATTICE_TUNE.CHUNK_MAP_KIND;
+    });
+    const rank = (id) => seen.lastIndexOf(id);
+    const held = (id) => id === currentZoneId || id === world.startZone || !!PF.own(world.zones, id)?.npcs?.length;
+    // ONE total order, oldest first, and the budget is taken off the young end:
+    // the `keep` newest cells stand and everything before them goes, in the
+    // order it went stale. Refusals are applied AFTER the count, so a cell that
+    // cannot be taken keeps its place in the budget instead of pushing an
+    // innocent neighbour out to make room for itself.
+    const oldestFirst = cells.sort((a, b) => rank(a) - rank(b) || (a < b ? -1 : 1));
+    return oldestFirst.slice(0, Math.max(0, oldestFirst.length - limit)).filter((id) => !held(id));
+  }
+
+  /** THE EFFECT, and the only thing in this module that destroys anything.
+   *
+   *  Two clears per cell, and both are load-bearing. The zone object takes the
+   *  tile arrays with it and the `_snowable` memo hung off it; the renderer's
+   *  composites are cached under `<id>|base` and `<id>|snow` and are where the
+   *  memory actually is, so a delete without `invalidateZone` would be the same
+   *  leak with the zone's name filed off — the picture outliving its world, and
+   *  a stale one waiting for whatever zone is next given that id. The renderer
+   *  has carried `invalidateZone` with no runtime caller since the day it was
+   *  written; this is the caller.
+   *
+   *  Nothing here is saved and nothing here is a decision: a cell walked back
+   *  into recompiles byte-identically from the same four inputs, which is what
+   *  makes dropping it free rather than lossy. The recency order KEEPS the ids
+   *  of cells it has let go — it remembers further back than residency holds, so
+   *  a cell that comes back is not treated as somewhere new. */
+  function evict(core, world, currentZoneId) {
+    const gone = residency(world, currentZoneId, LATTICE_TUNE.RESIDENCY_KEEP);
+    for (const id of gone) {
+      delete world.zones[id];
+      core?.render?.invalidateZone(id);
+    }
+    return gone;
+  }
+
+  /** WHAT ARRIVING SOMEWHERE IS WORTH — the one place both real zone-change
+   *  callers meet.
+   *
+   *  TWO CALLERS, deliberately: the frame loop's `_zoneChanged` (the walked
+   *  arrival) and 50-spatial's drift arm (the narrated one, which teleports
+   *  without ever calling the first). Arrival behaviour hung off the frame loop
+   *  alone would leave the recency order believing the player was still standing
+   *  in the cell the GM moved them out of.
+   *
+   *  Returns the entry: what was entered, what had been entered before it,
+   *  whether this arrival wrote a discovery, and which cells it let go of. The
+   *  caller decides what to WRITE from that — which is how a walk through the
+   *  wilderness avoids arming a whole-shard save per cell.
+   *
+   *  The recency order is runtime-only and lives on the world object, so a world
+   *  swap starts a fresh one for free and nothing about where the player has
+   *  been reaches a save row. */
+  function enter(core, zoneId) {
+    const world = core?.sim?.world;
+    const entry = {
+      id: typeof zoneId === "string" ? zoneId : null,
+      from: null,
+      discovered: false,
+      evicted: [],
+    };
+    if (!world || !entry.id) return entry;
+    const seen = (world._entered ??= []);
+    entry.from = seen.length ? seen[seen.length - 1] : null;
+    const at = seen.indexOf(entry.id);
+    if (at >= 0) seen.splice(at, 1);
+    seen.push(entry.id);
+    if (seen.length > LATTICE_TUNE.SEEN_MAX) seen.splice(0, seen.length - LATTICE_TUNE.SEEN_MAX);
+    entry.discovered = discoverCell(core, world, entry.id);
+    // LAST, and after the arrival has been counted: the cell just walked into is
+    // the most recent thing in the order, so the policy reading it can never
+    // decide to drop the ground under the player.
+    entry.evicted = evict(core, world, entry.id);
+    return entry;
+  }
+
+  // ── What the compiler asks for ──────────────────────────────────────────────
+  /** The settlement's own gates: every spine terminal the brief's wilds did not
+   *  already take. Where a wilds hangs, its shipped portal pair is the seam and
+   *  no gate is written at all — so a record and a gate can never both answer for
+   *  one tile, and the precedence is settled at build time.
+   *
+   *  `spine` is an OVERRIDE for a zone that does not carry one yet, and no
+   *  shipped caller passes it: the compiler stamps `v.spine` six hundred lines
+   *  before it asks for these gates. Kept so a caller building a settlement in
+   *  pieces has the seam available before the stamp, not because it is used. */
+  const settlementGates = (v, wilds, spine) =>
+    gatesFor(
+      v,
+      DIRS.filter((dir) => !(dir === "E" && wilds.east) && !(dir === "W" && wilds.west)),
+      spine ?? v.spine,
+    );
+
+  /** A brief wilds' gates: its three OUTWARD edges. The fourth is the portal pair
+   *  home, which is a record and stays one. */
+  const wildsGates = (zone, east) =>
+    gatesFor(
+      zone,
+      DIRS.filter((dir) => dir !== (east ? "W" : "E")),
+    );
+
+  return {
+    TUNE: LATTICE_TUNE,
+    DIRS,
+    CHUNK_ID_RE,
+    idFor,
+    parse,
+    cellOf,
+    cellZoneId,
+    opposite,
+    delta,
+    gateAt,
+    gateTargetId,
+    gateLabel,
+    arrivalFor,
+    insetOf,
+    gatesFor,
+    apronTiles,
+    reservationsFor,
+    punchGates,
+    settlementGates,
+    wildsGates,
+    classWeights,
+    classFor,
+    landmarkRate,
+    compileChunk,
+    ensure,
+    isLandmark,
+    isChunkCrossing,
+    residency,
+    enter,
+  };
 })();
 
 // ===== 25-schedule.js =====
@@ -7263,6 +8958,10 @@ PF.Sim = class {
     this._clockAcc = 0;
     this.nearNpc = null;
     this.nearPortal = null;
+    // The lattice edge within reach, or null (see step()) — a FIFTH proximity
+    // read, on the same terms as the four beside it and derived from the zone's
+    // own `gates` list, which only a lattice-participating zone carries.
+    this.nearGate = null;
     // The named feature the player is standing at, or null (see step()). Derived
     // per frame from the zone's own register (20-world makeZone.features), which
     // is itself derived — nothing here is ever saved.
@@ -7382,6 +9081,37 @@ PF.Sim = class {
     this.dirty = true;
   }
 
+  /** WALK THROUGH A LATTICE EDGE (0.16 §2.3) — materialize what is over there,
+   *  land on its facing doorway, and report what actually happened.
+   *
+   *  MATERIALIZE FIRST, ALWAYS. `ensure` is idempotent and hands a resident zone
+   *  straight back, so the walk home through the settlement's own gate is the
+   *  same call as the first step into country nobody has compiled — and a gate
+   *  into an evicted neighbour cannot be a dead doorway by construction rather
+   *  than by policy.
+   *
+   *  IT COMPUTES ITS OWN TRUTH, which the record loop above does not: that loop
+   *  returns `zoneChanged: true` whether or not its guarded teleport was
+   *  refused, so a record naming a zone this world does not own fires an arrival
+   *  for a zone the player never left. Nothing here can: the answer is whether
+   *  the player is standing in the zone we were asked to move them to.
+   *
+   *  Null means "not a crossing" — a refusal from a builder that threw, a cell
+   *  the lattice does not speak for, or a destination with no doorway facing
+   *  back. The caller falls through and finishes the frame normally, so the tile
+   *  is INERT rather than a hole: the other proximity reads still run, the step
+   *  still returns `zoneChanged: false`, and the player walks away from it. */
+  _crossGate(z, gate) {
+    const id = PF.lattice.gateTargetId(this.world, z, gate);
+    if (!id) return null;
+    const dest = PF.lattice.ensure(this.world, id);
+    if (!dest) return null;
+    const arrival = PF.lattice.arrivalFor(dest, gate.dir);
+    if (!arrival) return null;
+    this.teleport(id, arrival.x, arrival.y);
+    return { zoneChanged: this.zoneId === id };
+  }
+
   step(dt, input) {
     const z = this.zone();
     // A beat is WALK-ONLY and never survives the screen changing hands. Dialogue,
@@ -7422,6 +9152,32 @@ PF.Sim = class {
           return { zoneChanged: true };
         }
         if (Math.abs(p.x - tx) + Math.abs(p.y - ty) <= 1) this.nearPortal = p;
+      }
+      // THE LATTICE EDGE — AFTER the record loop and never instead of it (0.16
+      // §2.3). Records keep priority, so shipped traversal is untouched: where a
+      // portal and a gate could both answer for one tile the compiler writes no
+      // gate at all, and this loop only ever sees edges nothing else owns.
+      //
+      // A gate is a border tile with a direction, and where it LEADS is
+      // arithmetic on the cell the zone stands in — resolved here, at step time,
+      // off no record whatsoever. That is what makes eviction safe: there is
+      // nothing to dangle when a neighbour goes and nothing to duplicate when it
+      // comes back, and re-entering an evicted cell is this same branch.
+      //
+      // The shape mirrors the record loop above it deliberately, INCLUDING the
+      // adjacency arm's Manhattan reach: the frame the player is standing ON the
+      // gate is the frame they leave, so a label computed only under their feet
+      // would compute and never render. Standing beside it is when the signpost
+      // is worth reading.
+      this.nearGate = null;
+      if (z.gates) {
+        for (const g of z.gates) {
+          if (g.x === tx && g.y === ty) {
+            const crossed = this._crossGate(z, g);
+            if (crossed) return crossed;
+          }
+          if (Math.abs(g.x - tx) + Math.abs(g.y - ty) <= 1) this.nearGate = g;
+        }
       }
       // nearest interactable NPC within reach
       this.nearNpc = null;
@@ -8586,6 +10342,13 @@ PF.spatial = {
           // can ever complete. Inside the zone-CHANGED test on purpose, so a
           // refresh that finds the party where it already was settles nothing.
           core.hud?.questFilled(PF.pack.visited(core, zoneId, saveGen));
+          // THE OTHER REAL ZONE-CHANGE CALLER'S SHARE OF THE ARRIVAL (0.16
+          // §2.3). This arm teleports without ever calling `_zoneChanged`, so
+          // the lattice would otherwise never hear about it: the cell the GM
+          // moved the player OUT of would stay the most-recently-entered one for
+          // the rest of the session, and the residency order that reads it would
+          // be describing a walk that stopped happening.
+          PF.lattice.enter(core, zoneId);
         }
         // Same class as a walked zone entry, so the same top surface: a narrated
         // arrival is the one notice most likely to print while the player is
@@ -13099,6 +14862,324 @@ const BRIEF_CACHE_MAX = 8;
 const PACK_META_KEY = "pixelforgePack";
 const PACK_WANTED_META_KEY = "pixelforgePackWanted";
 
+// ── THE GENERATION RETRY SURFACE (0.16 §2.10, maintainer ruling 4) ────────────
+// Ruling 4 rejected putting anything on the fallback map — "no one should play
+// in the fallback map" — and asked instead for a way OUT of it: after the game
+// starts, anything generated before game start that failed or is standing on a
+// fallback appears on a popup, and the player re-attempts THAT stage, keeping
+// the stages that succeeded. Ruling 8 fixed the one thing no recovery path may
+// do: the seed is the world's IDENTITY for the life of the chat, so nothing
+// here ever moves it — a regenerated stage re-runs everything DOWNSTREAM of it
+// instead (new brief → pack re-run), rather than orphaning an artifact built on
+// the old value.
+//
+// THE KEYS ARE WIRE FORMAT, NOT PLAYTEST TUNABLES, and they are kept apart from
+// the tunables below for exactly that reason: the PROVISIONAL header invites an
+// edit, and a durable metadata key renamed on that invitation orphans every chat
+// already carrying the old one. These change only the way any stored key changes
+// — with a compatibility story written first.
+const RETRY_KEYS = {
+  /** One flat boolean key per stage, meaning exactly "the player chose to keep
+   *  playing on this stage's fallback for now". FLAT rather than one map at one
+   *  key: the metadata PATCH is a queued SHALLOW merge (see `_configBrief`'s own
+   *  rationale below), so a map would be a read-modify-write whose lost-update
+   *  window grows with every stage reserved here. Written only by a row's own
+   *  explicit button — never by a failure, and never by a mere dismissal. */
+  ACCEPTED: { brief: "pixelforgeFallbackAcceptedBrief", pack: "pixelforgeFallbackAcceptedPack" },
+  /** The outgoing brief, parked beside the new one in the SAME PATCH when a paid
+   *  re-roll replaces it. One deep, additive, atomic: every other
+   *  destroy-the-only-copy path in this module parks first, and a degraded brief
+   *  is exactly the shape a newer build wrote and this one cannot compile. */
+  PRIOR_BRIEF: "pixelforgeBriefPrior",
+};
+
+// PROVISIONAL — maintainer ruling 2026-09-05: playtest values, expected to
+// change; one edit here changes code and lanes together.
+const RETRY_TUNE = {
+  /** The marker PATCHes ride the seal PATCH's own ladder, deliberately: three
+   *  attempts at the same spacing, so a storage failure here reads on the
+   *  shipped storage screen rather than inventing a second vocabulary. */
+  STORE_ATTEMPTS: 3,
+  STORE_BACKOFF_MS: 500,
+};
+
+/** THE STORE LADDER, WRITTEN ONCE. Four sites in this module PATCH one thing and
+ *  have to mean it — the two fallback markers, the brief seal and the pack seal
+ *  — and each carried its own copy of the same three lines, two of them with the
+ *  attempt count and the spacing spelled as literals rather than read off the
+ *  tune above. A retune that moved `RETRY_TUNE` and left those two behind would
+ *  have been invisible from the outside and wrong on the inside: the shipped
+ *  storage screen says one thing about how hard a save tried, for all four.
+ *
+ *  `run` is the whole of what a success MEANS on that site rather than the PATCH
+ *  alone — the marker sites mirror their own bookkeeping inside it, exactly
+ *  where the `try` used to hold it, so a throw out of the mirror is retried like
+ *  any other failure instead of being swallowed one line past the ladder. The
+ *  warning stays the CALLER'S, because the sentence a last attempt leaves in the
+ *  console is about what that site was storing and nothing else. */
+const storeWithRetry = async (run, warning) => {
+  for (let attempt = 0; attempt < RETRY_TUNE.STORE_ATTEMPTS; attempt++) {
+    try {
+      await run();
+      return true;
+    } catch (err) {
+      if (attempt === RETRY_TUNE.STORE_ATTEMPTS - 1) console.warn(warning, err);
+      else await new Promise((resolve) => setTimeout(resolve, RETRY_TUNE.STORE_BACKOFF_MS * (attempt + 1)));
+    }
+  }
+  return false;
+};
+
+/** The states `derive` can answer, split by what the surface does with them.
+ *  A POPUP state is a row the player can act on; everything else is silence —
+ *  "ok" and "n/a" have nothing to offer, "declined" is a choice already made,
+ *  and "pending" means the blocking gate screen is the surface right now. */
+const RETRY_POPUP_STATES = new Set(["fallback", "unreadable", "demoted"]);
+
+/** Every string the retry surface puts in front of a player, in the same region
+ *  as the registry rows and for the same reason `gateReason` lives here: the
+ *  HUD needs a DOM and a string nothing can pin is the one part of a screen
+ *  that drifts. Plain language throughout — no jargon, no stage ids. */
+const RETRY_COPY = {
+  title: "Some of this world didn't finish being written.",
+  footer:
+    "Or leave this world and start a new game — set up a fresh chat and it writes itself from scratch. Nothing here carries over.",
+  chip: "World: part stand-in",
+  // The free rebuild is DETERMINISTIC (ruling 8: same setting, same seed), so it
+  // succeeds only once an update has fixed the builder. The copy says so before
+  // the press rather than after it, and a repeat press is provably identical.
+  rebuildUnchanged:
+    "Same setting, same seed — nothing has changed yet. This works once an update has fixed the builder.",
+  confirmTitle: "Write the world again?",
+  confirmFreeTitle: "Build this world again?",
+  costPaid:
+    "This writes a new world from your setting (one generation call — two if it also rewrites what its people say).",
+  costFree:
+    "This builds the world again from the setting you already have — no generation call, same setting, same seed.",
+  // THE THIRD SHAPE, and it is here because the paid one would LIE on it: the
+  // cascade's press writes no setting — that call already succeeded and its
+  // answer is stored — it re-runs what is still owed and lands the player in the
+  // world their setting already describes. Same severance, different price, so
+  // the cost line is the only half that changes.
+  confirmCascadeTitle: "Move into the new world?",
+  costCascade:
+    "Your setting was already written again and stored, so this doesn't write it a second time. One generation call fills in what the new world's people say, and then you arrive there.",
+  // FREE IS NOT CONSEQUENCE-FREE: the severance is identical either way, so all
+  // three confirmations carry the same keeps-and-loses contract under their cost
+  // line.
+  keepsAndLoses:
+    "Your money, items, skills and the clock come with you. Friendships, quests, discoveries, your home and anything you bought here stay behind — they belonged to this map, and maps you exported stay in your collection. There's no second starting purse; you keep what you've earned. Once the new world is written there's no going back, even if you close this window. You'll arrive at the new world's door.",
+  confirmGo: "Yes, write it",
+  confirmFreeGo: "Yes, build it",
+  confirmCascadeGo: "Yes, take me there",
+  confirmBack: "Not now",
+  // THE SENTENCE UNDER A ROW IS ALWAYS ABOUT A PRESS THAT SPENT NOTHING, and
+  // that is a fact about `regenerateStage` rather than a policy: it answers TRUE
+  // the moment a call goes out, so a call that comes back badly paints the
+  // gate's own failure screen and can never reach this map. A second-failure
+  // line ("the problem is likely the setting, not luck") lived here for that
+  // never-taken arm and was therefore false wherever it actually landed — on a
+  // press turned away by the storage precondition, and on a press abandoned by a
+  // chat switch. Refusals get refusal words, and only the ones that leave no
+  // screen behind them need any: the one window where the panel is still live
+  // with a press already out is the pre-arm flush, where the re-entrancy check
+  // turns the second press away having spent nothing and having failed nothing.
+  // Session-only, honestly re-derived as first-time after a reload: a durable
+  // attempt log is refused for the same reason a durable failure log is.
+  pressInFlight: "That attempt is already running, so this press changed nothing — it finishes on its own.",
+};
+
+/** THE STAGE REGISTRY (ruling 4's extensibility demand, §2.10a). One row per
+ *  pre-game generation stage, each a self-contained bundle of
+ *  derive + regenerable modes + the strings its screens read. The gate's own
+ *  hardcoded brief-vs-pack ternaries move in here, so ONE table now runs the
+ *  gate, the registry and the popup, and the shipped strings stay byte-identical
+ *  for the boot-armed states they were written for.
+ *
+ *  `historygen` and `storyboard` are RESERVED IDS WITH NO ROWS SHIPPED, and
+ *  deliberately: historygen (W10) is designed to reduce connection dependency
+ *  and may fail like the pack's substance floor rather than like a network call,
+ *  and GM storyboarding has zero repo footprint — it was named for the first
+ *  time in the ruling. The registry accommodates them BY SHAPE, not by guessing
+ *  a failure vocabulary neither has yet. */
+const RESERVED_STAGE_IDS = Object.freeze(["historygen", "storyboard"]);
+
+const STAGE_ROWS = [
+  {
+    id: "brief",
+    label: "The world",
+    /** Which re-attempts this stage offers, and whether each one runs BEHIND THE
+     *  GATE. `gated: false` is the free rebuild: one synchronous compile, no
+     *  ladder, no gate, no hold — so a chat switch mid-press has nothing to
+     *  re-arm and the row simply re-derives on return.
+     *
+     *  `installs` is the OTHER question, and it is the one the confirmation
+     *  reads: both of this stage's modes compile a world and put the player in
+     *  it, whatever else is standing, so both ask first. The pack row's modes
+     *  carry no such flag because neither installs by itself — one of them does
+     *  it in exactly one state, which is `retryReplacesWorld`'s job to know. */
+    modes: { rebuild: { gated: false, installs: true }, reroll: { gated: true, installs: true } },
+    screens: {
+      generating: {
+        title: "Writing your world…",
+        body: "One generation call is shaping the settlement, its people and the places in it. This can take a minute.",
+      },
+      failed: { title: "The world didn't finish being written." },
+      // The sentence AFTER the reason, and every clause of it has to be true in
+      // EVERY state its stage can be in. The shipped one is true of a BOOT-armed
+      // brief gate and only of that: post-start there IS a stand-in world on
+      // this chat, standing in front of the player as they read it — so the
+      // post-start variant says the true thing instead.
+      note: "Nothing was lost, and no stand-in world was settled on this chat instead of yours. Try again whenever you like.",
+      postStartNote:
+        "Nothing was lost: your setting is still stored and the world you were standing in is exactly as it was. Trying again costs one generation call; keeping the stand-in costs nothing.",
+    },
+    // The two kinds `gateReason` forks on by stage; every other kind is shared.
+    reasons: {
+      refused:
+        "The request was turned down rather than delayed, so another attempt may well get the same answer; a shorter, plainer setting description is the likeliest thing to change it.",
+      storage: "The world was written, but saving it to this chat did not go through.",
+    },
+    rows: {
+      fallback: {
+        body: "Your setting is written and kept, but the world it describes couldn't be built — you're standing on a stand-in map.",
+        actions: [
+          {
+            key: "rebuild",
+            label: "Try building it again (free)",
+            mode: "rebuild",
+            note: "Same setting, same seed — this works when an update has fixed the builder, and changes nothing otherwise.",
+            // THE SAME BUTTON HAS A SECOND STATE, and the sentence above is
+            // FALSE in it: once the compile answers — an update fixed the
+            // builder, or a paid re-roll stored a setting this build can
+            // compile — the press works immediately, with no update involved
+            // and nothing unchanged about it. `noteReady` is that state's own
+            // sentence, and `actionNote` picks between them off the same probe
+            // the press itself makes.
+            noteReady:
+              "Same setting, same seed — and it builds right now, for no generation call. It still moves you off the stand-in you are standing on, so it asks first.",
+          },
+          { key: "reroll", label: "Write the world again", mode: "reroll" },
+          { key: "keep", label: "Keep the stand-in", accept: true },
+        ],
+      },
+      unreadable: {
+        // No free rebuild here, and the reason is provable rather than cautious:
+        // a seal that fails build()'s admission gate is one there is nothing to
+        // compile, so the free press could only ever fail.
+        body: "What was saved for this world can't be read back.",
+        actions: [
+          { key: "reroll", label: "Write the world again", mode: "reroll" },
+          { key: "keep", label: "Keep the stand-in", accept: true },
+        ],
+      },
+    },
+    /** Pure and PATCH-FREE: durable records plus this session's own seal
+     *  witnesses, which make it MORE correct in the window where a PATCH has
+     *  landed on the host and not yet on the blob in our hand. */
+    derive(meta, world, chatId) {
+      const save = PF.save;
+      const top =
+        meta && typeof meta.pixelforgeBrief === "object" && meta.pixelforgeBrief !== null ? meta.pixelforgeBrief : null;
+      // DECLINED IS KEYED BY SHAPE, never by "anything that is not a brief":
+      // `_configBrief`'s own declined arm reads any non-brief object at that key
+      // as a decline, so a truncated PATCH or a shape a newer build invents
+      // would otherwise vanish into "the player said no" and play the fallback
+      // forever with no gate and no row.
+      if (top && top.skipped === true) return "declined";
+      const sealed = save._configBrief(meta, chatId);
+      if (!sealed) {
+        if (meta && meta.pixelforgeBrief !== undefined) return "unreadable";
+        return save.briefExpected(meta, chatId) ? "pending" : "n/a";
+      }
+      // A good `cast` with a missing `places` or `_ids` lands in UNREADABLE, not
+      // in fallback — build() would refuse it at the door, so the free rebuild
+      // is provably futile against it and is never offered.
+      if (!save.briefCompiles(sealed)) return "unreadable";
+      if (!world) return "ok";
+      // The placeholder is not a fallback: it is the world the gate exists to
+      // keep everyone out of, and the sealed-brief-but-still-interim window
+      // spans the whole pack call.
+      if (world.interim) return "pending";
+      // `brieved` is written by compile() alone, so a sealed brief standing on a
+      // world without it is exactly the degrade — the case ruling 4 is aimed at.
+      return world.brieved ? "ok" : "fallback";
+    },
+  },
+  {
+    id: "pack",
+    label: "What the people say and do",
+    modes: { retry: { gated: true }, rewrite: { gated: true } },
+    /** WHAT A PRESS MEANS WHEN THIS STAGE WAS REACHED BY CASCADE (ruling 8's
+     *  law, §2.10d). A regenerated stage re-runs everything downstream of it, so
+     *  a paid re-roll whose brief SEALED and whose pack then failed is standing
+     *  at this stage carrying the BRIEF's mode name — a mode this row does not
+     *  offer. Resolved against `gate.mode` alone the press would find no
+     *  descriptor, refuse, and change nothing: a dead button on the one screen
+     *  built around it, over a world the freeze is still holding. So the row
+     *  says what a press owes here instead — the brief moved, so what is owed is
+     *  this world's pack, which is exactly `rewrite` — and it carries its own
+     *  sentence, because the shipped note ("the world you are standing in is
+     *  untouched whatever happens here") stops being true the moment a new brief
+     *  is sealed behind the screen saying it. */
+    cascade: {
+      mode: "rewrite",
+      note: "Your setting was written again and it is stored, so the new world is settled — what didn't finish is what its people say. Trying again costs one call and brings you to the new world. Keep playing without it and the new world is there the next time you open this chat.",
+    },
+    screens: {
+      generating: {
+        title: "Writing what your world has to say…",
+        body: "The settlement is written. One more call is filling in what its people say and the work they have to offer.",
+      },
+      failed: { title: "This world didn't finish opening." },
+      note: "Your setting is written and settled — the world comes out exactly as written, however many times you try. What did not finish is downstream of it: the work posted in this world, or the last of opening the world itself. Trying again is free: it picks up whatever is still owed and leaves everything already written alone.",
+      // "Trying again is free" is true of a boot-armed pack gate, where the call
+      // was owed and never made. Post-start the player is choosing to spend one,
+      // so the sentence that says otherwise is replaced rather than reused.
+      postStartNote:
+        "Your setting is written and settled, and the world you are standing in is untouched whatever happens here. What did not finish is the work posted in it. Trying again costs one call, and you can keep playing without it instead.",
+    },
+    reasons: {
+      refused: "The request was turned down rather than delayed, so another attempt may well get the same answer.",
+      storage: "The work was written, but saving it to this chat did not go through.",
+    },
+    rows: {
+      fallback: {
+        body: "The world itself is fine; the call that fills in jobs, wares and conversation didn't finish.",
+        actions: [
+          { key: "retry", label: "Try that call again", mode: "retry" },
+          { key: "keep", label: "Keep playing without it", accept: true },
+        ],
+      },
+      demoted: {
+        body: "The world was rewritten, and what its people used to say belonged to the old one.",
+        actions: [
+          { key: "rewrite", label: "Write it for this world", mode: "rewrite" },
+          { key: "keep", label: "Keep playing without it", accept: true },
+        ],
+      },
+    },
+    derive(meta, world, chatId) {
+      const save = PF.save;
+      const pack = save._configPack(meta, chatId);
+      if (pack) {
+        // A PACK IS SEALED AGAINST A BRIEF, so "a pack exists" is not "ok" — the
+        // hash is the question, asked against the brief this session actually
+        // reads (the re-roll witness routes a stale metadata blob past the
+        // blob-wins arm), never against possibly-stale metadata alone. Hash zero
+        // means "there was nothing to hash", which no sealed pack can match.
+        const expected = PF.player.briefHashOf(save._configBrief(meta, chatId));
+        return expected !== 0 && pack.briefHash === expected ? "ok" : "demoted";
+      }
+      if (!save.packDeferred(meta, chatId)) return "n/a";
+      // While the gate holds for this chat, the blocking screen IS the surface
+      // and the popup says nothing over the top of it.
+      if (save.gate !== null && !!chatId && save.gate.chatId === chatId) return "pending";
+      return "fallback";
+    },
+  },
+];
+
 // The ladder's rows and what each one MEANS at each site (plan §Q2). A table
 // rather than a switch in three places: the whole finding behind slice 4 is that
 // the sites disagreed about rows nobody had written down.
@@ -13289,6 +15370,49 @@ PF.save = {
    *  it is evicted with the `_packCache` entry it belongs to rather than growing
    *  for the life of the session (`_cachePack` says why the two share a rule). */
   _packWantedSealed: new Set(),
+  /** THE POST-START REGENERATION RECORD (0.16 §2.10d). chatId → {stage, mode}
+   *  while a regeneration this session started is still in flight. Its ONE job
+   *  is the re-arm: `reset()` nulls the gate and `armGate` arms only on
+   *  briefExpected ∨ packExpected — both false by construction post-start — so
+   *  without it a chat switch mid-regeneration kills the gate and lets the
+   *  install land on a live walking world with `_liftGate` no-op'd.
+   *
+   *  DELIBERATELY NOT CLEARED BY reset(), on the same argument `_generating` and
+   *  the caches are kept: a regeneration in flight for the chat we are leaving
+   *  must still land. Its eviction rule is `regenerateStage`'s own `finally` —
+   *  never the ladder's, whose `finally` sits below an early-out the record's
+   *  own guarded paths take, and a leaked record makes every later press refuse
+   *  and every later visit re-freeze. */
+  _regenPending: new Map(),
+  /** Chats whose seal PATCH this session recorded a deferral for, by
+   *  `chatId|stage`. The witness half of the accepted markers, for the reason
+   *  `_packWantedSealed` exists: the PATCH lands on the host and the metadata
+   *  blob in our hand does not have it yet. */
+  _fallbackAcceptedSealed: new Set(),
+  /** Chat+stage pairs whose stale marker this session has already asked the host
+   *  to drop. Housekeeping, so a healed world stops saying "part stand-in"
+   *  without re-PATCHing on every frame that reads the rows. */
+  _acceptedHousekept: new Set(),
+  /** chatId → the briefHash of the brief a re-roll REPLACED this session. For a
+   *  first seal the metadata blob is empty and the cache wins; for a RE-ROLL the
+   *  blob still carries a well-shaped old brief, so `_configBrief`'s blob-wins
+   *  arm would hand it back forever, the degraded world would rebuild on return,
+   *  and a second press would be a second full paid call. Session-only is
+   *  enough: after a real reload the host serves the PATCHed metadata and the
+   *  blob IS the new brief. */
+  _briefSuperseded: new Map(),
+  /** Chats whose brief THIS SESSION re-rolled and sealed (0.16 §2.10d). The
+   *  CONSENT witness, and it is what the world-replacing tail of a cascade hangs
+   *  on: the paid re-roll is the press that showed the keeps-and-loses confirm,
+   *  and the world that press was confirmed against is the world the install
+   *  replaces. Neither of the two facts already on hand can stand in for it —
+   *  `_briefSuperseded` is keyed by the OLD brief's hash and an unreadable seal
+   *  has none, and the world's own shape says nothing about who asked for the
+   *  new setting: a second device whose metadata refreshed to a brief IT never
+   *  requested is standing in exactly the same shape. Session-only by design; a
+   *  witness that outlived the confirm would be the same silent swap one boot
+   *  later. */
+  _briefResealed: new Set(),
 
   /** Reads core.sim and core.chatId and NOTHING else: 80-setup calls this with
    *  a synthetic two-key core, and reaching for core.host/hud/render there
@@ -13388,7 +15512,21 @@ PF.save = {
   _configBrief(meta, chatId) {
     const top =
       meta && typeof meta.pixelforgeBrief === "object" && meta.pixelforgeBrief !== null ? meta.pixelforgeBrief : null;
-    if (top && Array.isArray(top.cast)) return this._metaKnows(chatId, top);
+    if (top && Array.isArray(top.cast)) {
+      // THE ONE BLOB THIS ARM MAY NOT BELIEVE (0.16 §2.10d): a brief THIS
+      // SESSION already re-rolled away from. The blob-wins ordering is right for
+      // every other case — anything the host delivered is the newer truth — but
+      // a re-roll PATCHes the host while the blob in our hand still carries the
+      // brief it replaced, and believing it would rebuild the degraded world on
+      // the next visit, re-derive the fallback row, and charge a second full
+      // call for a re-roll that already succeeded. The superseded hash is the
+      // witness that says which blob is the stale one; the cache below is what
+      // it falls through to. Deliberately NOT `_metaKnows`-ed either: marking
+      // the stale blob as a witness would make the cached NEW brief evictable.
+      const cached = this._briefSupersededCache(chatId, top);
+      if (cached) return cached;
+      return this._metaKnows(chatId, top);
+    }
     if (top) return null; // a {skipped:true} marker: generation declined, stay legacy
     const setup =
       meta && typeof meta.gameSetupConfig === "object" && meta.gameSetupConfig !== null ? meta.gameSetupConfig : null;
@@ -13409,6 +15547,17 @@ PF.save = {
     // a sealed brief or a `{skipped:true}` marker — is the newer truth and both
     // return above, so the cache can never shadow the stored answer.
     const cached = chatId ? this._briefCache.get(chatId) : null;
+    return cached && Array.isArray(cached.cast) ? cached : null;
+  },
+
+  /** Is this metadata blob one THIS SESSION already replaced, and is there a
+   *  newer brief cached to answer with? Returns the cached brief when both are
+   *  true and null otherwise — so a superseded blob with nothing cached behind
+   *  it still answers with the blob, which is the only brief there is. */
+  _briefSupersededCache(chatId, top) {
+    if (!chatId || !this._briefSuperseded.has(chatId)) return null;
+    if (this._briefSuperseded.get(chatId) !== PF.player.briefHashOf(top)) return null;
+    const cached = this._briefCache.get(chatId);
     return cached && Array.isArray(cached.cast) ? cached : null;
   },
 
@@ -13608,9 +15757,111 @@ PF.save = {
    *  documented: there is no side door through which a wizard re-run can start
    *  retro-generating work for a world somebody has been playing for months. */
   packExpected(meta, chatId) {
+    if (!this.packDeferred(meta, chatId)) return false;
+    // …AND THE PLAYER'S OWN "LATER" (0.16 §2.10b), and it belongs INSIDE this
+    // predicate rather than at its consumers. One predicate, four consumers: put
+    // the term at `armGate` and `wantPack` only and every future visit of an
+    // accepted chat still enters the ladder body and runs a resume plus a save
+    // write forever, `maybeGenerateBrief`'s nothing-to-generate branch stops
+    // being reachable, and `gateWillHold` keeps deferring rehydration arms for a
+    // gate that will not hold. Here, all four fall out for free — and this is
+    // what makes pack-fallback play REACHABLE at all: the boot gate stops
+    // holding a chat whose player has said "later".
+    //
+    // `briefExpected` is deliberately NOT given a twin term: an unsealed brief
+    // always gates, nobody plays the placeholder, and `_liftGate`'s interim
+    // refusal keeps its exact meaning.
+    return !this.fallbackAccepted(meta, chatId, "pack");
+  },
+
+  /** The same question WITHOUT the player's deferral — "is this chat owed a pack
+   *  it has not got?". The registry's derive reads this rather than
+   *  `packExpected`, and it has to: the marker turns `packExpected` false, so a
+   *  row written on it would be unsatisfiable exactly when it is meant to show. */
+  packDeferred(meta, chatId) {
     if (!this._packWanted(meta, chatId)) return false;
     if (this._configPack(meta, chatId)) return false;
     return !!this._configBrief(meta, chatId) || this.briefExpected(meta, chatId);
+  },
+
+  /** Has the player chosen to keep playing on this stage's fallback? The durable
+   *  marker, or this session's own witness for a PATCH the host has taken and
+   *  the blob in our hand has not caught up with. Strict `=== true`, on
+   *  `_packWanted`'s discipline: a truthy value a later release writes for some
+   *  other reason must not silence a stage. */
+  fallbackAccepted(meta, chatId, stageId) {
+    const key = RETRY_KEYS.ACCEPTED[stageId];
+    if (!key) return false;
+    if (meta?.[key] === true) return true;
+    return !!chatId && this._fallbackAcceptedSealed.has(`${chatId}|${stageId}`);
+  },
+
+  /** Record the deferral durably, then witness it. Three attempts on the seal
+   *  PATCH's own ladder; `false` means all three failed, and the caller says so
+   *  on the shipped storage screen rather than pretending the choice stuck.
+   *
+   *  THE FAILURE MODE, STATED: if this never lands — or on a second device that
+   *  never saw the metadata — the next boot re-arms the pack gate and runs the
+   *  deferred call. That is a bounded loss of ONE call, not a nuisance, and the
+   *  alternative (a boot gate that asks first) is a loading-gate redesign this
+   *  release declines. */
+  async _acceptFallback(chatId, stageId) {
+    const key = RETRY_KEYS.ACCEPTED[stageId];
+    if (!chatId || !key) return false;
+    return storeWithRetry(async () => {
+      await PF.api.patchMetadata(chatId, { [key]: true });
+      this._fallbackAcceptedSealed.add(`${chatId}|${stageId}`);
+      this._acceptedHousekept.delete(`${chatId}|${stageId}`);
+    }, "[pixelforge] could not record that choice; the next visit will offer the call again");
+  },
+
+  /** …and the other direction, which a retry has to AWAIT before it dispatches:
+   *  without the marker genuinely cleared, `packExpected` stays false and the
+   *  ladder falls straight through its nothing-to-generate branch into the bare
+   *  lift, having generated nothing and run the deferred arms mid-session.
+   *  The local blob is mirrored on success (the PATCH is a shallow merge with no
+   *  delete convention, so the key is nulled rather than removed). */
+  async _clearAccepted(chatId, stageId, meta) {
+    const key = RETRY_KEYS.ACCEPTED[stageId];
+    if (!chatId || !key) return false;
+    return storeWithRetry(async () => {
+      await PF.api.patchMetadata(chatId, { [key]: null });
+      this._fallbackAcceptedSealed.delete(`${chatId}|${stageId}`);
+      if (meta && typeof meta === "object") meta[key] = null;
+    }, "[pixelforge] could not clear this chat's stand-in marker");
+  },
+
+  /** A stage that derives `ok` no longer has a fallback to be standing on, so
+   *  its marker is stale. Best-effort housekeeping, once per chat and stage per
+   *  session — the chip derives strictly from live rows either way, so this only
+   *  keeps a healed chat's metadata from carrying a dead answer forever. */
+  _forgetAccepted(core, stageId) {
+    const chatId = core?.chatId;
+    if (!chatId || !RETRY_KEYS.ACCEPTED[stageId]) return;
+    const meta = core.host && typeof core.host.chatMeta === "object" ? core.host.chatMeta : null;
+    if (!this.fallbackAccepted(meta, chatId, stageId)) return;
+    const memo = `${chatId}|${stageId}`;
+    if (this._acceptedHousekept.has(memo)) return;
+    this._acceptedHousekept.add(memo);
+    void this._clearAccepted(chatId, stageId, meta);
+  },
+
+  /** build()'s OWN five-field admission gate (20-world `build`), asked here so
+   *  the surface never offers a rebuild of something the compiler will refuse at
+   *  the door. `_configBrief`'s one-field `cast` test is NOT this predicate: a
+   *  seal with a good cast and no `_ids` reads as a brief there and as
+   *  uncompilable here, which is exactly the difference between the fallback row
+   *  and the unreadable one. */
+  briefCompiles(sealed) {
+    return !!(
+      sealed &&
+      typeof sealed === "object" &&
+      Array.isArray(sealed.cast) &&
+      Array.isArray(sealed.places) &&
+      Array.isArray(sealed.features) &&
+      sealed._ids &&
+      typeof sealed._ids.zones === "object"
+    );
   },
 
   /** The wizard's opt-in for surface-side world generation (0.4.0 chats). */
@@ -13637,6 +15888,36 @@ PF.save = {
    *  play immediately; so does a chat whose generation was declined, whose
    *  `{skipped:true}` marker briefExpected() reads as "sealed enough". */
   armGate(core, meta) {
+    // THE POST-START RE-ARM, FIRST AND ON ITS OWN TERM (0.16 §2.10d). A
+    // regeneration started from the popup is expected by neither predicate below
+    // — the brief is sealed and the pack marker is cleared — so without this a
+    // chat switch mid-regeneration nulls the gate for good and the install lands
+    // on a live walking world with `_liftGate` no-op'd, leaving `_packFold`
+    // uncleared: the exact shipped bug the lift's own invalidation rule closed.
+    //
+    // AND IT RETURNS FALSE, which is the half that is easy to get wrong. The
+    // boolean's shipped meaning is "defer adopt to `_liftGate`" — right at boot,
+    // where the probe would write an un-entered world up as play. A post-start
+    // re-arm has a world the player has been living in and a visit whose adopt
+    // must run NOW: swallowed, the route row is never written on the failure
+    // exit, and on the success exit `_liftGate`'s adopt runs the boot probe for
+    // the first time mid-visit against the pre-regen row with no anchor cached —
+    // classifying row 6 and rebuilding the stale row straight over the world it
+    // has just installed. So: arm, and let the visit adopt. When the install
+    // later lands, `_liftGate`'s adopt no-ops on `mode !== null`, which is the
+    // shipped protection doing its shipped job.
+    const pending = core?.chatId ? this._regenPending.get(core.chatId) : null;
+    if (pending && pending.gated) {
+      this.gate = {
+        chatId: core.chatId,
+        state: "generating",
+        attempts: 0,
+        stage: pending.stage,
+        mode: pending.mode,
+        postStart: true,
+      };
+      return false;
+    }
     const briefWanted = !!core?.chatId && this.briefExpected(meta, core.chatId);
     const packWanted = !!core?.chatId && this.packExpected(meta, core.chatId);
     if (!briefWanted && !packWanted) {
@@ -13661,6 +15942,13 @@ PF.save = {
     // is no world yet, and at the pack stage the world is written and safe and what
     // is being waited on is the work posted in it. A chat owed both starts at the
     // brief and is re-stamped when the second call begins.
+    //
+    // SPREAD-FREE, and that is a statement rather than an accident: `postStart`
+    // and `mode` are written at exactly TWO construction sites (the re-arm above
+    // and `regenerateStage`'s own arm) and carried everywhere else by the
+    // spreads in `_stageGate`/`_failGate`/`retryGeneration`. This literal is a
+    // boot arm, so its `postStart` is undefined — falsy BY THIS SENTENCE, not by
+    // luck — and every write refusal below reads it that way.
     this.gate = { chatId: core.chatId, state: "generating", attempts: 0, stage: briefWanted ? "brief" : "pack" };
     return true;
   },
@@ -13679,6 +15967,23 @@ PF.save = {
    *  two out of step (an async completion can land between the two). */
   gateHolds(core) {
     return this.gate !== null && !!core && this.gate.chatId === core.chatId;
+  },
+
+  /** …and the WRITE refusals ask this one instead (0.16 §2.10d). Every one of
+   *  them was written for a PLACEHOLDER world nobody had entered: a chat that
+   *  has not begun play emits nothing, so a world about to be discarded can
+   *  never stamp the store. Post-start there is a PLAYED world behind the gate,
+   *  and the reason it must still be writable is not walking — under any hold
+   *  the tick returns above `sim.step` and the positional governor, so a held
+   *  world accrues no position at all. It is a COMPLETED TURN: the host's
+   *  turn-end arm and the in-flight turn's own un-gated continuations keep
+   *  running, and on a FAILED regeneration the player goes on playing that very
+   *  world, so what those wrote has to be capturable.
+   *
+   *  SCOPED TO THE WRITE, and deliberately not to the rewind ladder underneath
+   *  it — see `_applyRewind`, whose world-replacing arms keep refusing. */
+  _gateBlocksWrites(core) {
+    return this.gateHolds(core) && this.gate.postStart !== true;
   },
 
   /** The brief sealed: play begins. adopt() runs HERE rather than at the chat
@@ -13744,7 +16049,7 @@ PF.save = {
    *  which started play IN THE PLACEHOLDER: adopt's first-write wrote it up, and
    *  everything played there was severed the next time the real world compiled.
    *  A retry recompiles from the brief that is already sealed instead. */
-  _installSealedWorld(core, chatId, sealed, seed, theme) {
+  _installSealedWorld(core, chatId, sealed, seed, theme, postStart) {
     // Under the gate the sim standing here is a placeholder nobody walked in, so
     // this is a plain replacement — but the envelope carry is NOT play state (it
     // is a newer build's fields) and rides across regardless, exactly as it does
@@ -13762,11 +16067,74 @@ PF.save = {
     // block is a fresh default and the split moves nothing, which is the point:
     // the safety net costs nothing when the gate has already done its job.
     const carriedPlayer = core.sim?.player;
+    // ── THE EIGHT POST-START GAP CLOSURES (0.16 §2.10d) ──────────────────────
+    // Every one of them is conditional on `postStart`, which only
+    // `regenerateStage`'s two world-replacing paths pass — the paid re-roll and
+    // the free same-seed rebuild — so the boot and compat-shim behaviour through
+    // here is byte-identical. Until 0.16 this path only ever ran against an
+    // untouched placeholder, where all eight cost nothing.
+    //
+    // (1) AN OPEN CONVERSATION DOES NOT SURVIVE THE WORLD BEING REPLACED. Only
+    // `_rebuild` carried this line, because under a boot gate dialogue can never
+    // be open; post-start the player can be mid-conversation when the swap
+    // lands, and the load-bearing half is the window's DOM and the
+    // document-level listener pair a fresh sim's constructor cannot unbind.
+    const carriedClock = postStart && core.sim ? { clockMin: core.sim.clockMin, day: core.sim.day } : null;
+    if (postStart) {
+      core.closeTalk?.();
+      // (6) THE OLD WORLD'S WRITES END HERE. `_gen`'s only other assignment is
+      // `reset()`, and every `_flushNow` continuation fences on it — so a flush
+      // parked mid-await when the button was pressed would resume post-swap
+      // still "fresh" and write the pre-swap bytes straight back over the
+      // `_lastSerialized = null` below. Bumping it makes those jobs stale in
+      // exactly the way a chat-switch capture is stale, which is the fence's own
+      // meaning. (The pre-arm flush is awaited before the gate arms, so nothing
+      // this bump strands is a write anybody is waiting on.)
+      this._gen = (this._gen ?? 0) + 1;
+    }
     core.sim = new PF.Sim(PF.world.build(seed, theme, sealed));
     if (carriedExtra) core.sim._envelopeExtra = carriedExtra;
     const moved = PF.player.transplant(carriedPlayer, core.sim.world, sealed);
     core.sim.player = moved.player;
-    if (moved.severed) this._park(chatId, moved.severed.slot, moved.severed.entry);
+    // (4) THE PARK'S RETURN VALUE IS HANDLED, not discarded, and (5) a severance
+    // NOTICE is pushed — the sentence `applyStamps` writes on this same event,
+    // which this path has never emitted because nothing had ever been played in
+    // the world it replaces. On a refused park the notice degrades to the honest
+    // overflow sentence, exactly as the rehydration arms already do: the
+    // comforting sentence promises the opposite of what happened.
+    let severedNotice = null;
+    if (moved.severed) {
+      const parked = this._park(chatId, moved.severed.slot, moved.severed.entry);
+      severedNotice = parked
+        ? "Some of what you had done here belonged to another world. It has been set aside."
+        : "What you had done in the world that changed could not be kept, and is gone.";
+    }
+    if (carriedClock) {
+      // (2) THE CLOCK AND THE DAY CROSS — and the RE-PLACE crosses with them.
+      // The constructor put everybody at their 08:00 anchors, so carrying the
+      // clock without `resolveSchedules()` lands a 23:00 player in a town
+      // standing at its morning posts. (3) …and the sky is re-read first,
+      // because the schedule bias reads it and a bare `new PF.Sim` — unlike
+      // `simFromSaved` — has no override at all until the next props delivery
+      // heals it. Position and zone are NOT recoverable and are not attempted:
+      // the two id spaces never intersect, so arrival is the new world's spawn
+      // and the confirm copy says so.
+      //
+      // RE-READ HERE RATHER THAN PASSED IN, deliberately: every caller reads its
+      // own `meta` before a generation call and holds it across the await, and
+      // the sky is the one field on it the host refreshes underneath them. The
+      // livest blob is the correct one for a world that is being stood up right
+      // now, and a seventh positional parameter carrying a staler copy of it
+      // would be worse than the read.
+      const meta =
+        core.host && typeof core.host.chatMeta === "object" && core.host.chatMeta !== null ? core.host.chatMeta : {};
+      core.sim.clockMin = PF.clamp(carriedClock.clockMin | 0, 0, 24 * 60 - 1);
+      core.sim.day = Math.max(1, carriedClock.day | 0);
+      core.sim.weatherOverride = PF.weather.foldOverride(meta.pixelforgeWeather);
+      core.sim._weatherMetaApplied = PF.weather.overrideKey(core.sim.weatherOverride);
+      core.sim.resolveSchedules();
+    }
+    if (postStart && severedNotice) PF.player.notice(core.sim.player, severedNotice, core.sim.day);
     this._lastSerialized = null;
     core.render?.clearZones?.();
     void PF.assets.load(core);
@@ -13780,9 +16148,30 @@ PF.save = {
     // later event to be written at all. The lift also pays S3's starting purse —
     // at the one moment that is unambiguously "this world begins now", through the
     // mutators the gate was refusing a line ago, and for sealed worlds only.
+    const lifted = this.gateHolds(core);
     this._liftGate(core);
+    // (8) …AND WHEN NO GATE LIFTED, THIS TAIL DOES THE LIFT'S WORK ITSELF. The
+    // free same-seed rebuild runs with no gate at all, so `_liftGate` no-ops
+    // through `gateHolds` and its two tail duties would simply not happen. The
+    // purse is idempotent by its own untouched-block predicate, which is what
+    // makes the second site safe: a player who has actually played the stand-in
+    // keeps their earnings instead, deliberately, and the confirm copy says so.
+    // Adopt needs nothing — `mode` is non-null mid-session and `_adoptNow`
+    // short-circuits on it — and `_packFold` died with the sim that was replaced.
+    if (postStart && !lifted) {
+      core.hud?.update?.();
+      if (core.sim.world.brieved) PF.economy.grantStartingPurse(core);
+    }
     core.hud?.refreshChips();
     core.hud?.toast("The world takes shape.");
+    // (7) THE SWAP OWES A WRITE THAT NO CACHE MAY DEDUPE AWAY. `_lastSerialized`
+    // was nulled above, but a flush already parked in an await can reassign it
+    // and cancel this write with nothing to show for it — which is exactly what
+    // the force flag outlives. The durability window is one debounce and it
+    // risks POSITION, never identity: a paid re-roll's metadata PATCH is already
+    // its point of no return, and the free rebuild's result is re-derivable on
+    // any later boot by determinism.
+    if (postStart) this._forceWrite = true;
     this.markDirty(core);
   },
 
@@ -13879,6 +16268,11 @@ PF.save = {
    *  beside a screen that says the world is safe is one a player has to guess
    *  at. What did not store at the pack stage is the WORK, not the world. */
   gateReason(kind, stage) {
+    // THE TWO STAGE-FORKED KINDS ARE THE ROW'S NOW (0.16 §2.10a). They used to
+    // be ternaries here, which is a shape that costs one edit per kind per new
+    // stage; the rest of the switch is genuinely cross-stage and stays shared.
+    const row = this.stage(stage);
+    if (row && row.reasons && Object.prototype.hasOwnProperty.call(row.reasons, kind)) return row.reasons[kind];
     switch (kind) {
       case "thin":
         // THE PACK LADDER'S OWN ROW (61-pack `generate`), and it never reaches a
@@ -13888,27 +16282,19 @@ PF.save = {
         // back rather than what was done to it, and leaves the retry sounding
         // like the worthwhile thing it is (another draw, not the same verdict).
         return "The reply came back with too little in it to keep, so none of it was written down.";
-      case "refused":
-        // THE ADVICE HALF IS BRIEF-STAGE ONLY. At the pack stage the setting has
-        // already been spent — it produced the world the player is about to walk
-        // into — and telling them to rewrite it would be asking them to change the
-        // one thing that worked.
-        return stage === "pack"
-          ? "The request was turned down rather than delayed, so another attempt may well get the same answer."
-          : "The request was turned down rather than delayed, so another attempt may well get the same answer; a shorter, plainer setting description is the likeliest thing to change it.";
+      // "refused" and "storage" USED TO BE TERNARIES HERE and are now the rows'
+      // (0.16 §2.10a): the advice half of "refused" is brief-stage only — at the
+      // pack stage the setting has already been spent and telling the player to
+      // rewrite it would be asking them to change the one thing that worked —
+      // and "storage" names WHICH artifact did not store, which is the stage's
+      // own answer. A stage with no row (a reserved id) falls to the honest
+      // generic below rather than borrowing another stage's sentence.
       case "unavailable":
         return "The engine could not take the request just now — it may be busy with something else.";
       case "network":
         return "The request did not get through.";
       case "timeout":
         return "It was taking longer than the time set aside for it.";
-      case "storage":
-        // WHICH ARTIFACT DID NOT STORE IS THE STAGE'S ANSWER. At the brief stage
-        // it is the world; at the pack stage the world stored one call earlier
-        // and is settled, and what did not go through is the work posted in it.
-        return stage === "pack"
-          ? "The work was written, but saving it to this chat did not go through."
-          : "The world was written, but saving it to this chat did not go through.";
       default:
         return "Something went wrong partway through.";
     }
@@ -13949,21 +16335,439 @@ PF.save = {
    *  of the install lands here with `pixelforgeBrief` already PATCHed, one-shot, and
    *  a retry that recompiles from it rather than re-rolling it. "Exactly as you left
    *  it" was false for that chat. What survives both is what ruling #7 actually
-   *  guarantees: NO failure seals a world on the player's behalf, ever. */
-  gateStageNote(stage) {
-    return stage === "pack"
-      ? "Your setting is written and settled — the world comes out exactly as written, however many times you try. What did not finish is downstream of it: the work posted in this world, or the last of opening the world itself. Trying again is free: it picks up whatever is still owed and leaves everything already written alone."
-      : "Nothing was lost, and no stand-in world was settled on this chat instead of yours. Try again whenever you like.";
+   *  guarantees: NO failure seals a world on the player's behalf, ever.
+   *
+   *  THE PACK STAGE HAS A FIFTH, and it is the one the cascade opened: a paid
+   *  re-roll that SEALED its brief and failed the pack lands here with the new
+   *  setting already stored and the old world still on screen. Both post-start
+   *  clauses are false there — the setting is not the one that was written and
+   *  settled before the press, and the world in front of the player is not
+   *  untouched, because the seal is the point of no return and the next visit
+   *  arrives in the new one. The row carries that sentence itself.
+   *
+   *  AND `cascaded` IS A FACT ABOUT THE STATE, NEVER ABOUT THE MODE ON THE GATE.
+   *  It was the mode once — "a mode this row does not offer was stamped by an
+   *  upstream stage" — and that reading lasted exactly one press: `_pressMode`
+   *  rewrites the mode to one the row DOES offer, so the SECOND failure of the
+   *  very same attempt went back to painting the post-start sentence over a chat
+   *  whose brief had already been sealed. The condition the sentence describes is
+   *  still true then, so the caller asks `worldBehindBrief` and hands the answer
+   *  down. */
+  gateStageNote(stage, postStart, cascaded) {
+    const row = this.stage(stage) ?? this.stage("brief");
+    if (postStart && cascaded && row.cascade?.note) return row.cascade.note;
+    if (postStart && row.screens.postStartNote) return row.screens.postStartNote;
+    return row.screens.note;
+  },
+
+  /** IS THE SETTING THAT IS SEALED AHEAD OF THE WORLD THE PLAYER IS STANDING IN?
+   *  One question, three readers, and they have to agree or the surface lies:
+   *  the install fork replaces the world exactly here, the failure screen's
+   *  sentence promises exactly this, and the confirmation warns about exactly
+   *  it.
+   *
+   *  BOTH TERMS ARE THE POINT. The witness says THIS SESSION re-rolled this
+   *  chat's brief behind the keeps-and-loses confirm — a brief that merely
+   *  arrived (another device's re-roll, refreshed into `chatMeta`) is a swap
+   *  nobody standing here agreed to, and the shape alone cannot tell the two
+   *  apart. The world's own `brieved` mark says the swap has not happened yet:
+   *  compile() writes it, so a world without it was never built from any brief,
+   *  and a world with it is the sealed brief's own — there is nothing left
+   *  behind and nothing left to replace. */
+  worldBehindBrief(core) {
+    const chatId = core?.chatId;
+    if (!chatId || !this._briefResealed.has(chatId)) return false;
+    const world = core?.sim?.world;
+    return !!world && !world.brieved;
+  },
+
+  /** The gate's TITLE and BODY, off the same rows. They used to be ternaries in
+   *  the HUD, which is the one place in this package a string cannot be pinned
+   *  without a DOM — so a stage added there was a stage whose screen nothing
+   *  watched. `state` is the gate's own: "generating" or "failed". */
+  gateTitle(stage, state) {
+    const row = this.stage(stage) ?? this.stage("brief");
+    return state === "failed" ? row.screens.failed.title : row.screens.generating.title;
+  },
+
+  gateBody(stage, state, kind, postStart, cascaded) {
+    const row = this.stage(stage) ?? this.stage("brief");
+    if (state === "failed") return `${this.gateReason(kind, stage)} ${this.gateStageNote(stage, postStart, cascaded)}`;
+    return row.screens.generating.body;
+  },
+
+  /** THE REGISTRY, exposed (0.16 §2.10a). One ordered table: the gate reads its
+   *  screens, the popup reads its rows, and a future stage is one entry rather
+   *  than four hardcoded two-way branches. */
+  STAGES: STAGE_ROWS,
+  /** Ids a stage registry must ACCOMMODATE without pretending to know them.
+   *  Neither has a row: historygen (W10) is designed to reduce connection
+   *  dependency and may fail like the pack's substance floor rather than like a
+   *  network call, and GM storyboarding has no repo footprint at all. */
+  RESERVED_STAGES: RESERVED_STAGE_IDS,
+  /** Every string the popup itself reads, beside the rows for the same reason. */
+  RETRY_COPY,
+
+  stage(stageId) {
+    return STAGE_ROWS.find((row) => row.id === stageId) ?? null;
+  },
+
+  /** The re-attempt a press at this stage actually means. Normally `gate.mode`,
+   *  which belongs to `gate.stage`; when the cascade moved the stage out from
+   *  under it — a mode the stamped row does not offer can only have been stamped
+   *  by an upstream stage and carried down by `_stageGate`'s spread — the row's
+   *  own cascade mode is what the press owes. Left alone when neither exists, so
+   *  the press refuses honestly rather than silently.
+   *
+   *  ASKED OF THE MODE, AND ONLY OF THE MODE. This is a stranded-name question,
+   *  not the state question `worldBehindBrief` answers, and keeping them apart is
+   *  what makes both correct across the same attempt's second press: by then the
+   *  mode has been rewritten to one this row DOES offer and belongs to it, while
+   *  the state — a setting sealed ahead of the world on screen — has not moved
+   *  at all. */
+  _pressMode(stageId, mode) {
+    const row = this.stage(stageId);
+    if (!mode || !row?.cascade || row.modes?.[mode]) return mode;
+    return row.cascade.mode;
   },
 
   /** The retry the gate's failure state offers, and the only caller is that
-   *  button: everything else re-arms by revisiting the chat. */
-  retryGeneration(core) {
+   *  button: everything else re-arms by revisiting the chat.
+   *
+   *  ASYNC ONLY SO THE POST-START ANSWER IS THE DELEGATE'S — the body still runs
+   *  to completion synchronously (there is no await above either return), so the
+   *  boot path's repaint lands in the pressing frame exactly as it always has. */
+  async retryGeneration(core) {
     if (!this.gateHolds(core) || this.gate.state !== "failed") return false;
+    // "TRY AGAIN" KNOWS WHERE IT IS (0.16 §2.10d). On a boot gate this is the
+    // shipped behaviour, byte-untouched: re-stamp and re-enter the ladder, which
+    // always runs. On a POST-START gate the ladder is not the entry point —
+    // `regenerateStage` is, with its own preconditions and its own re-entrancy
+    // check — and the pre-mutation above would be a spinner painted before
+    // anything was asked: a refused press would leave "writing…" on screen with
+    // nothing behind it and the retry button hidden, which is the exact hang the
+    // ladder's own header comment names. So this path mutates NOTHING and
+    // delegates whole; `regenerateStage` re-stamps the gate itself, after its
+    // check passes. The gate literal carries both halves the press needs.
+    //
+    // …AND THE MODE IS RESOLVED AGAINST THE STAMPED STAGE, never assumed to
+    // match it. Ruling 8's cascade moves the stage downstream MID-ATTEMPT — a
+    // paid re-roll whose brief seals fails at the pack stage still carrying
+    // "reroll" — and a mode the stamped row does not offer is a `regenerateStage`
+    // that refuses having touched nothing, which is a dead button on the one
+    // screen built around it, over a world the freeze is still holding. The
+    // ROW says what a press owes at its own stage; `_pressMode` asks it.
+    //
+    // AND THE DELEGATION'S ANSWER IS THE PRESS'S ANSWER (§2.10d). A `true`
+    // returned over a refusal is the silence that made the dead press invisible:
+    // the caller cannot tell a live press from a spent one, and neither can a
+    // lane. This is the one path that can refuse, so it is the one that reports.
+    if (this.gate.postStart)
+      return this.regenerateStage(core, this.gate.stage, this._pressMode(this.gate.stage, this.gate.mode));
     this.gate = { ...this.gate, state: "generating", failure: null };
     core.hud?.update?.();
     void this.maybeGenerateBrief(core);
     return true;
+  },
+
+  /** THE FAILED SCREEN'S SECOND EXIT (0.16 §2.10d), shown whenever a playable
+   *  non-interim world stands behind the gate. Two shapes, because the two gates
+   *  are two different situations:
+   *
+   *  • a POST-START gate is holding a world the player has already adopted and
+   *    played. Un-arm it bare — `_liftGate`'s adopt and purse tail must NOT
+   *    re-run, because this visit already did both — and drop the re-arm record
+   *    so the next visit does not freeze on a regeneration nobody asked for.
+   *  • a BOOT-armed PACK gate is the deferral the accepted marker was invented
+   *    for: record the choice durably, then re-enter the ladder, where the
+   *    marker has just made `packExpected` false and the nothing-to-generate
+   *    branch is genuinely the code that runs. */
+  async keepPlaying(core) {
+    if (!this.gateHolds(core) || this.gate.state !== "failed") return false;
+    const gate = this.gate;
+    if (gate.postStart) {
+      // Nobody is ever handed the placeholder — the whole promise of the gate —
+      // and a post-start gate is standing over a world with real play in it, so
+      // this can only be a defensive refusal.
+      if (!core.sim?.world || core.sim.world.interim) return false;
+      // …AND THIS CLEAR CANNOT FIRE TODAY, which is worth saying out loud rather
+      // than leaving it to look load-bearing. The constraint it guards is "no
+      // press may leave a re-arm record behind it", and the record is already
+      // gone by here: every `_failGate` that can paint this screen is followed
+      // by an immediate `return`, so `regenerateStage`'s own `finally` clears it
+      // in the same microtask run as the failure stamp — before any click can
+      // land, clicks being macrotasks. It stays because the plan writes the
+      // clear into this exit and because the alternative is an arm that silently
+      // depends on another function's ordering: a record that outlived its
+      // attempt refuses every later press and re-freezes every later visit
+      // through `armGate`. Deliberately unwatched — a lane for it would have to
+      // plant a state the game cannot reach.
+      this._regenPending.delete(core.chatId);
+      this.gate = null;
+      core.hud?.update?.();
+      return true;
+    }
+    // AND AT THE BRIEF STAGE THERE IS NOTHING TO DEFER TO. The world under a
+    // brief gate is the placeholder itself, which is exactly what nobody may be
+    // left standing in — so this exit is the pack stage's alone, where the
+    // world is written and only the work posted in it is missing. (The interim
+    // case IS reachable here, on a visit that sealed the brief mid-gate and then
+    // failed the pack: the re-entry below recompiles the real world from the
+    // sealed brief and installs it, which is the opposite of leaving anybody in
+    // the placeholder.)
+    if (gate.stage !== "pack") return false;
+    if (!(await this._acceptFallback(core.chatId, "pack"))) {
+      this._failGate(core, "storage", "pack");
+      return false;
+    }
+    await this.maybeGenerateBrief(core);
+    return true;
+  },
+
+  /** THE POPUP'S ROWS (0.16 §2.10c), derived fresh from durable records every
+   *  time it is asked — never from a log of what failed. A failure kind is
+   *  session-only and no durable one is written: the write that would record it
+   *  runs from a code path whose own PATCH may be the thing failing, which is a
+   *  log that lies exactly when it matters. Derivation cannot lie. */
+  retryRows(core) {
+    const meta =
+      core?.host && typeof core.host.chatMeta === "object" && core.host.chatMeta !== null ? core.host.chatMeta : {};
+    const world = core?.sim?.world ?? null;
+    const chatId = core?.chatId ?? null;
+    const rows = [];
+    for (const row of STAGE_ROWS) {
+      const state = row.derive(meta, world, chatId);
+      // A HEALED STAGE DROPS ITS MARKER. Housekeeping only — the rows are what
+      // the chip and the panel read, so a stale marker never shows through.
+      if (state === "ok") this._forgetAccepted(core, row.id);
+      if (!RETRY_POPUP_STATES.has(state) || !row.rows[state]) continue;
+      rows.push({
+        stage: row.id,
+        state,
+        label: row.label,
+        body: row.rows[state].body,
+        actions: row.rows[state].actions,
+        // Has the player already said "later" for this stage? The row still
+        // shows — the chip and the panel are the standing way back to it — but
+        // an accepted row does not re-open the popup on every visit.
+        accepted: this.fallbackAccepted(meta, chatId, row.id),
+      });
+    }
+    return rows;
+  },
+
+  /** The topbar chip's words, derived STRICTLY from live rows so a world that
+   *  healed never keeps saying "part stand-in". Null when there is nothing to
+   *  say, which is what hides it.
+   *
+   *  TWO ENTRY POINTS, ONE RULE, and the split is what makes the rule the
+   *  SHIPPED one rather than a parallel copy of it: the HUD already holds a
+   *  memoised row list (re-deriving per frame is a cost the memo exists to
+   *  avoid), so it asks `chipTextFor` with the rows it has, and this one is for
+   *  a caller holding only a core. A lane pinning this pins what the chip says. */
+  chipTextFor(rows) {
+    return rows && rows.length ? RETRY_COPY.chip : null;
+  },
+
+  retryChipText(core) {
+    return this.chipTextFor(this.retryRows(core));
+  },
+
+  /** Would the free same-seed rebuild actually produce a world this time?
+   *  ONE synchronous compile attempt (a whole city is 2.70 ms) and no side
+   *  effects at all: `build()` never throws — its own catch degrades to the
+   *  legacy layout — so the absence of `brieved` IS the answer. Deterministic by
+   *  construction, which is why the copy says out loud that it works once an
+   *  update has fixed the builder and changes nothing until then. */
+  canRebuild(core) {
+    const meta =
+      core?.host && typeof core.host.chatMeta === "object" && core.host.chatMeta !== null ? core.host.chatMeta : {};
+    const sealed = this._configBrief(meta, core?.chatId);
+    if (!this.briefCompiles(sealed)) return false;
+    const theme = this._configTheme(meta) ?? "cozy-village";
+    return !!PF.world.build(this._regenSeed(core, meta), theme, sealed).brieved;
+  },
+
+  /** THE SUB-LINE UNDER A ROW'S OWN BUTTON, and for the free rebuild it is a
+   *  STATE question rather than a constant. Its shipped sentence is written for
+   *  the state the row is usually in — the builder is broken, so the press
+   *  changes nothing until an update fixes it — and there are two states where
+   *  every clause of it is false: an update HAS fixed the builder, and the
+   *  cascade, where a paid re-roll has just stored a setting this build compiles
+   *  and the free press installs its world immediately. §2.10a asks every clause
+   *  to be true in every state its stage can be in, so a row that carries a
+   *  `noteReady` gets it asked; a row that does not is a constant, exactly as
+   *  before. Asked THROUGH the same probe the press makes, so the sentence and
+   *  the button can never disagree. */
+  actionNote(core, action) {
+    if (!action?.note) return null;
+    if (action.noteReady && this.canRebuild(core)) return action.noteReady;
+    return action.note;
+  },
+
+  /** WOULD THIS PRESS REPLACE THE WORLD IN FRONT OF THE PLAYER? The surface's
+   *  rule is that everything which does asks first, and the MODE'S NAME cannot
+   *  answer the question: `rewrite` is one pack call on the ordinary press — the
+   *  row's own words are "what its people used to say belonged to the old one" —
+   *  and the cascade's world swap on the other, over the very same button. So
+   *  the registry says which modes install whatever is standing, and the row's
+   *  cascade mode installs in exactly the state the install fork installs in.
+   *
+   *  THE THREE TERMS BELOW ARE THAT FORK'S, deliberately: the same witness, the
+   *  same `brieved` reading, and the same compile probe asked through
+   *  `canRebuild`, which reads the same seed (a forced re-attempt takes
+   *  `_regenSeed`), the same theme ladder and the same sealed brief. A confirm
+   *  that disagreed with the fork is either a warning about a swap that never
+   *  happens or a swap with no warning, and the second one is the bug this
+   *  exists for. */
+  retryReplacesWorld(core, stageId, mode) {
+    const row = this.stage(stageId);
+    if (!row?.modes?.[mode]) return false;
+    if (row.modes[mode].installs === true) return true;
+    return row.cascade?.mode === mode && this.worldBehindBrief(core) && this.canRebuild(core);
+  },
+
+  /** THE WORLD'S SEED, AND IT NEVER MOVES (maintainer ruling 8). The seed is the
+   *  world's identity for the life of the chat: historygen and every future
+   *  downstream stage must derive from the world that STANDS, so a regenerated
+   *  stage cascades downstream instead of orphaning what was built on the old
+   *  value. The live world's own seed first — it is what the player is standing
+   *  in — then the wizard's, then the chat-id hash, which is the ladder
+   *  `simFromSaved` and `maybeGenerateBrief` already agree on. With no path
+   *  moving it, all three can only ever answer the same number. */
+  _regenSeed(core, meta) {
+    const live = core?.sim?.world?.seed;
+    if (typeof live === "number") return live >>> 0;
+    const configured = this._configSeed(meta);
+    return configured === null ? PF.hashStr(String(core?.chatId)) : configured;
+  },
+
+  /** ONE ENTRY POINT FOR EVERY POST-START RE-ATTEMPT (0.16 §2.10d).
+   *
+   *  ORDER IS THE DESIGN HERE, and each step is a bug that was found rather than
+   *  a preference:
+   *   1. THE RE-ENTRANCY CHECK COMES FIRST, before the gate is touched at all.
+   *      Arm-then-enter is a hard hang: the ladder early-returns on its own
+   *      in-flight Set, leaving "writing…" with nothing running behind it, the
+   *      tick loop frozen and the retry button hidden.
+   *   2. THE RECORD IS WRITTEN BEFORE THE PRECONDITION, and it is written HERE
+   *      and cleared in THIS function's own `finally`, never the callee's: the
+   *      ladder's `finally` sits below an early-out that the guarded paths take,
+   *      so a record left to it leaks — and a leaked record refuses every later
+   *      press and re-freezes every later visit. Before the precondition rather
+   *      than after it because the precondition is a metadata round trip with
+   *      its own backoff, run with NO gate armed yet — so the popup's
+   *      held-disable does not apply either — and a second press inside that
+   *      await walked straight through the check above and then deleted the
+   *      record in its own `finally` while the first press's call was still out.
+   *      The next visit then re-armed through `armGate`'s ORDINARY path: a
+   *      boot-shaped gate over a played world with nothing running behind it.
+   *   3. THE PRECONDITION STILL PRECEDES THE GATE AND THE DISPATCH. A pack
+   *      retry has to clear the accepted marker DURABLY first: without that,
+   *      `packExpected` stays false and the dispatch falls through the ladder's
+   *      nothing-to-generate branch into the bare lift, spending nothing and
+   *      running the deferred arms mid-session.
+   *   4. THE PRE-ARM FLUSH IS AWAITED, and it is the ORDINARY chained write, not
+   *      the teardown shape (which is fire-and-forget, spends the keepalive
+   *      quota while the page is alive, and silently declines on a blocked last
+   *      check). The gate arms only once those bytes have landed. */
+  async regenerateStage(core, stageId, mode) {
+    const chatId = core?.chatId;
+    if (!chatId) return false;
+    const row = this.stage(stageId);
+    const descriptor = row?.modes?.[mode] ?? null;
+    if (!descriptor) return false;
+    // 1. Re-entrancy, and it touches NOTHING on refusal — `this.gate` included.
+    // The Set is what refuses an overlap across a chat switch (`reset()`
+    // preserves it); the record's own job is the re-arm.
+    if (this._generating.has(chatId) || this._regenPending.has(chatId)) return false;
+    const meta =
+      core.host && typeof core.host.chatMeta === "object" && core.host.chatMeta !== null ? core.host.chatMeta : {};
+    // 2. The record, covering the WHOLE attempt — precondition included.
+    this._regenPending.set(chatId, { stage: stageId, mode, gated: descriptor.gated });
+    try {
+      // 3. Preconditions.
+      if (mode === "retry" && !(await this._clearAccepted(chatId, "pack", meta))) {
+        // Three attempts down. The shipped storage screen says the true thing,
+        // and NOTHING is dispatched: the marker still stands, so the ladder
+        // would have found nothing to generate.
+        if (chatId !== core.chatId) return false;
+        this.gate = {
+          chatId,
+          state: "failed",
+          attempts: 1,
+          failure: "storage",
+          stage: "pack",
+          mode,
+          postStart: true,
+        };
+        core.hud?.update?.();
+        return false;
+      }
+      // THE FREE SAME-SEED REBUILD (ruling 8's replacement for the vetoed
+      // reseed). No LLM call, no ladder, no gate, no in-flight hold — one
+      // compile attempt, and a still-degraded result changes nothing and says
+      // so. The seed does not move, so this succeeds only once an update has
+      // fixed the builder; when it does, it answers the maintainer's flagship
+      // case — worldgen failed, everything else sealed — for zero tokens, and
+      // the sealed pack stays valid by construction because the brief, and so
+      // its hash, are untouched.
+      //
+      // The seed and the theme are read HERE and not above, because this is the
+      // only mode that compiles a world itself: the gated modes hand the ladder
+      // a force and the ladder reads its own pair.
+      if (mode === "rebuild") {
+        const theme = this._configTheme(meta) ?? "cozy-village";
+        const seed = this._regenSeed(core, meta);
+        const sealed = this._configBrief(meta, chatId);
+        if (!this.briefCompiles(sealed)) return false;
+        if (!PF.world.build(seed, theme, sealed).brieved) return false;
+        await this.flush(core, false);
+        if (chatId !== core.chatId) return false;
+        this._installSealedWorld(core, chatId, sealed, seed, theme, true);
+        return true;
+      }
+      await this.flush(core, false);
+      if (chatId !== core.chatId) return false;
+      this.gate = { chatId, state: "generating", attempts: 0, stage: stageId, mode, postStart: true };
+      core.hud?.update?.();
+      // A SCOPED FORCE, or none at all. The pack retry needs none: clearing the
+      // marker made `packExpected` true again, so call two runs against the
+      // already-sealed brief and lands in `_resumeHeldWorld` — no sim
+      // replacement, no transplant, the world byte-untouched. A DEMOTED pack
+      // cannot be reached that way (a pack exists, so `packExpected` is false
+      // whatever the marker says), and a brief re-roll cannot either.
+      const force = mode === "reroll" ? "brief" : mode === "rewrite" ? "pack" : null;
+      await this.maybeGenerateBrief(core, force ? { force } : undefined);
+      return true;
+    } finally {
+      this._regenPending.delete(chatId);
+    }
+  },
+
+  /** IS A RE-ATTEMPT ALREADY OUT FOR THIS CHAT? The two terms
+   *  `regenerateStage` refuses on, asked from outside so the surface can tell a
+   *  press that was REFUSED from a press that FAILED. They are two different
+   *  sentences to a player — one spent a call and did not work, the other spent
+   *  nothing and is still working — and the panel had only the failed one. Asked
+   *  BEFORE the dispatch by its one caller: after it, the first press's own
+   *  settle has already cleared the record and the answer is about the wrong
+   *  moment. */
+  retryInFlight(core) {
+    const chatId = core?.chatId;
+    return !!chatId && (this._generating.has(chatId) || this._regenPending.has(chatId));
+  },
+
+  /** The popup's per-row button, routed by the registry's own action shape so
+   *  the panel never has to know what a stage's modes are called. */
+  async retryAction(core, stageId, action) {
+    if (!core || !action) return false;
+    if (action.accept) {
+      const ok = await this._acceptFallback(core.chatId, stageId);
+      core.hud?.update?.();
+      return ok;
+    }
+    return this.regenerateStage(core, stageId, action.mode);
   },
 
   /** Surface-side world generation (spec §5, amended by plan §Q3b): BLOCKING now,
@@ -13981,8 +16785,13 @@ PF.save = {
    *  gate with nothing running behind it. The stored key (sealed brief or a skipped
    *  marker) remains the one-shot guard ACROSS visits, so completed chats and
    *  pre-0.4.0 chats never re-generate. */
-  async maybeGenerateBrief(core) {
+  async maybeGenerateBrief(core, opts) {
     const chatId = core.chatId;
+    // THE SCOPED FORCE (0.16 §2.10d), and "scoped" means every read-site in this
+    // function that asks what is owed, enumerated. The two shipped entry points
+    // pass nothing and are byte-identical under it; only `regenerateStage`
+    // passes one, and only for a stage the player pressed a priced button for.
+    const force = opts && (opts.force === "brief" || opts.force === "pack") ? opts.force : null;
     // ONE HOLD FOR THE WHOLE SEQUENCE (plan §2.2a): brief call, store, cache, pack
     // call, store, cache, fence, install. Every dispatcher entry checks it — this
     // one, the retry button's, and the boot's — because the two calls are one
@@ -13992,7 +16801,13 @@ PF.save = {
       core.host && typeof core.host.chatMeta === "object" && core.host.chatMeta !== null ? core.host.chatMeta : {};
     const briefWanted = this.briefExpected(meta, chatId);
     const packWanted = this.packExpected(meta, chatId);
-    if (!briefWanted && !packWanted) {
+    // READ-SITE 0 — THE ENTRY GUARD, and it is the one that decides whether a
+    // force runs at all. With a sealed brief standing, `briefWanted` and
+    // `packWanted` are BOTH false, so an unguarded force exits through the bare
+    // lift below having generated nothing, run the deferred arms and the
+    // adopt/purse tail mid-session, and left its record behind. A force always
+    // enters the body.
+    if (!briefWanted && !packWanted && !force) {
       // Nothing to generate. A gate armed against a metadata blob that has since
       // caught up (or against this session's own cache) lifts here rather than
       // waiting for a generation call that would find nothing to do.
@@ -14026,7 +16841,19 @@ PF.save = {
     this._generating.add(chatId);
     try {
       const theme = this._configTheme(meta) ?? "cozy-village";
-      let seed = this._configSeed(meta);
+      // READ-SITE 5 — THE SEED, AND ON A FORCE IT IS THE STANDING WORLD'S
+      // (maintainer ruling 8). The seed is the world's identity for the life of
+      // the chat, so no recovery path may move it — and the wizard config is not
+      // where that identity lives: `/game/create`'s reuse-an-existing-chat arm
+      // rewrites `gameSetupConfig` wholesale, `simFromSaved` prefers the SAVE
+      // ENVELOPE's seed over the config, and `snapshot()` writes the live
+      // world's, so a chat whose setup was edited after creation carries two
+      // different numbers. At BOOT the two questions are the same one (there is
+      // no world yet that anybody is standing in) and this line is byte-
+      // untouched; on a force there IS one, and it is the answer. `_regenSeed`
+      // is the shared ladder — live world, then wizard, then the chat-id hash —
+      // so the free rebuild and the paid re-roll can only ever agree.
+      let seed = force ? this._regenSeed(core, meta) : this._configSeed(meta);
       if (seed === null) seed = PF.hashStr(String(chatId));
       const setup = meta.gameSetupConfig && typeof meta.gameSetupConfig === "object" ? meta.gameSetupConfig : {};
       const preferences = [
@@ -14039,7 +16866,13 @@ PF.save = {
         .join("\n");
       // ── CALL ONE: THE BRIEF ─────────────────────────────────────────────────
       let sealed = this._configBrief(meta, chatId);
-      if (briefWanted) {
+      // The brief a forced re-roll is about to replace, captured before the call
+      // overwrites the binding: it is parked beside the new one in the same
+      // PATCH, and its hash is what tells this session's readers which blob has
+      // gone stale.
+      const priorBrief = sealed;
+      // READ-SITE 1 — the call-one gate: the intended override.
+      if (briefWanted || force === "brief") {
         let failure = null;
         sealed = await PF.brief.generate(chatId, {
           theme,
@@ -14065,18 +16898,25 @@ PF.save = {
         // pack. Copied HERE and nowhere else, which is what makes the copy
         // unmintable by any later rewrite of the wizard config it was read from.
         const patch = { pixelforgeBrief: sealed };
-        const wantsPack = this._configPackWanted(meta);
+        // THE OUTGOING BRIEF IS PARKED IN THE SAME PATCH (0.16 §2.10d). One
+        // deep, additive, atomic: every other destroy-the-only-copy path in this
+        // module parks first, and the case a re-roll is FOR is precisely a brief
+        // a newer build wrote that this one cannot compile — the one artifact
+        // worth keeping a copy of. Until this PATCH lands, the old brief and the
+        // fallback world stand untouched, so a failed re-roll leaves the player
+        // exactly where they were with the popup row intact; once it lands it is
+        // the point of no return, and the confirm copy says so.
+        if (force === "brief" && priorBrief) patch[RETRY_KEYS.PRIOR_BRIEF] = priorBrief;
+        // READ-SITE 2 — the marker copy is SUPPRESSED on the force path. The
+        // mint stays a creation-era one-shot: a force on a months-old chat must
+        // never be able to mint `pixelforgePackWanted` out of a wizard config
+        // that has been rewritten since, which is the whole of Q9's ruling.
+        const wantsPack = !force && this._configPackWanted(meta);
         if (wantsPack) patch[PACK_WANTED_META_KEY] = true;
-        let stored = false;
-        for (let attempt = 0; attempt < 3 && !stored; attempt++) {
-          try {
-            await PF.api.patchMetadata(chatId, patch);
-            stored = true;
-          } catch (err) {
-            if (attempt === 2) console.warn("[pixelforge] brief storage failed; the chat stays unsealed", err);
-            else await new Promise((resolve) => setTimeout(resolve, 500 * (attempt + 1)));
-          }
-        }
+        const stored = await storeWithRetry(
+          () => PF.api.patchMetadata(chatId, patch),
+          "[pixelforge] brief storage failed; the chat stays unsealed",
+        );
         if (!stored) {
           if (chatId === core.chatId) this._failGate(core, "storage", "brief");
           return;
@@ -14085,6 +16925,18 @@ PF.save = {
         // escape-safety: a generation that lands while the player is in another chat
         // returns here, and the cache is the only thing that will tell the next visit
         // this world is already sealed rather than generating it a second time.
+        // THE SUPERSEDED WITNESS, recorded before the cache it protects. For a
+        // FIRST seal the metadata blob is empty and the cache wins on its own;
+        // for a RE-ROLL the blob still carries a well-shaped old brief and would
+        // win forever, so this is what routes it past the blob-wins arm.
+        if (force === "brief" && priorBrief) this._briefSuperseded.set(chatId, PF.player.briefHashOf(priorBrief));
+        // AND THE CONSENT WITNESS BESIDE IT, on the wider term of the two: this
+        // one is recorded whether or not there was an old brief to park, because
+        // an UNREADABLE seal has nothing to park and is still a re-roll the
+        // player confirmed. From here on, everything downstream that would
+        // replace the world in front of them can tell this session's own paid
+        // press apart from a brief that simply arrived (`_briefResealed`).
+        if (force === "brief") this._briefResealed.add(chatId);
         this._cacheBrief(chatId, sealed);
         // The witness lands beside the cache and for the same reason: until the
         // host's metadata comes back carrying the copy, this is the only thing
@@ -14105,8 +16957,17 @@ PF.save = {
       // it would leave the chat permanently reading a fallback.
       const existingPack = this._configPack(meta, chatId);
       const packStale = !!existingPack && existingPack.briefHash !== PF.player.briefHashOf(sealed);
+      // READ-SITE 3 — the force's own arm, and it reads SEAL-SIDE EVIDENCE ONLY:
+      // the durable marker, or the sealed pack object itself, which a re-roll is
+      // about to strand. Never the wizard's copy — that is the Q9 side door, and
+      // the shipped wizard-config arm below is dead on the force path anyway
+      // because `briefWanted` stays false there. This is also ruling 8's cascade
+      // made mechanical: a regenerated brief re-runs everything downstream that
+      // exists rather than orphaning it.
+      const forcePack = force === "pack" || (force === "brief" && (this._packWanted(meta, chatId) || !!existingPack));
       const wantPack =
-        !!sealed && (packWanted || (briefWanted && this._configPackWanted(meta) && (!existingPack || packStale)));
+        !!sealed &&
+        (packWanted || forcePack || (briefWanted && this._configPackWanted(meta) && (!existingPack || packStale)));
       if (wantPack) {
         this._stageGate(core, "pack");
         let failure = null;
@@ -14126,16 +16987,10 @@ PF.save = {
           if (chatId === core.chatId) this._failGate(core, failure, "pack");
           return;
         }
-        let packStored = false;
-        for (let attempt = 0; attempt < 3 && !packStored; attempt++) {
-          try {
-            await PF.api.patchMetadata(chatId, { [PACK_META_KEY]: pack });
-            packStored = true;
-          } catch (err) {
-            if (attempt === 2) console.warn("[pixelforge] pack storage failed; the world stays packless", err);
-            else await new Promise((resolve) => setTimeout(resolve, 500 * (attempt + 1)));
-          }
-        }
+        const packStored = await storeWithRetry(
+          () => PF.api.patchMetadata(chatId, { [PACK_META_KEY]: pack }),
+          "[pixelforge] pack storage failed; the world stays packless",
+        );
         if (!packStored) {
           if (chatId === core.chatId) this._failGate(core, "storage", "pack");
           return;
@@ -14153,7 +17008,44 @@ PF.save = {
       // only owed a PACK is already standing in its real world, so it resumes
       // rather than recompiling (`_resumeHeldWorld` says why that distinction is
       // not cosmetic).
-      if (briefWanted || core.sim?.world?.interim) this._installSealedWorld(core, chatId, sealed, seed, theme);
+      //
+      // READ-SITE 4 — the install fork. Without the force arm a SUCCESSFUL
+      // re-roll lands in `_resumeHeldWorld`, never compiles the brief it just
+      // paid for, and the call is spent for nothing: the degraded world carries
+      // no `interim` mark, so neither shipped term catches it.
+      //
+      // POST-START IS THE GATE'S OWN ANSWER, so the eight gap closures below are
+      // scoped to a regeneration and the boot/compat-shim path is byte-identical.
+      const postStart = this.gateHolds(core) && this.gate.postStart === true;
+      // …AND THE CASCADE OWES AN INSTALL OF ITS OWN. A re-roll whose brief
+      // SEALED and whose pack then FAILED leaves the new brief stored and the
+      // old world still standing — the install is below the pack's failure exit,
+      // so it never ran. The press that finishes that attempt comes back through
+      // the PACK stage (`force: "pack"`), where not one of the three terms above
+      // is true, and `_resumeHeldWorld` would resume the very world the player
+      // paid to leave. So a FORCED post-start run installs as well when the
+      // setting sealed on this chat is AHEAD of the world on screen —
+      // `worldBehindBrief`, which is the same question the failure screen's
+      // sentence and the press's confirmation ask — AND that setting compiles
+      // into a real world: `canRebuild`'s own single probe (build() never
+      // throws; the absence of `brieved` IS the answer), asked here against the
+      // exact values the install would use. Every term is load-bearing. Without
+      // the compile probe, a chat standing on a stand-in with a DEMOTED pack
+      // rebuilds a degrade over a degrade and severs world-bound play for
+      // nothing; without the witness inside `worldBehindBrief`, a brief that
+      // merely ARRIVED — a second device re-rolled, this one's `chatMeta`
+      // refreshed — replaces a world nobody standing here agreed to leave.
+      // `force === "pack"` rather than any force, and the narrowing is the whole
+      // cost story: it is the only force that reaches this fork without having
+      // already decided to install, so the probe build below never runs on a
+      // path whose answer was known a term earlier. (It is also the only one
+      // whose seed is the STANDING world's — READ-SITE 5 gives an unforced run
+      // the wizard's, and installing at that number is precisely the reseed
+      // ruling 8 forbids.)
+      const cascadeInstall =
+        postStart && force === "pack" && this.worldBehindBrief(core) && PF.world.build(seed, theme, sealed).brieved;
+      if (briefWanted || force === "brief" || core.sim?.world?.interim || cascadeInstall)
+        this._installSealedWorld(core, chatId, sealed, seed, theme, postStart);
       else this._resumeHeldWorld(core, chatId, sealed);
     } catch (err) {
       // NEVER A SPINNER WITH NOTHING BEHIND IT. Every failure the generation
@@ -14283,6 +17175,23 @@ PF.save = {
       // solid-tile rescue below only fires if that lands in a wall, so the
       // player would silently reappear in a random corner. Land them at the
       // spawn instead, which is the one tile every zone guarantees is walkable.
+      //
+      // THE CELL THE SESSION ENDED IN, MATERIALIZED BEFORE ANYTHING ASKS
+      // WHETHER IT EXISTS (0.16 §2.3, hook 2). A wilderness cell is a cache fill
+      // rather than a zone the compiler built, so a save row naming one resolves
+      // to nothing on a freshly-built world — and the arm below would drop the
+      // player at the start zone and discard the saved x/y ON PURPOSE. A session
+      // that ended in the woods has to reload in the woods.
+      //
+      // ABOVE the resolution test and not beside it: `hasZone` is the question,
+      // and this is what makes the answer true. The refusals cost nothing —
+      // `ensure` returns the zone for any resident id, null for anything that is
+      // not a canonical cell this world speaks for, and null rather than a throw
+      // for a builder fault — and every one of them falls through to exactly the
+      // shipped drop: position lost, world playable, which is the house degrade
+      // shape. A rehydrated lone cell carries four gates by construction, so the
+      // player who lands in one can always walk out of it.
+      PF.lattice.ensure(world, saved.zone);
       const zoneResolved = hasZone(saved.zone);
       if (zoneResolved) sim.zoneId = saved.zone;
       const z = sim.zone();
@@ -14324,7 +17233,25 @@ PF.save = {
       }
       if (saved.bindings && typeof saved.bindings === "object") {
         for (const [loc, zone] of Object.entries(saved.bindings)) {
-          if (hasZone(zone)) {
+          // A MAP LOCATION MAY NOT BE BOUND TO A WILDERNESS CELL, and the arm
+          // above is what made that reachable: `ensure` materializes the cell the
+          // session ended in BEFORE `hasZone` is asked, so a save row naming that
+          // same cell as a binding target found the zone standing and bound it —
+          // to a cache fill that no location was ever posted for. 55-maps-export
+          // refuses a chunk a row of its own (`mapExport` is false on every one
+          // of them), so the binding names a location the world does not own: the
+          // topbar annotates a patch of country with somebody else's place name,
+          // and the residency policy then evicts the zone out from under it and
+          // leaves the binding pointing at nothing.
+          //
+          // THE TEST IS THE ID, NOT THE ZONE, which is what makes it exact in
+          // both directions. `PF.lattice.parse` answers for the canonical chunk
+          // spelling alone, so an id `ensure` would have handed back through its
+          // RESIDENT arm — one already standing in `world.zones` — refuses here
+          // just the same, and the three anchored cells that are real compiled
+          // zones (the settlement and the brief's own wilds, whose ids are not
+          // chunk ids at all) keep the bindings they have always had.
+          if (hasZone(zone) && !PF.lattice.parse(zone)) {
             world.bindings[loc] = zone;
             world.zones[zone].spatialLocationId = loc;
           }
@@ -14555,6 +17482,16 @@ PF.save = {
     // (_briefSeenInMeta rides with the cache it describes, for the same reason,
     // and so do the pack's two: a pack that seals after the player has left is
     // exactly the case its cache exists for.)
+    //
+    // AND SO ARE THE RETRY SURFACE'S FOUR (0.16 §2.10d), on the identical
+    // argument: `_regenPending` is what re-arms the gate for a regeneration
+    // still in flight when the player comes back, `_briefSuperseded` is what
+    // stops the metadata blob a re-roll replaced from winning on the way in,
+    // `_briefResealed` is the consent this session's own re-roll earned and the
+    // chat it belongs to is exactly the chat being left mid-attempt, and the
+    // accepted witnesses answer for PATCHes the host has taken and the arriving
+    // blob has not caught up with. Every one of them is evicted by the thing
+    // that made it — never by leaving the chat.
     this.gate = null;
     // The in-memory quarantine bag is per-chat, exactly like the caches above:
     // restore() hydrates the arriving chat's key into it a few lines later.
@@ -14912,6 +17849,31 @@ PF.save = {
    *  it, `settled` is the row the call actually ENDED on — which is not the row
    *  it was handed when a row-4 re-read resolves to something else, and the
    *  pre-check has to decide on the row that is really there. */
+  /** MAY THIS SITE REPLACE THE WORLD RIGHT NOW? (0.16 §2.10d.) The write
+   *  exemption is scoped to the WRITE, not to the ladder underneath it: exempting
+   *  `_pendingWrite` re-opens `_precheck` → `_applyRewind`, whose row-4 and row-7
+   *  arms rebuild the sim wholesale — so a checkpoint load landing mid-regeneration
+   *  would replace the world behind the freeze, at the one seam
+   *  `_checkRewindNow`'s own gate refusal was written to protect, and the two
+   *  refusal sites would then disagree about whether the gate holds. Under a
+   *  post-start hold the pre-check proceeds and its row-4/7 verdicts still BLOCK
+   *  the PUT exactly as shipped; the moved row is applied by the first turn edge
+   *  after the gate comes down, through the shipped `checkRewind` path.
+   *
+   *  AND IT IS THE ATTEMPT THAT HOLDS, NOT THE GATE. The gate is not up for the
+   *  whole press: every mode awaits an ordinary flush BEFORE arming (a PUT round
+   *  trip), and the free rebuild arms no gate at all — one synchronous compile
+   *  and a swap either side of that same await. In both windows the sim is still
+   *  stepping and nothing above refuses, so a checkpoint rewind landing there
+   *  would `_rebuild` the world the press is about to replace and the player
+   *  would read "The world rewound with the story." immediately before "The
+   *  world takes shape." The re-arm record spans the whole attempt, which is
+   *  exactly the window that has to hold. */
+  _rewindHeld(core) {
+    if (this.gateHolds(core) && this.gate.postStart === true) return true;
+    return !!core?.chatId && this._regenPending.has(core.chatId);
+  },
+
   async _applyRewind(core, decided, chatId, gen, seqAtIssue, reread) {
     if (decided.row === 1) {
       // A row-1 classification at ANY site means the next write repairs the row
@@ -14933,6 +17895,7 @@ PF.save = {
         if (!again) return { acted: false, settled: null };
         return this._applyRewind(core, again, chatId, gen, seqAtIssue, true);
       }
+      if (this._rewindHeld(core)) return { acted: false, settled: decided };
       this._serverSerialized = null;
       this._rebuild(core, null);
       core.hud?.toast(decided.toast);
@@ -14946,6 +17909,7 @@ PF.save = {
       return { acted: true, settled: decided };
     }
     if (decided.row === 7) {
+      if (this._rewindHeld(core)) return { acted: false, settled: decided };
       this._serverSerialized = decided.serialized;
       this._rebuild(core, decided.state);
       core.hud?.toast(decided.toast);
@@ -14972,7 +17936,17 @@ PF.save = {
     // THE LOADING GATE holds the PROBE too, not just the write: row 3's adopt
     // action is "first-write", so probing a gated chat would write the world
     // nobody has entered up as if it were play. _liftGate is what calls adopt.
-    if (this.gateHolds(core)) return;
+    //
+    // A POST-START hold is the exception, and it has to be: that gate stands
+    // over a world the player has been living in, and its visit's probe must run
+    // NOW rather than at the lift. Held to the lift, the FAILURE exit never
+    // writes a route row at all, and the success exit runs the boot probe for
+    // the first time mid-visit against the pre-regeneration row with no anchor
+    // cached — which classifies row 6 and rebuilds that stale row straight over
+    // the world just installed. Run here, `mode` is set before the install lands
+    // and `_liftGate`'s adopt then no-ops on it, which is the shipped protection
+    // doing its shipped job.
+    if (this._gateBlocksWrites(core)) return;
     const gen = this._gen ?? 0;
     const chatId = core.chatId;
     const seqAtIssue = _writeSeq;
@@ -15234,8 +18208,9 @@ PF.save = {
   markDirty(core) {
     // THE LOADING GATE (plan §Q3b): a chat that has not entered play emits
     // nothing. Refused HERE and not merely at the write, so a gated chat arms no
-    // timer either — a world nobody is playing should cost no wakeups.
-    if (this.gateHolds(core)) return;
+    // timer either — a world nobody is playing should cost no wakeups. A
+    // POST-START hold is the exception: see `_gateBlocksWrites`.
+    if (this._gateBlocksWrites(core)) return;
     if (this._timer) return; // a live timer already covers it — a backoff rung included
     this._timerIsBackoff = false;
     this._timer = setTimeout(() => {
@@ -15256,7 +18231,9 @@ PF.save = {
     // the debounce, the retry ladder, the chat-switch capture and the last-detach
     // flush all resolve their payload here, so one refusal covers all four. The
     // pagehide path builds its own snapshot and carries its own (flushTeardown).
-    if (this.gateHolds(core)) return null;
+    // ONE refusal, four paths — which is also why `captureFlush` has no refusal
+    // of its own to condition: it is a try/catch around this call.
+    if (this._gateBlocksWrites(core)) return null;
     const snap = this.snapshot(core);
     if (!snap || !core.chatId) return null;
     const serialized = JSON.stringify(snap);
@@ -15721,8 +18698,9 @@ PF.save = {
     // THE LOADING GATE. This path does not go through _pendingWrite, so it needs
     // its own refusal — and it is the path that would matter most: closing the tab
     // while the world is still generating must not stamp the placeholder world
-    // into the row store on the way out.
-    if (this.gateHolds(core)) return;
+    // into the row store on the way out. A POST-START hold is standing over a
+    // world with real play in it, and that one goes out.
+    if (this._gateBlocksWrites(core)) return;
     let snap;
     let serialized = "";
     try {
@@ -18554,6 +21532,11 @@ const DEFAULT_PACKS = (() => {
 // chips, touch D-pad, Talk / Travel / Keyboard controls, toasts. The root is
 // pointer-events:none; each control opts back in — clicks in empty space fall
 // through to the narration below (host contract).
+
+/** "No chat visit has been spent on the retry popup yet." A sentinel rather than
+ *  `null` because `null` is a chat id this HUD can actually hold. */
+const NO_RETRY_VISIT = Symbol("pixelforge:no-retry-visit");
+
 PF.Hud = class {
   constructor(rootEl, core) {
     this.core = core;
@@ -18640,6 +21623,12 @@ PF.Hud = class {
     this.captionEl.setAttribute("aria-atomic", "true");
     this.captionEl.setAttribute("aria-hidden", "true");
     this.locChip = PF.el("span", { style: S.chip, text: "…" });
+    // THE SIGNPOST AT THE EDGE (0.16 §2.3). A gate is crossed by walking into
+    // it, so there is no button to press and nothing to dim — what the player
+    // needs is which way it goes and what is over there. A chip beside the one
+    // that already says where you are, hidden until they are standing at an
+    // edge, and proximity-driven per frame like the offers in the action column.
+    this.gateChip = PF.el("span", { style: `${S.chip}display:none;`, text: "" });
     this.clockChip = PF.el("span", { style: S.chip, text: "" });
     // The purse (S3). Hidden until there is something in it: a legacy world with
     // no economy in it should not carry a permanent "0 coins" telling the player
@@ -18652,10 +21641,28 @@ PF.Hud = class {
     // `!inWorld` hiding is a toggle these two have to own (see update()).
     this.journalChip = this._chip("📖", "open the journal", () => this.toggleJournal());
     this.sheetChip = this._chip("👤", "open the character sheet", () => this.toggleSheet());
+    // THE RETRY SURFACE'S STANDING WAY BACK IN (0.16 §2.10c). The popup opens
+    // itself once a visit and is dismissible from then on; this chip is what
+    // keeps the offer reachable without nagging, and its words come off the same
+    // registry region the rows do. It derives STRICTLY from live rows, so a
+    // world that healed stops saying "part stand-in" on its own.
+    //
+    // A GLYPH, LIKE THE TWO OPENERS ABOVE IT, and that is `_chip`'s contract
+    // rather than a preference: the topbar is one flex row of chips centred over
+    // the play field, and its fullest state — a bound location name, a signpost,
+    // the clock, a purse with a carry count, and all three buttons — is what the
+    // width was struck against. A twenty-character sentence wearing button
+    // chrome is another whole chip's worth of row, and it pushed that state past
+    // the width on a phone. The SENTENCE is not lost: it is the accessible name,
+    // which is where the two beside it keep the words their glyphs do not say,
+    // and `RETRY_COPY.chip` stays the registry's one home for it.
+    this.retryChip = this._chip("🚧", `${PF.save.RETRY_COPY.chip} — what didn't finish being written`, () =>
+      this.toggleRetry(),
+    );
     this.topbar = PF.el(
       "div",
       { style: "position:absolute;top:10px;left:50%;transform:translateX(-50%);display:flex;gap:6px;z-index:2;" },
-      [this.locChip, this.clockChip, this.purseChip, this.journalChip, this.sheetChip],
+      [this.locChip, this.gateChip, this.clockChip, this.purseChip, this.retryChip, this.journalChip, this.sheetChip],
     );
 
     this.talkBtn = this._btn("Talk (E)", () => core.interact(), S.railBtn);
@@ -18841,7 +21848,14 @@ PF.Hud = class {
     this.gateBody = PF.el("div", {
       style: "font:12px/1.65 inherit;opacity:0.85;max-width:34ch;margin-bottom:12px;",
     });
-    this.gateRetry = this._btn("Try again", () => PF.save.retryGeneration(this.core));
+    this.gateRetry = this._btn("Try again", () => void PF.save.retryGeneration(this.core));
+    // THE SECOND EXIT (0.16 §2.10d), and it only ever appears when there is
+    // somewhere to go: a playable, non-interim world standing behind the gate.
+    // On a boot-armed pack gate it records the deferral and lets play begin
+    // packless; on a post-start one it simply takes the freeze off the world the
+    // player was already living in.
+    this.gateKeep = this._btn("Keep playing without it", () => void PF.save.keepPlaying(this.core));
+    this.gateKeep.style.display = "none";
     this.gateEl = PF.el(
       "div",
       {
@@ -18850,7 +21864,7 @@ PF.Hud = class {
           "text-align:center;padding:24px;box-sizing:border-box;gap:0;pointer-events:auto;z-index:4;" +
           "background:rgba(12,14,12,0.9);color:#f3efe2;",
       },
-      [this.gateTitle, this.gateBody, this.gateRetry],
+      [this.gateTitle, this.gateBody, this.gateRetry, this.gateKeep],
     );
     this.gateEl.setAttribute("role", "status");
     this.gateEl.setAttribute("aria-live", "polite");
@@ -18907,12 +21921,37 @@ PF.Hud = class {
       ]),
       PF.el("div", { style: "flex:1 1 auto;display:flex;gap:14px;overflow:hidden;" }, [this.sheetArt, this.sheetStats]),
     ]);
+    // ── THE GENERATION RETRY POPUP (0.16 §2.10c, ruling 4) ──────────────────
+    // On the two panels' exact shape, and for the exact same reason: the one
+    // window pattern in this package that composes safely with the host. Not an
+    // `aria-modal` dialog (that would make `_hostOwnsKeyboard` true and kill the
+    // keys that close it), a member of `closePanels()`'s mutual-exclusion set —
+    // which is what gets it Escape for free, with zero 90-element edits — and
+    // z-3, under the gate, because a regeneration IN FLIGHT re-arms that gate and
+    // the gate is then the surface.
+    //
+    // IT DOES NOT STOP THE CLOCK. The journal and the sheet do not either;
+    // `sim.talkAnchorId` means "a conversation is open" and is not ours to
+    // borrow. What freezes time is the gate a regeneration arms, at the tick
+    // level, which is exactly right for a world that may be replaced.
+    this.retryBody = PF.el("div", {
+      style: "flex:1 1 auto;overflow:auto;display:flex;flex-direction:column;gap:12px;",
+    });
+    this.retryEl = PF.el("div", { style: panelStyle, "aria-label": "what didn't finish being written" }, [
+      PF.el("div", { style: panelHead }, [
+        PF.el("div", { style: panelTitle, text: PF.save.RETRY_COPY.title }),
+        this._btn("✕ Close", () => this.closeRetry()),
+      ]),
+      this.retryBody,
+    ]);
+
     // Both boot DOWN, as a property rather than inside the style string: the
     // toggles and update() write this same property, and a boot state expressed
     // only in `cssText` is one nothing can read back (the berth button's own
     // discipline).
     this.journalEl.style.display = "none";
     this.sheetEl.style.display = "none";
+    this.retryEl.style.display = "none";
 
     // ── THE TALK WINDOW (plan §2.5) ─────────────────────────────────────────
     // The release's flagship surface, and the one panel here that is deliberately
@@ -19000,6 +22039,7 @@ PF.Hud = class {
         this.talkEl,
         this.journalEl,
         this.sheetEl,
+        this.retryEl,
         this.gateEl,
       ],
     );
@@ -19013,6 +22053,34 @@ PF.Hud = class {
     this._journalMemo = null;
     this._sheet = false;
     this._sheetKey = null;
+    // ── THE RETRY POPUP'S OWN STATE (0.16 §2.10c) ───────────────────────────
+    // CHAT IDENTITY LIVES HERE, which is the half that keeps "zero 90-element
+    // edits" true rather than lucky: `70-hud` reads no chat id today and
+    // `_switchChat` never rebuilds the HUD — it calls `refreshChips` and nothing
+    // else — so the latch, the once-a-visit memo and any half-made confirm are
+    // keyed by the chat they belong to and self-reset inside `update()`'s
+    // per-frame reconcile when it changes. Chat A's popup can never mount over
+    // chat B.
+    this._retry = false;
+    this._retryChat = null;
+    // NO VISIT HAS BEEN SPENT YET, said with a value no chat id can equal. Both
+    // memos used to start `null`, and `null` is also what `_retryChat` reads
+    // when there is no chat — so on the very first frame of a chat-less core the
+    // two agreed and the popup could never auto-open. A sentinel means "unspent"
+    // and nothing else.
+    this._retryVisit = NO_RETRY_VISIT;
+    this._retryKey = null;
+    this._retryRows = [];
+    // A half-made press: {stage, action, free}. Dropped on every close, on the
+    // chat change, and once it is spent — a confirmation half-made an hour ago
+    // is not permission for the press that reopens the panel (the journal's own
+    // discipline).
+    this._retryConfirm = null;
+    // Session-only sentences a press LEFT BEHIND, by stage: the free rebuild's
+    // "nothing has changed yet", and the second-failure line. Honestly
+    // re-derived as first-time after a reload, because a durable attempt log is
+    // refused for the same reason a durable failure log is.
+    this._retryNotes = {};
     // ── THE TABS THEMSELVES (0.13 §2.4) ──────────────────────────────────────
     // A LIST of {label, render, memoSync}, and it is a list rather than two
     // branches because the third occupant is already committed (P8's extended
@@ -20070,12 +23138,265 @@ PF.Hud = class {
     // a FROZEN CLOCK with an invisible window underneath, whose first Escape
     // closes a surface they cannot see.
     const open =
-      this._journal || this._sheet || this.boardMenu.style.display === "flex" || this.core.talkOpen?.() === true;
+      this._journal ||
+      this._sheet ||
+      this._retry ||
+      this.boardMenu.style.display === "flex" ||
+      this.core.talkOpen?.() === true;
     this.core.closeTalk?.();
     this.closeJournal();
     this.closeSheet();
+    // THE RETRY POPUP IS ONE OF THEM, and this is the whole of its Escape story
+    // (0.16 §2.10c). It is also where "dismissal is not acceptance" is enforced:
+    // `closePanels` is a blunt close-everything with no "why" channel, so a
+    // player who opened the journal has spent no choice — the close writes no
+    // marker, the once-a-visit memo stops the re-pop, and the chip stays the way
+    // back in. Only a row's own button records anything.
+    this.closeRetry();
     this.closeBoard();
     return open;
+  }
+
+  /** The popup, on `toggleJournal`'s exact shape: one surface at a time, and the
+   *  talk window counts as one of them because it is the member that also stops
+   *  the clock. */
+  toggleRetry() {
+    if (!this._panelsAllowed()) return;
+    if (this._retry) {
+      this.closeRetry();
+      return;
+    }
+    this.closeSheet();
+    this.closeJournal();
+    this.closeBoard();
+    this.core.closeTalk?.();
+    this._retry = true;
+    this._retryChat = this.core.chatId ?? null;
+    this._retryConfirm = null;
+    this._retryKey = null; // opening always paints
+    this._syncRetry();
+    this.retryEl.style.display = "flex";
+  }
+
+  closeRetry() {
+    this._retry = false;
+    this._retryConfirm = null;
+    this.retryEl.style.display = "none";
+  }
+
+  /** Recompute the rows only when something they are derived FROM has moved.
+   *  The key is deliberately all cheap reads — the derivation itself hashes a
+   *  sealed brief, which is not a per-frame cost. */
+  _retryMemoKey() {
+    const core = this.core;
+    const meta = core.host && typeof core.host.chatMeta === "object" ? core.host.chatMeta : null;
+    const gate = PF.save.gateHolds(core)
+      ? `${PF.save.gate.state}|${PF.save.gate.stage}|${PF.save.gate.postStart === true}`
+      : "";
+    return [
+      core.chatId ?? "",
+      gate,
+      core.sim?.world ?? null,
+      meta?.pixelforgeBrief ?? null,
+      meta?.pixelforgePack ?? null,
+      PF.save.fallbackAccepted(meta, core.chatId, "brief"),
+      PF.save.fallbackAccepted(meta, core.chatId, "pack"),
+      this._retryConfirm,
+      this._retryNotes,
+      this._retryNoteRev ?? 0,
+    ];
+  }
+
+  /** Ask the registry what is standing, and repaint if it moved. Returns the
+   *  live rows, which is what the chip reads too. */
+  _syncRetry() {
+    const key = this._retryMemoKey();
+    const held = this._retryKey;
+    const moved = !held || held.length !== key.length || key.some((value, at) => value !== held[at]);
+    if (moved) {
+      this._retryKey = key;
+      this._retryRows = PF.save.retryRows(this.core);
+      if (this._retry) this._renderRetry();
+    }
+    return this._retryRows;
+  }
+
+  /** The panel's body: one block per row, or the confirmation that stands in
+   *  front of a world-replacing press. */
+  _renderRetry() {
+    const C = PF.save.RETRY_COPY;
+    const body = this.retryBody;
+    const confirm = this._retryConfirm;
+    if (confirm) {
+      // THE TWO-STEP CONFIRM, and FREE IS NOT CONSEQUENCE-FREE: the severance is
+      // identical for all three shapes, so the cost line and the words on the
+      // button are the only halves that differ.
+      const words = confirm.free
+        ? { title: C.confirmFreeTitle, cost: C.costFree, go: C.confirmFreeGo }
+        : confirm.cascade
+          ? { title: C.confirmCascadeTitle, cost: C.costCascade, go: C.confirmCascadeGo }
+          : { title: C.confirmTitle, cost: C.costPaid, go: C.confirmGo };
+      body.replaceChildren(
+        PF.el("div", { style: "font:700 12px/1.6 inherit;", text: words.title }),
+        PF.el("div", { style: "opacity:0.9;", text: words.cost }),
+        PF.el("div", { style: "opacity:0.9;", text: C.keepsAndLoses }),
+        PF.el("div", { style: "display:flex;gap:6px;flex-wrap:wrap;" }, [
+          this._btn(words.go, () => this._retryGo(confirm)),
+          this._btn(C.confirmBack, () => {
+            this._retryConfirm = null;
+            this._retryKey = null;
+            this._syncRetry();
+          }),
+        ]),
+      );
+      return;
+    }
+    const held = PF.save.gateHolds(this.core);
+    const blocks = [];
+    for (const row of this._retryRows) {
+      const controls = [];
+      for (const action of row.actions) {
+        const button = this._btn(action.label, () => this._retryPress(row, action));
+        // Nothing is pressable while a call is in flight behind the gate.
+        if (held) button.disabled = true;
+        controls.push(button);
+      }
+      const parts = [
+        PF.el("div", { style: "font:700 12px/1.6 inherit;", text: row.label }),
+        PF.el("div", { style: "opacity:0.9;", text: row.body }),
+      ];
+      const note = this._retryNotes[row.stage];
+      if (note) parts.push(PF.el("div", { style: "opacity:0.75;", text: note }));
+      // A BUTTON'S OWN SUB-LINE IS ASKED, NOT READ: the free rebuild's sentence
+      // is true in the state the row is usually in and false in the two where
+      // the compile already answers. The registry owns both halves and the
+      // choice between them — this is one repaint, not a per-frame cost, and
+      // the memo above is what keeps it that way. Nor can the answer go stale on
+      // the panel, and the enumeration is exact: the probe reads the standing
+      // world, the sealed setting, the gate, and — behind `_regenSeed` and
+      // `_configTheme` — the wizard's seed and theme. The first three are in
+      // that key. The other two are written at setup and nothing moves them
+      // once a game has started, and the seed the probe actually uses is the
+      // standing world's, which is in the key.
+      for (const action of row.actions) {
+        const line = PF.save.actionNote(this.core, action);
+        if (line) parts.push(PF.el("div", { style: "opacity:0.75;", text: line }));
+      }
+      parts.push(PF.el("div", { style: "display:flex;gap:6px;flex-wrap:wrap;" }, controls));
+      blocks.push(PF.el("div", { style: "display:flex;flex-direction:column;gap:6px;" }, parts));
+    }
+    blocks.push(PF.el("div", { style: "opacity:0.75;", text: C.footer }));
+    body.replaceChildren(...blocks);
+  }
+
+  /** A row button. Everything that replaces the world asks first; everything
+   *  else — a pack call, a deferral — is its own press and no more.
+   *
+   *  AND "EVERYTHING" IS ASKED OF THE STATE, NEVER OF THE BUTTON'S NAME. The
+   *  pack row's one priced button is a single call on the ordinary press — its
+   *  own words are "what its people used to say belonged to the old one" — and
+   *  the cascade's world swap on the other, so a branch that listed mode names
+   *  here was a rule that had quietly stopped being true: it sent a press that
+   *  severs friendships, quests, home and purchases straight through with no
+   *  confirmation at all. `retryReplacesWorld` is the same question the install
+   *  fork asks, and it is the only thing this branch may believe. */
+  _retryPress(row, action) {
+    const C = PF.save.RETRY_COPY;
+    // WHAT A PRESS COSTS AND WHAT IT REPLACES ARE TWO QUESTIONS, and only the
+    // first of them is the mode's to answer. The free rebuild costs milliseconds
+    // rather than calls, and it says so before it asks anything: the rebuild is
+    // deterministic at the same seed, so when it cannot answer yet the honest
+    // thing is to change the copy rather than walk the player through a
+    // confirmation for a no-op.
+    const free = action.mode === "rebuild";
+    if (free && !PF.save.canRebuild(this.core)) {
+      this._retryNotes[row.stage] = C.rebuildUnchanged;
+      this._retryNoteRev = (this._retryNoteRev ?? 0) + 1;
+      this._syncRetry();
+      return;
+    }
+    // THE SECOND QUESTION IS THE REGISTRY'S, FOR EVERY BUTTON WITHOUT EXCEPTION.
+    // The free press installs the same world with the same permanent severance
+    // the paid one does — it just does it for nothing — so a branch that asked
+    // first and reached this line only for the priced modes was the same rule
+    // that had quietly stopped being true one button along: the flag that says
+    // which presses replace the world had a reader the free press never got to.
+    if (PF.save.retryReplacesWorld(this.core, row.stage, action.mode)) {
+      // Which of the three shapes the confirmation wears comes off the registry
+      // as well: the cascade's press spends a call on what its people say and
+      // lands the player in a setting that is already written and stored, so it
+      // may not wear the sentence that prices writing one — and the free press
+      // may not wear either, because it makes no call at all.
+      //
+      // AND THE SECOND TERM IS THE STATE, for the same reason the docstring above
+      // gives: the mode's NAME cannot answer this either. `rewrite` is the pack
+      // row's cascade mode AND its ordinary priced button, and what makes a press
+      // on it the cascade is the setting sitting ahead of the world on screen —
+      // `worldBehindBrief`, the same question `retryReplacesWorld` asked one line
+      // up and the install fork asks at the end. Inert while the pack row's modes
+      // carry no `installs` flag, since only the cascade arm can have got a press
+      // this far; a row that grows one would otherwise get the cascade's copy —
+      // "the new world is settled, this brings you to it" — over a world nothing
+      // has written yet.
+      const cascade = PF.save.stage(row.stage)?.cascade?.mode === action.mode && PF.save.worldBehindBrief(this.core);
+      this._retryConfirm = { stage: row.stage, action, free, cascade };
+      this._retryKey = null;
+      this._syncRetry();
+      return;
+    }
+    void this._retryGo({ stage: row.stage, action, free });
+  }
+
+  async _retryGo(confirm) {
+    this._retryConfirm = null;
+    const stage = confirm.stage;
+    // A REFUSAL IS NOT A FAILURE, and which one this is is asked BEFORE the
+    // dispatch because that is the moment the question is about: the pre-arm
+    // flush is the window where a press is already out and the panel is still
+    // live to take another — no gate is armed yet, so the held-disable does not
+    // apply — and `regenerateStage` turns the second one away having spent
+    // nothing and failed nothing. Read after the await, the answer would be
+    // about the first press's record rather than about this press's refusal.
+    // (Both readings answer the same in the window a press can actually land
+    // in: the refusal returns two microtasks before an after-read could run.
+    // This ordering is the one that cannot start disagreeing, not a fault being
+    // held off by an inch.)
+    const busy = PF.save.retryInFlight(this.core);
+    // …AND THE PRESS BELONGS TO THE CHAT THAT MADE IT. That same flush is the
+    // OTHER window the panel is live in: switch chat inside it and
+    // `regenerateStage` returns false having dispatched nothing, while the
+    // per-frame reconcile has already emptied this map for the chat that just
+    // arrived. Written anyway, a sentence about a press nobody there made lands
+    // on their screen — which is the reconcile's own contract, defeated by a
+    // write that lands after it.
+    const pressedIn = this.core.chatId ?? null;
+    const ok = await PF.save.retryAction(this.core, stage, confirm.action);
+    if (confirm.action.mode && (this.core.chatId ?? null) === pressedIn) {
+      // THE SENTENCE UNDER THE ROW IS ABOUT THE PRESS THAT WAS JUST MADE, which
+      // is why a press that DID what it said clears it rather than leaving the
+      // last one standing: "nothing has changed yet" over a row whose setting
+      // has since been rewritten is the same false-in-this-state copy the
+      // sub-line above was fixed for.
+      //
+      // EVERY SENTENCE IT CAN WRITE IS ABOUT A PRESS THAT SPENT NOTHING
+      // (`retryAction` answers true the moment a call goes out), and the two
+      // that exist are the two refusals that leave NO SCREEN behind them: an
+      // attempt already running, and a free rebuild this build still cannot
+      // answer. A refusal that does raise the failure screen — the pack retry
+      // whose choice-clearing write did not go through — has already said what
+      // happened, there and in its own words, so the panel adds nothing over
+      // the top of it.
+      this._retryNotes[stage] = ok
+        ? null
+        : busy
+          ? PF.save.RETRY_COPY.pressInFlight
+          : confirm.action.mode === "rebuild"
+            ? PF.save.RETRY_COPY.rebuildUnchanged
+            : null;
+      this._retryNoteRev = (this._retryNoteRev ?? 0) + 1;
+    }
+    this._retryKey = null;
+    this.update();
   }
 
   toggleJournal() {
@@ -20761,6 +24082,23 @@ PF.Hud = class {
   }
 
   refreshChips() {
+    // THE SIGNPOST'S MEMO IS DROPPED HERE — the one HUD door every world-
+    // replacing path already knocks on. The package builds exactly one Hud
+    // (`90-element` `attachMain`) and nothing that replaces the world rebuilds
+    // it: `_switchChat` (90-element), `_installSealedWorld` and `_rebuild`
+    // (60-save) all swap the sim underneath and all three call this. Its key is
+    // a zone id and a bearing, NEITHER OF WHICH IS WORLD-UNIQUE — every compiled
+    // world's settlement is `z1`, every cell id is `w_<cx>_<cy>` — so one key
+    // names one edge in every world at once, and without this line a chat switch
+    // between two saves both parked at a north edge leaves the country of the
+    // chat they left on the sign. That is the renderer's own rule for its own
+    // zone-id-keyed cache, one field along (`40-render` `clearZones`). Above the
+    // sim test on purpose: dropping a memo needs no sim.
+    // The cost is one label derivation on an event that was already writing DOM.
+    // The busiest caller is the clock chip below, which at
+    // `CLOCK_SECONDS_PER_GAME_MINUTE` is one derivation per 300 frames of
+    // standing still rather than 300.
+    this._signpost = null;
     const sim = this.core.sim;
     if (!sim) return;
     // The spatial name is the ENGINE's committed party location, which only
@@ -20826,41 +24164,56 @@ PF.Hud = class {
     // same reason `gateWhy` is: a stage that changed without the state changing
     // would leave the wrong sentence up.
     const gateStage = gate ? (PF.save.gate.stage ?? "brief") : null;
+    // WHETHER THIS GATE IS A POST-START ONE (0.16 §2.10d). In the memo key for
+    // exactly the reason `gateWhy` and `gateStage` are: it decides both the note
+    // under the reason and whether the second exit is on screen, and a flag that
+    // changed without the state changing would leave the wrong screen up.
+    const gatePost = gate ? PF.save.gate.postStart === true : false;
+    // WHETHER THE SETTING SEALED ON THIS CHAT IS AHEAD OF THE WORLD BEHIND THE
+    // SCREEN, in the memo key for the same reason the stage is: ruling 8's
+    // cascade seals a new brief mid-attempt, and from that moment the shipped
+    // post-start sentence ("the world you are standing in is untouched whatever
+    // happens here") is false. It is asked of the STATE and not of `gate.mode`,
+    // which the first press rewrites to a mode the row does offer — a note keyed
+    // on the mode reverted to that sentence on the second failure of the same
+    // attempt, over a chat whose brief was already replaced.
+    const gateCascade = gate ? PF.save.worldBehindBrief(this.core) : false;
+    // …and whether there is anywhere to go if the player declines. A brief-stage
+    // BOOT gate never offers it: the world under that one is the placeholder,
+    // which is the one thing nobody may be left standing in. A pack-stage gate
+    // does — the world is written, and only the work posted in it is missing —
+    // and so does any post-start gate, which is holding a world the player has
+    // already been living in.
+    const gateKeep = gate === "failed" && (gateStage === "pack" || (gatePost && !!sim.world && !sim.world.interim));
     if (
       mode !== this._mode ||
       spatialAvail !== this._spatialAvail ||
       gate !== this._gate ||
       gateWhy !== this._gateWhy ||
-      gateStage !== this._gateStage
+      gateStage !== this._gateStage ||
+      gatePost !== this._gatePost ||
+      gateCascade !== this._gateCascade ||
+      gateKeep !== this._gateKeep
     ) {
       this._mode = mode;
       this._spatialAvail = spatialAvail;
       this._gate = gate;
       this._gateWhy = gateWhy;
       this._gateStage = gateStage;
+      this._gatePost = gatePost;
+      this._gateCascade = gateCascade;
+      this._gateKeep = gateKeep;
       const inWorld = mode === "walk" && !gate;
       this.gateEl.style.display = gate ? "flex" : "none";
       this.gateRetry.style.display = gate === "failed" ? "" : "none";
-      this.gateTitle.textContent =
-        gate === "failed"
-          ? gateStage === "pack"
-            ? // NOT "the work for this world didn't finish being written": the pack
-              // stage is stamped on both sides of the pack's own seal, so on the
-              // arm where the work IS written and the install threw, that title
-              // named the wrong thing as missing. What is true on every arm is
-              // that the world did not finish coming up, which is also the thing
-              // the player is looking at a spinner instead of.
-              "This world didn't finish opening."
-            : "The world didn't finish being written."
-          : gateStage === "pack"
-            ? "Writing what your world has to say…"
-            : "Writing your world…";
-      this.gateBody.textContent =
-        gate === "failed"
-          ? `${PF.save.gateReason(gateWhy, gateStage)} ${PF.save.gateStageNote(gateStage)}`
-          : gateStage === "pack"
-            ? "The settlement is written. One more call is filling in what its people say and the work they have to offer."
-            : "One generation call is shaping the settlement, its people and the places in it. This can take a minute.";
+      this.gateKeep.style.display = gateKeep ? "" : "none";
+      // THE SCREEN'S WORDS ARE THE REGISTRY'S NOW (0.16 §2.10a). They used to be
+      // four hardcoded brief-vs-pack ternaries here — the one place in this
+      // package a string cannot be pinned without a DOM — so a third stage meant
+      // editing branches rather than adding a row, and the strings the player
+      // reads were the part nothing watched.
+      this.gateTitle.textContent = PF.save.gateTitle(gateStage, gate);
+      this.gateBody.textContent = PF.save.gateBody(gateStage, gate, gateWhy, gatePost, gateCascade);
       this.topbar.style.display = gate ? "none" : "";
       // Replay: the host owns the whole screen. Combat: keep a minimal HUD —
       // the mode is inferred from the narrative gameActiveState, which can flip
@@ -20882,12 +24235,22 @@ PF.Hud = class {
         this._sleep = null;
         this.boardBtn.style.display = "none";
         this._board = null;
+        // The signpost is proximity-driven too, and it is a TOPBAR chip — which
+        // the gate hides for free but dialogue mode does not. Leaving walk mode
+        // takes it down here and the walk block decides when it comes back.
+        // Its memo is `_signpost` and NOT `_gate`: the field above belongs to the
+        // loading gate's own reconcile, and a second owner writing an edge key
+        // into it would defeat both memos every frame.
+        this.gateChip.style.display = "none";
+        this._signpost = null;
       }
       // THE PANEL OPENERS, on the berth button's cadence and for a reason of
       // their own: the gate hides the whole topbar, but the topbar STAYS UP in
       // dialogue mode, so `!inWorld` hiding is a toggle these two have to own.
       this.journalChip.style.display = inWorld ? "" : "none";
       this.sheetChip.style.display = inWorld ? "" : "none";
+      // The retry chip has a second gate of its own — whether there is anything
+      // to say — so its visibility is settled below, off the live rows.
       // …AND THE PANELS THEMSELVES. The sheet CLOSES (plan §2.8): `e`, a cutscene
       // beat, and the props-driven replay/combat modes can all fire under an open
       // one, and a sheet that merely hid would resurface drawn against whoever
@@ -20922,6 +24285,56 @@ PF.Hud = class {
       // exactly "this dialogue came out of a conversation".
       if (mode === "dialogue" && !gate && sim.talkAnchorId == null)
         this.toast("Type in the message box below — Resume to keep walking");
+    }
+    // ── THE RETRY POPUP'S PER-FRAME RECONCILE (0.16 §2.10c) ──────────────────
+    // ABOVE the gate return, deliberately: this is the block that HIDES the
+    // panel under a gate, and one written below the return could never fire on
+    // the condition it was sited for (the talk window's own argument at the top
+    // of this method).
+    //
+    // CHAT IDENTITY FIRST. `_switchChat` never rebuilds the HUD, so this is the
+    // only place that can notice the chat moved — and everything the popup holds
+    // belongs to the chat that raised it.
+    if ((this.core.chatId ?? null) !== this._retryChat) {
+      this._retryChat = this.core.chatId ?? null;
+      this._retry = false;
+      this._retryConfirm = null;
+      this._retryNotes = {};
+      this._retryVisit = NO_RETRY_VISIT;
+      this._retryKey = null;
+      this.retryEl.style.display = "none";
+    }
+    const retryRows = this._syncRetry();
+    const retryAllowed = mode === "walk" && !gate;
+    // THE CHIP'S RULE IS THE REGISTRY'S, asked with the rows the memo already
+    // holds so the derivation is not paid twice a frame. Re-deriving the
+    // visibility here was a second copy of a rule that has one home.
+    this.retryChip.style.display = retryAllowed && PF.save.chipTextFor(retryRows) ? "" : "none";
+    if (!retryAllowed) {
+      this.retryEl.style.display = "none";
+    } else if (
+      !this._retry &&
+      this._retryVisit !== this._retryChat &&
+      // …AND NEVER OVER SOMETHING THE PLAYER IS ALREADY READING. `toggleRetry`
+      // is a member of the mutual-exclusion set, so an auto-open over an open
+      // journal would CLOSE it — a surface vanishing under somebody mid-read,
+      // for a popup they did not ask for at that moment. It waits instead; the
+      // visit memo is only spent when the panel actually mounts.
+      !this._journal &&
+      !this._sheet &&
+      this.boardMenu.style.display !== "flex" &&
+      this.core.talkOpen?.() !== true &&
+      retryRows.some((row) => !row.accepted)
+    ) {
+      // ONCE PER CHAT VISIT, and only for a stage nobody has already said
+      // "later" to. Everything after that is the chip: nothing nags, nothing
+      // blocks the game, and a close spends no choice.
+      this._retryVisit = this._retryChat;
+      this.toggleRetry();
+    } else if (this._retry && !retryRows.length) {
+      this.closeRetry();
+    } else {
+      this.retryEl.style.display = this._retry ? "flex" : "none";
     }
     // Nothing below the gate means anything: there is no beat to caption, nobody
     // to be standing next to, and the clock is not running.
@@ -21043,6 +24456,27 @@ PF.Hud = class {
         // does: a board's offers are the offers of a board you are standing at.
         if (board) this.boardBtn.textContent = `📋 ${board.name}`;
         else this.closeBoard();
+      }
+      // THE SIGNPOST, on the board's cadence and memoised the same way — but the
+      // KEY is the edge rather than the words, because the words cost two hashes
+      // and a name-book read and there is no reason to pay them sixty times a
+      // second for a player standing still at a gate. Which edge they are at is
+      // the only thing that can change what the sign says.
+      // The memo has a name of its own for a reason: `_gate` is the loading
+      // gate's, written and read by the mode reconcile at the top of this method,
+      // and sharing it would have left both fields holding the other machine's
+      // answer on every frame either one ran.
+      // The key names the edge and NOT the world it is an edge of, which is only
+      // safe because the memo is dropped whenever the world underneath can have
+      // changed — `refreshChips`, whose comment carries that argument, and the
+      // `!inWorld` teardown above.
+      const gateNear = sim.nearGate;
+      const signpostKey = gateNear ? `${sim.zoneId}|${gateNear.dir}` : "";
+      if (signpostKey !== this._signpost) {
+        this._signpost = signpostKey;
+        const label = gateNear ? PF.lattice.gateLabel(sim.world, sim.zone(), gateNear) : "";
+        this.gateChip.style.display = label ? "" : "none";
+        if (label) this.gateChip.textContent = label;
       }
       const clock = sim.clockLabel();
       if (clock !== this._clock) {
@@ -22127,7 +25561,18 @@ PF.core = {
     // pack answers whether this arrival finished anything and the HUD says so —
     // the toast above is where the player is, this is what it was worth.
     this.hud?.questFilled(PF.pack.visited(this, sim.zoneId, PF.save._gen ?? 0));
-    PF.save.markDirty(this);
+    // THE LATTICE'S OWN ARRIVAL BOOKKEEPING (0.16 §2.3): the recency order, and
+    // on a landmark cell the discovery row and the second notice that goes with
+    // it. Ordinary country gets the one location toast above and nothing else.
+    // 50-spatial's drift arm runs the same call, because a narrated hop is an
+    // arrival too.
+    const entered = PF.lattice.enter(this, sim.zoneId);
+    // AND THE WRITE — EXCEPT FOR A WALK THROUGH THE WILDERNESS (0.16 §2.4). This
+    // line used to be unconditional, which is fine for a world where crossing a
+    // zone boundary is an event; out in the lattice it is what walking IS, every
+    // six to eight seconds, each one a whole-shard write. A cell-to-cell step
+    // writes nothing here and rides the positional autosave below instead.
+    if (!PF.lattice.isChunkCrossing(entered.from, entered.id)) PF.save.markDirty(this);
   },
 
   markDirty() {

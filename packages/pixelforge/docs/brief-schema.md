@@ -452,6 +452,26 @@ Not yet exported: the root's population phrase (still §9 territory) and per-fea
 features have no zones of their own, and decorating the root would edit a location the user may
 have authored (the route deliberately cannot).
 
+**The wilderness lattice is a THIRD class of compiled zone and it exports NOTHING (0.16).** The
+paragraph above says "every other compiled zone registers as a child of that bound location", and
+since 0.16 that sentence needs its exception stated rather than inferred: a **compiler-minted
+wilderness cell** — a zone the lattice materialises on arrival, `w_<cx>_<cy>`, `mapKind: "wild"` —
+stamps `mapExport = false` (`21-lattice.js` `compileChunk`, off `LATTICE_TUNE.CHUNK_MAP_EXPORT`) and
+is skipped exactly as a room inside a building is. The brief's own `wilds` places are untouched and
+still export as `kind: "place"`; what is excluded is only the country the brief never named.
+
+**Why, and it is the same no-delete argument one rung harder.** The lattice has no edge: a player
+who walks for twenty minutes materialises tens of cells, so an exported cell is a permanent row per
+patch of wilderness they ever crossed, on a map route that cannot delete. Worse, cells are
+**evicted** — the residency policy drops the zone object once nine newer ones stand
+(`21-lattice.js` `residency`/`evict`) — and the export planner dereferences `world.zones[zoneId]`
+across its awaits with a staleness check that never asks whether the zone survived, so an
+exported-then-evicted cell is a crash rather than a stale row. `CHUNK_MAP_EXPORT` is therefore the
+one entry in the lattice's tunables block that is **not** a playtest knob, and it says so at the
+constant; the harness pins the literal AND drives the shipped `maybeSync` over two rings of walked
+country, asserting zero cell ids in the posted rows and in `world.bindings`, with the brief's own
+zones present as the witness that the export actually ran.
+
 **0.12's feature register is deliberately NOT exported here, and that is a decision rather than an
 oversight.** The register (§9) now holds a rect per feature, which is the first per-feature
 geometry the package has ever had, so extending this export is the obvious next thought. It is
