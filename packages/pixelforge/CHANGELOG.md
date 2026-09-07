@@ -8,6 +8,8 @@ The town stops being the same town. Where its crossroad sits, the shape of its s
 
 And if part of your world never finished being written, you can now try that part again from inside the game instead of starting a new one.
 
+The storyteller can now make someone a friend of yours, or turn them against you.
+
 ## 0.15.0 — 2026-09-04 [highlight]
 
 The town starts knowing you. Talk with people, buy from them, take a room at the inn, finish jobs off the board — and the people it happened with remember. Passing the time of day gets you known, and that is as far as it goes: it takes doing something real for someone — a job off the board, or steady business over a counter — to make a friend of them. You will see it happen: a word the moment somebody warms to you, said in the same breath as whatever you were paid, their standing beside their name when you talk, and the storyteller greets a friend like a friend.

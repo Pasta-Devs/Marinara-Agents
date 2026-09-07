@@ -867,6 +867,15 @@ PF.core = {
         if (detail.packageId !== (typeof core.host?.packageId === "string" ? core.host.packageId : "pixelforge"))
           return;
         if (detail.chatId !== core.chatId) return;
+        // Capability API 1.16: the GM's own event verbs ride the SAME bus and are
+        // not spatial. Routed here rather than through a second window listener —
+        // one listener, one address check, one branch per event family — and
+        // AHEAD of the funnel, which would otherwise take every type it does not
+        // recognise and quietly do nothing with it.
+        if (detail.type === "gm_verb") {
+          PF.gm.onVerb(core, detail);
+          return;
+        }
         PF.spatial.onHostEvent(core, detail);
       });
     }
