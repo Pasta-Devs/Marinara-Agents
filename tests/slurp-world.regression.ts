@@ -40,7 +40,10 @@ assert.equal(slurpWorldElapsedDays(day(0), day(365)), SLURP_WORLD_MAX_CATCHUP_DA
 // ── Rates scale with audience, but sublinearly ──────────────────────────────
 // A Creator with ten times the followers gets more requests, not ten times as many: the player's
 // time to answer them did not scale at all.
-assert.equal(slurpCommissionChancePerDay(50), 0, "a tiny Creator gets no commission requests");
+// The floor sits under `MIN_BASE_REACH` (240) so a new Creator is not dead on day one, but a
+// Creator smaller than the synthetic floor still gets nothing.
+assert.equal(slurpCommissionChancePerDay(20), 0, "a tiny Creator gets no commission requests");
+assert.ok(slurpCommissionChancePerDay(240) > 0, "a new Creator must be reachable for a commission");
 assert.ok(slurpCommissionChancePerDay(10_000) > slurpCommissionChancePerDay(500));
 assert.ok(slurpCommissionChancePerDay(50_000) < slurpCommissionChancePerDay(5_000) * 3);
 assert.ok(slurpCommissionChancePerDay(10_000_000) <= 0.5, "the rate is capped");
@@ -114,7 +117,12 @@ assert.ok(questions.size > 5, `questions must vary, got ${questions.size}`);
 // ── Somebody writing to you unprompted ──────────────────────────────────────
 // The strongest signal the world can send is somebody addressing you without being addressed
 // first. It stops being a signal the moment it is routine, so it is the rarest thing here.
-assert.equal(slurpMessageChancePerDay(100), 0, "a small Creator gets no cold messages");
+// The floor used to be 250, above the synthetic reach floor of 240, so a new Creator could not
+// receive a cold message at all — not rarely, never.
+assert.equal(slurpMessageChancePerDay(30), 0, "a tiny Creator gets no cold messages");
+assert.ok(slurpMessageChancePerDay(240) > 0, "a new Creator must be reachable at all");
+// Still the rarest thing the world does: rarer than a comment, at every size.
+assert.ok(slurpMessageChancePerDay(4_000) < slurpQuestionChancePerDay(4_000));
 assert.ok(slurpMessageChancePerDay(5_000) < slurpCommissionChancePerDay(5_000), "rarer than a commission");
 assert.ok(slurpMessageChancePerDay(10_000_000) <= 0.3, "capped");
 for (const bad of [-1, Number.NaN]) {

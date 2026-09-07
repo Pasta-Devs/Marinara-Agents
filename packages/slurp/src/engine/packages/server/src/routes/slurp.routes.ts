@@ -139,6 +139,7 @@ import { slurpPayoutAllowance } from "../services/slurp/slurp-earnings.js";
 import { slurpPlatformScaleMultiplier } from "../services/slurp/slurp-scale.js";
 import { createSlurpEventsStorage } from "../services/storage/slurp-events.storage.js";
 import { advanceSlurpWorld } from "../services/slurp/slurp-world.operation.js";
+import { drainSlurpAudienceReplies } from "../services/slurp/slurp-audience-reply.operation.js";
 import { drainSlurpPendingText } from "../services/slurp/slurp-pending-text.service.js";
 import { createSlurpPopulationStorage } from "../services/storage/slurp-population.storage.js";
 import { groupSlurpEvents } from "../services/slurp/slurp-event-weight.js";
@@ -1117,6 +1118,13 @@ export async function slurpRoutes(app: FastifyInstance) {
     // is where that debt is paid, with the player present and against text they are about to read.
     await drainSlurpPendingText(app.db).catch((error: unknown) =>
       logger.warn(error, "[slurp-pending] Drain on open failed"),
+    );
+    // Tier 2 the other way round: the creator answering the audience rather than the audience
+    // being rewritten. Same rule and same reason it lives here — unattended work never calls the
+    // model, so a written answer is spent with the player present and against a comment thread
+    // they are about to read.
+    await drainSlurpAudienceReplies(app.db).catch((error: unknown) =>
+      logger.warn(error, "[slurp-audience-reply] Drain on open failed"),
     );
     const events = createSlurpEventsStorage(app.db);
     const messages = createSlurpMessagesStorage(app.db);

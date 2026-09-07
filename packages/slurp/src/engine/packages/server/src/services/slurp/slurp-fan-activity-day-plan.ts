@@ -16,6 +16,8 @@ export interface NoodleFanAcceptedActivity {
   type: string;
   targetPostId: string;
   content: string | null;
+  /** The comment this one answers. Null when it answers the post itself. */
+  parentInteractionId: string | null;
   actorId: string;
   snapshot: NoodleAuthorSnapshot;
   applied: boolean;
@@ -45,6 +47,8 @@ export interface NoodleFanActivityToStore {
   type: string;
   targetPostId: string;
   content?: string | null;
+  /** The comment this one answers, when it answers one rather than the post. */
+  parentInteractionId?: string | null;
   actorId: string;
   snapshot: NoodleAuthorSnapshot;
 }
@@ -100,6 +104,9 @@ function validActivity(value: unknown): value is NoodleFanAcceptedActivity {
     typeof row.targetPostId === "string" &&
     typeof row.actorId === "string" &&
     (row.content === null || typeof row.content === "string") &&
+    (row.parentInteractionId === null ||
+      row.parentInteractionId === undefined ||
+      typeof row.parentInteractionId === "string") &&
     typeof row.applied === "boolean" &&
     validAuthorSnapshot(row.snapshot)
   );
@@ -295,6 +302,7 @@ export function storeNoodleFanAcceptedActivities(
               targetPostId: activity.targetPostId,
               actorId: activity.actorId,
               content: activity.content ?? null,
+              parentInteractionId: activity.parentInteractionId ?? null,
               snapshot: activity.snapshot,
               applied: false,
             })),

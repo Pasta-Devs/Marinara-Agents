@@ -168,6 +168,7 @@ async function applyAcceptedActivities(
       runId: run.id,
       type: activity.type as "like" | "reply" | "repost",
       content: activity.content,
+      parentInteractionId: activity.parentInteractionId ?? null,
     });
     if (result?.created) {
       created += 1;
@@ -259,36 +260,39 @@ export async function runNoodlerFanActivity(input: {
       // anybody who actually showed up sank out of the pool. Regulars could never recur.
       await Promise.all(cast.map((member) => population.touch(member.id).catch(() => undefined)));
 
-      // The cast carries its relationship to each Creator, so the prompt can say who is speaking.
-      // A provider is per run but a relationship is per Creator, so the tie is resolved against the
-      // Creator this run is about; with several, the first is used, which is what the run is
-      // weighted around anyway.
-      const relationshipCreatorId = run.creatorIds[0] ?? null;
-      const ties = relationshipCreatorId
-        ? new Map(
-            (await population.listTiesForCreator(relationshipCreatorId)).map((tie) => [tie.memberId, tie] as const),
-          )
-        : new Map();
-      const castWithHistory = cast.map((member) => {
-        const tie = ties.get(member.id);
-        return {
-          ...member,
-          ...(tie
-            ? {
-                stage: tie.stage,
-                spent: tie.spent,
-                arc: tie.arc,
-                knownForDays: Math.max(0, Math.round((at.getTime() - Date.parse(tie.firstSeenAt)) / 86_400_000) || 0),
-              }
-            : {}),
-        };
-      });
+      // The cast carries its relationship to each Creator. Resolved for every creator in the run,
+      // not just the first: a run covers up to twelve, and reusing one creator's ties for all of
+      // them told the model a false history rather than no history.
+      const tiesByCreator = new Map(
+        await Promise.all(
+          run.creatorIds.map(
+            async (creatorId) =>
+              [
+                creatorId,
+                new Map(
+                  (await population.listTiesForCreator(creatorId)).map((tie) => [
+                    tie.memberId,
+                    {
+                      stage: tie.stage,
+                      spent: tie.spent,
+                      knownForDays: Math.max(
+                        0,
+                        Math.round((at.getTime() - Date.parse(tie.firstSeenAt)) / 86_400_000) || 0,
+                      ),
+                      arc: tie.arc,
+                    },
+                  ]),
+                ),
+              ] as const,
+          ),
+        ),
+      );
 
       const creators = await prepareNoodlerFanCreatorCandidates({
         db: input.db,
         settings,
         creatorIds: run.creatorIds,
-        identityProvider: populationNoodlerFanIdentityProvider(castWithHistory),
+        identityProvider: populationNoodlerFanIdentityProvider(cast, tiesByCreator),
       });
       if (creators.length === 0) {
         plan = finishNoodleFanActivityRun(plan, run.id, "skipped", at);

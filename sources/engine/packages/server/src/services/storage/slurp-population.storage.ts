@@ -29,6 +29,9 @@ export type SlurpAudienceTie = {
   creatorAccountId: string;
   stage: SlurpFunnelStage;
   spent: number;
+  /** The `spent` split. Rapport weighs a tip and an unlock differently, so they are kept apart. */
+  tipped: number;
+  unlocked: number;
   interactions: number;
   firstSeenAt: string;
   lastSeenAt: string;
@@ -70,6 +73,10 @@ function mapTie(row: Record<string, unknown>): SlurpAudienceTie {
     creatorAccountId: String(row.creatorAccountId),
     stage: String(row.stage) as SlurpFunnelStage,
     spent: int(row.spent),
+    // `int` reads a missing column as zero, so a tie written before the split existed reads as
+    // unsplit rather than as NaN poisoning every score derived from it.
+    tipped: int(row.tipped),
+    unlocked: int(row.unlocked),
     interactions: int(row.interactions),
     firstSeenAt: String(row.firstSeenAt),
     lastSeenAt: String(row.lastSeenAt),
@@ -140,6 +147,8 @@ export function createSlurpPopulationStorage(db: DB) {
         creatorAccountId,
         stage: "stranger",
         spent: "0",
+        tipped: "0",
+        unlocked: "0",
         interactions: "0",
         firstSeenAt: timestamp,
         lastSeenAt: timestamp,
@@ -159,7 +168,16 @@ export function createSlurpPopulationStorage(db: DB) {
     async advanceTie(
       memberId: string,
       creatorAccountId: string,
-      input: { stage?: SlurpFunnelStage; spent?: number; interactions?: number; hasSubscription?: boolean } = {},
+      input: {
+        stage?: SlurpFunnelStage;
+        spent?: number;
+        /** Part of `spent` that was a tip. Callers that know the kind should say so. */
+        tipped?: number;
+        /** Part of `spent` that unlocked something: a locked post, or a locked direct message. */
+        unlocked?: number;
+        interactions?: number;
+        hasSubscription?: boolean;
+      } = {},
     ): Promise<SlurpAudienceTie> {
       const tie = await storage.ensureTie(memberId, creatorAccountId);
       const currentIndex = SLURP_FUNNEL_STAGES.indexOf(tie.stage as (typeof SLURP_FUNNEL_STAGES)[number]);
@@ -175,12 +193,21 @@ export function createSlurpPopulationStorage(db: DB) {
       const next = {
         stage,
         spent: String(tie.spent + Math.max(0, Math.floor(input.spent ?? 0))),
+        tipped: String(tie.tipped + Math.max(0, Math.floor(input.tipped ?? 0))),
+        unlocked: String(tie.unlocked + Math.max(0, Math.floor(input.unlocked ?? 0))),
         interactions: String(tie.interactions + Math.max(0, Math.floor(input.interactions ?? 0))),
         lastSeenAt: now(),
         ...(tie.stage === "lapsed" && stage !== "lapsed" ? { arc: "returning", arcSince: now() } : {}),
       };
       await db.update(slurpAudienceTies).set(next).where(eq(slurpAudienceTies.id, tie.id));
-      return { ...tie, ...next, spent: int(next.spent), interactions: int(next.interactions) };
+      return {
+        ...tie,
+        ...next,
+        spent: int(next.spent),
+        tipped: int(next.tipped),
+        unlocked: int(next.unlocked),
+        interactions: int(next.interactions),
+      };
     },
 
     /**

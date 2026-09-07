@@ -28,7 +28,7 @@ const fan = readFileSync(
   "packages/slurp/src/engine/packages/server/src/services/slurp/slurp-fan-activity.service.ts",
   "utf8",
 );
-assert.match(fan, /access === "locked"\s*\n?\s*\? \{ id, title, access, \.\.\.\(image && \{ image \}\) \}/u);
+assert.match(fan, /access === "locked"\s*\n?\s*\? \{ id, title, access, \.\.\.\(image && \{ image \}\)/u);
 assert.doesNotMatch(fan, /access === "locked" \? \{ id, title, content/u, "locked bodies must never reach the prompt");
 
 console.log("slurp-image-context regression passed");

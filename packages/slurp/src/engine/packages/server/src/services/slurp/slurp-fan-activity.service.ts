@@ -38,6 +38,9 @@ type GenerationConnection = NonNullable<Awaited<ReturnType<ReturnType<typeof cre
 
 export const MAX_FAN_POSTS_PER_CREATOR = 4;
 
+/** Comments shown per post. Enough to answer somebody, short enough not to bury the post. */
+const MAX_POST_COMMENTS_IN_PROMPT = 6;
+
 export interface ResolvedNoodlerFanActivityPolicy {
   enabled: boolean;
   archetypeWeights: NoodlerFanArchetypeWeights;
@@ -66,6 +69,14 @@ export interface NoodlerFanCreatorCandidate {
     /** What the attached image shows, so a reply can react to the picture instead of ignoring it. */
     image?: string | null;
     access: "public" | "locked";
+    /**
+     * Comments already under this post.
+     *
+     * The model used to write every comment blind to the ones beside it, which is most of why a
+     * comment section read as a stack of parallel monologues: six people answering the post and
+     * nobody answering each other, often all saying the same thing.
+     */
+    comments?: { id: string; from: string; text: string }[];
   }>;
   identities: NoodlerFanIdentity[];
 }
@@ -77,7 +88,7 @@ function weightedIdentitySequence(identities: NoodlerFanIdentity[], weights: Noo
 }
 
 export function selectNoodlerFanActivities(input: {
-  activities: NoodleGeneratedFanRefresh["activities"];
+  activities: (NoodleGeneratedFanRefresh["activities"][number] & { parentInteractionId?: string | null })[];
   creators: readonly NoodlerFanCreatorCandidate[];
   existingInteractions: readonly Pick<NoodleInteraction, "postId" | "actorAccountId" | "type" | "content">[];
   quotas: { like: number; reply: number; repost: number };
@@ -109,6 +120,13 @@ export function selectNoodlerFanActivities(input: {
     if (!identity || !creator.identities.some((candidate) => candidate.id === identity.id)) continue;
     const content = activity.type === "reply" ? activity.content?.trim() || null : null;
     if (activity.type === "reply" && !content) continue;
+    // A parent must be a real comment on the same post, and a fan may not answer themselves.
+    const parentComment =
+      activity.type === "reply" && activity.parentInteractionId
+        ? creator.posts
+            .find((post) => post.id === activity.targetPostId)
+            ?.comments?.find((comment) => comment.id === activity.parentInteractionId)
+        : undefined;
     const key = `${activity.targetPostId}:${identity.id}:${activity.type}`;
     if (seen.has(key)) continue;
     const creatorSlotKey = `${creator.creator.id}:${identity.id}:${activity.type}`;
@@ -123,6 +141,7 @@ export function selectNoodlerFanActivities(input: {
       type: activity.type,
       targetPostId: activity.targetPostId,
       content,
+      parentInteractionId: parentComment?.id ?? null,
       snapshot: identity.snapshot,
     });
   }
@@ -173,6 +192,8 @@ function buildFanActivityMessages(input: {
     "Posts marked locked are paid posts. Only subscribers see them, so react to the title and the fact it is paid; never invent or state its hidden contents.",
     "Use only supplied creator IDs, actor handles, and post IDs. Never invent identifiers.",
     "Likes and reposts have null content. Replies are one short sentence, normally under 180 characters, natural, relevant, and not repetitive.",
+    "Each post lists the comments already under it. Never repeat a point somebody has already made.",
+    'To answer one of those comments instead of the post, set "parentInteractionId" to that comment\'s id. Leave it out to comment on the post itself. Some replies should answer other people; a comment section where nobody talks to anybody is a list, not a conversation.',
     "Return JSON only with an activities array.",
     "Each actor handle has a weight; prefer higher-weight actors more often, proportionally.",
     slurpAudienceToneInstruction(input.settings.audienceTone),
@@ -203,10 +224,10 @@ function buildFanActivityMessages(input: {
       }),
     ),
     // Locked bodies stay out, but the image line stays in: a teaser's picture is public.
-    posts: candidate.posts.map(({ id, title, content, image, access }) =>
+    posts: candidate.posts.map(({ id, title, content, image, access, comments }) =>
       access === "locked"
-        ? { id, title, access, ...(image && { image }) }
-        : { id, title, content, access, ...(image && { image }) },
+        ? { id, title, access, ...(image && { image }), ...(comments?.length ? { comments } : {}) }
+        : { id, title, content, access, ...(image && { image }), ...(comments?.length ? { comments } : {}) },
     ),
   }));
   return [
@@ -283,7 +304,16 @@ export function parseGeneratedFanActivityResponse(
   const normalized = normalizeSlurpFanActivityRows(value, creatorAccountIdByPostId);
   const accepted = normalized.rows.flatMap((row) => {
     const parsed = noodleGeneratedFanActivitySchema.safeParse(row);
-    return parsed.success ? [parsed.data] : [];
+    // The shared schema strips fields it does not know, and this package cannot change it, so the
+    // parent is read back off the normalised row rather than through the parse result.
+    return parsed.success
+      ? [
+          {
+            ...parsed.data,
+            parentInteractionId: typeof row.parentInteractionId === "string" ? row.parentInteractionId : null,
+          },
+        ]
+      : [];
   });
   return {
     value: { activities: accepted },
@@ -308,6 +338,21 @@ export async function prepareNoodlerFanCreatorCandidates(input: {
     MAX_FAN_POSTS_PER_CREATOR,
   );
   const provider = input.identityProvider ?? syntheticNoodlerFanIdentityProvider;
+  const allPostIds = creators.flatMap((creator) => (postsByCreator.get(creator.id) ?? []).map((post) => post.id));
+  const commentsByPost = new Map<string, { id: string; from: string; text: string }[]>();
+  for (const interaction of allPostIds.length > 0 ? await noodle.listNoodlerInteractions(allPostIds) : []) {
+    if (interaction.type !== "reply" || !interaction.content?.trim()) continue;
+    const list = commentsByPost.get(interaction.postId) ?? [];
+    // Newest few only. The whole thread would crowd out the post it is under.
+    if (list.length < MAX_POST_COMMENTS_IN_PROMPT) {
+      list.push({
+        id: interaction.id,
+        from: interaction.actorSnapshot?.handle ?? interaction.actorAccountId,
+        text: interaction.content.slice(0, 200),
+      });
+    }
+    commentsByPost.set(interaction.postId, list);
+  }
   return creators.flatMap((creator) => {
     const policy = resolveNoodlerFanActivityPolicy(input.settings, creator);
     if (!policy.enabled) return [];
@@ -318,8 +363,9 @@ export async function prepareNoodlerFanCreatorCandidates(input: {
       content: post.content,
       image: noodleImageContext(post),
       access: post.access,
+      comments: commentsByPost.get(post.id) ?? [],
     }));
-    const identities = provider.resolve(policy.archetypeWeights);
+    const identities = provider.resolve(policy.archetypeWeights, creator.id);
     return posts.length > 0 && identities.length > 0 ? [{ creator, policy, posts, identities }] : [];
   });
 }

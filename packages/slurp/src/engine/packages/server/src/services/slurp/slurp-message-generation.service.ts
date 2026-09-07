@@ -33,6 +33,8 @@ import { noodleResponseFormat } from "./slurp-response-format.js";
 import { resolveSlurpCreatorScheduleContext } from "./slurp-creator-schedule.js";
 import { resolveSlurpCreatorAvailability, type SlurpCreatorAvailability } from "./slurp-creator-schedule-context.js";
 import { describeSlurpRapport, type SlurpRapport } from "./slurp-rapport.js";
+import { slurpArcDescription } from "./slurp-arc.js";
+import { createSlurpPopulationStorage } from "../storage/slurp-population.storage.js";
 import type { SlurpMessage } from "../storage/slurp-messages.storage.js";
 import type { SlurpDmPolicy } from "./slurp-messaging.js";
 
@@ -44,6 +46,9 @@ export const SLURP_MESSAGE_CONTENT_MAX_LENGTH = 900;
 /** How many turns of history the model sees. Enough to hold a thread, short enough to stay cheap. */
 const HISTORY_TURNS = 16;
 
+/** Recent posts the fan can plausibly be talking about. Titles and bodies, not the whole feed. */
+const RECENT_POSTS = 4;
+
 export function buildSlurpMessageChat(input: {
   creator: NoodleAccount;
   viewer: NoodleAccount;
@@ -53,6 +58,10 @@ export function buildSlurpMessageChat(input: {
   subscribed: boolean;
   dmPolicy: SlurpDmPolicy;
   isRequest: boolean;
+  /** Where the relationship is heading, when it is heading anywhere. */
+  arc?: string | null;
+  /** What the creator has posted lately, so "loved your new set" can be answered. */
+  recentPosts?: { title: string | null; content: string; access: string }[];
   generationGuidance: string;
   scheduleContext?: string;
   disclosureMode: Parameters<typeof noodlerIdentityInstruction>[0];
@@ -78,6 +87,11 @@ export function buildSlurpMessageChat(input: {
     input.availability.online
       ? ""
       : `You are not free right now: ${input.availability.activity ?? "you are away"}. Answer anyway, but let it show — you are replying between other things.`,
+    // Without this the creator answered "loved your new set" with a compliment about nothing: the
+    // prompt carried the whole conversation and not one thing the conversation was ever about.
+    input.recentPosts && input.recentPosts.length > 0
+      ? "Your own recent posts are supplied. If the fan refers to something you posted, answer about that post rather than in general."
+      : "",
     "This is a private chat, so write like one: lowercase is fine, contractions are fine, emojis are fine if they suit the persona.",
     "Keep it to a chat message, not an essay. One to four sentences unless the fan asked something that needs more.",
     'Return exactly one JSON object with one string field named "content".',
@@ -99,7 +113,19 @@ export function buildSlurpMessageChat(input: {
       handle: protect(input.viewer.handle),
       subscribed: input.subscribed,
     },
-    relationship: describeSlurpRapport(input.rapport, protect(input.viewer.displayName) || "this fan"),
+    relationship: `${describeSlurpRapport(input.rapport, protect(input.viewer.displayName) || "this fan")}${
+      input.arc ? ` They are ${input.arc}.` : ""
+    }`,
+    ...(input.recentPosts && input.recentPosts.length > 0
+      ? {
+          yourRecentPosts: input.recentPosts.map((post) => ({
+            title: protect(post.title),
+            // A locked body is what the fan is being sold. Quoting it into a free chat gives it away.
+            content: post.access === "locked" ? "[paid post, contents not repeated here]" : protect(post.content),
+            access: post.access,
+          })),
+        }
+      : {}),
     scheduleContext: input.scheduleContext ?? "No active Conversation Schedule is available for this Creator today.",
     conversation: input.history.slice(-HISTORY_TURNS).map((message) => ({
       from: message.role === "creator" ? "you" : "the fan",
@@ -166,8 +192,25 @@ export async function generateSlurpMessageReply(input: {
       ? resolveSlurpCreatorAvailability(characters, source, undefined, new Date())
       : Promise.resolve({ online: true, activity: null, minutesUntilOnline: 0 }),
   ]);
+  // The fan's direction, and what the creator has posted lately. Both were already stored and
+  // neither reached the one prompt where a fan is most likely to mention them.
+  const tie = await createSlurpPopulationStorage(input.db)
+    .listTiesForCreator(input.creator.id)
+    .then((ties) => ties.find((entry) => entry.memberId === input.viewer.id))
+    .catch(() => undefined);
+  const recentPosts = await slurp
+    .listNoodlerPostsByAccounts([input.creator.id], RECENT_POSTS)
+    .then((byAccount) =>
+      (byAccount.get(input.creator.id) ?? [])
+        .filter((post) => post.access !== "draft")
+        .slice(0, RECENT_POSTS)
+        .map((post) => ({ title: post.title, content: post.content, access: post.access })),
+    )
+    .catch(() => []);
   const messages = buildSlurpMessageChat({
     ...input,
+    arc: tie ? slurpArcDescription(tie.arc) : null,
+    recentPosts,
     availability,
     disclosureMode,
     publicIdentity,

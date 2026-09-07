@@ -2,7 +2,6 @@ import {
   ArrowLeft,
   ArrowDown,
   ArrowRight,
-  BadgeDollarSign,
   Bell,
   Bookmark,
   BookmarkCheck,
@@ -11,7 +10,6 @@ import {
   ChevronLeft,
   ChevronRight,
   Clock3,
-  Coins,
   Crown,
   Eye,
   Gift,
@@ -146,6 +144,7 @@ import {
 import { NoodleAnchoredPopover } from "./NoodleAnchoredPopover";
 import { LockedSlurpPostCard, SlurpCreatorPostCard } from "./SlurpCreatorPostCard";
 import { SlurpSparkleVeil } from "./SlurpSparkleVeil";
+import { SlurpCoin, SlurpCoinAmount } from "./SlurpCoin";
 import { ChatImageLightbox } from "../chat/ChatImageLightbox";
 import { useNearViewportSlurpMediaSrc, useSlurpMediaSrc } from "../../hooks/use-slurp-media-src";
 import { SlurpOnboardingWizard } from "./SlurpOnboardingPanel";
@@ -4017,10 +4016,13 @@ function StageProfileView({
               >
                 {viewerCreator.subscribed
                   ? localizeUi("ui.slurp.profile.subscribed")
-                  : `${localizeUi("ui.slurp.profile.subscribe")} · ${localizeUi("ui.slurp.profile.pricePerWeek", {
-                      defaultValue: "{{amount}} coins / week",
-                      amount: slurpSubscriptionPriceOf(profile),
-                    })}`}
+                  : localizeUi("ui.slurp.profile.subscribe")}
+                {!viewerCreator.subscribed && (
+                  <>
+                    {" · "}
+                    <SlurpCoinAmount amount={`${slurpSubscriptionPriceOf(profile)} / week`} />
+                  </>
+                )}
               </button>
               <button
                 type="button"
@@ -4972,13 +4974,7 @@ function ViewerHub({
             aria-label={localizeUi("ui.slurp.wallet.balance", { amount: walletCoins })}
             title={localizeUi("ui.slurp.wallet.balance", { amount: walletCoins })}
           >
-            <span className="min-w-0 truncate">{walletCoins}</span>
-            <span
-              className="inline-flex h-4 w-4 items-center justify-center rounded-full bg-[var(--noodle-accent)] text-[0.62rem] font-black leading-none text-white"
-              aria-hidden="true"
-            >
-              C
-            </span>
+            <SlurpCoinAmount amount={walletCoins} />
           </button>
         </div>
       </div>
@@ -5361,7 +5357,7 @@ function SlurpWalletView({
     return normalized;
   };
   const entryAppearance = (kind: string): { icon: LucideIcon; tone: string } => {
-    if (kind === "tip" || kind === "income") return { icon: Coins, tone: "bg-emerald-500/14 text-emerald-300" };
+    if (kind === "tip" || kind === "income") return { icon: Gift, tone: "bg-emerald-500/14 text-emerald-300" };
     if (kind === "unlock" || kind === "ppv") return { icon: Lock, tone: "bg-violet-500/14 text-violet-300" };
     if (kind === "subscribe" || kind === "renew") return { icon: Crown, tone: "bg-fuchsia-500/14 text-fuchsia-300" };
     if (kind === "payout" || kind === "topUp")
@@ -5399,7 +5395,7 @@ function SlurpWalletView({
               <div className="min-w-0">
                 <div className="flex items-center gap-2.5 text-xs font-semibold text-[var(--muted-foreground)]">
                   <span className="flex h-8 w-8 items-center justify-center rounded-full bg-fuchsia-500/12 text-fuchsia-300">
-                    <BadgeDollarSign size={16} strokeWidth={2} aria-hidden="true" />
+                    <SlurpCoin size={18} />
                   </span>
                   <span>{localizeUi("ui.slurp.wallet.creatorEarnings", { defaultValue: "Creator earnings" })}</span>
                   <HelpTooltip
@@ -5410,9 +5406,11 @@ function SlurpWalletView({
                     })}
                   />
                 </div>
-                <p className="mt-2 text-4xl font-black leading-none tabular-nums">
-                  {creator.earnings.coins.toLocaleString()}
-                </p>
+                <SlurpCoinAmount
+                  amount={creator.earnings.coins.toLocaleString()}
+                  className="mt-2 text-4xl font-black leading-none tabular-nums"
+                  size={28}
+                />
                 <p className="mt-0.5 text-[0.7rem] text-[var(--muted-foreground)]">
                   {localizeUi("ui.slurp.wallet.creatorEarningsSource", { defaultValue: "From your creator page" })}
                 </p>
@@ -5466,13 +5464,7 @@ function SlurpWalletView({
                 />
               </div>
               <p className="mt-2 flex items-center gap-2 text-4xl font-black leading-none tabular-nums">
-                {coins.toLocaleString()}
-                <span
-                  className="inline-flex h-6 w-6 items-center justify-center rounded-full bg-[var(--noodle-accent)] text-xs font-black leading-none text-zinc-950 shadow-[0_7px_16px_-9px_var(--noodle-accent)]"
-                  aria-hidden="true"
-                >
-                  C
-                </span>
+                <SlurpCoinAmount amount={coins.toLocaleString()} size={26} />
               </p>
               <p className="mt-1 text-[0.7rem] text-[var(--muted-foreground)]">
                 {localizeUi("ui.slurp.wallet.readyToSpend", { defaultValue: "Ready to spend" })}
@@ -5595,7 +5587,7 @@ function SlurpWalletView({
                     </span>
                     <span className="ms-auto flex shrink-0 flex-col items-end">
                       <span className="text-xs tabular-nums text-[var(--muted-foreground)]">
-                        {subscription.price} / week
+                        <SlurpCoinAmount amount={`${subscription.price} / week`} />
                       </span>
                       <button
                         type="button"
@@ -5676,13 +5668,7 @@ function SlurpWalletView({
                           : "text-[var(--foreground)]",
                       )}
                     >
-                      {entry.amount > 0 ? `+${entry.amount}` : entry.amount}
-                      <span
-                        className="flex h-4 w-4 items-center justify-center rounded-full bg-[var(--noodle-accent)] text-[0.55rem] text-zinc-950"
-                        aria-hidden="true"
-                      >
-                        C
-                      </span>
+                      <SlurpCoinAmount amount={entry.amount > 0 ? `+${entry.amount}` : entry.amount} size={16} />
                     </span>
                   </li>
                 );
@@ -6012,10 +5998,7 @@ function SlurpMomentViewer({
                     })
                   : localizeUi("ui.noodle.post.imageBy", { name: moment.creator.profile.displayName })
               }
-              className={cn(
-                "h-full w-full object-cover",
-                moment.post.locked && "scale-[1.04] blur-[8px] saturate-[0.78]",
-              )}
+              className={cn("h-full w-full object-cover", moment.post.locked && "saturate-[0.88]")}
             />
           ) : (
             <div
@@ -7211,7 +7194,7 @@ function SlurpStudioView({
                               fan.arc && fan.arc !== "steady" ? localizeUi(`ui.slurp.studio.arc.${fan.arc}`) : null,
                               fan.spent > 0
                                 ? localizeUi("ui.slurp.studio.fanSpent", {
-                                    defaultValue: "{{count}} coins",
+                                    defaultValue: "{{count}}",
                                     count: fan.spent,
                                   })
                                 : null,
@@ -7345,10 +7328,11 @@ function SlurpGoalEditor({ creator, personaId }: { creator: SlurpStudioCreator; 
           {creator.goal.met
             ? localizeUi("ui.slurp.studio.goalMet", { defaultValue: "Goal met." })
             : localizeUi("ui.slurp.studio.goalProgress", {
-                defaultValue: "{{raised}} of {{target}} coins",
+                defaultValue: "{{raised}} of {{target}}",
                 raised: creator.goal.raised.toLocaleString(),
                 target: creator.goal.target.toLocaleString(),
-              })}
+              })}{" "}
+          <SlurpCoin size={14} />
         </p>
       </div>
     ) : (
@@ -7579,7 +7563,7 @@ function SlurpNotificationsView({
       return { icon: MessageCircle, tone: "bg-[var(--noodle-accent)]/14 text-[var(--noodle-accent)]" };
     if (kind === "comment" || kind === "returned" || kind === "arc")
       return { icon: Heart, tone: "bg-sky-500/14 text-sky-300" };
-    if (kind === "tip") return { icon: Coins, tone: "bg-emerald-500/14 text-emerald-300" };
+    if (kind === "tip") return { icon: Gift, tone: "bg-emerald-500/14 text-emerald-300" };
     if (kind === "unlock" || kind === "ppv_unlock") return { icon: Lock, tone: "bg-violet-500/14 text-violet-300" };
     if (kind === "subscribed") return { icon: Crown, tone: "bg-fuchsia-500/14 text-fuchsia-300" };
     if (kind === "milestone") return { icon: Star, tone: "bg-amber-500/14 text-amber-300" };
@@ -7696,11 +7680,10 @@ function SlurpPayoutRow({ creator, personaId }: { creator: SlurpStudioCreator; p
           {localizeUi("ui.slurp.studio.payoutTitle", { defaultValue: "Available to withdraw today" })}
         </span>
         <span className="block text-[0.7rem] text-[var(--muted-foreground)]">
-          {localizeUi("ui.slurp.studio.payoutDetail", {
-            defaultValue: "{{amount}} coins, from {{balance}} earned and unspent.",
-            amount: creator.payoutAllowance.toLocaleString(),
-            balance: creator.earnings.coins.toLocaleString(),
-          })}
+          <SlurpCoinAmount amount={creator.payoutAllowance.toLocaleString()} />
+          {", from "}
+          <SlurpCoinAmount amount={creator.earnings.coins.toLocaleString()} />
+          {" earned and unspent."}
         </span>
       </span>
       <button

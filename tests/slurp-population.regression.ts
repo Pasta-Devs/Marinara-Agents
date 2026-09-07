@@ -108,7 +108,7 @@ const read = (path: string) => readFileSync(join(root, path), "utf8");
 
 // The six fixed identities with placeholder handles are no longer what fan activity draws from.
 const operation = read("services/slurp/slurp-fan-activity.operation.ts");
-assert.match(operation, /populationNoodlerFanIdentityProvider\(castWithHistory\)/u);
+assert.match(operation, /populationNoodlerFanIdentityProvider\(cast, tiesByCreator\)/u);
 // Regulars recur so they can be recognised; new faces arrive so the cast churns. A frozen cast of
 // thirty is the old six-account problem with thirty faces.
 assert.match(operation, /FAN_RUN_RETURNING/u);
@@ -137,8 +137,13 @@ assert.match(
   /if \(!settings\.walletEnabled\) \{\s*await this\.advanceAudienceTie\(viewerAccountId, creatorAccountId, \{\s*stage: "subscriber"/u,
   "free subscriptions must still enter the audience funnel",
 );
-assert.match(slurpStorage, /advanceAudienceTie\(viewerAccountId, post\.authorAccountId, \{ stage: "liker"/u);
-assert.match(slurpStorage, /advanceAudienceTie\(viewerAccountId, creator\.id, \{ stage: "regular"/u);
+assert.match(slurpStorage, /advanceAudienceTie\(viewerAccountId, post\.authorAccountId, \{\s*stage: "liker"/u);
+// Rapport weighs a tip and an unlock differently, so the funnel has to record which one it was.
+// It used to read both back out of the wallet ledger, which is capped at 60 entries across every
+// creator — a whale's history aged out of their own score.
+assert.match(slurpStorage, /unlocked: price/u);
+assert.match(slurpStorage, /tipped: amount/u);
+assert.match(slurpStorage, /advanceAudienceTie\(viewerAccountId, creator\.id, \{\s*stage: "regular"/u);
 // Unsubscribing drops the tie, so a lost subscriber leaves the funnel as well as the feed.
 assert.match(slurpStorage, /\.lapseTie\(viewerAccountId, creatorAccountId\)/u);
 // A funnel write must never roll back the payment that caused it.
@@ -222,7 +227,11 @@ assert.match(fanService, /Kept to a sentence\./u);
 
 const provider = read("services/slurp/slurp-fan-identity-provider.ts");
 assert.match(provider, /persona\?: \{/u);
-assert.match(fanRun, /populationNoodlerFanIdentityProvider\(castWithHistory\)/u);
+assert.match(fanRun, /populationNoodlerFanIdentityProvider\(cast, tiesByCreator\)/u);
+// A run covers up to twelve Creators. Resolving ties once and reusing them described every fan by
+// their history with the first Creator while they commented on the seventh.
+assert.match(fanRun, /run\.creatorIds\.map\(/u);
+assert.match(provider, /resolve\(weights: NoodlerFanArchetypeWeights, creatorAccountId: string\)/u);
 
 // ── Being a particular fan has to change something ──────────────────────────
 // A Creator answered a whale who had spent four hundred coins exactly as they answered a stranger:

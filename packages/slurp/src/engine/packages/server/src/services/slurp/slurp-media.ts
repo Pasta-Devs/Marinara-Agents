@@ -82,8 +82,8 @@ export async function persistNoodlerPostWithUploadedMedia<T>(
 // original bytes and blurring in CSS discloses the image to anyone who opens devtools.
 // Downscaling to a handful of pixels before blurring makes the original unrecoverable
 // rather than merely hidden.
-const TEASER_WIDTH = 24;
-const TEASER_SUFFIX = ".teaser.jpg";
+const TEASER_WIDTH = 64;
+const TEASER_SUFFIX = ".teaser-v4.jpg";
 export const NOODLER_MEDIA_WIDTHS = [96, 320, 480, 640, 960, 1280, 1600] as const;
 
 export async function resolveNoodlerMediaVariant(absolutePath: string, width: number | undefined): Promise<string> {
@@ -126,7 +126,7 @@ export async function readNoodlerLockedTeaser(absolutePath: string): Promise<Buf
   try {
     const teaser: Buffer = await sharp(absolutePath)
       .resize({ width: TEASER_WIDTH, withoutEnlargement: true })
-      .blur(2)
+      .blur(1.6)
       .jpeg({ quality: 60 })
       .toBuffer();
     const stagingPath = `${teaserPath}.${process.pid}.${Date.now()}.${Math.random().toString(36).slice(2)}.tmp`;

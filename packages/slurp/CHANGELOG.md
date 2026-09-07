@@ -1,5 +1,34 @@
 # Slurp release notes
 
+## 1.2.11 — 2026-09-07
+
+- Creators now answer comments from the generated audience, at a rate set by what that person is to them.
+- Creators can now open a direct message with somebody who has gone quiet, and rarely with an ordinary fan.
+- Generated audience comments are on by default, and short reactions now arrive continuously.
+- Fixed the in-session activity clock, which discarded time too short to buy a whole reaction and so produced no likes while the app was open.
+- Lowered the audience thresholds that left a new Creator with almost no comments and no unprompted messages.
+- Fan comments can now reply to each other, and see the comments already under a post.
+- Relationship scores now read a per-pair spend record instead of the capped wallet ledger.
+- Sending a direct message now counts as engagement.
+- Message requests now get one reply, and queued replies now appear without reopening the conversation.
+- Commissions from the generated audience can now be accepted or declined.
+
+## 1.2.10 — 2026-09-07
+
+- Locked previews now use a darker, softer teaser with a high-contrast coin price and no preview label.
+- Increased sparkle density while keeping animation limited to a small mote layer.
+
+## 1.2.9 — 2026-09-07
+
+- Locked previews now use a slightly darker, softer teaser with a larger lock and directly grouped unlock controls.
+- Increased the sparkle veil density while keeping the animated layer small.
+
+## 1.2.8 — 2026-09-07
+
+- Locked media now uses a larger, lightly blurred teaser so viewers can understand the image shape without receiving the original bytes.
+- Replaced the noisy sparkle texture with a denser, lower-cost sparkle veil.
+- Locked and unlocked feed images now use the same preview frame and crop.
+
 ## 1.2.7 — 2026-09-07
 
 - First Creator posts now run through a durable background queue with bounded retries.

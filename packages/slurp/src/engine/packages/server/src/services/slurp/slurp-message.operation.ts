@@ -38,8 +38,7 @@ export async function replyToSlurpMessage(
   const messagesStore = createSlurpMessagesStorage(db);
   const slurp = createSlurpStorage(db);
   const thread = await messagesStore.getThreadById(input.threadId);
-  // A request the creator has not accepted gets no reply. That is the whole point of the tray.
-  if (!thread || thread.state !== "active") return { status: "ineligible" };
+  if (!thread || (thread.state !== "active" && thread.state !== "request")) return { status: "ineligible" };
 
   const [creator, viewer] = await Promise.all([
     slurp.getNoodlerAccountById(thread.creatorAccountId),
@@ -52,6 +51,13 @@ export async function replyToSlurpMessage(
     ? await resolveSlurpCreatorAvailability(createCharactersStorage(db), source, undefined, new Date())
     : { online: true, activity: null, minutesUntilOnline: 0 };
   const history = await messagesStore.listMessages(thread.id, 60);
+  // A request gets exactly one answer: a guarded, non-committal one, written before the creator
+  // has decided anything. Any answer at all used to be impossible, so a fan who wrote to a
+  // creator they did not subscribe to wrote into silence forever and the tray read as a bug.
+  // Capping it at one keeps the tray meaningful — the thread still cannot become a conversation
+  // until the creator accepts it.
+  const isRequest = thread.state === "request";
+  if (isRequest && history.some((message) => message.role === "creator")) return { status: "ineligible" };
   const trigger = history.find((message) => message.id === input.triggerMessageId) ?? history[history.length - 1];
   const subscriptions = await slurp.listSubscriptionsForViewer(thread.viewerAccountId);
   const subscribed = subscriptions.some((entry) => entry.creatorAccountId === thread.creatorAccountId);
@@ -94,7 +100,7 @@ export async function replyToSlurpMessage(
         rapport: thread.rapport,
         subscribed,
         dmPolicy: messaging.dmPolicy,
-        isRequest: false,
+        isRequest,
         connection,
         debugMode: input.debugMode,
       });

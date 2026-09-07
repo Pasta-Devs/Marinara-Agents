@@ -36,6 +36,30 @@
     "slurp": {
       "versions": [
         {
+          "version": "1.2.11",
+          "date": "2026-09-07",
+          "notes": "- Creators now answer comments from the generated audience, at a rate set by what that person is to them.\n- Creators can now open a direct message with somebody who has gone quiet, and rarely with an ordinary fan.\n- Generated audience comments are on by default, and short reactions now arrive continuously.\n- Fixed the in-session activity clock, which discarded time too short to buy a whole reaction and so produced no likes while the app was open.\n- Lowered the audience thresholds that left a new Creator with almost no comments and no unprompted messages.\n- Fan comments can now reply to each other, and see the comments already under a post.\n- Relationship scores now read a per-pair spend record instead of the capped wallet ledger.\n- Sending a direct message now counts as engagement.\n- Message requests now get one reply, and queued replies now appear without reopening the conversation.\n- Commissions from the generated audience can now be accepted or declined.",
+          "highlight": false
+        },
+        {
+          "version": "1.2.10",
+          "date": "2026-09-07",
+          "notes": "- Locked previews now use a darker, softer teaser with a high-contrast coin price and no preview label.\n- Increased sparkle density while keeping animation limited to a small mote layer.",
+          "highlight": false
+        },
+        {
+          "version": "1.2.9",
+          "date": "2026-09-07",
+          "notes": "- Locked previews now use a slightly darker, softer teaser with a larger lock and directly grouped unlock controls.\n- Increased the sparkle veil density while keeping the animated layer small.",
+          "highlight": false
+        },
+        {
+          "version": "1.2.8",
+          "date": "2026-09-07",
+          "notes": "- Locked media now uses a larger, lightly blurred teaser so viewers can understand the image shape without receiving the original bytes.\n- Replaced the noisy sparkle texture with a denser, lower-cost sparkle veil.\n- Locked and unlocked feed images now use the same preview frame and crop.",
+          "highlight": false
+        },
+        {
           "version": "1.2.7",
           "date": "2026-09-07",
           "notes": "- First Creator posts now run through a durable background queue with bounded retries.\n- The onboarding screen can show Creator setup before first-post generation finishes.",
@@ -129,30 +153,6 @@
           "version": "1.1.26",
           "date": "2026-09-06",
           "notes": "- Creator tools are now Profile controls: a quieter unified rail that keeps Edit\n  Profile inside it and reveals publishing, access, and automation only when\n  expanded.",
-          "highlight": false
-        },
-        {
-          "version": "1.1.25",
-          "date": "2026-09-06",
-          "notes": "- The banner-to-profile fade now reaches the solid header exactly at the banner\n  edge, removing the bright seam beneath the artwork at every avatar size.",
-          "highlight": false
-        },
-        {
-          "version": "1.1.24",
-          "date": "2026-09-06",
-          "notes": "- Creator avatars now visibly overlap about 30% of the banner artwork, while\n  the identity rises into a focused dark fade that blends into the solid\n  profile header.",
-          "highlight": false
-        },
-        {
-          "version": "1.1.23",
-          "date": "2026-09-06",
-          "notes": "- Profile actions now stay directly after the Creator identity and bio at every\n  width, before the Creator tools and content tabs.",
-          "highlight": false
-        },
-        {
-          "version": "1.1.22",
-          "date": "2026-09-06",
-          "notes": "- Creator headers now keep the avatar high in the banner at every width, give\n  mobile actions room to breathe, and keep feed controls clear and touchable on\n  narrow screens.\n- Header titles, focus states, and directional controls now work consistently\n  for keyboard and right-to-left navigation.",
           "highlight": false
         }
       ]

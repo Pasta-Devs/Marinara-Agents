@@ -359,8 +359,16 @@ export const slurpAudienceTies = fileTable(
     creatorAccountId: text("creator_account_id").notNull(),
     /** stranger | viewer | liker | follower | subscriber | regular | whale | lapsed */
     stage: text("stage").notNull().default("stranger"),
-    /** Coins this member has paid this Creator, ever. */
+    /** Coins this member has paid this Creator, ever. The sum of every split below, plus subscriptions. */
     spent: text("spent").notNull().default("0"),
+    /**
+     * The spend split, because rapport weighs a tip and an unlock differently.
+     *
+     * Kept here rather than derived from the wallet ledger: that ledger is capped at 60 entries
+     * across every creator, so a whale's history silently aged out of their own rapport score.
+     */
+    tipped: text("tipped").notNull().default("0"),
+    unlocked: text("unlocked").notNull().default("0"),
     /**
      * Where this relationship is heading, as opposed to where it stands.
      *

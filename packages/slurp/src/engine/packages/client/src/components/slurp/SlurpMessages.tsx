@@ -1,16 +1,4 @@
-import {
-  ArrowLeft,
-  Check,
-  Coins,
-  Lock,
-  MessageCircle,
-  Megaphone,
-  Palette,
-  Search,
-  Send,
-  Sparkles,
-  X,
-} from "lucide-react";
+import { ArrowLeft, Check, Lock, MessageCircle, Megaphone, Palette, Search, Send, Sparkles, X } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { useTranslation as useUiTranslation } from "react-i18next";
 import { useSlurpMediaSrc } from "../../hooks/use-slurp-media-src";
@@ -18,6 +6,7 @@ import { cn } from "../../lib/utils";
 import { Avatar } from "./SlurpShell";
 import { SlurpEmptyArtwork } from "./SlurpEmptyArtwork";
 import { formatTime } from "./SlurpDateTime";
+import { SlurpCoin, SlurpCoinAmount } from "./SlurpCoin";
 import {
   useAcceptSlurpCommission,
   useDeclineSlurpCommission,
@@ -609,7 +598,7 @@ function SlurpThreadView({
             </button>
           )}
           <div className="flex flex-wrap items-center gap-1.5">
-            <Coins size={14} className="text-[var(--noodle-accent)]" aria-hidden="true" />
+            <SlurpCoin size={15} />
             {TIP_PRESETS.map((amount) => (
               <button
                 key={amount}
@@ -685,8 +674,8 @@ function MessageBubble({
           "inline-flex items-center gap-1.5 self-center rounded-full bg-[var(--noodle-accent)]/12 px-3 py-1 text-[0.7rem] font-bold text-[var(--noodle-accent)]",
         )}
       >
-        <Coins size={12} aria-hidden="true" />
-        {localizeUi("ui.slurp.messages.tipSent", { defaultValue: "Tipped {{amount}} coins", amount: message.price })}
+        {localizeUi("ui.slurp.messages.tipSent", { defaultValue: "Tipped", amount: message.price })}{" "}
+        <SlurpCoinAmount amount={message.price} />
       </p>
     );
   }
@@ -709,9 +698,9 @@ function MessageBubble({
           >
             <Lock size={13} aria-hidden="true" />
             {localizeUi("ui.slurp.messages.unlock", {
-              defaultValue: "Unlock for {{price}} coins",
-              price: message.price,
+              defaultValue: "Unlock for",
             })}
+            <SlurpCoinAmount amount={message.price} />
           </button>
         ) : (
           message.content
@@ -1020,10 +1009,7 @@ function CommissionRow({
         {localizeUi(`ui.slurp.messages.commissionState.${commission.state}`, { defaultValue: commission.state })}
         {commission.price > 0 && (
           <span className="tabular-nums text-[var(--muted-foreground)]">
-            {localizeUi("ui.slurp.messages.commissionPrice", {
-              defaultValue: "{{price}} coins",
-              price: commission.price,
-            })}
+            <SlurpCoinAmount amount={commission.price} />
           </span>
         )}
       </p>
@@ -1092,10 +1078,8 @@ function CommissionRow({
           }
           className="mt-2 min-h-9 rounded-lg bg-[var(--noodle-accent)] px-3 font-bold text-zinc-950 disabled:opacity-50"
         >
-          {localizeUi("ui.slurp.messages.commissionAccept", {
-            defaultValue: "Accept for {{price}} coins",
-            price: commission.price,
-          })}
+          {localizeUi("ui.slurp.messages.commissionAccept", { defaultValue: "Accept for" })}{" "}
+          <SlurpCoinAmount amount={commission.price} />
         </button>
       )}
 

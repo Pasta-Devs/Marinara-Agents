@@ -28,7 +28,14 @@ export interface NoodlerFanIdentity {
 }
 
 export interface NoodlerFanIdentityProvider {
-  resolve(weights: NoodlerFanArchetypeWeights): NoodlerFanIdentity[];
+  /**
+   * `creatorAccountId` is what makes the relationship line true.
+   *
+   * A run covers up to twelve creators. Resolving once and reusing the answer meant every fan was
+   * described by their history with the *first* creator of the run while commenting on the
+   * seventh, so the prompt did not lack the fact — it stated a false one.
+   */
+  resolve(weights: NoodlerFanArchetypeWeights, creatorAccountId: string): NoodlerFanIdentity[];
 }
 
 const IDENTITIES: Array<[NoodlerFanArchetype, string, string]> = [
@@ -72,45 +79,51 @@ export const syntheticNoodlerFanIdentityProvider: NoodlerFanIdentityProvider = {
  * synchronous, so members are drawn from a pool the caller prepared — materialising a row is a
  * database write and belongs to the caller, not to a `resolve`.
  */
+export type NoodlerFanCastMember = {
+  id: string;
+  handle: string;
+  displayName: string;
+  archetype: NoodlerFanArchetype;
+  traits: string[];
+  spendTier: string;
+};
+
+/** One member's history with one creator, keyed by creator then by member. */
+export type NoodlerFanTieLookup = ReadonlyMap<
+  string,
+  ReadonlyMap<string, { stage: string; spent: number; knownForDays: number; arc: string }>
+>;
+
 export function populationNoodlerFanIdentityProvider(
-  members: readonly {
-    id: string;
-    handle: string;
-    displayName: string;
-    archetype: NoodlerFanArchetype;
-    traits: string[];
-    spendTier: string;
-    stage?: string;
-    spent?: number;
-    knownForDays?: number;
-    arc?: string;
-  }[],
+  members: readonly NoodlerFanCastMember[],
+  tiesByCreator: NoodlerFanTieLookup = new Map(),
 ): NoodlerFanIdentityProvider {
   return {
-    resolve(weights) {
+    resolve(weights, creatorAccountId) {
+      const ties = tiesByCreator.get(creatorAccountId);
       return members
         .filter((member) => (weights[member.archetype] ?? 0) > 0)
-        .map((member) => ({
-          id: member.id,
-          archetype: member.archetype,
-          persona: {
-            traits: member.traits,
-            spendTier: member.spendTier,
-            ...(member.stage ? { stage: member.stage } : {}),
-            ...(member.spent !== undefined ? { spent: member.spent } : {}),
-            ...(member.knownForDays !== undefined ? { knownForDays: member.knownForDays } : {}),
-            ...(member.arc ? { arc: member.arc } : {}),
-          },
-          snapshot: {
+        .map((member) => {
+          const tie = ties?.get(member.id);
+          return {
             id: member.id,
-            kind: "random_user" as const,
-            entityId: member.id,
-            handle: member.handle,
-            displayName: member.displayName,
-            avatarUrl: null,
-            avatarCrop: null,
-          },
-        }));
+            archetype: member.archetype,
+            persona: {
+              traits: member.traits,
+              spendTier: member.spendTier,
+              ...(tie ? { stage: tie.stage, spent: tie.spent, knownForDays: tie.knownForDays, arc: tie.arc } : {}),
+            },
+            snapshot: {
+              id: member.id,
+              kind: "random_user" as const,
+              entityId: member.id,
+              handle: member.handle,
+              displayName: member.displayName,
+              avatarUrl: null,
+              avatarCrop: null,
+            },
+          };
+        });
     },
   };
 }

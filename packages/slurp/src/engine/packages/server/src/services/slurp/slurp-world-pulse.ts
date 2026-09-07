@@ -49,8 +49,15 @@ export type SlurpPulseAction = {
   creatorAccountId: string;
   postId: string;
   actorAccountId: string;
-  /** A follow is rarer than a like and is what actually moves the funnel. */
-  kind: "like" | "follow";
+  /**
+   * A follow is rarer than a like and is what actually moves the funnel.
+   *
+   * `comment` is the noise floor of a comment section: three words from somebody who wanted to be
+   * seen saying them. It comes from the Tier 1 bank, not the model — it is the highest-volume text
+   * on the platform and the least worth reading, so generating it is the worst trade available.
+   * The model's budget belongs to the batched run, which has actually seen the post.
+   */
+  kind: "like" | "follow" | "comment";
 };
 
 function mulberry32(seed: number) {
@@ -136,12 +143,15 @@ export function planSlurpWorldPulse(input: {
     const key = `${chosen.target.postId}:${actor}`;
     if (used.has(key)) continue;
     used.add(key);
-    // Roughly one in six reactions is somebody deciding to follow rather than just tapping like.
+    // Roughly one in six reactions is somebody deciding to follow rather than just tapping like,
+    // and one in ten is somebody typing three words. Likes stay the overwhelming majority, which
+    // is the ratio every real feed has and the one `slurp-reach.ts` already claims in its counts.
+    const kindRoll = random();
     actions.push({
       creatorAccountId: chosen.target.creatorAccountId,
       postId: chosen.target.postId,
       actorAccountId: actor,
-      kind: random() < 0.16 ? "follow" : "like",
+      kind: kindRoll < 0.1 ? "comment" : kindRoll < 0.26 ? "follow" : "like",
     });
   }
   return actions;

@@ -607,7 +607,7 @@ export async function slurpMessageRoutes(app: FastifyInstance) {
     return {
       messaging,
       rapport: await messages.rapportFor(viewer.id, creatorAccountId),
-      facts: await messages.rapportFactsFor(viewer.id, creatorAccountId, creator.handle),
+      facts: await messages.rapportFactsFor(viewer.id, creatorAccountId),
     };
   });
 }

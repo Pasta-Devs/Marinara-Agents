@@ -34,6 +34,7 @@ import { cn, getAvatarCropStyle } from "../../lib/utils";
 import { useDialogFocusScope } from "../../hooks/use-dialog-focus-scope";
 import { useSlurpMediaSrc } from "../../hooks/use-slurp-media-src";
 import { useTranslation as useUiTranslation } from "react-i18next";
+import { SlurpCoinAmount } from "./SlurpCoin";
 
 export const NOODLE_BLUE = "#7EA7FF";
 export const NOODLE_PINK = "#FF7EC1";
@@ -201,20 +202,6 @@ export function NewSinceLastVisitDivider() {
       </span>
       <span className="h-px flex-1 bg-[var(--noodle-accent)]/30" />
     </div>
-  );
-}
-
-function CoinBadge({ size = "sm" }: { size?: "sm" | "md" }) {
-  return (
-    <span
-      className={cn(
-        "inline-flex shrink-0 items-center justify-center rounded-full bg-[var(--noodle-accent)] font-black leading-none text-white",
-        size === "md" ? "h-6 w-6 text-sm" : "h-4 w-4 text-[0.62rem]",
-      )}
-      aria-hidden="true"
-    >
-      C
-    </span>
   );
 }
 
@@ -482,8 +469,7 @@ function PersonaIdentityCard({
           <PersonaConnectionCounts counts={counts} />
           {balanceLabel && (
             <span className="inline-flex shrink-0 items-center gap-1 text-xs font-bold tabular-nums text-[var(--muted-foreground)]">
-              {balanceLabel}
-              <CoinBadge />
+              <SlurpCoinAmount amount={balanceLabel} size={16} />
             </span>
           )}
         </div>
@@ -550,8 +536,7 @@ function PersonaList({
               <PersonaConnectionCounts counts={counts?.[account.entityId]} />
               {wallets?.[account.entityId] && (
                 <span className="mt-0.5 inline-flex items-center gap-1 text-[0.68rem] font-semibold tabular-nums text-[var(--muted-foreground)]">
-                  {wallets[account.entityId].coins}
-                  <CoinBadge />
+                  <SlurpCoinAmount amount={wallets[account.entityId].coins} size={16} />
                 </span>
               )}
               {linkedIds?.has(account.id) && (
@@ -917,8 +902,7 @@ export function NoodleShell({
                         </span>
                         {walletBalanceLabel && (
                           <span className="inline-flex h-7 shrink-0 items-center gap-1.5 rounded-full px-2.5 text-xs font-bold tabular-nums text-[var(--muted-foreground)] ring-1 ring-inset ring-[var(--noodle-divider)]">
-                            {walletBalanceLabel}
-                            <CoinBadge />
+                            <SlurpCoinAmount amount={walletBalanceLabel} size={16} />
                           </span>
                         )}
                       </button>

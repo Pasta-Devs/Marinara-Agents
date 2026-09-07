@@ -288,25 +288,28 @@ export function createSlurpMessagesStorage(db: DB) {
     },
 
     /**
-     * Rebuild the rapport for one pair from the ledger and the thread itself.
+     * Rebuild the rapport for one pair from the audience tie and the thread itself.
      *
      * Computed rather than incremented: a counter that drifts is a counter nobody can debug, and
      * the inputs are all small reads the send path already pays for.
      */
     async rapportFor(viewerAccountId: string, creatorAccountId: string): Promise<SlurpRapport> {
-      const [messaging, creator] = await Promise.all([
-        storage.getCreatorMessaging(creatorAccountId),
-        slurp.getNoodlerAccountById(creatorAccountId),
-      ]);
-      const facts = await storage.rapportFactsFor(viewerAccountId, creatorAccountId, creator?.handle ?? null);
+      const messaging = await storage.getCreatorMessaging(creatorAccountId);
+      const facts = await storage.rapportFactsFor(viewerAccountId, creatorAccountId);
       return scoreSlurpRapport(facts, messaging.rapportWeights);
     },
 
-    async rapportFactsFor(
-      viewerAccountId: string,
-      creatorAccountId: string,
-      creatorHandle: string | null,
-    ): Promise<SlurpRapportFacts> {
+    /**
+     * The facts behind one pair's rapport.
+     *
+     * Money comes from the audience tie, which is per pair and keeps a lifetime total. It used to
+     * come from the wallet ledger, which was wrong three ways at once: the ledger is capped at 60
+     * entries across every creator, so a whale's history aged out of their own score; entries were
+     * matched by `note.includes(handle)`, so a creator named `mia` collected every tip sent to
+     * `miamoon`; and a tip sent inside a thread was counted twice, once from the ledger and once
+     * from the message row it also wrote.
+     */
+    async rapportFactsFor(viewerAccountId: string, creatorAccountId: string): Promise<SlurpRapportFacts> {
       const facts = emptySlurpRapportFacts();
       const wallet = await slurp.getWallet(viewerAccountId);
       const subscription = wallet.subscriptions[creatorAccountId];
@@ -315,12 +318,12 @@ export function createSlurpMessagesStorage(db: DB) {
       facts.subscribed = Boolean(active);
       facts.subscribedDays = active ? Math.max(0, (Date.now() - Date.parse(active.createdAt)) / DAY) : 0;
 
-      // The ledger notes carry the creator handle, which is what makes per-creator totals possible
-      // without a second table. A creator with no handle can only be scored on thread history.
-      for (const entry of wallet.ledger) {
-        if (!creatorHandle || !entry.note || !entry.note.includes(creatorHandle)) continue;
-        if (entry.kind === "tip") facts.tippedCoins += Math.abs(entry.amount);
-        if (entry.kind === "unlock") facts.unlockedCoins += Math.abs(entry.amount);
+      const tie = (await createSlurpPopulationStorage(db).listTiesForCreator(creatorAccountId)).find(
+        (entry) => entry.memberId === viewerAccountId,
+      );
+      if (tie) {
+        facts.tippedCoins = tie.tipped;
+        facts.unlockedCoins = tie.unlocked;
       }
 
       const thread = await storage.getThread(viewerAccountId, creatorAccountId);
@@ -328,18 +331,18 @@ export function createSlurpMessagesStorage(db: DB) {
         const messages = await storage.listMessages(thread.id, 500);
         const fromViewer = messages.filter((message) => message.role === "viewer" && message.kind !== "tip");
         facts.viewerMessages = fromViewer.length;
-        facts.creatorMessages = messages.filter((message) => message.role === "creator").length;
+        // A broadcast went to everybody, so counting it here let a mass send buy the reciprocity
+        // score, which exists to measure whether this creator answers *you*.
+        facts.creatorMessages = messages.filter(
+          (message) => message.role === "creator" && message.kind !== "broadcast",
+        ).length;
         facts.averageViewerMessageLength =
           fromViewer.length === 0
             ? 0
             : fromViewer.reduce((sum, message) => sum + message.content.length, 0) / fromViewer.length;
         const last = fromViewer[fromViewer.length - 1];
         facts.daysSinceViewerMessage = last ? Math.max(0, (Date.now() - Date.parse(last.createdAt)) / DAY) : null;
-        for (const message of messages) {
-          if (message.kind === "tip" && message.role === "viewer") facts.tippedCoins += message.price;
-          if (message.kind === "ppv" && message.unlockedAt) facts.unlockedCoins += message.price;
-          if (message.kind === "commission_delivery") facts.commissionsDelivered += 1;
-        }
+        facts.commissionsDelivered = messages.filter((message) => message.kind === "commission_delivery").length;
       }
       // Paid through a period that has ended, with no live subscription row, is a lapse.
       facts.lapsed = !facts.subscribed && subscription !== undefined;
@@ -509,6 +512,13 @@ export function createSlurpMessagesStorage(db: DB) {
         try {
           await slurp.creditCreatorIncome(thread.creatorAccountId, price, "ppv");
           await slurp.notifyCreatorIncome(thread.creatorAccountId, "ppv", price, viewerAccountId, messageId);
+          // Paying to see something is the strongest signal in a thread, and it reached the funnel
+          // nowhere: only profile unlocks did, so the same coins counted or not by where they were spent.
+          await slurp.advanceAudienceTie(viewerAccountId, thread.creatorAccountId, {
+            stage: "regular",
+            spent: price,
+            unlocked: price,
+          });
           const unlockedAt = now();
           await db.update(slurpMessages).set({ unlockedAt }).where(eq(slurpMessages.id, messageId));
           return mapMessage({ ...row, unlockedAt });
@@ -667,6 +677,58 @@ export function createSlurpMessagesStorage(db: DB) {
       return rows[0] ? mapCommission(rows[0]) : null;
     },
 
+    /** Every commission waiting on the fan's answer, for the world tick to settle. */
+    async listQuotedCommissions(): Promise<SlurpCommission[]> {
+      const rows = await db.select().from(slurpCommissions);
+      return rows.map(mapCommission).filter((row) => row.state === "quoted");
+    },
+
+    /**
+     * Settle a quote on behalf of a fan the world invented.
+     *
+     * The accept route requires the commission's viewer to be the player's persona, and a
+     * generated population member is not one and has no wallet. So every commission the world
+     * opened — the only path by which the audience ever pays the Creator anything — sat at
+     * `quoted` forever: the player named a price and nothing could ever answer.
+     *
+     * No wallet is debited, because there is no wallet to debit: this fan is not spending the
+     * player's coins. The Creator is credited and the tie records what was paid, which is what
+     * makes the funnel's paying stages reachable by anyone other than the player.
+     */
+    async settleAudienceCommission(id: string, decision: "accept" | "decline"): Promise<SlurpCommission | null> {
+      const commission = await storage.getCommission(id);
+      if (!commission || commission.state !== "quoted") return commission;
+      if (!(await createSlurpPopulationStorage(db).get(commission.viewerAccountId))) return commission;
+      if (decision === "decline") {
+        await db
+          .update(slurpCommissions)
+          .set({ state: "declined", updatedAt: now() })
+          .where(eq(slurpCommissions.id, id));
+        return storage.getCommission(id);
+      }
+      await slurp.creditCreatorIncome(commission.creatorAccountId, commission.price, "commission");
+      await slurp.notifyCreatorIncome(
+        commission.creatorAccountId,
+        "commission",
+        commission.price,
+        commission.viewerAccountId,
+        commission.id,
+      );
+      await slurp.advanceAudienceTie(commission.viewerAccountId, commission.creatorAccountId, {
+        stage: "subscriber",
+        spent: commission.price,
+      });
+      await db.update(slurpCommissions).set({ state: "accepted", updatedAt: now() }).where(eq(slurpCommissions.id, id));
+      await storage.appendMessage(commission.threadId, {
+        senderAccountId: commission.viewerAccountId,
+        role: "viewer",
+        kind: "system",
+        content: `Accepted the quote and paid ${commission.price} coins.`,
+        metadata: { commissionId: id },
+      });
+      return storage.getCommission(id);
+    },
+
     async quoteCommission(id: string, price: number): Promise<SlurpCommission | null> {
       // Re-quoting an accepted or delivered commission used to reset it to `quoted`, which made it
       // payable a second time.
@@ -721,6 +783,10 @@ export function createSlurpMessagesStorage(db: DB) {
         return null;
       try {
         await slurp.creditCreatorIncome(commission.creatorAccountId, commission.price, "commission");
+        await slurp.advanceAudienceTie(commission.viewerAccountId, commission.creatorAccountId, {
+          stage: "regular",
+          spent: commission.price,
+        });
         await slurp.notifyCreatorIncome(
           commission.creatorAccountId,
           "commission",
@@ -832,6 +898,10 @@ export function createSlurpMessagesStorage(db: DB) {
         subjectId: opened.thread.id,
         actorLabel: viewerAccountId,
       });
+      // Writing to somebody is engagement, and it reached the funnel nowhere. Every other action
+      // advanced the tie, so a fan who wrote daily kept a `lastSeenAt` that never moved and was
+      // marked `cooling`, then `burnout`, for doing the most engaged thing available.
+      await slurp.advanceAudienceTie(viewerAccountId, creatorAccountId, { stage: "viewer", interactions: 1 });
       const thread = await storage.getThreadById(opened.thread.id);
       return { status: "sent", thread: thread ?? opened.thread, message };
     },

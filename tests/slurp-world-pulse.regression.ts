@@ -95,15 +95,41 @@ const world = readFileSync(
 );
 // Driven by minutes, not days. The day-scale plan cannot fire inside a session, which is exactly
 // where a roleplay product needs the world to move.
-assert.match(world, /elapsedMinutes: \(until\.getTime\(\) - since\.getTime\(\)\) \/ 60_000/u);
+assert.match(world, /elapsedMinutes: \(until\.getTime\(\) - pulseSince\.getTime\(\)\) \/ 60_000/u);
+// Measured from the pulse's own mark, not the tick's. The tick advances on every notifications
+// read — a 30-second client poll — so measuring from it gave the pulse ~0.5 elapsed minutes,
+// floored the budget to zero at every audience size, and then consumed the time regardless.
+assert.match(world, /const pulseSince = \(await readPulseMark\(db\)\) \?\? since;/u);
 assert.match(world, /async function applyPulse/u);
 assert.match(
   world,
   /postsByAccount\.get\(creator\.id\) \?\? \[\]\)\s*\.filter\(\(post\) => post\.access !== "draft"\)/u,
   "draft posts must not receive world pulse reactions",
 );
-// Free tier only: a like carries no text, so no model call.
-assert.match(world, /type: "like",\s*content: null,/u);
+// Free tier only: the pulse runs unattended, so it must never call the model. A pulse comment
+// carries text, but that text comes from the Tier 1 combinatorial bank — most comments on a real
+// post are three words, and paying a model for the highest-volume, least-readable text on the
+// platform is the worst trade available.
+assert.match(world, /type: isComment \? "reply" : "like"/u);
+assert.match(world, /content: isComment \? slurpAudienceReaction\(/u);
+const applyPulseBody = world.slice(world.indexOf("async function applyPulse"));
+assert.doesNotMatch(applyPulseBody.slice(0, 1500), /generate|Generation|connection/u, "the pulse must stay free");
+
+// Likes must stay the overwhelming majority. `slurp-reach.ts` already claims roughly that ratio
+// in the counts it displays, and readable rows that contradict the displayed counts read as broken.
+const pulseKinds = new Map<string, number>();
+for (let index = 0; index < 400; index += 1) {
+  for (const action of planSlurpWorldPulse({ elapsedMinutes: 30, targets, audience, seed: `r${index}` })) {
+    pulseKinds.set(action.kind, (pulseKinds.get(action.kind) ?? 0) + 1);
+  }
+}
+const pulseTotal = [...pulseKinds.values()].reduce((sum, value) => sum + value, 0);
+assert.ok((pulseKinds.get("comment") ?? 0) > 0, "the free tier has to produce some comments");
+assert.ok(
+  (pulseKinds.get("comment") ?? 0) / pulseTotal < 0.2,
+  "a comment section where everybody comments is not a comment section",
+);
+assert.ok((pulseKinds.get("like") ?? 0) > (pulseKinds.get("comment") ?? 0) * 4, "likes must dominate comments");
 const storage = readFileSync(
   join(import.meta.dirname, "..", "packages/slurp/src/engine/packages/server/src/services/storage/slurp.storage.ts"),
   "utf8",

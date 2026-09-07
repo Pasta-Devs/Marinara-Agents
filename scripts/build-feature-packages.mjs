@@ -326,7 +326,7 @@ const features = [
   },
   {
     id: "slurp",
-    version: "1.2.7",
+    version: "1.2.11",
     minEngineVersion: "2.4.3",
     maxEngineExclusive: MAX_ENGINE_EXCLUSIVE,
     name: "Slurp",
@@ -371,7 +371,7 @@ const features = [
     packageSourceRoot: slurpSourceRoot,
     ownedSourcePaths: slurpOwnedSourcePaths,
     libraryHidden: true,
-    assetPaths: ["slurp-logo.png", "slurpagent.png"],
+    assetPaths: ["slurp-logo.png", "slurpagent.png", "slurpcoin.svg"],
     contributions: {
       slots: ["home-browser-tab"],
       homeBrowserTab: {

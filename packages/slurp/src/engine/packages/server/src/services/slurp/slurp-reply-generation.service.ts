@@ -39,9 +39,18 @@ import { createCharactersStorage } from "../storage/characters.storage.js";
 
 type GenerationConnection = NonNullable<Awaited<ReturnType<ReturnType<typeof createConnectionsStorage>["getWithKey"]>>>;
 
+/**
+ * Whoever wrote the comment.
+ *
+ * Narrowed from `NoodleAccount` to the three fields the prompt actually reads, so a generated
+ * population member can be the commenter without a fake account row being minted to satisfy a
+ * type. Real accounts satisfy this structurally, so every existing caller is unaffected.
+ */
+export type NoodlerReplyCommenter = { id: string; displayName: string; handle: string };
+
 export function buildNoodlerCreatorReplyMessages(input: {
   creator: NoodleAccount;
-  viewer: NoodleAccount;
+  viewer: NoodlerReplyCommenter;
   post: NoodlerManagedPost;
   parent: NoodleInteraction;
   disclosureMode: NoodleIdentityDisclosure;
@@ -107,7 +116,7 @@ export function buildNoodlerCreatorReplyMessages(input: {
 export async function generateNoodlerCreatorReply(input: {
   db: DB;
   creator: NoodleAccount;
-  viewer: NoodleAccount;
+  viewer: NoodlerReplyCommenter;
   post: NoodlerManagedPost;
   parent: NoodleInteraction;
   connection: GenerationConnection;

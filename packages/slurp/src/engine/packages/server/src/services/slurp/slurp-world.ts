@@ -57,6 +57,22 @@ export const SLURP_WORLD_MAX_ACTIONS = 4;
 
 const DAY_MS = 86_400_000;
 
+/**
+ * Audience a Creator needs before the world will do each thing.
+ *
+ * These used to be 50, 100 and 250 against a synthetic floor of 240 (`MIN_BASE_REACH`), so a new
+ * Creator got a question about once a week and *could not receive an unprompted message at all* —
+ * they were below the floor for it. The obligation layer only switched on for a Creator the
+ * player had already grown, which is exactly backwards: a new Creator is the one who needs the
+ * world to prove it is there.
+ *
+ * Set well under the synthetic floor so day one is not silent. The per-tick action ceiling
+ * (`SLURP_WORLD_MAX_ACTIONS`) and the unanswered-queue limit still hold the volume down.
+ */
+const QUESTION_FLOOR = 10;
+const COMMISSION_FLOOR = 40;
+const MESSAGE_FLOOR = 60;
+
 /** Deterministic, so a plan can be asserted in a test and reproduced from a log. */
 function mulberry32(seed: number) {
   let state = seed >>> 0;
@@ -89,8 +105,8 @@ function hashSeed(value: string): number {
  */
 export function slurpCommissionChancePerDay(followers: number): number {
   const count = Number.isFinite(followers) ? Math.max(0, followers) : 0;
-  if (count < 100) return 0;
-  return Math.min(0.5, Math.log10(count / 100) * 0.09);
+  if (count < COMMISSION_FLOOR) return 0;
+  return Math.min(0.5, Math.log10(count / COMMISSION_FLOOR) * 0.09);
 }
 
 /**
@@ -102,15 +118,18 @@ export function slurpCommissionChancePerDay(followers: number): number {
  */
 export function slurpMessageChancePerDay(followers: number): number {
   const count = Number.isFinite(followers) ? Math.max(0, followers) : 0;
-  if (count < 250) return 0;
-  return Math.min(0.3, Math.log10(count / 250) * 0.06);
+  if (count < MESSAGE_FLOOR) return 0;
+  // Coefficient held under the commission curve's, and against a higher floor, so an unprompted
+  // message stays the rarest thing the world does at every audience size. That is the design rule
+  // this function was written around; lowering the floor must not quietly overturn it.
+  return Math.min(0.3, Math.log10(count / MESSAGE_FLOOR) * 0.07);
 }
 
 /** Chance per day that somebody asks a question under a recent post. Commoner and lighter. */
 export function slurpQuestionChancePerDay(followers: number): number {
   const count = Number.isFinite(followers) ? Math.max(0, followers) : 0;
-  if (count < 50) return 0;
-  return Math.min(0.8, Math.log10(count / 50) * 0.2);
+  if (count < QUESTION_FLOOR) return 0;
+  return Math.min(2.5, Math.log10(count / QUESTION_FLOOR) * 0.45);
 }
 
 /** Days of world time to apply, capped so a long absence does not become a backlog. */
@@ -181,3 +200,76 @@ export function planSlurpWorldTick(input: {
 
   return actions.slice(0, SLURP_WORLD_MAX_ACTIONS);
 }
+
+/**
+ * How likely a creator is to answer one comment.
+ *
+ * A creator who answers everything is a bot, and one who answers nothing is a wall. The number
+ * that decides which comments get answered should be the one that already describes what somebody
+ * is to this creator, so being a particular fan changes something visible rather than only
+ * changing a prompt nobody sees.
+ *
+ * Nobody is at zero. A first comment from a stranger sometimes getting a reply is exactly the
+ * thing that makes people comment again, and gating it entirely on history means only people who
+ * already have history ever get anything.
+ */
+export function slurpCreatorReplyChance(tie: { stage: string; spent: number; interactions: number } | null): number {
+  if (!tie) return 0.08;
+  const byStage: Record<string, number> = {
+    stranger: 0.08,
+    viewer: 0.12,
+    liker: 0.18,
+    follower: 0.3,
+    subscriber: 0.5,
+    regular: 0.5,
+    whale: 0.7,
+    lapsed: 0.12,
+  };
+  const base = byStage[tie.stage] ?? 0.1;
+  // Having paid, and having kept turning up, both earn attention on their own.
+  const paid = tie.spent > 0 ? 0.15 : 0;
+  const familiar = Math.min(0.12, Math.max(0, tie.interactions) * 0.01);
+  return Math.min(0.8, base + paid + familiar);
+}
+
+/** Replies a creator writes in one tick. A wall of answers at once reads as a script, not a person. */
+export const SLURP_MAX_CREATOR_REPLIES_PER_TICK = 3;
+
+/**
+ * Whether a creator writes to somebody who did not write first, and what kind of message it is.
+ *
+ * `null` is the usual answer, and has to stay the usual answer. A creator who opens conversations
+ * freely is a mailing list, and the whole value of being messaged is that it does not happen much.
+ *
+ * Two paths, because a real platform has two. Somebody with history who has gone quiet gets
+ * noticed, which is what the rapport model's silence decay was always measuring and what nothing
+ * ever read. Everybody else gets a small flat chance — a creator with a slow afternoon says hello
+ * to somebody ordinary. Without that second path only whales ever hear from anyone, which is both
+ * bleak and untrue to how these places work.
+ */
+export function slurpCreatorOpenerKind(input: {
+  tie: { stage: string; spent: number; interactions: number } | null;
+  /** Days since this person last did anything with this creator. */
+  daysSinceSeen: number;
+  /** Whether a conversation already exists. A creator does not "open" one twice. */
+  hasThread: boolean;
+  /** Stable number in [0, 1) for this pair and stretch of time. */
+  roll: number;
+}): "missed" | "cold" | null {
+  if (input.hasThread) return null;
+  const tie = input.tie;
+  // Somebody who was really here and stopped. Needs history, or every stranger reads as a loss.
+  const wasPresent = tie !== null && tie.interactions >= 5 && (tie.spent > 0 || tie.interactions >= 12);
+  if (wasPresent && input.daysSinceSeen >= 10 && input.daysSinceSeen <= 90) {
+    return input.roll < 0.25 ? "missed" : null;
+  }
+  // The ordinary case. Deliberately small: at a couple of hundred ties this is still only a
+  // handful of unprompted messages a month across the whole platform.
+  if (tie !== null && tie.stage !== "stranger" && input.daysSinceSeen <= 30) {
+    return input.roll < 0.015 ? "cold" : null;
+  }
+  return null;
+}
+
+/** Unprompted creator messages per tick. Being messaged stops meaning anything in bulk. */
+export const SLURP_MAX_CREATOR_OPENERS_PER_TICK = 1;

@@ -1323,7 +1323,7 @@ export function SlurpSettings({
               {section === "wallet" && (
                 <div className="space-y-5">
                   <SectionTitle
-                    title={t("ui.slurp.settings.wallet.title", { defaultValue: "Coins" })}
+                    title={t("ui.slurp.settings.wallet.title", { defaultValue: "SlurpCoins" })}
                     detail={t("ui.slurp.settings.wallet.detail", {
                       defaultValue: "Prices, earning, and the daily stipend.",
                     })}
@@ -1332,7 +1332,7 @@ export function SlurpSettings({
                     <p>
                       {t("ui.slurp.settings.wallet.explainer", {
                         defaultValue:
-                          "With coins off, prices are decoration and nothing is ever charged. With them on, unlocking a post and subscribing to a creator both cost coins, and running out has consequences: a subscription you cannot pay for lapses.",
+                          "With SlurpCoins off, prices are decoration and nothing is ever charged. With them on, unlocking a post and subscribing to a creator both cost SlurpCoins, and running out has consequences: a subscription you cannot pay for lapses.",
                       })}
                     </p>
                     <p className="mt-2">
@@ -1343,7 +1343,9 @@ export function SlurpSettings({
                     </p>
                   </div>
                   <Toggle
-                    label={t("ui.slurp.settings.wallet.enabled", { defaultValue: "Coins actually cost something" })}
+                    label={t("ui.slurp.settings.wallet.enabled", {
+                      defaultValue: "SlurpCoins actually cost something",
+                    })}
                     detail={t("ui.slurp.settings.wallet.enabledDetail", {
                       defaultValue: "Off keeps prices as decoration, which is how Slurp has always behaved.",
                     })}
@@ -1416,7 +1418,7 @@ export function SlurpSettings({
                     />
                   </Field>
                   <Field
-                    label={t("ui.slurp.settings.wallet.adDailyCap", { defaultValue: "Most ad coins per day" })}
+                    label={t("ui.slurp.settings.wallet.adDailyCap", { defaultValue: "Most ad SlurpCoins per day" })}
                     detail={t("ui.slurp.settings.wallet.adDailyCapDetail", {
                       defaultValue: "The cap is what stops ad clicking from becoming a job.",
                     })}
@@ -1443,7 +1445,7 @@ export function SlurpSettings({
                   </Field>
                   <Field
                     label={t("ui.slurp.settings.wallet.engagementDailyCap", {
-                      defaultValue: "Most posting coins per day",
+                      defaultValue: "Most posting SlurpCoins per day",
                     })}
                     detail={t("ui.slurp.settings.wallet.engagementDailyCapDetail", {
                       defaultValue: "The cap is what stops posting from becoming a grind.",
@@ -1483,7 +1485,7 @@ export function SlurpSettings({
                       <p className="mt-2">
                         {t("ui.slurp.settings.ads.explainerEarning", {
                           defaultValue:
-                            "Acting on an ad pays {{reward}} coins, up to {{cap}} a day. Change either in Coins.",
+                            "Acting on an ad pays {{reward}} SlurpCoins, up to {{cap}} a day. Change either in SlurpCoins.",
                           reward: settings.walletAdReward,
                           cap: settings.walletAdDailyCap,
                         })}

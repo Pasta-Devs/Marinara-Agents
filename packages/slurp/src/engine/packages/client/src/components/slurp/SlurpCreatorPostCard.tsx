@@ -66,6 +66,9 @@ import { NoodleAnchoredPopover } from "./NoodleAnchoredPopover";
 import { NoodlePollComposer } from "./SlurpPollComposer";
 import { PostImageFrame } from "./PostImageCropEditor";
 import { SlurpSparkleVeil } from "./SlurpSparkleVeil";
+import { SlurpCoin } from "./SlurpCoin";
+
+const SLURP_FEED_MEDIA_RATIO_CLASS = "aspect-[4/3] sm:aspect-[16/10]";
 
 export function LockedSlurpPostCard({
   post,
@@ -216,7 +219,8 @@ export function LockedSlurpPostCard({
             ref={observeMedia}
             data-slurp-locked-preview
             className={cn(
-              "relative -mx-4 mt-4 aspect-[4/3] w-[calc(100%+2rem)] overflow-hidden bg-[var(--muted)] ring-1 ring-inset ring-white/10 sm:mx-0 sm:aspect-[16/10] sm:w-full sm:rounded-xl",
+              "relative -mx-4 mt-4 w-[calc(100%+2rem)] overflow-hidden bg-[var(--muted)] ring-1 ring-inset ring-white/10 sm:mx-0 sm:w-full sm:rounded-xl",
+              SLURP_FEED_MEDIA_RATIO_CLASS,
             )}
           >
             {shownMediaSrc ? (
@@ -231,11 +235,10 @@ export function LockedSlurpPostCard({
                     : localizeUi("ui.noodle.lockednoodlerpostcard.lockedImageFrom", { name: profile.displayName })
                 }
                 className={cn(
-                  "h-full w-full object-cover transition-[filter,transform] duration-500 group-hover/locked:scale-[1.02] motion-reduce:transition-none motion-reduce:group-hover/locked:scale-100",
-                  // Real locked images are already reduced and blurred on the server. Never blur
-                  // those bytes a second time: the extra client filter erased the silhouette and
-                  // made a working preview look like an empty card.
-                  revealed ? "scale-100" : "scale-[1.04] blur-[8px] saturate-[0.78]",
+                  "h-full w-full object-cover",
+                  // Locked images are reduced and lightly blurred on the server. Keep the client
+                  // treatment limited to a small color adjustment so the silhouette stays clear.
+                  revealed ? "scale-100" : "saturate-[0.88]",
                 )}
               />
             ) : requestedMediaUrl ? (
@@ -271,26 +274,21 @@ export function LockedSlurpPostCard({
             )}
             {!revealed && (
               <div
-                className="pointer-events-none absolute inset-0 bg-[linear-gradient(to_top,rgba(8,4,10,0.94)_0%,rgba(8,4,10,0.58)_34%,rgba(8,4,10,0.08)_72%)]"
+                className="pointer-events-none absolute inset-0 bg-[linear-gradient(to_top,rgba(8,4,10,0.9)_0%,rgba(8,4,10,0.52)_38%,rgba(8,4,10,0.16)_76%)]"
                 aria-hidden="true"
               />
             )}
             {!revealed && shownMediaSrc && <SlurpSparkleVeil />}
-            {!revealed && shownMediaSrc && (
-              <span className="absolute left-3 top-3 rounded-full bg-black/55 px-2.5 py-1 text-[0.65rem] font-bold uppercase tracking-[0.12em] text-white backdrop-blur-sm ring-1 ring-white/15">
-                {localizeUi("ui.slurp.locked.blurredPreview")}
-              </span>
-            )}
             {/* The lock is a state cue; the accessible image text already describes the preview. */}
             {!revealed && (
               <span className="pointer-events-none absolute inset-x-0 top-[36%] flex justify-center" aria-hidden="true">
-                <span className="flex h-12 w-12 items-center justify-center rounded-2xl bg-[#24131f] text-[var(--noodle-accent)] shadow-[0_12px_28px_-14px_rgba(0,0,0,0.95),inset_0_0_0_1px_rgba(255,111,174,0.18)]">
-                  <Lock size={19} strokeWidth={2.4} />
+                <span className="flex h-16 w-16 items-center justify-center rounded-3xl bg-[#24131f] text-[var(--noodle-accent)] shadow-[0_12px_28px_-14px_rgba(0,0,0,0.95),inset_0_0_0_1px_rgba(255,111,174,0.18)]">
+                  <Lock size={27} strokeWidth={2.4} />
                 </span>
               </span>
             )}
             {!revealed && !controllerOnly && (
-              <div className="absolute inset-x-4 bottom-4 flex flex-col items-center gap-2">
+              <div className="absolute inset-x-4 top-[calc(36%+4.75rem)] flex flex-col items-center gap-2">
                 <button
                   type="button"
                   disabled={unlockPending || subscriptionPending}
@@ -448,9 +446,10 @@ function NoodlerFictionalPrice({ amount }: { amount: number }) {
   return (
     <span
       title={localizeUi("ui.noodle.unlocksheet.priceHint")}
-      className="shrink-0 cursor-help rounded-full border border-dashed border-[var(--noodle-divider)] px-2 py-0.5 text-xs font-bold text-[var(--muted-foreground)]"
+      className="inline-flex shrink-0 cursor-help items-center gap-1.5 rounded-full bg-[#24131f] px-2.5 py-1 text-sm font-black text-amber-200 shadow-[0_2px_10px_rgba(0,0,0,0.28)] ring-1 ring-inset ring-amber-200/35"
     >
-      {localizeUi("ui.noodle.unlocksheet.price", { amount })}
+      <span>{localizeUi("ui.noodle.unlocksheet.price", { amount })}</span>
+      <SlurpCoin size={15} />
     </span>
   );
 }
@@ -1031,14 +1030,23 @@ export function SlurpCreatorPostCard({
                 })}
               />
             ) : (
-              <PostImageFrame
-                src={displayedImageUrl}
-                onError={() => setFailedImageUrl(displayedImageUrl)}
-                crop={null}
-                alt={localizeUi("ui.noodle.post.imageBy", {
-                  name: author?.displayName ?? localizeUi("ui.slurp.profile.fallbackUser"),
-                })}
-              />
+              <div
+                className={cn(
+                  "relative w-full overflow-hidden rounded-xl bg-[var(--slurp-media-stage,#17131a)]",
+                  SLURP_FEED_MEDIA_RATIO_CLASS,
+                )}
+              >
+                <img
+                  src={displayedImageUrl}
+                  onError={() => setFailedImageUrl(displayedImageUrl)}
+                  alt={localizeUi("ui.noodle.post.imageBy", {
+                    name: author?.displayName ?? localizeUi("ui.slurp.profile.fallbackUser"),
+                  })}
+                  loading="lazy"
+                  decoding="async"
+                  className="h-full w-full object-cover"
+                />
+              </div>
             )}
           </button>
         ) : post.imagePrompt ? (

@@ -22,12 +22,59 @@ import { slurpCreatorReach } from "./slurp-reach.js";
 import { slurpMembersActiveAt } from "./slurp-population.js";
 import { isNotableArcChange, slurpNextArc } from "./slurp-arc.js";
 import { slurpPlatformScaleMultiplier, slurpWorldActivityMultiplier } from "./slurp-scale.js";
-import { slurpAudienceOpener, slurpAudienceQuestion, slurpCommissionBrief } from "./slurp-world-copy.js";
+import {
+  slurpAudienceOpener,
+  slurpAudienceQuestion,
+  slurpAudienceReaction,
+  slurpCommissionBrief,
+  slurpCreatorOpener,
+  slurpCreatorReaction,
+} from "./slurp-world-copy.js";
 import { enqueueSlurpPendingText } from "./slurp-pending-text.service.js";
-import { planSlurpWorldTick, type SlurpWorldAction, type SlurpWorldCreator } from "./slurp-world.js";
+import {
+  planSlurpWorldTick,
+  slurpCreatorOpenerKind,
+  slurpCreatorReplyChance,
+  SLURP_MAX_CREATOR_OPENERS_PER_TICK,
+  SLURP_MAX_CREATOR_REPLIES_PER_TICK,
+  type SlurpWorldAction,
+  type SlurpWorldCreator,
+} from "./slurp-world.js";
 import { planSlurpWorldPulse, type SlurpPulseAction } from "./slurp-world-pulse.js";
 
 const TICK_KEY = "slurp.world.tick";
+
+/** The local day, so a per-pair roll is made once a day rather than on every page load. */
+function localDayKey(at: Date): string {
+  return `${at.getFullYear()}-${at.getMonth() + 1}-${at.getDate()}`;
+}
+
+/** A stable number in [0, 1) for one string. Same shape as the other Slurp rule modules use. */
+function slurpDeterministicUnit(value: string): number {
+  let out = 0x811c9dc5;
+  for (let index = 0; index < value.length; index += 1) {
+    out ^= value.charCodeAt(index);
+    out = Math.imul(out, 0x01000193);
+  }
+  out ^= out >>> 16;
+  out = Math.imul(out, 0x85ebca6b);
+  out ^= out >>> 13;
+  return (out >>> 0) / 0x100000000;
+}
+
+/**
+ * The pulse keeps its own mark, and this is why.
+ *
+ * The tick advances on every notifications read, which the client polls every 30 seconds. So a
+ * pulse saw `elapsedMinutes` of about 0.5, `slurpPulseBudget` floored that to zero at every
+ * audience size, and `writeLastTick` then consumed the half-minute anyway. The layer whose whole
+ * stated purpose is "likes must arrive while the player watches" produced nothing for as long as
+ * the player was watching, and only fired if Slurp had been closed for five minutes or more.
+ *
+ * Holding a separate mark lets the unspent time accumulate until it is worth at least one
+ * reaction, instead of being rounded away several thousand times a day.
+ */
+const PULSE_KEY = "slurp.world.pulse";
 
 /** Posts older than this are no longer worth asking about. */
 const RECENT_POST_DAYS = 7;
@@ -55,6 +102,12 @@ async function readLastTick(db: DB): Promise<Date | null> {
 
 async function writeLastTick(db: DB, at: Date): Promise<void> {
   await createAppSettingsStorage(db).set(TICK_KEY, at.toISOString());
+}
+
+async function readPulseMark(db: DB): Promise<Date | null> {
+  const raw = await createAppSettingsStorage(db).get(PULSE_KEY);
+  const parsed = raw ? Date.parse(raw) : Number.NaN;
+  return Number.isFinite(parsed) ? new Date(parsed) : null;
 }
 
 /**
@@ -160,6 +213,24 @@ export async function advanceSlurpWorld(db: DB, until = new Date()): Promise<Slu
       }
     }
 
+    // Settle quotes the audience is sitting on. A commission the world opened could never be
+    // answered — the accept route wants the player's persona, and these fans are not one — so the
+    // only path by which the audience ever paid the Creator anything dead-ended at `quoted`.
+    //
+    // Deterministic per commission, so the same quote does not flip its answer between two ticks,
+    // and gated on a day's thinking time so a price is never answered the instant it is named.
+    for (const commission of await messages.listQuotedCommissions()) {
+      const quotedFor = (until.getTime() - Date.parse(commission.updatedAt)) / 86_400_000;
+      if (!Number.isFinite(quotedFor) || quotedFor < 1) continue;
+      const member = await population.get(commission.viewerAccountId).catch(() => null);
+      if (!member) continue;
+      // Cheap work is taken, expensive work is haggled away. `spendTier` is the person's appetite
+      // and was stored on every member from the start without ever being read here.
+      const budget = { none: 0, light: 40, regular: 120, whale: 400 }[member.spendTier] ?? 40;
+      const accepts = budget > 0 && commission.price <= budget;
+      await messages.settleAudienceCommission(commission.id, accepts ? "accept" : "decline").catch(() => null);
+    }
+
     // Counted after churn, so reach reflects the audience that is left rather than the one that
     // just drifted out.
     const tickFunnel = await population.countFollowersForCreators(accounts.map((account) => account.id));
@@ -197,10 +268,14 @@ export async function advanceSlurpWorld(db: DB, until = new Date()): Promise<Slu
 
     // The pulse: likes and follows landing while the player watches. Driven by elapsed minutes
     // rather than days, so it fires during a session, where the day-scale plan below cannot.
+    //
+    // Measured from the pulse's own mark, not the tick's, so time too short to buy a whole
+    // reaction is kept rather than discarded. See `PULSE_KEY`.
+    const pulseSince = (await readPulseMark(db)) ?? since;
     const pulse = planSlurpWorldPulse({
-      elapsedMinutes: (until.getTime() - since.getTime()) / 60_000,
+      elapsedMinutes: (until.getTime() - pulseSince.getTime()) / 60_000,
       audience,
-      seed: `${since.toISOString()}:${until.toISOString()}`,
+      seed: `${pulseSince.toISOString()}:${until.toISOString()}`,
       activity,
       targets: creators.flatMap((creator) =>
         (postsByAccount.get(creator.id) ?? [])
@@ -219,6 +294,88 @@ export async function advanceSlurpWorld(db: DB, until = new Date()): Promise<Slu
         if (await applyPulse(db, action)) pulsed += 1;
       } catch (error) {
         logger.warn(error, "[slurp-world] Could not apply a %s pulse", action.kind);
+      }
+    }
+    // Only spend the pulse clock when the pulse actually bought something. An empty plan leaves
+    // the mark where it is so the time carries into the next tick instead of being rounded away.
+    if (pulse.length > 0 || !(await readPulseMark(db))) {
+      await createAppSettingsStorage(db).set(PULSE_KEY, until.toISOString());
+    }
+
+    // Creators answering their audience. Free tier, like the pulse: a three-word comment does not
+    // need a model to answer it, and a creator who never answers anybody reads as a bot however
+    // good the comments underneath are.
+    //
+    // Which comments get answered is decided by what the commenter is to this creator, so being a
+    // particular fan changes something the player can see rather than only changing a prompt they
+    // cannot. Nobody is at zero: a stranger's first comment sometimes getting a reply is the thing
+    // that makes them comment again.
+    let replied = 0;
+    for (const account of accounts) {
+      if (replied >= SLURP_MAX_CREATOR_REPLIES_PER_TICK) break;
+      const recent = (postsByAccount.get(account.id) ?? []).filter((post) => post.access !== "draft").slice(0, 4);
+      if (recent.length === 0) continue;
+      const interactions = await noodle.listNoodlerInteractions(recent.map((post) => post.id));
+      const answered = new Set(
+        interactions
+          .filter((entry) => entry.actorAccountId === account.id && entry.parentInteractionId)
+          .map((entry) => entry.parentInteractionId!),
+      );
+      const ties = new Map((await population.listTiesForCreator(account.id)).map((tie) => [tie.memberId, tie]));
+      for (const comment of interactions) {
+        if (replied >= SLURP_MAX_CREATOR_REPLIES_PER_TICK) break;
+        if (comment.type !== "reply" || !comment.content?.trim()) continue;
+        // Never answer yourself, and never answer the same comment twice.
+        if (comment.actorAccountId === account.id || answered.has(comment.id)) continue;
+        const tie = ties.get(comment.actorAccountId) ?? null;
+        // Deterministic per comment, so a comment does not flip between answered and ignored
+        // across two ticks of the same stretch of time.
+        const roll = slurpDeterministicUnit(`${account.id}:${comment.id}`);
+        if (roll >= slurpCreatorReplyChance(tie)) continue;
+        const written = await noodle
+          .createInteraction(comment.postId, {
+            actorAccountId: account.id,
+            type: "reply",
+            content: slurpCreatorReaction(`${account.id}:${comment.id}`),
+            parentInteractionId: comment.id,
+          })
+          .catch(() => null);
+        if (written) {
+          answered.add(comment.id);
+          replied += 1;
+        }
+      }
+    }
+
+    // Creators writing first. The rapport model has measured silence since it shipped and nothing
+    // ever read the number: somebody who used to be here every day going quiet is the most legible
+    // thing in the whole relationship model, and it moved a counter nobody saw.
+    //
+    // Tier 1, so it stays free and safe to run unattended. Only the opener is canned — the moment
+    // the fan answers, the reply runs through the full direct-message path with rapport, arc, and
+    // the creator's recent posts. A cheap invitation to a real conversation.
+    let opened = 0;
+    for (const account of accounts) {
+      if (opened >= SLURP_MAX_CREATOR_OPENERS_PER_TICK) break;
+      for (const tie of await population.listTiesForCreator(account.id)) {
+        if (opened >= SLURP_MAX_CREATOR_OPENERS_PER_TICK) break;
+        const daysSinceSeen = (until.getTime() - Date.parse(tie.lastSeenAt)) / 86_400_000;
+        if (!Number.isFinite(daysSinceSeen)) continue;
+        const kind = slurpCreatorOpenerKind({
+          tie,
+          daysSinceSeen,
+          hasThread: Boolean(await messages.getThread(tie.memberId, account.id)),
+          // Bucketed by day, so the same pair is not re-rolled on every page load — otherwise a
+          // 1.5% chance fires within an hour of scrolling.
+          roll: slurpDeterministicUnit(`${account.id}:${tie.memberId}:${localDayKey(until)}`),
+        });
+        if (!kind) continue;
+        const sent = await messages
+          .sendCreatorMessage(account.id, tie.memberId, {
+            content: slurpCreatorOpener(`${account.id}:${tie.memberId}:${localDayKey(until)}`, kind),
+          })
+          .catch(() => null);
+        if (sent) opened += 1;
       }
     }
 
@@ -354,19 +511,26 @@ async function applyAction(db: DB, action: SlurpWorldAction, at: Date): Promise<
 /**
  * Apply one pulse reaction.
  *
- * Free tier: a like, no text, no model call. Both kinds write a real interaction row, so they show
- * as named people, feed the funnel, and cost nothing. A "follow" differs only in how far it moves
- * the tie — there is no separate follow row for a synthetic fan.
+ * Free tier: no model call, ever. All three kinds write a real interaction row, so they show as
+ * named people, feed the funnel, and cost nothing. A "follow" differs only in how far it moves the
+ * tie — there is no separate follow row for a synthetic fan.
+ *
+ * A "comment" carries Tier 1 copy. Most comments on a real post are three words from somebody who
+ * wanted to be seen typing them, and paying a model to write those is backwards: they are the
+ * highest-volume text on the platform and the least worth reading. The batched run keeps the
+ * model, and keeps it for comments that have actually seen the post.
  */
 async function applyPulse(db: DB, action: SlurpPulseAction): Promise<boolean> {
   const noodle = createSlurpStorage(db);
   const actor = await resolveActor(db, action.actorAccountId);
   if (!actor) return false;
+  const isComment = action.kind === "comment";
   const result = await noodle.createNoodlerWorldInteraction(action.postId, {
     creatorAccountId: action.creatorAccountId,
     actorId: actor.id,
-    type: "like",
-    content: null,
+    type: isComment ? "reply" : "like",
+    // Tier 1 copy, so this stays free: the pulse runs unattended and must never call the model.
+    content: isComment ? slurpAudienceReaction(`${action.postId}:${actor.id}`) : null,
   });
   if (!result?.created) return false;
   const population = createSlurpPopulationStorage(db);

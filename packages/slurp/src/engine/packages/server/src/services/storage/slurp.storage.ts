@@ -854,11 +854,24 @@ export const DEFAULT_SLURP_SETTINGS: SlurpSettings = {
   postsPerDay: 4,
   autoPostingScheduleEnabled: false,
   autoPostGenerationMode: "on_demand",
-  fanActivityEnabled: false,
+  // On by default, and at a volume that reads as a comment section rather than a rumour of one.
+  // At the old defaults this was off, and switching it on bought one reply per run across up to
+  // twelve Creators: roughly one comment per Creator every three days.
+  //
+  // This does not breach the readable-handful rule. That rule caps *notable* events, and a comment
+  // weighs 25 against a notable threshold of 40 (`slurp-event-weight.ts`), so comments group into
+  // a single line instead of filling the notification list.
+  fanActivityEnabled: true,
   fanActivityRunsPerDay: 4,
+  // Likes belong to the pulse, which produces them free and continuously; spending a generated
+  // batch slot on "who tapped like" buys nothing an RNG cannot. A couple are kept so somebody who
+  // just wrote a comment can also be seen liking the post.
   fanLikesPerRefresh: 2,
-  fanRepliesPerRefresh: 1,
-  fanRepostsPerRefresh: 1,
+  // A run is one batched model call however many rows it returns, so replies per run are close to
+  // free. Six across up to twelve Creators is about 24 readable comments a day, which sits at
+  // roughly the same like-to-comment ratio the displayed counts in `slurp-reach.ts` already claim.
+  fanRepliesPerRefresh: 6,
+  fanRepostsPerRefresh: 2,
   fanArchetypeWeights: {
     ordinary: 1,
     eccentric: 1,
@@ -4513,6 +4526,124 @@ export function createSlurpStorage(db: DB) {
     },
 
     /**
+     * Claim a creator reply to a comment from the generated audience.
+     *
+     * Deliberately *not* a relaxation of `claimNoodlerCreatorReply`. That function's access checks
+     * — hidden-creator, subscription, unlock — exist because the player is asking for a reply to
+     * their own comment, and without them the endpoint would hand back text about a locked post
+     * they never paid for. Loosening it to let a synthetic fan through would weaken a gate that
+     * protects a real person, to serve a caller that is not one.
+     *
+     * So this is a second, narrower door. The commenter must be a generated population member on
+     * the creator's own post, and there is no viewer to protect content from. It shares the parts
+     * that actually matter — the one-reply-per-comment dedupe and the 24-hour spend ceiling — so
+     * audience replies and player replies draw on the same budget and cannot double-answer.
+     */
+    async claimNoodlerAudienceReply(
+      creatorAccountId: string,
+      parentInteractionId: string,
+      at = now(),
+      ceiling = DEFAULT_NOODLER_CREATOR_REPLIES_PER_24_HOURS,
+    ): Promise<
+      | {
+          status: "claimed";
+          claimId: string;
+          creator: NoodleAccount;
+          post: NoodlerManagedPost;
+          parent: NoodleInteraction;
+          commenter: { id: string; handle: string; displayName: string };
+        }
+      | { status: "ineligible" }
+      | { status: "duplicate" }
+      | { status: "exhausted" }
+    > {
+      return db.transaction(async (tx) => {
+        const parentRow = (
+          await tx.select().from(noodleInteractions).where(eq(noodleInteractions.id, parentInteractionId))
+        )[0];
+        if (!parentRow || parentRow.type !== "reply" || !parentRow.content?.trim()) return { status: "ineligible" };
+        if (parentRow.actorAccountId === creatorAccountId) return { status: "ineligible" };
+        // Only somebody the world invented. A real persona's comment belongs to the player-facing
+        // path, with its access checks intact.
+        const commenterRow = (
+          await tx.select().from(slurpPopulation).where(eq(slurpPopulation.id, parentRow.actorAccountId))
+        )[0];
+        if (!commenterRow) return { status: "ineligible" };
+        const creatorRow = (
+          await tx
+            .select()
+            .from(noodleAccounts)
+            .where(and(eq(noodleAccounts.id, creatorAccountId), eq(noodleAccounts.platform, "slurp")))
+        )[0];
+        if (!creatorRow) return { status: "ineligible" };
+        const postRow = (
+          await tx
+            .select()
+            .from(noodlePosts)
+            .where(and(eq(noodlePosts.id, String(parentRow.postId)), eq(noodlePosts.authorAccountId, creatorAccountId)))
+        )[0];
+        if (!postRow) return { status: "ineligible" };
+
+        const cutoff = new Date(Date.parse(at) - ROLLING_DAY_MS).toISOString();
+        const existing = (
+          await tx
+            .select()
+            .from(noodlerCreatorReplyClaims)
+            .where(
+              and(
+                eq(noodlerCreatorReplyClaims.parentInteractionId, parentInteractionId),
+                eq(noodlerCreatorReplyClaims.creatorAccountId, creatorAccountId),
+              ),
+            )
+        )[0];
+        if (existing) return { status: "duplicate" };
+        // The free tier may already have answered this comment from the bank. One reply per
+        // comment, whichever tier wrote it.
+        const strandedReply = (
+          await tx
+            .select()
+            .from(noodleInteractions)
+            .where(
+              and(
+                eq(noodleInteractions.parentInteractionId, parentInteractionId),
+                eq(noodleInteractions.actorAccountId, creatorAccountId),
+                eq(noodleInteractions.type, "reply"),
+              ),
+            )
+        )[0];
+        if (strandedReply) return { status: "duplicate" };
+
+        const recentClaims = await tx
+          .select()
+          .from(noodlerCreatorReplyClaims)
+          .where(gt(noodlerCreatorReplyClaims.claimedAt, cutoff));
+        if (recentClaims.length >= ceiling) return { status: "exhausted" };
+
+        const claimId = newId();
+        await tx.insert(noodlerCreatorReplyClaims).values({
+          id: claimId,
+          postId: String(postRow.id),
+          parentInteractionId,
+          creatorAccountId,
+          replyInteractionId: null,
+          claimedAt: at,
+        });
+        return {
+          status: "claimed",
+          claimId,
+          creator: mapAccount(creatorRow),
+          post: mapManagedPost(postRow),
+          parent: mapInteraction(parentRow),
+          commenter: {
+            id: String(commenterRow.id),
+            handle: String(commenterRow.handle),
+            displayName: String(commenterRow.displayName),
+          },
+        };
+      });
+    },
+
+    /**
      * Release a claim whose generation never produced a reply. The claim is the dedupe key
      * for "this comment already has a creator reply", so keeping it after a failure would
      * block that comment forever; no provider call succeeded, so nothing is billed twice.
@@ -4796,6 +4927,8 @@ export function createSlurpStorage(db: DB) {
         runId: string;
         type: "like" | "reply" | "repost";
         content: string | null;
+        /** The comment being answered. Null, or an unusable id, means answering the post. */
+        parentInteractionId?: string | null;
       },
     ): Promise<{ interaction: NoodleInteraction; created: boolean } | null> {
       return db.transaction(async (tx) => {
@@ -4955,6 +5088,20 @@ export function createSlurpStorage(db: DB) {
         if (!actorSnapshot || (actor && actor.kind !== "random_user")) return null;
         const content = input.type === "reply" ? input.content?.trim() || null : null;
         if (input.type === "reply" && !content) return null;
+        // A parent must be a real comment on this post, and nobody answers themselves. Only a
+        // reply may have one: a like on a comment is not a thing this schema models.
+        let parentInteractionId: string | null = null;
+        if (input.type === "reply" && input.parentInteractionId) {
+          const parentRow = (
+            await tx.select().from(noodleInteractions).where(eq(noodleInteractions.id, input.parentInteractionId))
+          )[0];
+          const parent = parentRow ? mapInteraction(parentRow) : null;
+          if (parent && parent.postId === postId && parent.type === "reply" && parent.actorAccountId !== input.actorId)
+            parentInteractionId = parent.id;
+        }
+        const matchesParent = parentInteractionId
+          ? eq(noodleInteractions.parentInteractionId, parentInteractionId)
+          : isNull(noodleInteractions.parentInteractionId);
         const existing = await tx
           .select()
           .from(noodleInteractions)
@@ -4963,7 +5110,7 @@ export function createSlurpStorage(db: DB) {
               eq(noodleInteractions.postId, postId),
               eq(noodleInteractions.actorAccountId, input.actorId),
               eq(noodleInteractions.type, input.type),
-              isNull(noodleInteractions.parentInteractionId),
+              matchesParent,
             ),
           );
         if (existing[0]) return { interaction: mapInteraction(existing[0]), created: false };
@@ -4972,7 +5119,7 @@ export function createSlurpStorage(db: DB) {
           await tx.insert(noodleInteractions).values({
             id,
             postId,
-            parentInteractionId: null,
+            parentInteractionId,
             actorAccountId: input.actorId,
             type: input.type,
             content,
@@ -4999,7 +5146,7 @@ export function createSlurpStorage(db: DB) {
                   eq(noodleInteractions.postId, postId),
                   eq(noodleInteractions.actorAccountId, input.actorId),
                   eq(noodleInteractions.type, input.type),
-                  isNull(noodleInteractions.parentInteractionId),
+                  matchesParent,
                 ),
               )
           )[0];
@@ -5679,7 +5826,11 @@ export function createSlurpStorage(db: DB) {
                 await creditEarningsNow(post.authorAccountId, "unlock", share, `unlock: ${post.authorAccountId}`);
               }
               await this.notifyCreatorIncome(post.authorAccountId, "unlock", price, viewerAccountId, post.id);
-              await this.advanceAudienceTie(viewerAccountId, post.authorAccountId, { stage: "liker", spent: price });
+              await this.advanceAudienceTie(viewerAccountId, post.authorAccountId, {
+                stage: "liker",
+                spent: price,
+                unlocked: price,
+              });
             }
             paymentCompleted = true;
           } catch (error) {
@@ -5841,7 +5992,11 @@ export function createSlurpStorage(db: DB) {
           await writeWallet(viewerAccountId, charged);
           await creditEarningsNow(creator.id, "tip", amount, `tip: ${creator.handle}`);
           await this.recordCreatorEvent(creator.id, "tip", { amount, actorLabel: viewerAccountId });
-          await this.advanceAudienceTie(viewerAccountId, creator.id, { stage: "regular", spent: amount });
+          await this.advanceAudienceTie(viewerAccountId, creator.id, {
+            stage: "regular",
+            spent: amount,
+            tipped: amount,
+          });
           return charged;
         } catch (error) {
           // Restore the sender if the recipient write fails. The shared queue prevents concurrent
@@ -5949,7 +6104,14 @@ export function createSlurpStorage(db: DB) {
     async advanceAudienceTie(
       memberId: string,
       creatorAccountId: string,
-      input: { stage?: SlurpFunnelStage; spent?: number; interactions?: number; hasSubscription?: boolean },
+      input: {
+        stage?: SlurpFunnelStage;
+        spent?: number;
+        tipped?: number;
+        unlocked?: number;
+        interactions?: number;
+        hasSubscription?: boolean;
+      },
     ): Promise<void> {
       // A legacy `noodler-fan:` id names an archetype slot, not a person, and persisted day plans
       // written before the population existed still carry them. A tie for one is a follower who

@@ -1904,6 +1904,11 @@ export function useSlurpThreads(personaId: string | null) {
         inboundUnread: number;
       }>(`/slurp/messages/threads?personaId=${encodeURIComponent(personaId!)}`),
     enabled: Boolean(personaId),
+    // A creator who is offline answers minutes or hours later, through the scheduler. Without a
+    // poll that reply only appeared once some other mutation happened to invalidate the cache,
+    // so the whole off-hours pacing model was invisible while the app was open.
+    refetchInterval: personaId ? 30_000 : false,
+    refetchIntervalInBackground: false,
   });
 }
 
@@ -1921,6 +1926,8 @@ export function useSlurpThread(threadId: string | null, personaId: string | null
         subscribed?: boolean;
       }>(`/slurp/messages/threads/${encodeURIComponent(threadId!)}?personaId=${encodeURIComponent(personaId!)}`),
     enabled: Boolean(threadId && personaId),
+    refetchInterval: threadId && personaId ? 30_000 : false,
+    refetchIntervalInBackground: false,
   });
 }
 

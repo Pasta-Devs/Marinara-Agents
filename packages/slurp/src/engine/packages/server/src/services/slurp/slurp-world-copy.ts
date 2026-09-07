@@ -102,3 +102,118 @@ const OPENERS = [
 export function slurpAudienceOpener(seed: string): string {
   return OPENERS[pickIndex(seed, "opener-dm", OPENERS.length)]!;
 }
+
+/**
+ * The noise floor of a comment section.
+ *
+ * Most comments on a real post are not observations, they are somebody tapping out three words to
+ * be seen tapping them out. Generating those with a model is the worst trade available: it is the
+ * highest-volume text on the platform and the least worth reading, so it costs the most and
+ * returns the least.
+ *
+ * So they are combinatorial, like everything else in Tier 1, and they hang off the free pulse
+ * rather than the batched run. The model's budget goes entirely to Tier 2 — the comments that
+ * have actually seen the post and come from somebody with a history.
+ *
+ * Deliberately post-agnostic, for the same reason the briefs are: "the lighting in this one" is a
+ * lie about most posts, "ok this is unfair" is true of any of them.
+ */
+const REACTION_OPENERS = ["ok", "no because", "sorry but", "genuinely", "listen", "", "", ""] as const;
+
+const REACTIONS = [
+  "this is unfair",
+  "you never miss",
+  "how are you real",
+  "this one got me",
+  "obsessed",
+  "the best one yet",
+  "I was not ready for this",
+  "stop it",
+  "perfection honestly",
+  "this is the one",
+  "screaming",
+  "you did that",
+  "unreal",
+  "my god",
+  "this is art",
+  "instant favourite",
+  "criminally good",
+  "I keep coming back to this one",
+] as const;
+
+const REACTION_TAILS = ["", "", "", " 🔥", " 😍", " 🥺", "!!", "…", " ❤️", " 😭"] as const;
+
+/**
+ * One low-effort comment. Three banks give well over a thousand distinct lines, which is more
+ * than a player will read in a very long time.
+ */
+export function slurpAudienceReaction(seed: string): string {
+  const opener = REACTION_OPENERS[pickIndex(seed, "reaction-open", REACTION_OPENERS.length)]!;
+  const body = REACTIONS[pickIndex(seed, "reaction", REACTIONS.length)]!;
+  const tail = REACTION_TAILS[pickIndex(seed, "reaction-tail", REACTION_TAILS.length)]!;
+  return `${opener ? `${opener} ` : ""}${body}${tail}`;
+}
+
+/**
+ * What a creator says back to a three-word comment.
+ *
+ * The other half of the free tier. A creator who never answers reads as a bot, but "obsessed 😍"
+ * does not need a model to answer it — "🥺 thank you" is both what a real creator writes and the
+ * whole of what the moment needs. Tier 2 keeps the model for comments that said something.
+ */
+const CREATOR_REPLIES = [
+  "thank you 🥺",
+  "you are too kind",
+  "🥺🥺🥺",
+  "this made my day",
+  "stop it you",
+  "thank you love",
+  "ok this is so sweet",
+  "aa thank you",
+  "you always say the nicest things",
+  "🥹 thank you",
+  "means a lot honestly",
+  "thank you for being here",
+] as const;
+
+export function slurpCreatorReaction(seed: string): string {
+  return CREATOR_REPLIES[pickIndex(seed, "creator-reply", CREATOR_REPLIES.length)]!;
+}
+
+/**
+ * A creator writing to a fan who did not write first.
+ *
+ * The rapport model has measured silence since it shipped — a 21-day decay curve on exactly this
+ * signal — and nothing ever acted on it. Somebody who used to talk to you every day going quiet
+ * is the most legible thing in the whole relationship model, and it moved a number nobody saw.
+ *
+ * Two shapes, because two things happen on a real platform. `MISSED` is earned: it goes to
+ * somebody with history who stopped turning up, and it only reads as sincere because it is rare.
+ * `COLD` is the ordinary case — a creator with a slow afternoon messaging somebody who has done
+ * nothing in particular. Both are Tier 1: the opener is canned, but the moment the fan answers,
+ * the reply runs through the full direct-message path with rapport, arc, and recent posts. The
+ * conversation is real even though the invitation was cheap.
+ */
+const MISSED = [
+  "hey, you have been quiet lately. everything ok?",
+  "you disappeared on me. how have you been?",
+  "not seen you around in a bit. hope things are alright",
+  "was just thinking about you. where did you go?",
+  "you used to be in here all the time. miss you",
+  "checking in. you have been away a while",
+] as const;
+
+const COLD = [
+  "hey you 🙂",
+  "hope your day is going ok",
+  "just saying hi",
+  "you have been lovely lately, wanted you to know",
+  "thanks for sticking around, genuinely",
+  "hi 🙂 hope I am not interrupting anything",
+  "was doing a round of hellos. hello",
+] as const;
+
+export function slurpCreatorOpener(seed: string, kind: "missed" | "cold"): string {
+  const bank = kind === "missed" ? MISSED : COLD;
+  return bank[pickIndex(seed, `creator-dm-${kind}`, bank.length)]!;
+}
