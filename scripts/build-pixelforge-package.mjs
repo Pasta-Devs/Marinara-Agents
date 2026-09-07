@@ -94,8 +94,34 @@ const agentDefinition = {
 };
 const agentsBuffer = Buffer.from(`${JSON.stringify([agentDefinition], null, 2)}\n`);
 
+// ── Declared assets, second source: the GM verb table ────────────────────────
+// The first non-art asset the package ships. `gm-verbs.json` is the closed list
+// of Game Master verbs the Engine may act on for Pixelforge (capability API
+// 1.16, Engine #5798): the Engine reads it off the installed package BY THIS
+// EXACT FILENAME, so the name is the Engine's to choose and not ours, and the
+// literal is pinned here rather than derived from a glob.
+//
+// It is hand-authored and checked in at the package root, so unlike every asset
+// above it, nothing generates it — which is the whole reason the asset list
+// stops being `art.files` and becomes two sources joined. Both sources then
+// flow through one payload loop, so the manifest, the zip and the pairing lint
+// below cannot learn about an asset one at a time.
+//
+// Parsed, not schema-checked. A table that is not JSON degrades at the Engine
+// to a warn and an empty verb list — silent to the player and the packager
+// both — and catching that here costs one parse. The SHAPE is validated against
+// the Engine's own `gmVerbTableSchema`, which lives in the Engine repo; a
+// second copy of those rules maintained here would be a copy free to drift.
+const GM_VERB_TABLE_PATH = "gm-verbs.json";
+try {
+  JSON.parse(await readFile(join(packageRoot, GM_VERB_TABLE_PATH), "utf8"));
+} catch (error) {
+  throw new Error(`Pixelforge ${GM_VERB_TABLE_PATH} is not valid JSON: ${error.message}`);
+}
+const declaredAssetPaths = [...art.files, GM_VERB_TABLE_PATH];
+
 const assetPayloads = [];
-for (const assetPath of art.files) {
+for (const assetPath of declaredAssetPaths) {
   assetPayloads.push({ path: assetPath, buffer: await readFile(join(packageRoot, assetPath)) });
 }
 
@@ -113,7 +139,7 @@ const manifest = {
   contributions: {
     slots: ["game-surface"],
     gameSurface: { surfaceClass: "pixelforge-surface" },
-    assets: { paths: art.files },
+    assets: { paths: declaredAssetPaths },
   },
   files: [
     { path: "agents.json", sha256: sha256(agentsBuffer), bytes: agentsBuffer.byteLength },
@@ -130,6 +156,37 @@ const manifest = {
   permissions: ["chat-read", "chat-write", "ui"],
   restartRequired: false,
 };
+
+// ── Pairing lint: declared assets and hash-pinned files stay in step ─────────
+// Read off the GENERATED manifest rather than off the lists above, because the
+// manifest is the thing that ships and there is no manifest line for a reviewer
+// to eyeball — every path in it was computed a few lines ago.
+//
+// Both directions are checked, because the Engine only checks one. Its manifest
+// schema refuses a declared asset that `files[]` does not pin; a file pinned in
+// `files[]` and MISSING from `contributions.assets.paths` is silent at install,
+// at catalog build and at runtime. That silent half is exactly how a verb table
+// ships dead: `gm-verbs.json` hash-verified, present in the zip, on disk in the
+// install — and resolving zero verbs forever, with no diagnostic anywhere to
+// say why. The failure is loud here because it can be loud nowhere else.
+//
+// Entrypoints are the one legitimate asymmetry: `agents.json` and `client.js`
+// are pinned but are not assets. They are subtracted by reading the manifest's
+// own `entrypoints`, so declaring a new one does not red this lint by surprise.
+const entrypointPaths = new Set(Object.values(manifest.entrypoints));
+const pinnedPaths = new Set(manifest.files.map((file) => file.path));
+const declaredPaths = new Set(manifest.contributions.assets.paths);
+const unpinnedAssets = [...declaredPaths].filter((path) => !pinnedPaths.has(path));
+const undeclaredFiles = [...pinnedPaths].filter((path) => !declaredPaths.has(path) && !entrypointPaths.has(path));
+if (unpinnedAssets.length > 0 || undeclaredFiles.length > 0) {
+  throw new Error(
+    [
+      "Pixelforge manifest asset pairing is broken:",
+      ...unpinnedAssets.map((path) => `  declared in contributions.assets.paths but not hash-pinned in files[]: ${path}`),
+      ...undeclaredFiles.map((path) => `  hash-pinned in files[] but not declared in contributions.assets.paths: ${path}`),
+    ].join("\n"),
+  );
+}
 
 await writeFile(join(packageRoot, "client.js"), clientBuffer);
 await writeFile(join(packageRoot, "agents.json"), agentsBuffer);
