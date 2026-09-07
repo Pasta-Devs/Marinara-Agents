@@ -38,6 +38,12 @@
     "noodle": {
       "versions": [
         {
+          "version": "1.2.21",
+          "date": "2026-09-07",
+          "notes": "- Fixed \"Load more\" on the timeline, which failed on every page after the first.\n- Fixed a manually chosen profile avatar being replaced by the character card image.\n- Applying a saved prompt now asks before it discards unsaved prompt changes.\n- Ambient accounts no longer post images.\n- Removed leftover NoodleR wording from the image generation settings.",
+          "highlight": false
+        },
+        {
           "version": "1.2.20",
           "date": "2026-09-03",
           "notes": "- Added independent image width and height settings to Noodle settings.",
