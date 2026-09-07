@@ -358,7 +358,16 @@ export async function noodleRoutes(app: FastifyInstance) {
   app.put("/accounts/:id/profile", async (request, reply) => {
     const account = await noodle.getAccountById((request.params as { id: string }).id);
     if (!account) return reply.code(404).send({ error: "Noodle account not found" });
-    return noodle.updateAccountProfile((request.params as { id: string }).id, request.body as Record<string, unknown>);
+    const body = request.body as Record<string, unknown>;
+    // A person editing identity here outranks the card: mark the profile so the bootstrap
+    // identity sync stops writing the character card's name and avatar back over it.
+    const editsIdentity = ["avatarUrl", "displayName", "bio", "handle"].some((field) => field in body);
+    return noodle.updateAccountProfile((request.params as { id: string }).id, {
+      ...body,
+      ...(editsIdentity && {
+        profile: { ...((body.profile as Record<string, unknown>) ?? {}), profileManuallyEdited: true },
+      }),
+    });
   });
   app.patch("/accounts/:id/settings", async (request, reply) => {
     const account = await noodle.getAccountById((request.params as { id: string }).id);
