@@ -21500,23 +21500,33 @@ const DEFAULT_PACKS = (() => {
 // rather than advisory, and it is the one thing this half has that the state
 // half (the weather row, written to chat metadata) does not.
 //
-// THE FIVE WAYS A DELIVERY IS LOST, stated once because none of them is a bug
-// waiting to be found: an aborted turn (the stream is already gone), a tab
-// reloaded or closed mid-stream, a dispatch that lands before this package's
-// first mount of the page's life (the listener binds in `_bindKeys`), a chat the
-// player has switched away from (that listener's own chatId guard), and the
-// loading gate (`_live` refuses every mutator while it holds, 58-player).
-// Nothing re-delivers any of them, and the only trace a lost one leaves is a
-// server-side warning the player never sees.
+// THE SIX WAYS A DELIVERY IS LOST, stated once because none of them is a bug
+// waiting to be found. FIVE ARE THE CHANNEL'S: an aborted turn (the stream is
+// already gone), a tab reloaded or closed mid-stream, a dispatch that lands
+// before this package's first mount of the page's life (the listener binds in
+// `_bindKeys`), a chat the player has switched away from (that listener's own
+// chatId guard), and the loading gate (`_live` refuses every mutator while it
+// holds, 58-player).
+//
+// THE SIXTH IS THIS FILE'S OWN BELT, and it is the one that is not obvious: the
+// engine RE-PACKS swipe indices when a swipe is deleted (`removeSwipe` slides
+// every higher swipe down one; `addSwipe` mints `existing.length`). So DELETE A
+// SWIPE, THEN REGENERATE and the new turn arrives under an index the dedupe set
+// below already holds, and this file drops it. It costs ONE UPDATE: silent, and
+// self-healing on the very next verb, because what is dropped is an absolute row
+// rather than an increment. Nothing re-delivers any of the six, and the only
+// trace a lost one leaves is a server-side warning the player never sees.
 //
 // WHY THAT IS SURVIVABLE, and it is NOT the dedupe set below: `standing` writes
 // ABSOLUTE fields. `bump`'s `d` is a clamped set, `h` is a set-or-delete, `s` is
 // a clipped set, and an explicit `t: 0` adds nothing (58-player). Applying one
-// delivery twice writes the same row twice. Regenerating the turn mints a fresh
-// swipe under a NEW key, so the newest narration's standing simply overwrites
-// the previous one — self-healing, where a relative verb ("+25 coins") would
-// compound once per re-roll. That is why the first event verb is an absolute
-// one, and why a relative verb cannot live on this channel at all.
+// delivery twice writes the same row twice. Regenerating the turn ORDINARILY
+// mints a fresh swipe under a NEW key, so the newest narration's standing simply
+// overwrites the previous one — self-healing, where a relative verb ("+25 coins")
+// would compound once per re-roll. That is why the first event verb is an
+// absolute one, and why a relative verb cannot live on this channel at all: the
+// sixth loss costs an absolute verb one stale row until the next delivery, and
+// would cost a relative one a total that is permanently short.
 
 /** The `npc` argument's declared `maxLength` in `gm-verbs.json`. Re-stated here
  *  because the engine's validation of a string argument is SHAPE-ONLY and the
@@ -21540,7 +21550,14 @@ PF.gm = {
    *  opening the closed `PLAYER_KEYS` allowlist, `serialize()` and the load-time
    *  completeness assertion (58-player, 60-save) to buy a guarantee nothing
    *  needs — this channel has no replay, and a reload drops every undelivered
-   *  event anyway. It is a belt. The mechanism is that the write is absolute. */
+   *  event anyway. It is a belt. The mechanism is that the write is absolute.
+   *
+   *  NEITHER A CHAT SWITCH NOR A REWIND CLEARS IT, and neither needs to: the
+   *  `chatId` rides the key, so the same messageId in a second chat is a distinct
+   *  key and applies; and `_rebuild` replaces the player block wholesale while
+   *  this Set survives it, so a same-triple re-delivery after a rewind is dropped
+   *  — unreachable on its own, since nothing replays, and the same mechanism as
+   *  the sixth loss above. */
   _seen: new Set(),
 
   /** Capability API 1.16 events, addressed to this package by the host. The
@@ -21550,10 +21567,14 @@ PF.gm = {
     const data = detail.data && typeof detail.data === "object" ? detail.data : {};
     const verb = String(data.verb ?? "");
     // THE DEDUPE TRIPLE, and it guards REDELIVERY — which this channel cannot do
-    // — rather than REGENERATION, which it will. A regenerate mints a fresh
-    // swipeIndex, so the same sentence generated twice arrives under two keys and
-    // applies twice; being absolute, the second apply lands on the row the first
-    // one wrote. Skipped entirely when the messageId is missing (the engine emits
+    // — rather than REGENERATION, which it will. A regenerate ORDINARILY mints a
+    // fresh swipeIndex, so the same sentence generated twice arrives under two
+    // keys and applies twice; being absolute, the second apply lands on the row
+    // the first one wrote. NOT ALWAYS FRESH, though, and the header's sixth loss
+    // is exactly this: the engine re-packs indices when a swipe is deleted, so a
+    // regenerate after a deletion can re-mint an index this Set already holds and
+    // the delivery is dropped — one stale row until the next verb lands.
+    // Skipped entirely when the messageId is missing (the engine emits
     // without one on a message it could not claim): two unidentified deliveries
     // would collide on one key, and swallowing a distinct event is worse than
     // re-applying an idempotent one.
@@ -21605,6 +21626,15 @@ PF.gm = {
    *  `d` also makes the promotion heuristic yield (58-player), so a named rung is
    *  not fought by CASUAL_CEILING or the one-rung-per-press rule. */
   standing(core, args) {
+    // THE GATE, ASKED HERE TOO, and the only guard this verb repeats. `_live`
+    // already refuses the WRITE while the gate holds — but it cannot reach the
+    // refusal toast below, which fires before anything gets that far. And while
+    // the gate holds, `core.sim.world` can be the interim world rather than the
+    // one the narration was composed against (60-save), so a name the GM took
+    // honestly from the story would be refused with a sentence that is false.
+    // With this, all three of this verb's refusals are silent under the gate, the
+    // way the header says they are.
+    if (PF.save?.gateHolds?.(core)) return;
     const world = core?.sim?.world;
     if (!world) return;
     const stance = String(args?.stance ?? "");

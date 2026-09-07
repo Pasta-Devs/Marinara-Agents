@@ -24334,6 +24334,28 @@ const fire = (node, type) => Promise.all((node.listeners[type] ?? []).map((fn) =
     send({ npc: "Tam", stance: "stranger" }, { chatId: "chat-elsewhere", messageId: "msg-11" });
     assert.equal(rowFor("Tam").d, 2, "…and neither is one for a chat the player has left");
     assert.equal(hud.toastEl.textContent, "", "…silently, both of them");
+
+    // 8. THE RUNG IS SET, NOT ADDED — measured from a row that is NOT on the
+    // floor, which is the only place the two can be told apart. Tam has sat at
+    // friendly since lane 2, so naming `acquainted` has to land him ON
+    // acquainted; an apply that added the named rung to the held one would carry
+    // him UP to close friend instead. Every other lane starts its row at rung 0,
+    // where a set and an add are the same number and prove nothing.
+    hud.toastEl.textContent = "";
+    assert.equal(rowFor("Tam").d, 2, "the row this lane measures from is above the floor");
+    send({ npc: "Tam", stance: "acquainted" }, { messageId: "msg-12" });
+    assert.equal(rowFor("Tam").d, 1, "the GM's rung was SET on a non-zero row, not added to it");
+    assert.match(hud.toastEl.textContent, /Tam knows you now\./, "…and said in the ladder's own words");
+
+    // 9. A BLANK LINE DOES NOT ERASE. The engine's validator checks `typeof` and
+    // `maxLength` and never emptiness, so `"line": "   "` really does arrive —
+    // and `bump`'s `s` is a set-or-DELETE, so handing it straight through would
+    // wipe what this person remembers. Mira is still carrying lane 6's line.
+    hud.toastEl.textContent = "";
+    assert.equal(rowFor("Mira").s, "Made it right with her.", "the row this lane measures from remembers a line");
+    send({ npc: "mira", stance: "friendly", line: "   " }, { messageId: "msg-13" });
+    assert.equal(rowFor("Mira").s, "Made it right with her.", "a blank line is 'the GM supplied none', not 'erase it'");
+    assert.equal(hud.toastEl.textContent, "Mira counts you a friend now.", "…and an older line is not re-said as news");
   } finally {
     globalThis.setTimeout = realSetTimeout;
     globalThis.clearTimeout = realClearTimeout;
