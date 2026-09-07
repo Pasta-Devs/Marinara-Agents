@@ -24473,7 +24473,12 @@ const fire = (node, type) => Promise.all((node.listeners[type] ?? []).map((fn) =
     );
     return {
       launches,
-      nameIn: nodes.find((node) => node.tagName === "INPUT" && node.value === "Hearthvale"),
+      // LOCATED BY PLACEHOLDER, because the field ships EMPTY now (0.16.2). It
+      // was found by its VALUE, which stopped finding it the moment "Hearthvale"
+      // became a placeholder rather than a pre-fill — and a `find` that misses
+      // returns undefined rather than failing, so every lane touching `nameIn`
+      // would have gone quiet instead of red.
+      nameIn: nodes.find((node) => node.tagName === "INPUT" && node.placeholder === "Hearthvale"),
       launchBtn: nodes.find((node) => node.tagName === "BUTTON" && String(node.textContent).startsWith("Begin in")),
       generateIn: checkboxes[0],
       generateLabel: nodes.find((node) => String(node.textContent).startsWith("Generate a unique world")),
@@ -24600,7 +24605,12 @@ const fire = (node, type) => Promise.all((node.listeners[type] ?? []).map((fn) =
     return {
       launches,
       nodes,
-      nameIn: nodes.find((node) => node.tagName === "INPUT" && node.value === "Hearthvale"),
+      // LOCATED BY PLACEHOLDER, because the field ships EMPTY now (0.16.2). It
+      // was found by its VALUE, which stopped finding it the moment "Hearthvale"
+      // became a placeholder rather than a pre-fill — and a `find` that misses
+      // returns undefined rather than failing, so every lane touching `nameIn`
+      // would have gone quiet instead of red.
+      nameIn: nodes.find((node) => node.tagName === "INPUT" && node.placeholder === "Hearthvale"),
       seedIn: nodes.find((node) => node.tagName === "INPUT" && /^\d+$/.test(String(node.value ?? ""))),
       settingIn: nodes.find((node) => node.tagName === "TEXTAREA"),
       connSel: nodes.find((node) => node.children.some((option) => option.attrs.value === "conn-default")),
@@ -25278,7 +25288,12 @@ const fire = (node, type) => Promise.all((node.listeners[type] ?? []).map((fn) =
       nodes,
       checkboxes,
       selects: nodes.filter((node) => node.tagName === "SELECT"),
-      nameIn: nodes.find((node) => node.tagName === "INPUT" && node.value === "Hearthvale"),
+      // LOCATED BY PLACEHOLDER, because the field ships EMPTY now (0.16.2). It
+      // was found by its VALUE, which stopped finding it the moment "Hearthvale"
+      // became a placeholder rather than a pre-fill — and a `find` that misses
+      // returns undefined rather than failing, so every lane touching `nameIn`
+      // would have gone quiet instead of red.
+      nameIn: nodes.find((node) => node.tagName === "INPUT" && node.placeholder === "Hearthvale"),
       seedIn: nodes.find((node) => node.tagName === "INPUT" && /^\d+$/.test(String(node.value ?? ""))),
       settingIn: nodes.find((node) => node.tagName === "TEXTAREA"),
       connSel: nodes.find((node) => node.children.some((option) => option.attrs.value === "conn-1")),
@@ -25341,6 +25356,22 @@ const fire = (node, type) => Promise.all((node.listeners[type] ?? []).map((fn) =
     const colony = await mountWizard();
     colony.settingIn.value =
       "A sealed hab ring in orbit above a frozen moon. The crew keeps the reactor and the hydroponics bay alive.";
+    // THE NAME FIELD IS LEFT UNTOUCHED ON PURPOSE, and this is the half that
+    // 0.16.2's first cut got wrong in the other direction. `nameIn` shipped
+    // PRE-FILLED with "Hearthvale"; 0.16.1's theme-swap listener re-synced it and
+    // died with the dropdown, and the kit is derived from text typed AFTER mount,
+    // so a pre-fill could never follow it. Measured before the fix: this exact
+    // setting yielded `theme: "sci-fi-colony"` — a world whose own settlement is
+    // Meridian Base — with `worldName`, `_configWorldName` and the launch button
+    // all saying Hearthvale, which is verbatim the shape 0.16.1 fixed the other
+    // way round. The field is a placeholder now, so the untouched box resolves off
+    // the DERIVED preset.
+    await fire(colony.settingIn, "input");
+    assert.equal(
+      colony.launchBtn.textContent,
+      "Begin in Meridian Base",
+      "the button names the world the launch is about to write, at the control the player reads last",
+    );
     colony.generateIn.checked = false;
     await fire(colony.launchBtn, "click");
     const declinedCfg = colony.launches[0].config;
@@ -25350,9 +25381,24 @@ const fire = (node, type) => Promise.all((node.listeners[type] ?? []).map((fn) =
       "the words decide the kit, and they are the ONLY thing that decides it now",
     );
     assert.equal(declinedCfg.experienceConfig.generate, false, "…on a world that declined the call");
+    // AND THE NAME AGREES WITH THE KIT AT ALL FOUR READERS. This is also the only
+    // pin on `THEME_PRESETS["sci-fi-colony"].name`: mutating "Meridian Base" left
+    // the whole harness green before this line existed, and under the placeholder
+    // fix that field became MORE load-bearing rather than less — it is now the
+    // world name a colony player gets by leaving the field alone.
+    assert.equal(declinedCfg.experienceConfig.worldName, "Meridian Base", "the config carries the colony's own name");
+    assert.equal(colony.launches[0].name, "Meridian Base", "…so does the chat the host is asked to create");
+    assert.equal(
+      loadedPF.save._configWorldName({ gameSetupConfig: declinedCfg }),
+      "Meridian Base",
+      "…and so does the reader that puts it in front of the model and on the loading gate",
+    );
     const legacy = loadedPF.world.build(declinedCfg.experienceConfig.seed, declinedCfg.experienceConfig.theme, null);
     assert.equal(legacy.theme, "sci-fi-colony", "and the world the player actually walks into is painted in that kit");
     assert.equal(legacy.zones.village.name, "Meridian Base", "…down to the name of the settlement it stands up");
+    // Note `20-world.js`'s own name book is what the line above reads, which is a
+    // DIFFERENT source from the wizard preset the three lines before it read. Two
+    // tables holding the same string, and the lane needs both.
 
     // The box is a `rows="3"` textarea, so multi-line is its DESIGNED shape and
     // not an edge case. A reader that took only the first line would answer
@@ -25389,7 +25435,20 @@ const fire = (node, type) => Promise.all((node.listeners[type] ?? []).map((fn) =
     } finally {
       loadedPF.setup.themeFromWords = realResolver;
     }
-    assert.deepEqual(seen, [""], "the resolver was handed the RAW box, once, and the raw box was empty");
+    // EVERY CALL, NOT ONE CALL. This asserted `deepEqual(seen, [""])` while the
+    // launch was the resolver's only caller; the launch LABEL is a second one now,
+    // because with the name field shipping empty the button has to fall back to
+    // the derived preset's name or it re-opens the mismatch it exists to close.
+    // What the lane pins is unchanged and is the part that matters — every call
+    // is handed the RAW box, never `settingOf`'s composed sentence — so it is
+    // written over the whole list rather than pinned to a count that will move
+    // again the next time something else needs to know the kit.
+    assert.ok(seen.length > 0, "the resolver was called");
+    assert.deepEqual(
+      [...new Set(seen)],
+      [""],
+      "…and every call was handed the RAW box, which was empty — never the composed sentence",
+    );
     assert.equal(
       empty.launches[0].config.experienceConfig.theme,
       "cozy-village",
@@ -25489,6 +25548,76 @@ const fire = (node, type) => Promise.all((node.listeners[type] ?? []).map((fn) =
       loadedPF.art.themeIds().includes(loadedPF.setup.themeFromWords("a village orchard by the mill")),
     "whatever it returns is a kit that ships — `_configTheme` and the brief's own fold both assume it",
   );
+}
+
+// ── (9) THE RESOLVER DOES NOT MIS-KIT ORDINARY ENGLISH ───────────────────────
+// Matching was `token.startsWith(word)` against a lexicon that carries "hab",
+// "dome" and "crew", and `cozy-village` scores ZERO on most prose that is not
+// explicitly about farms and inns — so ONE stray token flipped the kit. All
+// three rows below were measured returning `sci-fi-colony`, and the first is the
+// maintainer's own worked example ("Pallet Town… a professor who studies
+// creatures") rendered as a space colony because of the word "Domestic".
+//
+// The fix keeps the prefix and bounds the REMAINDER to a suffix allowlist, which
+// is the only one of four candidate matchers that took all three of: these
+// counterexamples, suffix-carrying prose ("colonies", "terraforming",
+// "hydroponics", "androids" — all of which exact-token matching would silently
+// retire, because "coloni", "hydroponic" and "terraform" are deliberate STEMS),
+// and short-word plurals ("domes", "crews", "domed" — which a minimum-prefix-
+// length rule loses).
+{
+  const kit = (text) => loadedPF.setup.themeFromWords(text);
+  // The three counterexamples, and they are the acceptance bar for the matcher.
+  assert.equal(
+    kit("Pallet Town. A small place by the sea where a professor studies creatures. Domestic and slow."),
+    "cozy-village",
+    'a domestic town is not a colony because "dome" is a prefix of "domestic"',
+  );
+  assert.notEqual(
+    kit("A monastery in the mountains. The monks keep bees and habitually pray at dawn, a habit of centuries."),
+    "sci-fi-colony",
+    '…nor is a monastery of habits, on "hab"',
+  );
+  assert.equal(
+    kit("A Victorian seaside resort. Bathing machines, a pier, gulls, and a crewel-work shop."),
+    "cozy-village",
+    '…nor a crewel-work shop, on "crew" — the row nobody thinks of',
+  );
+  // AND THE OTHER HALF, because a matcher that answers cozy-village to everything
+  // would pass all three above. Genuine colony prose must still get through, and
+  // the stems must still carry their suffixes.
+  assert.equal(
+    kit("A sealed hab ring in orbit above a frozen moon. The crew keeps the reactor and the hydroponics bay alive."),
+    "sci-fi-colony",
+    "real colony prose still resolves — this is the declined-world lane's own sentence",
+  );
+  assert.equal(
+    kit("A quiet place at the edge of things.\nThe dome is cracked and the airlock sticks.\nEverybody here is a colonist."),
+    "sci-fi-colony",
+    "…and so does the multi-line one",
+  );
+  // ONE WORD, ALONE, because the line above passes on `dome` and `airlock` too
+  // and would survive the suffix set losing `st` entirely. "colonist" is
+  // "coloni" + "st", and the stem is deliberate — this is the assertion that
+  // makes the `st`/`sts`/`ist`/`ists` entries load-bearing rather than decorative.
+  assert.equal(kit("Everybody here is a colonist."), "sci-fi-colony", '"colonist" votes on the stem, on its own');
+  for (const text of [
+    "Terraforming crews and hydroponics domes on a frontier outpost.",
+    "Androids and colonies under glass.",
+    "Habs, domes, crews, crewmen and airlocks.",
+  ]) {
+    assert.equal(kit(text), "sci-fi-colony", `the stems still carry their suffixes: ${text}`);
+  }
+  // The trap sweep, all of which must stay cozy: every one is a real English word
+  // that a bare prefix match reads as a colony.
+  for (const text of [
+    "A domestic domicile with a domino parlour.",
+    "Cozening merchants, a goatee and a habit.",
+    "A wooden well and a woolen shawl, barnacle-crusted.",
+    "Station wagons on the farm lane.",
+  ]) {
+    assert.equal(kit(text), "cozy-village", `and the traps stay in the village: ${text}`);
+  }
 }
 
 // ── THE CONTENT PACK: THE SCHEMA IS THE CONTRACT (0.13 slice 1) ──────────────

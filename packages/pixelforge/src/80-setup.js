@@ -95,10 +95,42 @@ const KIT_WORDS = {
   ],
 };
 
-/** Tokens rather than substrings, so "a well-lit inner room" cannot vote for a
- *  village on the word "inn". A token counts once for a kit however many of that
- *  kit's words it matches, and a prefix match is what carries the plurals and the
- *  ordinary suffixes ("farms", "farmhand", "colonies", "domed"). */
+/** THE SUFFIXES A LEXICON WORD IS ALLOWED TO GROW, and this list is the whole
+ *  cost of matching on prefixes at all.
+ *
+ *  A bare `startsWith` mis-kits ordinary English, and it does it in the one
+ *  direction that matters: `cozy-village` scores ZERO on most prose that is not
+ *  explicitly about farms and inns, so a single stray token flips the answer.
+ *  Measured against the shipped lexicon — "hab", "dome" and "crew" are all in it
+ *  — "Domestic and slow" reads as a space colony, so does "habitually … a habit
+ *  of centuries", and so does "a crewel-work shop". The first of those is the
+ *  maintainer's own worked example rendered as a hab ring.
+ *
+ *  Exact-token matching fixes those three and breaks more than it fixes:
+ *  "coloni", "hydroponic", "terraform" and "innkeep" are deliberate STEMS, and
+ *  exact matching silently retires all four — "colonies", "terraforming",
+ *  "hydroponics" and "innkeeper" would stop voting. A minimum prefix length is
+ *  no better: it loses "domes", "crews" and "domed", and its passes on the cozy
+ *  side are the default masking a miss rather than a detection.
+ *
+ *  So the prefix stays and the REMAINDER is checked: `dome` + `s` is a dome,
+ *  `dome` + `stic` is not. Four matchers were run against the three
+ *  counterexamples, suffix-only prose and short-word plurals; this is the only
+ *  one that took all three sets. The trade is stated rather than assumed — the
+ *  list is a closed vocabulary, so a real word ending this list does not carry
+ *  ("domelike", say) is a miss, and the answer to a miss is to add the suffix
+ *  here rather than to loosen the match. */
+const SUFFIX =
+  /^(s|es|ed|d|ing|er|ers|ies|y|st|sts|ist|ists|land|lands|house|houses|hand|hands|man|men|folk|side|smith|keeper|keepers|al|ic|ics)$/;
+/** `st`/`sts`/`ist`/`ists` are in the set for `colonist` = `coloni` + `st`,
+ *  which is the multi-line lane's own word; without them that lane passes only
+ *  because `dome` and `airlock` also hit, which is a lane passing for the wrong
+ *  reason. */
+const matches = (token, word) => token === word || (token.startsWith(word) && SUFFIX.test(token.slice(word.length)));
+
+/** Tokens rather than substrings, and then a bounded prefix on top of that. A
+ *  token counts once for a kit however many of that kit's words it matches, so
+ *  "hydroponics domes" is two votes and not four. */
 const themeFromWords = (text) => {
   const tokens = String(text ?? "")
     .toLowerCase()
@@ -109,7 +141,7 @@ const themeFromWords = (text) => {
   let bestHits = 0;
   for (const [theme, words] of Object.entries(KIT_WORDS)) {
     let hits = 0;
-    for (const token of tokens) if (words.some((word) => token.startsWith(word))) hits++;
+    for (const token of tokens) if (words.some((word) => matches(token, word))) hits++;
     // STRICTLY greater, so a tie keeps the incumbent and nothing wins by being
     // first in the table: a tie and zero hits both land on cozy-village.
     if (hits > bestHits) {
@@ -120,10 +152,29 @@ const themeFromWords = (text) => {
   return best;
 };
 
-/** On PF because the harness has to be able to drive the resolver DIRECTLY. The
- *  lane that matters is which INPUT it was handed — the raw box, never the
- *  composed sentence — and the only way to pin that is to watch the call, so the
- *  wizard calls it through this object rather than through the local binding. */
+/** `PF.setup` IS A PUBLISHED SURFACE, DELIBERATELY, AND THIS IS THE CONTRACT.
+ *
+ *  The design note for this release said the resolver "never crosses a module
+ *  boundary", and the implementation published it anyway — which was the right
+ *  call badly recorded, so it is recorded here. What the surface guarantees:
+ *
+ *    - ONE production call site. The launch handler below, and nothing else in
+ *      `src/` reads `PF.setup`. No other module writes the key either, so there
+ *      is no collision to inherit.
+ *    - ONE consumer, and it is the harness. The lane that matters is which INPUT
+ *      the resolver was handed — the RAW Setting box, never `settingOf`'s
+ *      composed "A cozy pixel village called Hearthvale." — and there is no way
+ *      to pin that from the outside except to watch the call. So the wizard calls
+ *      through this object rather than through the local binding: replacing
+ *      `PF.setup.themeFromWords` with a spy is what makes the laundering bug
+ *      testable at all, and a seeded mutant proves the spy catches it.
+ *    - `kitIds()` exists for the same reason: the lexicons are hand-written per
+ *      kit, so they are the one thing that can silently fall behind a third
+ *      theme. The harness pins them against `PF.art.themeIds()`.
+ *
+ *  Anything else reading this object is out of contract. A future caller that
+ *  wants a theme from text should be asking the brief or the config, not
+ *  re-running the wizard's own resolver over somebody else's string. */
 PF.setup = {
   themeFromWords,
   kitIds: () => Object.keys(KIT_WORDS),
@@ -222,7 +273,25 @@ PF.mountSetup = (el, props) => {
    *  real boolean still accepted so a future projection does not re-break it. */
   const isYes = (value) => value === "true" || value === true;
 
-  const nameIn = input(THEME_PRESETS["cozy-village"].name);
+  // THE NAME IS A PLACEHOLDER AND NEVER A VALUE EITHER (0.16.2), and it is the
+  // same fix as the Setting box's one field over. It shipped pre-filled with
+  // "Hearthvale", and 0.16.1's theme-swap listener re-synced it when the dropdown
+  // moved (`if (nameIn.value === previous.name) nameIn.value = next.name`) — that
+  // listener died with the dropdown, and the theme is now derived from text typed
+  // AFTER mount, so a pre-fill can never follow it. Measured: a hab-ring setting
+  // with the name field untouched gave a world whose own settlement is Meridian
+  // Base, with `worldName`, `_configWorldName`, the launch button and the brief
+  // payload's leading `World name:` all saying Hearthvale — verbatim the shape
+  // 0.16.1 fixed in the other direction.
+  //
+  // As a placeholder it shows the same word in the same place and carries none of
+  // it, and the fallback then resolves itself: `nameIn.value.trim() || preset.name`
+  // already reads the DERIVED preset, so an untouched field on a colony setting
+  // yields Meridian Base for free. Preferred over re-syncing on a `settingIn`
+  // event because there is no "is it still the untouched default" state to get
+  // wrong.
+  const nameIn = input("");
+  nameIn.placeholder = THEME_PRESETS["cozy-village"].name;
   const seedIn = input(String((Math.random() * 0xffffffff) >>> 0));
   // THE PRESET IS A PLACEHOLDER AND NEVER A VALUE. It shipped as `settingIn.value`,
   // which made "leave it alone" the strongest instruction the wizard could send:
@@ -297,18 +366,30 @@ PF.mountSetup = (el, props) => {
     type: "button",
     style: `${S.btn}background:var(--primary,#2f6b4f);color:var(--primary-foreground,#fff);border:none;`,
   });
-  // The button names the world you are about to walk into, so it answers to the
-  // name field rather than to a literal. It shipped as the constant "Begin in
-  // Hearthvale" and only the RETRY path below ever rewrote it, so a colony called
-  // Meridian Base offered to begin in a cozy village that was not in the game.
-  // 0.16.2 leaves it answering to the NAME FIELD ALONE: the theme is derived from
-  // the Setting box at launch and there is no longer a control whose change could
-  // re-skin the label mid-form.
+  // THE BUTTON ANSWERS TO BOTH FIELDS, and "the name field alone" was the bug
+  // stated as the fix. It names the world you are about to walk into, so it must
+  // say what the launch is actually going to write. It shipped as the constant
+  // "Begin in Hearthvale" with only the RETRY path ever rewriting it, so a colony
+  // called Meridian Base offered to begin in a cozy village that was not in the
+  // game — and with the name field now shipping EMPTY, a label reading only
+  // `nameIn` would re-open exactly that mismatch at the control the player reads
+  // last: colony prose in the box, an untouched name, and a button still offering
+  // Hearthvale.
+  //
+  // So it falls back to the DERIVED preset's name — the same pair the launch
+  // resolves — and re-runs when either field changes. There is no control whose
+  // change could re-skin it mid-form any more; there is a TEXTAREA, and typing in
+  // it is how the kit is chosen now.
+  const resolveKit = () => {
+    const theme = PF.setup.themeFromWords(settingIn.value);
+    return { theme, preset: PF.own(THEME_PRESETS, theme) || THEME_PRESETS["cozy-village"] };
+  };
   const syncLaunchLabel = () => {
-    launchBtn.textContent = `Begin in ${nameIn.value.trim() || THEME_PRESETS["cozy-village"].name}`;
+    launchBtn.textContent = `Begin in ${nameIn.value.trim() || resolveKit().preset.name}`;
   };
   syncLaunchLabel();
   nameIn.addEventListener("input", syncLaunchLabel);
+  settingIn.addEventListener("input", syncLaunchLabel);
   const cancelBtn = PF.el("button", {
     type: "button",
     style: `${S.btn}background:transparent;color:inherit;`,
@@ -410,9 +491,10 @@ PF.mountSetup = (el, props) => {
     // resolving from the result would feed the resolver `settingOf`'s own
     // sentence — "A cozy pixel village called Hearthvale." — so the wizard's
     // preset words would be counted as the player's evidence, which is exactly
-    // the class of bug 0.16.1 removed one layer up.
-    const theme = PF.setup.themeFromWords(settingIn.value);
-    const preset = PF.own(THEME_PRESETS, theme) || THEME_PRESETS["cozy-village"];
+    // the class of bug 0.16.1 removed one layer up. The launch label resolves the
+    // same pair through the same helper, so the button and the config cannot
+    // disagree about which kit the box asked for.
+    const { theme, preset } = resolveKit();
     // THE NAME, RESOLVED ONCE AND SPENT EVERYWHERE. It used to be resolved at the
     // `onLaunch` call and nowhere else, which is why it named the chat and reached
     // no generator: the Engine's blueprint call, the GM's per-turn prompt and this
