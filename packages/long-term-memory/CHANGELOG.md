@@ -1,5 +1,20 @@
 # Long-Term Memory changelog
 
+## 1.2.23 — 2026-09-06 [highlight]
+
+- Restored responsive Memory Vault and Sources loading by deferring local-character discovery.
+- Reused one aggregate local-character catalog and kept its loading and retry state visible.
+
+## 1.2.22 — 2026-09-06
+
+- Kept user-selected source targets valid while isolating parent chat context transitions.
+- Prevented stale source previews and details from rendering during scope changes.
+
+## 1.2.21 — 2026-09-05
+
+- Reduced redundant vault scans across Review Queue, Memory Vault, and Sources loading.
+- Preserved local-character scope targets while reusing the existing note snapshot.
+
 ## 1.2.20 — 2026-09-04
 
 - Added conversation-family-scoped Roleplay local-character memories and reviewable first-use mutations.

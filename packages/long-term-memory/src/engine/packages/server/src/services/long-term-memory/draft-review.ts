@@ -44,10 +44,11 @@ export async function projectLongTermMemoryDraftReview(
         : draft.status === "pending" || (options.includeInvalidated && draft.status === "invalidated"),
     )
     .sort((a, b) => a.createdAt.localeCompare(b.createdAt) || a.id.localeCompare(b.id));
-  const overlay = await storage.getNotesByIds(
-    uniqueStrings(drafts.flatMap((draft) => draft.mutations.map(noteIdForLtmDraftMutation))),
-  );
-  const sourceNotes = await storage.getNotesByIds(uniqueStrings(drafts.map((draft) => draft.source.sourceNoteId)));
+  const sourceNoteIds = drafts.map((draft) => draft.source.sourceNoteId);
+  const overlayNoteIds = drafts.flatMap((draft) => draft.mutations.map(noteIdForLtmDraftMutation));
+  const notes = await storage.getNotesByIds(uniqueStrings([...sourceNoteIds, ...overlayNoteIds]));
+  const overlay = new Map(notes);
+  const sourceNotes = notes;
   const sources = new Map<string, MutableSource>();
   for (const draft of drafts) {
     const sourceNoteId = draft.source.sourceNoteId;

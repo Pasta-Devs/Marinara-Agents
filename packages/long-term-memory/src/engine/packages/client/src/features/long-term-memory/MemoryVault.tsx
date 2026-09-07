@@ -40,7 +40,7 @@ import {
   getLtmScopePersonaIds,
   normalizeLtmScope,
 } from "../../../../shared/src/features/agents/long-term-memory/scope.js";
-import { invalidateLtmQueries, queryKeys, request, requestAllNotes } from "./api";
+import { invalidateLtmQueries, ltmScopeTargetsKey, queryKeys, request, requestAllNotes } from "./api";
 import { Button, ClickSurface, IconButton, InfoPopover, inputClass, StatusSurface } from "./shared-controls";
 import type { LongTermMemoryDestinationProps } from "./types";
 import {
@@ -67,6 +67,7 @@ import {
   type AvailabilityTarget,
   type PickerTarget,
 } from "./TargetPicker";
+import type { ScopeTargetLocalCharacter } from "./scope-targets";
 import { normalizeDetailName } from "./detail-name";
 
 const noteTypes: readonly LtmNoteType[] = [
@@ -1333,7 +1334,8 @@ export default function MemoryVault({
   });
 
   const scopeTargets = useQuery({
-    queryKey: [...queryKeys.scopeTargets(props.chatId), "all-chats"],
+    queryKey: ltmScopeTargetsKey(props.chatId),
+    staleTime: 30_000,
     queryFn: () =>
       request<ScopeTargets>(
         `/scope-targets?includeAllChats=true${props.chatId ? `&chatId=${encodeURIComponent(props.chatId)}` : ""}`,
@@ -1415,6 +1417,15 @@ export default function MemoryVault({
   const scopeTargetResolved = Boolean(
     target && targetContextKey.current === contextKey && scopeTargets.isSuccess && targetScopeResolved,
   );
+  const localCharacters = useQuery({
+    queryKey: queryKeys.localCharacters(props.chatId),
+    staleTime: 30_000,
+    enabled: scopeTargetResolved && Boolean(draft && (draft.type === "character" || draft.type === "relationship")),
+    queryFn: () =>
+      request<ScopeTargetLocalCharacter[]>(
+        `/local-characters?includeAllChats=true${props.chatId ? `&chatId=${encodeURIComponent(props.chatId)}` : ""}`,
+      ),
+  });
   const notesScope = target?.id === `chat:${props.chatId}` ? currentScope : target?.scope;
   const notes = useQuery({
     queryKey: [...queryKeys.notes, contextKey, target?.id, notesScope],
@@ -1448,7 +1459,7 @@ export default function MemoryVault({
         : subject.ref.kind === "persona"
           ? scopeTargets.data?.personas
           : subject.ref.kind === "local_character"
-            ? scopeTargets.data?.localCharacters
+            ? localCharacters.data
             : [];
     return targets?.find((target) => target.id === subject.ref!.id)?.label ?? subject.ref.id;
   };
@@ -1702,7 +1713,7 @@ export default function MemoryVault({
         label: persona.label,
         comment: persona.comment,
       })),
-      ...(scopeTargets.data?.localCharacters ?? [])
+      ...(localCharacters.data ?? [])
         .filter((character) => !localSubjectFamily || character.familyId === localSubjectFamily)
         .map((character) => ({
           kind: "local_character" as const,
@@ -1715,7 +1726,7 @@ export default function MemoryVault({
     scopeTargets.data?.characters,
     scopeTargets.data?.chats,
     scopeTargets.data?.groups,
-    scopeTargets.data?.localCharacters,
+    localCharacters.data,
     scopeTargets.data?.personas,
     draft?.subjects,
   ]);
@@ -1788,7 +1799,12 @@ export default function MemoryVault({
       return scopeTargetLabel(subject.ref.kind, subject.ref.id, pickerTargets, {
         character: localizeUi("ui.longTermMemory.memoryvault.deletedCharacter"),
         persona: localizeUi("ui.longTermMemory.memoryvault.missingPersona"),
-        local_character: localizeUi("ui.longTermMemory.memoryvault.missingLocalCharacter"),
+        local_character:
+          localCharacters.isError && !localCharacters.data
+            ? localizeUi("ui.longTermMemory.memoryvault.unresolvedSubject")
+            : localCharacters.isLoading && !localCharacters.data
+              ? localizeUi("ui.longTermMemory.memoryvault.loadingLocalCharacter")
+              : localizeUi("ui.longTermMemory.memoryvault.missingLocalCharacter"),
       });
     return localizeUi("ui.longTermMemory.memoryvault.unresolvedSubject");
   };
@@ -2011,6 +2027,7 @@ export default function MemoryVault({
       queryKeys.rejectedSuggestions,
       queryKeys.integrity,
       queryKeys.lastInjectionRoot,
+      queryKeys.localCharactersRoot,
     ]);
   }
   async function undoArchive(recovery: ArchiveUndoState) {
@@ -2204,7 +2221,12 @@ export default function MemoryVault({
         setError(
           localizeUi("ui.longTermMemory.memoryvault.savedButRecallIsStale", { error: response.rebuild.error ?? "" }),
         );
-        await invalidateLtmQueries(client, [queryKeys.notes, queryKeys.status, queryKeys.activity]).catch(() => {});
+        await invalidateLtmQueries(client, [
+          queryKeys.notes,
+          queryKeys.status,
+          queryKeys.activity,
+          queryKeys.localCharactersRoot,
+        ]).catch(() => {});
         return false;
       }
       const recoveryComplete = fingerprint(draftRef.current) === submittedFingerprint;
@@ -2253,6 +2275,7 @@ export default function MemoryVault({
         queryKeys.notes,
         queryKeys.status,
         queryKeys.activity,
+        queryKeys.localCharactersRoot,
         ...(rejectedId && recoveryComplete ? [queryKeys.rejectedSuggestions] : []),
       ]).catch(() => {});
       succeeded = savedCurrentDraft;
@@ -3648,6 +3671,20 @@ export default function MemoryVault({
                                 ? localizeUi("ui.longTermMemory.memoryvault.personThisMemoryDescribes")
                                 : localizeUi("ui.longTermMemory.memoryvault.peopleInThisRelationship")}
                             </span>
+                            {localCharacters.isLoading && !localCharacters.data ? (
+                              <StatusSurface compact busy>
+                                {localizeUi("ui.longTermMemory.memoryvault.loadingLocalCharacters")}
+                              </StatusSurface>
+                            ) : localCharacters.isError && !localCharacters.data ? (
+                              <StatusSurface compact tone="danger">
+                                <span className="mr-auto">
+                                  {localizeUi("ui.longTermMemory.memoryvault.localCharactersUnavailable")}
+                                </span>
+                                <Button onClick={() => void localCharacters.refetch()}>
+                                  {localizeUi("ui.longTermMemory.memoryvault.retryLocalCharacters")}
+                                </Button>
+                              </StatusSurface>
+                            ) : null}
                             <div className="flex flex-wrap gap-1.5">
                               {(draft.subjects ?? []).map((subject, index) => (
                                 <Pill

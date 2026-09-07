@@ -10,6 +10,7 @@ async function main() {
   const {
     analyzeTrustedLtmNoteSubjects,
     buildTrustedLtmSubjectCatalog,
+    resolveLtmSubjectIdentities,
     subjectsEqual,
     trustedLtmIdentityNotesForSource,
   } = await import(`${source}/subject-identity.ts`);
@@ -130,6 +131,10 @@ async function main() {
     ),
     true,
   );
+  assert.equal(
+    relationshipWithoutCause.outcome.droppedCandidates[0]?.validatorCode,
+    "relationship_state_missing_caused_by",
+  );
 
   const relationshipWithMissingCause = compile(chat, [
     unit(chat, {
@@ -145,11 +150,69 @@ async function main() {
   ]);
   assert.equal(relationshipWithMissingCause.accounting.keptUnits, 0);
   assert.equal(
-    relationshipWithMissingCause.outcome.droppedCandidates.some((candidate) =>
-      candidate.message.includes("does not exist"),
+    relationshipWithMissingCause.outcome.droppedCandidates.some(
+      (candidate) =>
+        candidate.message.includes("missing a caused_by link") &&
+        !candidate.message.includes("timeline_missing_argument"),
     ),
     true,
   );
+  assert.equal(
+    relationshipWithMissingCause.outcome.droppedCandidates[0]?.validatorCode,
+    "relationship_state_missing_caused_by",
+  );
+  const unknownLinkTarget = compile(chat, [
+    unit(chat, {
+      bucket: "world_fact",
+      subjectId: "missing_link_fact",
+      sectionKey: "facts",
+      text: "A fact linked to a missing memory.",
+      links: [{ target: "missing_memory", relation: "evidenced_by" }],
+    }),
+  ]);
+  assert.equal(unknownLinkTarget.outcome.droppedCandidates[0]?.validatorCode, "unknown_link_target");
+  assert.doesNotMatch(unknownLinkTarget.outcome.droppedCandidates[0]?.message ?? "", /missing_memory/u);
+  const closureAfterInitialDrop = compile(chat, [
+    unit(chat, {
+      bucket: "relationship_state",
+      subjectId: "removed_relationship",
+      sectionKey: "state",
+      text: "Alice and Rowan's trust changed after the argument.",
+      claimKind: "change",
+      subjectNames: ["Alice", "Rowan"],
+      dimensionChanges: { trust: -12 },
+    }),
+    unit(chat, {
+      bucket: "world_fact",
+      subjectId: "dependent_fact",
+      sectionKey: "facts",
+      text: "The observatory kept a record of Alice and Rowan's trust.",
+      links: [{ target: "rel_removed_relationship", relation: "evidenced_by" }],
+    }),
+  ]);
+  const closureDrop = closureAfterInitialDrop.outcome.droppedCandidates.find(
+    (candidate) => candidate.validatorCode === "unknown_link_target",
+  );
+  assert.ok(closureDrop);
+  assert.doesNotMatch(closureDrop.message, /rel_removed_relationship/u);
+  assert.equal(
+    closureAfterInitialDrop.diagnostics.find(
+      (diagnostic) => diagnostic.details?.validatorCode === "unknown_link_target",
+    )?.details?.validationStage,
+    "closure",
+  );
+  const sourceHashMismatch = compile(chat, [
+    {
+      ...unit(chat, {
+        bucket: "world_fact",
+        subjectId: "stale_source_fact",
+        sectionKey: "facts",
+        text: "A fact extracted from a stale source version.",
+      }),
+      sourceHash: "stale-source-hash",
+    },
+  ]);
+  assert.equal(sourceHashMismatch.outcome.droppedCandidates[0]?.validatorCode, "source_hash_mismatch");
 
   const relationshipWithEvent = compile(chat, [
     unit(chat, {
@@ -399,6 +462,7 @@ async function main() {
     ),
     true,
   );
+  assert.doesNotMatch(oversizedDerivedNoteId.outcome.droppedCandidates[0]?.message ?? "", /a{120}/u);
   assert.equal(
     oversizedDerivedNoteId.diagnostics.some(
       (diagnostic) => diagnostic.details?.validatorCode === "overlong_target_note_id",
@@ -412,6 +476,7 @@ async function main() {
     undefined,
   );
   assert.equal(oversizedDerivedNoteId.outcome.droppedCandidates[0]?.recovery?.noteId, undefined);
+  assert.equal(oversizedDerivedNoteId.outcome.droppedCandidates[0]?.validatorCode, "overlong_target_note_id");
 
   const strictStorageIds: string[][] = [];
   const legacyScope = {
@@ -510,6 +575,8 @@ async function main() {
   const malformedPayload = parseEvidenceUnitPayload({ units: Array.from({ length: 100 }, () => null) }, sourceHash);
   assert.equal(malformedPayload.parserRejections, 100);
   assert.equal(malformedPayload.droppedCandidates.length, 80);
+  assert.equal(malformedPayload.droppedCandidates[0]?.validatorCode, "invalid_evidence_unit_format");
+  assert.ok(malformedPayload.droppedCandidates[0]?.issues?.length);
   const countedMalformedCompilation = compileEvidenceUnitExtraction({
     unitResponse: malformedPayload.response,
     providerCandidates: malformedPayload.totalCandidates,
@@ -896,6 +963,22 @@ async function main() {
     ],
     notes: [],
   });
+  const subjectIdentityRejection = resolveLtmSubjectIdentities({
+    units: [
+      unit(chat, {
+        bucket: "character_fact",
+        subjectId: "unknown_person",
+        sectionKey: "facts",
+        text: "An unknown person has a durable fact.",
+        subjectNames: ["Unknown Person"],
+      }),
+    ],
+    catalog: identityCatalog,
+    existingNotes: [],
+    scope: {},
+    mode: "roleplay",
+  });
+  assert.equal(subjectIdentityRejection.droppedCandidates[0]?.validatorCode, "untrusted_subject_identity");
   const canonicalIdentityNote = identityNote("char_seraphina", "Seraphina Duvall", [
     identityCatalog.entries.find((entry: any) => entry.name === "Seraphina Duvall")!.subject,
   ]);

@@ -7,15 +7,15 @@
         "schemaVersion": 2,
         "capabilityApi": {
           "major": 1,
-          "minor": 9
+          "minor": 10
         },
         "builtAgainst": {
-          "engineVersion": "2.4.4",
-          "engineCommit": "3a700bb01dd616e767e3521da30954dd93c79c24"
+          "engineVersion": "2.4.5",
+          "engineCommit": "4cd3140d628274dfb6737c2ee6545d420e3e9d4e"
         },
         "id": "gacha-forge",
         "name": "Gacha Forge",
-        "version": "1.6.0",
+        "version": "1.7.0",
         "description": "A complete gacha game mode. Describe a world and Gacha Forge builds the rest: banners to pull on, a cast the model writes and paints for you, story chapters told by a visual-novel narrator, and the battles, gear and events that grow around them. Install it, restart Marinara Engine when prompted, then open Home → Gacha Forge.",
         "engine": {
           "min": "2.4.4",
@@ -39,6 +39,78 @@
             "iconPaths": [
               "gacha-forge-icon.png"
             ]
+          },
+          "assets": {
+            "paths": [
+              "item-aether.webp",
+              "item-coin-event.webp",
+              "item-doctrine-assassin-1.webp",
+              "item-doctrine-assassin-2.webp",
+              "item-doctrine-assassin-3.webp",
+              "item-doctrine-mage-1.webp",
+              "item-doctrine-mage-2.webp",
+              "item-doctrine-mage-3.webp",
+              "item-doctrine-support-1.webp",
+              "item-doctrine-support-2.webp",
+              "item-doctrine-support-3.webp",
+              "item-doctrine-tank-1.webp",
+              "item-doctrine-tank-2.webp",
+              "item-doctrine-tank-3.webp",
+              "item-doctrine-warrior-1.webp",
+              "item-doctrine-warrior-2.webp",
+              "item-doctrine-warrior-3.webp",
+              "item-funds.webp",
+              "item-glimmer.webp",
+              "item-insight-core.webp",
+              "item-insight-prism.webp",
+              "item-insight-shard.webp",
+              "item-mandate-any-1.webp",
+              "item-rank.webp",
+              "item-relic-core.webp",
+              "item-relic-crest.webp",
+              "item-relic-edge.webp",
+              "item-relic-flow.webp",
+              "item-relic.webp",
+              "item-sigil-dark-1.webp",
+              "item-sigil-dark-2.webp",
+              "item-sigil-dark-3.webp",
+              "item-sigil-earth-1.webp",
+              "item-sigil-earth-2.webp",
+              "item-sigil-earth-3.webp",
+              "item-sigil-fire-1.webp",
+              "item-sigil-fire-2.webp",
+              "item-sigil-fire-3.webp",
+              "item-sigil-light-1.webp",
+              "item-sigil-light-2.webp",
+              "item-sigil-light-3.webp",
+              "item-sigil-water-1.webp",
+              "item-sigil-water-2.webp",
+              "item-sigil-water-3.webp",
+              "item-sigil-wind-1.webp",
+              "item-sigil-wind-2.webp",
+              "item-sigil-wind-3.webp",
+              "item-tenet-dark-1.webp",
+              "item-tenet-dark-2.webp",
+              "item-tenet-dark-3.webp",
+              "item-tenet-earth-1.webp",
+              "item-tenet-earth-2.webp",
+              "item-tenet-earth-3.webp",
+              "item-tenet-fire-1.webp",
+              "item-tenet-fire-2.webp",
+              "item-tenet-fire-3.webp",
+              "item-tenet-light-1.webp",
+              "item-tenet-light-2.webp",
+              "item-tenet-light-3.webp",
+              "item-tenet-water-1.webp",
+              "item-tenet-water-2.webp",
+              "item-tenet-water-3.webp",
+              "item-tenet-wind-1.webp",
+              "item-tenet-wind-2.webp",
+              "item-tenet-wind-3.webp",
+              "item-vigor-l.webp",
+              "item-vigor-m.webp",
+              "item-vigor-s.webp"
+            ]
           }
         },
         "permissions": [
@@ -56,8 +128,8 @@
           },
           {
             "path": "client.js",
-            "sha256": "a900ead12b01d06c1eab9f8381e4b4abc536507727d615e1a9d7084e901b7ff4",
-            "bytes": 852806
+            "sha256": "fcf9076213162534ef97b90f1f49649f91f32d771e0785322e0d000a44bd599a",
+            "bytes": 960522
           },
           {
             "path": "gacha-forge-icon.png",
@@ -65,18 +137,358 @@
             "bytes": 5352
           },
           {
+            "path": "item-aether.webp",
+            "sha256": "5ff700de5b04aa8c75fd9f2b88302e7a79f8eb4446a6f3dc97828782cbaf34fb",
+            "bytes": 4712
+          },
+          {
+            "path": "item-coin-event.webp",
+            "sha256": "baacfa3a0d8015eba3ca4d382238b60cc8afb645ea91eff3590861431c74b856",
+            "bytes": 4114
+          },
+          {
+            "path": "item-doctrine-assassin-1.webp",
+            "sha256": "e3e8e08d8305e77aa904aeb9552bc2efa0615de50591c2106a283fa84b365399",
+            "bytes": 2968
+          },
+          {
+            "path": "item-doctrine-assassin-2.webp",
+            "sha256": "c22e57be8ace57c5d77fd2e8557bd7b8b75ef904c1d4178060f136e7f589454c",
+            "bytes": 6078
+          },
+          {
+            "path": "item-doctrine-assassin-3.webp",
+            "sha256": "74b1575584085d89a18cf14a4a40d41d8e5863e43ef68a8b526f0f0d4a600f79",
+            "bytes": 9412
+          },
+          {
+            "path": "item-doctrine-mage-1.webp",
+            "sha256": "c29df12fe0dc2554c6534dca4425155ba77cd8c433311c4f6329376214617e81",
+            "bytes": 4936
+          },
+          {
+            "path": "item-doctrine-mage-2.webp",
+            "sha256": "15071ae8f87ed182da06486cc4863b153a7dab8a273228cfc5233bfbb7afb4a9",
+            "bytes": 6206
+          },
+          {
+            "path": "item-doctrine-mage-3.webp",
+            "sha256": "9722fdebdd19846b4ba46eb49b872378a8f642d915ffd739e09ab543e2e9f782",
+            "bytes": 10884
+          },
+          {
+            "path": "item-doctrine-support-1.webp",
+            "sha256": "d464363598e58e27517866989fea37fd0b41eb303b41340296d92b71ff31a742",
+            "bytes": 5992
+          },
+          {
+            "path": "item-doctrine-support-2.webp",
+            "sha256": "d3884d8dd9f5a95f8d1c1bdf9d04556b7a8cc65f4cb72cfb4419b25095e91fe7",
+            "bytes": 8248
+          },
+          {
+            "path": "item-doctrine-support-3.webp",
+            "sha256": "bae18e994ced93219439dadb117c1464a665dc7616f4f4b731afaf0ab3982947",
+            "bytes": 5770
+          },
+          {
+            "path": "item-doctrine-tank-1.webp",
+            "sha256": "74ed8b6eb757da57e806b18c8ac03795fe3c8a9d6d2e3a049b5829e764c7063c",
+            "bytes": 3874
+          },
+          {
+            "path": "item-doctrine-tank-2.webp",
+            "sha256": "a8ddba9a239932e93a7c322147a0a609beab8d9e1cb949e21bab6848bf6287c0",
+            "bytes": 6760
+          },
+          {
+            "path": "item-doctrine-tank-3.webp",
+            "sha256": "615f32fb93011eb58a51f4eea54a76cc0a74bb7be629d09076fba88241196bfa",
+            "bytes": 10942
+          },
+          {
+            "path": "item-doctrine-warrior-1.webp",
+            "sha256": "8d93918b0392a997b5385c2df54016e276c21b0096ec590afd57380bbca88c99",
+            "bytes": 4848
+          },
+          {
+            "path": "item-doctrine-warrior-2.webp",
+            "sha256": "3be295f73e96b47907dc50f0f9cc8bdc09394f053825c4b21e50f9586cc0d027",
+            "bytes": 5354
+          },
+          {
+            "path": "item-doctrine-warrior-3.webp",
+            "sha256": "9f38c5ad24e194893aeb239939694c77503daf41fe88430bb44ce461c048316d",
+            "bytes": 5688
+          },
+          {
+            "path": "item-funds.webp",
+            "sha256": "674d3ea1a0c2309e5869a313ff0263708e50945fa96eaad90122d7f783ffd690",
+            "bytes": 10962
+          },
+          {
+            "path": "item-glimmer.webp",
+            "sha256": "0fb1cd8f61006e0bedf01f19487342a77a0d7ebd9630365aa4d2270b78f14673",
+            "bytes": 2336
+          },
+          {
+            "path": "item-insight-core.webp",
+            "sha256": "f11ce258d8be6a4a048b222a4c5ed10a62716b1797d4e935c0fd492cd5429bc3",
+            "bytes": 12522
+          },
+          {
+            "path": "item-insight-prism.webp",
+            "sha256": "407dbf28825225211bba3aef59f87c2cf22d35049c373790ca80c8f1a6d976e8",
+            "bytes": 7134
+          },
+          {
+            "path": "item-insight-shard.webp",
+            "sha256": "5030ccaf03b367580d7651816c9bff5e314645f5b10be9181155b05a0e3632a2",
+            "bytes": 3096
+          },
+          {
+            "path": "item-mandate-any-1.webp",
+            "sha256": "0b79c91b010708c43cf7a17deb042f4fee9f3d665fa55ac4a506676f201a7ad6",
+            "bytes": 6358
+          },
+          {
+            "path": "item-rank.webp",
+            "sha256": "dd7bddd89fd5bafb2bb2fbfca62f5bb6622b1c62eb067db056649327aac4dd6e",
+            "bytes": 11572
+          },
+          {
+            "path": "item-relic-core.webp",
+            "sha256": "e24467a64fcdc7e953884d8eaacf7cd4951e08a7d261bd6897de799b8a618e89",
+            "bytes": 10764
+          },
+          {
+            "path": "item-relic-crest.webp",
+            "sha256": "4a97afead04eeacce97ac6b0749f53f478b39c4d701caab5dd4fbef68e4247eb",
+            "bytes": 2792
+          },
+          {
+            "path": "item-relic-edge.webp",
+            "sha256": "307ffc22c382ea6732f148577bc1147448f8af1fa555a35629d45346b1f50677",
+            "bytes": 3590
+          },
+          {
+            "path": "item-relic-flow.webp",
+            "sha256": "bd81751680bb2750feffe2a454326008ac9583927e0069c87903e7e6392447d4",
+            "bytes": 5284
+          },
+          {
+            "path": "item-relic.webp",
+            "sha256": "a187d80334fd0b172a7b02165df2a13c749ddbcc7e18d698bf595f0507bdb085",
+            "bytes": 7164
+          },
+          {
+            "path": "item-sigil-dark-1.webp",
+            "sha256": "b79f937e28ac4f957630a254356974d46ee8420eba96475d55529356b45cf834",
+            "bytes": 10232
+          },
+          {
+            "path": "item-sigil-dark-2.webp",
+            "sha256": "2035ea9e96ccf590b79eb5d0c256606d12e90038cf9f2d54867c57a98de0bdfa",
+            "bytes": 13248
+          },
+          {
+            "path": "item-sigil-dark-3.webp",
+            "sha256": "d30434651a3e2016ea4daba5e6adae588f84371153aeacf3b0856df4f81e0c46",
+            "bytes": 15118
+          },
+          {
+            "path": "item-sigil-earth-1.webp",
+            "sha256": "b06b291c2ba71aacf58c655c2252d443bc43fbad54a7b33d34a50eda9f0bd121",
+            "bytes": 10814
+          },
+          {
+            "path": "item-sigil-earth-2.webp",
+            "sha256": "29f73aff78a037471cfd24f045708378957aea383f952562a363755e24b6c7bd",
+            "bytes": 11502
+          },
+          {
+            "path": "item-sigil-earth-3.webp",
+            "sha256": "a8aa45df2cbf4e3d5d29df367e608451f5dcb4f37c435993e597ba13ed7c42e1",
+            "bytes": 10136
+          },
+          {
+            "path": "item-sigil-fire-1.webp",
+            "sha256": "f69d006f0693a2f32ba863be28b60bf5b8dbc08b12aee1705efef8f5a7405baa",
+            "bytes": 9608
+          },
+          {
+            "path": "item-sigil-fire-2.webp",
+            "sha256": "99334e0a8f06e15ebb4f8d9eac4279945a59a4698bbd1066200d1caec1e06b12",
+            "bytes": 10682
+          },
+          {
+            "path": "item-sigil-fire-3.webp",
+            "sha256": "fbe2a3ec2af76f55a705e3ebd5ef4de4ba3bc7336bd41495459d48311130512a",
+            "bytes": 15146
+          },
+          {
+            "path": "item-sigil-light-1.webp",
+            "sha256": "13eee285ffb63d5ee89aeeb98ab70b4d9c924154f3a631eb5722a92b1fd925c8",
+            "bytes": 14952
+          },
+          {
+            "path": "item-sigil-light-2.webp",
+            "sha256": "bdd35b58655bb080b825acb51848bb8e85d5188aa72351b59eb19f256c2ce110",
+            "bytes": 16708
+          },
+          {
+            "path": "item-sigil-light-3.webp",
+            "sha256": "51ef08b7db5e310be138baabbbeaf911e44d20a4bdf84dbabba2a065bc623d9c",
+            "bytes": 14522
+          },
+          {
+            "path": "item-sigil-water-1.webp",
+            "sha256": "3060272bf774de320f7319aff5679638209f6a2d78b27bcc042bb43f42650582",
+            "bytes": 9836
+          },
+          {
+            "path": "item-sigil-water-2.webp",
+            "sha256": "4af29eb49bc4a19f540220723767a9ed353bcd45b5c8a6d6a67187566e8f2d23",
+            "bytes": 13046
+          },
+          {
+            "path": "item-sigil-water-3.webp",
+            "sha256": "b6859492d9809a13462fbf3ac5ea2e468536845edcf7f6ea5609c436ad3a5e9e",
+            "bytes": 10176
+          },
+          {
+            "path": "item-sigil-wind-1.webp",
+            "sha256": "c9ab541e48ddcc218667f4ded9e323aec0a638bbb96c36d97c9739d87dc59170",
+            "bytes": 9998
+          },
+          {
+            "path": "item-sigil-wind-2.webp",
+            "sha256": "50aa3ba2d1a5d3fc0a46c444d9ef11b7d5f3039b085b21a49a046c8a8ed17aa3",
+            "bytes": 13774
+          },
+          {
+            "path": "item-sigil-wind-3.webp",
+            "sha256": "bc78115c0a2822181a6d781a514ce2d1fa8c8b2c09ff3581f94d12f020cea723",
+            "bytes": 14570
+          },
+          {
+            "path": "item-tenet-dark-1.webp",
+            "sha256": "f85418a9925f38141ada6e8b15d0dc6f5768a40a6e8761ecb194d209d6e9250b",
+            "bytes": 3682
+          },
+          {
+            "path": "item-tenet-dark-2.webp",
+            "sha256": "c3215b366b4bf8c68ce7b63affa193459e58be9148b2bb2c5281a8e4418e6c1c",
+            "bytes": 5010
+          },
+          {
+            "path": "item-tenet-dark-3.webp",
+            "sha256": "6a3393f3cc6384f53287b3ee45993157fc409101573195bb24c70aadef76e9a2",
+            "bytes": 8140
+          },
+          {
+            "path": "item-tenet-earth-1.webp",
+            "sha256": "5ac0c29cea1ba29dd60ea411579e7eaf026368cb200c8c80d3099fa125f085d3",
+            "bytes": 4798
+          },
+          {
+            "path": "item-tenet-earth-2.webp",
+            "sha256": "543f08034843add3e50826d493f70aab12b48e27b5b71865cab1a0532240f77c",
+            "bytes": 9014
+          },
+          {
+            "path": "item-tenet-earth-3.webp",
+            "sha256": "24dfde66d227d05d74df8a3c09d21a9d4d01ca21d92384fc9ef35d8bca03bdf9",
+            "bytes": 8674
+          },
+          {
+            "path": "item-tenet-fire-1.webp",
+            "sha256": "cef27b3658af9452d58d1d69502b37b5a8e7428bf66d0e0573a6fc4b449f5cd0",
+            "bytes": 4238
+          },
+          {
+            "path": "item-tenet-fire-2.webp",
+            "sha256": "faea4878976d07dc53ce65c77214766f59200ff98489f5c52b33791204dfcf5d",
+            "bytes": 5510
+          },
+          {
+            "path": "item-tenet-fire-3.webp",
+            "sha256": "05773009f4c0974f6ab2b90a23915307386ccc443800bb7c0d30137d9692067c",
+            "bytes": 7622
+          },
+          {
+            "path": "item-tenet-light-1.webp",
+            "sha256": "04058cb9c8165eb062f9c65f6b09cd27ac5beba55a5e7a90f43b538deb6c5699",
+            "bytes": 4068
+          },
+          {
+            "path": "item-tenet-light-2.webp",
+            "sha256": "b947e6f845a8e583bcf1295d11d833c7a2b95b5b9baae742196926aa1315fbcf",
+            "bytes": 5040
+          },
+          {
+            "path": "item-tenet-light-3.webp",
+            "sha256": "860a486dec3303f2ec6d1980e33583e4817a3624284ff85f2de5ea49c4a562ad",
+            "bytes": 10726
+          },
+          {
+            "path": "item-tenet-water-1.webp",
+            "sha256": "68d227466bfddb98953331cc50d089c37526bdb15be7f892a2daf0021f209c91",
+            "bytes": 4590
+          },
+          {
+            "path": "item-tenet-water-2.webp",
+            "sha256": "618b1faae019d27fedbfc0ddc09a3089944e76d11ef07bd4853486639aee0ac9",
+            "bytes": 4892
+          },
+          {
+            "path": "item-tenet-water-3.webp",
+            "sha256": "a8b61da772289b658e720fe589a0a66d4d06b3d0fa994eb570122f2d1ae2f8bc",
+            "bytes": 11314
+          },
+          {
+            "path": "item-tenet-wind-1.webp",
+            "sha256": "ddbe6b6f7321e8ccd8a67cb5df44161e826e7203e1d96d0ff1e4fa6a0c62d50a",
+            "bytes": 3764
+          },
+          {
+            "path": "item-tenet-wind-2.webp",
+            "sha256": "4c39a1e6fed4d22fb5cdce9e4bb04b7216ddcd43f4fb66fcffcd6cd4e4382127",
+            "bytes": 4160
+          },
+          {
+            "path": "item-tenet-wind-3.webp",
+            "sha256": "6edc8d82ae10db6598cb415958ab8f1b1d95a77f8657e63d90b35c6f96421e66",
+            "bytes": 10766
+          },
+          {
+            "path": "item-vigor-l.webp",
+            "sha256": "95ff61774a7e9af05a7ef74236680204a53eebf78e3292f0cdeff85b1de9cc2f",
+            "bytes": 5008
+          },
+          {
+            "path": "item-vigor-m.webp",
+            "sha256": "55b24fb66b0655156370ea7f7c911a492c162a26c96e517b02e15d7ebbd1304b",
+            "bytes": 4918
+          },
+          {
+            "path": "item-vigor-s.webp",
+            "sha256": "875ac6479ebbde409d2f17efc059bb26fe67f6d4ed1a01e6857e94c72cbc3d4b",
+            "bytes": 3294
+          },
+          {
             "path": "server.mjs",
-            "sha256": "45bae3ed72ef5cb556dbde5416c222640f34ce7350973825c2218072e138f120",
-            "bytes": 312512
+            "sha256": "7a45245c71de14790ca11b3cb826ea6f2553ea77f63cfca2bc00fe190ab68452",
+            "bytes": 344949
           }
         ]
       },
       "category": "misc",
       "iconUrl": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artwork/agent-covers/gacha-forge.png",
       "artifact": {
-        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/gacha-forge-1.6.0.zip",
-        "sha256": "a2e242baac626c13207e69b4587a1e7f5ff74240a0fcd6d63d63065f349e14e2",
-        "bytes": 1173743
+        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/gacha-forge-1.7.0.zip",
+        "sha256": "0f3d9de0ff8f5511b9159aa7be5d01a97ebc1959bf790221049e7dea5bf3fcec",
+        "bytes": 1878928
       },
       "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Agents/blob/main/packages/gacha-forge/README.md"
     },

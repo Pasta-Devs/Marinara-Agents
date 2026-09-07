@@ -396,6 +396,7 @@ export default function MemorySettings({
         queryKeys.status,
         queryKeys.notes,
         queryKeys.activity,
+        queryKeys.localCharactersRoot,
         ...(props.chatId ? [queryKeys.lastInjection(props.chatId)] : []),
       ]);
     } catch (error) {
@@ -564,6 +565,7 @@ export default function MemorySettings({
         queryKeys.pendingDrafts,
         queryKeys.rejectedSuggestions,
         queryKeys.activity,
+        queryKeys.localCharactersRoot,
         ...(props.chatId ? [queryKeys.lastInjection(props.chatId)] : []),
       ]);
     } catch (error) {
