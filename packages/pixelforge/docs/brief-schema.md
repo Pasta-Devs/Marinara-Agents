@@ -71,6 +71,12 @@ through the derivations below.
                             // Full specification in docs/player-state.md §7.9.
 
   name: "Mossbrook",        // TEXT ≤24 graphemes → settlement name, World Maps root.
+                            // Since 0.16.1 the payload LEADS with the world name the player typed
+                            // in the wizard and the guidance says to keep it, shortening only if
+                            // it does not fit — the 24-cap is the schema's and outranks the ask,
+                            // so the instruction says shorten rather than "use it exactly". The
+                            // DEFAULT_NAMES seeded fallback is untouched: it answers a NAMELESS
+                            // response, which is the degraded path and not this one.
   flavor: "…",              // TEXT ≤140, one sentence. Arrival atmosphere. Injected ONCE at setup.
   situation: "…",           // TEXT ≤240, one sentence. "The unresolved thing happening right now —
                             // name a cause and a person, not a mood." The GM's standing hook.
@@ -337,6 +343,14 @@ _Amended again in 0.11 (maintainer ruling #7, plan §Q3b): it no longer runs beh
 throwaway world the player is already walking in. A generate-configured chat whose brief is not
 sealed holds at a **loading gate** — the sim does not step, no mutator resolves, no save is
 written — because a world that is going to be discarded must never be one anybody invested in._
+_Amended in 0.16.1: what the wizard stamps is no longer only the `generate` answer. The Setting box
+ships EMPTY with the theme's prose as its placeholder — it shipped as a pre-filled VALUE, so leaving
+it alone was an active instruction to build the shipped village, and the `userContent` below carried
+that paragraph to a model that then obediently minted its cast — and an untouched box composes one
+line from the theme and the typed name instead ("A cozy pixel village called Pallet Town."). The
+payload gains a `World name:` line ABOVE the setting, read from `experienceConfig.worldName`
+(player-state §9.2), so the model is asked to dress the player's name rather than invent a second
+one; it is omitted entirely for a chat created before 0.16.1, where there is no stored name to keep._
 Package-side call budget: 90 s abort; `userContent` clamps to 7,800 chars (the route 400s
 past 8,000 — a hard contract). On a 409 `chat_busy` (server-documented transient, Retry-After 15)
 → wait it out **once** inside the budget. On the route's `truncated: true` 422 → **one** plain

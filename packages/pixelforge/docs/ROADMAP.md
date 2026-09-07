@@ -81,6 +81,21 @@ dying on its own, become **one entry** — **S8**, the persistence umbrella; and
 spanning multiple maps open **W11**. The 0.16 release row records what landed. No group, no
 sequencing decision and none of the three 2026-08-21 rulings moved.
 
+**Updated 2026-09-07, the 0.16.1 pass.** A playtest pass rather than a design one, and it moves two
+entries and opens a third. 0.16.1 is the setup wizard's patch: the first playtest of 0.16.0 named a
+world "Pallet Town", cleared the Setting box, and walked into Hearthvale — because four of the
+config's prompt-bearing fields were the theme preset and only one of them had a control, and the
+game NAME reached no generator at all. **S6** gains a second down payment (the preset is a
+placeholder now, and the typed name is templated into the fields that carry it — the *parallel form*
+itself is untouched and is still the item). **S7 is ANSWERED, by its own cheapest option** — the
+package declines widget generation at setup, which also closes the "Review Starting Widgets" step
+the maintainer clicked through, and the entry keeps its two unchosen options on the record because
+the decision is reversible. **W12 opens:** street topology is a new partitioner rather than a fifth
+variety lever, written down after a read of what 0.16 actually varies. **S1 gains an integration
+note** — the GM and the walkable world are running two different casts, which the newly shipped
+`standing` verb is the first thing to trip over. No group, no ruling and no sequencing decision
+moved.
+
 **Inspirations — the games checked first (maintainer, 2026-08-28).** When the maintainer asks for a
 feature, these are the games whose systems get looked at before anything is designed. **THE
 REGISTER IS BINDING, and it is the one the Dwarf Fortress direction was already stated in:
@@ -217,6 +232,35 @@ These five gate more of the roadmap than everything else combined. Marked **LOAD
 
 **A GM time-skip verb (`advanceDays:<n>`) is NAMED as a natural candidate on the same channel and deliberately not designed** — 0.14's seasons are months long and the package's own time verbs are day-grain, so a GM who wants to show a player a winter has no way to get there. Maintainer's option.
 
+**INTEGRATION NOTE — THE GAME IS RUNNING TWO CASTS, AND THE FIRST SHIPPED VERB IS WHAT FOUND IT
+(0.16.1 playtest, and this is 0.17's to answer).** Measured on the playtest chat rather than
+reasoned about: the sealed brief's cast was **six** people — Mira, Rook, Tam, **Lily, Elder Bran,
+Farrow** — and the Engine's own `gameNpcs` roster, minted separately by the blueprint call from the
+same setup prose, was **three**: Mira, Tam, Rook, each with its own description, its own reputation
+number and its own World Map location. `gameJournal` tracks those three. The two halves agreed on
+the overlap **only because both were handed the same preset paragraph**, which 0.16.1 has now
+stopped doing — so from here the rosters are minted from one shared *name* and nothing else, and
+the overlap is whatever two independent calls happen to produce.
+
+**Why it lands on this entry rather than on P7 or E2.** `62-gm.js`'s `npcNamed` resolves the name
+the GM used against the **live compiled world**, which is the package's roster; the GM is prompted
+with the **Engine's** roster. So the first event verb on this channel already has a live seam: a
+`standing` verb naming somebody only `gameNpcs` knows is refused with a player-visible toast
+("*X isn't anyone in this world — nothing changed*"), and the three people the walkable world knows
+that the GM has never heard of can never be named at all. That refusal is correct — the package
+must not invent a row for somebody who is not in the world — but it is answering a mismatch rather
+than a mistake, and every further verb that takes an `npc` argument inherits it.
+
+**Three directions, unranked, none of them designed here.** (i) **Feed the Engine the sealed cast** —
+the brief is minted first, so the blueprint call could be given the roster instead of inventing one;
+cheapest, and it makes the Engine's list a projection of the package's. (ii) **Read `gameNpcs` at
+resolve time** — accept either spelling and bind the Engine's person to the nearest package one;
+cheap and lossy, and it cannot conjure a body for somebody the world has no sprite for.
+(iii) **Say the roster in the turn header** — the package already meters prose into the GM's context
+and could name who actually exists, which costs tokens every turn and fixes nothing structurally.
+The choice is a maintainer call and it belongs with W1's second-settlement work, since a second
+settlement multiplies the same problem by the number of towns.
+
 ### S2. Inspect / Use — the second verb — LOAD-BEARING
 
 **What:** extend E-targeting beyond NPCs to features, signs, doors, furniture. Two grades matching the clock covenant: **Inspect is free** (talk-shaped — `[Player examines The Long Furrows (crop-plots)]`, the GM riffs), **Use costs time** (the trigger surface for every P3 action).
@@ -292,7 +336,52 @@ The window matters at both ends. World-derived ids — a discovered sub-zone, a 
 
 **Pillar:** none — this is the front door, not a gap in the game. **Secondary tag:** legibility. **Unlocks:** one obvious home for every future package setting instead of a second wizard that grows; a seed a player can share and get the same town back; and the end of the defaults drift, which is where the stale "Begin in Hearthvale" label over a sci-fi colony came from. **Depends on:** an engine-side seam — Game Mode's setup has to be able to host a package's own fields. Same class of conversation as S1's channel, and worth opening the same way: early, regardless of ship order. **Down payment shipped in 0.11:** the generate-or-decline toggle, the first of those three fields — unchecked boots the themed default world immediately, with no loading gate and no generation call ever made for that chat.
 
-### S7. The engine's HUD widgets — integrate or suppress *(new — maintainer playtest 2, 2026-08-24)*
+**0.16.1 paid the defaults-drift half of this entry, and the item survives it.** The drift this entry
+names as its own unlock — *"the end of the defaults drift, which is where the stale 'Begin in
+Hearthvale' label over a sci-fi colony came from"* — turned out to have a second and much worse
+form, found in the first 0.16 playtest: the second form was not a stale *label*, it was a stale
+*instruction*. Four prompt-bearing fields were the theme preset (`genre`, `setting`, `playerGoals`,
+`spatialMapInstructions`) and only `setting` had a control — and it had one as a pre-filled VALUE, so
+leaving it alone read as agreement and arrived at three generators as the player's own words. The
+patch makes the preset a placeholder, templates the typed name through `playerGoals` and
+`spatialMapInstructions`, and carries the name into the brief payload on
+`experienceConfig.worldName`. **What that does NOT do is retire the parallel form**, which is the
+whole item: it is still ten fields on a second dialog against a second set of defaults, still asking
+questions Game Mode's own setup asks, and still needing the engine seam this entry depends on. The
+patch made the second form *honest*; it did not make it unnecessary. **And it narrows the ask by
+one field:** with the presets templated rather than literal, what the package genuinely needs beside
+a Game Mode toggle is theme, seed, generate-or-decline **and a name it can read back** — four, not
+three, unless the host is willing to hand the chat's own name to the experience.
+
+### S7. The engine's HUD widgets — integrate or suppress *(ANSWERED in 0.16.1 by suppression — maintainer playtest 2, 2026-08-24)*
+
+**ANSWERED, and by the cheapest of the three options: suppress at setup.** The wizard emits
+`enableCustomWidgets: false` and everything below follows from that one literal, with no Engine
+change. The entry is kept whole rather than rewritten, because the two options not taken are still
+the options, and the decision is reversible the day the package wants a rail of its own
+(`customHudWidgets` on the same config is the hook, and `game.routes.ts` flips the design prompt
+off when it is non-empty).
+
+**Why it was never `undefined`-safe, which is the part worth keeping.** The package had simply never
+emitted the key — and every gate on the engine side is written `!== false`, so `undefined` read as
+YES at all five of them: the setup call was handed the `<blueprint_widget_types>` catalogue and the
+`hudWidgets` output template (`gm-prompts.ts`), chat metadata recorded `enableCustomWidgets: true`
+on both the create and the reuse path (`game.routes.ts`), the GM was instructed to emit `[widget:]`
+commands for every changed widget on **every turn**, and `handleStartGameRequest` opened the "Review
+Starting Widgets" modal on `normalizedWidgets.length > 0` alone — which has no experience term and
+never needed one, because a Pixelforge chat now carries no widgets to review. So the four widgets
+the maintainer approved and never saw again were not a leak; they were the honest consequence of an
+absent key.
+
+**And the double bookkeeping was real while it lasted.** Two of the four the model invented for a
+"cozy village RPG" genre string were a **second purse** (Coppers) and a **second relationship
+ledger** (Village Bonds) beside the ones `59-economy.js` and `58-player.js` actually keep, with the
+GM instructed to maintain them every turn and the package's own header being the one the player
+looks at. That is P7's finding from the other side, and it stops accruing here.
+
+**What is NOT answered:** a player who wants a gauge for something Pixelforge has no opinion about
+loses it, which is the cost this option was always priced at. If that turns out to matter, option 2
+("render them, honestly, as the engine's") is the one 0.12 already made cheap.
 
 **What:** Game Mode's setup generates starting HUD widgets — stat blocks, gauges, counters, lists — writes them to `gameWidgetState` at chat creation, keeps feeding them to the GM's prompt, and lets the GM mutate them mid-turn with `[widget:]` tags. The engine's own HUD draws them on rails either side of the screen. Pixelforge does not draw them either, and they are not on the surface props — a package that wanted them would read `chatMeta.gameWidgetState` itself.
 
@@ -859,6 +948,51 @@ lattice (shipped) for addressing; **S8**'s layout pinning, hard — a structure 
 precisely the thing a generator change must never re-lay under a player halfway through it;
 **W3**'s districts, which are the same problem at settlement grain and should be designed with this
 in view rather than twice.
+
+### W12. Street topology — a second shape of town *(new — 0.16 playtest read, 2026-09-07)*
+
+**What:** every compiled settlement, at every scale, is **exactly one horizontal road and one
+vertical road meeting at a single crossroad**. That is not a tuning value anywhere; it is two
+unconditional `fillRect` calls in `20-world.js` — a 2-tile band spanning the full width at `midY`,
+a 2-tile band spanning the full height at `midX`, where `midX`/`midY` are simply `plan.spine.x` /
+`plan.spine.y` — recorded as the settlement's public ground in the same shape twice more. There is
+no loop, no count and no scale term: `scale.buildings` changes how many lots the four quadrants
+hold, never how many roads exist. Buildings are laid in exactly four bands — north, south, west and
+east of the junction (`BANDS`) — so the plan is structurally a **plus sign with four filled
+quadrants** whether the settlement is an outpost or a city. What this item asks for is a second
+answer to that question: a ring road, a T-junction with no fourth arm, a main street bent around a
+river, a settlement with no crossroad at all.
+
+**Why it is not a fifth lever, which is the whole reason it is written down.** 0.16's four variety
+levers move **where** the plus sign sits and **what it looks like** — the junction slides within a
+margin floor, each band's lot rhythm phases toward the crossroad, the plaza's rectangle is drawn
+from a fixed-area shape set (every shape pinned on `(w−2)(h−2) === 36`), and the ground idiom follows
+the surround — all four off one side stream keyed on seed and settlement name. They are worth what
+they cost: two worlds no longer share a map. But they all take the topology as given, and reading
+the file makes the reason plain: **`BANDS` and `gridYield` assume the four-quadrant shape, and
+`slots.length` is the supply cap the entire NPC roster hangs off.** A fifth lever that changed the
+road count would change the lot yield, which re-mints the town, which severs every saved `rel` row
+in it — which is exactly the argument that made 0.16's junction search enumerate candidates against
+the allocator's own arithmetic and filter to the **centred yield** rather than compute a position.
+So a second topology is **a new partitioner** — its own yield function, its own band vocabulary, its
+own margin rules — sitting beside the crossroad one and chosen per world, not a fifth entry in
+`TOWN_TUNE`.
+
+**And it is worth building because the levers cannot reach it.** The measured plan space is large —
+737 layouts at outpost up to 3.9 million at town — and every one of those layouts is the same road.
+At the two smallest ranks it is *literally* the same road: outpost and hamlet maps have room for
+exactly one legal band depth, so the crossroad moves only sideways and every outpost that will ever
+compile puts its horizontal road on the same row. Variety measured in layouts is not the same
+quantity as variety a player perceives, and a town's silhouette is the part they see from the first
+frame.
+
+**Pillar:** world variety. **Secondary tag:** world coherence. **Depends on:** **S8** first, and
+hard — a second partitioner is a generator change under worlds people are living in, which is
+precisely what S8(a)'s layout pinning exists to make safe; the honest sequencing is that this item
+cannot ship before a stored world can decline to be re-laid. **Reads with:** **W3** (a district is
+the other thing one centre cannot express), **W7** (a differently-laid town is still not a town with
+more in it), and **W8**, whose swamp settlements are the clearest case of a silhouette the crossroad
+partitioner cannot produce at all.
 
 ---
 
