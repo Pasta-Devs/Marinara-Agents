@@ -7,6 +7,10 @@ import { dirname } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { runRegressionToCompletion } from "./regression-helpers.ts";
 
+type RouteScenario = "all" | "notes" | "imports" | "drafts" | "scope-identity" | "backup";
+const routeScenario = (process.env.MARINARA_LTM_ROUTE_SCENARIO ?? "all") as RouteScenario;
+class RouteScenarioComplete extends Error {}
+
 async function main() {
   const engineRoot =
     process.env.MARINARA_ENGINE_ROOT ?? join(dirname(fileURLToPath(import.meta.url)), "../../Marinara-Engine");
@@ -989,6 +993,7 @@ async function main() {
       personaId: "persona-fixture",
       personaIds: ["persona-fixture"],
     });
+    if (routeScenario === "notes") throw new RouteScenarioComplete();
     const observatoryFamilyId = "group_observatory_branches_37a983fd32de";
     const archiveChatFamilyId = "chat_chat_b_58689bbec408";
     await storageService.storage.createNote({
@@ -2593,6 +2598,7 @@ async function main() {
       personaId: "persona-fixture",
       personaIds: ["persona-fixture"],
     });
+    if (routeScenario === "scope-identity") throw new RouteScenarioComplete();
     const preview = await app.inject({
       method: "POST",
       url: "/api/long-term-memory/import/preview",
@@ -3570,7 +3576,7 @@ async function main() {
       method: "POST",
       url: "/api/long-term-memory/import/preview",
       headers,
-      payload: { source: "chats", limit: 10 },
+      payload: { source: "chats", limit: 100 },
     });
     assert.equal(
       currentPreview
@@ -3578,6 +3584,7 @@ async function main() {
         .samples.some((sample: any) => sample.sourceId === "game-a:game-session-1" && sample.freshness === "current"),
       true,
     );
+    if (routeScenario === "imports") throw new RouteScenarioComplete();
     const source = await app.inject({
       method: "POST",
       url: "/api/long-term-memory/notes",
@@ -4203,6 +4210,7 @@ async function main() {
       [{ target: "timeline_eastern_gate_sealed", relation: "evidenced_by" }],
       "accepted memories preserve their evidenced_by timeline link",
     );
+    if (routeScenario === "drafts") throw new RouteScenarioComplete();
     const integrity = await app.inject({
       method: "GET",
       url: "/api/long-term-memory/integrity",
@@ -4268,6 +4276,7 @@ async function main() {
       1,
     );
     assert.equal((await storageService.storage.getNote("world_route_fixture"))?.id, "world_route_fixture");
+    if (routeScenario === "backup") throw new RouteScenarioComplete();
     const deletionFixture = await app.inject({
       method: "POST",
       url: "/api/long-term-memory/notes",
@@ -4752,6 +4761,8 @@ async function main() {
       ).statusCode,
       404,
     );
+  } catch (error) {
+    if (!(error instanceof RouteScenarioComplete)) throw error;
   } finally {
     releaseRuntimeOverride?.();
     await cleanup?.();
@@ -4767,7 +4778,8 @@ async function main() {
   );
 }
 
-void runRegressionToCompletion("long-term-memory-routes", main).catch((error) => {
+export const completion = runRegressionToCompletion("long-term-memory-routes", main);
+void completion.catch((error) => {
   console.error(error);
   process.exitCode = 1;
 });
