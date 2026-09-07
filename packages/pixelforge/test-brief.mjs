@@ -18781,7 +18781,13 @@ const fire = (node, type) => Promise.all((node.listeners[type] ?? []).map((fn) =
     // the action column — the column is the thumb zone and it stays the verbs'.
     // The stack census above is the assertion that this is true; these are the
     // assertions that say WHERE they went instead.
-    const openers = { Journal: hud.journalChip, Sheet: hud.sheetChip };
+    //
+    // AND THE RETRY CHIP RIDES THE SAME DISCIPLINE (0.16 §2.10c). It is the third
+    // `_chip` in the bar and it arrived wearing a twenty-character SENTENCE in
+    // button chrome — a whole extra chip's worth of a row that has no width
+    // machinery at all — so it is asserted here beside the two openers rather
+    // than left to a lane about its own panel, which would never have asked.
+    const openers = { Journal: hud.journalChip, Sheet: hud.sheetChip, Retry: hud.retryChip };
     for (const [name, chip] of Object.entries(openers)) {
       assert.ok(!hud.actions.children.includes(chip), `the ${name} opener is not in the action stack`);
       assert.ok(hud.topbar.children.includes(chip), `…it is a chip in the topbar`);
@@ -32215,7 +32221,16 @@ const layoutFingerprint = (w) => {
       assert.equal(S.RETRY_COPY.title, "Some of this world didn't finish being written.");
       assert.ok(S.RETRY_COPY.footer.startsWith("Or leave this world and start a new game"));
       assert.equal(S.RETRY_COPY.chip, "World: part stand-in");
-      assert.equal(hud.retryChip.textContent, S.RETRY_COPY.chip, "…and the chip wears the registry's own words");
+      // THE CHIP WEARS A GLYPH AND SAYS THE REGISTRY'S WORDS, which is `_chip`'s
+      // contract and the topbar's width pin (the glyph-width lane asserts the one
+      // character; this asserts where the sentence went). The words stay the
+      // registry's single home either way — the accessible name is composed from
+      // them, so a copy change moves the chip's own announcement with it.
+      assert.equal(hud.retryChip.textContent, "🚧", "the chip is one glyph, like the two openers beside it");
+      assert.ok(
+        hud.retryChip.getAttribute("aria-label").startsWith(S.RETRY_COPY.chip),
+        "…and the registry's own words are its accessible name",
+      );
       assert.equal(S.chipTextFor([{}]), S.RETRY_COPY.chip, "the chip's rule is the registry's, and the HUD asks it");
       assert.equal(S.chipTextFor([]), null, "…which is what hides it when a world has healed");
       // THE ONCE-A-VISIT MEMO STARTS ON A SENTINEL, not on `null` — `null` is a
@@ -32722,6 +32737,39 @@ const layoutFingerprint = (w) => {
         assert.ok(plain, "the button is still the row's own");
         await fire(plain, "click");
         assert.equal(presses, 2, "an ordinary rewrite is its own press and no more");
+
+        // …AND WHICH WORDS THE CONFIRMATION WEARS IS ASKED OF THE STATE TOO.
+        // The shape is picked one line under the routing question, and it used to
+        // be picked off the MODE NAME alone — `rewrite` is the pack row's cascade
+        // mode AND its ordinary priced button, so the two can only be told apart
+        // by whether a setting is sitting ahead of the world on screen. Today the
+        // registry makes that unreachable from the outside: the pack row's modes
+        // carry no `installs` flag, so the cascade arm is the only way a press on
+        // this button reaches a confirmation at all. The routing question is
+        // therefore stood in for — a row that grows an `installs` mode is one edit
+        // away — and what has to come up is the PAID confirmation, over a world
+        // nothing has written ahead of.
+        const realReplaces = S.retryReplacesWorld;
+        S.retryReplacesWorld = () => true;
+        try {
+          assert.equal(S.worldBehindBrief(core), false, "nothing is written ahead of the world here");
+          hud._retryKey = null;
+          hud.update();
+          const named = walkNodes(hud.retryBody).find((node) => node.textContent === "Write it for this world");
+          await fire(named, "click");
+          assert.equal(presses, 2, "the press asks first, because the stand-in says every press replaces the world");
+          const shape = textIn(hud.retryBody);
+          assert.ok(shape.includes(S.RETRY_COPY.costPaid), "…and it is priced as writing a setting");
+          assert.ok(
+            !shape.includes(S.RETRY_COPY.costCascade),
+            "…and NOT as the cascade, whose words promise a new world that is already written and stored",
+          );
+          assert.ok(!shape.includes(S.RETRY_COPY.confirmCascadeTitle), "…nor titled as moving into one");
+          hud._retryConfirm = null;
+          hud._retryKey = null;
+        } finally {
+          S.retryReplacesWorld = realReplaces;
+        }
       } finally {
         S.regenerateStage = realRegen;
       }
@@ -34601,6 +34649,45 @@ const layoutFingerprint = (w) => {
     const good = S.simFromSaved(row(L.idFor(-2, 4)), meta, "chat-hostile-good");
     assert.equal(good.zoneId, L.idFor(-2, 4), "a canonical cell this world speaks for is restored into");
     assert.equal(chunkIds(good.world).length, 1, "…and exactly one cell was compiled to do it");
+  }
+
+  // ── 3b. A SAVE ROW BINDING A MAP LOCATION TO A CELL ───────────────────────
+  // The hazard lane 2 created. `ensure` materializes the cell the session ended
+  // in BEFORE `hasZone` is asked — which is what makes reloading in the woods
+  // work — and the bindings loop three lines further down asks the same
+  // `hasZone`. So a row naming that same cell as a binding TARGET found the zone
+  // standing and bound it, to a cache fill 55-maps-export refuses to post a row
+  // for (`mapExport` is false on every chunk). The topbar would then annotate a
+  // patch of country with a location name the world does not own, and residency
+  // would evict the zone out from under the binding and leave it pointing at
+  // nothing.
+  //
+  // BOTH DIRECTIONS, because the test is the ID and not the zone: a canonical
+  // chunk spelling is refused even when the zone is standing, and the anchored
+  // wilds — a cell of this world whose id is `z3` and not a chunk id — keeps the
+  // binding it has always had.
+  {
+    const { world: w, meta } = wildWorld("cozy-village", 5772, { surround: "fields" });
+    const standing = L.cellZoneId(w, 3, -1);
+    const wilds = w.latticeAnchors["1,0"];
+    assert.ok(L.parse(standing) && !L.parse(wilds), "one is a chunk id, the other is a cell wearing a resident id");
+    assert.ok(L.ensure(w, standing), "the cell the session ends in compiles");
+    const sim = new loadedPF.Sim(w);
+    sim.teleport(standing, 8, 9);
+    w.bindings["loc.root"] = w.startZone;
+    w.bindings["loc.wilds"] = wilds;
+    w.bindings["loc.cell"] = standing;
+    w.zones[standing].spatialLocationId = "loc.cell";
+    const snap = S.snapshot({ sim, chatId: "chat-wild-binding" });
+    assert.equal(snap.bindings["loc.cell"], standing, "the envelope carries the cell-targeted row as written");
+
+    const back = S.simFromSaved(JSON.parse(JSON.stringify(snap)), meta, "chat-wild-binding");
+    assert.equal(back.zoneId, standing, "the reload still lands in the cell the session ended in");
+    assert.equal(back.world.bindings["loc.root"], back.world.startZone, "…the settlement keeps its binding");
+    assert.equal(back.world.bindings["loc.wilds"], wilds, "…the anchored wilds keeps its binding");
+    assert.equal(back.world.bindings["loc.cell"], undefined, "…and the one naming a chunk is dropped");
+    assert.ok(back.world.zones[standing], "the cell is standing, because the player is in it");
+    assert.equal(back.world.zones[standing].spatialLocationId, null, "…and it wears no location id");
   }
 
   // ── 4. WHAT GETS WRITTEN DOWN, AND WHAT DOES NOT ──────────────────────────

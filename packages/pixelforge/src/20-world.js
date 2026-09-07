@@ -2415,12 +2415,31 @@ PF.world = (() => {
    *  Falls back to the centred junction if the search comes back empty, which no
    *  shipped scale does — but a future scale table is one edit away from a map
    *  too small to hold four bands, and a settlement is not a thing to lose to an
-   *  empty array inside build()'s silent degrade. */
+   *  empty array inside build()'s silent degrade.
+   *
+   *  AND THE PLAZA FALLBACK IS DERIVED RATHER THAN TRANSCRIBED. It used to spell
+   *  the first shape and its offset as `w: 8, h: 8` at `spine - 4`, which is the
+   *  shipped tunables written out as literals: a retune of `PLAZA_SHAPES` would
+   *  move every square on every map EXCEPT this one, and leave the degrade
+   *  drawing a rect the shape set no longer offers — the clipped square the
+   *  junction search's own comment warns about, arrived at from the other side.
+   *
+   *  The offset is the MIDPOINT of the band `plazaCandidates` would have handed
+   *  back for that shape, which is why it is the shape's half-extent and not the
+   *  inset: the legal x runs `[mx + half - shape.w, mx - half]` for
+   *  `half = PLAZA_INSET >> 1`, and its middle is `mx - shape.w / 2` for any
+   *  inset at all. So the inset moves that band's ends and not its centre, and
+   *  the fallback stays exactly as legal as the shape set is — it contains the
+   *  paved inset whenever the shape is at least as big as one, which is the same
+   *  condition that makes the shape offerable in the first place. */
   const townPlan = (w, h, budget, rnd) => {
     const legal = junctionCandidates(w, h, budget);
     const spine = legal.length ? legal[(rnd() * legal.length) | 0] : { x: (w / 2) | 0, y: (h / 2) | 0 };
     const plazas = plazaCandidates(w, h, spine.x, spine.y);
-    const plaza = plazas.length ? plazas[(rnd() * plazas.length) | 0] : { x: spine.x - 4, y: spine.y - 4, w: 8, h: 8 };
+    const first = TOWN_TUNE.PLAZA_SHAPES[0];
+    const plaza = plazas.length
+      ? plazas[(rnd() * plazas.length) | 0]
+      : { x: spine.x - (first.w >> 1), y: spine.y - (first.h >> 1), w: first.w, h: first.h };
     // ONE DRAW PER BAND, in a fixed order, so the stream position after the plan
     // is a function of the plan's shape alone — which is what lets the ground
     // idiom draw from the same stream five hundred lines further down.

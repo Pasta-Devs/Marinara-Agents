@@ -117,7 +117,19 @@ PF.Hud = class {
     // keeps the offer reachable without nagging, and its words come off the same
     // registry region the rows do. It derives STRICTLY from live rows, so a
     // world that healed stops saying "part stand-in" on its own.
-    this.retryChip = this._chip(PF.save.RETRY_COPY.chip, "what didn't finish being written", () => this.toggleRetry());
+    //
+    // A GLYPH, LIKE THE TWO OPENERS ABOVE IT, and that is `_chip`'s contract
+    // rather than a preference: the topbar is one flex row of chips centred over
+    // the play field, and its fullest state — a bound location name, a signpost,
+    // the clock, a purse with a carry count, and all three buttons — is what the
+    // width was struck against. A twenty-character sentence wearing button
+    // chrome is another whole chip's worth of row, and it pushed that state past
+    // the width on a phone. The SENTENCE is not lost: it is the accessible name,
+    // which is where the two beside it keep the words their glyphs do not say,
+    // and `RETRY_COPY.chip` stays the registry's one home for it.
+    this.retryChip = this._chip("🚧", `${PF.save.RETRY_COPY.chip} — what didn't finish being written`, () =>
+      this.toggleRetry(),
+    );
     this.topbar = PF.el(
       "div",
       { style: "position:absolute;top:10px;left:50%;transform:translateX(-50%);display:flex;gap:6px;z-index:2;" },
@@ -1824,7 +1836,18 @@ PF.Hud = class {
       // lands the player in a setting that is already written and stored, so it
       // may not wear the sentence that prices writing one — and the free press
       // may not wear either, because it makes no call at all.
-      const cascade = PF.save.stage(row.stage)?.cascade?.mode === action.mode;
+      //
+      // AND THE SECOND TERM IS THE STATE, for the same reason the docstring above
+      // gives: the mode's NAME cannot answer this either. `rewrite` is the pack
+      // row's cascade mode AND its ordinary priced button, and what makes a press
+      // on it the cascade is the setting sitting ahead of the world on screen —
+      // `worldBehindBrief`, the same question `retryReplacesWorld` asked one line
+      // up and the install fork asks at the end. Inert while the pack row's modes
+      // carry no `installs` flag, since only the cascade arm can have got a press
+      // this far; a row that grows one would otherwise get the cascade's copy —
+      // "the new world is settled, this brings you to it" — over a world nothing
+      // has written yet.
+      const cascade = PF.save.stage(row.stage)?.cascade?.mode === action.mode && PF.save.worldBehindBrief(this.core);
       this._retryConfirm = { stage: row.stage, action, free, cascade };
       this._retryKey = null;
       this._syncRetry();

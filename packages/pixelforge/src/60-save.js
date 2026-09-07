@@ -146,6 +146,33 @@ const RETRY_TUNE = {
   STORE_BACKOFF_MS: 500,
 };
 
+/** THE STORE LADDER, WRITTEN ONCE. Four sites in this module PATCH one thing and
+ *  have to mean it — the two fallback markers, the brief seal and the pack seal
+ *  — and each carried its own copy of the same three lines, two of them with the
+ *  attempt count and the spacing spelled as literals rather than read off the
+ *  tune above. A retune that moved `RETRY_TUNE` and left those two behind would
+ *  have been invisible from the outside and wrong on the inside: the shipped
+ *  storage screen says one thing about how hard a save tried, for all four.
+ *
+ *  `run` is the whole of what a success MEANS on that site rather than the PATCH
+ *  alone — the marker sites mirror their own bookkeeping inside it, exactly
+ *  where the `try` used to hold it, so a throw out of the mirror is retried like
+ *  any other failure instead of being swallowed one line past the ladder. The
+ *  warning stays the CALLER'S, because the sentence a last attempt leaves in the
+ *  console is about what that site was storing and nothing else. */
+const storeWithRetry = async (run, warning) => {
+  for (let attempt = 0; attempt < RETRY_TUNE.STORE_ATTEMPTS; attempt++) {
+    try {
+      await run();
+      return true;
+    } catch (err) {
+      if (attempt === RETRY_TUNE.STORE_ATTEMPTS - 1) console.warn(warning, err);
+      else await new Promise((resolve) => setTimeout(resolve, RETRY_TUNE.STORE_BACKOFF_MS * (attempt + 1)));
+    }
+  }
+  return false;
+};
+
 /** The states `derive` can answer, split by what the surface does with them.
  *  A POPUP state is a row the player can act on; everything else is silence —
  *  "ok" and "n/a" have nothing to offer, "declined" is a choice already made,
@@ -1024,19 +1051,11 @@ PF.save = {
   async _acceptFallback(chatId, stageId) {
     const key = RETRY_KEYS.ACCEPTED[stageId];
     if (!chatId || !key) return false;
-    for (let attempt = 0; attempt < RETRY_TUNE.STORE_ATTEMPTS; attempt++) {
-      try {
-        await PF.api.patchMetadata(chatId, { [key]: true });
-        this._fallbackAcceptedSealed.add(`${chatId}|${stageId}`);
-        this._acceptedHousekept.delete(`${chatId}|${stageId}`);
-        return true;
-      } catch (err) {
-        if (attempt === RETRY_TUNE.STORE_ATTEMPTS - 1)
-          console.warn("[pixelforge] could not record that choice; the next visit will offer the call again", err);
-        else await new Promise((resolve) => setTimeout(resolve, RETRY_TUNE.STORE_BACKOFF_MS * (attempt + 1)));
-      }
-    }
-    return false;
+    return storeWithRetry(async () => {
+      await PF.api.patchMetadata(chatId, { [key]: true });
+      this._fallbackAcceptedSealed.add(`${chatId}|${stageId}`);
+      this._acceptedHousekept.delete(`${chatId}|${stageId}`);
+    }, "[pixelforge] could not record that choice; the next visit will offer the call again");
   },
 
   /** …and the other direction, which a retry has to AWAIT before it dispatches:
@@ -1048,19 +1067,11 @@ PF.save = {
   async _clearAccepted(chatId, stageId, meta) {
     const key = RETRY_KEYS.ACCEPTED[stageId];
     if (!chatId || !key) return false;
-    for (let attempt = 0; attempt < RETRY_TUNE.STORE_ATTEMPTS; attempt++) {
-      try {
-        await PF.api.patchMetadata(chatId, { [key]: null });
-        this._fallbackAcceptedSealed.delete(`${chatId}|${stageId}`);
-        if (meta && typeof meta === "object") meta[key] = null;
-        return true;
-      } catch (err) {
-        if (attempt === RETRY_TUNE.STORE_ATTEMPTS - 1)
-          console.warn("[pixelforge] could not clear this chat's stand-in marker", err);
-        else await new Promise((resolve) => setTimeout(resolve, RETRY_TUNE.STORE_BACKOFF_MS * (attempt + 1)));
-      }
-    }
-    return false;
+    return storeWithRetry(async () => {
+      await PF.api.patchMetadata(chatId, { [key]: null });
+      this._fallbackAcceptedSealed.delete(`${chatId}|${stageId}`);
+      if (meta && typeof meta === "object") meta[key] = null;
+    }, "[pixelforge] could not clear this chat's stand-in marker");
   },
 
   /** A stage that derives `ok` no longer has a fallback to be standing on, so
@@ -2145,16 +2156,10 @@ PF.save = {
         // that has been rewritten since, which is the whole of Q9's ruling.
         const wantsPack = !force && this._configPackWanted(meta);
         if (wantsPack) patch[PACK_WANTED_META_KEY] = true;
-        let stored = false;
-        for (let attempt = 0; attempt < 3 && !stored; attempt++) {
-          try {
-            await PF.api.patchMetadata(chatId, patch);
-            stored = true;
-          } catch (err) {
-            if (attempt === 2) console.warn("[pixelforge] brief storage failed; the chat stays unsealed", err);
-            else await new Promise((resolve) => setTimeout(resolve, 500 * (attempt + 1)));
-          }
-        }
+        const stored = await storeWithRetry(
+          () => PF.api.patchMetadata(chatId, patch),
+          "[pixelforge] brief storage failed; the chat stays unsealed",
+        );
         if (!stored) {
           if (chatId === core.chatId) this._failGate(core, "storage", "brief");
           return;
@@ -2225,16 +2230,10 @@ PF.save = {
           if (chatId === core.chatId) this._failGate(core, failure, "pack");
           return;
         }
-        let packStored = false;
-        for (let attempt = 0; attempt < 3 && !packStored; attempt++) {
-          try {
-            await PF.api.patchMetadata(chatId, { [PACK_META_KEY]: pack });
-            packStored = true;
-          } catch (err) {
-            if (attempt === 2) console.warn("[pixelforge] pack storage failed; the world stays packless", err);
-            else await new Promise((resolve) => setTimeout(resolve, 500 * (attempt + 1)));
-          }
-        }
+        const packStored = await storeWithRetry(
+          () => PF.api.patchMetadata(chatId, { [PACK_META_KEY]: pack }),
+          "[pixelforge] pack storage failed; the world stays packless",
+        );
         if (!packStored) {
           if (chatId === core.chatId) this._failGate(core, "storage", "pack");
           return;
@@ -2477,7 +2476,25 @@ PF.save = {
       }
       if (saved.bindings && typeof saved.bindings === "object") {
         for (const [loc, zone] of Object.entries(saved.bindings)) {
-          if (hasZone(zone)) {
+          // A MAP LOCATION MAY NOT BE BOUND TO A WILDERNESS CELL, and the arm
+          // above is what made that reachable: `ensure` materializes the cell the
+          // session ended in BEFORE `hasZone` is asked, so a save row naming that
+          // same cell as a binding target found the zone standing and bound it —
+          // to a cache fill that no location was ever posted for. 55-maps-export
+          // refuses a chunk a row of its own (`mapExport` is false on every one
+          // of them), so the binding names a location the world does not own: the
+          // topbar annotates a patch of country with somebody else's place name,
+          // and the residency policy then evicts the zone out from under it and
+          // leaves the binding pointing at nothing.
+          //
+          // THE TEST IS THE ID, NOT THE ZONE, which is what makes it exact in
+          // both directions. `PF.lattice.parse` answers for the canonical chunk
+          // spelling alone, so an id `ensure` would have handed back through its
+          // RESIDENT arm — one already standing in `world.zones` — refuses here
+          // just the same, and the three anchored cells that are real compiled
+          // zones (the settlement and the brief's own wilds, whose ids are not
+          // chunk ids at all) keep the bindings they have always had.
+          if (hasZone(zone) && !PF.lattice.parse(zone)) {
             world.bindings[loc] = zone;
             world.zones[zone].spatialLocationId = loc;
           }
