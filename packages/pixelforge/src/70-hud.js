@@ -864,11 +864,19 @@ PF.Hud = class {
     // — so a key built off the memo alone would leave "Skip story & talk?" drawn
     // on a control whose question no longer exists.
     const confirm = this.core.talkConfirmArmed?.() === true ? (this.core._talkConfirm?.controlId ?? "") : "";
+    // THE STANDING, because the title draws it (`_talkRender` below) and a key
+    // that did not carry it was pinned by whatever the row said when the window
+    // opened. Nothing in the game could move a row with the window already open
+    // — the talk press's own bump lands on an accepted turn, which is a frame
+    // later — so this was inert until the GM got a standing verb (0.16), and it
+    // is the half that makes the change visible without closing the window.
+    const stand = PF.player.rung(this.core, sim.world?.startZone, anchor.name);
     return [
       anchor.id,
       sim.day,
       sim.daypart(),
       sim.weather().word,
+      `${stand.d}${stand.h ? "!" : ""}`,
       errands,
       PF.pack.askBurned(this.core, anchor) ? "burnt" : "",
       this._talkDoorNote() ?? "",
@@ -1483,6 +1491,36 @@ PF.Hud = class {
     if (rung >= 3) return "they count you a close friend now.";
     if (rung >= 2) return "they count you a friend now.";
     return "they know you now.";
+  }
+
+  /** The GM's own standing verb, announced (0.16, Capability API 1.16). Shaped
+   *  like `questFilled` above and for the same reason: the copy for an event
+   *  lives with the other copy, and the caller hands over FACTS rather than a
+   *  finished sentence.
+   *
+   *  The three rungs above the floor DELEGATE to `roseLine` — two spellings of
+   *  one moment is exactly the bug that header warns about — and the two words it
+   *  has no case for are the two only the GM can reach: hostility, which no press
+   *  in the game writes, and a return to the floor, which no rise can be.
+   *
+   *  `remembered` is the line the row now carries and ONLY WHEN THIS EVENT SET
+   *  IT; empty drops out of `_said`, so the ordinary case is one sentence.
+   *
+   *  NO `refreshChips()`, unlike `questFilled` — deliberately. Nothing on the
+   *  chip row shows standing, and the three surfaces that do read the row live:
+   *  the turn header composes fresh (30-sim), the Standing sheet's value key
+   *  projects the rungs and the hostile count (`_sheetValueKey`), and the talk
+   *  window's key carries the standing beside it (`_talkKeyOf`). */
+  standingSet(name, stance, remembered) {
+    if (!name) return;
+    const rung = PF.player.RUNGS.indexOf(stance);
+    const said =
+      stance === "hostile"
+        ? `${name} has turned against you.`
+        : rung > 0
+          ? this.roseLine(name, rung)
+          : `${name} is a stranger to you again.`;
+    this.toast(this._said(said, remembered));
   }
 
   /** Take the rod the button is offering. The offer is re-read inside buyRod, so

@@ -72,6 +72,7 @@ const MODULES = [
   "59-economy.js",
   "60-save.js",
   "61-pack.js",
+  "62-gm.js",
   "70-hud.js",
   "80-setup.js",
 ];
@@ -24145,6 +24146,215 @@ const fire = (node, type) => Promise.all((node.listeners[type] ?? []).map((fn) =
     globalThis.document._docListeners = {};
     loadedPF.save.reset();
     loadedPF.spatial.reset();
+  }
+}
+
+// ── THE GM'S STANDING VERB, DRIVEN THROUGH THE REAL LISTENER (0.16) ───────────
+// Capability API 1.16's event half. The engine validates `[standing:{…}]` against
+// the table this package ships, strips it from the prose and delivers it as one
+// SSE frame the client re-dispatches as one DOM event — so everything below fires
+// a synthetic envelope AT THE WINDOW and lets the shipped code route it.
+//
+// FIRED AT THE WINDOW AND NOT AT `PF.gm.onVerb`, and that is the whole design of
+// this block. The routing branch lives inside `_bindKeys`'s listener behind three
+// things — a bind-once latch, a packageId check and a chatId check — and a lane
+// that called the applier directly would prove the applier and none of them,
+// which is exactly where a second event family goes wrong.
+{
+  const core = loadedPF.core;
+  const realSetTimeout = globalThis.setTimeout;
+  const realClearTimeout = globalThis.clearTimeout;
+  const realWindow = globalThis.window;
+  const realWarn = console.warn;
+  globalThis.setTimeout = () => 0;
+  globalThis.clearTimeout = () => {};
+  // A window that RECORDS rather than swallows, so the listener the package binds
+  // can be fired at. The other element blocks stub both methods away because they
+  // only need `_bindKeys` not to throw; this one needs what it bound.
+  const listeners = {};
+  globalThis.window = {
+    addEventListener(type, fn) {
+      (listeners[type] ??= []).push(fn);
+    },
+    removeEventListener(type, fn) {
+      const list = listeners[type];
+      const at = list ? list.indexOf(fn) : -1;
+      if (at >= 0) list.splice(at, 1);
+    },
+  };
+  const warned = [];
+  console.warn = (...parts) => warned.push(parts.map((part) => String(part)).join(" "));
+  try {
+    loadedPF.save.reset();
+    const w = world.build(4242, "cozy-village", null);
+    const sim = new loadedPF.Sim(w);
+    const zone = w.startZone;
+    core.chatId = "chat-gm";
+    core.sim = sim;
+    core.input = {};
+    core.host = {
+      chatId: "chat-gm",
+      packageId: "pixelforge",
+      chatMeta: {},
+      isStreaming: false,
+      narrationDone: true,
+      latestAssistant: { id: "m0" },
+      sendMessage: () => true,
+    };
+    const mountEl = new FakeNode("div");
+    core._mainEl = mountEl;
+    const hud = new loadedPF.Hud(mountEl, core);
+    core.hud = hud;
+    core._keysBound = false;
+    // The bind-once latch is a CORE field and the core is shared across this file,
+    // so it is re-armed here — otherwise an earlier block's bind would own the
+    // listener and this one would fire into a window nobody is listening at.
+    core._capEventsBound = false;
+    core._bindKeys();
+
+    /** One delivery, shaped exactly as the engine emits it: an explicit packageId
+     *  on the envelope (not a convention field inside the payload), the verb name,
+     *  the validated args, and the `chatId:messageId:swipeIndex` triple the
+     *  executor stamps its provenance claim with. */
+    const send = (args, over = {}) => {
+      const data = {
+        packageId: "pixelforge",
+        verb: "standing",
+        args,
+        chatId: "chat-gm",
+        messageId: "msg-1",
+        swipeIndex: 0,
+        ...over,
+      };
+      const detail = { packageId: data.packageId, type: "gm_verb", chatId: data.chatId, data };
+      for (const fn of (listeners["marinara-capability-server-event"] ?? []).slice()) fn({ detail });
+    };
+    const rowFor = (name) => loadedPF.player.get(core)?.rel?.[zone]?.[name];
+    const relRows = () =>
+      Object.values(loadedPF.player.get(core)?.rel ?? {}).reduce((n, rows) => n + Object.keys(rows ?? {}).length, 0);
+
+    // 1. THE APPLY LANDS — and it lands on the flag that has had three readers
+    // and no writer since 0.15. The GM's spelling is lowercase and Mira is in the
+    // INN, two zones from the row's key: the resolver walks the whole world and
+    // the row is written settlement-scoped under the world's own spelling, which
+    // is the only way this and the talk press can share one row per person.
+    const sheetBefore = hud._sheetValueKey();
+    send({ npc: "mira", stance: "hostile", line: "  You cheated her at the market.  " });
+    const mira = rowFor("Mira");
+    assert.ok(mira, "the GM's lowercase spelling landed on the world's own row key");
+    assert.equal(mira.h, 1, "the hostile flag is SET — the first writer that flag has ever had");
+    assert.equal(mira.t, 0, "…and the encounter count did not move, because `t: 0` adds nothing");
+    assert.equal(mira.d, 0, "…and hostility did not invent a rung: it is a flag beside the ladder");
+    assert.equal(mira.s, "You cheated her at the market.", "the remembered line rides, through the shipped clip");
+    assert.match(hud.toastEl.textContent, /Mira has turned against you/, "the toast says it in plain words");
+    assert.match(hud.toastEl.textContent, /cheated her at the market/, "…composed with the line the GM supplied");
+    assert.equal(hud._standing(loadedPF.player.get(core)).hostile, 1, "the Standing sheet counts the hostile row");
+    assert.notEqual(hud._sheetValueKey(), sheetBefore, "…and the sheet's live key moved, so an open sheet redraws");
+
+    // 2. THE TALK WINDOW'S TITLE FOLLOWS IT WITHOUT CLOSING. Nothing in the game
+    // could move a row with the window mounted — the talk press unmounts on
+    // `setMode("dialogue")` before its own bump — so the standing was absent from
+    // the window's memo key until the GM got a verb.
+    const tam = w.zones[zone].npcs.find((npc) => npc.name === "Tam");
+    sim.mode = "walk";
+    sim.x = tam.x * loadedPF.TILE + 8;
+    sim.y = tam.y * loadedPF.TILE + 8;
+    sim.nearNpc = tam;
+    core.interact();
+    hud.update();
+    assert.equal(hud.talkWho.textContent, "Tam — " + tam.role, "a stranger's window title says no standing word");
+    send({ npc: "Tam", stance: "friendly" }, { messageId: "msg-2" });
+    hud.update();
+    assert.match(hud.talkWho.textContent, /· friendly$/, "the open window's title followed the GM's verb");
+    assert.match(hud.toastEl.textContent, /Tam counts you a friend now\./, "…said in the ladder's own words");
+    assert.equal(rowFor("Tam").d, 2, "the rung was SET, not earned — the promotion heuristic yields to it");
+    core.closeTalk();
+    hud.update();
+
+    // 3. AN UNKNOWN NAME IS REFUSED, AND THE REFUSAL IS BINDING. An event verb
+    // writes nothing engine-side before it reaches the package, so there is no
+    // committed row for this refusal to disagree with — unlike the state half,
+    // where a package's objection is only advisory.
+    const rowsBefore = relRows();
+    hud.toastEl.textContent = "";
+    warned.length = 0;
+    send({ npc: "Nobody", stance: "hostile" }, { messageId: "msg-3" });
+    assert.equal(relRows(), rowsBefore, "nothing was written for a person this world does not have");
+    assert.match(hud.toastEl.textContent, /Nobody isn't anyone in this world/, "the player is told plainly");
+    assert.ok(
+      warned.some((line) => line.includes("unknown person")),
+      "…and the refusal is logged rather than swallowed",
+    );
+
+    // 4. A DUPLICATE TRIPLE IS DROPPED. Redelivery is the only thing the triple
+    // can guard, so the second envelope carries a DIFFERENT stance: an unchanged
+    // row here is the dedupe set answering, not absoluteness hiding a re-apply.
+    hud.toastEl.textContent = "";
+    send({ npc: "mira", stance: "close friend" });
+    assert.equal(rowFor("Mira").h, 1, "the repeated triple never reached the mutator");
+    assert.equal(rowFor("Mira").d, 0, "…so the second stance was not applied");
+    assert.equal(hud.toastEl.textContent, "", "…and nothing was said about it");
+
+    // 5. MALFORMED ARGUMENTS ARE REFUSED, every shape of them. The engine's own
+    // validation is shape-only and the package's check is the load-bearing one,
+    // so none of these may throw, write, or toast.
+    hud.toastEl.textContent = "";
+    warned.length = 0;
+    send({ npc: "Tam", stance: "beloved" }, { messageId: "msg-5" });
+    send({ npc: "Tam", stance: "" }, { messageId: "msg-6" });
+    send({ npc: 17, stance: "friendly" }, { messageId: "msg-7" });
+    send(undefined, { messageId: "msg-8" });
+    send({ npc: "Tam", stance: "close friend" }, { verb: "reputation", messageId: "msg-9" });
+    assert.equal(rowFor("Tam").d, 2, "no malformed delivery moved the row a valid one left behind");
+    assert.equal(relRows(), rowsBefore, "…and none of them minted a row either");
+    assert.ok(
+      warned.some((line) => line.includes("unknown stance")),
+      "an out-of-vocabulary stance is logged",
+    );
+    assert.ok(
+      warned.some((line) => line.includes("unknown GM verb reputation")),
+      "…and a verb this build does not consume names itself",
+    );
+
+    // 6. A SECOND DISTINCT DELIVERY APPLIES. A regenerate mints a fresh
+    // swipeIndex under the same messageId, which is a NEW key — and because the
+    // write is absolute, the newest narration's standing simply overwrites.
+    hud.toastEl.textContent = "";
+    send({ npc: "mira", stance: "friendly", line: "Made it right with her." }, { swipeIndex: 1 });
+    assert.equal(rowFor("Mira").d, 2, "the regenerated turn's standing overwrote rather than stacked");
+    assert.equal(rowFor("Mira").h, undefined, "…and the stance the GM named CLEARED the flag it replaced");
+    assert.equal(rowFor("Mira").t, 0, "…with the encounter count still untouched");
+    assert.match(hud.toastEl.textContent, /Mira counts you a friend now/, "and it was announced");
+
+    // 7. THE ADDRESS CHECKS IN FRONT OF ALL OF IT. Both are the listener's, and
+    // both are why this block fires at the window.
+    hud.toastEl.textContent = "";
+    send({ npc: "Tam", stance: "stranger" }, { packageId: "hierarchical-maps", messageId: "msg-10" });
+    assert.equal(rowFor("Tam").d, 2, "an event addressed to another package is not ours to apply");
+    send({ npc: "Tam", stance: "stranger" }, { chatId: "chat-elsewhere", messageId: "msg-11" });
+    assert.equal(rowFor("Tam").d, 2, "…and neither is one for a chat the player has left");
+    assert.equal(hud.toastEl.textContent, "", "…silently, both of them");
+  } finally {
+    globalThis.setTimeout = realSetTimeout;
+    globalThis.clearTimeout = realClearTimeout;
+    console.warn = realWarn;
+    core._unbindKeys();
+    core._mainEl = null;
+    if (realWindow === undefined) delete globalThis.window;
+    else globalThis.window = realWindow;
+    // The listener this block bound is closed over a window that is about to go
+    // away, so the latch is dropped with it — the next block to bind gets a live
+    // one instead of inheriting this one's.
+    core._capEventsBound = false;
+    loadedPF.gm._seen.clear();
+    core.chatId = null;
+    core.sim = null;
+    core.hud = null;
+    core.host = null;
+    core._talkConfirm = null;
+    core._talkAnchor = null;
+    globalThis.document._docListeners = {};
+    loadedPF.save.reset();
   }
 }
 
