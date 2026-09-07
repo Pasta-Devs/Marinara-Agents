@@ -40,7 +40,8 @@
         "sprites/mira.png",
         "sprites/tam.png",
         "sprites/rook.png",
-        "sprites/fen.png"
+        "sprites/fen.png",
+        "gm-verbs.json"
       ]
     }
   },
@@ -99,6 +100,11 @@
       "path": "sprites/fen.png",
       "sha256": "5c27a49f7942c46a55e0c162112fdf9d6563a513e3c125df5c1fddf637676bf4",
       "bytes": 423
+    },
+    {
+      "path": "gm-verbs.json",
+      "sha256": "938eb779c9af0bd8373ee984a8eb480fb2783e1348efda4daaaabfee81844e00",
+      "bytes": 1371
     }
   ],
   "permissions": [
