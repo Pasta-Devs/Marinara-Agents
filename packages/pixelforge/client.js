@@ -5504,12 +5504,31 @@ PF.world = (() => {
    *  Falls back to the centred junction if the search comes back empty, which no
    *  shipped scale does — but a future scale table is one edit away from a map
    *  too small to hold four bands, and a settlement is not a thing to lose to an
-   *  empty array inside build()'s silent degrade. */
+   *  empty array inside build()'s silent degrade.
+   *
+   *  AND THE PLAZA FALLBACK IS DERIVED RATHER THAN TRANSCRIBED. It used to spell
+   *  the first shape and its offset as `w: 8, h: 8` at `spine - 4`, which is the
+   *  shipped tunables written out as literals: a retune of `PLAZA_SHAPES` would
+   *  move every square on every map EXCEPT this one, and leave the degrade
+   *  drawing a rect the shape set no longer offers — the clipped square the
+   *  junction search's own comment warns about, arrived at from the other side.
+   *
+   *  The offset is the MIDPOINT of the band `plazaCandidates` would have handed
+   *  back for that shape, which is why it is the shape's half-extent and not the
+   *  inset: the legal x runs `[mx + half - shape.w, mx - half]` for
+   *  `half = PLAZA_INSET >> 1`, and its middle is `mx - shape.w / 2` for any
+   *  inset at all. So the inset moves that band's ends and not its centre, and
+   *  the fallback stays exactly as legal as the shape set is — it contains the
+   *  paved inset whenever the shape is at least as big as one, which is the same
+   *  condition that makes the shape offerable in the first place. */
   const townPlan = (w, h, budget, rnd) => {
     const legal = junctionCandidates(w, h, budget);
     const spine = legal.length ? legal[(rnd() * legal.length) | 0] : { x: (w / 2) | 0, y: (h / 2) | 0 };
     const plazas = plazaCandidates(w, h, spine.x, spine.y);
-    const plaza = plazas.length ? plazas[(rnd() * plazas.length) | 0] : { x: spine.x - 4, y: spine.y - 4, w: 8, h: 8 };
+    const first = TOWN_TUNE.PLAZA_SHAPES[0];
+    const plaza = plazas.length
+      ? plazas[(rnd() * plazas.length) | 0]
+      : { x: spine.x - (first.w >> 1), y: spine.y - (first.h >> 1), w: first.w, h: first.h };
     // ONE DRAW PER BAND, in a fixed order, so the stream position after the plan
     // is a function of the plan's shape alone — which is what lets the ground
     // idiom draw from the same stream five hundred lines further down.
@@ -14884,6 +14903,33 @@ const RETRY_TUNE = {
   STORE_BACKOFF_MS: 500,
 };
 
+/** THE STORE LADDER, WRITTEN ONCE. Four sites in this module PATCH one thing and
+ *  have to mean it — the two fallback markers, the brief seal and the pack seal
+ *  — and each carried its own copy of the same three lines, two of them with the
+ *  attempt count and the spacing spelled as literals rather than read off the
+ *  tune above. A retune that moved `RETRY_TUNE` and left those two behind would
+ *  have been invisible from the outside and wrong on the inside: the shipped
+ *  storage screen says one thing about how hard a save tried, for all four.
+ *
+ *  `run` is the whole of what a success MEANS on that site rather than the PATCH
+ *  alone — the marker sites mirror their own bookkeeping inside it, exactly
+ *  where the `try` used to hold it, so a throw out of the mirror is retried like
+ *  any other failure instead of being swallowed one line past the ladder. The
+ *  warning stays the CALLER'S, because the sentence a last attempt leaves in the
+ *  console is about what that site was storing and nothing else. */
+const storeWithRetry = async (run, warning) => {
+  for (let attempt = 0; attempt < RETRY_TUNE.STORE_ATTEMPTS; attempt++) {
+    try {
+      await run();
+      return true;
+    } catch (err) {
+      if (attempt === RETRY_TUNE.STORE_ATTEMPTS - 1) console.warn(warning, err);
+      else await new Promise((resolve) => setTimeout(resolve, RETRY_TUNE.STORE_BACKOFF_MS * (attempt + 1)));
+    }
+  }
+  return false;
+};
+
 /** The states `derive` can answer, split by what the surface does with them.
  *  A POPUP state is a row the player can act on; everything else is silence —
  *  "ok" and "n/a" have nothing to offer, "declined" is a choice already made,
@@ -15762,19 +15808,11 @@ PF.save = {
   async _acceptFallback(chatId, stageId) {
     const key = RETRY_KEYS.ACCEPTED[stageId];
     if (!chatId || !key) return false;
-    for (let attempt = 0; attempt < RETRY_TUNE.STORE_ATTEMPTS; attempt++) {
-      try {
-        await PF.api.patchMetadata(chatId, { [key]: true });
-        this._fallbackAcceptedSealed.add(`${chatId}|${stageId}`);
-        this._acceptedHousekept.delete(`${chatId}|${stageId}`);
-        return true;
-      } catch (err) {
-        if (attempt === RETRY_TUNE.STORE_ATTEMPTS - 1)
-          console.warn("[pixelforge] could not record that choice; the next visit will offer the call again", err);
-        else await new Promise((resolve) => setTimeout(resolve, RETRY_TUNE.STORE_BACKOFF_MS * (attempt + 1)));
-      }
-    }
-    return false;
+    return storeWithRetry(async () => {
+      await PF.api.patchMetadata(chatId, { [key]: true });
+      this._fallbackAcceptedSealed.add(`${chatId}|${stageId}`);
+      this._acceptedHousekept.delete(`${chatId}|${stageId}`);
+    }, "[pixelforge] could not record that choice; the next visit will offer the call again");
   },
 
   /** …and the other direction, which a retry has to AWAIT before it dispatches:
@@ -15786,19 +15824,11 @@ PF.save = {
   async _clearAccepted(chatId, stageId, meta) {
     const key = RETRY_KEYS.ACCEPTED[stageId];
     if (!chatId || !key) return false;
-    for (let attempt = 0; attempt < RETRY_TUNE.STORE_ATTEMPTS; attempt++) {
-      try {
-        await PF.api.patchMetadata(chatId, { [key]: null });
-        this._fallbackAcceptedSealed.delete(`${chatId}|${stageId}`);
-        if (meta && typeof meta === "object") meta[key] = null;
-        return true;
-      } catch (err) {
-        if (attempt === RETRY_TUNE.STORE_ATTEMPTS - 1)
-          console.warn("[pixelforge] could not clear this chat's stand-in marker", err);
-        else await new Promise((resolve) => setTimeout(resolve, RETRY_TUNE.STORE_BACKOFF_MS * (attempt + 1)));
-      }
-    }
-    return false;
+    return storeWithRetry(async () => {
+      await PF.api.patchMetadata(chatId, { [key]: null });
+      this._fallbackAcceptedSealed.delete(`${chatId}|${stageId}`);
+      if (meta && typeof meta === "object") meta[key] = null;
+    }, "[pixelforge] could not clear this chat's stand-in marker");
   },
 
   /** A stage that derives `ok` no longer has a fallback to be standing on, so
@@ -16883,16 +16913,10 @@ PF.save = {
         // that has been rewritten since, which is the whole of Q9's ruling.
         const wantsPack = !force && this._configPackWanted(meta);
         if (wantsPack) patch[PACK_WANTED_META_KEY] = true;
-        let stored = false;
-        for (let attempt = 0; attempt < 3 && !stored; attempt++) {
-          try {
-            await PF.api.patchMetadata(chatId, patch);
-            stored = true;
-          } catch (err) {
-            if (attempt === 2) console.warn("[pixelforge] brief storage failed; the chat stays unsealed", err);
-            else await new Promise((resolve) => setTimeout(resolve, 500 * (attempt + 1)));
-          }
-        }
+        const stored = await storeWithRetry(
+          () => PF.api.patchMetadata(chatId, patch),
+          "[pixelforge] brief storage failed; the chat stays unsealed",
+        );
         if (!stored) {
           if (chatId === core.chatId) this._failGate(core, "storage", "brief");
           return;
@@ -16963,16 +16987,10 @@ PF.save = {
           if (chatId === core.chatId) this._failGate(core, failure, "pack");
           return;
         }
-        let packStored = false;
-        for (let attempt = 0; attempt < 3 && !packStored; attempt++) {
-          try {
-            await PF.api.patchMetadata(chatId, { [PACK_META_KEY]: pack });
-            packStored = true;
-          } catch (err) {
-            if (attempt === 2) console.warn("[pixelforge] pack storage failed; the world stays packless", err);
-            else await new Promise((resolve) => setTimeout(resolve, 500 * (attempt + 1)));
-          }
-        }
+        const packStored = await storeWithRetry(
+          () => PF.api.patchMetadata(chatId, { [PACK_META_KEY]: pack }),
+          "[pixelforge] pack storage failed; the world stays packless",
+        );
         if (!packStored) {
           if (chatId === core.chatId) this._failGate(core, "storage", "pack");
           return;
@@ -17215,7 +17233,25 @@ PF.save = {
       }
       if (saved.bindings && typeof saved.bindings === "object") {
         for (const [loc, zone] of Object.entries(saved.bindings)) {
-          if (hasZone(zone)) {
+          // A MAP LOCATION MAY NOT BE BOUND TO A WILDERNESS CELL, and the arm
+          // above is what made that reachable: `ensure` materializes the cell the
+          // session ended in BEFORE `hasZone` is asked, so a save row naming that
+          // same cell as a binding target found the zone standing and bound it —
+          // to a cache fill that no location was ever posted for. 55-maps-export
+          // refuses a chunk a row of its own (`mapExport` is false on every one
+          // of them), so the binding names a location the world does not own: the
+          // topbar annotates a patch of country with somebody else's place name,
+          // and the residency policy then evicts the zone out from under it and
+          // leaves the binding pointing at nothing.
+          //
+          // THE TEST IS THE ID, NOT THE ZONE, which is what makes it exact in
+          // both directions. `PF.lattice.parse` answers for the canonical chunk
+          // spelling alone, so an id `ensure` would have handed back through its
+          // RESIDENT arm — one already standing in `world.zones` — refuses here
+          // just the same, and the three anchored cells that are real compiled
+          // zones (the settlement and the brief's own wilds, whose ids are not
+          // chunk ids at all) keep the bindings they have always had.
+          if (hasZone(zone) && !PF.lattice.parse(zone)) {
             world.bindings[loc] = zone;
             world.zones[zone].spatialLocationId = loc;
           }
@@ -21610,7 +21646,19 @@ PF.Hud = class {
     // keeps the offer reachable without nagging, and its words come off the same
     // registry region the rows do. It derives STRICTLY from live rows, so a
     // world that healed stops saying "part stand-in" on its own.
-    this.retryChip = this._chip(PF.save.RETRY_COPY.chip, "what didn't finish being written", () => this.toggleRetry());
+    //
+    // A GLYPH, LIKE THE TWO OPENERS ABOVE IT, and that is `_chip`'s contract
+    // rather than a preference: the topbar is one flex row of chips centred over
+    // the play field, and its fullest state — a bound location name, a signpost,
+    // the clock, a purse with a carry count, and all three buttons — is what the
+    // width was struck against. A twenty-character sentence wearing button
+    // chrome is another whole chip's worth of row, and it pushed that state past
+    // the width on a phone. The SENTENCE is not lost: it is the accessible name,
+    // which is where the two beside it keep the words their glyphs do not say,
+    // and `RETRY_COPY.chip` stays the registry's one home for it.
+    this.retryChip = this._chip("🚧", `${PF.save.RETRY_COPY.chip} — what didn't finish being written`, () =>
+      this.toggleRetry(),
+    );
     this.topbar = PF.el(
       "div",
       { style: "position:absolute;top:10px;left:50%;transform:translateX(-50%);display:flex;gap:6px;z-index:2;" },
@@ -23279,7 +23327,18 @@ PF.Hud = class {
       // lands the player in a setting that is already written and stored, so it
       // may not wear the sentence that prices writing one — and the free press
       // may not wear either, because it makes no call at all.
-      const cascade = PF.save.stage(row.stage)?.cascade?.mode === action.mode;
+      //
+      // AND THE SECOND TERM IS THE STATE, for the same reason the docstring above
+      // gives: the mode's NAME cannot answer this either. `rewrite` is the pack
+      // row's cascade mode AND its ordinary priced button, and what makes a press
+      // on it the cascade is the setting sitting ahead of the world on screen —
+      // `worldBehindBrief`, the same question `retryReplacesWorld` asked one line
+      // up and the install fork asks at the end. Inert while the pack row's modes
+      // carry no `installs` flag, since only the cascade arm can have got a press
+      // this far; a row that grows one would otherwise get the cascade's copy —
+      // "the new world is settled, this brings you to it" — over a world nothing
+      // has written yet.
+      const cascade = PF.save.stage(row.stage)?.cascade?.mode === action.mode && PF.save.worldBehindBrief(this.core);
       this._retryConfirm = { stage: row.stage, action, free, cascade };
       this._retryKey = null;
       this._syncRetry();
