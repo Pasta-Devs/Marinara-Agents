@@ -203,12 +203,14 @@ export async function advanceSlurpWorld(db: DB, until = new Date()): Promise<Slu
       seed: `${since.toISOString()}:${until.toISOString()}`,
       activity,
       targets: creators.flatMap((creator) =>
-        (postsByAccount.get(creator.id) ?? []).map((post) => ({
-          creatorAccountId: creator.id,
-          postId: post.id,
-          ageHours: (until.getTime() - Date.parse(post.createdAt)) / 3_600_000,
-          creatorReach: creator.followers,
-        })),
+        (postsByAccount.get(creator.id) ?? [])
+          .filter((post) => post.access !== "draft")
+          .map((post) => ({
+            creatorAccountId: creator.id,
+            postId: post.id,
+            ageHours: (until.getTime() - Date.parse(post.createdAt)) / 3_600_000,
+            creatorReach: creator.followers,
+          })),
       ),
     });
     let pulsed = 0;

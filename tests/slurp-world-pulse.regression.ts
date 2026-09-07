@@ -97,11 +97,31 @@ const world = readFileSync(
 // where a roleplay product needs the world to move.
 assert.match(world, /elapsedMinutes: \(until\.getTime\(\) - since\.getTime\(\)\) \/ 60_000/u);
 assert.match(world, /async function applyPulse/u);
+assert.match(
+  world,
+  /postsByAccount\.get\(creator\.id\) \?\? \[\]\)\s*\.filter\(\(post\) => post\.access !== "draft"\)/u,
+  "draft posts must not receive world pulse reactions",
+);
 // Free tier only: a like carries no text, so no model call.
 assert.match(world, /type: "like",\s*content: null,/u);
 const storage = readFileSync(
   join(import.meta.dirname, "..", "packages/slurp/src/engine/packages/server/src/services/storage/slurp.storage.ts"),
   "utf8",
+);
+assert.match(
+  storage,
+  /for \(const row of rows\) \{\s*if \(row\.access === "draft"\) continue;\s*const post = mapManagedPost\(row\);/u,
+  "draft posts must be removed before managed-post mapping",
+);
+assert.match(
+  storage,
+  /function noodlerPostPageCondition[\s\S]*?ne\(noodlePosts\.access, "draft"\)/u,
+  "draft posts must be excluded before feed pagination",
+);
+assert.match(
+  storage,
+  /\.where\(and\(inArray\(noodlePosts\.authorAccountId, visibleAccountIds\), ne\(noodlePosts\.access, "draft"\)\)\)/u,
+  "draft posts must be excluded from unseen signals",
 );
 assert.match(world, /createNoodlerWorldInteraction\(action\.postId/u, "world actions use internal storage");
 assert.match(storage, /async createNoodlerWorldInteraction\(/u, "world interactions have a separate internal method");

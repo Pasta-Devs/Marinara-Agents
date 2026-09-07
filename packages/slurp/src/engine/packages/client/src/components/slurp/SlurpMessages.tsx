@@ -46,7 +46,16 @@ const TIP_PRESETS = [5, 15, 50] as const;
 
 export type SlurpMessageThreadContext = Pick<
   SlurpThread,
-  "id" | "creatorAccountId" | "creatorDisplayName" | "creatorHandle" | "creatorAvatarUrl" | "subscribed" | "rapport"
+  | "id"
+  | "creatorAccountId"
+  | "creatorDisplayName"
+  | "creatorHandle"
+  | "creatorAvatarUrl"
+  | "viewerAccountId"
+  | "counterpartName"
+  | "counterpartHandle"
+  | "subscribed"
+  | "rapport"
 >;
 
 /**
@@ -337,11 +346,14 @@ function SlurpThreadView({
   const thread = threadQuery.data?.thread ?? null;
   const messages = threadQuery.data?.messages ?? [];
   const creator = threadQuery.data?.creator;
+  const counterpart = threadQuery.data?.counterpart ?? creator;
   const messaging = threadQuery.data?.messaging;
   const commissions = threadQuery.data?.commissions ?? [];
   const subscribed = thread?.subscribed ?? threadQuery.data?.subscribed ?? false;
   const targetCreatorAccountId = thread?.creatorAccountId ?? creator?.id ?? creatorAccountId;
   const ownsCreator = Boolean(targetCreatorAccountId && ownedCreatorAccountIds.includes(targetCreatorAccountId));
+  const headerAccount = ownsCreator ? counterpart : creator;
+  const headerProfileId = ownsCreator ? thread?.viewerAccountId : targetCreatorAccountId;
   const busy = send.isPending || tip.isPending || creatorReply.isPending || draftReply.isPending;
 
   // Follow the conversation down as it grows, the way every chat surface does.
@@ -423,14 +435,16 @@ function SlurpThreadView({
         </button>
         <button
           type="button"
-          onClick={() => targetCreatorAccountId && onOpenProfile(targetCreatorAccountId)}
+          onClick={() => headerProfileId && onOpenProfile(headerProfileId)}
           className="flex min-w-0 flex-1 items-center gap-2 rounded-lg px-1 py-1 text-left hover:bg-[var(--noodle-accent)]/[0.06]"
         >
-          {creator && <Avatar account={creator} size="sm" />}
+          {headerAccount && <Avatar account={headerAccount} size="sm" />}
           <span className="min-w-0">
-            <span className="block truncate text-sm font-bold">{creator?.displayName ?? ""}</span>
+            <span className="block truncate text-sm font-bold">{headerAccount?.displayName ?? ""}</span>
             <span className="flex min-w-0 items-center gap-1.5">
-              <span className="truncate text-[0.7rem] text-[var(--muted-foreground)]">@{creator?.handle ?? ""}</span>
+              <span className="truncate text-[0.7rem] text-[var(--muted-foreground)]">
+                @{headerAccount?.handle ?? ""}
+              </span>
               {/* Rapport decides how fast and how warmly a Creator answers. The player felt it and
                   could never see it, so the one number the whole thread turns on was invisible. */}
               {thread && <SlurpRapportBadge rapport={thread.rapport} ownsCreator={ownsCreator} />}
@@ -497,7 +511,13 @@ function SlurpThreadView({
             </p>
           )}
           {messages.map((message) => (
-            <MessageBubble key={message.id} message={message} locale={i18n.language} personaId={personaId} />
+            <MessageBubble
+              key={message.id}
+              message={message}
+              locale={i18n.language}
+              personaId={personaId}
+              ownsCreator={ownsCreator}
+            />
           ))}
           {typing && (
             <p
@@ -647,15 +667,17 @@ function MessageBubble({
   message,
   locale,
   personaId,
+  ownsCreator,
 }: {
   message: SlurpMessage;
   locale: string;
   personaId?: string | null;
+  ownsCreator: boolean;
 }) {
   const { t: localizeUi } = useUiTranslation();
   const unlock = useUnlockSlurpMessage();
   const messageImage = useSlurpMediaSrc(message.imageUrl);
-  const mine = message.role === "viewer";
+  const mine = ownsCreator ? message.role === "creator" : message.role === "viewer";
   if (message.kind === "tip") {
     return (
       <p
@@ -815,7 +837,6 @@ function CreatorMessageTools({
   const [open, setOpen] = useState(false);
   const [content, setContent] = useState("");
   const [price, setPrice] = useState(defaultPpvPrice > 0 ? defaultPpvPrice : 10);
-  const [imageUrl, setImageUrl] = useState("");
   const [error, setError] = useState<string | null>(null);
 
   const submit = async () => {
@@ -829,10 +850,8 @@ function CreatorMessageTools({
         viewerAccountId,
         content: body,
         price,
-        imageUrl: imageUrl.trim() || null,
       });
       setContent("");
-      setImageUrl("");
       setOpen(false);
     } catch (cause) {
       setError(
@@ -867,19 +886,6 @@ function CreatorMessageTools({
             onChange={(event) => setContent(event.target.value)}
             placeholder={localizeUi("ui.slurp.messages.ppvPlaceholder", { defaultValue: "What they pay to see…" })}
             className="w-full resize-y rounded-lg bg-[var(--slurp-canvas,var(--background))] px-3 py-2 text-sm outline-none ring-1 ring-inset ring-[var(--noodle-divider)] focus:ring-2 focus:ring-[var(--noodle-accent)]"
-          />
-          {/* The whole point of a locked message is usually a picture, and it could not carry one. */}
-          <label className="sr-only" htmlFor="slurp-ppv-image">
-            {localizeUi("ui.slurp.messages.attachImage", { defaultValue: "Image" })}
-          </label>
-          <input
-            id="slurp-ppv-image"
-            value={imageUrl}
-            onChange={(event) => setImageUrl(event.target.value)}
-            placeholder={localizeUi("ui.slurp.messages.attachImagePlaceholder", {
-              defaultValue: "Image path stored by Marinara, optional",
-            })}
-            className="h-9 w-full rounded-lg bg-[var(--slurp-canvas,var(--background))] px-3 text-sm outline-none ring-1 ring-inset ring-[var(--noodle-divider)] focus:ring-2 focus:ring-[var(--noodle-accent)]"
           />
           <div className="flex items-center gap-2">
             <label htmlFor="slurp-ppv-price" className="text-xs font-bold text-[var(--muted-foreground)]">
@@ -997,7 +1003,6 @@ function CommissionRow({
   const [price, setPrice] = useState(commission.price > 0 ? commission.price : 25);
   // Only an unpaid commission can be called off; after accept the coins have moved.
   const canEnd = commission.state === "brief" || commission.state === "quoted";
-  const [deliveryImageUrl, setDeliveryImageUrl] = useState("");
   const [generateImage, setGenerateImage] = useState(false);
   const [delivery, setDelivery] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -1110,24 +1115,11 @@ function CommissionRow({
             })}
             className="w-full resize-y rounded-lg bg-[var(--slurp-canvas,var(--background))] px-3 py-2 outline-none ring-1 ring-inset ring-[var(--noodle-divider)] focus:ring-2 focus:ring-[var(--noodle-accent)]"
           />
-          <label className="sr-only" htmlFor={`slurp-deliver-image-${commission.id}`}>
-            {localizeUi("ui.slurp.messages.attachImage", { defaultValue: "Image" })}
-          </label>
-          <input
-            id={`slurp-deliver-image-${commission.id}`}
-            value={deliveryImageUrl}
-            onChange={(event) => setDeliveryImageUrl(event.target.value)}
-            placeholder={localizeUi("ui.slurp.messages.attachImagePlaceholder", {
-              defaultValue: "Image path stored by Marinara, optional",
-            })}
-            className="h-9 w-full rounded-lg bg-[var(--slurp-canvas,var(--background))] px-3 outline-none ring-1 ring-inset ring-[var(--noodle-divider)] focus:ring-2 focus:ring-[var(--noodle-accent)]"
-          />
           <label className="flex min-h-9 items-center gap-2 text-[var(--muted-foreground)]">
             <input
               type="checkbox"
               checked={generateImage}
               onChange={(event) => setGenerateImage(event.target.checked)}
-              disabled={busy || Boolean(deliveryImageUrl.trim())}
               className="size-4 accent-[var(--noodle-accent)]"
             />
             {localizeUi("ui.slurp.messages.generateCommissionImage", {
@@ -1144,12 +1136,10 @@ function CommissionRow({
                     commissionId: commission.id,
                     personaId,
                     content: delivery.trim(),
-                    imageUrl: deliveryImageUrl.trim() || null,
                     generateImage,
                   })
                   .then(() => {
                     setDelivery("");
-                    setDeliveryImageUrl("");
                     setGenerateImage(false);
                   }),
                 localizeUi("ui.slurp.messages.commissionDeliverFailed", { defaultValue: "Could not deliver that." }),

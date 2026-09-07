@@ -1,5 +1,14 @@
 # Slurp release notes
 
+## 1.2.5 — 2026-09-07
+
+- Background audience activity no longer reacts to draft posts.
+- Free subscriptions now enter the Creator audience funnel even when wallet charging is disabled.
+- Story views are idempotent under concurrent requests.
+- Creator-side Inbox threads show the fan identity and correct message direction.
+- Paid-message media paths are server-owned, so callers cannot expose unrelated protected API media.
+- Commission image failures now offer a clear text-only delivery path.
+
 ## 1.2.4 — 2026-09-06
 
 - Right rails now provide contextual content instead of repeating the main view.

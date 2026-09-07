@@ -132,6 +132,11 @@ assert.match(schema, /uniqueBy: \[\{ keys: \["memberId", "creatorAccountId"\] \}
 // fraction of what actually happened and could never be believed as a follower count.
 const slurpStorage = read("services/storage/slurp.storage.ts");
 assert.match(slurpStorage, /advanceAudienceTie\(viewerAccountId, creatorAccountId, \{\s*stage: "subscriber"/u);
+assert.match(
+  slurpStorage,
+  /if \(!settings\.walletEnabled\) \{\s*await this\.advanceAudienceTie\(viewerAccountId, creatorAccountId, \{\s*stage: "subscriber"/u,
+  "free subscriptions must still enter the audience funnel",
+);
 assert.match(slurpStorage, /advanceAudienceTie\(viewerAccountId, post\.authorAccountId, \{ stage: "liker"/u);
 assert.match(slurpStorage, /advanceAudienceTie\(viewerAccountId, creator\.id, \{ stage: "regular"/u);
 // Unsubscribing drops the tie, so a lost subscriber leaves the funnel as well as the feed.

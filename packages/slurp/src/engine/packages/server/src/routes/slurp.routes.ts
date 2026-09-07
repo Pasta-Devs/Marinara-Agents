@@ -1853,21 +1853,34 @@ export async function slurpRoutes(app: FastifyInstance) {
         ),
       );
     if (existing[0]) return { viewed: true, duplicate: true };
-    await app.db.insert(noodleInteractions).values({
-      id: newId(),
-      postId: id,
-      parentInteractionId: null,
-      actorAccountId: identity.actor.id,
-      type: "story_view",
-      content: null,
-      imageUrl: null,
-      actorSnapshot: JSON.stringify({
-        id: identity.actor.id,
-        handle: identity.actor.handle,
-        displayName: identity.actor.displayName,
-      }),
-      createdAt: now(),
-    });
+    try {
+      await app.db.insert(noodleInteractions).values({
+        id: newId(),
+        postId: id,
+        parentInteractionId: null,
+        actorAccountId: identity.actor.id,
+        type: "story_view",
+        content: null,
+        imageUrl: null,
+        actorSnapshot: JSON.stringify({
+          id: identity.actor.id,
+          handle: identity.actor.handle,
+          displayName: identity.actor.displayName,
+        }),
+        createdAt: now(),
+      });
+    } catch (error) {
+      if (
+        !isFileUniqueConstraintError(error, "slurp_interactions", [
+          "postId",
+          "actorAccountId",
+          "type",
+          "parentInteractionId",
+        ])
+      )
+        throw error;
+      return { viewed: true, duplicate: true };
+    }
     return { viewed: true, duplicate: false };
   });
 

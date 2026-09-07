@@ -2,7 +2,7 @@
 // Storage: Noodle Fake Social Media
 // ──────────────────────────────────────────────
 import { existsSync } from "node:fs";
-import { and, desc, eq, gt, inArray, isNotNull, isNull, like, lt, or } from "../../db/file-query.js";
+import { and, desc, eq, gt, inArray, isNotNull, isNull, like, lt, ne, or } from "../../db/file-query.js";
 import {
   createNoodlePoll,
   DEFAULT_NOODLER_CREATOR_REPLIES_PER_24_HOURS,
@@ -325,6 +325,7 @@ function noodlerPostPageCondition(options: NoodlerPostPageOptions, includeCursor
   const readable = noodlerReadablePostCondition(options);
   return and(
     inArray(noodlePosts.authorAccountId, options.accountIds),
+    ne(noodlePosts.access, "draft"),
     options.mediaOnly
       ? and(isNotNull(noodlePosts.imageUrl), or(readable, like(noodlePosts.imageUrl, `${NOODLER_MEDIA_URL_PREFIX}%`)))
       : undefined,
@@ -3590,6 +3591,7 @@ export function createSlurpStorage(db: DB) {
         .where(inArray(noodlePosts.authorAccountId, accountIds))
         .orderBy(desc(noodlePosts.createdAt));
       for (const row of rows) {
+        if (row.access === "draft") continue;
         const post = mapManagedPost(row);
         const existing = result.get(post.authorAccountId);
         if (existing) {
@@ -3681,7 +3683,7 @@ export function createSlurpStorage(db: DB) {
           updatedAt: noodlePosts.updatedAt,
         })
         .from(noodlePosts)
-        .where(inArray(noodlePosts.authorAccountId, visibleAccountIds));
+        .where(and(inArray(noodlePosts.authorAccountId, visibleAccountIds), ne(noodlePosts.access, "draft")));
       const latestPost = [...posts].sort(compareNoodlerPostSortKeysDescending)[0];
       const latestUpdate = [...posts].sort((left, right) =>
         compareNoodlerPostSortKeysDescending(
@@ -5353,6 +5355,10 @@ export function createSlurpStorage(db: DB) {
               }),
             );
           }
+          await this.advanceAudienceTie(viewerAccountId, creatorAccountId, {
+            stage: "subscriber",
+            hasSubscription: true,
+          });
           return mapSubscription(existing[0]);
         }
 
@@ -5476,6 +5482,12 @@ export function createSlurpStorage(db: DB) {
             await this.advanceAudienceTie(viewerAccountId, creatorAccountId, {
               stage: "subscriber",
               spent: price,
+              hasSubscription: true,
+            });
+          }
+          if (!settings.walletEnabled) {
+            await this.advanceAudienceTie(viewerAccountId, creatorAccountId, {
+              stage: "subscriber",
               hasSubscription: true,
             });
           }

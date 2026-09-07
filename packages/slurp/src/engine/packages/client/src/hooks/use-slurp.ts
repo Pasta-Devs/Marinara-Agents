@@ -1821,6 +1821,8 @@ export type SlurpThread = {
   creatorHandle: string;
   creatorDisplayName: string;
   creatorAvatarUrl: string | null;
+  counterpartName?: string | null;
+  counterpartHandle?: string | null;
   subscribed: boolean;
 };
 
@@ -1880,6 +1882,7 @@ export function useSlurpThread(threadId: string | null, personaId: string | null
         thread: SlurpThread;
         messages: SlurpMessage[];
         creator: { id: string; handle: string; displayName: string; avatarUrl: string | null } | null;
+        counterpart: { id: string; handle: string; displayName: string; avatarUrl: string | null } | null;
         messaging: SlurpCreatorMessaging;
         commissions: SlurpCommission[];
         subscribed?: boolean;
@@ -1972,7 +1975,6 @@ export function useSendSlurpCreatorPpv() {
       viewerAccountId: string;
       content: string;
       price: number;
-      imageUrl?: string | null;
     }) =>
       api.post<{ message: SlurpMessage }>(
         `/slurp/messages/creators/${encodeURIComponent(input.creatorAccountId)}/ppv`,
@@ -2043,13 +2045,7 @@ export function useDeclineSlurpCommission() {
 export function useDeliverSlurpCommission() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (input: {
-      commissionId: string;
-      personaId: string;
-      content: string;
-      imageUrl?: string | null;
-      generateImage?: boolean;
-    }) =>
+    mutationFn: (input: { commissionId: string; personaId: string; content: string; generateImage?: boolean }) =>
       api.post<{ commission: SlurpCommission }>(
         `/slurp/messages/commissions/${encodeURIComponent(input.commissionId)}/deliver`,
         input,

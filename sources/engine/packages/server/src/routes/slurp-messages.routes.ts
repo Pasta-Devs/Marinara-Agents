@@ -42,18 +42,14 @@ const tipSchema = z.object({
  * bytes, so accepting a remote URL here would let a Creator point the app at anything and would
  * leak the viewer's IP to it on render.
  */
-const messageImageUrlSchema = z
-  .string()
-  .trim()
-  .max(2048)
-  .refine((value) => /^\/api\/[A-Za-z0-9._~\-/%?&=]*$/u.test(value), "Use an image stored by Marinara.");
-
 const creatorMessageSchema = z.object({
   personaId: z.string().trim().min(1),
   viewerAccountId: z.string().trim().min(1),
   content: z.string().trim().min(1).max(4000),
   price: z.number().int().min(0).max(9999).default(0),
-  imageUrl: messageImageUrlSchema.nullable().optional(),
+  // Attachments are created by the server after the message exists. Client-supplied paths could
+  // point at unrelated protected API resources.
+  imageUrl: z.null().optional(),
 });
 
 const broadcastSchema = creatorMessageSchema.omit({ viewerAccountId: true });
@@ -69,7 +65,7 @@ const commissionQuoteSchema = z.object({
 const commissionDeliverySchema = z.object({
   personaId: z.string().trim().min(1),
   content: z.string().trim().min(1).max(5000),
-  imageUrl: messageImageUrlSchema.nullable().optional(),
+  imageUrl: z.null().optional(),
   /** Draw the commissioned piece from the brief instead of attaching one. */
   generateImage: z.boolean().optional(),
 });
@@ -185,10 +181,17 @@ export async function slurpMessageRoutes(app: FastifyInstance) {
     const side = thread.viewerAccountId === viewer.id ? "viewer" : "creator";
     await messages.markRead(thread.id, side);
     const creator = await slurp.getNoodlerAccountById(thread.creatorAccountId);
+    const counterpart =
+      side === "creator"
+        ? ((await population.get(thread.viewerAccountId)) ??
+          (await slurp.getNoodlerAccountById(thread.viewerAccountId)) ??
+          (await slurp.getViewer(thread.viewerAccountId).catch(() => null)))
+        : creator;
     return {
       thread: await freshView(thread.id),
       messages: await visibleMessages(thread.id, side),
       creator,
+      counterpart,
       messaging: await messages.getCreatorMessaging(thread.creatorAccountId),
       commissions: await messages.listCommissionsForThread(thread.id),
     };
@@ -473,7 +476,9 @@ export async function slurpMessageRoutes(app: FastifyInstance) {
         });
       } catch (error) {
         logger.warn(error, "[slurp-commission] Could not draw the commissioned piece");
-        return reply.code(502).send({ error: "Could not draw that commission. Try again, or attach an image." });
+        return reply
+          .code(502)
+          .send({ error: "Could not draw that commission. Try again, or proceed without a generated image." });
       }
       if (drawn === "unavailable") {
         return reply.code(404).send({ error: "No image generation connection is configured." });

@@ -69,7 +69,11 @@ assert.match(draftService, /import \{ noodlerSourceText \} from "\.\/slurp-promp
 assert.match(messageStorage, /async listThreadsForCreators\(/u);
 assert.match(messageRoutes, /const inbound = await messages\.listThreadsForCreators\(operated\)/u);
 assert.match(messageRoutes, /counterpartName:/u, "a Creator-side row must name the fan, not the Creator");
+assert.match(messageRoutes, /counterpart,/u, "thread detail must return the inbound fan identity");
 assert.match(messages, /ui\.slurp\.messages\.inbound/u, "the inbox must show Creator-side threads");
+assert.match(messages, /const headerAccount = ownsCreator \? counterpart : creator/u);
+assert.match(messages, /const headerProfileId = ownsCreator \? thread\?\.viewerAccountId : targetCreatorAccountId/u);
+assert.match(messages, /const mine = ownsCreator \? message\.role === "creator" : message\.role === "viewer"/u);
 // A thread the player opened with their own Creator must not appear on both sides.
 assert.match(messageStorage, /if \(wanted\.has\(thread\.viewerAccountId\)\) continue;/u);
 

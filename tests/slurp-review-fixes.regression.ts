@@ -308,9 +308,11 @@ assert.match(messagesView2, /ui\.slurp\.messages\.commissionDecline"/u);
 
 // The column, the mapper and the append signature all existed; nothing ever set or rendered it, so
 // unlocking a PPV always revealed text and a commission could not deliver the artwork.
-assert.match(messageRoutes, /const messageImageUrlSchema = z/u);
-// A reference, not a download: a remote URL would be an open fetch and would leak the viewer's IP.
-assert.match(messageRoutes, /\.refine\(\(value\) => \/\^\\\/api\\\//u);
+// Attachments are server-owned references. A caller must not select an arbitrary protected API path.
+assert.match(messageRoutes, /imageUrl: z\.null\(\)\.optional\(\)/gu);
+assert.doesNotMatch(messagesView2, /slurp-ppv-image|slurp-deliver-image|imageUrl:/u);
+assert.doesNotMatch(useSlurpSource, /useSendSlurpCreatorPpv[\s\S]*imageUrl\?: string \| null/u);
+assert.doesNotMatch(useSlurpSource, /useDeliverSlurpCommission[\s\S]*imageUrl\?: string \| null/u);
 // The paywall has to cover the picture, or the thing being sold travels over the wire unpaid.
 assert.match(
   messageRoutes,
@@ -321,6 +323,18 @@ assert.match(messagesView2, /const messageImage = useSlurpMediaSrc\(message\.ima
 assert.match(useSlurpSource, /generateImage\?: boolean/u);
 assert.match(messagesView2, /ui\.slurp\.messages\.generateCommissionImage/u);
 assert.match(messagesView2, /generateImage,/u);
+
+const slurpRoutesSource = read(join(server, "routes/slurp.routes.ts"));
+assert.match(
+  slurpRoutesSource,
+  /isFileUniqueConstraintError\(error, "slurp_interactions", \[[\s\S]*?"postId"[\s\S]*?"actorAccountId"[\s\S]*?"type"[\s\S]*?"parentInteractionId"[\s\S]*?\]\)/u,
+  "concurrent Story views must use the file-store uniqueness error",
+);
+assert.match(
+  messageRoutes,
+  /proceed without a generated image/u,
+  "commission image failures must offer a text-only delivery path",
+);
 
 // ── Creator message policy and prices have a UI ──────────
 
