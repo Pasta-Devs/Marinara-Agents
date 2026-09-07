@@ -2,24 +2,20 @@
 
 ## 0.16.1 — 2026-09-07
 
-Name your world and get your world. The setup form used to arrive with its Setting box already
-filled in, so leaving it alone quietly asked for the village in that text — the same valley, the
-same innkeeper, the same farmer — no matter what you called the game. The box starts empty now, with
-that description shown behind it as a suggestion instead. Leave it empty and the world is generated
-from what you did give: the name you typed and the theme you picked. Type your own and it is used
-exactly as you wrote it. Either way the name on your game is the name of the place you arrive in,
-and the loading screen says which world it is writing.
+Name your world and get your world. The Setting box arrived pre-filled, so leaving it alone quietly
+asked for the village in that text — same valley, same innkeeper — whatever you called the game. It
+starts empty now, with that description shown behind it as a suggestion. Leave it empty and the
+world is built from what you did give: your game name and your theme. Type your own and it is used
+exactly as written. Either way the place you arrive in has the name you gave it, and the loading
+screen says which world it is writing.
 
-Pixelforge games no longer generate the engine's HUD gauges. This surface has never drawn them, so
-the "Review Starting Widgets" step on the way in is gone, and the storyteller stops keeping a second
-purse and a second list of who likes you beside the ones the game actually uses.
+Pixelforge games no longer generate the engine's HUD gauges, so the "Review Starting Widgets" step
+is gone and the storyteller stops keeping a second purse beside the one the game uses.
 
-The party list shows people's names instead of a column of ids. The connection dropdown shows which
-model each connection uses, starts on the one you actually marked as your default, and no longer
-offers connections that are waiting for you to review an import — picking one of those used to fail
-a minute later instead of not being offered.
+The party list shows names instead of ids. The connection dropdown shows each connection's model,
+starts on your real default, and hides ones still waiting on an import review.
 
-Worlds you already have are untouched: nothing about them is re-generated, re-laid or renamed.
+Worlds you already have are untouched.
 
 ## 0.16.0 — 2026-09-06 [highlight]
 
