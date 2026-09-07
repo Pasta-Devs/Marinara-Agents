@@ -234,7 +234,7 @@ export function LockedSlurpPostCard({
                   // Real locked images are already reduced and blurred on the server. Never blur
                   // those bytes a second time: the extra client filter erased the silhouette and
                   // made a working preview look like an empty card.
-                  revealed ? "scale-100" : "scale-105 saturate-[0.82]",
+                  revealed ? "scale-100" : "scale-110 blur-[14px] saturate-[0.78]",
                 )}
               />
             ) : requestedMediaUrl ? (
@@ -270,7 +270,13 @@ export function LockedSlurpPostCard({
             )}
             {!revealed && (
               <div
-                className="pointer-events-none absolute inset-0 bg-[linear-gradient(to_top,rgba(8,4,10,0.62),transparent_52%,rgba(8,4,10,0.12))]"
+                className="pointer-events-none absolute inset-0 bg-[linear-gradient(to_top,rgba(8,4,10,0.94)_0%,rgba(8,4,10,0.58)_34%,rgba(8,4,10,0.08)_72%)]"
+                aria-hidden="true"
+              />
+            )}
+            {!revealed && shownMediaSrc && (
+              <span
+                className="slurp-privacy-noise pointer-events-none absolute -inset-6 opacity-[0.16] motion-reduce:animate-none"
                 aria-hidden="true"
               />
             )}
@@ -281,14 +287,30 @@ export function LockedSlurpPostCard({
             )}
             {/* The lock is a state cue; the accessible image text already describes the preview. */}
             {!revealed && (
-              <span
-                className="pointer-events-none absolute inset-0 flex items-center justify-center"
-                aria-hidden="true"
-              >
-                <span className="rounded-full bg-black/55 p-3 text-white shadow-xl backdrop-blur-sm ring-1 ring-white/20">
-                  <Lock size={18} />
+              <span className="pointer-events-none absolute inset-x-0 top-[36%] flex justify-center" aria-hidden="true">
+                <span className="flex h-12 w-12 items-center justify-center rounded-2xl bg-[#24131f] text-[var(--noodle-accent)] shadow-[0_12px_28px_-14px_rgba(0,0,0,0.95),inset_0_0_0_1px_rgba(255,111,174,0.18)]">
+                  <Lock size={19} strokeWidth={2.4} />
                 </span>
               </span>
+            )}
+            {!revealed && !controllerOnly && (
+              <div className="absolute inset-x-4 bottom-4 flex flex-col items-center gap-2">
+                <button
+                  type="button"
+                  disabled={unlockPending || subscriptionPending}
+                  onClick={() => setUnlockSheetOpen(true)}
+                  className="pointer-events-auto inline-flex min-h-12 items-center justify-center gap-2 rounded-full bg-[var(--noodle-accent)] px-7 text-sm font-black text-zinc-950 shadow-[0_14px_34px_-16px_var(--noodle-accent)] transition-[opacity,transform] hover:opacity-90 active:scale-[0.96] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white focus-visible:ring-offset-2 focus-visible:ring-offset-black motion-reduce:transition-none motion-reduce:active:scale-100 disabled:opacity-50 [&_svg]:!text-zinc-950"
+                >
+                  <Eye size={16} strokeWidth={2.4} aria-hidden="true" />
+                  {localizeUi("ui.noodle.lockednoodlerpostcard.unlock")}
+                  <NoodlerFictionalPrice amount={noodlerUnlockPriceOf(post)} />
+                </button>
+                <span className="text-[0.68rem] font-semibold text-white/72 drop-shadow-sm">
+                  {localizeUi("ui.slurp.locked.includedForSubscribers", {
+                    defaultValue: "Included for subscribers",
+                  })}
+                </span>
+              </div>
             )}
           </div>
         )}
@@ -300,15 +322,14 @@ export function LockedSlurpPostCard({
           return title && <h3 className="mt-3 text-lg font-bold leading-snug">{title}</h3>;
         })()}
 
-        {/* Body: unreadable teaser until unlocked */}
+        {/* Body: a short teaser until unlocked; the private copy is never reconstructed client-side. */}
         {revealed && demo ? (
           <p className="mt-3 whitespace-pre-line text-sm leading-6">{demo.body}</p>
         ) : (
           !controllerOnly && (
-            <div className="mt-3 space-y-2 select-none" aria-hidden="true">
-              <div className="h-2.5 w-full rounded-lg bg-[var(--muted-foreground)]/20" />
-              <div className="h-2.5 w-3/4 rounded-lg bg-[var(--muted-foreground)]/15" />
-            </div>
+            <p className="mt-3 text-sm text-[var(--muted-foreground)]">
+              {localizeUi("ui.slurp.locked.teaser", { defaultValue: "A little something from tonight…" })}
+            </p>
           )
         )}
 
@@ -317,18 +338,7 @@ export function LockedSlurpPostCard({
           <p className="mt-3 text-xs text-[var(--muted-foreground)]">
             {localizeUi("ui.noodle.lockednoodlerpostcard.openTheControllerToolsToManageThisPost")}
           </p>
-        ) : (
-          !revealed && (
-            <button
-              type="button"
-              disabled={unlockPending || subscriptionPending}
-              onClick={() => setUnlockSheetOpen(true)}
-              className="mt-5 inline-flex min-h-11 items-center justify-center gap-2 rounded-full bg-[var(--noodle-accent)] px-5 text-sm font-bold text-zinc-950 shadow-[0_10px_28px_-18px_var(--noodle-accent)] transition-[opacity,transform] hover:opacity-90 active:scale-[0.96] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--noodle-accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--slurp-surface)] motion-reduce:transition-none motion-reduce:active:scale-100 disabled:cursor-not-allowed disabled:opacity-50 [&_svg]:!text-zinc-950"
-            >
-              <Eye size={14} /> {localizeUi("ui.noodle.lockednoodlerpostcard.unlock")}
-            </button>
-          )
-        )}
+        ) : null}
 
         {/* Footer */}
         <div className="mt-5 flex items-center gap-4 border-t border-[var(--noodle-divider)] pt-4 text-sm tabular-nums text-[var(--muted-foreground)]">
@@ -408,6 +418,22 @@ export function LockedSlurpPostCard({
           </button>
         </div>
       </Modal>
+      <style>{`
+        @keyframes slurp-privacy-drift {
+          0% { transform: translate3d(-2%, -1%, 0); }
+          33% { transform: translate3d(1%, 2%, 0); }
+          66% { transform: translate3d(2%, -2%, 0); }
+          100% { transform: translate3d(-2%, -1%, 0); }
+        }
+        .slurp-privacy-noise {
+          background-image:
+            repeating-linear-gradient(0deg, transparent 0 3px, rgba(255,255,255,.16) 3px 4px),
+            radial-gradient(circle at 20% 30%, rgba(255,255,255,.42) 0 1px, transparent 1.5px),
+            radial-gradient(circle at 72% 64%, rgba(255,255,255,.28) 0 1px, transparent 1.5px);
+          background-size: 100% 7px, 19px 23px, 29px 31px;
+          animation: slurp-privacy-drift 1.8s steps(3, end) infinite;
+        }
+      `}</style>
     </article>
   );
 }

@@ -500,6 +500,7 @@ export type SlurpWallet = {
   stipendOn?: string;
   refillFloor?: number;
   refillAvailable?: boolean;
+  nextRefillAt?: string;
   ledger: SlurpWalletEntry[];
   earnedToday: { ad: number; engagement: number };
   subscriptions: Record<string, { paidThroughAt: string; price: number }>;

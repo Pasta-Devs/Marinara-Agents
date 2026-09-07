@@ -5317,6 +5317,7 @@ function SlurpWalletView({
   const payout = useSlurpPayout();
   const toggleSubscription = useToggleNoodlerSubscription();
   const [ledgerMode, setLedgerMode] = useState<"spending" | "earnings">("spending");
+  const [countdownNow, setCountdownNow] = useState(() => Date.now());
   // The wallet stores subscriptions by creator id. Rendering the raw id told the player nothing,
   // so join the managed profiles the same way every other Slurp surface names a creator.
   const creatorsQuery = useNoodlerAccounts();
@@ -5331,6 +5332,20 @@ function SlurpWalletView({
   const earned = (wallet?.ledger ?? []).reduce((total, entry) => total + (entry.amount > 0 ? entry.amount : 0), 0);
   const weeklyOutgoing = subscriptions.reduce((total, [, subscription]) => total + subscription.price, 0);
   const refillReady = wallet?.refillAvailable === true;
+  useEffect(() => {
+    if (!wallet?.nextRefillAt || refillReady) return;
+    const timer = window.setInterval(() => setCountdownNow(Date.now()), 1_000);
+    return () => window.clearInterval(timer);
+  }, [refillReady, wallet?.nextRefillAt]);
+  const refillRemaining = wallet?.nextRefillAt
+    ? Math.max(0, new Date(wallet.nextRefillAt).getTime() - countdownNow)
+    : null;
+  const refillCountdown =
+    refillRemaining === null
+      ? null
+      : `${String(Math.floor(refillRemaining / 3_600_000)).padStart(2, "0")}:${String(
+          Math.floor((refillRemaining % 3_600_000) / 60_000),
+        ).padStart(2, "0")}:${String(Math.floor((refillRemaining % 60_000) / 1_000)).padStart(2, "0")}`;
   const entryLabel = (kind: string) =>
     ledgerMode === "earnings"
       ? localizeUi(`ui.slurp.earnings.entry.${kind}`, { defaultValue: kind })
@@ -5358,18 +5373,18 @@ function SlurpWalletView({
   return (
     <NoodlerFrame onBack={onBack} title={localizeUi("ui.slurp.navigation.wallet")} action={<span />}>
       <div className="mx-auto flex w-full max-w-[40rem] flex-col gap-5 px-3 py-4 sm:px-5 sm:py-5">
-        <div className="flex items-center gap-4 px-1">
+        <div className="flex items-center gap-3 px-1">
           <Avatar
             account={{
               displayName: creator?.displayName ?? personaName,
               avatarUrl: creator?.avatarUrl ?? personaAvatarUrl,
               avatarCrop: creator ? creatorAvatarCrop : personaAvatarCrop,
             }}
-            size="lg"
+            size="md"
           />
           <div className="min-w-0">
-            <p className="break-words text-xl font-black leading-tight">{creator?.displayName ?? personaName}</p>
-            <p className="mt-1 text-sm text-[var(--muted-foreground)]">
+            <p className="break-words text-lg font-black leading-tight">{localizeUi("ui.slurp.navigation.wallet")}</p>
+            <p className="mt-0.5 text-xs text-[var(--muted-foreground)]">
               {creator
                 ? localizeUi("ui.slurp.wallet.creatorIdentity", { defaultValue: "Creator · Fan" })
                 : localizeUi("ui.slurp.wallet.fanIdentity", { defaultValue: "Fan wallet" })}
@@ -5377,36 +5392,40 @@ function SlurpWalletView({
           </div>
         </div>
 
-        <section className="relative isolate overflow-hidden rounded-2xl bg-[linear-gradient(155deg,color-mix(in_srgb,var(--noodle-accent)_9%,var(--slurp-surface-raised)),var(--slurp-surface)_46%,color-mix(in_srgb,var(--slurp-violet)_8%,var(--slurp-surface)))] shadow-[0_1px_0_rgba(255,255,255,0.06),0_28px_64px_-42px_rgba(0,0,0,0.95)]">
+        <section className="relative isolate overflow-hidden rounded-2xl bg-[var(--slurp-surface)] shadow-[0_1px_0_rgba(255,255,255,0.06),0_24px_52px_-40px_rgba(0,0,0,0.95)] ring-1 ring-inset ring-white/[0.055]">
           {creator && (
-            <div className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-3 px-4 pb-5 pt-4 sm:px-6 sm:pt-5">
+            <div className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-4 bg-[linear-gradient(120deg,color-mix(in_srgb,var(--noodle-accent)_8%,var(--slurp-surface)),color-mix(in_srgb,var(--slurp-surface)_97%,black))] px-4 pb-8 pt-5 sm:px-6">
               <div className="min-w-0">
                 <div className="flex items-center gap-2.5 text-xs font-semibold text-[var(--muted-foreground)]">
-                  <span className="flex h-8 w-8 items-center justify-center rounded-full bg-fuchsia-500/14 text-fuchsia-300 shadow-[inset_0_0_0_1px_rgba(255,255,255,0.05)]">
+                  <span className="flex h-8 w-8 items-center justify-center rounded-full bg-fuchsia-500/12 text-fuchsia-300">
                     <BadgeDollarSign size={16} strokeWidth={2} aria-hidden="true" />
                   </span>
                   <span>{localizeUi("ui.slurp.wallet.creatorEarnings", { defaultValue: "Creator earnings" })}</span>
+                  <HelpTooltip
+                    side="bottom"
+                    text={localizeUi("ui.slurp.wallet.creatorEarningsHelp", {
+                      defaultValue:
+                        "Coins earned through your creator page stay here until you move them into your Fan wallet.",
+                    })}
+                  />
                 </div>
                 <p className="mt-2 text-4xl font-black leading-none tabular-nums">
                   {creator.earnings.coins.toLocaleString()}
                 </p>
                 <p className="mt-0.5 text-[0.7rem] text-[var(--muted-foreground)]">
-                  {localizeUi("ui.slurp.wallet.notSpendable", { defaultValue: "Not spendable yet" })}
+                  {localizeUi("ui.slurp.wallet.creatorEarningsSource", { defaultValue: "From your creator page" })}
                 </p>
               </div>
-              <div className="rounded-xl bg-black/10 px-3 py-2 text-end shadow-[inset_0_0_0_1px_rgba(255,255,255,0.045)]">
-                <p className="text-[0.68rem] text-[var(--muted-foreground)]">
-                  {localizeUi("ui.slurp.wallet.availableToday", { defaultValue: "Available today" })}
-                </p>
-                <p className="mt-0.5 text-xl font-black tabular-nums text-[var(--noodle-accent)]">
-                  {creator.payoutAllowance.toLocaleString()}
-                </p>
-              </div>
+              <span className="rounded-full bg-black/12 px-3 py-2 text-xs font-black tabular-nums text-[var(--noodle-accent)] ring-1 ring-inset ring-[var(--noodle-accent)]/25">
+                {localizeUi("ui.slurp.wallet.availableAmount", {
+                  defaultValue: "{{amount}} available",
+                  amount: creator.payoutAllowance.toLocaleString(),
+                })}
+              </span>
             </div>
           )}
           {creator && (
-            <div className="relative flex justify-center py-1">
-              <span className="absolute inset-x-5 top-1/2 h-px bg-gradient-to-r from-transparent via-[var(--noodle-accent)]/28 to-transparent" />
+            <div className="absolute inset-x-0 z-10 flex -translate-y-1/2 justify-center">
               <button
                 type="button"
                 disabled={!personaId || payout.isPending || creator.payoutAllowance <= 0}
@@ -5417,24 +5436,33 @@ function SlurpWalletView({
                     { onError: (error) => toast.error(errorMessage(error)) },
                   )
                 }
-                className="relative z-10 flex min-h-11 flex-col items-center justify-center gap-1 bg-[var(--slurp-surface)] px-4 text-[0.68rem] font-bold text-[var(--noodle-accent)] transition-[opacity,transform] active:scale-[0.96] focus-visible:rounded-xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--slurp-focus)] disabled:opacity-45 motion-reduce:transition-none motion-reduce:active:scale-100"
+                className="inline-flex min-h-11 items-center justify-center gap-2 rounded-full bg-[var(--noodle-accent)] px-6 text-xs font-black text-zinc-950 shadow-[0_12px_28px_-16px_var(--noodle-accent)] transition-[opacity,transform] hover:opacity-90 active:scale-[0.96] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--slurp-surface)] disabled:opacity-45 motion-reduce:transition-none motion-reduce:active:scale-100"
               >
-                <span className="flex h-11 w-11 items-center justify-center rounded-full bg-[var(--noodle-accent)] text-zinc-950 shadow-[0_10px_28px_-14px_var(--noodle-accent)]">
-                  <ArrowDown size={20} strokeWidth={2.5} aria-hidden="true" />
-                </span>
+                <ArrowDown size={16} strokeWidth={2.5} aria-hidden="true" />
                 {payout.isPending
                   ? localizeUi("ui.slurp.wallet.moving", { defaultValue: "Moving…" })
                   : localizeUi("ui.slurp.wallet.moveToWallet", { defaultValue: "Move to Wallet" })}
               </button>
             </div>
           )}
-          <div className="flex items-center justify-between gap-4 px-4 pb-5 pt-4 sm:px-6 sm:pb-6">
+          <div
+            className={cn(
+              "flex items-center justify-between gap-4 bg-[linear-gradient(120deg,color-mix(in_srgb,var(--slurp-violet)_7%,var(--slurp-surface)),var(--slurp-surface))] px-4 pb-5 sm:px-6 sm:pb-6",
+              creator ? "pt-8" : "pt-5",
+            )}
+          >
             <div>
               <div className="flex items-center gap-2.5 text-xs font-semibold text-[var(--muted-foreground)]">
                 <span className="flex h-8 w-8 items-center justify-center rounded-full bg-sky-500/14 text-sky-300 shadow-[inset_0_0_0_1px_rgba(255,255,255,0.05)]">
                   <WalletCards size={16} strokeWidth={2} aria-hidden="true" />
                 </span>
                 <span>{localizeUi("ui.slurp.wallet.fanWallet", { defaultValue: "Fan wallet" })}</span>
+                <HelpTooltip
+                  side="bottom"
+                  text={localizeUi("ui.slurp.wallet.fanWalletHelp", {
+                    defaultValue: "This is your spendable balance for subscriptions, tips, and locked posts.",
+                  })}
+                />
               </div>
               <p className="mt-2 flex items-center gap-2 text-4xl font-black leading-none tabular-nums">
                 {coins.toLocaleString()}
@@ -5445,34 +5473,45 @@ function SlurpWalletView({
                   C
                 </span>
               </p>
+              <p className="mt-1 text-[0.7rem] text-[var(--muted-foreground)]">
+                {localizeUi("ui.slurp.wallet.readyToSpend", { defaultValue: "Ready to spend" })}
+              </p>
             </div>
-            {refillReady && (
+            <div className="flex shrink-0 flex-col items-end gap-1">
               <button
                 type="button"
-                disabled={!personaId || claimRefill.isPending}
+                disabled={!refillReady || !personaId || claimRefill.isPending}
                 onClick={() => personaId && claimRefill.mutate({ personaId })}
-                className="flex min-h-11 items-center gap-2 rounded-xl bg-[var(--noodle-accent)]/12 px-3 text-xs font-bold text-[var(--noodle-accent)] transition-[background-color,transform] hover:bg-[var(--noodle-accent)]/18 active:scale-[0.96] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--slurp-focus)] disabled:opacity-50 motion-reduce:transition-none motion-reduce:active:scale-100"
+                className="flex min-h-11 items-center gap-2 rounded-full border border-[var(--slurp-violet)]/45 px-4 text-xs font-bold text-[var(--slurp-violet)] transition-[background-color,transform] hover:bg-[var(--slurp-violet)]/10 active:scale-[0.96] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--slurp-focus)] disabled:opacity-65 motion-reduce:transition-none motion-reduce:active:scale-100"
               >
                 <Gift size={16} aria-hidden="true" />
                 {claimRefill.isPending
                   ? localizeUi("ui.slurp.wallet.refilling", { defaultValue: "Claiming…" })
                   : localizeUi("ui.slurp.wallet.dailyRefill", { defaultValue: "Daily refill" })}
               </button>
-            )}
+              <span className="flex items-center gap-1 text-[0.65rem] tabular-nums text-[var(--muted-foreground)]">
+                {refillReady
+                  ? localizeUi("ui.slurp.wallet.refillReady", { defaultValue: "Ready now" })
+                  : localizeUi("ui.slurp.wallet.refillCountdown", {
+                      defaultValue: "Next check in {{countdown}}",
+                      countdown: refillCountdown ?? "—",
+                    })}
+                <HelpTooltip
+                  side="left"
+                  text={localizeUi("ui.slurp.wallet.refillHelp", {
+                    defaultValue:
+                      "Once per Slurp day, you can refill when your Fan wallet is below {{amount}} coins. The countdown shows the next eligibility check.",
+                    amount: wallet?.refillFloor ?? 0,
+                  })}
+                />
+              </span>
+            </div>
           </div>
-          {!refillReady && wallet?.refillFloor !== undefined && (
-            <p className="px-4 pb-4 text-[0.68rem] text-[var(--muted-foreground)] sm:px-6">
-              {localizeUi("ui.slurp.wallet.refillThreshold", {
-                defaultValue: "Daily refill is available on a new day when your balance is below {{amount}} coins.",
-                amount: wallet.refillFloor,
-              })}
-            </p>
-          )}
         </section>
 
         {creator && (
           <div
-            className="grid grid-cols-2 rounded-xl bg-[var(--slurp-surface-raised)] p-1 shadow-[inset_0_0_0_1px_rgba(255,255,255,0.045)]"
+            className="mx-auto grid w-full max-w-xs grid-cols-2 rounded-full bg-[var(--slurp-surface-raised)] p-1 shadow-[inset_0_0_0_1px_rgba(255,255,255,0.055)]"
             role="tablist"
             aria-label={localizeUi("ui.slurp.wallet.history", { defaultValue: "Wallet history" })}
           >
@@ -5497,7 +5536,7 @@ function SlurpWalletView({
                 }}
                 data-wallet-history={mode}
                 className={cn(
-                  "min-h-11 rounded-lg px-3 text-sm font-semibold text-[var(--muted-foreground)] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--slurp-focus)]",
+                  "min-h-10 rounded-full px-3 text-sm font-semibold text-[var(--muted-foreground)] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--slurp-focus)]",
                   ledgerMode === mode &&
                     "bg-[var(--slurp-surface)] text-[var(--noodle-accent)] shadow-[var(--slurp-shadow-raised)]",
                 )}
@@ -5526,11 +5565,11 @@ function SlurpWalletView({
               )}
             </div>
             {subscriptions.length > 0 ? (
-              <ul className="mt-2 flex snap-x gap-3 overflow-x-auto pb-2 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+              <ul className="mt-2 flex snap-x gap-2.5 overflow-x-auto pb-2 pe-8 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
                 {subscriptions.map(([creatorId, subscription]) => (
                   <li
                     key={creatorId}
-                    className="flex min-w-[17rem] max-w-[20rem] flex-1 snap-start items-center gap-3 rounded-xl bg-[var(--slurp-surface)]/70 p-3 shadow-[var(--slurp-shadow-raised)] ring-1 ring-inset ring-white/[0.045]"
+                    className="flex min-w-[13.5rem] max-w-[16rem] flex-1 snap-start items-center gap-2.5 rounded-full bg-[var(--slurp-surface)]/55 py-2 ps-2 pe-3 ring-1 ring-inset ring-white/[0.055]"
                   >
                     <Avatar
                       account={{
@@ -5553,7 +5592,7 @@ function SlurpWalletView({
                         })}
                       </span>
                     </span>
-                    <span className="ms-auto flex shrink-0 flex-col items-end gap-1">
+                    <span className="ms-auto flex shrink-0 flex-col items-end">
                       <span className="text-xs tabular-nums text-[var(--muted-foreground)]">
                         {subscription.price} / week
                       </span>
@@ -5564,7 +5603,7 @@ function SlurpWalletView({
                           personaId &&
                           toggleSubscription.mutate({ creatorAccountId: creatorId, personaId, subscribed: true })
                         }
-                        className="min-h-11 px-2 text-[0.7rem] font-semibold text-[var(--muted-foreground)] transition-[color,transform] hover:text-[var(--foreground)] active:scale-[0.96] focus-visible:rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--slurp-focus)] disabled:opacity-50 motion-reduce:active:scale-100"
+                        className="min-h-6 px-1 text-[0.65rem] font-semibold text-[var(--muted-foreground)] transition-[color,transform] hover:text-[var(--foreground)] active:scale-[0.96] focus-visible:rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--slurp-focus)] disabled:opacity-50 motion-reduce:active:scale-100"
                       >
                         {localizeUi("ui.slurp.wallet.unsubscribe", { defaultValue: "Cancel" })}
                       </button>
@@ -5586,7 +5625,7 @@ function SlurpWalletView({
           id="slurp-wallet-history-panel"
           aria-labelledby={`slurp-wallet-history-${ledgerMode}-tab`}
           role="tabpanel"
-          className="px-1"
+          className="px-1 pb-5"
         >
           <div className="flex items-baseline justify-between gap-3">
             <h2 id="slurp-wallet-activity" className="text-sm font-bold">
@@ -5603,7 +5642,7 @@ function SlurpWalletView({
             )}
           </div>
           {activityEntries.length > 0 ? (
-            <ul className="mt-2 flex flex-col divide-y divide-white/[0.055]">
+            <ul className="mt-2 flex flex-col divide-y divide-white/[0.045]">
               {activityEntries.map((entry, index) => {
                 const appearance = entryAppearance(entry.kind);
                 const EntryIcon = appearance.icon;
@@ -5670,28 +5709,52 @@ function SlurpMediaDialog({
   onClose,
   media,
   side,
+  variant = "post",
 }: {
   title: string;
   onClose: () => void;
   media: ReactNode;
   side: ReactNode;
+  variant?: "post" | "story";
 }) {
+  const story = variant === "story";
   return (
     <Modal
       open
       onClose={onClose}
       title={title}
-      width="max-w-5xl"
+      width={story ? "max-w-md" : "max-w-6xl"}
       mobileFullscreen
       contentClassName="p-0 sm:p-0"
-      panelClassName="noodle-icon-scope"
+      panelClassName={cn(
+        "noodle-icon-scope overflow-hidden",
+        story &&
+          "bg-black [&>div:first-child]:absolute [&>div:first-child]:inset-x-0 [&>div:first-child]:top-0 [&>div:first-child]:z-30 [&>div:first-child]:border-0 [&>div:first-child]:bg-gradient-to-b [&>div:first-child]:from-black/65 [&>div:first-child]:to-transparent [&>div:first-child>h2]:sr-only",
+      )}
       panelStyle={getNoodleAccentStyle(NOODLE_PINK)}
     >
-      <div className="flex h-full min-h-0 flex-col sm:h-[min(80vh,44rem)] sm:flex-row">
-        <div className="relative flex min-h-[16rem] flex-1 items-center justify-center overflow-hidden bg-black sm:min-h-0">
+      <div
+        className={cn(
+          "flex h-full min-h-0 flex-col",
+          story ? "relative sm:h-[min(88vh,52rem)]" : "sm:h-[min(84vh,48rem)] sm:flex-row",
+        )}
+      >
+        <div
+          className={cn(
+            "relative flex flex-1 items-center justify-center overflow-hidden bg-black",
+            story ? "min-h-0" : "min-h-[16rem] sm:min-h-0",
+          )}
+        >
           {media}
         </div>
-        <aside className="flex min-h-0 w-full shrink-0 flex-col overflow-y-auto border-t border-[var(--noodle-divider)] bg-[var(--slurp-surface)] sm:w-[22rem] sm:border-s sm:border-t-0 @min-[1280px]:w-[24rem]">
+        <aside
+          className={cn(
+            "flex min-h-0 w-full shrink-0 flex-col overflow-y-auto",
+            story
+              ? "absolute inset-x-0 bottom-0 z-20 max-h-[46%] bg-gradient-to-t from-black via-black/88 to-transparent px-1 pb-2 pt-16 text-white"
+              : "border-t border-[var(--noodle-divider)] bg-[var(--slurp-surface)] sm:w-[24rem] sm:border-s sm:border-t-0 @min-[1280px]:w-[26rem]",
+          )}
+        >
           {side}
         </aside>
       </div>
@@ -5717,12 +5780,20 @@ function SlurpPostDialog({
       onClose={onClose}
       media={
         source ? (
-          <img
-            src={source}
-            alt={localizeUi("ui.noodle.post.imageBy", { name: authorName })}
-            decoding="async"
-            className="max-h-full w-full object-contain"
-          />
+          <>
+            <img
+              src={source}
+              alt=""
+              aria-hidden="true"
+              className="absolute inset-0 h-full w-full scale-110 object-cover opacity-25 blur-3xl"
+            />
+            <img
+              src={source}
+              alt={localizeUi("ui.noodle.post.imageBy", { name: authorName })}
+              decoding="async"
+              className="relative z-10 max-h-full max-w-full object-contain outline outline-1 -outline-offset-1 outline-white/10"
+            />
+          </>
         ) : (
           <div className="h-full w-full animate-pulse bg-[var(--slurp-surface-raised)] motion-reduce:animate-none" />
         )
@@ -5925,6 +5996,7 @@ function SlurpMomentViewer({
     <SlurpMediaDialog
       title={localizeUi("ui.slurp.moments.fromCreator", { name: moment.creator.profile.displayName })}
       onClose={onClose}
+      variant="story"
       media={
         <>
           {mediaSrc ? (
@@ -5939,7 +6011,10 @@ function SlurpMomentViewer({
                     })
                   : localizeUi("ui.noodle.post.imageBy", { name: moment.creator.profile.displayName })
               }
-              className={cn("max-h-full w-full object-contain", moment.post.locked && "scale-105 saturate-[0.82]")}
+              className={cn(
+                "h-full w-full object-cover",
+                moment.post.locked && "scale-110 blur-[14px] saturate-[0.78]",
+              )}
             />
           ) : (
             <div
@@ -5948,18 +6023,31 @@ function SlurpMomentViewer({
             />
           )}
           <div
-            className="absolute inset-x-0 top-0 h-1 bg-black/40"
+            className="absolute inset-x-3 top-3 z-10 flex gap-1"
             role="progressbar"
             aria-label={localizeUi("ui.slurp.moments.progress")}
             aria-valuemin={1}
             aria-valuemax={total}
             aria-valuenow={index + 1}
           >
-            <div
-              className="h-full bg-[var(--noodle-accent)] transition-[width] motion-reduce:transition-none"
-              style={{ width: `${((index + 1) / total) * 100}%` }}
-            />
+            {Array.from({ length: total }, (_, storyIndex) => (
+              <span key={storyIndex} className="h-0.5 flex-1 overflow-hidden rounded-full bg-white/35">
+                <span className={cn("block h-full rounded-full", storyIndex <= index && "bg-white")} />
+              </span>
+            ))}
           </div>
+          <button
+            type="button"
+            onClick={openProfile}
+            disabled={!onOpenProfile}
+            className="absolute inset-x-4 top-7 z-10 flex min-h-11 items-center gap-2 rounded-xl text-left text-white drop-shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white disabled:cursor-default"
+          >
+            <ProfileInitial profile={moment.creator.profile} />
+            <span className="min-w-0">
+              <span className="block truncate text-sm font-black">{moment.creator.profile.displayName}</span>
+              <span className="block truncate text-[0.68rem] text-white/72">@{moment.creator.profile.handle}</span>
+            </span>
+          </button>
           {onPrevious && (
             <button
               type="button"
@@ -5983,31 +6071,7 @@ function SlurpMomentViewer({
         </>
       }
       side={
-        <div data-component="SlurpHome.MomentViewer" className="flex flex-col gap-4 p-4">
-          <div className="flex items-center gap-3">
-            <button
-              type="button"
-              onClick={openProfile}
-              disabled={!onOpenProfile}
-              className="rounded-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--noodle-accent)] disabled:cursor-default"
-            >
-              <ProfileInitial profile={moment.creator.profile} />
-            </button>
-            <button
-              type="button"
-              onClick={openProfile}
-              disabled={!onOpenProfile}
-              className="min-w-0 flex-1 rounded-lg text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--noodle-accent)] disabled:cursor-default"
-            >
-              <span className="block truncate text-sm font-bold">{moment.creator.profile.displayName}</span>
-              <span className="block truncate text-xs text-[var(--muted-foreground)]">
-                @{moment.creator.profile.handle}
-              </span>
-            </button>
-            <span className="text-xs tabular-nums text-[var(--muted-foreground)]">
-              {index + 1}/{total}
-            </span>
-          </div>
+        <div data-component="SlurpHome.MomentViewer" className="flex flex-col gap-3 p-4 text-shadow-sm">
           {moment.post.locked && (
             <span className="inline-flex w-fit items-center gap-1.5 rounded-full bg-[var(--accent)] px-2.5 py-1 text-[0.68rem] font-bold uppercase tracking-[0.12em] ring-1 ring-inset ring-[var(--noodle-divider)]">
               <Lock size={11} aria-hidden="true" /> {localizeUi("ui.slurp.locked.blurredPreview")}

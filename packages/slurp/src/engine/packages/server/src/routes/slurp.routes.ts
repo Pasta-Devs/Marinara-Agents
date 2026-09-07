@@ -569,10 +569,15 @@ export async function slurpRoutes(app: FastifyInstance) {
     const [wallet, settings] = await Promise.all([noodle.getWallet(viewer.id), noodle.getSettings()]);
     // The same day boundary the refill itself uses. This duplicated the UTC date and would have
     // drifted from the configured start hour.
-    const today = slurpDayKey(new Date(), settings.walletDayStartHour);
+    const now = new Date();
+    const today = slurpDayKey(now, settings.walletDayStartHour);
+    const nextRefillAt = new Date(now);
+    nextRefillAt.setHours(settings.walletDayStartHour, 0, 0, 0);
+    if (nextRefillAt.getTime() <= now.getTime()) nextRefillAt.setDate(nextRefillAt.getDate() + 1);
     return {
       ...wallet,
       refillFloor: settings.walletStipendFloor,
+      nextRefillAt: nextRefillAt.toISOString(),
       refillAvailable:
         settings.walletEnabled && wallet.stipendOn !== today && wallet.coins < settings.walletStipendFloor,
     };
