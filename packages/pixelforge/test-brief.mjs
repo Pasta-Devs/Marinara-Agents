@@ -262,10 +262,32 @@ const ctx = { theme: "cozy-village", seed: 424242 };
 }
 
 // 9. Guidance and schema stay within their budgets.
+// THE GUIDANCE CAP IS 4,500 AS OF 0.16.2 — RAISED ONCE, WITH THE ARITHMETIC.
+// Measured at the 0.16.1 tip, `guidance("sci-fi-colony")` was 3,489 characters.
+// This release deletes the theme-authority line and one of its two blank
+// neighbours (105 characters together), leaving 3,384 and a 616-character budget
+// under the old 4,000 — and the `artTheme` field doc that replaces it costs 608,
+// for a total of 3,992. EIGHT characters of slack is not a budget, and the
+// lorebook clause is queued for the same one.
+//
+// 4,000 was this package's own round number and never a route constraint: the
+// ceiling that is real on this path is the route's `instructions` cap of 16,000,
+// of which guidance() is one component. Deleting true content to fit a round
+// number is the wrong trade; the field doc is read off 10-art's painter-override
+// table and is more honest than the sentence it replaces. The lane stays binding —
+// raise it again only with new arithmetic written beside it, never by eye.
 {
-  const text = brief.guidance("sci-fi-colony");
-  assert.ok(text.length < 4_000, `guidance stays compact (${text.length} chars)`);
-  assert.ok(text.includes("AUTHORITATIVE"), "theme-authority line present");
+  const text = brief.guidance();
+  assert.ok(text.length < 4_500, `guidance stays compact (${text.length} chars)`);
+  // THE THEME IS ASKED FOR, NOT DECLARED (0.16.2). This asserted the opposite
+  // until this release: `The visual theme is "…" and it is AUTHORITATIVE` was the
+  // dropdown's answer stated at a model that had not read the setting yet. The
+  // dropdown is gone and the question is inverted — the kit is a FIELD of the
+  // brief now, and the model answers it from the player's own words. The
+  // near-identical assertion further down this file reads the PACK's guidance
+  // (61-pack), which this cycle does not touch; the two are not the same line.
+  assert.ok(!text.includes("AUTHORITATIVE"), "no theme is declared at the model any more");
+  assert.ok(text.includes("- artTheme: one of "), "…it is asked for as a field of the brief instead");
   assert.ok(text.includes("do NOT give everyone their own number"), "household teaching line present");
   assert.ok(
     text.includes("lodgers") && text.includes("no limit on how many"),
@@ -24775,6 +24797,441 @@ const fire = (node, type) => Promise.all((node.listeners[type] ?? []).map((fn) =
       }
     });
   });
+}
+
+// ── THE KIT IS A FIELD OF THE BRIEF NOW (0.16.2) ─────────────────────────────
+// The theme dropdown is deleted, and the ruling is that the kit is "determined by
+// the player in Game Mode setup via freestyle input, not a selector". Deleting a
+// control that decided something means somebody else has to decide it, and there
+// are exactly two candidates: the MODEL, which is about to read the player's whole
+// setting text inside a call that is already being paid for, and the RESOLVER in
+// 80-setup, which reads the same words with no call at all. The model gets the
+// first vote on a generated world; the resolver answers for a declined one and
+// stands behind the model as rung 2.
+//
+// So `artTheme` becomes a field of the brief: a schema property, a line of
+// guidance asking for it, and a three-rung ladder at the top of validate() that
+// resolves it before any theme-keyed lexicon is read. Everything below is that
+// ladder, its guards, and the three doors that must not be able to disagree.
+{
+  const scifiCtx = { theme: "sci-fi-colony", seed: 4242 };
+  const modelBrief = (extra) => ({
+    scale: "village",
+    name: "Anchorage",
+    cast: [
+      { name: "Vega", role: "lead", kind: "leader", tint: "blue", home: "Anchorage", household: 1 },
+      { name: "Odile", role: "medic", kind: "folk", tint: "rose", home: "Anchorage", household: 2 },
+      { name: "Bex", role: "rigger", kind: "maker", tint: "teal", home: "Anchorage", household: 3 },
+      { name: "Corin", role: "pilot", kind: "wanderer", tint: "green", home: "Anchorage", household: 4 },
+    ],
+    ...extra,
+  });
+  const themeFold = (sealed) => sealed._repairs.filter((entry) => entry.startsWith("artTheme:"));
+
+  // ── (1) THE MODEL CHOOSES THE KIT, AND THE LADDER IS THE ONLY OTHER VOTER ──
+  // Rung 1 is the model's own answer, and it is offered ONLY to the caller that
+  // has one: `validate(raw, ctx, { fromModel: true })`, which generate() passes
+  // and nothing else does. Without that gate a STORED brief's `artTheme` key —
+  // chat metadata, so restorable from a checkpoint, importable, hand-editable —
+  // would outrank its own seal on the #566 revalidate path, and this door and
+  // `foldStored` would answer differently for the same bytes.
+  {
+    await withGeneration(async ({ responses }) => {
+      responses.post = async () => ({
+        status: 200,
+        body: { ok: true, data: modelBrief({ artTheme: "sci-fi-colony" }) },
+      });
+      const sealed = await brief.generate("chat-art-theme", { theme: "cozy-village", seed: 4242 });
+      assert.equal(sealed.theme, "sci-fi-colony", "the generation path really does hand the model's answer to rung 1");
+    });
+    assert.equal(
+      brief.validate(modelBrief({ artTheme: "sci-fi-colony" }), { theme: "cozy-village", seed: 4242 }).theme,
+      "cozy-village",
+      "…and a caller that is NOT a model never gets rung 1 offered: a stored brief cannot outrank its own seal",
+    );
+
+    // RUNG 2 CATCHES EVERY WAY RUNG 1 CAN FAIL, and the assertion is that it lands
+    // on the CALLER's theme rather than on the literal default: an unusable model
+    // answer must not silently demote a colony to a village.
+    for (const answer of ["constructor", 42, undefined, { toString: () => "sci-fi-colony" }]) {
+      const sealed = brief.validate(modelBrief({ artTheme: answer }), scifiCtx, { fromModel: true });
+      assert.equal(sealed.theme, "sci-fi-colony", `an unusable artTheme ${JSON.stringify(answer)} falls to rung 2`);
+    }
+    assert.equal(
+      brief.validate(modelBrief({}), scifiCtx, { fromModel: true }).theme,
+      "sci-fi-colony",
+      "…and so does an absent one",
+    );
+
+    // THE GO/NO-GO SIGNAL FOR THE AUTHORIZED FALLBACK PRE-GENERATION. `foldEnum` is
+    // silent by construction — only `foldAt` records, and `foldAt` lives in
+    // foldStored — so before this entry existed a model answering "steampunk" on
+    // every single call was indistinguishable from one answering correctly, and
+    // the measurement that decides whether to spend a second call had nothing to
+    // read. Written when rung 1 was OFFERED, the model wrote a non-empty string,
+    // and the fold did not return it.
+    for (const answer of ["nonsense-kit", "steampunk"]) {
+      const sealed = brief.validate(modelBrief({ artTheme: answer }), scifiCtx, { fromModel: true });
+      assert.equal(themeFold(sealed).length, 1, `a folded artTheme is RECORDED (${answer})`);
+      assert.ok(
+        themeFold(sealed)[0].includes(JSON.stringify(answer)) && themeFold(sealed)[0].includes("sci-fi-colony"),
+        "…naming both what was answered and what it folded to",
+      );
+    }
+    for (const [label, raw] of [
+      ["a correct answer", modelBrief({ artTheme: "sci-fi-colony" })],
+      ["an absent one", modelBrief({})],
+      ["a non-string", modelBrief({ artTheme: 42 })],
+    ]) {
+      assert.deepEqual(themeFold(brief.validate(raw, scifiCtx, { fromModel: true })), [], `${label} stays silent`);
+    }
+  }
+
+  // ── (2) THE WORKED EXAMPLES STILL COME BACK AS THEMSELVES ──────────────────
+  // The lane that would have caught the first draft of this ladder, which deleted
+  // rung 2 outright and took `defaults()` with it. The prototype-key legs are NOT
+  // restated here: the case above at "THE WORKED EXAMPLE IS PICKED THE SAME WAY"
+  // already asserts whole-`JSON.stringify` equality against the cozy brief for
+  // "retired-theme" plus five prototype keys, which is strictly stronger than any
+  // per-field check written here would be. It stays green under this ladder.
+  {
+    const scifi = brief.defaults("sci-fi-colony", 4242);
+    assert.equal(scifi.theme, "sci-fi-colony", "the colony's worked example is still labelled the colony");
+    assert.equal(scifi.name, "Meridian Base", "…and still carries its own name rather than the village's");
+  }
+
+  // ── (3) THE REPAIR LEXICONS FOLLOW THE RESOLVED THEME, NOT A WIZARD'S ──────
+  // The reason the ladder sits at the TOP of validate() rather than beside the
+  // seal: GATHERING_NOUNS, STOCK_CAST and WILDS_NAMES are all read by the repair
+  // passes further down, so a brief whose kit was decided after pass 6 would mint
+  // a colony's floors out of a village's books. This drives both top-ups at once
+  // with rung 1 and rung 2 pointed at DIFFERENT kits, so it proves the ordering
+  // and the precedence in one launch.
+  //
+  // The one member is deliberately NOT a `host`: the gathering floor runs once
+  // ahead of the cast pass and once behind it, and a model-supplied host spends
+  // the first call, which fills `places` and stops the wilds floor from firing at
+  // all. With no host in the raw cast both floors run — the wilds name off the
+  // theme's own book, then the common room off the host the cast top-up minted.
+  {
+    const sealed = brief.validate(
+      {
+        scale: "village",
+        name: "Anchorage",
+        artTheme: "sci-fi-colony",
+        cast: [{ name: "Vega", role: "rigger", kind: "maker", tint: "blue", home: "Anchorage", household: 1 }],
+      },
+      { theme: "cozy-village", seed: 4242 },
+      { fromModel: true },
+    );
+    assert.equal(sealed.theme, "sci-fi-colony", "rung 1 beat rung 2");
+    assert.equal(sealed.cast.length, 4, "the cast floor top-up fired");
+    const roles = sealed.cast.map((member) => member.role);
+    assert.ok(
+      roles.includes("hydroponics lead") || roles.includes("pad marshal") || roles.includes("salvage scout"),
+      `the minted people came out of the COLONY roster (${roles.join(", ")})`,
+    );
+    assert.ok(
+      !roles.includes("farmer") && !roles.includes("innkeeper") && !roles.includes("forager"),
+      "…and not one of them out of the village's",
+    );
+    const wilds = sealed.places.find((place) => place.kind === "wilds");
+    assert.ok(wilds, "the wilds floor top-up fired too");
+    assert.ok(
+      ["The Mast Field", "The Outer Flats"].includes(wilds.name),
+      `and its name came from the colony's book (${wilds.name})`,
+    );
+    assert.ok(
+      sealed.places.some((place) => place.kind === "gathering" && place.name.includes("Cantina")),
+      "…as did the common room's own noun: a Cantina, not an Inn",
+    );
+  }
+
+  // ── (4) THE PACK IS WRITTEN FOR THE WORLD THAT WAS SEALED ──────────────────
+  // 60-save read ONE theme for the whole sequence and it was the wizard's copy, so
+  // a world the model kitted as a colony had its content pack written for a
+  // village and was then painted in a third answer. The value splits: `configTheme`
+  // is what the brief call is HANDED (its rung 2), and everything below the seal —
+  // the pack, the compile, the install — reads `sealed.theme` first.
+  await withSavePath(async ({ behavior, tick, makeCore }) => {
+    await withGeneration(async ({ responses }) => {
+      const realPack = loadedPF.pack.generate;
+      const packArgs = [];
+      loadedPF.pack.generate = async (chatId, args) => {
+        packArgs.push(args);
+        return null;
+      };
+      responses.post = async () => ({
+        status: 200,
+        body: { ok: true, data: modelBrief({ artTheme: "sci-fi-colony" }) },
+      });
+      behavior.get = async () => ({ available: true, status: 200, body: { exists: false } });
+      try {
+        // NO `theme` IN THE CONFIG AT ALL, which is the honest fixture for this
+        // lane: the kit is not the wizard's answer any more, so the sequence must
+        // be able to run without one and still write the pack for the right world.
+        const cfg = { experienceConfig: { seed: 4242, generate: true, packWanted: true } };
+        const meta = { gameSetupConfig: cfg };
+        const core = makeCore("chat-sealed-kit", 4242);
+        core.host.chatMeta = meta;
+        core.sim = loadedPF.save.restore(meta, "chat-sealed-kit");
+        assert.equal(loadedPF.save.armGate(core, meta), true, "the chat gates for a generated world");
+        await loadedPF.save.maybeGenerateBrief(core);
+        await tick();
+        assert.equal(packArgs.length, 1, "call two went out");
+        assert.equal(
+          packArgs[0].theme,
+          "sci-fi-colony",
+          "the content pack is written for the kit the BRIEF sealed, not for the one the config carried",
+        );
+      } finally {
+        loadedPF.pack.generate = realPack;
+      }
+    });
+  });
+  // …AND A FORCED PACK ON A CHAT WITH NO BRIEF DOES NOT THROW. `sealed` is
+  // provably nullable at the post-seal read: the `if (!sealed) … return` bail
+  // lives INSIDE the call-one gate, and a force always enters the body. Unguarded,
+  // `sealed.theme` threw into the catch and put a retry screen on a world the
+  // player had DECLINED — and the catch swallows it, so the tell is the warning
+  // rather than an exception reaching this line.
+  await withSavePath(async ({ tick, makeCore }) => {
+    await withGeneration(async () => {
+      const realWarn = console.warn;
+      const warnings = [];
+      console.warn = (...args) => warnings.push(args.map(String).join(" "));
+      try {
+        const meta = { gameSetupConfig: { experienceConfig: { seed: 4242, generate: false } } };
+        const core = makeCore("chat-declined-force", 4242);
+        core.host.chatMeta = meta;
+        await loadedPF.save.maybeGenerateBrief(core, { force: "pack" });
+        await tick();
+      } finally {
+        console.warn = realWarn;
+      }
+      assert.deepEqual(
+        warnings.filter((line) => line.includes("failed unexpectedly")),
+        [],
+        "a forced pack on a chat that never sealed a brief reads the theme safely and reaches no catch",
+      );
+    });
+  });
+
+  // ── (5) THE BRIEF NEVER READS THE PLAYER'S BLOB FOR A THEME ────────────────
+  // Structural, and it is the lane that keeps the parser deleted. Two earlier
+  // drafts had this module re-derive the kit from the player's Setting text, which
+  // is (a) a question the wizard has already answered and (b) unanswerable here:
+  // the Setting box is a `rows="3"` textarea joined into a newline-delimited
+  // record, so a "Setting: line" reading loses everything after the first Enter
+  // and a "Setting: segment" reading truncates at a `Tone:` the player typed
+  // themselves. validate()'s options bag has THREE keys and none of them is a
+  // preferences channel; the sweep below is what that absence looks like from
+  // outside.
+  {
+    const blobs = [
+      "World name: Anchorage Nine\nSetting: A sealed hab ring; the crew keeps the reactor alive.\nTone: cold",
+      "World name: Hearthvale\nSetting: A cozy valley of orchards and thatched roofs.",
+      "",
+      "World name: Nine\nSetting: A quiet dome.\nTone: wistful\nSetting: and an airlock that sticks",
+    ];
+    for (const blob of blobs) {
+      const sealed = brief.validate(
+        { scale: "village", name: "Nowhere", cast: [], preferences: blob, setting: blob },
+        { seed: 4242, preferences: blob, setting: blob, userContent: blob },
+      );
+      assert.equal(sealed.theme, "cozy-village", "no theme anywhere means cozy-village, whatever the blob says");
+    }
+  }
+
+  // ── (6) WITH NO ART MODULE, A FUTURE THEME PASSES AND A PROTOTYPE KEY DOES NOT
+  // The no-authority arm, and it exists because folding needs a list to fold
+  // against. Two populations were being conflated: a FUTURE theme this build has
+  // art for but no lexicon entry — which must survive, because folding it would
+  // replace a valid value one screen before setTheme() would have accepted it —
+  // and a string that resolves against Object.prototype, which must not, because
+  // `TABLE["constructor"]` returns a truthy INHERITED value and the
+  // `|| TABLE["cozy-village"]` tail never fires for it.
+  {
+    const realThemeIds = loadedPF.art.themeIds;
+    const bare = { scale: "village", name: "Nowhere", cast: [] };
+    const PROTO = ["constructor", "__proto__", "toString", "valueOf", "hasOwnProperty"];
+    try {
+      loadedPF.art.themeIds = undefined;
+      // (a) A CALLER's theme passes through unfolded at both doors — the
+      // future-theme case, preserved. `swamp-fen` is the roadmap's own example.
+      for (const id of ["sci-fi-colony", "swamp-fen"]) {
+        assert.equal(brief.validate(bare, { theme: id, seed: 7 }).theme, id, `validate passes ${id} through`);
+        assert.equal(brief.foldStored({ ...bare, theme: id }, 7).theme, id, `…and so does foldStored`);
+      }
+      // (b) The MODEL's answer is a different population and is never trusted
+      // here: with no list there is no fold, so rung 1 is skipped outright.
+      for (const key of PROTO.slice(0, 3)) {
+        const sealed = brief.validate(
+          { ...bare, artTheme: key },
+          { theme: "sci-fi-colony", seed: 7 },
+          { fromModel: true },
+        );
+        assert.equal(sealed.theme, "sci-fi-colony", `a hostile model answer (${key}) never displaces the caller's`);
+      }
+      // (b2) …and rung 2 carries untrusted text too, which three drafts of this
+      // work denied. It is an exported function's parameter, it is
+      // `_configTheme(meta)` off player-writable chat metadata, and it is a stored
+      // brief's `sealed.theme` on the #566 path. Unguarded, validate() THREW out
+      // of the STOCK_CAST top-up and defaults() sealed the key into `brief.theme`,
+      // where it travelled on to setTheme, world.build and the pack's catch tables.
+      for (const key of PROTO) {
+        assert.equal(brief.validate(bare, { theme: key, seed: 7 }).theme, "cozy-village", `validate refuses ${key}`);
+        assert.equal(brief.defaults(key, 7).theme, "cozy-village", `…and so does the exported defaults() door`);
+      }
+      // (b3) THE THIRD DOOR, and this leg pins a SCOPE rather than a guard.
+      // `foldStored` runs on every world load and keeps its pre-existing
+      // pass-through: measured, today's build answers identically, and no
+      // measurement in this cycle says that is wrong. The claim the ladder's own
+      // comment makes is "closed at both rungs of validate, and at defaults" —
+      // exactly these three doors and no more. The day somebody widens it, this
+      // lane is what tells them they changed something.
+      for (const key of PROTO) {
+        assert.equal(
+          brief.foldStored({ ...bare, theme: key }, 7).theme,
+          key,
+          `foldStored passes ${key} through, as it always has`,
+        );
+      }
+      // (c) Nothing resolvable at either rung.
+      assert.equal(brief.validate(bare, { theme: "", seed: 7 }).theme, "cozy-village", "an empty theme lands on cozy");
+      assert.equal(brief.validate(bare, { seed: 7 }).theme, "cozy-village", "…and so does no theme at all");
+    } finally {
+      loadedPF.art.themeIds = realThemeIds;
+    }
+  }
+
+  // ── (7) THE SCHEMA STILL FITS THE ROUTE ────────────────────────────────────
+  // The enum is generated from `PF.art.themeIds()` rather than copied, so a third
+  // theme shipping in 10-art reaches this schema the day it lands — and the
+  // assertion is written against the LIST rather than against "both", which is a
+  // two-shaped claim that would survive a third kit.
+  {
+    const shape = brief.schema();
+    const serialized = JSON.stringify(shape);
+    for (const id of loadedPF.art.themeIds()) {
+      assert.ok(shape.properties.artTheme.enum.includes(id), `the schema offers the kit ${id}`);
+      assert.ok(brief.guidance().includes(id), `…and the guidance names it too`);
+    }
+    assert.ok(shape.required.includes("artTheme"), "and the field is required, so a silent omission is not an answer");
+    assert.ok(serialized.length <= 8_000, `the schema still fits the route's cap (${serialized.length} chars)`);
+    assert.ok(brief.guidance().length < 4_500, "and the guidance is still inside its own");
+
+    // THE PARTIAL ART MODULE, WHICH IS WORSE THAN AN ABSENT ONE. schema() and
+    // guidance() are both called BEFORE the network request inside generate()'s
+    // try, whose catch reports `onFailure("network")` — so a `themeIds` that
+    // returns `[]`, returns a non-array, or throws would have burned a paid call
+    // and blamed the network for a type error, from three new sites at once. The
+    // guard is `Array.isArray(x) && x.length` at four places rather than a
+    // truthiness test, because `[]` is truthy and so is a non-array, and both are
+    // exactly the states it is described as preventing.
+    const realThemeIds = loadedPF.art.themeIds;
+    try {
+      for (const [label, stub] of [
+        ["absent", undefined],
+        ["an empty list", () => []],
+        ["a non-array", () => "cozy-village"],
+        [
+          "a throwing reader",
+          () => {
+            throw new TypeError("the art module is half-loaded");
+          },
+        ],
+      ]) {
+        loadedPF.art.themeIds = stub;
+        const partial = brief.schema();
+        assert.ok(!("artTheme" in partial.properties), `with ${label} the property is ABSENT, never an empty enum`);
+        assert.ok(!partial.required.includes("artTheme"), `…and so is the required entry nothing could satisfy`);
+        assert.ok(!brief.guidance().includes("- artTheme:"), `…and the guidance asks for no field the schema lacks`);
+        // The other two doors, for the same reason: all four are on the paid path.
+        assert.equal(
+          brief.validate({ scale: "village", name: "X", cast: [] }, { theme: "cozy-village", seed: 7 }).theme,
+          "cozy-village",
+          `validate() returns rather than throws with ${label}`,
+        );
+        assert.equal(
+          brief.defaults("cozy-village", 7).theme,
+          "cozy-village",
+          `defaults() returns rather than throws with ${label}`,
+        );
+      }
+    } finally {
+      loadedPF.art.themeIds = realThemeIds;
+    }
+  }
+
+  // ── (8) A NEAR-MISS THEME LABEL AND ITS BODY AGREE ─────────────────────────
+  // defaults() is the one door that returns a {theme, name} PAIR, so it is the
+  // only door where a LABEL can disagree with a BODY. The ladder folds; this line
+  // looked the worked example up with the UNFOLDED word, so `defaults("Sci-Fi-
+  // Colony", 7)` came back labelled `sci-fi-colony` carrying Hearthvale and the
+  // cozy example — a shape the pre-0.16.2 code could not produce. One fold at the
+  // top, spent on both reads.
+  //
+  // The property this pins is "an id that has its own worked example ALWAYS gets
+  // that example" — not "label and body always agree", which the
+  // `|| DEFAULT_BRIEFS["cozy-village"]` tail makes impossible to state and which
+  // the future-theme case requires to stay impossible. Note the same call is a
+  // BOOT invariant in 61-pack, so a wrong answer here is a package that does not
+  // load rather than a lane that goes red.
+  {
+    const realThemeIds = loadedPF.art.themeIds;
+    const SWEEP = [
+      "cozy-village",
+      "sci-fi-colony",
+      "Sci-Fi-Colony",
+      "SCI-FI-COLONY",
+      "  sci-fi-colony  ",
+      "swamp-fen",
+      "retired-theme",
+      "constructor",
+      "__proto__",
+      "toString",
+      "valueOf",
+      "hasOwnProperty",
+      "prototype",
+      "0",
+      "length",
+    ];
+    const pairOf = (word) => {
+      const sealed = brief.defaults(word, 7);
+      return `${sealed.theme}/${sealed.name}`;
+    };
+    for (const word of ["Sci-Fi-Colony", "SCI-FI-COLONY", "  sci-fi-colony  "]) {
+      assert.equal(pairOf(word), "sci-fi-colony/Meridian Base", `a near miss resolves whole: ${word}`);
+    }
+    assert.equal(pairOf("sci-fi-colony"), "sci-fi-colony/Meridian Base", "an exact id is unchanged");
+    assert.equal(pairOf("cozy-village"), "cozy-village/Hearthvale", "…as is the other one");
+    assert.equal(pairOf("__proto__"), "cozy-village/Hearthvale", "a prototype key gets the cozy example, labelled cozy");
+    assert.equal(pairOf("constructor"), "cozy-village/Hearthvale", "…and so does the other one");
+    const withArt = SWEEP.map(pairOf);
+    try {
+      // BOTH ARMS, AND THEY AGREE WITH EACH OTHER. This door folds on the
+      // no-authority arm too, against `Object.keys(DEFAULT_BRIEFS)` — the table it
+      // is about to look the body up in. The two alternatives were measured and
+      // both lose something: passing the word through makes EVERY no-authority row
+      // a label disagreeing with its body (`swamp-fen` carrying Hearthvale), and
+      // folding everything to cozy-village makes a SHIPPED id lose its own worked
+      // example. Folding against the brief table gives neither, and it pays more
+      // than either promised — the no-authority arm stops being a separate policy
+      // at all, which is the property that motivated the fold in the first place.
+      loadedPF.art.themeIds = undefined;
+      assert.equal(pairOf("sci-fi-colony"), "sci-fi-colony/Meridian Base", "a shipped id keeps its example with no art");
+      // `swamp-fen` FOLDS here, and it is the one place it does: this door owes a
+      // worked example and has none for it. validate()'s rung 2 passes the same
+      // word through untouched — lane 6(a) asserts exactly that — and the two must
+      // be read together or they look contradictory. What this gives up is the
+      // future-theme case inside defaults(), on an arm no shipped build reaches.
+      assert.equal(pairOf("swamp-fen"), "cozy-village/Hearthvale", "…and an id with no example folds, as it does today");
+      assert.deepEqual(SWEEP.map(pairOf), withArt, "the two arms answer identically on every string in the sweep");
+    } finally {
+      loadedPF.art.themeIds = realThemeIds;
+    }
+  }
 }
 
 // ── THE WIZARD STOPS ASKING WHAT IT SHOULD NEVER HAVE ASKED (0.16.2) ─────────

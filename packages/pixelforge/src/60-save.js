@@ -1848,7 +1848,11 @@ PF.save = {
       core?.host && typeof core.host.chatMeta === "object" && core.host.chatMeta !== null ? core.host.chatMeta : {};
     const sealed = this._configBrief(meta, core?.chatId);
     if (!this.briefCompiles(sealed)) return false;
-    const theme = this._configTheme(meta) ?? "cozy-village";
+    // THE SEAL FIRST, THE CONFIG SECOND (0.16.2). The kit is no longer a dropdown
+    // answer the config owns: on a generated world the MODEL chose it, and the
+    // brief is where that choice was written down. Reading the config here would
+    // probe a rebuild in one kit and then install a world in another.
+    const theme = sealed?.theme ?? this._configTheme(meta) ?? "cozy-village";
     return !!PF.world.build(this._regenSeed(core, meta), theme, sealed).brieved;
   },
 
@@ -1981,10 +1985,15 @@ PF.save = {
       // only mode that compiles a world itself: the gated modes hand the ladder
       // a force and the ladder reads its own pair.
       if (mode === "rebuild") {
-        const theme = this._configTheme(meta) ?? "cozy-village";
         const seed = this._regenSeed(core, meta);
         const sealed = this._configBrief(meta, chatId);
         if (!this.briefCompiles(sealed)) return false;
+        // THE THEME READ MOVED BELOW THE SEAL (0.16.2), and the move is the point
+        // rather than a tidy-up: it is `sealed.theme` first now — the kit the model
+        // chose, written into the brief — with the config's answer behind it for a
+        // chat whose brief predates the ladder. It is the same pair `canRebuild`
+        // probes with, and the two must not be able to disagree.
+        const theme = sealed?.theme ?? this._configTheme(meta) ?? "cozy-village";
         if (!PF.world.build(seed, theme, sealed).brieved) return false;
         await this.flush(core, false);
         if (chatId !== core.chatId) return false;
@@ -2104,7 +2113,16 @@ PF.save = {
     }
     this._generating.add(chatId);
     try {
-      const theme = this._configTheme(meta) ?? "cozy-village";
+      // THE WIZARD'S THEME, AND FROM 0.16.2 IT IS ONE HALF OF A PAIR. It used to
+      // be the whole answer: the dropdown said `sci-fi-colony`, the config stored
+      // it, and every generator downstream of this line read it. The kit is derived
+      // from the player's own Setting text now, and on a GENERATED world the model
+      // gets the deciding vote inside the brief call — so this value is what the
+      // brief call is HANDED (its rung 2, and the only door the wizard's derived
+      // answer walks through), while what the world is BUILT from comes off the
+      // seal below. Still the answer on its own for the interim world, for a
+      // declined chat, and for a pre-0.16.2 chat that stored a dropdown's answer.
+      const configTheme = this._configTheme(meta) ?? "cozy-village";
       // READ-SITE 5 — THE SEED, AND ON A FORCE IT IS THE STANDING WORLD'S
       // (maintainer ruling 8). The seed is the world's identity for the life of
       // the chat, so no recovery path may move it — and the wizard config is not
@@ -2149,7 +2167,11 @@ PF.save = {
       if (briefWanted || force === "brief") {
         let failure = null;
         sealed = await PF.brief.generate(chatId, {
-          theme,
+          // RUNG 2, and it is passed for that reason rather than as a legacy hint:
+          // `generate()`'s `theme` is exactly what reaches `validate()`'s second
+          // rung, which is what answers when the model names no kit or names one
+          // this build does not ship.
+          theme: configTheme,
           seed,
           preferences,
           onFailure: (kind) => {
@@ -2217,6 +2239,22 @@ PF.save = {
         // that knows this chat is owed a pack.
         if (wantsPack) this._packWantedSealed.add(chatId);
       }
+
+      // ── THE KIT THE WORLD IS ACTUALLY BUILT IN, OFF THE SEAL (0.16.2) ───────
+      // Everything below this line — the content pack, the compile, the install —
+      // belongs to the world that was SEALED, and from this release the model is
+      // the one that chose its kit. Reading the wizard's copy here would write a
+      // content pack for a theme the world does not have and then paint the world
+      // in a third one. The config stays behind it for a chat whose brief predates
+      // the ladder, and the literal behind that for a chat with no config at all.
+      //
+      // OPTIONALLY CHAINED, because `sealed` is provably nullable here: the
+      // `if (!sealed) … return` bail lives INSIDE the call-one gate, and a
+      // `force === "pack"` entry always enters this body — so a forced pack on a
+      // chat with no brief would otherwise throw into the catch below and put a
+      // retry screen on a world the player declined. Every sibling read on this
+      // path is already guarded the same way.
+      const theme = sealed?.theme ?? configTheme ?? "cozy-village";
 
       // ── CALL TWO: THE CONTENT PACK ──────────────────────────────────────────
       // Wanted when the formula already says so (the half-sealed chat this visit
