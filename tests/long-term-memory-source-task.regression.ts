@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { runRegressionToCompletion } from "./regression-helpers.ts";
 
 const session = new Map<string, string>();
 Object.defineProperty(globalThis, "window", {
@@ -132,7 +133,7 @@ async function main() {
   );
 }
 
-void main().catch((error) => {
+void runRegressionToCompletion("long-term-memory-source-task", main).catch((error) => {
   console.error(error);
   process.exitCode = 1;
 });

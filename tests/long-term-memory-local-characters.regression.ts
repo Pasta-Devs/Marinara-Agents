@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
+import { runRegressionToCompletion } from "./regression-helpers.ts";
 
 const source = "../packages/long-term-memory/src/engine/packages/server/src/services/long-term-memory";
 const timestamp = "2026-09-04T00:00:00.000Z";
@@ -263,7 +264,7 @@ async function main() {
   );
 }
 
-void main().catch((error) => {
+void runRegressionToCompletion("long-term-memory-local-characters", main).catch((error) => {
   console.error(error);
   process.exitCode = 1;
 });

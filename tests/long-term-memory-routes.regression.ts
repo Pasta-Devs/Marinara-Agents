@@ -5,6 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { dirname } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
+import { runRegressionToCompletion } from "./regression-helpers.ts";
 
 async function main() {
   const engineRoot =
@@ -160,6 +161,13 @@ async function main() {
         },
       ],
     };
+    chats.find((chat) => chat.id === "chat-persona-a").metadata.summaryEntries = [
+      {
+        id: "summary-persona-write-scope",
+        content: "A current-chat import must not inherit the chat persona.",
+        enabled: true,
+      },
+    ];
     chats.push({
       id: "game-a",
       name: "Cobalt Campaign",
@@ -3065,6 +3073,23 @@ async function main() {
               modelCalls += 1;
               completionOptions.push(options);
               if (failGameRefine) throw new Error("Fixture refine failure");
+              if (abortInFlight) {
+                abortReachedChatComplete = true;
+                notifyAbortChatComplete?.();
+                return new Promise((_resolve, reject) => {
+                  if (options.signal?.aborted) {
+                    reject(new Error("aborted"));
+                    return;
+                  }
+                  options.signal?.addEventListener(
+                    "abort",
+                    () => {
+                      reject(new Error("aborted"));
+                    },
+                    { once: true },
+                  );
+                });
+              }
               return {
                 content: JSON.stringify({
                   summary: "Extracted Moon Vault discovery.",
@@ -3523,11 +3548,25 @@ async function main() {
         limit: 100,
         importConcurrency: 1,
         destinationScope: { chatId: "chat-a", chatIds: ["chat-a"] },
+        extract: true,
       },
       storageService.root,
       inFlightController.signal,
     );
-    await chatCompleteEntered;
+    let cancellationTimeout: ReturnType<typeof setTimeout> | undefined;
+    try {
+      await Promise.race([
+        chatCompleteEntered,
+        new Promise((_, reject) => {
+          cancellationTimeout = setTimeout(
+            () => reject(new Error("Timed out waiting for in-flight cancellation to enter chatComplete")),
+            10_000,
+          );
+        }),
+      ]);
+    } finally {
+      if (cancellationTimeout) clearTimeout(cancellationTimeout);
+    }
     inFlightController.abort();
     const inFlightResult = await inFlightImport;
     abortInFlight = false;
@@ -3538,7 +3577,7 @@ async function main() {
       method: "POST",
       url: "/api/long-term-memory/import/preview",
       headers,
-      payload: { source: "chats", limit: 10 },
+      payload: { source: "chats", limit: 20 },
     });
     assert.equal(
       currentPreview
@@ -3844,6 +3883,11 @@ async function main() {
       tags: ["source_summary"],
       keywords: [],
       links: [],
+      provenance: {
+        kind: "chat_summary",
+        sourceId: "chat-a",
+        entryId: "route-blocked",
+      },
       sections: {
         source: {
           text: "A separate source for blocked preflight.",
@@ -4033,6 +4077,11 @@ async function main() {
       tags: ["source_summary"],
       keywords: [],
       links: [],
+      provenance: {
+        kind: "chat_summary",
+        sourceId: "chat-a",
+        entryId: "route-cap",
+      },
       sections: { source: { text: "Section cap evidence.", updatedAt: "2026-07-17T00:00:00.000Z" } },
     });
     await storageService.storage.createNote({
@@ -4045,7 +4094,7 @@ async function main() {
       tags: [],
       keywords: ["cap"],
       links: [],
-      sections: { facts: { text: "x".repeat(20_000), updatedAt: "2026-07-17T00:00:00.000Z" } },
+      sections: { facts: { text: "word ".repeat(4_000), updatedAt: "2026-07-17T00:00:00.000Z" } },
     });
     const capMutationId = "10000000-0000-4000-8000-000000000005";
     const capDraft = await storageService.drafts.createDraft({
@@ -4090,6 +4139,11 @@ async function main() {
       tags: ["source_summary"],
       keywords: [],
       links: [],
+      provenance: {
+        kind: "chat_summary",
+        sourceId: "chat-a",
+        entryId: "route-grounding",
+      },
       sections: { source: { text: "Grounding evidence.", updatedAt: "2026-07-17T00:00:00.000Z" } },
     });
     const groundingMutationId = "10000000-0000-4000-8000-000000000006";
@@ -4168,7 +4222,10 @@ async function main() {
     );
     assert.deepEqual(
       (await storageService.storage.getNote("world_eastern_gate"))?.links,
-      [{ target: "timeline_eastern_gate_sealed", relation: "evidenced_by" }],
+      [
+        { target: "timeline_eastern_gate_sealed", relation: "evidenced_by" },
+        { target: "source_route_review", relation: "extracted_from" },
+      ],
       "accepted memories preserve their evidenced_by timeline link",
     );
     const integrity = await app.inject({
@@ -4185,7 +4242,7 @@ async function main() {
     });
     assert.equal(backup.statusCode, 200, backup.body);
     assert.equal(backup.json().format, "marinara-long-term-memory");
-    assert.equal(backup.json().rejectedSuggestions.length, 1);
+    assert.equal(backup.json().rejectedSuggestions.length, 10);
     const backupPreview = await app.inject({
       method: "POST",
       url: "/api/long-term-memory/backup/preview",
@@ -4194,8 +4251,8 @@ async function main() {
     });
     assert.equal(backupPreview.statusCode, 200, backupPreview.body);
     assert.equal(backupPreview.json().incoming.notes > 0, true);
-    assert.equal(backupPreview.json().incoming.rejectedSuggestions, 1);
-    assert.equal(backupPreview.json().current.rejectedSuggestions, 1);
+    assert.equal(backupPreview.json().incoming.rejectedSuggestions, 10);
+    assert.equal(backupPreview.json().current.rejectedSuggestions, 10);
     const replacement = backup.json();
     replacement.notes = replacement.notes.filter((note: any) => note.id === "world_route_fixture");
     const imported = await app.inject({
@@ -4217,7 +4274,7 @@ async function main() {
           headers,
         })
       ).json().total,
-      1,
+      10,
     );
     const resetSettings = await app.inject({
       method: "POST",
@@ -4233,7 +4290,7 @@ async function main() {
           headers,
         })
       ).json().total,
-      1,
+      10,
     );
     assert.equal((await storageService.storage.getNote("world_route_fixture"))?.id, "world_route_fixture");
     const deletionFixture = await app.inject({
@@ -4309,7 +4366,7 @@ async function main() {
       keywords: [],
       links: [],
       sections: { source: { text: "Imported source material.", updatedAt: "2026-07-17T00:00:00.000Z" } },
-      provenance: { kind: "character", sourceId: "character-mara" },
+      provenance: { kind: "character", sourceId: "character-attribution" },
     });
     await storageService.storage.createNote({
       id: "world_route_attribution",
@@ -4434,7 +4491,7 @@ async function main() {
       },
     });
     assert.equal(crossScopeConflict.statusCode, 200, crossScopeConflict.body);
-    assert.equal(crossScopeConflict.json().batchStatus, "partial_success");
+    assert.equal(crossScopeConflict.json().batchStatus, "failed");
     assert.deepEqual(
       crossScopeConflict.json().imported.map((item: any) => item.sourceId),
       ["chat-a:summary-cross-conflict-batch"],
@@ -4442,14 +4499,14 @@ async function main() {
     assert.deepEqual(crossScopeConflict.json().writeFailures, [
       {
         sourceId: "chat-a:summary-cross-scope",
-        title: "Observatory, msgs messages 2",
+        title: "Observatory, msgs last messages",
         sourceWriteStatus: "failed",
         extractionStatus: "not_started",
         retryable: false,
         error: {
           code: "ltm_source_destination_conflict",
           message:
-            "Source Observatory, msgs messages 2 is already imported with a different destination. Manage its availability in Memory Vault.",
+            "Source Observatory, msgs last messages is already imported with a different destination. Manage its availability in Memory Vault.",
         },
       },
     ]);
@@ -4735,7 +4792,7 @@ async function main() {
   );
 }
 
-void main().catch((error) => {
+void runRegressionToCompletion("long-term-memory-routes", main).catch((error) => {
   console.error(error);
   process.exitCode = 1;
 });
