@@ -1040,7 +1040,7 @@ written for a gate armed at boot, over a **placeholder** world nobody has entere
 retry surface (§15) re-arms the same gate **mid-session**, over a world the player has been living
 in, and the literal grows three fields to say so:
 
-```
+```js
 { chatId, state: "generating" | "failed", attempts, failure,
   stage,        // "brief" | "pack" — which artifact is owed (0.13-era, now registry-keyed)
   mode,         // the re-attempt this gate is running: "rebuild" | "reroll" | "retry" | "rewrite"
