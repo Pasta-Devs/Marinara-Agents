@@ -1,5 +1,22 @@
 # Pixelforge release notes
 
+## 0.16.1 — 2026-09-07
+
+Name your world and get your world. The Setting box arrived pre-filled, so leaving it alone quietly
+asked for the village in that text — same valley, same innkeeper — whatever you called the game. It
+starts empty now, with that description shown behind it as a suggestion. Leave it empty and the
+world is built from what you did give: your game name and your theme. Type your own and it is used
+exactly as written. Either way the place you arrive in has the name you gave it, and the loading
+screen says which world it is writing.
+
+Pixelforge games no longer generate the engine's HUD gauges, so the "Review Starting Widgets" step
+is gone and the storyteller stops keeping a second purse beside the one the game uses.
+
+The party list shows names instead of ids. The connection dropdown shows each connection's model,
+starts on your real default, and hides ones still waiting on an import review.
+
+Worlds you already have are untouched.
+
 ## 0.16.0 — 2026-09-06 [highlight]
 
 Walk out of town and keep going. Past the settlement's edge the country carries on in every direction — woods, heath, scree, fen, far fields and fallen walls — made as you reach it and identical every time you come back, so the way home is the way you came. Roughly one patch in seven holds something worth finding, and finding it goes in your journal. Beyond that the wilderness does not remember you yet.

@@ -1,4 +1,4 @@
-// Pixelforge 0.16.0 — Marinara Engine game-surface Experience (single-file client bundle)
+// Pixelforge 0.16.1 — Marinara Engine game-surface Experience (single-file client bundle)
 // Built from packages/pixelforge/src (20 modules) by scripts/build-pixelforge-package.mjs. Do not edit; edit src/ and rebuild.
 (() => {
 "use strict";
@@ -2791,7 +2791,16 @@ PF.brief = (() => {
       `- prosperity: one of ${PROSPERITY.join(" | ")}.`,
       `- latitude (optional): one of ${PF.weather.LATITUDES.join(" | ")} — set it only when the setting's identity demands it; omit to let the world roll its own.`,
       `- precipitation (optional): one of ${PF.weather.PRECIPS.join(" | ")} — set it only when the setting's identity demands it; omit to let the world roll its own.`,
-      "- name: the settlement's name, <=24 characters.",
+      // THE NAME IS THE PLAYER'S WHEN THE PLAYER GAVE ONE (0.16.1). The wizard's
+      // first field is the world's name and the payload now leads with it, so the
+      // one thing this call must not do is invent a second name for a place that
+      // already has one. The 24-char cap is the schema's and outranks the ask,
+      // which is why the instruction says shorten rather than "use it exactly" —
+      // a rule the model cannot obey is a rule it is free to ignore entirely.
+      // `DEFAULT_NAMES` is untouched and stays what it was: the seeded fallback a
+      // NAMELESS response lands on, which is the degraded path and not this one.
+      "- name: the settlement's name, <=24 characters. When the preferences give a world name that IS the",
+      "  settlement's name — keep it, and shorten it only if it does not fit. Choose one only when none was given.",
       "- flavor: ONE sentence of arrival atmosphere, <=140 characters.",
       "- situation: ONE sentence, <=240 characters — the unresolved thing happening right now.",
       "  Name a cause and a person, not a mood.",
@@ -15020,9 +15029,19 @@ const STAGE_ROWS = [
      *  it in exactly one state, which is `retryReplacesWorld`'s job to know. */
     modes: { rebuild: { gated: false, installs: true }, reroll: { gated: true, installs: true } },
     screens: {
+      /** THE SCREEN SAYS WHICH WORLD IT IS WRITING (0.16.1). The static pair below
+       *  is what an older chat still reads — there is no stored name on one — and
+       *  the `*Named` pair is what a chat created by a 0.16.1 wizard gets, because
+       *  by then the player has typed a name and the whole point of this release
+       *  is that the name is not decoration. Two forms rather than one templated
+       *  string with an empty slot: "Writing …" with nothing in it is worse than
+       *  the sentence it replaced. */
       generating: {
         title: "Writing your world…",
+        titleNamed: (name) => `Writing ${name}…`,
         body: "One generation call is shaping the settlement, its people and the places in it. This can take a minute.",
+        bodyNamed: (name) =>
+          `One generation call is shaping ${name} — its people, and the places in it. This can take a minute.`,
       },
       failed: { title: "The world didn't finish being written." },
       // The sentence AFTER the reason, and every clause of it has to be true in
@@ -15129,7 +15148,10 @@ const STAGE_ROWS = [
     screens: {
       generating: {
         title: "Writing what your world has to say…",
+        titleNamed: (name) => `Writing what ${name} has to say…`,
         body: "The settlement is written. One more call is filling in what its people say and the work they have to offer.",
+        bodyNamed: (name) =>
+          `${name} is written. One more call is filling in what its people say and the work they have to offer.`,
       },
       failed: { title: "This world didn't finish opening." },
       note: "Your setting is written and settled — the world comes out exactly as written, however many times you try. What did not finish is downstream of it: the work posted in this world, or the last of opening the world itself. Trying again is free: it picks up whatever is still owed and leaves everything already written alone.",
@@ -16385,15 +16407,23 @@ PF.save = {
    *  the HUD, which is the one place in this package a string cannot be pinned
    *  without a DOM — so a stage added there was a stage whose screen nothing
    *  watched. `state` is the gate's own: "generating" or "failed". */
-  gateTitle(stage, state) {
+  gateTitle(stage, state, worldName) {
     const row = this.stage(stage) ?? this.stage("brief");
-    return state === "failed" ? row.screens.failed.title : row.screens.generating.title;
+    if (state === "failed") return row.screens.failed.title;
+    const named = typeof worldName === "string" ? worldName.trim() : "";
+    return named ? row.screens.generating.titleNamed(named) : row.screens.generating.title;
   },
 
-  gateBody(stage, state, kind, postStart, cascaded) {
+  /** THE FAILURE ARM TAKES NO NAME, and that is a decision rather than an
+   *  omission: the failure screen's whole job is the reason and the note under it
+   *  — what did not finish and what it costs to try again — and dropping the
+   *  world's name into a sentence about a call that was refused buys nothing the
+   *  title above does not already say. */
+  gateBody(stage, state, kind, postStart, cascaded, worldName) {
     const row = this.stage(stage) ?? this.stage("brief");
     if (state === "failed") return `${this.gateReason(kind, stage)} ${this.gateStageNote(stage, postStart, cascaded)}`;
-    return row.screens.generating.body;
+    const named = typeof worldName === "string" ? worldName.trim() : "";
+    return named ? row.screens.generating.bodyNamed(named) : row.screens.generating.body;
   },
 
   /** THE REGISTRY, exposed (0.16 §2.10a). One ordered table: the gate reads its
@@ -16856,7 +16886,17 @@ PF.save = {
       let seed = force ? this._regenSeed(core, meta) : this._configSeed(meta);
       if (seed === null) seed = PF.hashStr(String(chatId));
       const setup = meta.gameSetupConfig && typeof meta.gameSetupConfig === "object" ? meta.gameSetupConfig : {};
+      // THE WORLD'S NAME LEADS THE PAYLOAD (0.16.1). The brief call asks the model
+      // for `name: the settlement's name` and the player had already answered that
+      // question in the wizard's first field — but the name went to the chat and
+      // nowhere near this payload, so the model was asked to invent one while
+      // being handed a Setting paragraph that named somewhere else. Named first
+      // because the guidance's naming rule now points at this line: given a name,
+      // keep it. Omitted entirely for a chat created before 0.16.1, where there is
+      // no stored name to keep and the model chooses exactly as it always did.
+      const worldName = this._configWorldName(meta);
       const preferences = [
+        worldName ? `World name: ${worldName}` : "",
         setup.setting ? `Setting: ${setup.setting}` : "",
         setup.tone ? `Tone: ${setup.tone}` : "",
         setup.difficulty ? `Difficulty: ${setup.difficulty}` : "",
@@ -17079,6 +17119,60 @@ PF.save = {
       if (typeof candidate === "string" && candidate) return candidate;
     }
     return null;
+  },
+
+  /** THE NAME THE PLAYER TYPED IN THE WIZARD (0.16.1), from the same
+   *  double-nested config home as the seed and the theme. "Typed" resolves at
+   *  write time: the wizard stores the field's value trimmed, and an emptied
+   *  field stores the theme's default name instead — a world needs SOME name,
+   *  and an empty string is not one.
+   *
+   *  It reads back rather than being derived because the host has nowhere else to
+   *  put it: `gameSetupConfigSchema` has no world-name field, the CHAT carries the
+   *  name and the chat's name is not on this props object, and every generator on
+   *  both sides reads the setup config. So the wizard writes it into the one
+   *  object on that config the package owns (`experienceConfig.worldName`) and
+   *  this is the reader.
+   *
+   *  ABSENT ON EVERY CHAT CREATED BEFORE 0.16.1, which is not a migration: both
+   *  callers below fall back to the wording they shipped with, so an older world
+   *  reads exactly as it always did.
+   *
+   *  CLIPPED, and the clip belongs to the READER rather than to the writer. The
+   *  stored copy keeps the trimmed field verbatim past that; this reader then
+   *  collapses runs of whitespace and clips at the grapheme cap, because what a
+   *  400-character game name must never do is take over a loading-screen title
+   *  or a line of a generation prompt. Grapheme-aware, because it lands on a
+   *  player-visible surface (58-player `graphemes`). */
+  WORLD_NAME_CHARS: 60,
+
+  _configWorldName(meta) {
+    const setup =
+      meta && typeof meta.gameSetupConfig === "object" && meta.gameSetupConfig !== null ? meta.gameSetupConfig : null;
+    const outer =
+      setup && typeof setup.experienceConfig === "object" && setup.experienceConfig !== null
+        ? setup.experienceConfig
+        : null;
+    const inner =
+      outer && typeof outer.experienceConfig === "object" && outer.experienceConfig !== null
+        ? outer.experienceConfig
+        : null;
+    for (const candidate of [inner?.worldName, outer?.worldName]) {
+      if (typeof candidate !== "string") continue;
+      const trimmed = candidate.replace(/\s+/g, " ").trim();
+      if (!trimmed) continue;
+      const units = PF.player.graphemes(trimmed);
+      return units.length <= this.WORLD_NAME_CHARS ? trimmed : units.slice(0, this.WORLD_NAME_CHARS).join("");
+    }
+    return null;
+  },
+
+  /** The loading gate's copy asks for this one directly, off the host's own
+   *  metadata — the same blob every other read-site in this file starts from. */
+  gateWorldName(core) {
+    const meta =
+      core?.host && typeof core.host.chatMeta === "object" && core.host.chatMeta !== null ? core.host.chatMeta : null;
+    return this._configWorldName(meta) ?? "";
   },
 
   /** Build a sim from a save object (route state or the metadata key). */
@@ -24449,6 +24543,14 @@ PF.Hud = class {
     // and so does any post-start gate, which is holding a world the player has
     // already been living in.
     const gateKeep = gate === "failed" && (gateStage === "pack" || (gatePost && !!sim.world && !sim.world.interim));
+    // WHICH WORLD THE SCREEN IS WRITING (0.16.1) — the name the player typed in
+    // the wizard, or "" for a chat created before there was anywhere to store one.
+    // In the memo key for the same reason every field above it is, and for one
+    // more that is particular to it: this method is the HUD of whichever chat is
+    // mounted, and the name is the one gate input that differs between two chats
+    // holding gates in the same state. Without it the second chat's screen would
+    // keep the first chat's world's name.
+    const gateName = gate ? PF.save.gateWorldName(this.core) : "";
     if (
       mode !== this._mode ||
       spatialAvail !== this._spatialAvail ||
@@ -24457,7 +24559,8 @@ PF.Hud = class {
       gateStage !== this._gateStage ||
       gatePost !== this._gatePost ||
       gateCascade !== this._gateCascade ||
-      gateKeep !== this._gateKeep
+      gateKeep !== this._gateKeep ||
+      gateName !== this._gateName
     ) {
       this._mode = mode;
       this._spatialAvail = spatialAvail;
@@ -24467,6 +24570,7 @@ PF.Hud = class {
       this._gatePost = gatePost;
       this._gateCascade = gateCascade;
       this._gateKeep = gateKeep;
+      this._gateName = gateName;
       const inWorld = mode === "walk" && !gate;
       this.gateEl.style.display = gate ? "flex" : "none";
       this.gateRetry.style.display = gate === "failed" ? "" : "none";
@@ -24476,8 +24580,8 @@ PF.Hud = class {
       // package a string cannot be pinned without a DOM — so a third stage meant
       // editing branches rather than adding a row, and the strings the player
       // reads were the part nothing watched.
-      this.gateTitle.textContent = PF.save.gateTitle(gateStage, gate);
-      this.gateBody.textContent = PF.save.gateBody(gateStage, gate, gateWhy, gatePost, gateCascade);
+      this.gateTitle.textContent = PF.save.gateTitle(gateStage, gate, gateName);
+      this.gateBody.textContent = PF.save.gateBody(gateStage, gate, gateWhy, gatePost, gateCascade, gateName);
       this.topbar.style.display = gate ? "none" : "";
       // Replay: the host owns the whole screen. Combat: keep a minimal HUD —
       // the mode is inferred from the narrative gameActiveState, which can flip
@@ -24828,33 +24932,71 @@ PF.mountSetup = (el, props) => {
     );
 
   // Per-theme wizard defaults: picking a theme re-skins the whole run — genre
-  // text for the GM, default name/setting/goals, spatial seed, and the tile
-  // theme the world builder paints with (PF.art themes). Fields the player has
-  // already edited are never overwritten by a theme change.
+  // text for the GM, default name, the Setting box's PLACEHOLDER, the goals and
+  // spatial templates, and the tile theme the world builder paints with (PF.art
+  // themes). Fields the player has already edited are never overwritten by a
+  // theme change.
+  //
+  // THREE OF THESE USED TO BE THE PLAYER'S ANSWER WHETHER THE PLAYER ANSWERED OR
+  // NOT (0.16.1, and it is the whole of this patch). `setting` was the textarea's
+  // VALUE, so leaving the box alone was an active instruction to build the shipped
+  // village; `goals` and `spatial` were constants naming Hearthvale with no
+  // control anywhere in the wizard. All three reached generators — the Engine's
+  // blueprint call, the GM's per-turn prompt and this package's own brief call —
+  // so a player who typed "Pallet Town" and cleared the Setting box got Hearthvale
+  // with Mira, Tam and Rook in it, and nothing had failed: it is the world the
+  // wizard asked for. `setting` is a placeholder now, and `goals` and `spatial`
+  // are templates that take the name the player actually typed.
   const THEME_PRESETS = {
     "cozy-village": {
       genre: "Cozy pixel-art village RPG (Stardew/Harvest-Moon-like), slice of life with gentle adventure",
       name: "Hearthvale",
+      // What the theme IS, in the fewest words that still name a place — the one
+      // honest sentence an empty Setting box composes with (see `settingOf`).
+      kind: "cozy pixel village",
       setting:
         "The pixel village of Hearthvale: a cozy closed valley with an inn (The Amber Hearth, kept by Mira), " +
         "Tam's farm, and a small guard post watched by Rook. Slice-of-life with gentle mystery; danger exists but is rare.",
-      goals: "Settle into Hearthvale, get to know its people, and follow whatever quiet mysteries surface.",
-      spatial:
-        "A small closed valley. Root location: the village of Hearthvale. Children: The Amber Hearth Inn, " +
-        "Tam's Farm, the Guard Post, the Village Pond. Keep the world compact and walkable.",
+      goals: (name) => `Settle into ${name}, get to know its people, and follow whatever quiet mysteries surface.`,
+      // THE CHILD LIST IS GONE, and deliberately: it named four buildings — the
+      // Amber Hearth Inn, Tam's Farm, the Guard Post, the Village Pond — that the
+      // brief has not invented yet, so the Engine's hierarchical World Map was
+      // seeded with a settlement the walkable world does not contain. The root
+      // location is the one thing this field genuinely knows.
+      spatial: (name) => `A small closed valley. Root location: ${name}. Keep the world compact and walkable.`,
     },
     "sci-fi-colony": {
       genre: "Pixel-art sci-fi frontier-colony RPG, slice of life with gentle mystery among the stars",
       name: "Meridian Base",
+      kind: "small frontier colony",
       setting:
         "Meridian Base, a small frontier colony under a sealed sky: a hab ring with a cantina (kept by Mira), " +
         "Tam's hydroponics bay, and a landing pad watched by Rook. Slice-of-life with gentle mystery; danger exists but is rare.",
-      goals: "Settle into the colony, get to know its crew, and follow whatever quiet mysteries surface.",
-      spatial:
-        "A compact pressurised colony. Root location: Meridian Base. Children: the Cantina, the Hydroponics Bay, " +
-        "the Landing Pad, the Coolant Pool. Keep the world compact and walkable.",
+      goals: (name) => `Settle into ${name}, get to know its crew, and follow whatever quiet mysteries surface.`,
+      spatial: (name) => `A compact pressurised colony. Root location: ${name}. Keep the world compact and walkable.`,
     },
   };
+
+  /** The Setting the launch actually ships, and the reason the `||` survives:
+   *  the host declares `setting: z.string().min(1)` (game.routes
+   *  `gameSetupConfigSchema`), so an empty one is a 400 rather than a blank
+   *  field. What changed is WHAT the fallback says. It used to be the theme
+   *  preset — the paragraph naming Hearthvale, Mira, Tam and Rook — which is the
+   *  most specific instruction in the whole config and was reached by doing
+   *  nothing. Now an untouched box composes ONE line out of what the player did
+   *  give us, the typed name and the chosen theme, and invents no cast at all. */
+  const settingOf = (preset, typed, worldName) => typed.trim() || `A ${preset.kind} called ${worldName}.`;
+
+  /** Engine list rows carry TEXT booleans, not booleans. `connections.is_default`
+   *  and `connections.fallback_for_main` are `text().notNull().default("false")`,
+   *  so the literal string `"false"` is what a non-default row holds — and
+   *  `"false"` is truthy. Every `c?.isDefault` test in this file matched the
+   *  FIRST row unconditionally, and `list()` orders by `desc(updatedAt)`, so the
+   *  wizard preselected the most-recently-edited connection and the user's actual
+   *  default was never honoured. The Engine's own `getDefault()` compares
+   *  `eq(apiConnections.isDefault, "true")`; this is that comparison, with the
+   *  real boolean still accepted so a future projection does not re-break it. */
+  const isYes = (value) => value === "true" || value === true;
 
   const themeSel = select(
     (PF.art.themeIds ? PF.art.themeIds() : ["cozy-village"])
@@ -24864,18 +25006,31 @@ PF.mountSetup = (el, props) => {
 
   const nameIn = input(THEME_PRESETS["cozy-village"].name);
   const seedIn = input(String((Math.random() * 0xffffffff) >>> 0));
+  // THE PRESET IS A PLACEHOLDER AND NEVER A VALUE. It shipped as `settingIn.value`,
+  // which made "leave it alone" the strongest instruction the wizard could send:
+  // the box read as a helpful default and arrived at three generators as the
+  // player's own words. As a placeholder it shows exactly the same prose, in the
+  // same place, and carries none of it — an untouched box submits empty and
+  // `settingOf` composes the honest line instead.
   const settingIn = PF.el("textarea", { style: `${S.input}min-height:64px;`, rows: "3" });
-  settingIn.value = THEME_PRESETS["cozy-village"].setting;
+  settingIn.placeholder = THEME_PRESETS["cozy-village"].setting;
+  // Written rather than left to the element's own default, because "this box
+  // starts empty" is the whole change and it should be a line in the source
+  // rather than a property of `<textarea>` a reader has to remember.
+  settingIn.value = "";
 
   // Swap theme-derived defaults on selection, but only for fields still holding
-  // the previous theme's default — a player's own text always wins.
+  // the previous theme's default — a player's own text always wins. The Setting
+  // box needs no such test any more: a placeholder is never the player's text, so
+  // it swaps unconditionally and the "a player's own text always wins" promise is
+  // true by construction rather than by string comparison.
   let appliedTheme = "cozy-village";
   themeSel.addEventListener("change", () => {
     const previous = THEME_PRESETS[appliedTheme];
     const next = THEME_PRESETS[themeSel.value];
     if (!next || !previous) return;
     if (nameIn.value === previous.name) nameIn.value = next.name;
-    if (settingIn.value === previous.setting) settingIn.value = next.setting;
+    settingIn.placeholder = next.setting;
     appliedTheme = themeSel.value;
   });
   const toneSel = select([
@@ -24976,18 +25131,38 @@ PF.mountSetup = (el, props) => {
       const conns = await PF.api.getJson("/connections");
       // Text-capable connections only — the host doesn't re-check eligibility,
       // and an image/video connection here fails at first generation (review finding).
+      //
+      // …AND CONNECTIONS THAT CANNOT RESOLVE A KEY. A row with
+      // `profileImportReviewRequired === "true"` is one an import parked for the
+      // user to look at, and the Engine's `getWithKey()` returns null for exactly
+      // those — so offering one launched a game whose very first GM call had no
+      // credential behind it, with the failure arriving a minute later on the
+      // retry screen instead of here where it is a row not to show.
       const list = (Array.isArray(conns) ? conns : []).filter(
-        (c) => c?.provider !== "image_generation" && c?.provider !== "video_generation",
+        (c) =>
+          c?.provider !== "image_generation" &&
+          c?.provider !== "video_generation" &&
+          !isYes(c?.profileImportReviewRequired),
       );
       connSel.replaceChildren(
-        ...list.map((c) =>
-          PF.el("option", {
+        ...list.map((c) => {
+          const label =
+            typeof c?.name === "string" ? c.name : typeof c?.label === "string" ? c.label : String(c?.id ?? "?");
+          // THE MODEL, BESIDE THE NAME, because the name is a label the user chose
+          // and the model is the thing that writes the world. Two connections
+          // called "princess" pointed at two different models are one dropdown row
+          // apart and were indistinguishable. `model` is a top-level column on the
+          // connections table and rides the list route verbatim, so this costs a
+          // read and nothing else — it is what the Engine's own Start Game screen
+          // renders (GameSurface's `{connection.name}{connection.model ? … : ""}`).
+          const model = typeof c?.model === "string" && c.model ? c.model : "";
+          return PF.el("option", {
             value: typeof c?.id === "string" ? c.id : "",
-            text: typeof c?.name === "string" ? c.name : typeof c?.label === "string" ? c.label : String(c?.id ?? "?"),
-          }),
-        ),
+            text: model ? `${label} — ${model}` : label,
+          });
+        }),
       );
-      const preferred = list.find((c) => c?.isDefault) ?? list.find((c) => c?.fallbackForMain);
+      const preferred = list.find((c) => isYes(c?.isDefault)) ?? list.find((c) => isYes(c?.fallbackForMain));
       if (preferred && typeof preferred.id === "string") connSel.value = preferred.id;
       if (!list.length) connSel.replaceChildren(PF.el("option", { value: "", text: "No text connections configured" }));
     } catch {
@@ -24999,8 +25174,23 @@ PF.mountSetup = (el, props) => {
       for (const c of Array.isArray(chars) ? chars : []) {
         const id = typeof c?.id === "string" ? c.id : null;
         if (!id) continue;
-        const name =
-          typeof c?.name === "string" && c.name ? c.name : typeof c?.data?.name === "string" ? c.data.name : id;
+        // THE ROW IS RAW STORAGE, NOT THE ENGINE CLIENT'S VIEW MODEL, and this
+        // list rendered every character as its id because of it. `/characters`
+        // answers `storage.list()` — the characters table verbatim — and that
+        // table has NO `name` column: the V2 card lives in `data` as a JSON
+        // STRING. So `c.name` was undefined for every row, `c.data?.name` was
+        // undefined for every row (a string has no `.name`), and the id fallback
+        // was not an edge case, it was 100% of the list. Parsed the way the
+        // Engine's own character picker parses it, with the id surviving only as
+        // the last resort a corrupt card lands on.
+        let card = null;
+        try {
+          card = typeof c.data === "string" ? JSON.parse(c.data) : c.data;
+        } catch {
+          card = null;
+        }
+        const carded = card && typeof card.name === "string" ? card.name.trim() : "";
+        const name = carded || (typeof c?.name === "string" && c.name.trim()) || id;
         const cb = PF.el("input", { type: "checkbox", value: id });
         partyChecks.push(cb);
         partyBox.appendChild(
@@ -25031,19 +25221,40 @@ PF.mountSetup = (el, props) => {
     const seedText = seedIn.value.trim();
     const seed = (/^\d+$/.test(seedText) ? Number.parseInt(seedText, 10) : PF.hashStr(seedText || nameIn.value)) >>> 0;
     const preset = THEME_PRESETS[themeSel.value] || THEME_PRESETS["cozy-village"];
+    // THE NAME, RESOLVED ONCE AND SPENT EVERYWHERE. It used to be resolved at the
+    // `onLaunch` call and nowhere else, which is why it named the chat and reached
+    // no generator: the Engine's blueprint call, the GM's per-turn prompt and this
+    // package's own brief call between them read `setting`, `genre`, `playerGoals`
+    // and `spatialMapInstructions`, and the game name was in none of them.
+    const worldName = nameIn.value.trim() || preset.name;
     const setupConfig = {
       genre: preset.genre,
-      setting: settingIn.value.trim() || preset.setting,
+      setting: settingOf(preset, settingIn.value, worldName),
       tone: toneSel.value,
       difficulty: diffSel.value,
       rating: ratingSel.value,
       gmMode: "standalone",
-      playerGoals: preset.goals,
+      playerGoals: preset.goals(worldName),
       partyCharacterIds: partyChecks.filter((cb) => cb.checked).map((cb) => cb.value),
       gameWorldMapMode: "hierarchical",
       enableAgents: true,
-      spatialMapInstructions: preset.spatial,
+      spatialMapInstructions: preset.spatial(worldName),
       combatStyle: "classic",
+      // THE HOST'S OWN HUD WIDGETS, DECLINED (roadmap S7, the "suppress at setup"
+      // option). This surface has never drawn an engine widget and has no reader
+      // for one — the day, the purse and the sky are the package's own header —
+      // but the key was simply never emitted, and every gate on the engine side is
+      // written `!== false`, so `undefined` read as YES at all five of them: the
+      // setup call was handed the widget catalogue and designed four, chat
+      // metadata recorded them, the GM was told to emit `[widget:]` commands for
+      // them every single turn, and the player was walked through a "Review
+      // Starting Widgets" step for a rail that never appears. Two of the four the
+      // model invented were a second purse and a second relationship ledger beside
+      // the ones this package actually keeps, so the double bookkeeping was real
+      // and diverging. One literal closes all five, with no Engine change, and it
+      // is reversible the day the package wants to seed widgets of its own
+      // (`customHudWidgets` is the hook).
+      enableCustomWidgets: false,
       // `packWanted` rides the SAME answer rather than asking a second question
       // (0.13): the offline content pack is written by a second call in the same
       // creation, and a player who wants a generated world wants its people to
@@ -25057,13 +25268,22 @@ PF.mountSetup = (el, props) => {
         theme: themeSel.value,
         generate: generateIn.checked,
         packWanted: generateIn.checked,
+        // THE NAME, WHERE THE PACKAGE CAN READ IT BACK. `gameSetupConfigSchema`
+        // has no field for a world name — the chat's `name` is where the host
+        // keeps it, and nothing in the config reaches it — so it rides the one
+        // object on this config the package owns outright. Two readers: the brief
+        // call's payload, so the model is asked to dress THE PLAYER'S name rather
+        // than invent one, and the loading gate, so the screen says which world it
+        // is writing. `_configWorldName` reads it at both nesting depths, exactly
+        // as the seed and the theme are read (60-save).
+        worldName,
       },
     };
     launchBtn.disabled = true;
     cancelBtn.disabled = true; // mirror the host's mid-launch freeze
     launchBtn.textContent = "Setting up…";
     try {
-      await el._pfProps.onLaunch(setupConfig, nameIn.value.trim() || preset.name, undefined, {
+      await el._pfProps.onLaunch(setupConfig, worldName, undefined, {
         gmConnectionId,
       });
       // NO WORLD IS SEEDED HERE ANY MORE (plan §Q3b, maintainer ruling #7). The

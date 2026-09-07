@@ -2321,6 +2321,33 @@ stores it beside the brief it sealed, and `packExpected()` reads only that copy,
 **A chat sealed before 0.13 carries no copy and is therefore never expected to have a pack.** That
 is the packless-veteran ruling, and §11 records it as a limitation rather than a bug.
 
+**What the wizard actually writes into `experienceConfig`, and the one field 0.16.1 added.** The
+object holds four keys the package owns outright — `seed`, `theme`, `generate` and `packWanted` —
+read back at both nesting depths by `_configSeed`, `_configTheme` and `_configPackWanted`, because
+`/game/create`'s chooser re-nests the whole config one level deeper on the way to the host. **0.16.1
+adds a fifth: `worldName`, the name the player typed in the wizard's first field** — resolved at
+write time as the field's trimmed value, or the theme's default name when the field is empty,
+because a world needs SOME name and an empty string is not one. It rides here
+because `gameSetupConfigSchema` has no world-name field at all: the CHAT carries the name, the chat's
+name is not on the surface's props, and every generator on both sides reads the setup config
+instead — so the name that was on screen when the player pressed the button reached the Engine's
+blueprint call, the GM's per-turn prompt and this package's own brief call **not once**, which is
+how a chat called "Pallet Town" came to be a village called Hearthvale.
+
+**And it is deliberately NOT copied the way `packWanted` is, which the paragraph above makes look
+inconsistent.** The marker is copied because it is an **era fact** — a durable claim about what the
+chat was created wanting, whose corruption costs a paid call per chat in one direction and a
+permanently packless world in the other. `worldName` is neither durable nor load-bearing: its two
+readers are the loading gate's title and the brief payload's first line, so a `setupConfig` rewrite
+that changed it would change what a screen says and what a *future* re-roll asks for, and could
+neither mint nor destroy an artifact. A key that cannot lie about a seal does not need protecting
+from a rewrite. It is also **absent on every chat created before 0.16.1**, which is not a migration:
+`_configWorldName` returns null and both readers fall back to the wording they shipped with.
+`WORLD_NAME_CHARS` (60, grapheme-aware) is a **reader's** clip and not a writer's — the stored copy
+keeps the trimmed field past that, the reader collapses whitespace runs before clipping, and each
+reader states its own limit, because a 400-character game name must not take over a loading screen
+or a line of a generation prompt.
+
 **Fold-at-read, and the one invalidation rule that is not free.** `packFold(core)` derives what THIS
 world can offer, once, into a slot on the sim — never saved, rebuilt exactly when `core.sim` is,
 like the feature register and the schedule handles. The rule 0.13 had to add is the GATE'S LIFT: two
@@ -3206,11 +3233,17 @@ both places the assets live:
 - **`client.js` at 1,396,090 bytes over nineteen modules** (eighteen in 0.14; `21-lattice.js` is the
   nineteenth), and the figure was reproduced independently of the build: concatenating the modules
   and the wrapper by hand predicts 1,396,090 exactly — 1,395,292 bytes of source plus 798 of banner
-  and IIFE. That is the check the 0.11.0 CRLF incident is the reason for.
-- **The `0.16.0` artifact zip at 1,407,926 bytes**, new; the `0.15.0` zip is untouched, as is every
-  older one. **Three bakes over the same tree produced byte-identical output** — the same zip hash,
-  the same `client.js`, the same manifest — so the artifact is reproducible rather than merely
-  deterministic-by-design.
+  and IIFE. That is the check the 0.11.0 CRLF incident is the reason for. **Those were the figures
+  of the bake this cycle committed; they are not the figures shipping under the `0.16.0` version
+  today.** The GM-verbs merge landed after this record was written and re-baked in place without a
+  version bump — `62-gm.js` is a twentieth module — so the `0.16.0` actually on `staging` is
+  **1,411,873 bytes over twenty modules**. The paragraphs above stay as written because they are the
+  record of *this* cycle's bake; this sentence is the pointer that the version's final shape is the
+  verbs merge's, not this one.
+- **The `0.16.0` artifact zip at 1,407,926 bytes as this cycle baked it — 1,425,322 after the verbs
+  re-bake**; the `0.15.0` zip is untouched, as is every older one. **Three bakes over the same tree
+  produced byte-identical output** — the same zip hash, the same `client.js`, the same manifest — so
+  the artifact is reproducible rather than merely deterministic-by-design.
 - **The cycle carries TWO bake commits, and the second one is the point of this bullet.** The first
   baked a `src/21-lattice.js` that `npm run check` refuses. Renaming the tunables block `TUNE` →
   `LATTICE_TUNE` pushed exactly three statements past Prettier's 120-column width, and the arc
@@ -3227,6 +3260,15 @@ both places the assets live:
 - **The `?v=` cache key moved with the version**, as it does every release. With the art unchanged
   that buys nothing this time and costs one re-fetch of identical bytes, which is the honest reading
   rather than a benefit worth claiming.
+
+**The 0.16.1 bake.** A four-module release — `80-setup.js` carries the wizard change, `60-save.js`
+the `worldName` reader, `18-brief.js` the payload's `World name:` line, `70-hud.js` the loading
+gate's title — over the twenty-module post-verbs tree: **`client.js` at 1,426,669 bytes, the
+`0.16.1` artifact zip at 1,440,118**, art byte-identical again (both theme sheets and `atlas.json`
+sha256-matched before and after, in both the shipped copies and the regenerated `build/assets/`),
+`manifest.json` moved the same three lines a source-only release moves, and **two bakes over the
+same tree were byte-identical**. Every older artifact zip — the re-baked `0.16.0` included — is
+untouched.
 
 **Older prep, kept because it is the record of how this went the last two times.** **This section
 flipped for 0.14 and has flipped back: the rebuild ran in-cycle rather than being
@@ -3586,6 +3628,18 @@ self-contained bundle of `derive` + re-attemptable `modes` + the `screens`/`rows
 surfaces read. The gate's own hardcoded brief-vs-pack ternaries moved in here, so **one table now
 runs the gate, the registry and the popup**, and the shipped strings stay byte-identical for the
 boot-armed states they were written for.
+
+**0.16.1: the generating screens say WHICH world they are writing.** Each `generating` block gains a
+`titleNamed`/`bodyNamed` pair beside the static one, and `gateTitle`/`gateBody` take a `worldName`
+the HUD resolves through `gateWorldName(core)` off the chat's own metadata (§9.2). Two forms rather
+than one templated string with an empty slot, because "Writing …" with nothing in it is worse than
+the sentence it replaces — and the static pair is not a fallback in the apologetic sense, it is
+exactly what a chat created before there was anywhere to store a name still reads. **The name is in
+the HUD's memo key**, for the reason every other gate input is and for one more that is particular
+to it: `update()` is the HUD of whichever chat is mounted, and the name is the one gate input that
+differs between two chats holding gates in the same state, so a memo keyed on state alone would keep
+the first chat's world's title on the second chat's screen. **The failure screens take no name**, on
+purpose: what that screen owes the player is the reason and what another attempt costs.
 
 `historygen` and `storyboard` are **reserved ids with no rows shipped** (`RESERVED_STAGES`), and
 deliberately: history generation is designed to *reduce* connection dependency and may fail like the

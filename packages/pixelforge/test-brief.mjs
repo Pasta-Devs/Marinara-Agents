@@ -24511,6 +24511,260 @@ const fire = (node, type) => Promise.all((node.listeners[type] ?? []).map((fn) =
   }
 }
 
+// ── THE WIZARD STOPS ANSWERING FOR THE PLAYER (0.16.1) ───────────────────────
+// The first playtest of 0.16.0 named a world "Pallet Town", cleared the Setting
+// box, and walked into Hearthvale with Mira, Tam and Rook in it — and nothing had
+// failed: the brief sealed clean, the pack sealed clean, no retry row derived.
+// The world the player got was the world the wizard asked for, because FOUR of
+// this config's prompt-bearing fields were the theme preset and only one of them
+// had a control. `setting` was the textarea's VALUE, so leaving it alone was an
+// active instruction; `genre`, `playerGoals` and `spatialMapInstructions` were
+// constants, two of which name Hearthvale outright. All four reach generators —
+// the Engine's blueprint call, the GM's per-turn prompt and this package's own
+// brief call — and the game NAME reached none of them.
+//
+// Everything below is one launch's worth of that, read off the config the wizard
+// really writes rather than off the source, plus the three raw-row misreads the
+// same pass found in the two lists this form loads.
+{
+  const realGetJson = loadedPF.api.getJson;
+  // The `/connections` rows AS THE ROUTE ANSWERS THEM: `storage.list()` ordered
+  // by `desc(updatedAt)`, with `is_default` and `fallback_for_main` as the TEXT
+  // columns they are. The row the user actually marked default is deliberately
+  // NOT first, which is the entire isDefault bug — `"false"` is truthy, so
+  // `find((c) => c.isDefault)` matched whatever had been edited last.
+  const CONNECTIONS = [
+    { id: "conn-recent", name: "scratch", model: "local/tiny", isDefault: "false", fallbackForMain: "false" },
+    {
+      id: "conn-parked",
+      name: "imported",
+      model: "models/parked",
+      isDefault: "false",
+      profileImportReviewRequired: "true",
+    },
+    {
+      id: "conn-default",
+      name: "princess",
+      model: "models/gemini-3.1-pro-preview",
+      isDefault: "true",
+      fallbackForMain: "false",
+    },
+    { id: "conn-art", name: "pictures", provider: "image_generation", isDefault: "false" },
+  ];
+  // …and the `/characters` rows the same way: the characters TABLE has no `name`
+  // column at all and keeps the V2 card in `data` as a JSON STRING, so the
+  // wizard's `c.name ?? c.data?.name ?? id` chain fell through to the id for
+  // 100% of rows and the party list was a column of nanoids.
+  const CHARACTERS = [
+    { id: "char-7f3a", data: JSON.stringify({ name: "Wren Ash", description: "a miller" }), comment: "the miller" },
+    { id: "char-bad", data: "{ this is not json", comment: "" },
+  ];
+  loadedPF.api.getJson = async (path) =>
+    path === "/connections" ? CONNECTIONS : path === "/characters" ? CHARACTERS : [];
+  const settle = async () => {
+    for (let i = 0; i < 16; i++) await Promise.resolve();
+  };
+  const mountWizard = async () => {
+    const el = new FakeNode("div");
+    const launches = [];
+    loadedPF.mountSetup(el, { onLaunch: async (config, name) => void launches.push({ config, name }) });
+    await settle(); // the connections/characters load is an async IIFE
+    const nodes = walkNodes(el);
+    return {
+      launches,
+      nodes,
+      nameIn: nodes.find((node) => node.tagName === "INPUT" && node.value === "Hearthvale"),
+      seedIn: nodes.find((node) => node.tagName === "INPUT" && /^\d+$/.test(String(node.value ?? ""))),
+      settingIn: nodes.find((node) => node.tagName === "TEXTAREA"),
+      themeSel: nodes.find((node) => node.children.some((option) => option.attrs.value === "sci-fi-colony")),
+      connSel: nodes.find((node) => node.children.some((option) => option.attrs.value === "conn-default")),
+      // The one node whose children are ALL party rows: the generate toggle is a
+      // label of the same shape, so "contains one" would match its parent too.
+      partyBox: nodes.find(
+        (node) =>
+          node.children.length > 0 &&
+          node.children.every((child) => child.tagName === "LABEL" && child.children[0]?.type === "checkbox"),
+      ),
+      launchBtn: nodes.find((node) => node.tagName === "BUTTON" && String(node.textContent).startsWith("Begin in")),
+    };
+  };
+  const launchedConfig = { value: null };
+  try {
+    const w = await mountWizard();
+    assert.ok(w.nameIn && w.settingIn && w.connSel && w.launchBtn, "the wizard mounted the fields this lane reads");
+
+    // ── (1) THE PRESET IS A PLACEHOLDER AND NEVER A VALUE ─────────────────────
+    assert.equal(w.settingIn.value, "", "the Setting box starts EMPTY, so an untouched form instructs nothing");
+    assert.ok(
+      w.settingIn.placeholder.includes("Hearthvale") && w.settingIn.placeholder.includes("Mira"),
+      "…with the theme's prose shown as the suggestion it always was, in the same place and carrying none of it",
+    );
+
+    // ── (3) THE CONNECTION LIST, READ AS RAW ROWS ─────────────────────────────
+    const options = w.connSel.children.map((option) => ({ value: option.attrs.value, text: option.textContent }));
+    assert.deepEqual(
+      options.map((option) => option.value),
+      ["conn-recent", "conn-default"],
+      "an image connection is filtered, and so is one whose import is parked for review — `getWithKey` returns null for those, so offering one launched a game whose first GM call had no key behind it",
+    );
+    assert.equal(
+      options[1].text,
+      "princess — models/gemini-3.1-pro-preview",
+      "…and a row names the model beside the label, because the label is a nickname and the model is what writes the world",
+    );
+    assert.equal(options[0].text, "scratch — local/tiny", "every row, not just the preselected one");
+    assert.equal(
+      w.connSel.value,
+      "conn-default",
+      'the preselection honours the user\'s actual default: `isDefault` is TEXT, `"false"` is truthy, and the old test matched the most-recently-edited row every time',
+    );
+
+    // ── (7) THE PARTY LIST NAMES PEOPLE, NOT IDS ──────────────────────────────
+    const partyLabels = w.partyBox.children.map((row) => row.children[1]?.textContent);
+    assert.deepEqual(
+      partyLabels,
+      ["Wren Ash", "char-bad"],
+      "the V2 card is parsed out of the `data` STRING the way the Engine's own picker parses it, with the id surviving only for a card that will not parse",
+    );
+
+    // ── (2) THE NAME THE PLAYER TYPED REACHES THE GENERATORS ──────────────────
+    w.nameIn.value = "Pallet Town";
+    w.seedIn.value = "4242";
+    await fire(w.nameIn, "input");
+    assert.equal(w.launchBtn.textContent, "Begin in Pallet Town");
+    await fire(w.launchBtn, "click");
+    assert.equal(w.launches.length, 1, "the launch went through");
+    const cfg = w.launches[0].config;
+    launchedConfig.value = cfg;
+    assert.equal(w.launches[0].name, "Pallet Town", "the chat is still named what it was named");
+    assert.equal(
+      cfg.setting,
+      "A cozy pixel village called Pallet Town.",
+      "an empty Setting composes ONE honest line from what the player DID give — the host's `z.string().min(1)` is satisfied and no cast is invented",
+    );
+    assert.ok(cfg.playerGoals.includes("Pallet Town"), "the goals are about the world the player named");
+    assert.ok(cfg.spatialMapInstructions.includes("Pallet Town"), "…and so is the World Map's root location");
+    assert.ok(
+      !cfg.spatialMapInstructions.includes("Children:"),
+      "…which no longer lists four buildings the brief has not invented yet",
+    );
+    // THE NEGATIVE IS THE POINT OF THE WHOLE RELEASE, so it is asserted over
+    // every field of the config at once rather than one at a time: not one of the
+    // shipped village's four names may reach a generator off a form nobody typed
+    // them into.
+    const wire = JSON.stringify(cfg);
+    for (const name of ["Hearthvale", "Mira", "Tam's", "Rook"]) {
+      assert.ok(!wire.includes(name), `nothing in the launched config says ${name}`);
+    }
+    assert.ok(
+      cfg.genre.startsWith("Cozy pixel-art village RPG"),
+      "the genre stays theme-derived — it names a kind of game, not a place",
+    );
+    assert.equal(
+      cfg.experienceConfig.worldName,
+      "Pallet Town",
+      "and the name is stored where the package can read it back: the config the host has no field for it in",
+    );
+
+    // ── (4) THE HOST'S OWN HUD WIDGETS, DECLINED ──────────────────────────────
+    assert.equal(
+      cfg.enableCustomWidgets,
+      false,
+      "emitted explicitly, because every engine gate reads `!== false` and an absent key was YES at all five of them",
+    );
+
+    // ── THE OTHER THEME COMPOSES ITS OWN LINE, off the same two answers ───────
+    const colony = await mountWizard();
+    colony.themeSel.value = "sci-fi-colony";
+    await fire(colony.themeSel, "change");
+    assert.ok(
+      colony.settingIn.placeholder.startsWith("Meridian Base"),
+      "a theme change swaps the placeholder unconditionally — a placeholder is never the player's text, so there is nothing to trample",
+    );
+    assert.equal(colony.settingIn.value, "", "…and the box the player has not touched is still empty");
+    await fire(colony.launchBtn, "click");
+    assert.equal(colony.launches[0].config.setting, "A small frontier colony called Meridian Base.");
+    assert.ok(colony.launches[0].config.playerGoals.includes("Meridian Base"));
+
+    // ── A SETTING THE PLAYER ACTUALLY WROTE STILL WINS, unchanged ─────────────
+    const typed = await mountWizard();
+    typed.settingIn.value = "  A drowned lighthouse and the three people who still light it.  ";
+    await fire(typed.launchBtn, "click");
+    assert.equal(
+      typed.launches[0].config.setting,
+      "A drowned lighthouse and the three people who still light it.",
+      "trimmed and shipped verbatim — the composed line is the empty-box fallback and nothing else",
+    );
+  } finally {
+    loadedPF.api.getJson = realGetJson;
+    loadedPF.save.reset();
+  }
+
+  // ── (2b) …AND IT REACHES THE BRIEF CALL'S PAYLOAD ───────────────────────────
+  // The end of the same story, driven through the real save path with the real
+  // config the wizard just wrote: the model that minted Hearthvale was not being
+  // creative, it was being obedient — it was handed `Setting: The pixel village
+  // of Hearthvale … kept by Mira … Tam's farm … Rook` and asked to name a
+  // settlement. This is the payload it gets now.
+  const cfg = launchedConfig.value;
+  assert.ok(cfg, "the launch above produced the config this leg drives");
+  await withSavePath(async ({ behavior, tick, makeCore }) => {
+    await withGeneration(async ({ responses }) => {
+      const realPack = loadedPF.pack.generate;
+      // The pack is call TWO and is not this lane's subject; stubbing it away
+      // keeps the capture below to the one payload being asserted.
+      loadedPF.pack.generate = async () => null;
+      const bodies = [];
+      responses.post = async (chatId, body) => {
+        bodies.push(body);
+        return { status: 200, body: { ok: true, data: gateBriefData } };
+      };
+      behavior.get = async () => ({ available: true, status: 200, body: { exists: false } });
+      try {
+        // The chooser re-nests the package's own config one level deeper on the
+        // way to the host (`experienceConfig: cfg`), so stage the metadata at the
+        // depth it really lands at — which is the depth `_configWorldName` reads
+        // second, exactly as the seed and the theme are read.
+        const meta = { gameSetupConfig: { ...cfg, experienceConfig: cfg } };
+        const core = makeCore("chat-pallet", cfg.experienceConfig.seed);
+        core.host.chatMeta = meta;
+        core.sim = loadedPF.save.restore(meta, "chat-pallet");
+        assert.equal(loadedPF.save.armGate(core, meta), true, "a generated world gates, as it always did");
+        assert.equal(
+          loadedPF.save.gateWorldName(core),
+          "Pallet Town",
+          "and the gate can say which world it is writing, from the config nested two deep",
+        );
+        await loadedPF.save.maybeGenerateBrief(core);
+        await tick();
+        assert.equal(bodies.length, 1, "one brief call went out");
+        const [{ userContent, instructions }] = bodies;
+        assert.ok(
+          userContent.startsWith("World name: Pallet Town\n"),
+          "the payload LEADS with the name the player typed, which it never carried before",
+        );
+        assert.ok(
+          userContent.includes("Setting: A cozy pixel village called Pallet Town."),
+          "…over the composed setting, and not over a paragraph about somewhere else",
+        );
+        for (const name of ["Hearthvale", "Mira", "Tam", "Rook"]) {
+          assert.ok(!userContent.includes(name), `the model is never handed the name ${name}`);
+        }
+        assert.ok(
+          instructions.includes("When the preferences give a world name"),
+          "and the guidance tells it to keep the given name rather than invent a second one",
+        );
+        assert.ok(
+          instructions.includes("<=24 characters"),
+          "…without promising an exactness the schema's own cap would forbid",
+        );
+      } finally {
+        loadedPF.pack.generate = realPack;
+      }
+    });
+  });
+}
+
 // ── THE CONTENT PACK: THE SCHEMA IS THE CONTRACT (0.13 slice 1) ──────────────
 // The pack is sealed forever and validated exactly once, on the way in from a
 // generation call whose schema is ADVISORY (#5135 — strictSchema is unavailable
@@ -32288,6 +32542,50 @@ const layoutFingerprint = (w) => {
       ])
         assert.ok(S.RETRY_COPY.keepsAndLoses.includes(clause), `the confirm names what is kept and lost: ${clause}`);
       assert.ok(S.RETRY_COPY.rebuildUnchanged.includes("nothing has changed yet"), "and the free no-op says so plainly");
+
+      // ── THE SAME TWO GENERATING SCREENS OVER A NAMED WORLD (0.16.1) ─────────
+      // The six pinned above are byte-identical because the fixture is a chat
+      // with no stored world name, which is every chat created before 0.16.1 —
+      // that is the FALLBACK, not the shape. Given a name, the generating screens
+      // say which world they are writing, because the name the player typed is
+      // now stored where the package can read it back rather than only naming the
+      // chat. Driven through the same `screen()` and the same live HUD, so this
+      // proves the SURFACE reads it and not that the lane author transcribed it.
+      core.host.chatMeta = { ...wizard({ worldName: "Pallet Town" }), pixelforgeBrief: rBrief };
+      const namedBrief = screen({ state: "generating", stage: "brief" });
+      assert.equal(namedBrief.title, "Writing Pallet Town…");
+      assert.equal(
+        namedBrief.body,
+        "One generation call is shaping Pallet Town — its people, and the places in it. This can take a minute.",
+      );
+      // THE NAME IS IN THE MEMO KEY, and this is the leg that says so: the state
+      // and the stage do not move here, ONLY the name does, so a memo keyed on
+      // the gate's state alone would leave the previous chat's world's title on
+      // screen and this repaint would never happen. It doubles as the clip's own
+      // lane — what the player typed is stored whole and every reader states its
+      // own limit, because a 200-character game name must not take over a
+      // loading screen.
+      core.host.chatMeta = { ...wizard({ worldName: `Pallet ${"o".repeat(200)}` }), pixelforgeBrief: rBrief };
+      const clippedBrief = screen({ state: "generating", stage: "brief" });
+      assert.notEqual(clippedBrief.title, namedBrief.title, "a name change alone repaints the screen");
+      assert.equal(
+        clippedBrief.title.length,
+        "Writing …".length + S.WORLD_NAME_CHARS,
+        "…and the title is clipped to the reader's cap rather than to whatever was typed",
+      );
+      core.host.chatMeta = { ...wizard({ worldName: "Pallet Town" }), pixelforgeBrief: rBrief };
+      const namedPack = screen({ state: "generating", stage: "pack" });
+      assert.equal(namedPack.title, "Writing what Pallet Town has to say…");
+      assert.equal(
+        namedPack.body,
+        "Pallet Town is written. One more call is filling in what its people say and the work they have to offer.",
+      );
+      // AND THE FAILURE SCREENS TAKE NO NAME, deliberately: what that screen owes
+      // the player is the reason and what another attempt costs, and dropping the
+      // world's name into a sentence about a refused call buys nothing.
+      const namedFail = screen({ state: "failed", stage: "brief", failure: "refused" });
+      assert.equal(namedFail.title, "The world didn't finish being written.");
+      assert.ok(!namedFail.body.includes("Pallet Town"), "…so the body stays about the failure");
       hud.destroy();
     } finally {
       S.gate = null;

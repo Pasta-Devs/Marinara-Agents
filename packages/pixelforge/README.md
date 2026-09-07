@@ -29,6 +29,22 @@ brief is validated, repaired, and floored (`src/18-brief.js`, spec in `docs/brie
 then sealed into chat metadata; the compiled zones carry the prose the GM sees, metered so it
 never taxes more than one turn.
 
+**Since 0.16.1 the setup form answers nothing on your behalf.** The **Setting** box starts empty and
+shows the theme's own description as a placeholder: it used to arrive pre-filled, which meant leaving
+it alone was an instruction to build the village in that text, cast and all. Left empty it now
+composes one line from what you did give — the theme and the **Game name** — so a world called Pallet
+Town is generated as *"A cozy pixel village called Pallet Town."* and the model names the place you
+named. Your Game name is also carried into the generation call and into the world's goals and map
+root, which it never was before. Type your own Setting and it is used exactly as written, as it
+always has been.
+
+**Pixelforge chats carry no engine HUD widgets** (roadmap S7). Game Mode's setup normally has the
+model design gauges and counters for the chat's genre, keeps feeding them to the GM, and asks you to
+approve them in a "Review Starting Widgets" step on the way in. This surface has never drawn them —
+the day, the purse and the sky are the package's own header — so since 0.16.1 the wizard declines
+them outright: no widgets are generated, the review step does not appear, and the GM is not told to
+maintain a second purse beside the one the game actually keeps.
+
 **Since 0.11.0 generation is a LOADING GATE, not a background upgrade** (maintainer ruling, S5
 §Q3b). Through 0.10 the chat booted a themed default world instantly and rebuilt in place when the
 brief landed — and the discarded world was real enough to play, so a player could put ten minutes
