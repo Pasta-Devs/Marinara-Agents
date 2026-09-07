@@ -72,8 +72,10 @@ through the derivations below.
 
   name: "Mossbrook",        // TEXT ≤24 graphemes → settlement name, World Maps root.
                             // Since 0.16.1 the payload LEADS with the world name the player typed
-                            // in the wizard and the guidance says to keep it, shortening only if
-                            // it does not fit — the 24-cap is the schema's and outranks the ask,
+                            // in the wizard (resolved: the field trimmed, or the theme's default
+                            // name if emptied; the reader collapses whitespace and clips at 60
+                            // graphemes — player-state §9.2) and the guidance says to keep it,
+                            // shortening only if it does not fit — the 24-cap outranks the ask,
                             // so the instruction says shorten rather than "use it exactly". The
                             // DEFAULT_NAMES seeded fallback is untouched: it answers a NAMELESS
                             // response, which is the degraded path and not this one.

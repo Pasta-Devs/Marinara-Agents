@@ -17122,7 +17122,10 @@ PF.save = {
   },
 
   /** THE NAME THE PLAYER TYPED IN THE WIZARD (0.16.1), from the same
-   *  double-nested config home as the seed and the theme.
+   *  double-nested config home as the seed and the theme. "Typed" resolves at
+   *  write time: the wizard stores the field's value trimmed, and an emptied
+   *  field stores the theme's default name instead — a world needs SOME name,
+   *  and an empty string is not one.
    *
    *  It reads back rather than being derived because the host has nowhere else to
    *  put it: `gameSetupConfigSchema` has no world-name field, the CHAT carries the
@@ -17136,10 +17139,11 @@ PF.save = {
    *  reads exactly as it always did.
    *
    *  CLIPPED, and the clip belongs to the READER rather than to the writer. The
-   *  stored copy is what the player typed, byte for byte; what a 400-character
-   *  game name must never do is take over a loading-screen title or a line of a
-   *  generation prompt. Grapheme-aware, because it lands on a player-visible
-   *  surface (58-player `graphemes`). */
+   *  stored copy keeps the trimmed field verbatim past that; this reader then
+   *  collapses runs of whitespace and clips at the grapheme cap, because what a
+   *  400-character game name must never do is take over a loading-screen title
+   *  or a line of a generation prompt. Grapheme-aware, because it lands on a
+   *  player-visible surface (58-player `graphemes`). */
   WORLD_NAME_CHARS: 60,
 
   _configWorldName(meta) {

@@ -2325,7 +2325,9 @@ is the packless-veteran ruling, and §11 records it as a limitation rather than 
 object holds four keys the package owns outright — `seed`, `theme`, `generate` and `packWanted` —
 read back at both nesting depths by `_configSeed`, `_configTheme` and `_configPackWanted`, because
 `/game/create`'s chooser re-nests the whole config one level deeper on the way to the host. **0.16.1
-adds a fifth: `worldName`, the name the player typed in the wizard's first field.** It rides here
+adds a fifth: `worldName`, the name the player typed in the wizard's first field** — resolved at
+write time as the field's trimmed value, or the theme's default name when the field is empty,
+because a world needs SOME name and an empty string is not one. It rides here
 because `gameSetupConfigSchema` has no world-name field at all: the CHAT carries the name, the chat's
 name is not on the surface's props, and every generator on both sides reads the setup config
 instead — so the name that was on screen when the player pressed the button reached the Engine's
@@ -2342,8 +2344,9 @@ neither mint nor destroy an artifact. A key that cannot lie about a seal does no
 from a rewrite. It is also **absent on every chat created before 0.16.1**, which is not a migration:
 `_configWorldName` returns null and both readers fall back to the wording they shipped with.
 `WORLD_NAME_CHARS` (60, grapheme-aware) is a **reader's** clip and not a writer's — the stored copy
-is what the player typed, and each reader states its own limit, because a 400-character game name
-must not take over a loading screen or a line of a generation prompt.
+keeps the trimmed field past that, the reader collapses whitespace runs before clipping, and each
+reader states its own limit, because a 400-character game name must not take over a loading screen
+or a line of a generation prompt.
 
 **Fold-at-read, and the one invalidation rule that is not free.** `packFold(core)` derives what THIS
 world can offer, once, into a slot on the sim — never saved, rebuilt exactly when `core.sim` is,
@@ -3258,9 +3261,10 @@ both places the assets live:
   that buys nothing this time and costs one re-fetch of identical bytes, which is the honest reading
   rather than a benefit worth claiming.
 
-**The 0.16.1 bake.** A one-module release — `80-setup.js` is the only source file the patch
-touches — over the twenty-module post-verbs tree: **`client.js` at 1,426,358 bytes, the
-`0.16.1` artifact zip at 1,439,807**, art byte-identical again (both theme sheets and `atlas.json`
+**The 0.16.1 bake.** A four-module release — `80-setup.js` carries the wizard change, `60-save.js`
+the `worldName` reader, `18-brief.js` the payload's `World name:` line, `70-hud.js` the loading
+gate's title — over the twenty-module post-verbs tree: **`client.js` at 1,426,669 bytes, the
+`0.16.1` artifact zip at 1,440,118**, art byte-identical again (both theme sheets and `atlas.json`
 sha256-matched before and after, in both the shipped copies and the regenerated `build/assets/`),
 `manifest.json` moved the same three lines a source-only release moves, and **two bakes over the
 same tree were byte-identical**. Every older artifact zip — the re-baked `0.16.0` included — is
