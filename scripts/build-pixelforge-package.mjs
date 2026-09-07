@@ -116,7 +116,7 @@ const GM_VERB_TABLE_PATH = "gm-verbs.json";
 try {
   JSON.parse(await readFile(join(packageRoot, GM_VERB_TABLE_PATH), "utf8"));
 } catch (error) {
-  throw new Error(`Pixelforge ${GM_VERB_TABLE_PATH} is not valid JSON: ${error.message}`);
+  throw new Error(`Pixelforge ${GM_VERB_TABLE_PATH} is not valid JSON: ${error.message}`, { cause: error });
 }
 const declaredAssetPaths = [...art.files, GM_VERB_TABLE_PATH];
 
@@ -182,8 +182,12 @@ if (unpinnedAssets.length > 0 || undeclaredFiles.length > 0) {
   throw new Error(
     [
       "Pixelforge manifest asset pairing is broken:",
-      ...unpinnedAssets.map((path) => `  declared in contributions.assets.paths but not hash-pinned in files[]: ${path}`),
-      ...undeclaredFiles.map((path) => `  hash-pinned in files[] but not declared in contributions.assets.paths: ${path}`),
+      ...unpinnedAssets.map(
+        (path) => `  declared in contributions.assets.paths but not hash-pinned in files[]: ${path}`,
+      ),
+      ...undeclaredFiles.map(
+        (path) => `  hash-pinned in files[] but not declared in contributions.assets.paths: ${path}`,
+      ),
     ].join("\n"),
   );
 }

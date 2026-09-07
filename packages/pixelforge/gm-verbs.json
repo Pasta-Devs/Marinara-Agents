@@ -3,7 +3,7 @@
   "verbs": [
     {
       "name": "weather",
-      "description": "Set the sky over the whole world, from now until it is set again. Use it when the story turns the weather. rain and snow also take an intensity of light or heavy; the other three words ignore it.",
+      "description": "Set the sky over the whole world until it is set again: fair, overcast, rain, storm or snow. rain and snow also take an intensity of light or heavy; the other three words ignore it.",
       "effect": "state",
       "metadataKey": "pixelforgeWeather",
       "args": [
@@ -22,7 +22,7 @@
     },
     {
       "name": "standing",
-      "description": "Say where the player now stands with one person, naming the rung outright. Use the name of someone who lives in this world. The optional line is the one thing that person remembers the player by.",
+      "description": "Say where the player now stands with one person in this world: stranger, acquainted, friendly, close friend or hostile. The optional line is what that person remembers them by.",
       "effect": "event",
       "args": [
         {

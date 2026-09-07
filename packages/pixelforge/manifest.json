@@ -103,8 +103,8 @@
     },
     {
       "path": "gm-verbs.json",
-      "sha256": "938eb779c9af0bd8373ee984a8eb480fb2783e1348efda4daaaabfee81844e00",
-      "bytes": 1371
+      "sha256": "4fcc82a8d1342c3f8bd4101db17314f8659316825427bcb5e85dedea79b89a12",
+      "bytes": 1338
     }
   ],
   "permissions": [
