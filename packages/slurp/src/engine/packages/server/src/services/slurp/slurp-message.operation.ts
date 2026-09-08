@@ -15,9 +15,10 @@ import { createSlurpMessagesStorage, type SlurpMessage } from "../storage/slurp-
 import { tryNoodlerAccountOperation } from "./slurp-account-operation-lock.js";
 import { generateSlurpMessageReply } from "./slurp-message-generation.service.js";
 import { describeSlurpDayVibe } from "./slurp-day-vibe.service.js";
+import { recoverSlurpMood } from "./slurp-mood.js";
 import { activeSlurpStrikes, SLURP_COOL_OFF_HOURS, type SlurpStanceLatitude } from "./slurp-stance.js";
 import { resolveSlurpCreatorAvailability } from "./slurp-creator-schedule-context.js";
-import { slurpReplyPacing, type SlurpReplyPacing } from "./slurp-messaging.js";
+import { slurpReplyPacing, splitSlurpReplyBurst, type SlurpReplyPacing } from "./slurp-messaging.js";
 
 export type SlurpReplyOutcome =
   | { status: "replied"; message: SlurpMessage; pacing: SlurpReplyPacing }
@@ -75,6 +76,12 @@ export async function replyToSlurpMessage(
     subscribed,
     messageLength: trigger?.content.length ?? 0,
     minutesUntilOnline: availability.minutesUntilOnline,
+    // Healed for the silence since it was written, so the wait is judged on how things stand now
+    // and not on an argument the fan has already slept off.
+    mood: recoverSlurpMood(
+      thread.mood,
+      thread.moodUpdatedAt ? Math.max(0, (Date.now() - Date.parse(thread.moodUpdatedAt)) / 60_000) : 0,
+    ),
   });
   if (pacing.mode === "queued" && input.force !== true) {
     await messagesStore.setReplyNotBefore(thread.id, new Date(Date.now() + pacing.notBeforeMs).toISOString());
@@ -122,11 +129,18 @@ export async function replyToSlurpMessage(
         connection,
         debugMode: input.debugMode,
       });
-      const stored = await messagesStore.appendMessage(thread.id, {
-        senderAccountId: thread.creatorAccountId,
-        role: "creator",
-        content: reply.content,
-      });
+      // Two or three messages when the conversation is going well, one when it is not. A creator
+      // who always answers in exactly one tidy block reads as a form letter.
+      const bubbles = splitSlurpReplyBurst(reply.content, reply.latitude === "normal" && reply.moodShift !== "down");
+      let stored = null;
+      for (const bubble of bubbles) {
+        stored =
+          (await messagesStore.appendMessage(thread.id, {
+            senderAccountId: thread.creatorAccountId,
+            role: "creator",
+            content: bubble,
+          })) ?? stored;
+      }
       // After the message is safely stored. The conversation's mood and what she now knows are
       // worth keeping, but never at the price of the reply itself.
       if (stored) {

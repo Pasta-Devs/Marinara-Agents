@@ -111,20 +111,61 @@ export function slurpReplyPacing(input: {
   messageLength: number;
   /** Minutes until the creator's schedule brings them back, when it is known. */
   minutesUntilOnline: number | null;
+  /**
+   * Conversation mood, -100 to 100. See `slurp-mood.ts`.
+   *
+   * A mood that only changes word choice is a number. A mood that changes how fast somebody
+   * answers is a person: being kept waiting is how annoyance actually reads in a chat, long
+   * before the words arrive.
+   */
+  mood?: number;
 }): SlurpReplyPacing {
+  const mood = Math.max(-100, Math.min(100, input.mood ?? 0));
+  // -0.4 when delighted, +0.6 when cold. Multiplies every wait in both branches.
+  const drag = mood >= 0 ? 1 - (mood / 100) * 0.4 : 1 + (-mood / 100) * 0.6;
   const considered = Math.min(1, input.messageLength / 200);
   if (input.online) {
-    // 1.2s to 4s. Long enough to read as typing, short enough that nobody waits on it.
-    return { mode: "instant", typingMs: Math.round(1200 + considered * 2800), notBeforeMs: 0 };
+    // 1.2s to 4s before the mood is applied. Long enough to read as typing, short enough that
+    // nobody waits on it.
+    return { mode: "instant", typingMs: Math.round((1200 + considered * 2800) * drag), notBeforeMs: 0 };
   }
-  // Off-hours reach: a stranger waits for the schedule, a whale gets an answer in minutes.
-  const reach = Math.min(1, input.rapport.score / 100 + (input.subscribed ? 0.2 : 0));
+  // Off-hours reach: a stranger waits for the schedule, a whale gets an answer in minutes. A warm
+  // conversation reaches further, and a bad one does not get answered at midnight at all.
+  const reach = Math.min(1, Math.max(0, input.rapport.score / 100 + (input.subscribed ? 0.2 : 0) + mood / 400));
   if (reach >= 0.55) {
-    return { mode: "instant", typingMs: Math.round(2000 + (1 - reach) * 6000), notBeforeMs: 0 };
+    return { mode: "instant", typingMs: Math.round((2000 + (1 - reach) * 6000) * drag), notBeforeMs: 0 };
   }
   const scheduled = input.minutesUntilOnline === null ? 90 : Math.max(2, input.minutesUntilOnline);
   // Warmth shortens the wait without ever erasing it, so the schedule still means something.
-  return { mode: "queued", typingMs: 0, notBeforeMs: Math.round(scheduled * MINUTE * (1 - reach * 0.7)) };
+  return { mode: "queued", typingMs: 0, notBeforeMs: Math.round(scheduled * MINUTE * (1 - reach * 0.7) * drag) };
+}
+
+/**
+ * Break one reply into the two or three messages a person would actually have sent.
+ *
+ * Nobody texts in paragraphs. They send a thought, then a correction, then an afterthought, and a
+ * creator who always answers in exactly one tidy block reads as a form letter however good the
+ * words are. This is the cheapest authenticity available: no model call, no extra tokens.
+ *
+ * Only when the conversation is going well. Somebody being short with you does not send three
+ * messages, so a curt stance returns the reply whole and the shape itself carries the mood.
+ */
+export function splitSlurpReplyBurst(content: string, allow: boolean, limit = 3): string[] {
+  const trimmed = content.trim();
+  if (!allow || trimmed.length < 90) return [trimmed];
+  // Split on sentence ends only. Splitting mid-clause produces two fragments rather than two
+  // messages, which reads worse than the paragraph it replaced.
+  const parts = trimmed.match(/[^.!?\n]+[.!?]*[\n]*/g)?.map((part) => part.trim()) ?? [];
+  const sentences = parts.filter(Boolean);
+  if (sentences.length < 2) return [trimmed];
+  // Pack into at most `limit` bubbles, keeping them roughly even so one is not a single word.
+  const target = Math.min(limit, Math.max(2, Math.round(sentences.length / 2)));
+  const perBubble = Math.ceil(sentences.length / target);
+  const bubbles: string[] = [];
+  for (let index = 0; index < sentences.length; index += perBubble) {
+    bubbles.push(sentences.slice(index, index + perBubble).join(" "));
+  }
+  return bubbles.filter(Boolean);
 }
 
 /**
