@@ -389,6 +389,17 @@ export async function slurpMessageRoutes(app: FastifyInstance) {
     return { message, wallet: await slurp.getWallet(viewer.id) };
   });
 
+  app.post("/messages/:messageId/reaction", async (req, reply) => {
+    const parsed = z
+      .object({ personaId: z.string().min(1), reaction: z.enum(["heart"]).nullable() })
+      .safeParse(req.body ?? {});
+    if (!parsed.success) return reply.code(400).send({ error: parsed.error.flatten() });
+    const { messageId } = req.params as { messageId: string };
+    const message = await messages.setMessageReaction(messageId, parsed.data.personaId, parsed.data.reaction);
+    if (!message) return reply.code(404).send({ error: "Message not found" });
+    return { message };
+  });
+
   /**
    * Write as the Creator, in your own words.
    *

@@ -255,6 +255,7 @@ export function slurpCreatorOpenerKind(input: {
   hasThread: boolean;
   /** Stable number in [0, 1) for this pair and stretch of time. */
   roll: number;
+  mood?: number;
 }): "missed" | "cold" | null {
   if (input.hasThread) return null;
   const tie = input.tie;
@@ -266,7 +267,9 @@ export function slurpCreatorOpenerKind(input: {
   // The ordinary case. Deliberately small: at a couple of hundred ties this is still only a
   // handful of unprompted messages a month across the whole platform.
   if (tie !== null && tie.stage !== "stranger" && input.daysSinceSeen <= 30) {
-    return input.roll < 0.015 ? "cold" : null;
+    const moodBoost =
+      input.mood !== undefined && input.mood >= 40 ? 0.02 : input.mood !== undefined && input.mood <= -40 ? -0.01 : 0;
+    return input.roll < Math.max(0, 0.015 + moodBoost) ? "cold" : null;
   }
   return null;
 }

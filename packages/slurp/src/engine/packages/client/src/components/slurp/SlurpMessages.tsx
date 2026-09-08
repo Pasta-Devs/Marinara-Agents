@@ -2,6 +2,7 @@ import {
   ArrowLeft,
   Check,
   ChevronDown,
+  Heart,
   Loader2,
   Lock,
   MessageCircle,
@@ -41,6 +42,7 @@ import {
   useSlurpThreads,
   useTipInSlurpThread,
   useUnlockSlurpMessage,
+  useReactToSlurpMessage,
   useSlurpWallet,
   type SlurpCommission,
   type SlurpThreadRelationship,
@@ -449,13 +451,15 @@ function SlurpThreadView({
   const [replyStatus, setReplyStatus] = useState<string | null>(null);
   const [infoOpen, setInfoOpen] = useState(false);
   const [debugOpen, setDebugOpen] = useState(false);
-  const draftStorageKey = `slurp-message-draft:${personaId ?? "none"}:${targetCreatorAccountId ?? "none"}`;
   const bottomRef = useRef<HTMLDivElement | null>(null);
 
   const thread = threadQuery.data?.thread ?? null;
   const messages = threadQuery.data?.messages ?? [];
   const creator = threadQuery.data?.creator;
   const counterpart = threadQuery.data?.counterpart ?? creator;
+  const targetCreatorAccountId = thread?.creatorAccountId ?? creator?.id ?? creatorAccountId;
+  const ownsCreator = Boolean(targetCreatorAccountId && ownedCreatorAccountIds.includes(targetCreatorAccountId));
+  const draftStorageKey = `slurp-message-draft:${personaId ?? "none"}:${targetCreatorAccountId ?? "none"}`;
   const messaging = threadQuery.data?.messaging;
   const commissions = threadQuery.data?.commissions ?? [];
   const relationship = "relationship" in (threadQuery.data ?? {}) ? threadQuery.data?.relationship : undefined;
@@ -493,8 +497,6 @@ function SlurpThreadView({
     .map(({ commission, at }) => `${commission.id}:${commission.state}:${commission.updatedAt}:${at}`)
     .join("|");
   const subscribed = thread?.subscribed ?? threadQuery.data?.subscribed ?? false;
-  const targetCreatorAccountId = thread?.creatorAccountId ?? creator?.id ?? creatorAccountId;
-  const ownsCreator = Boolean(targetCreatorAccountId && ownedCreatorAccountIds.includes(targetCreatorAccountId));
   const headerAccount = ownsCreator ? counterpart : creator;
   // Only meaningful for the Creator side of the conversation. Looking at your own inbox as the
   // Creator, the counterpart is a fan, and a fan has no posting schedule to read a status from.
@@ -983,6 +985,7 @@ function MessageBubble({
 }) {
   const { t: localizeUi } = useUiTranslation();
   const unlock = useUnlockSlurpMessage();
+  const react = useReactToSlurpMessage();
   const messageImage = useSlurpMediaSrc(
     message.imageUrl
       ? `${message.imageUrl}${message.imageUrl.includes("?") ? "&" : "?"}personaId=${encodeURIComponent(personaId ?? "")}`
@@ -1115,6 +1118,25 @@ function MessageBubble({
           </span>
         )}
       </time>
+      {message.role === "creator" && !ownsCreator && personaId && (
+        <button
+          type="button"
+          aria-label={localizeUi("ui.slurp.messages.heart", { defaultValue: "Heart message" })}
+          onClick={() =>
+            react.mutate({
+              personaId,
+              messageId: message.id,
+              reaction: message.metadata.reaction === "heart" ? null : "heart",
+            })
+          }
+          className={cn(
+            "self-start px-1 text-xs",
+            message.metadata.reaction === "heart" ? "text-red-500" : "text-[var(--muted-foreground)]",
+          )}
+        >
+          <Heart size={14} fill={message.metadata.reaction === "heart" ? "currentColor" : "none"} />
+        </button>
+      )}
     </div>
   );
 }

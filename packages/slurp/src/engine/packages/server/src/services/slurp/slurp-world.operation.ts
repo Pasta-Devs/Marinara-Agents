@@ -412,13 +412,15 @@ export async function advanceSlurpWorld(db: DB, until = new Date()): Promise<Slu
         if (opened >= SLURP_MAX_CREATOR_OPENERS_PER_TICK) break;
         const daysSinceSeen = (until.getTime() - Date.parse(tie.lastSeenAt)) / 86_400_000;
         if (!Number.isFinite(daysSinceSeen)) continue;
+        const existingThread = await messages.getThread(tie.memberId, account.id);
         const kind = slurpCreatorOpenerKind({
           tie,
           daysSinceSeen,
-          hasThread: Boolean(await messages.getThread(tie.memberId, account.id)),
+          hasThread: Boolean(existingThread),
           // Bucketed by day, so the same pair is not re-rolled on every page load — otherwise a
           // 1.5% chance fires within an hour of scrolling.
           roll: slurpDeterministicUnit(`${account.id}:${tie.memberId}:${localDayKey(until)}`),
+          mood: existingThread?.mood,
         });
         if (!kind) continue;
         const sent = await messages

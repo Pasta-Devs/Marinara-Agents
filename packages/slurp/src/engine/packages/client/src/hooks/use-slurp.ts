@@ -2181,6 +2181,15 @@ export function useUnlockSlurpMessage() {
   });
 }
 
+export function useReactToSlurpMessage() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (input: { personaId: string; messageId: string; reaction: "heart" | null }) =>
+      api.post<{ message: SlurpMessage }>(`/slurp/messages/${encodeURIComponent(input.messageId)}/reaction`, input),
+    onSuccess: () => invalidateSlurpMessages(queryClient),
+  });
+}
+
 /** Write as the Creator, in your own words. */
 export function useSendSlurpCreatorReply() {
   const queryClient = useQueryClient();
