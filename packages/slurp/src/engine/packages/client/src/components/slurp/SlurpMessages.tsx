@@ -37,6 +37,7 @@ import {
   useSendSlurpMessage,
   useSlurpCompose,
   useSlurpThread,
+  useSlurpMessagePrompt,
   useSlurpThreads,
   useTipInSlurpThread,
   useUnlockSlurpMessage,
@@ -46,6 +47,7 @@ import {
   type SlurpMessage,
   type SlurpRapport,
   type SlurpThread,
+  type SlurpPromptDebug,
 } from "../../hooks/use-slurp";
 
 /** Tip amounts offered in a thread. Small enough to be a reflex, large enough to mean something. */
@@ -446,6 +448,7 @@ function SlurpThreadView({
   // sleeping creator, a busy thread and a missing connection all looked like the same silence.
   const [replyStatus, setReplyStatus] = useState<string | null>(null);
   const [infoOpen, setInfoOpen] = useState(false);
+  const [debugOpen, setDebugOpen] = useState(false);
   const bottomRef = useRef<HTMLDivElement | null>(null);
 
   const thread = threadQuery.data?.thread ?? null;
@@ -506,6 +509,7 @@ function SlurpThreadView({
   const creatorActivity = threadQuery.data?.creatorAvailability?.activity;
   const headerProfileId = ownsCreator ? thread?.viewerAccountId : targetCreatorAccountId;
   const busy = send.isPending || tip.isPending || creatorReply.isPending || draftReply.isPending;
+  const promptDebug = useSlurpMessagePrompt(threadId, personaId, debugOpen);
 
   // Drop the echo only once the refetch carries the real row, so the message never blinks out
   // between the response landing and the thread reloading.
@@ -519,6 +523,7 @@ function SlurpThreadView({
     setTyping(false);
     setReplyStatus(null);
     setInfoOpen(false);
+    setDebugOpen(false);
   }, [threadId, creatorAccountId]);
 
   // Follow the conversation down as it grows, the way every chat surface does.
@@ -676,9 +681,22 @@ function SlurpThreadView({
             />
           </button>
         )}
+        {threadId && (
+          <button
+            type="button"
+            aria-expanded={debugOpen}
+            onClick={() => setDebugOpen((open) => !open)}
+            className="flex min-h-11 w-11 shrink-0 items-center justify-center rounded-xl text-[var(--muted-foreground)] transition-colors hover:bg-[var(--slurp-surface)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--slurp-focus)]"
+            aria-label={localizeUi("ui.slurp.messages.promptDebug", { defaultValue: "Show prompt details" })}
+            title={localizeUi("ui.slurp.messages.promptDebug", { defaultValue: "Show prompt details" })}
+          >
+            <Search size={15} aria-hidden="true" />
+          </button>
+        )}
       </div>
 
       {infoOpen && relationship && <SlurpRelationshipPanel relationship={relationship} locale={i18n.language} />}
+      {debugOpen && <SlurpPromptDebugPanel query={promptDebug} />}
 
       {thread?.state === "request" && (
         <div className="mx-3 mt-3 shrink-0 rounded-2xl bg-amber-500/[0.08] px-4 py-3 ring-1 ring-inset ring-amber-500/25">
@@ -1703,6 +1721,44 @@ function SlurpRelationshipPanel({
         )}
       </dl>
     </div>
+  );
+}
+
+function SlurpPromptDebugPanel({
+  query,
+}: {
+  query: { data?: SlurpPromptDebug; isPending: boolean; isError: boolean };
+}) {
+  const { t: localizeUi } = useUiTranslation();
+  if (query.isPending)
+    return (
+      <p className="mx-3 mt-2 shrink-0 rounded-xl bg-[var(--slurp-surface)] p-3 text-xs text-[var(--muted-foreground)]">
+        {localizeUi("ui.slurp.messages.promptLoading", { defaultValue: "Loading prompt details…" })}
+      </p>
+    );
+  if (query.isError || !query.data)
+    return (
+      <p className="mx-3 mt-2 shrink-0 rounded-xl bg-red-500/10 p-3 text-xs text-red-600 dark:text-red-400">
+        {localizeUi("ui.slurp.messages.promptUnavailable", { defaultValue: "Prompt details are not available." })}
+      </p>
+    );
+  return (
+    <details
+      open
+      className="mx-3 mt-2 shrink-0 rounded-xl bg-[var(--slurp-surface)] p-3 text-xs ring-1 ring-inset ring-[var(--noodle-divider)]"
+    >
+      <summary className="cursor-pointer font-bold">
+        {localizeUi("ui.slurp.messages.promptDebug", { defaultValue: "Prompt details" })}
+      </summary>
+      <div className="mt-2 space-y-2">
+        <pre className="max-h-40 overflow-auto whitespace-pre-wrap break-words rounded-lg bg-black/10 p-2">
+          {JSON.stringify(query.data.stance, null, 2)}
+        </pre>
+        <pre className="max-h-72 overflow-auto whitespace-pre-wrap break-words rounded-lg bg-black/10 p-2">
+          {query.data.prompt.map((message) => `${message.role}: ${message.content}`).join("\n\n")}
+        </pre>
+      </div>
+    </details>
   );
 }
 

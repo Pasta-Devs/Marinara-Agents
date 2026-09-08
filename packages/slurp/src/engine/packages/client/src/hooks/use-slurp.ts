@@ -2021,6 +2021,13 @@ export type SlurpThreadRelationship =
       coolUntil: string | null;
     };
 
+export type SlurpPromptDebug = {
+  stance: Record<string, unknown>;
+  thread: Record<string, unknown>;
+  audienceTone: string;
+  prompt: Array<{ role: string; content: string }>;
+};
+
 const messageKeys = {
   /** Every messaging query hangs off this, so one prefix invalidates the whole surface. */
   root: () => [...noodleKeys.noodlerRoot(), "messages"],
@@ -2093,6 +2100,18 @@ export function useSlurpThread(threadId: string | null, personaId: string | null
     enabled: Boolean(threadId && personaId),
     refetchInterval: threadId && personaId ? 30_000 : false,
     refetchIntervalInBackground: false,
+  });
+}
+
+export function useSlurpMessagePrompt(threadId: string | null, personaId: string | null, enabled: boolean) {
+  return useQuery({
+    queryKey: [...messageKeys.thread(threadId ?? "none", personaId), "prompt"],
+    queryFn: () =>
+      api.get<SlurpPromptDebug>(
+        `/slurp/messages/threads/${encodeURIComponent(threadId!)}\/prompt?personaId=${encodeURIComponent(personaId!)}`,
+      ),
+    enabled: enabled && Boolean(threadId && personaId),
+    staleTime: 0,
   });
 }
 
