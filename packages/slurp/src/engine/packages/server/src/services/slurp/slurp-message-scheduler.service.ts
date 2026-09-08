@@ -1,6 +1,7 @@
 import type { FastifyInstance } from "fastify";
 import { logger } from "../../lib/logger.js";
 import { createSlurpMessagesStorage } from "../storage/slurp-messages.storage.js";
+import { deliverDueSlurpCommissions } from "./slurp-commission-delivery.service.js";
 import { replyToSlurpMessage } from "./slurp-message.operation.js";
 import { slurpPollBackoffMs } from "./slurp-poll-backoff.js";
 
@@ -24,6 +25,14 @@ export function startSlurpMessageScheduler(app: FastifyInstance, registerStop?: 
     active = (async () => {
       const storage = createSlurpMessagesStorage(app.db);
       let failed = false;
+      // A commissioned piece is drawn and paid for at accept time and then held, so this owes the
+      // model nothing — it is a clock running out. Done first, and separately, so a dead text
+      // connection never keeps a finished commission from arriving.
+      try {
+        await deliverDueSlurpCommissions(app.db);
+      } catch (error) {
+        logger.warn(error, "[slurp-commission] scheduled delivery failed");
+      }
       for (const thread of await storage.listThreadsAwaitingReply()) {
         if (stopped) break;
         const latest = (await storage.listMessages(thread.id, 1))[0];

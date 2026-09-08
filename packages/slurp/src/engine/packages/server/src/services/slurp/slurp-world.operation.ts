@@ -513,7 +513,9 @@ async function applyAction(db: DB, action: SlurpWorldAction, at: Date): Promise<
     const messages = createSlurpMessagesStorage(db);
     const brief = slurpCommissionBrief(`${action.creatorAccountId}:${action.actorAccountId}:${at.toISOString()}`);
     const commission = await messages.createCommission(action.actorAccountId, action.creatorAccountId, brief);
-    if (!commission) return false;
+    // `"open_request"` means this fan already has one waiting. Piling on a second is exactly what
+    // the cap exists to stop, so the tick spends its action elsewhere.
+    if (!commission || commission === "open_request") return false;
     // The brief is a placeholder. Queue it to be written properly the next time the player is here.
     await enqueueSlurpPendingText(db, {
       kind: "commission",

@@ -21,7 +21,7 @@ import { Avatar } from "./SlurpShell";
 import { slurpCreatorStatus } from "./slurp-creator-status";
 import { SlurpEmptyArtwork } from "./SlurpEmptyArtwork";
 import { formatTime } from "./SlurpDateTime";
-import { SlurpCoin, SlurpCoinAmount } from "./SlurpCoin";
+import { SlurpCoin, SlurpCoinAmount, SlurpCoinBurst } from "./SlurpCoin";
 import {
   useAcceptSlurpCommission,
   useDeclineSlurpCommission,
@@ -47,6 +47,20 @@ import {
 } from "../../hooks/use-slurp";
 
 /** Tip amounts offered in a thread. Small enough to be a reflex, large enough to mean something. */
+/**
+ * What each reply outcome means, in the fan's words.
+ *
+ * `replyToSlurpMessage` reports six outcomes and the client displayed none of them, so an offline
+ * creator, a thread already generating, and a missing connection were all the same blank screen.
+ */
+const SLURP_REPLY_STATUS_FALLBACKS: Record<string, string> = {
+  queued: "{{name}} has seen this. They are not around right now and will answer later.",
+  busy: "{{name}} is already writing back. Give it a moment.",
+  ineligible: "{{name}} is not answering this conversation right now.",
+  connection_not_found: "No text connection is configured, so nobody can answer yet.",
+  failed: "The reply could not be written. Your message was still delivered.",
+};
+
 const TIP_PRESETS = [5, 15, 50] as const;
 
 export type SlurpMessageThreadContext = Pick<
@@ -422,6 +436,12 @@ function SlurpThreadView({
   const [error, setError] = useState<string | null>(null);
   const [typing, setTyping] = useState(false);
   const [toolsOpen, setToolsOpen] = useState(false);
+  const [activeTipAmount, setActiveTipAmount] = useState<number | null>(null);
+  // The fan's own words, held on screen until the server's copy of them arrives.
+  const [pending, setPending] = useState<{ content: string; id: string | null } | null>(null);
+  // Why no answer came. The send route has always reported this and nothing ever read it, so a
+  // sleeping creator, a busy thread and a missing connection all looked like the same silence.
+  const [replyStatus, setReplyStatus] = useState<string | null>(null);
   const bottomRef = useRef<HTMLDivElement | null>(null);
 
   const thread = threadQuery.data?.thread ?? null;
@@ -450,6 +470,10 @@ function SlurpThreadView({
         : null,
     };
   });
+  const lastOwnMessageId = messages.reduce<string | null>(
+    (latest, message) => ((ownsCreator ? message.role === "creator" : message.role === "viewer") ? message.id : latest),
+    null,
+  );
   const timeline = [
     ...messages
       .filter((message) => typeof message.metadata.commissionId !== "string")
@@ -474,19 +498,42 @@ function SlurpThreadView({
   const headerProfileId = ownsCreator ? thread?.viewerAccountId : targetCreatorAccountId;
   const busy = send.isPending || tip.isPending || creatorReply.isPending || draftReply.isPending;
 
+  // Drop the echo only once the refetch carries the real row, so the message never blinks out
+  // between the response landing and the thread reloading.
+  useEffect(() => {
+    if (pending?.id && messages.some((message) => message.id === pending.id)) setPending(null);
+  }, [messages, pending]);
+
+  // A different conversation must not inherit the last one's unsent echo.
+  useEffect(() => {
+    setPending(null);
+    setTyping(false);
+    setReplyStatus(null);
+  }, [threadId, creatorAccountId]);
+
   // Follow the conversation down as it grows, the way every chat surface does.
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ block: "end" });
-  }, [commissionTimelineKey, messages.length, typing]);
+  }, [commissionTimelineKey, messages.length, typing, pending]);
 
   /**
    * Hold the reply behind a typing indicator for as long as the server said the creator would
    * take. The reply is already in hand, so this is presentation only — nothing is being waited on.
    */
-  const holdTyping = (ms: number) => {
-    if (ms <= 0) return;
-    setTyping(true);
-    window.setTimeout(() => setTyping(false), ms);
+  /**
+   * Keep the typing indicator up for the rest of the pacing the server named.
+   *
+   * The indicator now starts when the fan hits send, because `/messages/send` generates the reply
+   * before it answers and that wait is the real one. `typingMs` is a floor on how long the
+   * creator appears to type, so only the part of it the request did not already cover is left.
+   */
+  const holdTyping = (ms: number, startedAt: number) => {
+    const remaining = ms - (Date.now() - startedAt);
+    if (remaining <= 0) {
+      setTyping(false);
+      return;
+    }
+    window.setTimeout(() => setTyping(false), remaining);
   };
 
   const submit = async () => {
@@ -494,17 +541,24 @@ function SlurpThreadView({
     if (!content || !personaId || !targetCreatorAccountId || busy) return;
     setError(null);
     setDraft("");
+    // Show the message and the typing indicator at once. The send route waits for the model
+    // before it answers, so the chat used to sit empty for the whole generation.
+    setPending({ content, id: null });
+    setReplyStatus(null);
+    const startedAt = Date.now();
+    if (!ownsCreator) setTyping(true);
     try {
       // On a Creator-side thread the player is the Creator, so the message goes the other way.
       // Sending through the viewer route here opened a second conversation from the persona to
       // their own Creator instead of answering the fan.
       if (ownsCreator && thread) {
-        await creatorReply.mutateAsync({
+        const written = await creatorReply.mutateAsync({
           creatorAccountId: thread.creatorAccountId,
           personaId,
           viewerAccountId: thread.viewerAccountId,
           content,
         });
+        setPending({ content, id: written.message.id });
         return;
       }
       const result = await send.mutateAsync({
@@ -512,10 +566,14 @@ function SlurpThreadView({
         creatorAccountId: targetCreatorAccountId,
         content,
       });
-      if (result.reply) holdTyping(result.typingMs ?? 0);
+      setPending({ content, id: result.message.id });
+      setReplyStatus(result.replyStatus ?? null);
+      holdTyping(result.reply ? (result.typingMs ?? 0) : 0, startedAt);
     } catch (cause) {
       // Put the words back in the box. Losing a typed message to a failed request is the one
       // thing a chat surface must never do.
+      setPending(null);
+      setTyping(false);
       setDraft(content);
       setError(
         cause instanceof Error
@@ -528,6 +586,7 @@ function SlurpThreadView({
   const sendTip = async (amount: number) => {
     if (!personaId || !targetCreatorAccountId || busy) return;
     setError(null);
+    setActiveTipAmount(amount);
     try {
       const result = await tip.mutateAsync({ personaId, creatorAccountId: targetCreatorAccountId, amount });
       if (result.reply) holdTyping(result.typingMs ?? 0);
@@ -537,6 +596,8 @@ function SlurpThreadView({
           ? cause.message
           : localizeUi("ui.slurp.messages.tipFailed", { defaultValue: "Could not send that tip." }),
       );
+    } finally {
+      setActiveTipAmount(null);
     }
   };
 
@@ -656,6 +717,7 @@ function SlurpThreadView({
                 locale={i18n.language}
                 personaId={personaId}
                 ownsCreator={ownsCreator}
+                showReceipt={entry.message.id === lastOwnMessageId}
               />
             ) : personaId ? (
               <CommissionRow
@@ -666,6 +728,21 @@ function SlurpThreadView({
                 ownsCreator={ownsCreator}
               />
             ) : null,
+          )}
+          {pending && !messages.some((message) => message.id === pending.id) && (
+            <div className="flex max-w-[88%] flex-col items-end gap-1 self-end opacity-60 sm:max-w-[78%]">
+              <div className="whitespace-pre-wrap break-words rounded-[1.15rem] rounded-br-[0.35rem] bg-[var(--noodle-accent)] px-3.5 py-2.5 text-sm leading-relaxed text-zinc-950 shadow-[var(--slurp-shadow-raised)]">
+                {pending.content}
+              </div>
+            </div>
+          )}
+          {!typing && replyStatus && replyStatus !== "replied" && (
+            <p aria-live="polite" className="self-start px-1 text-xs italic text-[var(--muted-foreground)]">
+              {localizeUi(`ui.slurp.messages.replyStatus.${replyStatus}`, {
+                defaultValue: SLURP_REPLY_STATUS_FALLBACKS[replyStatus] ?? "No answer yet.",
+                name: creator?.displayName ?? "",
+              })}
+            </p>
           )}
           {typing && (
             <p
@@ -754,8 +831,9 @@ function SlurpThreadView({
                     type="button"
                     disabled={busy || !personaId || !targetCreatorAccountId}
                     onClick={() => sendTip(amount)}
-                    className="min-h-11 rounded-full px-3 text-xs font-bold text-[var(--noodle-accent)] ring-1 ring-inset ring-[var(--noodle-accent)]/40 transition-[background-color,transform] hover:bg-[var(--noodle-accent)]/10 active:scale-[0.96] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--slurp-focus)] disabled:opacity-50 motion-reduce:transition-none motion-reduce:active:scale-100"
+                    className="relative min-h-11 overflow-visible rounded-full px-3 text-xs font-bold text-[var(--noodle-accent)] ring-1 ring-inset ring-[var(--noodle-accent)]/40 transition-[background-color,transform] hover:bg-[var(--noodle-accent)]/10 active:scale-[0.96] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--slurp-focus)] disabled:opacity-50 motion-reduce:transition-none motion-reduce:active:scale-100"
                   >
+                    <SlurpCoinBurst active={activeTipAmount === amount} />
                     {localizeUi("ui.slurp.messages.tipAmount", { defaultValue: "Tip {{amount}}", amount })}
                   </button>
                 ))}
@@ -824,11 +902,14 @@ function MessageBubble({
   locale,
   personaId,
   ownsCreator,
+  showReceipt = false,
 }: {
   message: SlurpMessage;
   locale: string;
   personaId?: string | null;
   ownsCreator: boolean;
+  /** Only the newest message you sent carries a receipt, the way every chat surface does it. */
+  showReceipt?: boolean;
 }) {
   const { t: localizeUi } = useUiTranslation();
   const unlock = useUnlockSlurpMessage();
@@ -870,8 +951,9 @@ function MessageBubble({
             type="button"
             disabled={!personaId || unlock.isPending}
             onClick={() => personaId && unlock.mutate({ personaId, messageId: message.id })}
-            className="inline-flex min-h-11 items-center gap-1.5 rounded-lg px-1 text-left text-[var(--muted-foreground)] underline-offset-2 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--slurp-focus)] disabled:opacity-60"
+            className="relative inline-flex min-h-11 items-center gap-1.5 overflow-visible rounded-lg px-1 text-left text-[var(--muted-foreground)] underline-offset-2 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--slurp-focus)] disabled:opacity-60"
           >
+            <SlurpCoinBurst active={unlock.isPending} />
             <Lock size={13} aria-hidden="true" />
             {localizeUi("ui.slurp.messages.unlock", {
               defaultValue: "Unlock for",
@@ -899,6 +981,15 @@ function MessageBubble({
       )}
       <time dateTime={message.createdAt} className="px-1 text-xs text-[var(--muted-foreground)]">
         {formatTime(message.createdAt, locale)}
+        {/* Read state was written on every message since messaging shipped and shown on none. */}
+        {mine && showReceipt && message.readAt && (
+          <span className="ml-1.5 font-semibold">
+            {localizeUi("ui.slurp.messages.seenAt", {
+              defaultValue: "Seen {{time}}",
+              time: formatTime(message.readAt, locale),
+            })}
+          </span>
+        )}
       </time>
     </div>
   );
@@ -1175,7 +1266,7 @@ function CommissionRow({
   personaId: string;
   ownsCreator: boolean;
 }) {
-  const { t: localizeUi } = useUiTranslation();
+  const { t: localizeUi, i18n } = useUiTranslation();
   const quote = useQuoteSlurpCommission();
   const accept = useAcceptSlurpCommission();
   const deliver = useDeliverSlurpCommission();
@@ -1370,8 +1461,9 @@ function CommissionRow({
                 }),
               )
             }
-            className="inline-flex min-h-11 items-center gap-1.5 rounded-xl bg-[var(--noodle-accent)] px-4 font-bold text-zinc-950 transition-transform active:scale-[0.96] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--slurp-focus)] disabled:opacity-50 motion-reduce:transition-none motion-reduce:active:scale-100"
+            className="relative inline-flex min-h-11 items-center gap-1.5 overflow-visible rounded-xl bg-[var(--noodle-accent)] px-4 font-bold text-zinc-950 transition-transform active:scale-[0.96] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--slurp-focus)] disabled:opacity-50 motion-reduce:transition-none motion-reduce:active:scale-100"
           >
+            <SlurpCoinBurst active={accept.isPending} />
             {accept.isPending && <Loader2 size={15} className="animate-spin" aria-hidden="true" />}
             {accept.isPending
               ? localizeUi("ui.slurp.messages.commissionAcceptPending", { defaultValue: "Processing payment…" })
@@ -1389,7 +1481,21 @@ function CommissionRow({
         </div>
       )}
 
-      {ownsCreator && commission.state === "accepted" && (
+      {/*
+        A character Creator's piece is finished and paid for, and now being waited on. Saying so,
+        with the time it is due, is the difference between a wait and a screen that looks stuck.
+      */}
+      {commission.state === "accepted" && commission.deliverAt && (
+        <p className="mt-3 flex items-center gap-1.5 font-semibold text-[var(--noodle-accent)]">
+          <Loader2 size={13} className="animate-spin motion-reduce:hidden" aria-hidden="true" />
+          {localizeUi("ui.slurp.messages.commissionArriving", {
+            defaultValue: "Being made. Arriving around {{time}}.",
+            time: formatTime(commission.deliverAt, i18n.language),
+          })}
+        </p>
+      )}
+
+      {ownsCreator && commission.state === "accepted" && !commission.deliverAt && (
         <div className="mt-3 flex flex-col gap-2">
           <label className="font-bold" htmlFor={`slurp-deliver-${commission.id}`}>
             {localizeUi("ui.slurp.messages.commissionDeliverLabel", { defaultValue: "Delivery" })}

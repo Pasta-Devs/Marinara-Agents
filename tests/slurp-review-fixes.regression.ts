@@ -164,11 +164,11 @@ assert.match(home, /composerSettings\.storyImageWidth \/ composerSettings\.story
 
 // ── Profile editor ───────────────────────────────────────
 
-// Opening the wizard is not a change: the source step used to prompt "Discard profile changes?"
-// with nothing picked, nothing typed, and nothing generated.
+// Opening the wizard is not a change. Only a real edit, typed guidance, or pending generation may
+// prompt "Discard profile changes?".
 assert.match(
   home,
-  /const hasNewDraft = Boolean\(\s*profileDraft \|\|\s*draftGuidance\.trim\(\) \|\|\s*generateProfileDraft\.isPending \|\|\s*\(creationStep === "source" && draftNoodleAccountId\),\s*\);/u,
+  /const hasNewDraft = Boolean\(profileDraftDirty \|\| draftGuidance\.trim\(\) \|\| generateProfileDraft\.isPending\);/u,
 );
 
 // ── Duplicate import bindings ────────────────────────────
@@ -344,7 +344,7 @@ assert.match(messagesView2, /const commissionTimeline = commissions\.map/u);
 assert.match(messagesView2, /const at = latestMessage[\s\S]{0,180}?commission\.updatedAt/u);
 assert.match(messagesView2, /const timeline = \[/u);
 assert.match(messagesView2, /commissionTimelineKey/u);
-assert.match(messagesView2, /\[commissionTimelineKey, messages\.length, typing\]/u);
+assert.match(messagesView2, /\[commissionTimelineKey, messages\.length, typing, pending\]/u);
 assert.doesNotMatch(messagesView2, /commissions\.map\(\(commission\) => \(\s*<CommissionRow/u);
 assert.match(messagesView2, /commissionAcceptPending/u);
 assert.match(messagesView2, /getApiErrorMessage\(raw, fallback\)/u);
@@ -389,3 +389,27 @@ for (const key of [
 }
 
 console.log("slurp review fixes regression passed");
+
+// The send route generates the reply before it answers, so the fan's own words and the typing
+// indicator have to appear at send time. Without this the chat sat empty for the whole wait.
+assert.match(messagesView2, /setPending\(\{ content, id: null \}\)/u);
+assert.match(messagesView2, /if \(!ownsCreator\) setTyping\(true\)/u);
+assert.match(messagesView2, /holdTyping\(result\.reply \? \(result\.typingMs \?\? 0\) : 0, startedAt\)/u);
+assert.match(messagesView2, /pending && !messages\.some\(\(message\) => message\.id === pending\.id\)/u);
+
+const slurpHooks = readFileSync("packages/slurp/src/engine/packages/client/src/hooks/use-slurp.ts", "utf8");
+// A chat opened from a profile polls like one opened from the inbox, or the queued off-hours
+// reply never arrives on that screen.
+assert.match(
+  slurpHooks,
+  /messages\/compose[\s\S]{0,400}?refetchInterval: creatorAccountId && personaId \? 30_000 : false/u,
+);
+// One DM used to invalidate the whole Slurp root, which re-paged the entire feed.
+assert.match(slurpHooks, /const invalidateSlurpMessages =/u);
+assert.doesNotMatch(
+  slurpHooks.slice(
+    slurpHooks.indexOf("export function useSendSlurpMessage()"),
+    slurpHooks.indexOf("export function useRecordSlurpStoryView()"),
+  ),
+  /invalidateQueries\(\{ queryKey: noodleKeys\.noodlerRoot\(\) \}\)/u,
+);

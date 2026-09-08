@@ -127,6 +127,21 @@ export function slurpReplyPacing(input: {
   return { mode: "queued", typingMs: 0, notBeforeMs: Math.round(scheduled * MINUTE * (1 - reach * 0.7)) };
 }
 
+/**
+ * How long a character Creator takes to finish a commissioned piece, in milliseconds.
+ *
+ * The picture is drawn before the fan is charged, so this delay buys nothing technically — it is
+ * the whole product. A commission that lands in the same second as the payment is a vending
+ * machine, and the wait is what makes it work somebody did for you.
+ *
+ * Pure and deterministic, like `slurpReplyPacing`: a bigger commission and a longer brief read as
+ * more work. Never instant, and never long enough that the player forgets they ordered it.
+ */
+export function slurpCommissionDeliveryDelayMs(input: { price: number; briefLength: number }): number {
+  const effort = Math.min(1, Math.max(0, input.price) / 200) * 0.7 + Math.min(1, input.briefLength / 600) * 0.3;
+  return Math.round(5 * MINUTE + effort * (45 * MINUTE - 5 * MINUTE));
+}
+
 /** One line of thread summary for the inbox. Kept short: the list shows it on one row. */
 export function slurpMessagePreview(kind: SlurpMessageKind, content: string, price: number): string {
   const trimmed = content.replace(/\s+/g, " ").trim();

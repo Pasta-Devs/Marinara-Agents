@@ -80,6 +80,8 @@ export type SlurpCommission = {
   brief: string;
   price: number;
   deliveryMessageId: string | null;
+  /** When the automatic delivery is due, when one is scheduled. Null on a hand-delivered piece. */
+  deliverAt: string | null;
   createdAt: string;
   updatedAt: string;
 };
@@ -157,9 +159,12 @@ export function createSlurpMessagesStorage(db: DB) {
     brief: String(row.brief),
     price: int(row.price as string),
     deliveryMessageId: (row.deliveryMessageId as string | null) ?? null,
+    deliverAt: (row.deliverAt as string | null) ?? null,
     createdAt: String(row.createdAt),
     updatedAt: String(row.updatedAt),
   });
+  // `mediaPath` is deliberately absent from `SlurpCommission`: it is a path on the host's disk,
+  // and the mapped row is sent to the client.
 
   /**
    * The cached rapport is a display convenience. A blob written by an older build, or by hand,
@@ -580,13 +585,23 @@ export function createSlurpMessagesStorage(db: DB) {
       });
     },
 
+    /**
+     * Open a commission request.
+     *
+     * `"open_request"` means this thread already has one waiting on the Creator. Nothing capped
+     * this, so a fan — or the world, ticking on a Creator nobody answers — could stack unlimited
+     * briefs in one conversation. The queue this is meant to protect is the same one
+     * `listOpenCommissionsForCreator` exists to keep short.
+     */
     async createCommission(
       viewerAccountId: string,
       creatorAccountId: string,
       brief: string,
-    ): Promise<SlurpCommission | null> {
+    ): Promise<SlurpCommission | "open_request" | null> {
       const opened = await storage.openThread(viewerAccountId, creatorAccountId, "viewer");
       if (opened.status !== "ok") return null;
+      const open = await storage.listCommissionsForThread(opened.thread.id);
+      if (open.some((row) => row.state === "brief" || row.state === "quoted")) return "open_request";
       const timestamp = now();
       const row = {
         id: newId(),
@@ -694,17 +709,23 @@ export function createSlurpMessagesStorage(db: DB) {
 
     /** Every commission waiting on the fan's answer, for the world tick to settle. */
     async listQuotedCommissions(): Promise<SlurpCommission[]> {
-      const rows = await db.select().from(slurpCommissions);
-      return rows.map(mapCommission).filter((row) => row.state === "quoted");
+      // Filtered in the query rather than after it: these run every world tick, and the table
+      // only ever grows.
+      const rows = await db.select().from(slurpCommissions).where(eq(slurpCommissions.state, "quoted"));
+      return rows.map(mapCommission);
     },
 
     /** Briefs opened by generated audience members, which the world can quote automatically. */
     async listAudienceBriefCommissions(): Promise<SlurpCommission[]> {
       const rows = await db.select().from(slurpCommissions).where(eq(slurpCommissions.state, "brief"));
       const population = createSlurpPopulationStorage(db);
+      const generated = new Map<string, boolean>();
       const commissions: SlurpCommission[] = [];
       for (const row of rows) {
-        if (await population.get(String(row.viewerAccountId))) commissions.push(mapCommission(row));
+        const viewerAccountId = String(row.viewerAccountId);
+        if (!generated.has(viewerAccountId))
+          generated.set(viewerAccountId, Boolean(await population.get(viewerAccountId)));
+        if (generated.get(viewerAccountId)) commissions.push(mapCommission(row));
       }
       return commissions;
     },
@@ -712,10 +733,17 @@ export function createSlurpMessagesStorage(db: DB) {
     /** Briefs addressed to character-controlled Creators. Their world tick supplies the first quote. */
     async listAutomatedBriefCommissions(): Promise<SlurpCommission[]> {
       const rows = await db.select().from(slurpCommissions).where(eq(slurpCommissions.state, "brief"));
+      // One read per Creator, not one per brief. A Creator with a stacked queue used to be
+      // fetched once for every row in it.
+      const automated = new Map<string, boolean>();
       const commissions: SlurpCommission[] = [];
       for (const row of rows) {
-        const creator = await slurp.getNoodlerAccountById(String(row.creatorAccountId));
-        if (creator && creator.sourceKind !== "persona") commissions.push(mapCommission(row));
+        const creatorAccountId = String(row.creatorAccountId);
+        if (!automated.has(creatorAccountId)) {
+          const creator = await slurp.getNoodlerAccountById(creatorAccountId);
+          automated.set(creatorAccountId, Boolean(creator && creator.sourceKind !== "persona"));
+        }
+        if (automated.get(creatorAccountId)) commissions.push(mapCommission(row));
       }
       return commissions;
     },
@@ -912,6 +940,47 @@ export function createSlurpMessagesStorage(db: DB) {
       return storage.getCommission(id);
     },
 
+    /**
+     * Hold a finished automatic commission until its delivery is due.
+     *
+     * The picture is already drawn and promoted, so nothing is being waited on but the clock. The
+     * path lives on the row rather than in memory: the wait has to outlive a restart, because the
+     * fan has already paid for what is at the end of it.
+     */
+    async scheduleCommissionDelivery(
+      id: string,
+      input: { deliverAt: string; mediaPath: string },
+    ): Promise<SlurpCommission | null> {
+      const commission = await storage.getCommission(id);
+      if (!commission || commission.state !== "accepted") return null;
+      await db
+        .update(slurpCommissions)
+        .set({ deliverAt: input.deliverAt, mediaPath: input.mediaPath, updatedAt: now() })
+        .where(eq(slurpCommissions.id, id));
+      return storage.getCommission(id);
+    },
+
+    /**
+     * Automatic commissions whose wait is over.
+     *
+     * `mediaPath` is returned beside the commission rather than on it, so the host path stays out
+     * of everything that reaches the client.
+     */
+    async listDueCommissionDeliveries(
+      at: string,
+    ): Promise<Array<{ commission: SlurpCommission; mediaPath: string | null }>> {
+      const rows = await db.select().from(slurpCommissions).where(eq(slurpCommissions.state, "accepted"));
+      return rows
+        .filter((row) => {
+          const deliverAt = row.deliverAt as string | null;
+          return Boolean(deliverAt) && String(deliverAt) <= at;
+        })
+        .map((row) => ({
+          commission: mapCommission(row),
+          mediaPath: (row.mediaPath as string | null) ?? null,
+        }));
+    },
+
     async deliverCommission(
       id: string,
       content: string,
@@ -945,11 +1014,24 @@ export function createSlurpMessagesStorage(db: DB) {
           await slurp.refundCoins(commission.viewerAccountId, commission.price, "failed commission delivery");
           await slurp.reverseCreatorIncome(commission.creatorAccountId, commission.price, "failed commission delivery");
         }
+        // Close it in the same breath as the refund. Leaving it `accepted` left a scheduled
+        // delivery due in the past, which the scheduler would retry — and refund — on every poll.
+        await db
+          .update(slurpCommissions)
+          .set({ state: "declined", deliverAt: null, updatedAt: now() })
+          .where(eq(slurpCommissions.id, id));
+        await storage.appendMessage(commission.threadId, {
+          senderAccountId: commission.creatorAccountId,
+          role: "creator",
+          kind: "system",
+          content: "This commission could not be delivered. The payment was refunded.",
+          metadata: { commissionId: id },
+        });
         return null;
       }
       await db
         .update(slurpCommissions)
-        .set({ state: "delivered", deliveryMessageId: message.id, updatedAt: now() })
+        .set({ state: "delivered", deliveryMessageId: message.id, deliverAt: null, updatedAt: now() })
         .where(eq(slurpCommissions.id, id));
       return storage.getCommission(id);
     },

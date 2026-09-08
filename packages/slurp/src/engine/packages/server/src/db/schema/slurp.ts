@@ -283,6 +283,20 @@ export const slurpCommissions = fileTable("slurp_commissions", {
   brief: text("brief").notNull(),
   price: text("price").notNull().default("0"),
   deliveryMessageId: text("delivery_message_id"),
+  /**
+   * When an automatic delivery is due.
+   *
+   * A character Creator used to be paid and deliver in the same request, so the one thing a
+   * commission is — somebody making you a thing, and the wait for it — never happened. Null on a
+   * commission a person delivers by hand, which is what keeps the scheduler off those.
+   */
+  deliverAt: text("deliver_at"),
+  /**
+   * The finished picture, drawn and kept at accept time, waiting for that delivery.
+   *
+   * Held on the row rather than in memory: the wait outlives a restart, and the fan has paid.
+   */
+  mediaPath: text("media_path"),
   createdAt: text("created_at").notNull(),
   updatedAt: text("updated_at").notNull(),
 });

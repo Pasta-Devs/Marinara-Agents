@@ -68,6 +68,10 @@ export async function replyToSlurpMessage(
   });
   if (pacing.mode === "queued" && input.force !== true) {
     await messagesStore.setReplyNotBefore(thread.id, new Date(Date.now() + pacing.notBeforeMs).toISOString());
+    // She has seen it and is not answering yet. That is the whole meaning of a queued reply, and
+    // it was indistinguishable from the app being broken because nothing recorded the noticing.
+    // "Seen, no reply" is the loudest thing this surface can say, and the timestamp already exists.
+    await messagesStore.markRead(thread.id, "creator");
     return { status: "queued", pacing };
   }
 

@@ -36,13 +36,13 @@ import { resolveSlurpTextConnection } from "./slurp-connection.js";
 import { NOODLER_UNTRUSTED_CONTENT_INSTRUCTION } from "./slurp-generation.service.js";
 import type { APIProvider } from "@marinara-engine/shared";
 
-export type SlurpPendingKind = "commission" | "question" | "opener";
+export type SlurpPendingKind = "commission" | "question" | "opener" | "delivery";
 
 /** Rewritten per drain. Small: a long absence must not stall the first read behind a queue. */
 const DRAIN_LIMIT = 2;
 
 /** Longest a rewrite may be. These are one-liners; a paragraph would not fit where they render. */
-const MAX_LENGTH: Record<SlurpPendingKind, number> = { commission: 400, question: 180, opener: 240 };
+const MAX_LENGTH: Record<SlurpPendingKind, number> = { commission: 400, question: 180, opener: 240, delivery: 240 };
 
 export async function enqueueSlurpPendingText(
   db: DB,
@@ -81,18 +81,30 @@ function buildMessages(input: {
   placeholder: string;
   post?: { title: string | null; content: string | null } | null;
 }) {
-  const shared = [
-    NOODLER_UNTRUSTED_CONTENT_INSTRUCTION,
-    "You are rewriting one short piece of text a fan sent to a Slurp creator. Write only the fan's words.",
-    "Never write as the creator, and never answer on their behalf.",
-    'Return exactly one JSON object with one string field named "content". Return JSON only.',
-  ];
+  // A delivery note is the only kind the creator speaks, so it gets the opposite framing. Handing
+  // it the fan-voice preamble produced deliveries written as if the fan had drawn the picture.
+  const shared =
+    input.kind === "delivery"
+      ? [
+          NOODLER_UNTRUSTED_CONTENT_INSTRUCTION,
+          "You are rewriting one short note a Slurp creator sends with a finished commission. Write only the creator's words.",
+          "Never write as the fan, and never speak for them.",
+          'Return exactly one JSON object with one string field named "content". Return JSON only.',
+        ]
+      : [
+          NOODLER_UNTRUSTED_CONTENT_INSTRUCTION,
+          "You are rewriting one short piece of text a fan sent to a Slurp creator. Write only the fan's words.",
+          "Never write as the creator, and never answer on their behalf.",
+          'Return exactly one JSON object with one string field named "content". Return JSON only.',
+        ];
   const instruction =
     input.kind === "commission"
       ? "Rewrite this commission request so it asks for something specific that suits this particular creator, in the fan's own voice. Keep it to a few sentences and stay polite about price and timing."
       : input.kind === "question"
         ? "Rewrite this question so it is about the actual post below, in the fan's own voice. One sentence, lowercase is fine, no greeting."
-        : "Rewrite this first message so it sounds like this particular person writing to this particular creator for the first time. Keep it short and a little awkward. Do not ask for anything.";
+        : input.kind === "delivery"
+          ? "Rewrite this hand-over note so it sounds like this particular creator giving a fan the piece they paid for. One or two sentences, warm, no greeting, and never describe the picture."
+          : "Rewrite this first message so it sounds like this particular person writing to this particular creator for the first time. Keep it short and a little awkward. Do not ask for anything.";
 
   const data = {
     creator: input.creator,
@@ -234,6 +246,7 @@ async function readPlaceholder(db: DB, kind: SlurpPendingKind, subjectId: string
     const interaction = await createSlurpStorage(db).getNoodlerInteractionById(subjectId);
     return interaction?.content ?? null;
   }
+  // Openers and delivery notes are both plain message rows.
   return (await messages.getMessageById(subjectId))?.content ?? null;
 }
 

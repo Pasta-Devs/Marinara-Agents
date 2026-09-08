@@ -501,6 +501,7 @@ export type SlurpWalletEntry = {
 
 export type SlurpWallet = {
   coins: number;
+  cheatsEnabled?: boolean;
   stipendOn?: string;
   refillFloor?: number;
   refillAvailable?: boolean;
@@ -707,6 +708,16 @@ export function useClaimSlurpDailyRefill() {
   });
 }
 
+export function useSetSlurpWalletCoinsForDevelopment() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (input: { personaId: string; coins: number }) =>
+      api.post<SlurpWallet>("/slurp/noodler/viewer/wallet/dev-set", input),
+    onSuccess: (_wallet, input) =>
+      queryClient.invalidateQueries({ queryKey: [...noodleKeys.noodlerRoot(), "wallet", input.personaId] }),
+  });
+}
+
 export function useTipSlurpCreator() {
   const queryClient = useQueryClient();
   return useMutation({
@@ -781,7 +792,7 @@ export type SlurpProfilePost =
 export function useNoodlerPosts(accountId: string | null, personaId: string | null) {
   return useQuery({
     queryKey: [...noodleKeys.noodlerPosts(accountId ?? "none"), personaId ?? "none"],
-    queryFn: async () => {
+    queryFn: async ({ signal }) => {
       const items: SlurpProfilePost[] = [];
       let cursor: SlurpPageCursor | null = null;
       do {
@@ -794,14 +805,17 @@ export function useNoodlerPosts(accountId: string | null, personaId: string | nu
         const page: {
           items: SlurpProfilePost[];
           nextCursor: SlurpPageCursor | null;
-        } = await api.get(`/slurp/noodler/accounts/${encodeURIComponent(accountId!)}/posts?${query.toString()}`);
+        } = await api.get(`/slurp/noodler/accounts/${encodeURIComponent(accountId!)}/posts?${query.toString()}`, {
+          signal,
+        });
         items.push(...page.items);
         cursor = page.nextCursor;
       } while (cursor);
       return items;
     },
     enabled: Boolean(accountId),
-    staleTime: 10_000,
+    staleTime: 30_000,
+    gcTime: 10 * 60_000,
     // Automatic posts are written server-side without a client mutation; poll while visible.
     refetchInterval: accountId ? 30_000 : false,
     refetchIntervalInBackground: false,
@@ -1314,7 +1328,7 @@ export function useLoadNoodlerPostImage() {
 export function useNoodlerViewer(personaId: string | null, enabled = true) {
   return useQuery({
     queryKey: noodleKeys.viewer(personaId ?? "none"),
-    queryFn: async () => {
+    queryFn: async ({ signal }) => {
       const encodedPersonaId = encodeURIComponent(personaId!);
       type ViewerPost = NoodlerViewerScope["creators"][number]["posts"][number] & { story?: boolean };
       type FeedPage = {
@@ -1335,14 +1349,18 @@ export function useNoodlerViewer(personaId: string | null, enabled = true) {
           }>;
           total: number;
           nextCursor: SlurpPageCursor | null;
-        }>(`/slurp/noodler/viewer/feed?personaId=${encodedPersonaId}&tab=all&limit=20${cursorQuery(cursor)}`);
+        }>(`/slurp/noodler/viewer/feed?personaId=${encodedPersonaId}&tab=all&limit=20${cursorQuery(cursor)}`, {
+          signal,
+        });
         feedItems.push(...page.items);
         cursor = page.nextCursor;
       } while (cursor);
       // Read the shell after the feed. A newly-created Creator account and its first post can
       // otherwise be observed from different file-store snapshots when these requests start
       // together, leaving the client with a post whose Creator is absent from the shell.
-      const scope = await api.get<NoodlerViewerScope>(`/slurp/noodler/viewer?personaId=${encodedPersonaId}`);
+      const scope = await api.get<NoodlerViewerScope>(`/slurp/noodler/viewer?personaId=${encodedPersonaId}`, {
+        signal,
+      });
       const postsByCreator = new Map<string, NoodlerViewerScope["creators"][number]["posts"]>();
       for (const item of feedItems) {
         const posts = postsByCreator.get(item.creatorAccountId) ?? [];
@@ -1358,8 +1376,8 @@ export function useNoodlerViewer(personaId: string | null, enabled = true) {
       };
     },
     enabled: enabled && Boolean(personaId),
-    staleTime: 10_000,
-    refetchOnMount: "always",
+    staleTime: 30_000,
+    gcTime: 10 * 60_000,
     refetchInterval: enabled && personaId ? 30_000 : false,
     refetchIntervalInBackground: false,
   });
@@ -1447,6 +1465,7 @@ export function useToggleNoodlerSubscription() {
           queryKey: noodleKeys.noodlerSubscribers(input.creatorAccountId),
         }),
         qc.invalidateQueries({ queryKey: [...noodleKeys.noodlerRoot(), "wallet", input.personaId] }),
+        qc.invalidateQueries({ queryKey: [...noodleKeys.noodlerRoot(), "viewer-wallets"] }),
       ]);
     },
   });
@@ -1489,7 +1508,11 @@ export function useUnlockNoodlerPost() {
       qc.setQueryData<NoodlerViewerScope | undefined>(noodleKeys.viewer(input.personaId), (current) =>
         mergeSlurpViewerShell(current, scope),
       );
-      await qc.invalidateQueries({ queryKey: noodleKeys.viewer(input.personaId) });
+      await Promise.all([
+        qc.invalidateQueries({ queryKey: noodleKeys.viewer(input.personaId) }),
+        qc.invalidateQueries({ queryKey: [...noodleKeys.noodlerRoot(), "wallet", input.personaId] }),
+        qc.invalidateQueries({ queryKey: [...noodleKeys.noodlerRoot(), "viewer-wallets"] }),
+      ]);
     },
   });
 }
@@ -1959,6 +1982,8 @@ export type SlurpCommission = {
   brief: string;
   price: number;
   deliveryMessageId: string | null;
+  /** When a character Creator's finished piece is due to arrive. Null when a person delivers it. */
+  deliverAt?: string | null;
   createdAt: string;
   updatedAt: string;
 };
@@ -1972,6 +1997,8 @@ export type SlurpSendResponse = {
 };
 
 const messageKeys = {
+  /** Every messaging query hangs off this, so one prefix invalidates the whole surface. */
+  root: () => [...noodleKeys.noodlerRoot(), "messages"],
   threads: (personaId: string | null) => [...noodleKeys.noodlerRoot(), "messages", "threads", personaId ?? "none"],
   thread: (threadId: string, personaId: string | null) => [
     ...noodleKeys.noodlerRoot(),
@@ -1981,6 +2008,23 @@ const messageKeys = {
     personaId ?? "none",
   ],
 };
+
+/**
+ * What a message or commission mutation actually changes.
+ *
+ * These used to invalidate the whole Slurp root, which re-ran the viewer feed and every profile's
+ * post list — and both of those page through the entire history in one request. Sending one chat
+ * line refetched the app.
+ */
+const invalidateSlurpMessages = (qc: ReturnType<typeof useQueryClient>) =>
+  Promise.all(
+    [
+      messageKeys.root(),
+      [...noodleKeys.noodlerRoot(), "wallet"],
+      [...noodleKeys.noodlerRoot(), "viewer-wallets"],
+      [...noodleKeys.noodlerRoot(), "notifications"],
+    ].map((queryKey) => qc.invalidateQueries({ queryKey })),
+  );
 
 export function useSlurpThreads(personaId: string | null) {
   return useQuery({
@@ -2043,6 +2087,10 @@ export function useSlurpCompose(creatorAccountId: string | null, personaId: stri
         `/slurp/messages/compose?personaId=${encodeURIComponent(personaId!)}&creatorAccountId=${encodeURIComponent(creatorAccountId!)}`,
       ),
     enabled: Boolean(creatorAccountId && personaId),
+    // Same poll as `useSlurpThread`. Without it a chat opened from a profile never saw the
+    // queued off-hours reply, which is most of what the pacing model exists to produce.
+    refetchInterval: creatorAccountId && personaId ? 30_000 : false,
+    refetchIntervalInBackground: false,
   });
 }
 
@@ -2051,7 +2099,7 @@ export function useSendSlurpMessage() {
   return useMutation({
     mutationFn: (input: { personaId: string; creatorAccountId: string; content: string }) =>
       api.post<SlurpSendResponse>("/slurp/messages/send", input),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: noodleKeys.noodlerRoot() }),
+    onSuccess: () => invalidateSlurpMessages(queryClient),
   });
 }
 
@@ -2060,7 +2108,7 @@ export function useTipInSlurpThread() {
   return useMutation({
     mutationFn: (input: { personaId: string; creatorAccountId: string; amount: number; note?: string }) =>
       api.post<SlurpSendResponse & { wallet: SlurpWallet }>("/slurp/messages/tip", input),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: noodleKeys.noodlerRoot() }),
+    onSuccess: () => invalidateSlurpMessages(queryClient),
   });
 }
 
@@ -2069,7 +2117,7 @@ export function useUnlockSlurpMessage() {
   return useMutation({
     mutationFn: (input: { personaId: string; messageId: string }) =>
       api.post<{ message: SlurpMessage; wallet: SlurpWallet }>("/slurp/messages/ppv/unlock", input),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: noodleKeys.noodlerRoot() }),
+    onSuccess: () => invalidateSlurpMessages(queryClient),
   });
 }
 
@@ -2082,7 +2130,7 @@ export function useSendSlurpCreatorReply() {
         `/slurp/messages/creators/${encodeURIComponent(input.creatorAccountId)}/reply`,
         input,
       ),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: noodleKeys.noodlerRoot() }),
+    onSuccess: () => invalidateSlurpMessages(queryClient),
   });
 }
 
@@ -2095,7 +2143,7 @@ export function useDraftSlurpCreatorReply() {
         `/slurp/messages/creators/${encodeURIComponent(input.creatorAccountId)}/draft-reply`,
         input,
       ),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: noodleKeys.noodlerRoot() }),
+    onSuccess: () => invalidateSlurpMessages(queryClient),
   });
 }
 
@@ -2113,7 +2161,7 @@ export function useSendSlurpCreatorPpv() {
         `/slurp/messages/creators/${encodeURIComponent(input.creatorAccountId)}/ppv`,
         input,
       ),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: noodleKeys.noodlerRoot() }),
+    onSuccess: () => invalidateSlurpMessages(queryClient),
   });
 }
 
@@ -2125,7 +2173,7 @@ export function useBroadcastSlurpMessage() {
         `/slurp/messages/creators/${encodeURIComponent(input.creatorAccountId)}/broadcast`,
         input,
       ),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: noodleKeys.noodlerRoot() }),
+    onSuccess: () => invalidateSlurpMessages(queryClient),
   });
 }
 
@@ -2134,7 +2182,7 @@ export function useCreateSlurpCommission() {
   return useMutation({
     mutationFn: (input: { personaId: string; creatorAccountId: string; brief: string }) =>
       api.post<{ commission: SlurpCommission }>("/slurp/messages/commissions", input),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: noodleKeys.noodlerRoot() }),
+    onSuccess: () => invalidateSlurpMessages(queryClient),
   });
 }
 
@@ -2146,7 +2194,7 @@ export function useQuoteSlurpCommission() {
         `/slurp/messages/commissions/${encodeURIComponent(input.commissionId)}/quote`,
         input,
       ),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: noodleKeys.noodlerRoot() }),
+    onSuccess: () => invalidateSlurpMessages(queryClient),
   });
 }
 
@@ -2158,7 +2206,7 @@ export function useAcceptSlurpCommission() {
         `/slurp/messages/commissions/${encodeURIComponent(input.commissionId)}/accept`,
         input,
       ),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: noodleKeys.noodlerRoot() }),
+    onSuccess: () => invalidateSlurpMessages(queryClient),
   });
 }
 
@@ -2171,7 +2219,7 @@ export function useDeclineSlurpCommission() {
         `/slurp/messages/commissions/${encodeURIComponent(input.commissionId)}/decline`,
         input,
       ),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: noodleKeys.noodlerRoot() }),
+    onSuccess: () => invalidateSlurpMessages(queryClient),
   });
 }
 
@@ -2183,7 +2231,7 @@ export function useDeliverSlurpCommission() {
         `/slurp/messages/commissions/${encodeURIComponent(input.commissionId)}/deliver`,
         input,
       ),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: noodleKeys.noodlerRoot() }),
+    onSuccess: () => invalidateSlurpMessages(queryClient),
   });
 }
 

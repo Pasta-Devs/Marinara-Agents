@@ -104,6 +104,28 @@ export function slurpAudienceOpener(seed: string): string {
 }
 
 /**
+ * The note a character Creator sends with a finished commission.
+ *
+ * Every automatic delivery used to carry one hardcoded English sentence, so every Creator in the
+ * world handed over their work with the same words forever. Vague on purpose, like the briefs:
+ * the model rewrites it in the Creator's voice on the next read.
+ */
+const COMMISSION_DELIVERIES = [
+  "here it is — I hope it is what you had in mind",
+  "finished this last night. really enjoyed making it",
+  "done! this one took a couple of tries but I like where it landed",
+  "all yours. thank you for asking me for something like this",
+  "here you go. tell me what you think, honestly",
+  "finally happy with it. hope you are too",
+  "this one was fun. thanks for trusting me with it",
+  "took me a while but here it is",
+] as const;
+
+export function slurpCommissionDeliveryNote(seed: string): string {
+  return COMMISSION_DELIVERIES[pickIndex(seed, "delivery", COMMISSION_DELIVERIES.length)]!;
+}
+
+/**
  * The noise floor of a comment section.
  *
  * Most comments on a real post are not observations, they are somebody tapping out three words to
