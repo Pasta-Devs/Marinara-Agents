@@ -1,5 +1,48 @@
 # Slurp release notes
 
+## 1.2.20 — 2026-09-08
+
+- Post images now always carry the character's appearance, and a retried image is built the same way the first attempt was.
+- Scheduled Stories now publish as Stories instead of ordinary posts.
+- A Creator's stage voice is now described to the model that writes it, so Creators stop sounding alike.
+- Creating a concealed Creator now fails far less often.
+- A Conversation Schedule can no longer leak the source name into a Hinted or Secret Creator's prompts.
+- Persona-owned Creators now get their appearance, personality, and image references.
+- A first post is no longer lost to a restart or a brief lock, and automatic posts now retry like manual ones.
+- Deleting a Creator now removes their commissions, audience, and queued work.
+
+## 1.2.19 — 2026-09-08
+
+- Opening Messages directly from a Creator profile now hides the redundant mobile Inbox header before the first thread record exists.
+
+## 1.2.18 — 2026-09-08
+
+- Mobile message threads now show only their conversation header and back button instead of stacking them beneath the Inbox header.
+
+## 1.2.17 — 2026-09-08
+
+- Message status pills now have their own metadata line, and the Inbox tab switcher gets out of the way while a conversation is open.
+
+## 1.2.16 — 2026-09-07
+
+- Refined the new Inbox to match its concept: full-height desktop conversations, message filters, selected-thread surfaces, compact broadcasts, and a focused message-tools menu.
+
+## 1.2.15 — 2026-09-07
+
+- Redesigned Inbox around dedicated Messages and Notifications tabs, with a desktop split conversation view, notification filters, and commissions kept inside their related conversations.
+
+## 1.2.14 — 2026-09-07
+
+- The Slurp coin now carries a smaller lowercase letter in white.
+
+## 1.2.13 — 2026-09-07
+
+- Updated the Slurp coin artwork.
+
+## 1.2.12 — 2026-09-07
+
+- Fixed the Slurp coin icon, which never loaded: the Engine does not serve SVG from the package asset route, so the coin is now embedded directly in the client.
+
 ## 1.2.11 — 2026-09-07
 
 - Creators now answer comments from the generated audience, at a rate set by what that person is to them.

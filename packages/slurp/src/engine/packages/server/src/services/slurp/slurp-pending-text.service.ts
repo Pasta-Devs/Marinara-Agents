@@ -25,6 +25,7 @@ import { createSlurpStorage } from "../storage/slurp.storage.js";
 import { createSlurpMessagesStorage } from "../storage/slurp-messages.storage.js";
 import { createSlurpPopulationStorage } from "../storage/slurp-population.storage.js";
 import { createLLMProvider } from "../llm/provider-registry.js";
+import { withConnectionFallbackProvider } from "../llm/connection-fallback-provider.js";
 import { resolveBaseUrl } from "../generation/connection-base-url.js";
 import { resolveStoredChatOptions } from "../generation/generation-parameters.js";
 import { clampGenerationMaxOutputTokens } from "../generation/output-token-limits.js";
@@ -132,17 +133,27 @@ export async function drainSlurpPendingText(db: DB, limit = DRAIN_LIMIT): Promis
   // No connection is not a failure. The placeholders stay, and stay usable.
   if (!connection) return 0;
 
-  const provider = createLLMProvider(
-    connection.provider,
-    resolveBaseUrl(connection),
-    connection.apiKey,
-    connection.maxContext,
-    connection.openrouterProvider,
-    connection.maxTokensOverride,
-    connection.claudeFastMode === "true",
-    connection.treatAsLocalEndpoint === "true",
-    connection.defaultParameters,
-  );
+  // Every other Slurp text path runs behind the fallback connection. This one called the provider
+  // bare, so a primary outage left placeholders unrewritten while the rest of Slurp carried on.
+  const connections = createConnectionsStorage(db);
+  const fallbackConnection = await connections.getFallbackForMain();
+  const provider = withConnectionFallbackProvider({
+    primary: createLLMProvider(
+      connection.provider,
+      resolveBaseUrl(connection),
+      connection.apiKey,
+      connection.maxContext,
+      connection.openrouterProvider,
+      connection.maxTokensOverride,
+      connection.claudeFastMode === "true",
+      connection.treatAsLocalEndpoint === "true",
+      connection.defaultParameters,
+    ),
+    primaryConnectionId: connection.id,
+    fallbackConnection,
+    fallbackBaseUrl: fallbackConnection ? resolveBaseUrl(fallbackConnection) : "",
+    category: "main",
+  });
   const messages = createSlurpMessagesStorage(db);
   const population = createSlurpPopulationStorage(db);
   let rewritten = 0;

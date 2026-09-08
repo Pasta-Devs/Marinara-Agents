@@ -30,7 +30,11 @@ export async function generateSlurpCommissionImage(
   if (!imageConnection) return "unavailable";
 
   const linkedPublicAccount = await noodle.resolveAccountSource(account);
-  const disclosureMode = account.settings.privacy.identityDisclosure ?? "hinted";
+  // Every other read of this setting defaults to "secret". Defaulting to "hinted" here meant an
+  // unconfigured Creator got reference images and no anonymity guard on a paid commission, and
+  // neither on anything else, which also contradicted this file's own docstring.
+  // ponytail: single-site fix; a shared resolveDisclosureMode() helper would stop it drifting again.
+  const disclosureMode = account.settings.privacy.identityDisclosure ?? "secret";
   const settings = await noodle.getSettings();
   const brief = input.brief.trim().slice(0, 2000);
   const image = await generateNoodlerPostImage({

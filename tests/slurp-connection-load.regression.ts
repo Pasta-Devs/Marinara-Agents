@@ -79,7 +79,10 @@ console.log("slurp image retry regression passed");
 // package bundles with esbuild, which does not typecheck) but drops it, so the generation ran
 // unadmitted and never booked its daily attempt — the reserve poll then regenerated a post on
 // every pass. Admission must wrap the composed provider instead.
-for (const file of ["slurp-generation.service.ts", "slurp-public-generation.service.ts"]) {
+// slurp-public-generation.service.ts was deleted: it had no importers, so its copy of this rule
+// would have passed forever no matter what the running code did. The invariant itself still
+// matters, so it stays pointed at the live generation path.
+for (const file of ["slurp-generation.service.ts"]) {
   const source = read(file);
   const fallbackCall = source.slice(
     source.indexOf("withConnectionFallbackProvider({"),
@@ -89,12 +92,18 @@ for (const file of ["slurp-generation.service.ts", "slurp-public-generation.serv
   assert.match(source, /withConnectionAdmissionProvider\(\s*fallbackProvider,/, `${file} does not admit its provider`);
 }
 
-// The text-only retry and the correction pass are steps inside an already-admitted refresh.
-const publicGeneration = read("slurp-public-generation.service.ts");
-assert.match(
-  publicGeneration,
-  /stepProvider = withConnectionAdmissionProvider\(fallbackProvider, input\.connection\.id, \{ kind: "none" \}\)/,
+// The correction pass is a step inside an already-admitted run, so it must not book a second
+// attempt. This used to be asserted only against the dead public-generation file.
+const admittedGeneration = read("slurp-generation.service.ts");
+assert.equal(
+  admittedGeneration.split("provider.chatComplete").length - 1,
+  2,
+  "the first call and the correction turn share one admission",
 );
-assert.equal(publicGeneration.split("stepProvider.chatComplete").length - 1, 2);
+assert.doesNotMatch(
+  admittedGeneration.slice(admittedGeneration.indexOf("const correctionMessages")),
+  /withConnectionAdmissionProvider\(/,
+  "the correction turn must not request its own admission",
+);
 
 console.log("slurp connection admission regression passed");

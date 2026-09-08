@@ -28,6 +28,7 @@ import { characterAppearanceFromRow, characterNoodleImageContextFromRow } from "
 import type { NoodleImagePromptReviewItem, ReviewedNoodleImagePrompt } from "./slurp-public-images.service.js";
 import { characterNameFromRow } from "./slurp-public-support.js";
 import { selectNoodleImageProviderPrompt } from "./slurp-image-prompt.js";
+import { slurpImageExtension } from "./slurp-image-format.js";
 
 const REVIEWED_IMAGE_CLAIM_LEASE_MS = 2 * 60 * 1000;
 const REVIEWED_IMAGE_CLAIM_RENEW_MS = 30 * 1000;
@@ -69,6 +70,12 @@ export async function generateNoodlerPostImage(input: {
   debugMode: boolean;
   previewOnly?: boolean;
   promptOverride?: { prompt: string; negativePrompt?: string };
+  /**
+   * The override is a draft this system generated earlier, not a prompt a human reviewed. A retry
+   * therefore still runs interpretation and still takes its negative prompt from the compiled
+   * template, so a retried image is built the same way the first attempt was.
+   */
+  retryStoredPrompt?: boolean;
   beforeProviderAttempt?: (attempt: number) => Promise<void>;
   onProviderAttemptFailure?: (attempt: number) => Promise<void>;
   admissionMode?: ConnectionAdmissionMode;
@@ -113,10 +120,12 @@ export async function generateNoodlerPostImage(input: {
   // no source image references or identifying physical description.
   // A HINTED creator also keeps image references: the same body, tattoos, and rooms can show up
   // while the source name and handle stay protected.
-  const referenceCharacter =
-    !input.suppressCharacterContext &&
-    input.disclosureMode !== "secret" &&
-    input.linkedPublicAccount?.kind === "character"
+  // Personas carry personality, appearance, and an avatar exactly like characters do, but this
+  // branch used to require kind === "character". A persona-owned Creator therefore got appearance
+  // text and nothing else in every mode, so "Open" quietly meant something weaker for a persona
+  // than for a character. Both kinds are eligible; Secret still gets no references at all.
+  const referenceSubject =
+    !input.suppressCharacterContext && input.disclosureMode !== "secret" && input.linkedPublicAccount
       ? input.linkedPublicAccount
       : null;
   const sourceCharacter =
@@ -137,12 +146,30 @@ export async function generateNoodlerPostImage(input: {
   if (!input.suppressCharacterContext && sourceAppearance && input.settings.imageGenerationIncludeDescriptions) {
     characterDescription = sourceAppearance;
   }
-  if (referenceCharacter) {
-    const row = sourceCharacter;
+  if (referenceSubject) {
+    // A character keeps its image context in a JSON `data` blob; a persona stores the same fields as
+    // plain columns and has no Noodle image-instruction extension to opt in with.
+    const row = sourceCharacter
+      ? {
+          id: sourceCharacter.id,
+          avatarPath: sourceCharacter.avatarPath ?? null,
+          appearance: characterAppearanceFromRow(sourceCharacter),
+          name: characterNameFromRow(sourceCharacter),
+          ...characterNoodleImageContextFromRow(sourceCharacter),
+        }
+      : sourcePersona
+        ? {
+            id: sourcePersona.id,
+            avatarPath: sourcePersona.avatarPath ?? null,
+            appearance: sourcePersona.appearance?.trim() ?? "",
+            name: sourcePersona.name,
+            personality: sourcePersona.personality?.trim() ?? "",
+            imageInstructions: "",
+          }
+        : null;
     if (row) {
-      const imageContext = characterNoodleImageContextFromRow(row);
-      characterPersonality = imageContext.personality;
-      characterImageInstructions = imageContext.imageInstructions;
+      characterPersonality = row.personality;
+      characterImageInstructions = row.imageInstructions;
 
       if (input.settings.imageGenerationIncludeDescriptions || input.settings.imageGenerationUseAvatarReferences) {
         const referenceResolution = await resolveIllustratorCharacterReferences({
@@ -150,9 +177,9 @@ export async function generateNoodlerPostImage(input: {
           chatCharacters: [
             {
               id: row.id,
-              name: referenceCharacter.displayName || characterNameFromRow(row),
-              avatarPath: row.avatarPath ?? null,
-              appearance: characterAppearanceFromRow(row),
+              name: referenceSubject.displayName || row.name,
+              avatarPath: row.avatarPath,
+              appearance: row.appearance,
             },
           ],
           persona: null,
@@ -210,8 +237,21 @@ export async function generateNoodlerPostImage(input: {
         imageDefaults,
       })
     : null;
-  const rawFinalPrompt = redactIdentity(compiledOverride?.prompt || compiledPrompt.prompt);
-  const rawProviderPrompt = redactIdentity(compiledOverride?.prompt || compiledDraft?.prompt || draftPrompt);
+  // A retry resends our own stored draft as the "override". That is the same string the template
+  // was just rendered from, so honouring it here would rebuild the retry from the bare draft and
+  // drop appearance and image habits — the exact context loss this flag exists to stop. Only a
+  // human-reviewed override displaces the template.
+  const reviewedOverride = input.retryStoredPrompt ? null : compiledOverride;
+  // NOODLE_IMAGE_POST documents itself as terminal — "everything this produces is sent to the image
+  // model verbatim" — and it is the only document carrying the appearance notes. It is therefore
+  // what the provider gets when no rewrite survives, rather than the bare draft, which drops
+  // appearance and the character's image habits entirely.
+  const rawProviderPrompt = redactIdentity(reviewedOverride?.prompt || compiledPrompt.prompt);
+  // The rewriter gets the visual intent only. It receives appearance, personality, and image habits
+  // through the labelled `characterContext` block below, so handing it the rendered template too
+  // sent the same three values twice and asked it to "preserve the visual facts" in a personality
+  // trait list.
+  const rawRewriteInput = redactIdentity(reviewedOverride?.prompt || compiledDraft?.prompt || draftPrompt);
   // Custom prompt templates may omit `userInstructions`, so restore configured instructions only
   // when the rendered prompt does not already contain them.
   const configuredImageInstructions = input.settings.imageGenerationPrompt.trim();
@@ -222,22 +262,31 @@ export async function generateNoodlerPostImage(input: {
   ]
     .filter(Boolean)
     .join("\n");
-  const characterContext = [
-    characterDescription ? `Appearance:\n${characterDescription}` : "",
-    characterPersonality ? `Personality:\n${characterPersonality}` : "",
-    characterImageInstructions ? `Character image preferences:\n${characterImageInstructions}` : "",
-  ]
-    .filter(Boolean)
-    .join("\n\n");
+  // Redacted like every other value reaching a language model. The appearance block is formatted as
+  // "${name}'s Appearance: ..." from the linked source account, so an unredacted context block sent
+  // the source's real name to the interpretation model in the same call whose prompt beside it had
+  // that name carefully replaced.
+  const characterContext = redactIdentity(
+    [
+      characterDescription ? `Appearance:\n${characterDescription}` : "",
+      characterPersonality ? `Personality:\n${characterPersonality}` : "",
+      characterImageInstructions ? `Character image preferences:\n${characterImageInstructions}` : "",
+    ]
+      .filter(Boolean)
+      .join("\n\n"),
+  );
+  // A stored draft we generated ourselves is not a reviewed decision, so a retry still runs
+  // interpretation. Only a prompt a human actually approved is sent through untouched.
+  const skipInterpretation = Boolean(input.promptOverride) && !input.retryStoredPrompt;
   const rewrittenPrompt =
     (imagePromptInstructions || characterContext || styleGuidance) &&
     input.settings.enableImageInterpretation !== false &&
-    !input.promptOverride
+    !skipInterpretation
       ? await rewriteNoodleImagePrompt({
           db: input.db,
-          prompt: rawFinalPrompt,
+          prompt: rawRewriteInput,
           interpretationInstruction: input.settings.imagePromptInterpretation,
-          instructions: imagePromptInstructions,
+          instructions: redactIdentity(imagePromptInstructions),
           characterContext,
           styleGuidance,
         })
@@ -263,9 +312,12 @@ export async function generateNoodlerPostImage(input: {
   const finalPrompt = [finalPromptBase, anonymityGuard, input.compositionGuard].filter(Boolean).join("\n\n");
   // A reviewer who cleared the negative prompt still gets the style profile's own negatives back,
   // for the same reason the positive prompt is recompiled above.
-  const baseNegativePrompt = input.promptOverride
-    ? redactIdentity(input.promptOverride.negativePrompt?.trim() || "") || compiledOverride?.negativePrompt || undefined
-    : compiledPrompt.negativePrompt || undefined;
+  const baseNegativePrompt =
+    input.promptOverride && !input.retryStoredPrompt
+      ? redactIdentity(input.promptOverride.negativePrompt?.trim() || "") ||
+        reviewedOverride?.negativePrompt ||
+        undefined
+      : compiledPrompt.negativePrompt || undefined;
   const finalNegativePrompt =
     [baseNegativePrompt, input.negativePromptAdditions].filter(Boolean).join(", ") || undefined;
   const outputWidth = input.width ?? input.settings.imageWidth;
@@ -329,7 +381,12 @@ export async function generateNoodlerPostImage(input: {
     },
   );
   const provider = input.imageConnection.provider ?? "image_generation";
-  const file = stageImageToDisk(`${NOODLER_MEDIA_PREFIX}${input.account.id}`, image.base64, image.ext);
+  const file = stageImageToDisk(
+    `${NOODLER_MEDIA_PREFIX}${input.account.id}`,
+    image.base64,
+    // The provider's declared extension is only a fallback; the bytes decide.
+    slurpImageExtension(image.base64, image.ext),
+  );
   return {
     metadata: {
       imageGenerated: true,
@@ -352,6 +409,8 @@ export function createNoodlerNoodleImagesService(db: DB) {
   const generateReviewedImages = async (input: {
     prompts: ReviewedNoodleImagePrompt[];
     debugMode: boolean;
+    /** Set when the prompts are stored drafts being retried rather than prompts a human approved. */
+    retryStoredPrompt?: boolean;
     admissionMode?: ConnectionAdmissionMode;
   }): Promise<
     { ok: true; finalized: number; deferred: number } | { ok: false; error: "missing_connection"; message: string }
@@ -423,6 +482,7 @@ export function createNoodlerNoodleImagesService(db: DB) {
           db,
           debugMode: input.debugMode,
           promptOverride,
+          retryStoredPrompt: input.retryStoredPrompt,
           admissionMode: input.admissionMode,
         });
       } catch (error) {
@@ -519,6 +579,8 @@ export function createNoodlerNoodleImagesService(db: DB) {
       const result = await generateReviewedImages({
         prompts: [{ id: post.id, prompt: post.imagePrompt }],
         debugMode: false,
+        // The stored prompt is our own draft from the failed attempt, not a reviewed one.
+        retryStoredPrompt: true,
         admissionMode: { kind: "background" },
       });
       // A missing image connection is a deferral, not a provider failure: nothing was sent, and

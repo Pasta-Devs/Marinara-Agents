@@ -26,9 +26,6 @@ const slurpMedia = read("packages/slurp/src/engine/packages/server/src/services/
 const artwork = read("packages/slurp/src/engine/packages/server/src/services/slurp/slurp-artwork.operation.ts");
 const shell = read("packages/slurp/src/engine/packages/client/src/components/slurp/SlurpShell.tsx");
 const serverEntry = read("packages/slurp/src/engine/packages/server/src/services/slurp/server-entry.ts");
-const publicGeneration = read(
-  "packages/slurp/src/engine/packages/server/src/services/slurp/slurp-public-generation.service.ts",
-);
 assert.match(
   settings,
   /const section = navigation\.section \?\? "overview";[\s\S]*?useSlurpAdState\(section/u,
@@ -46,10 +43,13 @@ assert.match(
 assert.match(multipartReader, /return await part\.toBuffer\(\);/u);
 assert.match(multipartReader, /const buffer = write\.value;[\s\S]*?isAllowedImageBuffer\(buffer, extension\)/u);
 assert.doesNotMatch(multipartReader, /return reply\./u, "the multipart helper must not return before validating media");
+// This guarded slurp-public-generation.service.ts, which had no importers and has been deleted.
+// The live Slurp equivalent is the image gate in the generation service: a run with no usable
+// image prompt must not reach the provider.
 assert.match(
-  publicGeneration,
-  /settings: generatedMediaSettings\(settings, parsedGenerated\.rejected\.length\)/u,
-  "partially rejected timeline output must not reach image generation",
+  read("packages/slurp/src/engine/packages/server/src/services/slurp/slurp-generation.service.ts"),
+  /const draftImagePrompt = imagesEnabled/u,
+  "image generation must stay gated on the run actually producing a prompt",
 );
 
 const updateRoute = routes.slice(
@@ -97,7 +97,7 @@ assert.doesNotMatch(
   /aria-label=\{localizeUi\("ui\.slurp\.wallet\.balance", \{ amount: activeWalletCoins \}\)\}/u,
   "ViewerHub must use its wallet prop",
 );
-assert.match(shell, /function CoinBadge[\s\S]*?>\s*C\s*</u, "balances must use the compact C coin badge");
+assert.match(shell, /<SlurpCoinAmount amount=/u, "balances must use the shared coin component");
 assert.match(home, /const accessViewerAccounts = viewerAccounts\.filter/u);
 assert.match(home, /!personaBackedCreator && \([\s\S]*?setAutomationOpen\(true\)/u);
 assert.match(storage, /withoutNoodlerSelfHiddenAccountId\([\s\S]*?row\.sourceEntityId \?\? row\.entityId/u);
@@ -243,7 +243,8 @@ const lockedCard = creatorPostCard.slice(
   creatorPostCard.indexOf("function noodlerUnlockPriceOf"),
 );
 assert.match(lockedCard, /data-slurp-locked-preview/u);
-assert.match(lockedCard, /scale-105 saturate-\[0\.82\]/u);
+// See slurp-media-surfaces: assert the treatment, not the exact Tailwind value.
+assert.match(lockedCard, /saturate-\[[\d.]+\]/u);
 assert.doesNotMatch(
   lockedCard,
   /(?:^|\s)blur-sm/u,
@@ -490,9 +491,11 @@ assert.match(
   /scale-110 object-cover opacity-25 blur-2xl/u,
   "Slurp post media must use a subdued image-derived stage background",
 );
+// The locked branch no longer renders its own crop-less frame: the server ships pre-blurred bytes
+// for locked media, so one frame honouring the real crop covers both states.
 assert.match(
   creatorPostCard,
-  /<PostImageFrame[\s\S]*?crop=\{null\}/u,
+  /<PostImageFrame[\s\S]*?crop=\{imageCrop\}/u,
   "Slurp feed images must use the shared media stage",
 );
 assert.match(slurpMedia, /NOODLER_MEDIA_WIDTHS = \[96, 320, 480, 640, 960, 1280, 1600\]/u);

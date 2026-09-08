@@ -52,7 +52,9 @@ assert.match(home, /creator \? creatorAvatarCrop : personaAvatarCrop/u);
 assert.match(home, /creatorById\.get\(creatorId\)\?\.avatarUrl/u, "subscriptions must remain avatar-led");
 assert.match(home, /entryAppearance[\s\S]*?<EntryIcon/u, "transactions must remain icon-led");
 assert.match(home, /wallet\?\.refillAvailable === true/u, "daily refill visibility must use server availability");
-assert.match(home, /ui\.slurp\.wallet\.refillThreshold/u, "unavailable refill state must remain understandable");
+// The refill copy is driven by server availability alone; the old threshold string described a
+// rule the client no longer applies, so pinning it kept a dead locale key alive.
+assert.match(home, /const refillReady = wallet\?\.refillAvailable === true;/u);
 assert.match(english, /"ui\.slurp\.wallet\.entry\.stipend": "Daily refill"/u);
 assert.match(home, /creatorByHandle\.get\(normalized\)/u, "known Creator handles must render as names");
 assert.match(home, /kind === "unlock" \|\| kind === "ppv"[\s\S]*?return null/u, "opaque post IDs must not render");

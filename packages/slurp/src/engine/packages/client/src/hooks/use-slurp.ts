@@ -1101,12 +1101,10 @@ export type NoodlerPostDraftImage = {
   crop: NoodlePostImageCrop | null;
 };
 
-export type NoodlerContentFormat = "caption" | "teaser" | "announcement" | "long_form";
+export type NoodlerContentFormat = "caption" | "announcement" | "long_form";
 
 type NoodlerFormatRequest = {
   format?: NoodlerContentFormat;
-  lockedFollowUpPostId?: string;
-  lockedFollowUp?: { title: string; content: string };
 };
 
 type NoodlerCreatePostRequest = Omit<NoodlerPostCreateInput, "uploadedImageUrl" | "imageCrop"> & {

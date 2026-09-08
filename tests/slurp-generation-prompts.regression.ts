@@ -13,17 +13,46 @@ const reply = read("packages/slurp/src/engine/packages/server/src/services/slurp
 
 const scheduleText = "Current Conversation Schedule for Ari: Tuesday: busy at work and slow to reply";
 assert.match(generation, /scheduleContext,/u);
-assert.match(generation, /input\.scheduleContext \?\? "No active Conversation Schedule/u);
-assert.match(reply, /scheduleContext: input\.scheduleContext/u);
+assert.match(generation, /protect\(input\.scheduleContext \?\? ""\) \|\| "No active Conversation Schedule/u);
+assert.match(reply, /scheduleContext:\s*protect\(input\.scheduleContext\)/u);
 assert.match(reply, /resolveSlurpCreatorScheduleContext\(createCharactersStorage\(input\.db\), source/u);
 assert.match(generation, /resolveSlurpCreatorScheduleContext\(\s*createCharactersStorage\(db\),/u);
 assert.ok([generation, reply].some((source) => source.includes(scheduleText)) === false);
 assert.match(
   generation,
-  /input\.scheduleContext \?\? "No active Conversation Schedule/u,
-  "Post prompt must have a schedule slot",
+  /protect\(input\.scheduleContext \?\? ""\) \|\| "No active Conversation Schedule/u,
+  "Post prompt must have a schedule slot, redacted like every neighbouring field",
 );
+// The schedule is a generation input, not a property of the character, and it must sit with the
+// timing instruction that refers to it rather than unlabelled inside the source card.
+assert.match(generation, /"# Today's schedule"/u, "Schedule needs its own header above the timing block");
 assert.match(reply, /scheduleContext/u, "Reply request must carry a schedule slot");
+
+// A Conversation Schedule activity is user-written and can name the source, so it is untrusted
+// content like every other value in these prompts. It was the one field in all three builders that
+// bypassed protect(), which meant a Hinted or Secret creator could be handed the source's name in
+// the same prompt that forbids writing it.
+const messages = readFileSync(
+  join(root, "packages/slurp/src/engine/packages/server/src/services/slurp/slurp-message-generation.service.ts"),
+  "utf8",
+);
+for (const [name, source] of [
+  ["post", generation],
+  ["reply", reply],
+  ["direct message", messages],
+] as const) {
+  assert.match(
+    source,
+    /protect\(input\.scheduleContext/u,
+    `the ${name} prompt must redact the schedule like every neighbouring field`,
+  );
+}
+// Closed at the source too: the schedule string itself no longer carries the source display name.
+const scheduleBuilder = readFileSync(
+  join(root, "packages/slurp/src/engine/packages/server/src/services/slurp/slurp-creator-schedule-context.ts"),
+  "utf8",
+);
+assert.doesNotMatch(scheduleBuilder, /Schedule for \$\{source\.displayName\}/u);
 
 for (const answer of ["", "   ", "[]", "```json\n[]\n```"]) {
   if (!answer.trim() || /^\s*```json\s*\[\s*\]\s*```\s*$/u.test(answer)) {

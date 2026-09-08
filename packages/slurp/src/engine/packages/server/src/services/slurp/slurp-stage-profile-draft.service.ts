@@ -73,18 +73,26 @@ export function buildNoodlerStageProfileDraftMessages(input: {
           "This is the same person as the source, running a page they do not want traced back to them. They are not a different person and not a vaguer one.",
           "Keep them fully themselves: same body, same voice, same humour, same tastes, same everyday life. An anonymous creator is specific and vivid, because their body and personality are the page.",
           "Withhold only what would link them: the source name and handle, the face and any one-of-a-kind marker, named people, employer, and city, and any canonical event someone could look up.",
+          // Secret is validated against this rule but was never told it, which is why creating a
+          // Secret creator failed more often than the other modes, and opaquely.
+          "Do not reuse four or more of the source's distinctive words in sequence, ignoring short connecting words. Write it all in your own wording.",
           noodlerConcealedSourceText(input.source?.data) || CONCEALED_SOURCE_FALLBACK_BRIEF,
         ].join("\n")
       : hintedBrief
         ? [
             "# Open-secret inspiration brief",
             "The stage identity is the same person as the source. Carry over look, vibe, interests, and daily life so a regular follower can recognize them.",
-            "Never use the source name or handle, and never copy four or more consecutive words from the text below. Rewrite everything in the stage voice.",
+            // Worded to match the validator, which strips words shorter than four characters before
+            // checking 4-grams. "Four consecutive words" invited a faithful paraphrase that only
+            // swapped the stopwords the validator drops anyway, so the more carefully the model
+            // obeyed, the more likely it tripped and the creation failed.
+            "Never use the source name or handle. Do not reuse four or more of the source's distinctive words in sequence, ignoring short connecting words — change the notable nouns, verbs, and adjectives, not just the words between them. Rewrite everything in the stage voice.",
             noodlerConcealedSourceText(input.source?.data) || CONCEALED_SOURCE_FALLBACK_BRIEF,
           ].join("\n")
         : [
             "# Source character or persona",
-            `Public name: ${input.publicAccount.displayName}`,
+            // `Public name:` is dropped: noodlerSourceText already opens with `Name:` from the same
+            // card, so the Open block stated the name twice in consecutive lines.
             `Public handle: @${input.publicAccount.handle}`,
             `Public bio: ${input.publicAccount.bio || "No bio provided."}`,
             sourceDetails,
@@ -101,7 +109,15 @@ export function buildNoodlerStageProfileDraftMessages(input: {
       role: "system",
       content: [
         "Create one editable Slurp creator profile draft.",
-        "Return JSON only with displayName, handle, bio, stagePersonality, and disclosureMode.",
+        // disclosureMode is chosen by the caller and stripped by the parser, so asking for it only
+        // invites the model to second-guess a decision it does not own.
+        "Return JSON only with displayName, handle, bio, and stagePersonality.",
+        // The post prompt states the person-vs-performance contract to the model that *consumes*
+        // stagePersonality, but the model that writes it was never told what the field is for. The
+        // obvious guess is "restate the personality", which collapses the two layers into one trait
+        // list and flattens every Creator toward the same register. Define it here too.
+        "The source character is who this Creator actually is. The stage voice describes how they perform on Slurp and how they treat the people reading, layered over that person, not a replacement for them.",
+        "stagePersonality is the performance, not the person. Describe how they post: how they address readers, their recurring habits and bits, their register and pacing on a feed. Do not restate the source character's traits, because those are supplied separately every time a post is written.",
         "Make the profile concise and usable for future Slurp post generation. Follow the disclosure rules exactly.",
         disclosureRules(input.request.disclosureMode, identity),
       ].join("\n"),

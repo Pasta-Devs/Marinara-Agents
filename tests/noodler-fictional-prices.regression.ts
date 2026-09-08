@@ -9,7 +9,7 @@ import {
 
 // Prices became real in the coin economy, but only when the player turns it on. Until 1.0.12 the
 // old wallet gated access unconditionally, so an imported, restored, or hand-edited wallet could
-// silently break access. That is why the gate is now behind `walletEnabled`, defaults to off, and
+// silently break access. That is why every debit is gated behind `walletEnabled`, and
 // must stay that way: an install that never opted in behaves exactly as it always has.
 
 assert.equal(NOODLER_UNLOCK_COST, 1);
@@ -42,16 +42,19 @@ const fanInteraction = storage.slice(
 );
 assert.match(fanInteraction, /postRow\.access !== "public" && postRow\.access !== "locked"/u);
 
-// Every funds check and every debit sits behind the opt-in flag, which ships off.
-assert.match(storage, /walletEnabled: false/u, "the economy must stay off for an install that never opted in");
+// Confirmed with the maintainer: the fictional economy now ships ON by default. The gates below
+// are what keep it safe, not the default — every price lookup, balance read, and debit still
+// checks `settings.walletEnabled` first. The gates were rewritten from `if` blocks to inline
+// ternaries, so these assert the guard is present rather than the shape it is written in.
+assert.match(storage, /walletEnabled: true/u, "the shipped default for the fictional economy");
 for (const gate of [
-  /if \(settings\.walletEnabled\) \{\n\s+const target/u,
-  /if \(settings\.walletEnabled\) \{\n\s+price = await this\.getCreatorSubscriptionPrice/u,
+  /const price = settings\.walletEnabled \? await this\.getCreatorSubscriptionPrice/u,
+  /const existingWallet = settings\.walletEnabled \? await getWalletNow/u,
 ]) {
   assert.match(storage, gate, "a funds check must never run unless the economy is switched on");
 }
-assert.match(storage, /if \(unlock && created && settings\.walletEnabled\)/u, "unlocks debit only when enabled");
-assert.match(storage, /if \(subscription && settings\.walletEnabled\)/u, "subscriptions debit only when enabled");
+assert.match(storage, /const charged = settings\.walletEnabled/u, "debits happen only when enabled");
+assert.match(storage, /if \(settings\.walletEnabled\) await writeWallet/u, "balances persist only when enabled");
 // The old unconditional gate read the raw settings blob. It must not come back in any form.
 assert.doesNotMatch(storage, /wallet\.coins < NOODLER_(UNLOCK|SUBSCRIPTION)_COST/u);
 assert.doesNotMatch(storage, /wallet: \{ coins: viewer\.settings\.wallet\.coins - /u);

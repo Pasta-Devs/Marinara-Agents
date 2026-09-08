@@ -128,24 +128,32 @@ const generationPrivacy = readFileSync(
   "packages/slurp/src/engine/packages/server/src/services/slurp/slurp-generation.service.ts",
   "utf8",
 );
+// The privacy core now lives in a leaf module so tests can execute it instead of grepping it.
+// slurp-identity-protection.regression.ts covers the behaviour; these assertions only hold the
+// wiring in place. Do not move this logic back into the service: nothing there can be imported.
 assert.match(generationPrivacy, /stageProfileContainsSourceDetails/u);
-assert.match(generationPrivacy, /source\.scenario/u);
-assert.match(generationPrivacy, /source\.appearance/u);
-assert.match(generationPrivacy, /source\.backstory/u);
+const identityPrivacy = readFileSync(
+  "packages/slurp/src/engine/packages/server/src/services/slurp/slurp-identity-protection.ts",
+  "utf8",
+);
+assert.match(identityPrivacy, /source\.scenario/u);
+assert.match(identityPrivacy, /source\.appearance/u);
+assert.match(identityPrivacy, /source\.backstory/u);
 
 // Hinted is an open secret, not a near-secret: the posts tease the other life, the images keep
 // the same appearance, and only the name and handle stay protected.
 assert.match(generationPrivacy, /Disclosure is hinted\. The creator's other public life is an open secret\./u);
 assert.match(generationPrivacy, /Never confirm a guess/u);
-assert.match(generationPrivacy, /mode === "hinted" \? "you-know-who" : "someone"/u);
+assert.match(identityPrivacy, /mode === "hinted" \? "you-know-who" : "someone"/u);
 
 const imagesPrivacy = readFileSync(
   "packages/slurp/src/engine/packages/server/src/services/slurp/slurp-images.service.ts",
   "utf8",
 );
+// Secret still gets no image references. Open and Hinted do, for personas as well as characters.
 assert.match(
   imagesPrivacy,
-  /input\.disclosureMode !== "secret" &&\s+input\.linkedPublicAccount\?\.kind === "character"/u,
+  /!input\.suppressCharacterContext && input\.disclosureMode !== "secret" && input\.linkedPublicAccount/u,
 );
 
 const draftPrivacy = readFileSync(
@@ -185,8 +193,25 @@ const fanActivityPrivacy = readFileSync(
 // Locked posts are eligible fan-activity targets, but only their title reaches the prompt — a
 // fan reply must never be able to restate paid content it was never shown.
 // A locked post still withholds its body, but its picture is public, so the image line stays.
-assert.match(fanActivityPrivacy, /\? \{ id, title, access, \.\.\.\(image && \{ image \}\) \}/u);
+// Anchored on the locked branch's opening rather than its closing brace: appending another
+// optional field (comments, most recently) must not read as a privacy regression.
+assert.match(fanActivityPrivacy, /\? \{ id, title, access, \.\.\.\(image && \{ image \}\)/u);
 assert.doesNotMatch(fanActivityPrivacy, /\? \{ id, title, content/u, "a locked body must never reach the prompt");
 assert.match(fanActivityPrivacy, /Posts marked locked are paid posts\. Only subscribers see them/u);
+
+// The client re-declares the disclosure rank table because it cannot import from the server
+// bundle. A shared module across the two bundles is more machinery than one three-line constant
+// is worth, so the drift is caught here instead: if the orders ever disagree, a downgrade warning
+// fires on the wrong transition.
+const disclosureRankTable = /secret: 0,\s*hinted: 1,\s*open: 2,/u;
+assert.match(
+  readFileSync("packages/slurp/src/engine/packages/server/src/services/slurp/slurp-disclosure.ts", "utf8"),
+  disclosureRankTable,
+);
+assert.match(
+  readFileSync("packages/slurp/src/engine/packages/client/src/components/slurp/SlurpHome.tsx", "utf8"),
+  disclosureRankTable,
+  "the client disclosure rank must match the server's",
+);
 
 console.log("NoodleR disclosure contract regressions passed.");

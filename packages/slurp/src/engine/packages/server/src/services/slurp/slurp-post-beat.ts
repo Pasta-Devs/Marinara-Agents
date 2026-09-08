@@ -71,12 +71,12 @@ const COMPANY = [
 ] as const;
 
 /**
- * The four shipped content formats.
+ * The shipped content formats.
  *
  * Auto-posting only ever used the first. Rotating them is the cheapest single change to the feed:
  * length and shape stop being constant even before the situation does.
  */
-export const SLURP_POST_FORMATS = ["caption", "teaser", "announcement", "long_form"] as const;
+export const SLURP_POST_FORMATS = ["caption", "announcement", "long_form"] as const;
 
 export type SlurpPostFormat = (typeof SLURP_POST_FORMATS)[number];
 
@@ -84,13 +84,17 @@ export type SlurpPostFormat = (typeof SLURP_POST_FORMATS)[number];
  * Weighted rotation. A creator page is mostly short captions, so the long formats appear but do
  * not take over: a feed of essays is as monotonous as a feed of one-liners.
  */
+// Length stays at eight and the story slots below are all even, so replacing the two `teaser`
+// slots (1 and 5, both odd) changes which formats appear without touching Story placement.
+// `teaser` is gone: it asked the model to leave a hook to a linked locked post that nothing could
+// ever create, so every teaser shipped a promise the feed did not keep.
 const FORMAT_CYCLE: readonly SlurpPostFormat[] = [
-  "caption",
-  "teaser",
   "caption",
   "announcement",
   "caption",
-  "teaser",
+  "announcement",
+  "caption",
+  "caption",
   "caption",
   "long_form",
 ];

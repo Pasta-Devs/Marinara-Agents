@@ -112,7 +112,11 @@ export function buildSlurpCreatorScheduleContext(
     month: "long",
     day: "numeric",
   }).format(localNow);
-  return `Current Conversation Schedule for ${source.displayName} (${localDate}${zone ? `, ${zone}` : ""}): ${today.map((block) => `${block.time}: ${block.activity}`).join(", ")}`;
+  // The name is deliberately absent. The model already knows whose schedule this is from the
+  // surrounding prompt, and a Hinted or Secret Creator must never receive the source's real
+  // display name — this string used to carry it straight past the redaction applied to every
+  // neighbouring field.
+  return `Current Conversation Schedule (${localDate}${zone ? `, ${zone}` : ""}): ${today.map((block) => `${block.time}: ${block.activity}`).join(", ")}`;
 }
 
 export async function resolveSlurpCreatorScheduleContext(

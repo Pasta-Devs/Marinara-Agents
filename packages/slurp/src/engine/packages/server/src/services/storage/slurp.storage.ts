@@ -129,12 +129,17 @@ import {
   noodlerReserveState,
   noodlerFanActivityState,
   slurpPopulation,
+  slurpAudienceTies,
+  slurpEvents,
+  slurpPendingText,
+  noodlerFirstPostJobs,
   slurpMessageClaims,
   slurpMessages,
   slurpThreads,
   slurpCommissions,
 } from "../../db/schema/slurp.js";
 import { SLURP_CREATOR_MESSAGING_KEY } from "../slurp/slurp-messaging.js";
+import { noodlerContentLimitFor } from "../slurp/slurp-content-format.js";
 import { readNoodlerAccountMediaPath, readNoodlerAvatarMediaPath } from "../slurp/slurp-avatar.js";
 import { newId, now } from "../../utils/id-generator.js";
 import {
@@ -1793,6 +1798,13 @@ export function createSlurpStorage(db: DB) {
           slurpMessages,
           slurpCommissions,
           slurpThreads,
+          // Everything below had no deletion path at all, not even in this full reset. A fresh
+          // install inherited the previous one's audience, world events, and queued work.
+          noodlerFirstPostJobs,
+          slurpEvents,
+          slurpAudienceTies,
+          slurpPopulation,
+          slurpPendingText,
         ]) {
           await tx.delete(table);
         }
@@ -2029,6 +2041,13 @@ export function createSlurpStorage(db: DB) {
             ),
           );
         await tx.delete(noodlerPreparedPosts).where(eq(noodlerPreparedPosts.creatorAccountId, existing.id));
+        // Same Creator-keyed rows deleteNoodlerAccount cascades. Both entry points must agree, or
+        // which one the caller happened to use decides what survives.
+        await tx.delete(slurpCommissions).where(eq(slurpCommissions.creatorAccountId, existing.id));
+        await tx.delete(slurpAudienceTies).where(eq(slurpAudienceTies.creatorAccountId, existing.id));
+        await tx.delete(slurpPendingText).where(eq(slurpPendingText.creatorAccountId, existing.id));
+        await tx.delete(slurpEvents).where(eq(slurpEvents.creatorAccountId, existing.id));
+        await tx.delete(noodlerFirstPostJobs).where(eq(noodlerFirstPostJobs.creatorAccountId, existing.id));
         await tx.delete(noodlePosts).where(inArray(noodlePosts.id, postIds));
         await tx.delete(noodleAccounts).where(eq(noodleAccounts.id, existing.id));
         await tx._fileStore.flush();
@@ -2216,6 +2235,13 @@ export function createSlurpStorage(db: DB) {
                 : eq(noodleInteractions.postId, "__none__"),
             ),
           );
+        // Rows keyed to this Creator that nothing else cleans up. Left behind, a deleted Creator
+        // kept an audience, a commission history, and queued work that could still fire.
+        await tx.delete(slurpCommissions).where(eq(slurpCommissions.creatorAccountId, id));
+        await tx.delete(slurpAudienceTies).where(eq(slurpAudienceTies.creatorAccountId, id));
+        await tx.delete(slurpPendingText).where(eq(slurpPendingText.creatorAccountId, id));
+        await tx.delete(slurpEvents).where(eq(slurpEvents.creatorAccountId, id));
+        await tx.delete(noodlerFirstPostJobs).where(eq(noodlerFirstPostJobs.creatorAccountId, id));
         await tx.delete(noodleAccounts).where(and(eq(noodleAccounts.id, id), eq(noodleAccounts.platform, "slurp")));
         await tx._fileStore.flush();
       });
@@ -2458,6 +2484,13 @@ export function createSlurpStorage(db: DB) {
         const row = (await tx.select().from(noodleAccounts).where(eq(noodleAccounts.id, id)))[0];
         if (!row || row.platform !== "slurp") return null;
         const settings = normalizeNoodleAccountSettings(row.settings);
+        // The snapshot is re-minimised and handed back on every stage-profile save, almost always
+        // byte-identical to the stored one. Writing it anyway churned the row and moved updatedAt,
+        // which made a save with no source change look like a source change to everything reading
+        // that timestamp.
+        if (JSON.stringify(settings.profile.noodlerSourceSnapshot ?? null) === JSON.stringify(sourceSnapshot)) {
+          return mapAccount(row);
+        }
         await tx
           .update(noodleAccounts)
           .set({
@@ -3217,19 +3250,23 @@ export function createSlurpStorage(db: DB) {
           }
           const postId = newId();
           const imageState = current.imageState === "attached" ? "attached" : "closed";
+          const preparedMetadata = parseRecord(payload.metadata);
+          const hasMedia = typeof preparedMetadata.noodlerMediaPath === "string";
+          // A Story is a picture with a line under it. The prepared payload carries the story
+          // intent, but a run whose image never attached publishes as an ordinary post.
+          if (!hasMedia) delete preparedMetadata.noodlerPostType;
           await tx.insert(noodlePosts).values({
             id: postId,
             authorAccountId: account.id,
             title: typeof payload.title === "string" ? payload.title : null,
             content: payload.content,
-            imageUrl:
-              typeof parseRecord(payload.metadata).noodlerMediaPath === "string" ? noodlerPostMediaUrl(postId) : null,
+            imageUrl: hasMedia ? noodlerPostMediaUrl(postId) : null,
             imagePrompt: typeof payload.imagePrompt === "string" ? payload.imagePrompt : null,
             parentPostId: null,
             quotePostId: null,
             source: "generated",
             access: payload.access === "public" ? "public" : "locked",
-            metadata: JSON.stringify({ ...parseRecord(payload.metadata), noodlerPreparedPostId: current.id }),
+            metadata: JSON.stringify({ ...preparedMetadata, noodlerPreparedPostId: current.id }),
             authorSnapshot: JSON.stringify(snapshotForAccount(account)),
             // A late publish is stamped with the moment it actually happened. Using publishAt
             // would file the post behind whatever the feed received during the delay.
@@ -3999,7 +4036,9 @@ export function createSlurpStorage(db: DB) {
         await tx
           .update(noodlePosts)
           .set({
-            ...(input.content !== undefined && { content: input.content.trim().slice(0, 4000) }),
+            ...(input.content !== undefined && {
+              content: input.content.trim().slice(0, noodlerContentLimitFor(nextMetadata)),
+            }),
             ...(input.imageUrl !== undefined && { imageUrl: input.imageUrl }),
             ...(input.imagePrompt !== undefined && { imagePrompt: input.imagePrompt }),
             ...((input.imageUrl !== undefined || input.imagePrompt !== undefined) && {
@@ -4084,7 +4123,9 @@ export function createSlurpStorage(db: DB) {
           .update(noodlePosts)
           .set({
             ...(input.title !== undefined && { title: input.title }),
-            ...(input.content !== undefined && { content: input.content.trim().slice(0, 4000) }),
+            ...(input.content !== undefined && {
+              content: input.content.trim().slice(0, noodlerContentLimitFor(nextMetadata)),
+            }),
             ...(imageChanged && {
               imageUrl: media?.imageUrl ?? null,
               imagePrompt: null,

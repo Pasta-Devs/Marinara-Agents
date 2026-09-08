@@ -10,6 +10,13 @@ const RETRY_DELAYS_MS = [15_000, 60_000, 300_000] as const;
 const POLL_MS = 2_000;
 const queues = new WeakMap<object, ReturnType<typeof createSlurpFirstPostQueue>>();
 
+/** Transient outcomes: the run never reached the model, so the job is worth another pass. */
+const RETRYABLE_STATUSES = new Set(["busy"]);
+
+function retryAt(attempt: number): string {
+  return new Date(Date.now() + RETRY_DELAYS_MS[Math.min(attempt - 1, RETRY_DELAYS_MS.length - 1)]!).toISOString();
+}
+
 type FirstPostJob = typeof noodlerFirstPostJobs.$inferSelect;
 
 function attempts(value: unknown): number {
@@ -106,6 +113,13 @@ export function createSlurpFirstPostQueue(db: DB) {
           .update(noodlerFirstPostJobs)
           .set({ status: "generated", postId: result.post.id, updatedAt: now() })
           .where(eq(noodlerFirstPostJobs.id, job.id));
+      } else if (RETRYABLE_STATUSES.has(result.status) && attempt < MAX_ATTEMPTS) {
+        // "busy" only means another operation held this account's lock for a moment. Recording it
+        // as a permanent failure threw away the creator's first post over a transient collision.
+        await db
+          .update(noodlerFirstPostJobs)
+          .set({ status: "queued", nextAttemptAt: retryAt(attempt), error: result.status, updatedAt: now() })
+          .where(eq(noodlerFirstPostJobs.id, job.id));
       } else {
         await db
           .update(noodlerFirstPostJobs)
@@ -119,9 +133,7 @@ export function createSlurpFirstPostQueue(db: DB) {
         .update(noodlerFirstPostJobs)
         .set({
           status: retry ? "queued" : "failed",
-          nextAttemptAt: new Date(
-            Date.now() + RETRY_DELAYS_MS[Math.min(attempt - 1, RETRY_DELAYS_MS.length - 1)]!,
-          ).toISOString(),
+          nextAttemptAt: retryAt(attempt),
           error: message.slice(0, 500),
           updatedAt: now(),
         })
@@ -148,7 +160,29 @@ export function createSlurpFirstPostQueue(db: DB) {
     start() {
       if (active) return;
       active = true;
-      void poll();
+      // A job is marked `running` before the model call and only leaves that state when the call
+      // settles. A restart mid-call therefore stranded it forever: processOne only ever selects
+      // `queued`, so the wizard polled a job that could never finish. Hand them back on startup.
+      void (async () => {
+        try {
+          const stranded = await db
+            .select()
+            .from(noodlerFirstPostJobs)
+            .where(eq(noodlerFirstPostJobs.status, "running"));
+          for (const job of stranded) {
+            await db
+              .update(noodlerFirstPostJobs)
+              .set({ status: "queued", nextAttemptAt: now(), updatedAt: now() })
+              .where(eq(noodlerFirstPostJobs.id, job.id));
+          }
+          if (stranded.length > 0) {
+            logger.warn("[noodler] Requeued %d first-post job(s) left running by a restart", stranded.length);
+          }
+        } catch (error) {
+          logger.error(error, "[noodler] Failed to requeue stranded first-post jobs");
+        }
+        void poll();
+      })();
     },
     async stop() {
       active = false;

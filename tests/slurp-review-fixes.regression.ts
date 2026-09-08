@@ -130,8 +130,23 @@ assert.match(
   generation,
   /imageUrl: noodlerPostMediaUrl\(postId\),\s*metadata: \{ \.\.\.image\.metadata, \.\.\.\(storyBeat \? \{ noodlerPostType: "story" \} : \{\}\) \},/u,
 );
+// The scheduled path returns at prepareOnly, before the committed-image branch, so it carries the
+// story intent in the prepared payload instead — otherwise every scheduled Story silently published
+// as an ordinary post. publishDueNoodlerPreparedPosts drops the flag again when no image attached,
+// which is what keeps "a Story is a picture with a line under it" true.
 const storyMarks = [...generation.matchAll(/noodlerPostType: "story"/gu)];
-assert.equal(storyMarks.length, 1, "only the committed-image path may publish a Story");
+assert.equal(storyMarks.length, 2, "the committed-image path and the prepared payload both mark a Story");
+assert.match(
+  generation,
+  /metadata: \{ \.\.\.baseInput\.metadata, \.\.\.\(storyBeat \? \{ noodlerPostType: "story" \} : \{\}\) \},/u,
+  "the prepareOnly return must carry the story flag",
+);
+const storage = read("packages/slurp/src/engine/packages/server/src/services/storage/slurp.storage.ts");
+assert.match(
+  storage,
+  /if \(!hasMedia\) delete preparedMetadata\.noodlerPostType;/u,
+  "publishing a prepared post without an image must drop the story flag",
+);
 assert.match(
   generation,
   /\.\.\.\(storyBeat \? \{ width: settings\.storyImageWidth, height: settings\.storyImageHeight \} : \{\}\)/u,

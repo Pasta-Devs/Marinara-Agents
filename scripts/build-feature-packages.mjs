@@ -326,7 +326,7 @@ const features = [
   },
   {
     id: "slurp",
-    version: "1.2.11",
+    version: "1.2.20",
     minEngineVersion: "2.4.3",
     maxEngineExclusive: MAX_ENGINE_EXCLUSIVE,
     name: "Slurp",
@@ -371,7 +371,10 @@ const features = [
     packageSourceRoot: slurpSourceRoot,
     ownedSourcePaths: slurpOwnedSourcePaths,
     libraryHidden: true,
-    assetPaths: ["slurp-logo.png", "slurpagent.png", "slurpcoin.svg"],
+    // `slurpcoin.svg` is deliberately not shipped: the Engine keeps SVG out of its servable
+    // package-asset content types, so the route 404s it whatever the manifest declares. The coin
+    // is inlined as a data URI in SlurpCoin.tsx instead, from the same file kept as source.
+    assetPaths: ["slurp-logo.png", "slurpagent.png"],
     contributions: {
       slots: ["home-browser-tab"],
       homeBrowserTab: {

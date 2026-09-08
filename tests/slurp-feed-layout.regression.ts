@@ -74,7 +74,7 @@ const stickyHeader = home.slice(
 assert.doesNotMatch(stickyHeader, /SlurpMomentsShelf/u, "The moments strip must sit outside the sticky header");
 assert.match(stickyHeader, /h-11 w-11/u, "The mobile refresh control must keep a full touch target");
 assert.match(stickyHeader, /absolute start-1\/2[\s\S]*?-translate-x-1\/2/u, "The logo must stay geometrically centred");
-assert.match(stickyHeader, /<span className="min-w-0 truncate">\{walletCoins\}<\/span>/u);
+assert.match(stickyHeader, /<SlurpCoinAmount amount=\{walletCoins\}/u, "the sticky header shows the coin balance");
 
 // Shared subpage headers are real page headings and retain visible keyboard focus.
 const frame = home.slice(home.indexOf("function NoodlerFrame("), home.indexOf("function SlurpStudioView("));
@@ -92,7 +92,10 @@ for (const [name, source] of [
   ["settings", settings],
   ["home", home],
 ] as const) {
-  assert.doesNotMatch(source, /blur-3xl/u, `${name} panels must not carry one-off decorative glows`);
+  // An image-derived stage background (the `object-cover opacity-25 blur-*` pattern shared with
+  // PostImageCropEditor) is a media surface, not a decorative panel glow. Only the latter is banned.
+  const decorativeGlow = source.replace(/scale-110 object-cover opacity-25 blur-3xl/gu, "");
+  assert.doesNotMatch(decorativeGlow, /blur-3xl/u, `${name} panels must not carry one-off decorative glows`);
 }
 
 // Creator studio was a second door into Settings.
@@ -130,8 +133,12 @@ assert.match(shell, /export const SLURP_TOGGLE_ACTIVE_CLASS/u, "Small toggles ne
 assert.match(shell, /SLURP_ROW_ACTIVE_CLASS =\n {2}"bg-\[color-mix/u, "The active row must be coloured in");
 assert.doesNotMatch(home, /feedLayout === option\.id && "bg-\[var\(--slurp-surface-raised\)\]/u);
 
-// The coin reads as a coin: bright mark on the accent disc.
-assert.match(shell, /rounded-full bg-\[var\(--noodle-accent\)\] font-black leading-none text-white/u);
+// The coin reads as a coin. It is now a real minted asset rather than a CSS disc with a letter on
+// it, so the check moved to the shared component and its source SVG.
+const coin = readFileSync(join(componentsDir, "SlurpCoin.tsx"), "utf8");
+assert.match(coin, /export const SLURP_COIN_SRC =\s*\n?\s*"data:image\/svg\+xml;base64,/u);
+assert.match(coin, /export function SlurpCoinAmount\(/u);
+assert.match(shell, /<SlurpCoinAmount amount=/u, "balances render through the shared coin component");
 
 // Wide screens: the room and frame must not add a right-edge accent glow.
 assert.match(shell, /"--slurp-outer"/u, "The outer background needs its own token");

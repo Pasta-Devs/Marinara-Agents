@@ -50,10 +50,22 @@ async function main() {
     "services/slurp/slurp-reserve.operation.ts",
     "services/slurp/slurp-fan-activity.service.ts",
     "services/slurp/slurp-garnish-generation.service.ts",
+    // Rewrites placeholder commission, question, and opener text. It resolved the connection
+    // correctly but called the provider bare, so it was the one text path with no fallback.
+    "services/slurp/slurp-pending-text.service.ts",
   ]) {
     const source = read(file);
     assert.match(source, /resolveSlurpTextConnection/, `${file} must resolve through the shared helper`);
     assert.doesNotMatch(source, /getDefaultForAgents\(\)/, `${file} must not resolve the agent default on its own`);
+  }
+
+  // A resolved connection is only half of it: every text path must also survive that connection
+  // being down, or one outage silently stops part of Slurp while the rest keeps running.
+  for (const file of [
+    "services/slurp/slurp-reply-generation.service.ts",
+    "services/slurp/slurp-pending-text.service.ts",
+  ]) {
+    assert.match(read(file), /withConnectionFallbackProvider\(\{/, `${file} must run behind the fallback provider`);
   }
 
   // The stage-profile draft route drives creator and persona creation and editing. It used to skip

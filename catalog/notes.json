@@ -36,6 +36,60 @@
     "slurp": {
       "versions": [
         {
+          "version": "1.2.20",
+          "date": "2026-09-08",
+          "notes": "- Post images now always carry the character's appearance, and a retried image is built the same way the first attempt was.\n- Scheduled Stories now publish as Stories instead of ordinary posts.\n- A Creator's stage voice is now described to the model that writes it, so Creators stop sounding alike.\n- Creating a concealed Creator now fails far less often.\n- A Conversation Schedule can no longer leak the source name into a Hinted or Secret Creator's prompts.\n- Persona-owned Creators now get their appearance, personality, and image references.\n- A first post is no longer lost to a restart or a brief lock, and automatic posts now retry like manual ones.\n- Deleting a Creator now removes their commissions, audience, and queued work.",
+          "highlight": false
+        },
+        {
+          "version": "1.2.19",
+          "date": "2026-09-08",
+          "notes": "- Opening Messages directly from a Creator profile now hides the redundant mobile Inbox header before the first thread record exists.",
+          "highlight": false
+        },
+        {
+          "version": "1.2.18",
+          "date": "2026-09-08",
+          "notes": "- Mobile message threads now show only their conversation header and back button instead of stacking them beneath the Inbox header.",
+          "highlight": false
+        },
+        {
+          "version": "1.2.17",
+          "date": "2026-09-08",
+          "notes": "- Message status pills now have their own metadata line, and the Inbox tab switcher gets out of the way while a conversation is open.",
+          "highlight": false
+        },
+        {
+          "version": "1.2.16",
+          "date": "2026-09-07",
+          "notes": "- Refined the new Inbox to match its concept: full-height desktop conversations, message filters, selected-thread surfaces, compact broadcasts, and a focused message-tools menu.",
+          "highlight": false
+        },
+        {
+          "version": "1.2.15",
+          "date": "2026-09-07",
+          "notes": "- Redesigned Inbox around dedicated Messages and Notifications tabs, with a desktop split conversation view, notification filters, and commissions kept inside their related conversations.",
+          "highlight": false
+        },
+        {
+          "version": "1.2.14",
+          "date": "2026-09-07",
+          "notes": "- The Slurp coin now carries a smaller lowercase letter in white.",
+          "highlight": false
+        },
+        {
+          "version": "1.2.13",
+          "date": "2026-09-07",
+          "notes": "- Updated the Slurp coin artwork.",
+          "highlight": false
+        },
+        {
+          "version": "1.2.12",
+          "date": "2026-09-07",
+          "notes": "- Fixed the Slurp coin icon, which never loaded: the Engine does not serve SVG from the package asset route, so the coin is now embedded directly in the client.",
+          "highlight": false
+        },
+        {
           "version": "1.2.11",
           "date": "2026-09-07",
           "notes": "- Creators now answer comments from the generated audience, at a rate set by what that person is to them.\n- Creators can now open a direct message with somebody who has gone quiet, and rarely with an ordinary fan.\n- Generated audience comments are on by default, and short reactions now arrive continuously.\n- Fixed the in-session activity clock, which discarded time too short to buy a whole reaction and so produced no likes while the app was open.\n- Lowered the audience thresholds that left a new Creator with almost no comments and no unprompted messages.\n- Fan comments can now reply to each other, and see the comments already under a post.\n- Relationship scores now read a per-pair spend record instead of the capped wallet ledger.\n- Sending a direct message now counts as engagement.\n- Message requests now get one reply, and queued replies now appear without reopening the conversation.\n- Commissions from the generated audience can now be accepted or declined.",
@@ -100,60 +154,6 @@
           "date": "2026-09-06",
           "notes": "- Inbox now keeps Chats and Activity in one polished, avatar-led destination with\n  compact rows, colorful event medallions, per-tab unread badges, and safe legacy\n  notification links.\n- Wallet now presents Creator earnings and Fan coins as connected but separate\n  pockets, with clearer transfer limits, avatar-led subscriptions, and distinct\n  Spending and Earnings histories.",
           "highlight": true
-        },
-        {
-          "version": "1.2.0",
-          "date": "2026-09-06",
-          "notes": "- Messages and notifications now share one Inbox with separate Chats and Activity\n  tabs, avatar-led rows, semantic event icons, and a single navigation badge.\n- Wallet now shows the active identity's unwithdrawn Creator earnings and\n  spendable Fan wallet as two connected pockets, with an explicit Move to Wallet\n  action and separate Spending and Earnings histories.",
-          "highlight": true
-        },
-        {
-          "version": "1.1.33",
-          "date": "2026-09-06",
-          "notes": "- Removed the visible Stories heading so the Home memory ribbon begins directly\n  with its visual create and preview tiles.",
-          "highlight": false
-        },
-        {
-          "version": "1.1.32",
-          "date": "2026-09-06",
-          "notes": "- Stories on Home are now an image-first memory ribbon: compact portrait previews\n  reveal each Story at a glance, while adding, unread state, and locks stay quiet.",
-          "highlight": false
-        },
-        {
-          "version": "1.1.31",
-          "date": "2026-09-06",
-          "notes": "- Removed the separators around Edit Profile and the chevron so Profile controls\n  reads as one uninterrupted rail.",
-          "highlight": false
-        },
-        {
-          "version": "1.1.30",
-          "date": "2026-09-06",
-          "notes": "- Edit Profile now renders as a small tinted pill inside its full-size accessible\n  rail target instead of filling the rail's height.",
-          "highlight": false
-        },
-        {
-          "version": "1.1.29",
-          "date": "2026-09-06",
-          "notes": "- Profile controls and its chevron now recede into the rail; Edit Profile alone\n  keeps a restrained pink tint instead of sharing a loud solid accent block.",
-          "highlight": false
-        },
-        {
-          "version": "1.1.28",
-          "date": "2026-09-06",
-          "notes": "- Edit Profile now sits inside Profile controls immediately before the trailing\n  expansion chevron, with both the label and chevron able to open the panel.",
-          "highlight": false
-        },
-        {
-          "version": "1.1.27",
-          "date": "2026-09-06",
-          "notes": "- The collapsed Profile controls rail is now a single compact 44px control:\n  Edit Profile is integrated into its trailing edge instead of appearing as a\n  separate button beside it.",
-          "highlight": false
-        },
-        {
-          "version": "1.1.26",
-          "date": "2026-09-06",
-          "notes": "- Creator tools are now Profile controls: a quieter unified rail that keeps Edit\n  Profile inside it and reveals publishing, access, and automation only when\n  expanded.",
-          "highlight": false
         }
       ]
     }

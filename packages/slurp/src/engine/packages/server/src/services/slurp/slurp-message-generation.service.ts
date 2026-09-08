@@ -126,7 +126,11 @@ export function buildSlurpMessageChat(input: {
           })),
         }
       : {}),
-    scheduleContext: input.scheduleContext ?? "No active Conversation Schedule is available for this Creator today.",
+    // Redacted like every neighbouring field. A Conversation Schedule activity is user-written and
+    // can name the source, so it must not be the one value that bypasses protect(). Matches the
+    // same fix in buildNoodlerPostMessages.
+    scheduleContext:
+      protect(input.scheduleContext) || "No active Conversation Schedule is available for this Creator today.",
     conversation: input.history.slice(-HISTORY_TURNS).map((message) => ({
       from: message.role === "creator" ? "you" : "the fan",
       // A tip is a message with no words. Rendering it as one is what lets the creator thank

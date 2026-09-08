@@ -102,7 +102,11 @@ export function buildNoodlerCreatorReplyMessages(input: {
       relationship: input.relationship ?? "no history with this creator yet",
     },
     viewerComment: protect(input.parent.content) || (input.parent.imageUrl ? "[image reply]" : ""),
-    scheduleContext: input.scheduleContext ?? "No active Conversation Schedule is available for this Creator today.",
+    // Redacted like every neighbouring field. A Conversation Schedule activity is user-written and
+    // can name the source, so it must not be the one value that bypasses protect(). Matches the
+    // same fix in buildNoodlerPostMessages.
+    scheduleContext:
+      protect(input.scheduleContext) || "No active Conversation Schedule is available for this Creator today.",
   };
   return [
     { role: "system", content: system },
