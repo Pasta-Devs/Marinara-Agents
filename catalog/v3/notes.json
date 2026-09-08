@@ -36,6 +36,36 @@
     "slurp": {
       "versions": [
         {
+          "version": "1.2.32",
+          "date": "2026-09-08",
+          "notes": "- Commission requests now wait for Creator review instead of receiving an instant quote.\n- Creators can revise an unpaid quote or decline a request before payment.\n- Commission payment now shows loading, success, balance, and error feedback.\n- Delivery cards show image loading feedback while protected artwork is fetched.",
+          "highlight": false
+        },
+        {
+          "version": "1.2.31",
+          "date": "2026-09-08",
+          "notes": "- Commission delivery text and artwork now render inside the commission card without repeating as chat messages.\n- Delivery media URLs now use the same persona-scoped loading path as other Slurp images.",
+          "highlight": false
+        },
+        {
+          "version": "1.2.30",
+          "date": "2026-09-08",
+          "notes": "- The generated audience can now subscribe to a Creator and pay for it, so subscriber counts and earnings grow with the whole audience rather than with the six ambient profiles alone.\n- Posts now say who liked them: a few names, then the count for everybody else.\n- Creator profiles gained a Followers list, and the Subscribers list no longer drops audience members.\n- Tapping any audience name opens a fan card with their funnel stage, direction, spending, and traits.",
+          "highlight": false
+        },
+        {
+          "version": "1.2.29",
+          "date": "2026-09-08",
+          "notes": "- Commission briefs, quotes, and state changes no longer repeat as ordinary chat messages. The commission card now contains its delivered text and artwork directly.",
+          "highlight": false
+        },
+        {
+          "version": "1.2.28",
+          "date": "2026-09-08",
+          "notes": "- Pending messages now enter the Creator's paced reply queue. A Creator reply accepts the request, so conversations continue even when they began while the Creator was away or the fan was not subscribed.\n- Character-controlled Creators can quote fan commissions themselves and generate the finished commission after the fan explicitly accepts and pays.\n- Refined the chat and commission cards with clearer state guidance, larger controls, stronger focus and press feedback, and cleaner coin labels.",
+          "highlight": false
+        },
+        {
           "version": "1.2.27",
           "date": "2026-09-08",
           "notes": "- Polished Slurp's mobile navigation, empty states, wide-screen layouts, and small-text readability without changing the page structure.\n- Spending coins now gives live balances a brief coin animation, with a quiet color-only cue when reduced motion is enabled.\n- The age gate keeps its confetti payoff and now offers a direct way back to Home.",
@@ -123,36 +153,6 @@
           "version": "1.2.13",
           "date": "2026-09-07",
           "notes": "- Updated the Slurp coin artwork.",
-          "highlight": false
-        },
-        {
-          "version": "1.2.12",
-          "date": "2026-09-07",
-          "notes": "- Fixed the Slurp coin icon, which never loaded: the Engine does not serve SVG from the package asset route, so the coin is now embedded directly in the client.",
-          "highlight": false
-        },
-        {
-          "version": "1.2.11",
-          "date": "2026-09-07",
-          "notes": "- Creators now answer comments from the generated audience, at a rate set by what that person is to them.\n- Creators can now open a direct message with somebody who has gone quiet, and rarely with an ordinary fan.\n- Generated audience comments are on by default, and short reactions now arrive continuously.\n- Fixed the in-session activity clock, which discarded time too short to buy a whole reaction and so produced no likes while the app was open.\n- Lowered the audience thresholds that left a new Creator with almost no comments and no unprompted messages.\n- Fan comments can now reply to each other, and see the comments already under a post.\n- Relationship scores now read a per-pair spend record instead of the capped wallet ledger.\n- Sending a direct message now counts as engagement.\n- Message requests now get one reply, and queued replies now appear without reopening the conversation.\n- Commissions from the generated audience can now be accepted or declined.",
-          "highlight": false
-        },
-        {
-          "version": "1.2.10",
-          "date": "2026-09-07",
-          "notes": "- Locked previews now use a darker, softer teaser with a high-contrast coin price and no preview label.\n- Increased sparkle density while keeping animation limited to a small mote layer.",
-          "highlight": false
-        },
-        {
-          "version": "1.2.9",
-          "date": "2026-09-07",
-          "notes": "- Locked previews now use a slightly darker, softer teaser with a larger lock and directly grouped unlock controls.\n- Increased the sparkle veil density while keeping the animated layer small.",
-          "highlight": false
-        },
-        {
-          "version": "1.2.8",
-          "date": "2026-09-07",
-          "notes": "- Locked media now uses a larger, lightly blurred teaser so viewers can understand the image shape without receiving the original bytes.\n- Replaced the noisy sparkle texture with a denser, lower-cost sparkle veil.\n- Locked and unlocked feed images now use the same preview frame and crop.",
           "highlight": false
         }
       ]

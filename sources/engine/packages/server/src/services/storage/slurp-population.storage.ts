@@ -38,6 +38,8 @@ export type SlurpAudienceTie = {
   arc: SlurpArc;
   /** When the current arc was set. Null for a tie that predates arcs. */
   arcSince: string | null;
+  /** When this member's subscription is paid up to. Null for anybody who has never subscribed. */
+  paidThroughAt: string | null;
 };
 
 const int = (value: unknown): number => {
@@ -82,6 +84,7 @@ function mapTie(row: Record<string, unknown>): SlurpAudienceTie {
     lastSeenAt: String(row.lastSeenAt),
     arc: (SLURP_ARCS as readonly string[]).includes(String(row.arc)) ? (String(row.arc) as SlurpArc) : "steady",
     arcSince: (row.arcSince as string | null) ?? null,
+    paidThroughAt: (row.paidThroughAt as string | null) ?? null,
   };
 }
 
@@ -225,13 +228,23 @@ export function createSlurpPopulationStorage(db: DB) {
       if (!rows[0]) return;
       await db
         .update(slurpAudienceTies)
-        .set({ stage: "lapsed" })
+        .set({ stage: "lapsed", paidThroughAt: null })
         .where(eq(slurpAudienceTies.id, String(rows[0].id)));
     },
 
     /** Set somebody's direction. Stamped, because an arc that has run its course must expire. */
     async setTieArc(tieId: string, arc: SlurpArc): Promise<void> {
       await db.update(slurpAudienceTies).set({ arc, arcSince: now() }).where(eq(slurpAudienceTies.id, tieId));
+    },
+
+    /**
+     * Record that a subscription is paid up to a date.
+     *
+     * Separate from `advanceTie` because it is the only write here that is not about attention.
+     * An audience member holds no wallet, so this column is the whole of their billing state.
+     */
+    async setTiePaidThrough(tieId: string, paidThroughAt: string | null): Promise<void> {
+      await db.update(slurpAudienceTies).set({ paidThroughAt }).where(eq(slurpAudienceTies.id, tieId));
     },
 
     async listTiesForCreator(creatorAccountId: string): Promise<SlurpAudienceTie[]> {
@@ -272,20 +285,39 @@ export function createSlurpPopulationStorage(db: DB) {
      * doing its own scan is how a page of posts turns into a table scan per post.
      */
     async countFollowersForCreators(creatorAccountIds: readonly string[]): Promise<Map<string, number>> {
-      const floor = SLURP_FUNNEL_STAGES.indexOf("follower");
-      const wanted = new Set(creatorAccountIds);
-      const counts = new Map<string, number>();
-      for (const id of wanted) counts.set(id, 0);
-      const rows = await db.select().from(slurpAudienceTies);
-      for (const row of rows) {
-        const tie = mapTie(row as Record<string, unknown>);
-        if (!wanted.has(tie.creatorAccountId)) continue;
-        const index = SLURP_FUNNEL_STAGES.indexOf(tie.stage as (typeof SLURP_FUNNEL_STAGES)[number]);
-        if (index >= floor && index >= 0) counts.set(tie.creatorAccountId, (counts.get(tie.creatorAccountId) ?? 0) + 1);
-      }
-      return counts;
+      return countTiesAtOrAbove(creatorAccountIds, "follower");
+    },
+
+    /**
+     * Real subscriber counts for several Creators at once.
+     *
+     * The audience holds no subscription rows — an audience member is not a viewer and cannot be
+     * one — so a count taken from `slurp_account_subscriptions` alone reports only the personas on
+     * this install. Callers add the two together; both halves are exact, and neither is reach.
+     */
+    async countSubscribersForCreators(creatorAccountIds: readonly string[]): Promise<Map<string, number>> {
+      return countTiesAtOrAbove(creatorAccountIds, "subscriber");
     },
   };
+
+  /** One scan, one floor. `lapsed` is not in the ordered stages, so it never counts. */
+  async function countTiesAtOrAbove(
+    creatorAccountIds: readonly string[],
+    from: (typeof SLURP_FUNNEL_STAGES)[number],
+  ): Promise<Map<string, number>> {
+    const floor = SLURP_FUNNEL_STAGES.indexOf(from);
+    const wanted = new Set(creatorAccountIds);
+    const counts = new Map<string, number>();
+    for (const id of wanted) counts.set(id, 0);
+    const rows = await db.select().from(slurpAudienceTies);
+    for (const row of rows) {
+      const tie = mapTie(row as Record<string, unknown>);
+      if (!wanted.has(tie.creatorAccountId)) continue;
+      const index = SLURP_FUNNEL_STAGES.indexOf(tie.stage as (typeof SLURP_FUNNEL_STAGES)[number]);
+      if (index >= floor && index >= 0) counts.set(tie.creatorAccountId, (counts.get(tie.creatorAccountId) ?? 0) + 1);
+    }
+    return counts;
+  }
 
   // An Engine without `registerTables` rejects every package-owned table, and the funnel is read
   // by surfaces that predate it. Behave as an empty audience there rather than failing the page.
@@ -296,6 +328,8 @@ export function createSlurpPopulationStorage(db: DB) {
     listTiesForCreator: () => [],
     listNamedCast: () => [],
     countFollowersForCreators: (creatorAccountIds: readonly string[]) =>
+      new Map(creatorAccountIds.map((id) => [id, 0])),
+    countSubscribersForCreators: (creatorAccountIds: readonly string[]) =>
       new Map(creatorAccountIds.map((id) => [id, 0])),
   });
 }

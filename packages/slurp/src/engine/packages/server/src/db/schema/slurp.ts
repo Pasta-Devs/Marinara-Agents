@@ -378,6 +378,15 @@ export const slurpAudienceTies = fileTable(
      */
     arc: text("arc").notNull().default("steady"),
     arcSince: text("arc_since"),
+    /**
+     * When this member's subscription to this Creator is paid up to.
+     *
+     * Null for anybody who has never subscribed, and for a tie written before audience
+     * subscriptions existed. An audience member holds no wallet — they are not a viewer — so this
+     * column is the whole of their billing state: past it, the tick either renews them or lets
+     * them lapse.
+     */
+    paidThroughAt: text("paid_through_at"),
     interactions: text("interactions").notNull().default("0"),
     firstSeenAt: text("first_seen_at").notNull(),
     lastSeenAt: text("last_seen_at").notNull(),

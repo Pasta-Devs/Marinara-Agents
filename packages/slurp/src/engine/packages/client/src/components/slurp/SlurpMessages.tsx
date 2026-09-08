@@ -1,6 +1,7 @@
 import {
   ArrowLeft,
   Check,
+  Loader2,
   Lock,
   MessageCircle,
   Megaphone,
@@ -14,6 +15,7 @@ import {
 import { useEffect, useRef, useState } from "react";
 import { useTranslation as useUiTranslation } from "react-i18next";
 import { useSlurpMediaSrc } from "../../hooks/use-slurp-media-src";
+import { getApiErrorMessage } from "../../lib/api-client";
 import { cn } from "../../lib/utils";
 import { Avatar } from "./SlurpShell";
 import { slurpCreatorStatus } from "./slurp-creator-status";
@@ -37,6 +39,7 @@ import {
   useSlurpThreads,
   useTipInSlurpThread,
   useUnlockSlurpMessage,
+  useSlurpWallet,
   type SlurpCommission,
   type SlurpMessage,
   type SlurpRapport,
@@ -616,15 +619,17 @@ function SlurpThreadView({
                       })}
             </p>
           )}
-          {messages.map((message) => (
-            <MessageBubble
-              key={message.id}
-              message={message}
-              locale={i18n.language}
-              personaId={personaId}
-              ownsCreator={ownsCreator}
-            />
-          ))}
+          {messages
+            .filter((message) => typeof message.metadata.commissionId !== "string")
+            .map((message) => (
+              <MessageBubble
+                key={message.id}
+                message={message}
+                locale={i18n.language}
+                personaId={personaId}
+                ownsCreator={ownsCreator}
+              />
+            ))}
           {commissions.length > 0 && personaId && (
             <section className="my-3 flex w-full flex-col gap-2 rounded-2xl bg-[color-mix(in_srgb,var(--slurp-violet)_9%,var(--slurp-surface))] p-3 ring-1 ring-inset ring-[var(--slurp-violet)]/25 shadow-[var(--slurp-shadow-raised)]">
               <div className="flex items-center justify-between gap-3 px-1">
@@ -643,6 +648,7 @@ function SlurpThreadView({
                 <CommissionRow
                   key={commission.id}
                   commission={commission}
+                  deliveryMessage={messages.find((message) => message.id === commission.deliveryMessageId) ?? null}
                   personaId={personaId}
                   ownsCreator={ownsCreator}
                 />
@@ -1148,10 +1154,12 @@ function CommissionRequest({
  */
 function CommissionRow({
   commission,
+  deliveryMessage,
   personaId,
   ownsCreator,
 }: {
   commission: SlurpCommission;
+  deliveryMessage: SlurpMessage | null;
   personaId: string;
   ownsCreator: boolean;
 }) {
@@ -1166,13 +1174,29 @@ function CommissionRow({
   const [generateImage, setGenerateImage] = useState(false);
   const [delivery, setDelivery] = useState("");
   const [error, setError] = useState<string | null>(null);
+  const [success, setSuccess] = useState<string | null>(null);
   const busy = quote.isPending || accept.isPending || deliver.isPending || decline.isPending;
+  const wallet = useSlurpWallet(personaId);
   const steps = ["brief", "quoted", "accepted", "delivered"] as const;
   const currentStep = commission.state === "declined" ? -1 : steps.indexOf(commission.state);
+  const deliveryImage = useSlurpMediaSrc(
+    deliveryMessage?.imageUrl
+      ? `${deliveryMessage.imageUrl}${deliveryMessage.imageUrl.includes("?") ? "&" : "?"}personaId=${encodeURIComponent(personaId)}`
+      : null,
+  );
 
-  const run = (action: Promise<unknown>, fallback: string) => {
+  const run = (action: Promise<unknown>, fallback: string, successMessage?: string) => {
     setError(null);
-    action.catch((cause: unknown) => setError(cause instanceof Error ? cause.message : fallback));
+    setSuccess(null);
+    void action
+      .then(() => {
+        if (successMessage) setSuccess(successMessage);
+      })
+      .catch((cause: unknown) => {
+        const raw = cause instanceof Error ? cause.message : cause;
+        const message = getApiErrorMessage(raw, fallback);
+        setError(/^\{[\s\S]*\}$/u.test(message) || message === "[object Object]" ? fallback : message);
+      });
   };
 
   return (
@@ -1259,10 +1283,12 @@ function CommissionRow({
         })}
       </p>
 
-      {ownsCreator && commission.state === "brief" && (
+      {ownsCreator && (commission.state === "brief" || commission.state === "quoted") && (
         <div className="mt-3 flex flex-wrap items-end gap-2">
           <label htmlFor={`slurp-quote-${commission.id}`} className="flex flex-col gap-1 font-bold">
-            {localizeUi("ui.slurp.messages.commissionQuoteLabel", { defaultValue: "Quote price" })}
+            {localizeUi("ui.slurp.messages.commissionQuoteLabel", {
+              defaultValue: commission.state === "quoted" ? "Update quote" : "Quote price",
+            })}
             <span className="flex h-11 items-center gap-1.5 rounded-xl bg-[var(--slurp-canvas,var(--background))] px-3 ring-1 ring-inset ring-[var(--noodle-divider)] focus-within:ring-2 focus-within:ring-[var(--noodle-accent)]">
               <SlurpCoin size={15} />
               <input
@@ -1283,11 +1309,16 @@ function CommissionRow({
               run(
                 quote.mutateAsync({ commissionId: commission.id, personaId, price }),
                 localizeUi("ui.slurp.messages.commissionQuoteFailed", { defaultValue: "Could not send that quote." }),
+                localizeUi("ui.slurp.messages.commissionQuoteSent", { defaultValue: "Quote sent." }),
               )
             }
             className="min-h-11 rounded-xl bg-[var(--noodle-accent)] px-4 font-bold text-zinc-950 transition-transform active:scale-[0.96] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--slurp-focus)] disabled:opacity-50 motion-reduce:transition-none motion-reduce:active:scale-100"
           >
-            {localizeUi("ui.slurp.messages.commissionQuote", { defaultValue: "Quote" })}
+            {quote.isPending
+              ? localizeUi("ui.slurp.messages.commissionQuotePending", { defaultValue: "Sending quote…" })
+              : localizeUi("ui.slurp.messages.commissionQuote", {
+                  defaultValue: commission.state === "quoted" ? "Send new quote" : "Send quote",
+                })}
           </button>
         </div>
       )}
@@ -1314,20 +1345,36 @@ function CommissionRow({
       )}
 
       {!ownsCreator && commission.state === "quoted" && (
-        <button
-          type="button"
-          disabled={busy}
-          onClick={() =>
-            run(
-              accept.mutateAsync({ commissionId: commission.id, personaId }),
-              localizeUi("ui.slurp.messages.commissionAcceptFailed", { defaultValue: "Not enough coins." }),
-            )
-          }
-          className="mt-3 inline-flex min-h-11 items-center gap-1.5 rounded-xl bg-[var(--noodle-accent)] px-4 font-bold text-zinc-950 transition-transform active:scale-[0.96] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--slurp-focus)] disabled:opacity-50 motion-reduce:transition-none motion-reduce:active:scale-100"
-        >
-          {localizeUi("ui.slurp.messages.commissionAccept", { defaultValue: "Accept and pay" })}
-          <SlurpCoinAmount amount={commission.price} />
-        </button>
+        <div className="mt-3 flex flex-wrap items-center gap-2">
+          <button
+            type="button"
+            disabled={busy}
+            onClick={() =>
+              run(
+                accept.mutateAsync({ commissionId: commission.id, personaId }).then(() => wallet.refetch()),
+                localizeUi("ui.slurp.messages.commissionAcceptFailed", { defaultValue: "Unable to process payment." }),
+                localizeUi("ui.slurp.messages.commissionAccepted", {
+                  defaultValue: "Payment sent. Your commission is now in progress.",
+                }),
+              )
+            }
+            className="inline-flex min-h-11 items-center gap-1.5 rounded-xl bg-[var(--noodle-accent)] px-4 font-bold text-zinc-950 transition-transform active:scale-[0.96] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--slurp-focus)] disabled:opacity-50 motion-reduce:transition-none motion-reduce:active:scale-100"
+          >
+            {accept.isPending && <Loader2 size={15} className="animate-spin" aria-hidden="true" />}
+            {accept.isPending
+              ? localizeUi("ui.slurp.messages.commissionAcceptPending", { defaultValue: "Processing payment…" })
+              : localizeUi("ui.slurp.messages.commissionAccept", { defaultValue: "Accept and pay" })}
+            {!accept.isPending && <SlurpCoinAmount amount={commission.price} />}
+          </button>
+          {wallet.data && wallet.data.coins < commission.price && (
+            <span className="text-xs text-red-600 dark:text-red-400">
+              {localizeUi("ui.slurp.messages.commissionBalanceShort", {
+                defaultValue: "You need {{amount}} more coins.",
+                amount: commission.price - wallet.data.coins,
+              })}
+            </span>
+          )}
+        </div>
       )}
 
       {ownsCreator && commission.state === "accepted" && (
@@ -1381,6 +1428,34 @@ function CommissionRow({
             {localizeUi("ui.slurp.messages.commissionDeliver", { defaultValue: "Deliver" })}
           </button>
         </div>
+      )}
+
+      {commission.state === "delivered" && deliveryMessage && (
+        <div className="mt-3 overflow-hidden rounded-xl bg-[var(--slurp-surface)] ring-1 ring-inset ring-[var(--noodle-divider)]">
+          {deliveryMessage.imageUrl && !deliveryImage && (
+            <div className="flex min-h-40 items-center justify-center px-4 text-center text-xs text-[var(--muted-foreground)]">
+              {localizeUi("ui.slurp.messages.commissionImageLoading", { defaultValue: "Loading the finished image…" })}
+            </div>
+          )}
+          {deliveryImage && (
+            <img
+              src={deliveryImage}
+              alt={localizeUi("ui.slurp.messages.attachedImage", { defaultValue: "Commission delivery" })}
+              className="max-h-[32rem] w-full object-contain outline outline-1 outline-black/10 dark:outline-white/10"
+            />
+          )}
+          {deliveryMessage.content && (
+            <p className="whitespace-pre-wrap break-words px-3.5 py-3 text-sm leading-relaxed">
+              {deliveryMessage.content}
+            </p>
+          )}
+        </div>
+      )}
+
+      {success && (
+        <p role="status" className="mt-2 text-[var(--noodle-accent)]">
+          {success}
+        </p>
       )}
 
       {error && (

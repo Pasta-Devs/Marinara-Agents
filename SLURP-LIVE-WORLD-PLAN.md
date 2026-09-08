@@ -437,10 +437,33 @@ Also landed:
 - The named cast is surfaced in the Creator home as "Who is showing up", with stage, spend, and
   traits. A name with no history is still wallpaper.
 
+Also landed, after the "six profiles" review:
+
+- **The audience subscribes and pays.** `slurp-audience-subscription.ts` is the pure rule — a
+  follower converts only if their `spendTier` covers the Creator's price, a paid week is left alone,
+  and somebody priced out lapses rather than renewing for free. The world tick runs it on the churn
+  cadence and pays through the existing `creditCreatorIncome`. No wallet is invented for an audience
+  member: they are not viewers, and the audience commission path already settles money this way.
+  `paidThroughAt` on the tie is the whole of their billing state, and the decision is deterministic
+  per day so the catch-up path cannot bill the same person twice.
+- **Counts include them.** `countSubscribersForCreators` mirrors the follower count; the connection
+  counts and the studio add it to the real subscription rows. Both halves are exact and neither is
+  reach.
+- **Names, on the surfaces that had none.** `GET /noodler/accounts/:id/subscribers` no longer drops
+  an id it cannot resolve to an account — that one filter is why an audience subscription could
+  never have been seen. A Followers list exists for the first time. Posts carry a liked-by line
+  built from the like rows that were already being written, with the synthetic count as the
+  remainder. `GET /noodler/audience/:memberId` and `SlurpFanCard` open a card on any audience name,
+  which keeps the no-profile-page constraint.
+- Display names now fold the numeric handle suffix in, because 18,816 handles collapsed into 2,352
+  names and a cast of thirty is inside the birthday bound for that.
+
 Still open:
 
 - The world tick draws only from ambient accounts for commissions, because a commission needs a
   thread and threads key on an account id. Population members act through snapshot paths.
+- Likes are named only where a real like row exists. The remainder stays synthetic, by the
+  readable-handful rule.
 
 ### Stage 4 (original scope)
 

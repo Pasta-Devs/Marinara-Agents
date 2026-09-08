@@ -21,6 +21,7 @@ import { tryNoodleOperation } from "./slurp-operation-lock.js";
 import { slurpCreatorReach } from "./slurp-reach.js";
 import { slurpMembersActiveAt } from "./slurp-population.js";
 import { isNotableArcChange, slurpNextArc } from "./slurp-arc.js";
+import { slurpAudiencePaidThrough, slurpAudienceSubscriptionDecision } from "./slurp-audience-subscription.js";
 import { slurpPlatformScaleMultiplier, slurpWorldActivityMultiplier } from "./slurp-scale.js";
 import {
   slurpAudienceOpener,
@@ -213,10 +214,54 @@ export async function advanceSlurpWorld(db: DB, until = new Date()): Promise<Slu
       }
     }
 
-    // Generated audience briefs cannot wait for the player to name a price. Quote them before the
-    // existing settlement path, while player-created briefs remain manual.
+    // The audience pays. A follower who can afford the price converts, a subscriber renews when
+    // their week runs out, and somebody priced out lapses.
+    //
+    // Runs on the churn cadence and for the same reason: this is a full scan of every tie of every
+    // Creator, and nobody's paid week expires between two page loads. The decision is deterministic
+    // per day, so the catch-up path cannot bill the same person twice for one day either.
+    //
+    // No wallet is touched. An audience member is not a viewer and holds no balance; the money is
+    // credited to the Creator and that is the whole transaction, exactly as an audience commission
+    // already settles. Only a first subscribe and a lapse are notified — a renewal every week from
+    // every subscriber is the flood the readable-handful rule exists to prevent.
+    for (const account of elapsedDays >= CHURN_MIN_ELAPSED_DAYS ? accounts : []) {
+      const price = await noodle.getCreatorSubscriptionPrice(account.id).catch(() => 0);
+      for (const tie of await population.listTiesForCreator(account.id)) {
+        const member = await population.get(tie.memberId).catch(() => null);
+        if (!member) continue;
+        const decision = slurpAudienceSubscriptionDecision(
+          {
+            memberId: tie.memberId,
+            creatorAccountId: account.id,
+            stage: tie.stage,
+            spendTier: member.spendTier,
+            price,
+            paidThroughAt: tie.paidThroughAt,
+          },
+          until,
+        );
+        if (decision === "none") continue;
+        if (decision === "lapse") {
+          await population.lapseTie(tie.memberId, account.id).catch(() => undefined);
+          await noodle.recordCreatorEvent(account.id, "lapsed", { actorLabel: tie.memberId });
+          continue;
+        }
+        await population
+          .advanceTie(tie.memberId, account.id, { stage: "subscriber", spent: price, hasSubscription: true })
+          .catch(() => undefined);
+        await population.setTiePaidThrough(tie.id, slurpAudiencePaidThrough(until)).catch(() => undefined);
+        await noodle.creditCreatorIncome(account.id, price, decision === "subscribe" ? "subscribe" : "renew");
+        if (decision === "subscribe") {
+          await noodle.recordCreatorEvent(account.id, "subscribed", { actorLabel: tie.memberId, amount: price });
+        }
+      }
+    }
+
+    // Automated Creators review briefs on the world tick. Do not quote during request creation: the
+    // fan must see a real review step and the Creator must have time to decline or revise the quote.
     const AUDIENCE_COMMISSION_PRICE = 40;
-    for (const commission of await messages.listAudienceBriefCommissions()) {
+    for (const commission of await messages.listAutomatedBriefCommissions()) {
       await messages.quoteCommission(commission.id, AUDIENCE_COMMISSION_PRICE).catch(() => null);
     }
 

@@ -114,11 +114,18 @@ for (const postId of ["post-c", "post-d", "post-e", "post-f"]) {
 // ── Reach never reaches the economy ─────────────────────────────────────────
 // Wallets, ledgers, payouts, and subscriber lists must stay exact. `fans` is a paying subscriber
 // count, so it is read from real rows; only `followers` carries synthetic reach.
+//
+// Two halves, both exact: the personas on this install pay through subscription rows, and the
+// generated audience pays through the funnel, because an audience member is not a viewer and holds
+// no wallet. Neither half is reach.
 const routes = readFileSync(
   join(import.meta.dirname, "..", "packages/slurp/src/engine/packages/server/src/routes/slurp.routes.ts"),
   "utf8",
 );
-assert.match(routes, /fans: \(await noodle\.listSubscriptionsForCreator\(creator\.id\)\)\.length/u);
+assert.match(
+  routes,
+  /fans:\s*\n?\s*\(await noodle\.listSubscriptionsForCreator\(creator\.id\)\)\.length \+ \(countsSubscribers\.get\(creator\.id\) \?\? 0\)/u,
+);
 assert.match(routes, /followers: slurpCreatorReach\(/u);
 // Real followers come from the funnel, so a Creator who loses subscribers loses reach.
 assert.match(routes, /countFollowersForCreators/u, "reach must count from the audience funnel");

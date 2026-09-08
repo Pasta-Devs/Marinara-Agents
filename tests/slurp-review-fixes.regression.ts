@@ -89,6 +89,7 @@ const mediaSrc = read(join(client, "hooks/use-slurp-media-src.ts"));
 assert.match(mediaSrc, /observerRef\.current\?\.disconnect\(\);\s*observerRef\.current = null;\s*if \(!node/u);
 // A fetch still in flight when the release timer fires used to leak its object URL.
 assert.match(mediaSrc, /mediaCache\.delete\(imageUrl\);[\s\S]{0,200}?cached\.promise\.then\(\(objectUrl\) => \{/u);
+assert.match(mediaSrc, /if \(!response\.ok\) \{\s*mediaCache\.delete\(imageUrl\);/u);
 
 const apiClient = read(join(client, "lib/api-client.ts"));
 // A bare `null` or an array error body made `body.error` throw and hid the real HTTP status.
@@ -335,6 +336,13 @@ assert.match(
 );
 assert.match(messagesStorage, /kind: "commission_delivery",\s*imageUrl,/u);
 assert.match(messagesView2, /const messageImage = useSlurpMediaSrc\(\s*message\.imageUrl\s*\?/u);
+assert.match(messagesView2, /message\.metadata\.commissionId !== "string"/u);
+assert.match(messagesView2, /deliveryMessage=\{messages\.find/u);
+assert.match(messagesView2, /const deliveryImage = useSlurpMediaSrc\(/u);
+assert.match(messagesView2, /commission\.state === "delivered" && deliveryMessage/u);
+assert.match(messagesView2, /commissionAcceptPending/u);
+assert.match(messagesView2, /getApiErrorMessage\(raw, fallback\)/u);
+assert.match(useSlurpSource, /metadata: Record<string, unknown>;/u);
 assert.match(useSlurpSource, /generateImage\?: boolean/u);
 assert.match(messagesView2, /ui\.slurp\.messages\.generateCommissionImage/u);
 assert.match(messagesView2, /generateImage,/u);

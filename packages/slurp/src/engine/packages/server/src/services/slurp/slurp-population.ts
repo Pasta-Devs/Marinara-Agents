@@ -266,7 +266,13 @@ export function generateSlurpPopulationMember(seed: string, joinedAt: Date): Slu
   return {
     id: `slurp-fan:${seed}`,
     handle: `${first}_${second}${suffix}`,
-    displayName: `${titleCase(first)} ${titleCase(second)}`,
+    // The numeric suffixes carry into the display name, the symbol ones do not. Without this the
+    // 18,816 handles collapsed into 2,352 display names, and a named cast of thirty is well inside
+    // the birthday bound for that — two different people read as one person in the same list.
+    // "Moth Hour 77" is how a real handle collision reads; "Moth Hour _ii" is not.
+    // ponytail: five name buckets per stem pair, not eight. Add a display-name bank if a cast ever
+    // grows past thirty.
+    displayName: `${titleCase(first)} ${titleCase(second)}${/^\d+$/.test(suffix) ? ` ${suffix}` : ""}`,
     archetype: pick(ARCHETYPES, seed, "archetype"),
     traits,
     spendTier: spendTierFor(seed),

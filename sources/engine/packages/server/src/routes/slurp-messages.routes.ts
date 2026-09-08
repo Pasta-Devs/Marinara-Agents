@@ -74,6 +74,7 @@ const commissionDeliverySchema = z.object({
 // stop two rapid requests from drawing the same commission at once. Hold the whole route per
 // commission and make the second request retry after the first one finishes.
 const commissionDeliveryRequests = new Set<string>();
+const commissionAcceptRequests = new Set<string>();
 
 const requestDecisionSchema = z.object({
   personaId: z.string().trim().min(1),
@@ -422,6 +423,8 @@ export async function slurpMessageRoutes(app: FastifyInstance) {
     if (!viewer) return reply.code(404).send({ error: "Slurp persona not found" });
     const commission = await messages.createCommission(viewer.id, parsed.data.creatorAccountId, parsed.data.brief);
     if (!commission) return reply.code(403).send({ error: "This Creator is not accepting commissions." });
+    // A commission needs a review step. Character Creators quote from the world tick, while a
+    // persona-owned Creator can review and negotiate it here without charging the fan first.
     return { commission };
   });
 
@@ -432,7 +435,9 @@ export async function slurpMessageRoutes(app: FastifyInstance) {
     if (!commission) return reply.code(404).send({ error: "Commission not found" });
     if (!(await ownsCreator(parsed.data.personaId, commission.creatorAccountId)))
       return reply.code(403).send({ error: "Creator ownership required" });
-    return { commission: await messages.quoteCommission(commission.id, parsed.data.price) };
+    const updated = await messages.quoteCommission(commission.id, parsed.data.price);
+    if (!updated) return reply.code(409).send({ error: "This commission is no longer open for a quote." });
+    return { commission: updated };
   });
 
   app.post("/messages/commissions/:commissionId/accept", async (req, reply) => {
@@ -441,9 +446,60 @@ export async function slurpMessageRoutes(app: FastifyInstance) {
     const commission = await messages.getCommission((req.params as { commissionId: string }).commissionId);
     if (!commission || commission.viewerAccountId !== parsed.data.personaId)
       return reply.code(404).send({ error: "Commission not found" });
-    const accepted = await messages.acceptCommission(commission.id);
-    if (!accepted) return reply.code(402).send({ error: "Not enough coins." });
-    return { commission: accepted };
+    if (commission.state !== "quoted") {
+      return reply.code(409).send({ error: "This commission is not waiting for payment." });
+    }
+    if (commissionAcceptRequests.has(commission.id)) {
+      return reply.code(409).send({ error: "This commission is already being accepted." });
+    }
+    commissionAcceptRequests.add(commission.id);
+    let drawn: Awaited<ReturnType<typeof generateSlurpCommissionImage>> | null = null;
+    try {
+      const creator = await slurp.getNoodlerAccountById(commission.creatorAccountId);
+      const automatic = Boolean(creator && creator.sourceKind !== "persona");
+      // Stage the character Creator's work before taking payment. A missing or failed image
+      // connection must leave the quote payable later, not charge the fan for an empty delivery.
+      if (automatic) {
+        try {
+          drawn = await generateSlurpCommissionImage(app.db, {
+            creatorAccountId: commission.creatorAccountId,
+            brief: commission.brief,
+          });
+        } catch (error) {
+          logger.warn(error, "[slurp-commission] Could not draw an automatic commission");
+          return reply.code(502).send({ error: "Could not create that commission yet. Try again later." });
+        }
+        if (drawn === "unavailable") {
+          return reply.code(404).send({ error: "No image generation connection is configured." });
+        }
+      }
+
+      const accepted = await messages.acceptCommission(commission.id);
+      if (!accepted || accepted.state !== "accepted") {
+        if (drawn && drawn !== "unavailable") drawn.compensate();
+        return reply.code(402).send({ error: "Not enough coins." });
+      }
+      if (!automatic || !drawn || drawn === "unavailable") return { commission: accepted };
+
+      const delivered = await messages.deliverCommission(
+        commission.id,
+        "finished this for you — hope you love it ✨",
+        null,
+      );
+      if (!delivered || delivered.state !== "delivered" || !delivered.deliveryMessageId) {
+        drawn.compensate();
+        return reply.code(500).send({ error: "Could not deliver that commission. Your payment was refunded." });
+      }
+      drawn.promote();
+      await messages.setMessageMedia(
+        delivered.deliveryMessageId,
+        slurpMessageMediaUrl(delivered.deliveryMessageId),
+        drawn.mediaPath,
+      );
+      return { commission: delivered };
+    } finally {
+      commissionAcceptRequests.delete(commission.id);
+    }
   });
 
   /** Either side may end an unpaid commission: the Creator declines it, the fan takes it back. */
@@ -509,7 +565,7 @@ export async function slurpMessageRoutes(app: FastifyInstance) {
         drawn.promote();
         await messages.setMessageMedia(
           delivered.deliveryMessageId,
-          `${slurpMessageMediaUrl(delivered.deliveryMessageId)}?personaId=${encodeURIComponent(parsed.data.personaId)}`,
+          slurpMessageMediaUrl(delivered.deliveryMessageId),
           drawn.mediaPath,
         );
       }

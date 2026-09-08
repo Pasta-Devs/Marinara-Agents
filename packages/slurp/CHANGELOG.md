@@ -1,5 +1,34 @@
 # Slurp release notes
 
+## 1.2.32 — 2026-09-08
+
+- Commission requests now wait for Creator review instead of receiving an instant quote.
+- Creators can revise an unpaid quote or decline a request before payment.
+- Commission payment now shows loading, success, balance, and error feedback.
+- Delivery cards show image loading feedback while protected artwork is fetched.
+
+## 1.2.31 — 2026-09-08
+
+- Commission delivery text and artwork now render inside the commission card without repeating as chat messages.
+- Delivery media URLs now use the same persona-scoped loading path as other Slurp images.
+
+## 1.2.30 — 2026-09-08
+
+- The generated audience can now subscribe to a Creator and pay for it, so subscriber counts and earnings grow with the whole audience rather than with the six ambient profiles alone.
+- Posts now say who liked them: a few names, then the count for everybody else.
+- Creator profiles gained a Followers list, and the Subscribers list no longer drops audience members.
+- Tapping any audience name opens a fan card with their funnel stage, direction, spending, and traits.
+
+## 1.2.29 — 2026-09-08
+
+- Commission briefs, quotes, and state changes no longer repeat as ordinary chat messages. The commission card now contains its delivered text and artwork directly.
+
+## 1.2.28 — 2026-09-08
+
+- Pending messages now enter the Creator's paced reply queue. A Creator reply accepts the request, so conversations continue even when they began while the Creator was away or the fan was not subscribed.
+- Character-controlled Creators can quote fan commissions themselves and generate the finished commission after the fan explicitly accepts and pays.
+- Refined the chat and commission cards with clearer state guidance, larger controls, stronger focus and press feedback, and cleaner coin labels.
+
 ## 1.2.27 — 2026-09-08
 
 - Polished Slurp's mobile navigation, empty states, wide-screen layouts, and small-text readability without changing the page structure.

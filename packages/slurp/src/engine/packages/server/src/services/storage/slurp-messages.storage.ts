@@ -709,6 +709,17 @@ export function createSlurpMessagesStorage(db: DB) {
       return commissions;
     },
 
+    /** Briefs addressed to character-controlled Creators. Their world tick supplies the first quote. */
+    async listAutomatedBriefCommissions(): Promise<SlurpCommission[]> {
+      const rows = await db.select().from(slurpCommissions).where(eq(slurpCommissions.state, "brief"));
+      const commissions: SlurpCommission[] = [];
+      for (const row of rows) {
+        const creator = await slurp.getNoodlerAccountById(String(row.creatorAccountId));
+        if (creator && creator.sourceKind !== "persona") commissions.push(mapCommission(row));
+      }
+      return commissions;
+    },
+
     /**
      * Settle a quote on behalf of a fan the world invented.
      *
@@ -1117,6 +1128,7 @@ export function createSlurpMessagesStorage(db: DB) {
     listThreadsForViewer: () => [],
     listCommissionsForThread: () => [],
     listOpenCommissionsForCreator: () => [],
+    listAutomatedBriefCommissions: () => [],
     listThreadsAwaitingReply: () => [],
     rapportFactsFor: () => emptySlurpRapportFacts(),
     claimReply: () => ({ status: "busy" as const }),

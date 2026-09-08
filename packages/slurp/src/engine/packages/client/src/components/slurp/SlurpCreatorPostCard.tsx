@@ -63,6 +63,7 @@ import {
   type NoodlePostCardModel,
 } from "./SlurpPostCard";
 import { NoodleAnchoredPopover } from "./NoodleAnchoredPopover";
+import { SlurpLikedBy } from "./SlurpFanCard";
 import { NoodlePollComposer } from "./SlurpPollComposer";
 import { PostImageFrame } from "./PostImageCropEditor";
 import { SlurpSparkleVeil } from "./SlurpSparkleVeil";
@@ -1202,6 +1203,12 @@ export function SlurpCreatorPostCard({
             {replies.length}
           </button>
         </div>
+
+        <SlurpLikedBy
+          likes={rootPostInteractions.filter((interaction) => interaction.type === "like")}
+          total={countInteractions(rootPostInteractions, "like")}
+          creatorAccountId={post.authorAccountId}
+        />
 
         {replyPostId === post.id && !replyParentInteractionId && renderReplyComposer(false)}
 

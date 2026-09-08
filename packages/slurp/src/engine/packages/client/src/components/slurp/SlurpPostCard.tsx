@@ -50,6 +50,7 @@ import { formatTime } from "./SlurpDateTime";
 import { NoodleImageComposer } from "./SlurpImageComposer";
 import { NoodlePollComposer } from "./SlurpPollComposer";
 import { NoodleAnchoredPopover } from "./NoodleAnchoredPopover";
+import { SlurpLikedBy } from "./SlurpFanCard";
 import { PostImageCropEditor, PostImageFrame } from "./PostImageCropEditor";
 import { useTranslation as useUiTranslation } from "react-i18next";
 
@@ -831,6 +832,11 @@ export type NoodlePostCardModel = Pick<
   title: string | null;
   authorSnapshot: NoodlePostCardAuthor | null;
   interactions: NoodleInteraction[];
+  /**
+   * The platform total, where the caller has one. The rows carry the names; this carries the size.
+   * Optional because a managed post inside the composer has no projection behind it.
+   */
+  likeCount?: number;
 };
 
 interface NoodlePostCardTitleEditingCap {
@@ -2054,6 +2060,12 @@ export function NoodlePostCard({ post, ctx }: { post: NoodlePostCardModel; ctx: 
               {replies.length}
             </button>
           </div>
+
+          <SlurpLikedBy
+            likes={rootPostInteractions.filter((interaction) => interaction.type === "like")}
+            total={Math.max(post.likeCount ?? 0, countInteractions(rootPostInteractions, "like"))}
+            creatorAccountId={post.authorAccountId}
+          />
 
           {replyPostId === post.id && !replyParentInteractionId && renderReplyComposer(false)}
 

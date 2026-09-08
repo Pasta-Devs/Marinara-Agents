@@ -84,6 +84,7 @@ import {
   useTipSlurpCreator,
   useNoodlerViewerWallets,
   useNoodlerSubscribers,
+  useNoodlerFollowers,
   useNoodlerUnseenCount,
   useSlurpStudio,
   useSlurpNotifications,
@@ -144,6 +145,7 @@ import {
   useNoodlePostCardController,
 } from "./SlurpPostCard";
 import { NoodleAnchoredPopover } from "./NoodleAnchoredPopover";
+import { SlurpFanCard } from "./SlurpFanCard";
 import { LockedSlurpPostCard, SlurpCreatorPostCard } from "./SlurpCreatorPostCard";
 import { SlurpSparkleVeil } from "./SlurpSparkleVeil";
 import { SlurpCoin, SlurpCoinAmount } from "./SlurpCoin";
@@ -303,7 +305,7 @@ function NoodlerDraftImageFrame({ image }: { image: NoodlerPostDraftImage }) {
   );
 }
 
-type NoodlerProfileTab = "posts" | "media" | "stories" | "subscribers";
+type NoodlerProfileTab = "posts" | "media" | "stories" | "subscribers" | "followers";
 
 function toNoodlePostCardModel(view: NoodlerPostView, profile: NoodlerStageProfile): NoodlePostCardModel {
   return {
@@ -324,6 +326,7 @@ function toNoodlePostCardModel(view: NoodlerPostView, profile: NoodlerStageProfi
     },
     createdAt: view.createdAt,
     interactions: view.interactions,
+    likeCount: view.likeCount ?? undefined,
   };
 }
 
@@ -3615,6 +3618,7 @@ function StageProfileView({
   const [activeTab, setActiveTab] = useState<NoodlerProfileTab>("posts");
   const [revealedManagedPostIds, setRevealedManagedPostIds] = useState<Set<string>>(() => new Set());
   const subscribersQuery = useNoodlerSubscribers(profile.id);
+  const followersQuery = useNoodlerFollowers(profile.id);
   const subscribers = subscribersQuery.data?.pages.flatMap((page) => page.items) ?? [];
   const subscriberTotal = subscribersQuery.data?.pages[0]?.total ?? subscribers.length;
   const followerTotal = connectionCounts[profile.id]?.followers ?? 0;
@@ -3732,7 +3736,13 @@ function StageProfileView({
                 >
                   <Avatar account={subscriber} />
                   <div className="min-w-0 flex-1">
-                    <p className="truncate text-sm font-bold">{subscriber.displayName}</p>
+                    {subscriber.audience ? (
+                      <SlurpFanCard memberId={subscriber.id} creatorAccountId={profile.id} className="block min-w-0">
+                        <p className="truncate text-sm font-bold">{subscriber.displayName}</p>
+                      </SlurpFanCard>
+                    ) : (
+                      <p className="truncate text-sm font-bold">{subscriber.displayName}</p>
+                    )}
                     <p className="truncate text-xs text-[var(--muted-foreground)]">@{subscriber.handle}</p>
                   </div>
                   <time dateTime={subscriber.subscribedAt} className="shrink-0 text-xs text-[var(--muted-foreground)]">
@@ -3762,6 +3772,46 @@ function StageProfileView({
               title={localizeUi("ui.noodle.stageprofileview.noSubscribersYet")}
               detail={localizeUi("ui.noodle.stageprofileview.subscribersEmptyDetail")}
             />
+          )}
+        </div>
+      ) : activeTab === "followers" ? (
+        <div>
+          {/* Followers were a number everywhere and a list nowhere. The funnel held the people all
+              along; the named cast is capped, so the rest stays the count in the header. */}
+          {followersQuery.isLoading ? (
+            <div className="flex justify-center py-12" role="status">
+              <Loader2 size={22} className="animate-spin text-[var(--noodle-accent)]" />
+            </div>
+          ) : (followersQuery.data?.items.length ?? 0) > 0 ? (
+            <div>
+              {followersQuery.data!.items.map((follower) => (
+                <div
+                  key={follower.id}
+                  className="flex min-h-16 items-center gap-3 border-b border-[var(--noodle-divider)] px-4 py-3"
+                >
+                  <Avatar account={follower} />
+                  <div className="min-w-0 flex-1">
+                    <SlurpFanCard memberId={follower.id} creatorAccountId={profile.id} className="block min-w-0">
+                      <p className="truncate text-sm font-bold">{follower.displayName}</p>
+                    </SlurpFanCard>
+                    <p className="truncate text-xs text-[var(--muted-foreground)]">
+                      {[
+                        `@${follower.handle}`,
+                        localizeUi(`ui.slurp.studio.stage.${follower.stage}`, { defaultValue: follower.stage }),
+                        ...follower.traits,
+                      ].join(" · ")}
+                    </p>
+                  </div>
+                </div>
+              ))}
+              <p className="px-4 py-3 text-xs text-[var(--muted-foreground)]">
+                {localizeUi("ui.slurp.profile.followersRemainder", {
+                  count: Math.max(0, (followersQuery.data?.total ?? 0) - followersQuery.data!.items.length),
+                })}
+              </p>
+            </div>
+          ) : (
+            <EmptyState title={localizeUi("ui.slurp.profile.followersEmpty")} />
           )}
         </div>
       ) : viewerIsLoading || isLoading ? (
@@ -4141,6 +4191,11 @@ function StageProfileView({
             ariaLabel: localizeUi("ui.noodle.stageProfile.tabs.subscribersAria", {
               count: subscribersQuery.data ? subscriberTotal : localizeUi("ui.noodle.stageProfile.tabs.loading"),
             }),
+            management: true,
+          },
+          {
+            id: "followers",
+            label: localizeUi("ui.slurp.profile.tabs.followers", { count: followerTotal }),
             management: true,
           },
         ]}

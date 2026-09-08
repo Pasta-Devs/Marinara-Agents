@@ -247,4 +247,10 @@ assert.match(replyService, /Deliberately short\./u);
 // A missing relationship must never refuse a reply.
 assert.match(replyService, /A missing relationship is not a reason to refuse a reply\./u);
 
+// Display names must not collapse. The suffix bank made 18,816 handles out of 2,352 display names,
+// and a named cast of thirty is well inside the birthday bound for that — two different people read
+// as one person in the same list.
+const names = new Set(Array.from({ length: 4000 }, (_, index) => member(`name-${index}`).displayName));
+assert.ok(names.size > 2500, `display names must clear the old 2,352 ceiling, got ${names.size}`);
+
 console.log("slurp population regression passed");

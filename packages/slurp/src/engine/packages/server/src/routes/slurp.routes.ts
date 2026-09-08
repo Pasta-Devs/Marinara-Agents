@@ -33,6 +33,21 @@ import {
   type NoodlerSubscriber,
   type NoodlerPostView,
 } from "@marinara-engine/shared";
+import { SLURP_FUNNEL_STAGES, SLURP_NAMED_CAST_LIMIT } from "../services/slurp/slurp-population.js";
+
+/**
+ * A subscriber row, widened for the generated audience.
+ *
+ * `NoodlerSubscriber` lives in the Engine's shared package and describes an account-backed viewer.
+ * The audience has no account, so the extra fields are added here rather than in the Engine — a
+ * package must not need an Engine change to show its own data.
+ */
+type SlurpSubscriberRow = NoodlerSubscriber & {
+  /** True for somebody from the generated population, who has no profile to open. */
+  audience?: boolean;
+  stage?: string;
+  spent?: number;
+};
 import { noodleInteractions } from "../db/schema/slurp.js";
 import { createCharactersStorage } from "../services/storage/characters.storage.js";
 import { createCharacterGalleryStorage } from "../services/storage/character-gallery.storage.js";
@@ -651,15 +666,18 @@ export async function slurpRoutes(app: FastifyInstance) {
     // funnel now, so adding the social following list on top would count the same person twice —
     // at 25x weight each.
     const countsScale = slurpPlatformScaleMultiplier((await noodle.getSettings()).platformScale);
-    const countsFunnel = await createSlurpPopulationStorage(app.db).countFollowersForCreators(
-      creators.map((creator) => creator.id),
-    );
+    const countsPopulation = createSlurpPopulationStorage(app.db);
+    const countsFunnel = await countsPopulation.countFollowersForCreators(creators.map((creator) => creator.id));
+    const countsSubscribers = await countsPopulation.countSubscribersForCreators(creators.map((creator) => creator.id));
     const entries = await Promise.all(
       creators.map(async (creator) => [
         creator.id,
         {
-          // Fans are subscribers, and a subscriber is a wallet that pays. That number stays exact.
-          fans: (await noodle.listSubscriptionsForCreator(creator.id)).length,
+          // Fans are subscribers. Both halves are exact rows and neither is reach: the personas
+          // on this install pay through subscription rows, and the generated audience pays through
+          // the funnel because it holds no wallet.
+          fans:
+            (await noodle.listSubscriptionsForCreator(creator.id)).length + (countsSubscribers.get(creator.id) ?? 0),
           // Followers are social proof and nothing charges against them, so they carry the
           // synthetic platform reach. Real followers are folded in at a heavy weight.
           followers: slurpCreatorReach(
@@ -1321,7 +1339,9 @@ export async function slurpRoutes(app: FastifyInstance) {
           avatarUrl: account.avatarUrl,
           topFans: cast.filter((fan) => fan.displayName),
           followers,
-          subscribers: (await noodle.listSubscriptionsForCreator(account.id)).length,
+          subscribers:
+            (await noodle.listSubscriptionsForCreator(account.id)).length +
+            ((await population.countSubscribersForCreators([account.id])).get(account.id) ?? 0),
           earnings,
           milestone: slurpFollowerMilestone(followers),
           goal: goal ? slurpGoalProgress(goal, earnings.lifetime) : null,
@@ -2267,28 +2287,147 @@ export async function slurpRoutes(app: FastifyInstance) {
         : null,
       parsed.data.limit,
     );
+    const population = createSlurpPopulationStorage(app.db);
     const subscribers = (
       await Promise.all(
-        page.items.map(async (subscription): Promise<NoodlerSubscriber | null> => {
+        page.items.map(async (subscription): Promise<SlurpSubscriberRow | null> => {
           const account =
             (await noodle.getSlurpAccountForEntity("persona", subscription.viewerAccountId)) ??
             (await noodle.getViewer(subscription.viewerAccountId));
-          if (!account) return null;
+          // A subscriber with no account row is somebody from the generated audience. Dropping
+          // them here is why an audience subscription could never be seen: the row existed and the
+          // list threw it away.
+          const member = account ? null : await population.get(subscription.viewerAccountId).catch(() => null);
+          if (!account && !member) return null;
           return {
-            id: account.id,
-            displayName: account.displayName,
-            handle: account.handle,
-            avatarUrl: account.avatarUrl,
-            avatarCrop: account.avatarCrop,
+            id: account?.id ?? member!.id,
+            displayName: account?.displayName ?? member!.displayName,
+            handle: account?.handle ?? member!.handle,
+            avatarUrl: account?.avatarUrl ?? null,
+            avatarCrop: account?.avatarCrop ?? null,
             subscribedAt: subscription.createdAt,
+            ...(member ? { audience: true } : {}),
           };
         }),
       )
-    ).filter((subscriber): subscriber is NoodlerSubscriber => subscriber !== null);
+    ).filter((subscriber): subscriber is SlurpSubscriberRow => subscriber !== null);
+
+    // The audience pays through the funnel rather than through a subscription row, because an
+    // audience member is not a viewer and holds no wallet. They are named on the first page only:
+    // the named cast is capped at thirty by design, and everybody below it stays a number.
+    const named =
+      parsed.data.cursorAt || parsed.data.cursorId
+        ? []
+        : // Drawn wider than the cast limit and cut after filtering: the cast is ranked by spend,
+          // and cutting to thirty before the filter would hide subscribers behind free likers.
+          (await population.listNamedCast(id, SLURP_NAMED_CAST_LIMIT * 3))
+            .filter((entry) => entry.tie.stage === "subscriber" || entry.tie.paidThroughAt)
+            .slice(0, SLURP_NAMED_CAST_LIMIT)
+            .map((entry): SlurpSubscriberRow => ({
+              id: entry.tie.memberId,
+              displayName: entry.member.displayName,
+              handle: entry.member.handle,
+              avatarUrl: null,
+              avatarCrop: null,
+              subscribedAt: entry.tie.firstSeenAt,
+              audience: true,
+              stage: entry.tie.stage,
+              spent: entry.tie.spent,
+            }));
+    const audienceTotal = (await population.countSubscribersForCreators([id])).get(id) ?? 0;
     return {
-      items: subscribers,
-      total: page.total,
+      items: [...named, ...subscribers],
+      total: page.total + audienceTotal,
       nextCursor: page.nextCursor,
+    };
+  });
+
+  /**
+   * Who follows a Creator, by name.
+   *
+   * Followers were a number and nothing else — there was no list route and no list anywhere in the
+   * client. The funnel has held the people all along.
+   *
+   * Named entries stop at the cast limit on purpose. `total` carries the platform reach, so the
+   * list reads as "these people, and this many more" rather than pretending to be complete.
+   */
+  app.get("/noodler/accounts/:id/followers", async (req, reply) => {
+    const { id } = req.params as { id: string };
+    const creator = await noodle.getNoodlerAccountById(id);
+    if (!creator) return reply.code(404).send({ error: "NoodleR stage profile not found" });
+    const population = createSlurpPopulationStorage(app.db);
+    const at = new Date();
+    const followerFloor = SLURP_FUNNEL_STAGES.indexOf("follower");
+    const items = (await population.listNamedCast(id, SLURP_NAMED_CAST_LIMIT * 3))
+      .filter(
+        (entry) =>
+          SLURP_FUNNEL_STAGES.indexOf(entry.tie.stage as (typeof SLURP_FUNNEL_STAGES)[number]) >= followerFloor,
+      )
+      .slice(0, SLURP_NAMED_CAST_LIMIT)
+      .map((entry) => ({
+        id: entry.tie.memberId,
+        displayName: entry.member.displayName,
+        handle: entry.member.handle,
+        avatarUrl: null,
+        avatarCrop: null,
+        stage: entry.tie.stage,
+        arc: entry.tie.arc,
+        traits: entry.member.traits,
+        spent: entry.tie.spent,
+        followedAt: entry.tie.firstSeenAt,
+      }));
+    return {
+      items,
+      total: slurpCreatorReach(
+        {
+          accountId: creator.id,
+          createdAt: creator.createdAt,
+          realFollowers: (await population.countFollowersForCreators([id])).get(id) ?? 0,
+          scale: slurpPlatformScaleMultiplier((await noodle.getSettings()).platformScale),
+        },
+        at,
+      ),
+    };
+  });
+
+  /**
+   * One person from the generated audience, and their history with one Creator.
+   *
+   * A name on a like or a comment told the player nothing, and the audience has no profile page to
+   * open — that is the constraint that keeps it free. This is the card instead: stage, direction,
+   * what they have paid, and what they are like.
+   */
+  app.get("/noodler/audience/:memberId", async (req, reply) => {
+    const { memberId } = req.params as { memberId: string };
+    const creatorAccountId = (req.query as { creatorAccountId?: unknown }).creatorAccountId;
+    const member = await createSlurpPopulationStorage(app.db)
+      .get(memberId)
+      .catch(() => null);
+    if (!member) return reply.code(404).send({ error: "Audience member not found" });
+    const tie =
+      typeof creatorAccountId === "string" && creatorAccountId
+        ? ((await createSlurpPopulationStorage(app.db).listTiesForCreator(creatorAccountId)).find(
+            (entry) => entry.memberId === memberId,
+          ) ?? null)
+        : null;
+    return {
+      id: member.id,
+      displayName: member.displayName,
+      handle: member.handle,
+      traits: member.traits,
+      spendTier: member.spendTier,
+      activeHour: member.activeHour,
+      joinedAt: member.joinedAt,
+      tie: tie
+        ? {
+            stage: tie.stage,
+            arc: tie.arc,
+            spent: tie.spent,
+            interactions: tie.interactions,
+            firstSeenAt: tie.firstSeenAt,
+            subscribed: Boolean(tie.paidThroughAt),
+          }
+        : null,
     };
   });
 

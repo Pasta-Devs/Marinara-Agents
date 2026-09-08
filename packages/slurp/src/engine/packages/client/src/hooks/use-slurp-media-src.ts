@@ -29,11 +29,17 @@ function retainMedia(imageUrl: string): CachedMedia {
     entry.promise = api
       .raw(imageUrl.slice("/api".length), { cache: "force-cache" })
       .then(async (response) => {
-        if (!response.ok) return null;
+        if (!response.ok) {
+          mediaCache.delete(imageUrl);
+          return null;
+        }
         entry.objectUrl = URL.createObjectURL(await response.blob());
         return entry.objectUrl;
       })
-      .catch(() => null);
+      .catch(() => {
+        mediaCache.delete(imageUrl);
+        return null;
+      });
     cached = entry;
     mediaCache.set(imageUrl, cached);
   }

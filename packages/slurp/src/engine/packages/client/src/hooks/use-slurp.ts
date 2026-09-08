@@ -66,6 +66,9 @@ export const noodleKeys = {
     [...noodleKeys.noodlerEligibleAccountsRoot(), search, kind] as const,
   noodlerPosts: (accountId: string) => [...noodleKeys.noodlerRoot(), "posts", accountId] as const,
   noodlerSubscribers: (accountId: string) => [...noodleKeys.noodlerRoot(), "subscribers", accountId] as const,
+  noodlerFollowers: (accountId: string) => [...noodleKeys.noodlerRoot(), "followers", accountId] as const,
+  audienceMember: (memberId: string, creatorAccountId: string) =>
+    [...noodleKeys.noodlerRoot(), "audience", memberId, creatorAccountId] as const,
   noodlerViewers: () => [...noodleKeys.noodlerRoot(), "viewers"] as const,
   viewer: (personaId: string) => [...noodleKeys.noodlerViewers(), personaId] as const,
   noodlerUnseenCount: (personaId: string) => [...noodleKeys.noodlerViewers(), "unseen-count", personaId] as const,
@@ -805,13 +808,89 @@ export function useNoodlerPosts(accountId: string | null, personaId: string | nu
   });
 }
 
+/**
+ * A subscriber row, widened for the generated audience.
+ *
+ * `NoodlerSubscriber` describes an account-backed viewer. Somebody from the population has no
+ * account and no profile to open, so the extra fields say which kind of person a row is.
+ */
+export type SlurpSubscriberEntry = NoodlerSubscriber & {
+  audience?: boolean;
+  stage?: string;
+  spent?: number;
+};
+
+/** Somebody in the audience who follows a Creator, by name. */
+export type SlurpFollowerEntry = {
+  id: string;
+  displayName: string;
+  handle: string;
+  avatarUrl: string | null;
+  avatarCrop: null;
+  stage: string;
+  arc: string;
+  traits: string[];
+  spent: number;
+  followedAt: string;
+};
+
+/** One audience member's card: who they are, and their history with one Creator. */
+export type SlurpAudienceMember = {
+  id: string;
+  displayName: string;
+  handle: string;
+  traits: string[];
+  spendTier: string;
+  activeHour: number;
+  joinedAt: string;
+  tie: {
+    stage: string;
+    arc: string;
+    spent: number;
+    interactions: number;
+    firstSeenAt: string;
+    subscribed: boolean;
+  } | null;
+};
+
+/**
+ * The named followers of one Creator, plus the total.
+ *
+ * The list stops at the named cast; `total` is the platform reach. That is the point — these
+ * people, and this many more.
+ */
+export function useNoodlerFollowers(accountId: string | null) {
+  return useQuery({
+    queryKey: noodleKeys.noodlerFollowers(accountId ?? "none"),
+    queryFn: () =>
+      api.get<{ items: SlurpFollowerEntry[]; total: number }>(
+        `/slurp/noodler/accounts/${encodeURIComponent(accountId!)}/followers`,
+      ),
+    enabled: Boolean(accountId),
+    staleTime: 10_000,
+  });
+}
+
+/** The fan card. Fetched only when one is opened, because a feed of them would be a request each. */
+export function useSlurpAudienceMember(memberId: string | null, creatorAccountId: string | null) {
+  return useQuery({
+    queryKey: noodleKeys.audienceMember(memberId ?? "none", creatorAccountId ?? "none"),
+    queryFn: () =>
+      api.get<SlurpAudienceMember>(
+        `/slurp/noodler/audience/${encodeURIComponent(memberId!)}?creatorAccountId=${encodeURIComponent(creatorAccountId ?? "")}`,
+      ),
+    enabled: Boolean(memberId),
+    staleTime: 60_000,
+  });
+}
+
 export function useNoodlerSubscribers(accountId: string | null) {
   return useInfiniteQuery({
     queryKey: noodleKeys.noodlerSubscribers(accountId ?? "none"),
     initialPageParam: null as SlurpPageCursor | null,
     queryFn: ({ pageParam }) =>
       api.get<{
-        items: NoodlerSubscriber[];
+        items: SlurpSubscriberEntry[];
         total: number;
         nextCursor: SlurpPageCursor | null;
       }>(`/slurp/noodler/accounts/${encodeURIComponent(accountId!)}/subscribers?limit=20${cursorQuery(pageParam)}`),
@@ -1845,6 +1924,7 @@ export type SlurpMessage = {
   price: number;
   unlockedAt: string | null;
   readAt: string | null;
+  metadata: Record<string, unknown>;
   createdAt: string;
 };
 
