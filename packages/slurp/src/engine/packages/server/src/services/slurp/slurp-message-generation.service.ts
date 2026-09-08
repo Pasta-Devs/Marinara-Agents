@@ -104,14 +104,14 @@ export function buildSlurpMessageChat(input: {
       : "",
     "This is a private chat, so write like one: lowercase is fine, contractions are fine, emojis are fine if they suit the persona.",
     "Keep it to a chat message, not an essay. One to four sentences unless the fan asked something that needs more.",
-    'Return exactly one JSON object with five fields: "content", "moodShift", "remember", "sharePost" and "image".',
+    'Return exactly one JSON object with five fields: "content", "moodShift", "remember", "sharePost" and "image". Use "image" for a generated picture and "sharePost" for a post preview.',
     '"content" is your reply, and the only field the fan ever sees.',
     // A direction, never a value. The stored number is damped by rapport in `slurp-mood.ts`, so a
     // long-standing fan is forgiven a bad message and a stranger is not. If the model set the mood
     // outright, one sentence could end a two-year relationship.
     '"moodShift" is how this last message changed your feeling about the conversation: "up" if you enjoyed it, "same" for anything ordinary, "down" if they were rude, pushy, or tiring, "sharp_down" only for something you would genuinely take offence at. Most messages are "same".',
     `"remember" is an array of at most ${SLURP_NOTES_PER_REPLY} short facts about this fan worth keeping for later — a name, a job, something happening in their life. Use an empty array when nothing new was said. Never record your own words, and never record anything about payment.`,
-    '"sharePost" is an optional zero-based index into yourRecentPosts. Use it only when sharing one of your recent posts fits the conversation. Otherwise use null.',
+    '"sharePost" is an optional zero-based index into yourRecentPosts. Use it only when sharing one of your recent posts fits the conversation. A non-subscriber may receive a friendly locked preview sometimes. Otherwise use null.',
     '"image" is either null or an object with a concrete visual "prompt" and optional short "caption". Use it only when a picture would feel natural, such as showing something, rewarding a warm fan, or making a pointed hostile gesture. Never use it for every reply.',
     "When the conversation is warm or close and the fan has shared something personal, ask one natural follow-up question sometimes. Do not ask a question in every reply, and do not use a question to avoid answering.",
     "Return JSON only. No prose outside the JSON object.",

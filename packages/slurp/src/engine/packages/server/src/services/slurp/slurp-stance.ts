@@ -228,7 +228,9 @@ export function resolveSlurpStance(input: SlurpStanceInput): SlurpStance {
     instructions.push("Keep this reply short and a little cold. Do not pretend the conversation is going well.");
   }
 
-  const canSendImage = warmth === "warm" || warmth === "close" || (warmth === "cold" && input.tone === "unfiltered");
+  // Hostile reactions are part of an ordinary relationship. The audience tone changes how often
+  // the model chooses them, but it must not make an annoyed Creator unable to show annoyance.
+  const canSendImage = warmth === "warm" || warmth === "close" || warmth === "cold";
   const imageMode = canSendImage ? (warmth === "cold" ? "hostile" : "friendly") : "none";
   evidence.push({
     layer: "media latitude",

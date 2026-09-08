@@ -22,6 +22,7 @@ import { resolveSlurpCreatorAvailability } from "./slurp-creator-schedule-contex
 import { slurpReplyPacing, splitSlurpReplyBurst, type SlurpReplyPacing } from "./slurp-messaging.js";
 import { generateSlurpCommissionImage } from "./slurp-commission-image.operation.js";
 import { slurpMessageMediaUrl } from "./slurp-media.js";
+import { resolveSlurpMediaOffer } from "./slurp-media-offer.js";
 
 export type SlurpReplyOutcome =
   | { status: "replied"; message: SlurpMessage; pacing: SlurpReplyPacing }
@@ -176,10 +177,13 @@ export async function replyToSlurpMessage(
               })
             : "unavailable";
         if (drawn !== "unavailable") {
-          const price =
-            thread.rapport.tier === "whale" || thread.rapport.tier === "favourite"
-              ? 0
-              : Math.max(1, messaging.ppvPrice || 10);
+          const offer = resolveSlurpMediaOffer({
+            intent: reply.imageMode === "hostile" ? "hostile" : "friendly",
+            rapportTier: thread.rapport.tier,
+            subscribed,
+            configuredPrice: messaging.ppvPrice,
+          });
+          const price = offer.price;
           const imageMessage = await messagesStore.appendMessage(thread.id, {
             senderAccountId: thread.creatorAccountId,
             role: "creator",

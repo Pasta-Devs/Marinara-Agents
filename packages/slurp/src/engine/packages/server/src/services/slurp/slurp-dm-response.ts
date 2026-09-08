@@ -12,6 +12,7 @@
 import { z } from "zod";
 import { SLURP_MOOD_SHIFTS, type SlurpMoodShift } from "./slurp-mood.js";
 import type { SlurpStanceLatitude } from "./slurp-stance.js";
+import type { SlurpMediaIntent } from "./slurp-media-offer.js";
 
 /** A note is one short fact. Long enough for a sentence, short enough that twenty of them fit. */
 export const SLURP_NOTE_MAX_LENGTH = 160;
@@ -32,6 +33,17 @@ export const slurpDmReplySchema = z.object({
     .nullable()
     .optional()
     .catch(undefined),
+  media: z
+    .object({
+      kind: z.enum(["post", "generated_image"]),
+      postIndex: z.number().int().min(0).max(4).optional(),
+      intent: z.enum(["friendly", "hostile", "premium", "preview"]),
+      prompt: z.string().trim().min(3).max(1000).optional(),
+      caption: z.string().trim().max(500).optional(),
+    })
+    .nullable()
+    .optional()
+    .catch(undefined),
 });
 
 export type SlurpDmReply = {
@@ -40,6 +52,13 @@ export type SlurpDmReply = {
   remember: string[];
   sharePost?: number;
   image?: { prompt: string; caption: string };
+  media?: {
+    kind: "post" | "generated_image";
+    postIndex?: number;
+    intent: SlurpMediaIntent;
+    prompt?: string;
+    caption: string;
+  };
 };
 
 /** The reply plus what the resolved stance allows the creator to do about the conversation. */
@@ -73,6 +92,17 @@ export function readSlurpDmReply(value: unknown): SlurpDmReply {
     ...(parsed.data.sharePost === undefined ? {} : { sharePost: parsed.data.sharePost }),
     ...(parsed.data.image?.prompt
       ? { image: { prompt: parsed.data.image.prompt, caption: parsed.data.image.caption?.trim() ?? "" } }
+      : {}),
+    ...(parsed.data.media?.kind
+      ? {
+          media: {
+            kind: parsed.data.media.kind,
+            postIndex: parsed.data.media.postIndex,
+            intent: parsed.data.media.intent,
+            prompt: parsed.data.media.prompt,
+            caption: parsed.data.media.caption?.trim() ?? "",
+          },
+        }
       : {}),
   };
 }
