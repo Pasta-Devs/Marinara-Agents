@@ -258,8 +258,16 @@ export async function generateNoodlePostImage(input: {
           styleGuidance,
         })
       : null;
+  const compiledRewrittenPrompt = rewrittenPrompt
+    ? compileImagePrompt({
+        kind: "illustration",
+        prompt: rewrittenPrompt,
+        styleProfiles: imageSettings.styleProfiles,
+        imageDefaults,
+      })
+    : null;
   const finalPrompt = selectNoodleImageProviderPrompt({
-    rewrittenPrompt,
+    rewrittenPrompt: compiledRewrittenPrompt?.prompt || rewrittenPrompt,
     rawPrompt: rawProviderPrompt,
     // Art style and the character's image habits are meant to reach the provider, so a rewrite
     // that applies them is doing its job. Personality never belongs in a visual prompt at any

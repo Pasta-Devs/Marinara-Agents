@@ -1,6 +1,9 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
+import { compileImagePrompt } from "../sources/engine/packages/shared/dist/utils/image-prompt-compiler.js";
+import { normalizeImageGenerationProfile } from "../sources/engine/packages/shared/dist/constants/image-generation-defaults.js";
+import { normalizeImageStyleProfileSettings } from "../sources/engine/packages/shared/dist/constants/image-style-profiles.js";
 import { selectNoodleImageProviderPrompt } from "../packages/slurp/src/engine/packages/server/src/services/slurp/slurp-image-prompt";
 
 const root = join(import.meta.dirname, "..");
@@ -11,6 +14,20 @@ const internalContext = "User image instructions: preserve the personality notes
 const rewrittenPrompt = "A person reading beside a sunlit window, medium shot.";
 const appearancePrompt = "Appearance: green eyes, short black hair, and a blue jacket.";
 const styleGuidance = "Use a hand-painted editorial watercolor style.";
+
+const animeStyles = normalizeImageStyleProfileSettings({ defaultProfileId: "anime", profiles: [] });
+const emptyPromptPreset = normalizeImageGenerationProfile(
+  { styleProfileId: "anime", automatic1111: { promptPrefix: "", negativePromptPrefix: "" } },
+  "automatic1111",
+).profile;
+const rewrittenWithoutStyle = compileImagePrompt({
+  kind: "illustration",
+  prompt: "A person reading beside a window.",
+  styleProfiles: animeStyles,
+  imageDefaults: emptyPromptPreset,
+});
+assert.match(rewrittenWithoutStyle.prompt, /anime style/u);
+assert.match(rewrittenWithoutStyle.negativePrompt, /photorealistic/u);
 
 // Interpretation success sends the rewritten visual prompt only.
 assert.equal(selectNoodleImageProviderPrompt({ rewrittenPrompt, rawPrompt }), rewrittenPrompt);
