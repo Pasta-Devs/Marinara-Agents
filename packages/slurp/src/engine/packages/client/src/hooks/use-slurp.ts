@@ -2270,6 +2270,24 @@ export function useSendSlurpViewerImage() {
   });
 }
 
+export function useGenerateSlurpViewerImage() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (input: {
+      threadId: string;
+      creatorAccountId: string;
+      personaId: string;
+      prompt: string;
+      content?: string;
+    }) =>
+      api.post<{ message: SlurpMessage; replyStatus: string }>(
+        `/slurp/messages/threads/${encodeURIComponent(input.threadId)}/viewer-image`,
+        input,
+      ),
+    onSuccess: () => invalidateSlurpMessages(queryClient),
+  });
+}
+
 export function useBroadcastSlurpMessage() {
   const queryClient = useQueryClient();
   return useMutation({

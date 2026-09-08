@@ -860,6 +860,60 @@ export async function slurpMessageRoutes(app: FastifyInstance) {
     }
   });
 
+  app.post("/messages/threads/:threadId/viewer-image", async (req, reply) => {
+    const parsed = z
+      .object({
+        personaId: z.string().min(1),
+        creatorAccountId: z.string().min(1),
+        prompt: z.string().trim().min(3).max(1000),
+        content: z.string().max(1000).default(""),
+      })
+      .safeParse(req.body ?? {});
+    if (!parsed.success) return reply.code(400).send({ error: parsed.error.flatten() });
+    const { threadId } = req.params as { threadId: string };
+    const thread = await messages.getThreadById(threadId);
+    const viewer = await requireViewer(parsed.data.personaId);
+    if (
+      !thread ||
+      !viewer ||
+      thread.viewerAccountId !== viewer.id ||
+      thread.creatorAccountId !== parsed.data.creatorAccountId
+    )
+      return reply.code(404).send({ error: "Thread not found" });
+    if (thread.coolUntil && thread.coolUntil > new Date().toISOString())
+      return reply.code(409).send({ error: "This conversation is cooling off." });
+    const recentImage = (await messages.listMessages(thread.id)).some(
+      (message) =>
+        message.role === "viewer" &&
+        message.metadata.generatedContext === "viewer" &&
+        Date.now() - Date.parse(message.createdAt) < 3 * 60 * 60_000,
+    );
+    if (recentImage) return reply.code(429).send({ error: "You can generate another picture later." });
+    const drawn = await generateSlurpCommissionImage(app.db, {
+      creatorAccountId: thread.creatorAccountId,
+      brief: parsed.data.prompt,
+    });
+    if (drawn === "unavailable") return reply.code(503).send({ error: "Image generation is not available." });
+    try {
+      const message = await messages.appendMessage(thread.id, {
+        senderAccountId: viewer.id,
+        role: "viewer",
+        content: parsed.data.content,
+        imageUrl: slurpMessageMediaUrl("pending"),
+        unlockedAt: new Date().toISOString(),
+        metadata: { noodlerMediaPath: drawn.mediaPath, generatedContext: "viewer" },
+      });
+      if (!message) return reply.code(404).send({ error: "Thread not found" });
+      drawn.promote();
+      await messages.setMessageMedia(message.id, slurpMessageMediaUrl(message.id), drawn.mediaPath);
+      const outcome = await replyToSlurpMessage(app.db, { threadId, triggerMessageId: message.id });
+      return { message: { ...message, imageUrl: slurpMessageMediaUrl(message.id) }, replyStatus: outcome.status };
+    } catch (error) {
+      drawn.compensate();
+      throw error;
+    }
+  });
+
   app.post("/messages/threads/:threadId/request", async (req, reply) => {
     const parsed = requestDecisionSchema.safeParse(req.body ?? {});
     if (!parsed.success) return reply.code(400).send({ error: parsed.error.flatten() });
