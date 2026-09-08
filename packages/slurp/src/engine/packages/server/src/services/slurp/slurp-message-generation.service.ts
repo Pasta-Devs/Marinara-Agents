@@ -113,6 +113,7 @@ export function buildSlurpMessageChat(input: {
     `"remember" is an array of at most ${SLURP_NOTES_PER_REPLY} short facts about this fan worth keeping for later — a name, a job, something happening in their life. Use an empty array when nothing new was said. Never record your own words, and never record anything about payment.`,
     '"sharePost" is an optional zero-based index into yourRecentPosts. Use it only when sharing one of your recent posts fits the conversation. Otherwise use null.',
     '"image" is either null or an object with a concrete visual "prompt" and optional short "caption". Use it only when a picture would feel natural, such as showing something, rewarding a warm fan, or making a pointed hostile gesture. Never use it for every reply.',
+    "When the conversation is warm or close and the fan has shared something personal, ask one natural follow-up question sometimes. Do not ask a question in every reply, and do not use a question to avoid answering.",
     "Return JSON only. No prose outside the JSON object.",
   ]
     .filter(Boolean)

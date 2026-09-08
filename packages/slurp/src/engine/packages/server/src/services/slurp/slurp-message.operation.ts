@@ -12,6 +12,7 @@ import { resolveSlurpTextConnection } from "./slurp-connection.js";
 import { createCharactersStorage } from "../storage/characters.storage.js";
 import { createSlurpStorage } from "../storage/slurp.storage.js";
 import { createSlurpMessagesStorage, type SlurpMessage } from "../storage/slurp-messages.storage.js";
+import { createSlurpEventsStorage } from "../storage/slurp-events.storage.js";
 import { tryNoodlerAccountOperation } from "./slurp-account-operation-lock.js";
 import { generateSlurpMessageReply } from "./slurp-message-generation.service.js";
 import { describeSlurpDayVibe } from "./slurp-day-vibe.service.js";
@@ -212,6 +213,19 @@ export async function replyToSlurpMessage(
         await applyBoundary(messagesStore, thread.id, reply.latitude).catch((error: unknown) =>
           logger.warn(error, "[slurp-message] Could not apply the conversation boundary"),
         );
+        if (reply.latitude === "cool_off" || reply.latitude === "close") {
+          const events = createSlurpEventsStorage(db);
+          const operator = creator.sourceKind === "persona" ? creator.sourceEntityId : null;
+          if (operator) {
+            await events.recordAndPrune({
+              recipientPersonaId: operator,
+              kind: "message",
+              creatorAccountId: creator.id,
+              subjectId: thread.id,
+              actorLabel: viewer.displayName,
+            });
+          }
+        }
       }
       return stored ? ({ status: "replied", message: stored } as const) : ({ status: "ineligible" } as const);
     });

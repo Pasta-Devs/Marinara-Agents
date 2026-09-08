@@ -449,6 +449,7 @@ function SlurpThreadView({
   const [replyStatus, setReplyStatus] = useState<string | null>(null);
   const [infoOpen, setInfoOpen] = useState(false);
   const [debugOpen, setDebugOpen] = useState(false);
+  const draftStorageKey = `slurp-message-draft:${personaId ?? "none"}:${targetCreatorAccountId ?? "none"}`;
   const bottomRef = useRef<HTMLDivElement | null>(null);
 
   const thread = threadQuery.data?.thread ?? null;
@@ -510,6 +511,18 @@ function SlurpThreadView({
   const headerProfileId = ownsCreator ? thread?.viewerAccountId : targetCreatorAccountId;
   const busy = send.isPending || tip.isPending || creatorReply.isPending || draftReply.isPending;
   const promptDebug = useSlurpMessagePrompt(threadId, personaId, debugOpen);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const saved = window.localStorage.getItem(draftStorageKey);
+    if (saved) setDraft(saved);
+  }, [draftStorageKey]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    if (draft.trim()) window.localStorage.setItem(draftStorageKey, draft);
+    else window.localStorage.removeItem(draftStorageKey);
+  }, [draft, draftStorageKey]);
 
   // Drop the echo only once the refetch carries the real row, so the message never blinks out
   // between the response landing and the thread reloading.
@@ -755,26 +768,36 @@ function SlurpThreadView({
                       })}
             </p>
           )}
-          {timeline.map((entry) =>
-            entry.kind === "message" ? (
-              <MessageBubble
-                key={entry.message.id}
-                message={entry.message}
-                locale={i18n.language}
-                personaId={personaId}
-                ownsCreator={ownsCreator}
-                showReceipt={entry.message.id === lastOwnMessageId}
-              />
-            ) : personaId ? (
-              <CommissionRow
-                key={entry.commission.id}
-                commission={entry.commission}
-                deliveryMessage={entry.deliveryMessage}
-                personaId={personaId}
-                ownsCreator={ownsCreator}
-              />
-            ) : null,
-          )}
+          {timeline.map((entry, index) => {
+            const date = new Date(entry.at).toLocaleDateString(i18n.language, { dateStyle: "medium" });
+            const previousDate =
+              index > 0
+                ? new Date(timeline[index - 1]!.at).toLocaleDateString(i18n.language, { dateStyle: "medium" })
+                : null;
+            return (
+              <div key={entry.kind === "message" ? entry.message.id : entry.commission.id} className="contents">
+                {date !== previousDate && (
+                  <div className="self-center py-2 text-[0.65rem] font-bold text-[var(--muted-foreground)]">{date}</div>
+                )}
+                {entry.kind === "message" ? (
+                  <MessageBubble
+                    message={entry.message}
+                    locale={i18n.language}
+                    personaId={personaId}
+                    ownsCreator={ownsCreator}
+                    showReceipt={entry.message.id === lastOwnMessageId}
+                  />
+                ) : personaId ? (
+                  <CommissionRow
+                    commission={entry.commission}
+                    deliveryMessage={entry.deliveryMessage}
+                    personaId={personaId}
+                    ownsCreator={ownsCreator}
+                  />
+                ) : null}
+              </div>
+            );
+          })}
           {pending && !messages.some((message) => message.id === pending.id) && (
             <div className="flex max-w-[88%] flex-col items-end gap-1 self-end opacity-60 sm:max-w-[78%]">
               <div className="whitespace-pre-wrap break-words rounded-[1.15rem] rounded-br-[0.35rem] bg-[var(--noodle-accent)] px-3.5 py-2.5 text-sm leading-relaxed text-zinc-950 shadow-[var(--slurp-shadow-raised)]">
@@ -1014,6 +1037,19 @@ function MessageBubble({
           </div>
         </div>
         <time dateTime={message.createdAt} className="px-1 text-xs text-[var(--muted-foreground)]">
+          {formatTime(message.createdAt, locale)}
+        </time>
+      </div>
+    );
+  }
+  if (message.kind === "broadcast") {
+    return (
+      <div className="self-start max-w-[88%] rounded-2xl rounded-bl-md bg-[var(--slurp-surface)] px-3.5 py-2.5 ring-1 ring-inset ring-[var(--noodle-divider)]">
+        <p className="mb-1 text-[0.65rem] font-black uppercase tracking-[0.08em] text-[var(--noodle-accent)]">
+          {localizeUi("ui.slurp.messages.broadcastLabel", { defaultValue: "Broadcast" })}
+        </p>
+        <p className="whitespace-pre-wrap break-words text-sm leading-relaxed">{message.content}</p>
+        <time dateTime={message.createdAt} className="mt-1 block text-xs text-[var(--muted-foreground)]">
           {formatTime(message.createdAt, locale)}
         </time>
       </div>
