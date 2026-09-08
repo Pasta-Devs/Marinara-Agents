@@ -1,5 +1,22 @@
 # Pixelforge release notes
 
+## 0.16.2 — 2026-09-08
+
+Tell the game what kind of world you want in your own words and it works out the rest. The theme
+dropdown is gone: the setting you describe now decides whether you arrive in a village of stone and
+timber or a colony under a sealed sky. The world name box starts empty too; leaving either alone no
+longer answers for you.
+
+Pixelforge also stops asking who is in your party — every game starts with an empty party this
+release, and choosing one moves to Game Mode's own setup in the next — and it stops writing map
+notes and story goals on your behalf that you never asked for.
+
+You can now tick the exact lorebook entries the game reads before it writes your world, one at a
+time or a whole book at once, so a place you have already written history for comes out knowing it.
+It needs a newer Engine: on an older one your picks are ignored and the world is written from your
+setting alone. An entry limited to specific characters is skipped this release, because there is no
+party for it to match.
+
 ## 0.16.1 — 2026-09-07
 
 Name your world and get your world. The Setting box arrived pre-filled, so leaving it alone quietly
