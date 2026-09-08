@@ -36,6 +36,12 @@
     "slurp": {
       "versions": [
         {
+          "version": "1.2.35",
+          "date": "2026-09-08",
+          "notes": "- Mobile navigation is now icon-only with accessible labels retained.\n- Mobile navigation icons use the pink Slurp accent in every state.\n- The mobile wallet control is anchored to the top-right corner.",
+          "highlight": false
+        },
+        {
           "version": "1.2.34",
           "date": "2026-09-08",
           "notes": "- Commission cards now move to the latest chat position after every state update, including payment updates without a new message row.",
@@ -147,12 +153,6 @@
           "version": "1.2.16",
           "date": "2026-09-07",
           "notes": "- Refined the new Inbox to match its concept: full-height desktop conversations, message filters, selected-thread surfaces, compact broadcasts, and a focused message-tools menu.",
-          "highlight": false
-        },
-        {
-          "version": "1.2.15",
-          "date": "2026-09-07",
-          "notes": "- Redesigned Inbox around dedicated Messages and Notifications tabs, with a desktop split conversation view, notification filters, and commissions kept inside their related conversations.",
           "highlight": false
         }
       ]

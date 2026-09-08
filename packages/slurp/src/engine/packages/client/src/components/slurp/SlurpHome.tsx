@@ -5029,7 +5029,7 @@ function ViewerHub({
         data-component="SlurpHome.StickyHeader"
       >
         <div
-          className="relative grid h-14 grid-cols-[5.5rem_minmax(0,1fr)_5.5rem] items-center border-b border-[var(--noodle-divider)] px-3 @min-[1024px]:px-5"
+          className="relative flex h-14 items-center border-b border-[var(--noodle-divider)] px-3 @min-[1024px]:px-5"
           data-component="SlurpHome.HeaderBar"
         >
           <button
@@ -5048,7 +5048,7 @@ function ViewerHub({
           <button
             type="button"
             onClick={onOpenWallet}
-            className="flex h-11 max-w-full items-center justify-self-end gap-1.5 overflow-hidden rounded-full px-3 text-sm font-semibold tabular-nums text-[var(--muted-foreground)] ring-1 ring-inset ring-[var(--noodle-divider)] transition-colors hover:bg-[var(--accent)] hover:text-[var(--foreground)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--noodle-accent)] @min-[1024px]:hidden"
+            className="ms-auto flex h-11 max-w-full items-center gap-1.5 overflow-hidden rounded-full px-3 text-sm font-semibold tabular-nums text-[var(--muted-foreground)] ring-1 ring-inset ring-[var(--noodle-divider)] transition-colors hover:bg-[var(--accent)] hover:text-[var(--foreground)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--noodle-accent)] @min-[1024px]:hidden"
             aria-label={localizeUi("ui.slurp.wallet.balance", { amount: walletCoins })}
             title={localizeUi("ui.slurp.wallet.balance", { amount: walletCoins })}
           >

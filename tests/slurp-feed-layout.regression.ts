@@ -22,7 +22,7 @@ const images = readFileSync(
 assert.match(home, /useState<"list" \| "wall">\("list"\)/u, "The feed must default to the list layout");
 assert.match(home, /feedLayout === "wall" \? \(\s*<SlurpMediaWall/u, "The wall layout must replace the post list");
 
-// Small polish stays structural: labeled mobile navigation, useful empty states, and no empty rail.
+// Small polish stays structural: icon-only mobile navigation, useful empty states, and no empty rail.
 const mobileNavigation = shell.slice(
   shell.indexOf('data-component="NoodleView.MobileBottomNav"'),
   shell.indexOf("</nav>", shell.indexOf('data-component="NoodleView.MobileBottomNav"')),
@@ -34,9 +34,15 @@ for (const label of [
   "ui.slurp.navigation.search",
   "ui.slurp.navigation.more",
 ]) {
-  assert.match(mobileNavigation, new RegExp(label.replaceAll(".", "\\."), "u"), `mobile navigation must show ${label}`);
+  assert.match(mobileNavigation, new RegExp(`aria-label=\\{[\\s\\S]*${label.replaceAll(".", "\\.")}`, "u"));
 }
-assert.match(shell, /h-16 grid-flow-col/u, "mobile navigation must reserve enough height for visible labels");
+assert.match(shell, /h-16 grid-flow-col/u, "mobile navigation must keep its touch-target height");
+assert.doesNotMatch(
+  mobileNavigation,
+  /<span className="max-w-full truncate px-1">/u,
+  "mobile navigation must hide text labels",
+);
+assert.match(mobileNavigation, /!text-\[var\(--noodle-accent\)\]/u, "mobile navigation icons must stay pink");
 assert.match(home, /ui\.slurp\.empty\.clearSearch/u, "empty search must offer a recovery action");
 assert.match(home, /ui\.slurp\.empty\.browseAll/u, "an empty Following feed must offer all creators");
 assert.match(

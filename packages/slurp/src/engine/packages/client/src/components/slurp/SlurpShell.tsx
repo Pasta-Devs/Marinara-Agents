@@ -1089,24 +1089,17 @@ export function NoodleShell({
               }
               aria-current={homeActive ? "page" : undefined}
               className={cn(
-                "relative flex flex-col items-center justify-center gap-0.5 text-xs font-semibold transition-[background-color,color,transform] hover:bg-[var(--noodle-accent)]/10 active:scale-[0.96] active:bg-[var(--noodle-accent)]/15 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--noodle-accent)] motion-reduce:transition-none motion-reduce:active:scale-100",
-                homeActive
-                  ? "bg-[var(--noodle-accent)]/[0.07] text-[var(--noodle-accent)]"
-                  : "text-[var(--muted-foreground)]",
+                "relative flex flex-col items-center justify-center text-[var(--noodle-accent)] transition-[background-color,transform] hover:bg-[var(--noodle-accent)]/10 active:scale-[0.96] active:bg-[var(--noodle-accent)]/15 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--noodle-accent)] motion-reduce:transition-none motion-reduce:active:scale-100",
+                homeActive ? "bg-[var(--noodle-accent)]/[0.07]" : undefined,
               )}
             >
-              <Home
-                size={21}
-                strokeWidth={homeActive ? 2.6 : 2}
-                className={homeActive ? "!text-[var(--noodle-accent)]" : "!text-[var(--muted-foreground)]"}
-              />
+              <Home size={21} strokeWidth={homeActive ? 2.6 : 2} className="!text-[var(--noodle-accent)]" />
               {/* The drawer used to carry this badge; the bottom bar is the only Home entry now. */}
               {noodlerUnseenCount > 0 && (
                 <span className="absolute end-[22%] top-1.5 min-w-4 rounded-full bg-[var(--noodle-accent)] px-1 text-center text-[0.6rem] font-black leading-4 text-zinc-950">
                   {noodlerUnseenCount > 99 ? "99+" : noodlerUnseenCount}
                 </span>
               )}
-              <span className="max-w-full truncate px-1">{homeLabel}</span>
             </button>
             {onOpenProfile && (
               <button
@@ -1117,20 +1110,15 @@ export function NoodleShell({
                 }
                 aria-current={activeView === "profile" ? "page" : undefined}
                 className={cn(
-                  "relative flex flex-col items-center justify-center gap-0.5 text-xs font-semibold transition-[background-color,color,transform] hover:bg-[var(--noodle-accent)]/10 active:scale-[0.96] active:bg-[var(--noodle-accent)]/15 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--noodle-accent)] motion-reduce:transition-none motion-reduce:active:scale-100",
-                  activeView === "profile"
-                    ? "bg-[var(--noodle-accent)]/[0.07] text-[var(--noodle-accent)]"
-                    : "text-[var(--muted-foreground)]",
+                  "relative flex flex-col items-center justify-center text-[var(--noodle-accent)] transition-[background-color,transform] hover:bg-[var(--noodle-accent)]/10 active:scale-[0.96] active:bg-[var(--noodle-accent)]/15 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--noodle-accent)] motion-reduce:transition-none motion-reduce:active:scale-100",
+                  activeView === "profile" && "bg-[var(--noodle-accent)]/[0.07]",
                 )}
               >
                 <User
                   size={21}
                   strokeWidth={activeView === "profile" ? 2.6 : 2}
-                  className={
-                    activeView === "profile" ? "!text-[var(--noodle-accent)]" : "!text-[var(--muted-foreground)]"
-                  }
+                  className={"!text-[var(--noodle-accent)]"}
                 />
-                <span className="max-w-full truncate px-1">{localizeUi("ui.slurp.navigation.profile")}</span>
               </button>
             )}
             {onOpenMessages && (
@@ -1140,27 +1128,20 @@ export function NoodleShell({
                 aria-label={localizeUi("ui.slurp.navigation.messages", { defaultValue: "Inbox" })}
                 aria-current={activeView === "messages" ? "page" : undefined}
                 className={cn(
-                  "relative flex flex-col items-center justify-center gap-0.5 text-xs font-semibold transition-[background-color,color,transform] hover:bg-[var(--noodle-accent)]/10 active:scale-[0.96] active:bg-[var(--noodle-accent)]/15 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--noodle-accent)] motion-reduce:transition-none motion-reduce:active:scale-100",
-                  activeView === "messages"
-                    ? "bg-[var(--noodle-accent)]/[0.07] text-[var(--noodle-accent)]"
-                    : "text-[var(--muted-foreground)]",
+                  "relative flex flex-col items-center justify-center text-[var(--noodle-accent)] transition-[background-color,transform] hover:bg-[var(--noodle-accent)]/10 active:scale-[0.96] active:bg-[var(--noodle-accent)]/15 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--noodle-accent)] motion-reduce:transition-none motion-reduce:active:scale-100",
+                  activeView === "messages" && "bg-[var(--noodle-accent)]/[0.07]",
                 )}
               >
                 <MessageCircle
                   size={21}
                   strokeWidth={activeView === "messages" ? 2.6 : 2}
-                  className={
-                    activeView === "messages" ? "!text-[var(--noodle-accent)]" : "!text-[var(--muted-foreground)]"
-                  }
+                  className={"!text-[var(--noodle-accent)]"}
                 />
                 {notificationCount > 0 && (
                   <span className="absolute end-[22%] top-1.5 min-w-4 rounded-full bg-[var(--noodle-accent)] px-1 text-center text-[0.6rem] font-black leading-4 text-zinc-950">
                     {notificationCount > 99 ? "99+" : notificationCount}
                   </span>
                 )}
-                <span className="max-w-full truncate px-1">
-                  {localizeUi("ui.slurp.navigation.messages", { defaultValue: "Inbox" })}
-                </span>
               </button>
             )}
             {onOpenSearch && (
@@ -1176,22 +1157,15 @@ export function NoodleShell({
                 }
                 aria-current={activeView === "search" ? "page" : undefined}
                 className={cn(
-                  "relative flex flex-col items-center justify-center gap-0.5 text-xs font-semibold transition-[background-color,color,transform] hover:bg-[var(--noodle-accent)]/10 active:scale-[0.96] active:bg-[var(--noodle-accent)]/15 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--noodle-accent)] motion-reduce:transition-none motion-reduce:active:scale-100",
-                  activeView === "search"
-                    ? "bg-[var(--noodle-accent)]/[0.07] text-[var(--noodle-accent)]"
-                    : "text-[var(--muted-foreground)]",
+                  "relative flex flex-col items-center justify-center text-[var(--noodle-accent)] transition-[background-color,transform] hover:bg-[var(--noodle-accent)]/10 active:scale-[0.96] active:bg-[var(--noodle-accent)]/15 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--noodle-accent)] motion-reduce:transition-none motion-reduce:active:scale-100",
+                  activeView === "search" && "bg-[var(--noodle-accent)]/[0.07]",
                 )}
               >
                 <Search
                   size={21}
                   strokeWidth={activeView === "search" ? 2.6 : 2}
-                  className={
-                    activeView === "search" ? "!text-[var(--noodle-accent)]" : "!text-[var(--muted-foreground)]"
-                  }
+                  className={"!text-[var(--noodle-accent)]"}
                 />
-                <span className="max-w-full truncate px-1">
-                  {localizeUi("ui.slurp.navigation.search", { defaultValue: "Discover" })}
-                </span>
               </button>
             )}
             <button
@@ -1206,10 +1180,8 @@ export function NoodleShell({
                   : localizeUi("ui.noodle.noodleshell.noodleAccountMenu")
               }
               className={cn(
-                "relative flex flex-col items-center justify-center gap-0.5 text-xs font-semibold transition-[background-color,color,transform] hover:bg-[var(--noodle-accent)]/10 active:scale-[0.96] active:bg-[var(--noodle-accent)]/15 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--noodle-accent)] motion-reduce:transition-none motion-reduce:active:scale-100",
-                mobileDrawerOpen
-                  ? "bg-[var(--noodle-accent)]/[0.07] text-[var(--noodle-accent)]"
-                  : "text-[var(--muted-foreground)]",
+                "relative flex flex-col items-center justify-center text-[var(--noodle-accent)] transition-[background-color,transform] hover:bg-[var(--noodle-accent)]/10 active:scale-[0.96] active:bg-[var(--noodle-accent)]/15 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--noodle-accent)] motion-reduce:transition-none motion-reduce:active:scale-100",
+                mobileDrawerOpen && "bg-[var(--noodle-accent)]/[0.07]",
               )}
             >
               {personaAccount ? (
@@ -1219,9 +1191,6 @@ export function NoodleShell({
                   <AtSign size={18} className="!text-[var(--noodle-accent)]" />
                 </span>
               )}
-              <span className="max-w-full truncate px-1">
-                {localizeUi("ui.slurp.navigation.more", { defaultValue: "More" })}
-              </span>
             </button>
           </div>
         </nav>

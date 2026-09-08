@@ -1,5 +1,11 @@
 # Slurp release notes
 
+## 1.2.35 — 2026-09-08
+
+- Mobile navigation is now icon-only with accessible labels retained.
+- Mobile navigation icons use the pink Slurp accent in every state.
+- The mobile wallet control is anchored to the top-right corner.
+
 ## 1.2.34 — 2026-09-08
 
 - Commission cards now move to the latest chat position after every state update, including payment updates without a new message row.
