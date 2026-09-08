@@ -25614,6 +25614,32 @@ const fire = (node, type) => Promise.all((node.listeners[type] ?? []).map((fn) =
   ]) {
     assert.equal(kit(text), "sci-fi-colony", `the colony's own noun still votes: ${text}`);
   }
+  // ONE ROW PER SUB-GROUP, because the three rows above are carried by `ion` and
+  // `sation`/`zation` ALONE. The family went in as four alternations and only two
+  // of them were held down: deleting `ation|ations`, `sing|zing|sed|zed` or
+  // `ising|izing|ised|ized` from the set left this whole harness green, which is
+  // the very shape of miss the family exists to correct — a remainder rule
+  // changed with half the consequence measured.
+  //
+  // `sing|zing|sed|zed` is the one that most needs a lane, because it is the
+  // reason the shipped set deviates from the shorter list that was proposed for
+  // it: `colonising` is `coloni` + `sing`, not `coloni` + `ising`, so the shorter
+  // list would have recovered the NOUN and still lost all four verb forms. That
+  // argument lived in a comment and in nothing the harness could read.
+  //
+  // Every sentence here was measured to carry EXACTLY ONE lexicon token by
+  // EXACTLY ONE route — no `dome`, no `crew`, and no second suffix that could
+  // answer for a deleted one — so each goes red on its own sub-group and on no
+  // other. Both spellings of the verb group are pinned, because the STEM decides
+  // the remainder and `s` and `z` are separate entries in the set.
+  for (const [text, group] of [
+    ["Terraformation of the southern basin.", "ation"], // terraform + ation
+    ["Colonising the outer belt.", "sing"], // coloni + sing
+    ["A colonized world under glass.", "zed"], // coloni + zed
+    ["A robotised workforce.", "ised"], // robot + ised
+  ]) {
+    assert.equal(kit(text), "sci-fi-colony", `only \`${group}\` carries this row: ${text}`);
+  }
   // …and the half of that family that was NOT added, held down so a later widening
   // has to argue with a lane rather than with a comment. "stationary" is `station`
   // + `ary`, and recovering it costs the false-positive class the whole list
