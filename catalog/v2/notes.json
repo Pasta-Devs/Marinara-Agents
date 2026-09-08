@@ -36,6 +36,12 @@
     "slurp": {
       "versions": [
         {
+          "version": "1.2.26",
+          "date": "2026-09-08",
+          "notes": "- World-generated commission requests now receive an automatic quote and can complete through the existing audience decision and payment path.",
+          "highlight": false
+        },
+        {
           "version": "1.2.25",
           "date": "2026-09-08",
           "notes": "- A Creator who answers a message is no longer left marked as owing a reply. The unread count on the Creator's side was never cleared by replying, so an answered conversation stayed in the reply queue forever and the badge never went away.\n- The message thread now shows whether a Creator is online, away, or offline, the same as their profile does.",
@@ -147,12 +153,6 @@
           "version": "1.2.7",
           "date": "2026-09-07",
           "notes": "- First Creator posts now run through a durable background queue with bounded retries.\n- The onboarding screen can show Creator setup before first-post generation finishes.",
-          "highlight": false
-        },
-        {
-          "version": "1.2.6",
-          "date": "2026-09-07",
-          "notes": "- Fixed Slurp failing to load when wallet settings were normalized.",
           "highlight": false
         }
       ]

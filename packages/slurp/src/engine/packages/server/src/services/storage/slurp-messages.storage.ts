@@ -690,6 +690,17 @@ export function createSlurpMessagesStorage(db: DB) {
       return rows.map(mapCommission).filter((row) => row.state === "quoted");
     },
 
+    /** Briefs opened by generated audience members, which the world can quote automatically. */
+    async listAudienceBriefCommissions(): Promise<SlurpCommission[]> {
+      const rows = await db.select().from(slurpCommissions).where(eq(slurpCommissions.state, "brief"));
+      const population = createSlurpPopulationStorage(db);
+      const commissions: SlurpCommission[] = [];
+      for (const row of rows) {
+        if (await population.get(String(row.viewerAccountId))) commissions.push(mapCommission(row));
+      }
+      return commissions;
+    },
+
     /**
      * Settle a quote on behalf of a fan the world invented.
      *

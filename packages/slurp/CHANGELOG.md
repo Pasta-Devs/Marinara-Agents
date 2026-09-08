@@ -1,5 +1,9 @@
 # Slurp release notes
 
+## 1.2.26 — 2026-09-08
+
+- World-generated commission requests now receive an automatic quote and can complete through the existing audience decision and payment path.
+
 ## 1.2.25 — 2026-09-08
 
 - A Creator who answers a message is no longer left marked as owing a reply. The unread count on the Creator's side was never cleared by replying, so an answered conversation stayed in the reply queue forever and the badge never went away.

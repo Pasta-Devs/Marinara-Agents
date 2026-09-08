@@ -213,9 +213,15 @@ export async function advanceSlurpWorld(db: DB, until = new Date()): Promise<Slu
       }
     }
 
-    // Settle quotes the audience is sitting on. A commission the world opened could never be
-    // answered — the accept route wants the player's persona, and these fans are not one — so the
-    // only path by which the audience ever paid the Creator anything dead-ended at `quoted`.
+    // Generated audience briefs cannot wait for the player to name a price. Quote them before the
+    // existing settlement path, while player-created briefs remain manual.
+    const AUDIENCE_COMMISSION_PRICE = 40;
+    for (const commission of await messages.listAudienceBriefCommissions()) {
+      await messages.quoteCommission(commission.id, AUDIENCE_COMMISSION_PRICE).catch(() => null);
+    }
+
+    // Settle quotes the audience is sitting on. The accept route wants the player's persona, and
+    // generated fans are not one, so this path handles their decision without a wallet debit.
     //
     // Deterministic per commission, so the same quote does not flip its answer between two ticks,
     // and gated on a day's thinking time so a price is never answered the instant it is named.
