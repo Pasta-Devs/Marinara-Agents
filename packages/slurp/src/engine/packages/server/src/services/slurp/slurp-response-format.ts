@@ -148,6 +148,28 @@ const noodlerReplySchema = {
   additionalProperties: false,
 } as const;
 
+/**
+ * A direct-message reply.
+ *
+ * Separate from `noodlerReplySchema` because a DM carries two things a comment reply does not: how
+ * the creator now feels about the conversation, and anything about this fan worth keeping. Both
+ * ride the reply that already runs, so neither costs an extra call.
+ *
+ * `strict` requires every property to be listed in `required`, so the model always answers all
+ * three fields. The parser still treats the two new ones as optional, because a connection that
+ * does not support json_schema returns whatever it likes.
+ */
+const noodlerDmSchema = {
+  type: "object",
+  properties: {
+    content: { type: "string", maxLength: NOODLE_REPLY_HARD_MAX_LENGTH },
+    moodShift: { type: "string", enum: ["up", "same", "down", "sharp_down"] },
+    remember: { type: "array", items: { type: "string", maxLength: 160 }, maxItems: 2 },
+  },
+  required: ["content", "moodShift", "remember"],
+  additionalProperties: false,
+} as const;
+
 const noodlerFanActivitySchema = {
   type: "object",
   properties: {
@@ -163,7 +185,14 @@ const noodlerFanActivitySchema = {
 
 export function noodleResponseFormat(
   model: string,
-  kind: "timeline" | "profiles" | "noodler_post" | "noodler_profile" | "noodler_reply" | "noodler_fan_activity",
+  kind:
+    | "timeline"
+    | "profiles"
+    | "noodler_post"
+    | "noodler_profile"
+    | "noodler_reply"
+    | "noodler_dm"
+    | "noodler_fan_activity",
   options: { allowImagePrompt?: boolean; contentMaxLength?: number } = {},
 ): { type: string; [key: string]: unknown } {
   if (!isOpenAIGpt56Model(model)) return { type: "json_object" };
@@ -176,22 +205,24 @@ export function noodleResponseFormat(
           ? noodlerProfileSchema
           : kind === "noodler_reply"
             ? noodlerReplySchema
-            : kind === "noodler_fan_activity"
-              ? {
-                  type: "object",
-                  properties: {
-                    activities: {
-                      type: "array",
-                      items: noodlerFanActivitySchema,
+            : kind === "noodler_dm"
+              ? noodlerDmSchema
+              : kind === "noodler_fan_activity"
+                ? {
+                    type: "object",
+                    properties: {
+                      activities: {
+                        type: "array",
+                        items: noodlerFanActivitySchema,
+                      },
                     },
-                  },
-                  required: ["activities"],
-                  additionalProperties: false,
-                }
-              : noodlerPostSchema(
-                  options.allowImagePrompt === true,
-                  options.contentMaxLength ?? NOODLE_POST_HARD_MAX_LENGTH,
-                );
+                    required: ["activities"],
+                    additionalProperties: false,
+                  }
+                : noodlerPostSchema(
+                    options.allowImagePrompt === true,
+                    options.contentMaxLength ?? NOODLE_POST_HARD_MAX_LENGTH,
+                  );
   return {
     type: "json_schema",
     name:
@@ -203,9 +234,11 @@ export function noodleResponseFormat(
             ? "noodler_profile"
             : kind === "noodler_reply"
               ? "noodler_reply"
-              : kind === "noodler_fan_activity"
-                ? "noodler_fan_activity"
-                : "noodler_post",
+              : kind === "noodler_dm"
+                ? "noodler_dm"
+                : kind === "noodler_fan_activity"
+                  ? "noodler_fan_activity"
+                  : "noodler_post",
     schema,
     strict: true,
   };

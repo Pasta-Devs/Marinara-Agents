@@ -11,6 +11,7 @@ import { newId } from "../../utils/id-generator.js";
 import type { DB } from "../../db/connection.js";
 import { isFileUniqueConstraintError } from "../../db/file-schema.js";
 import { slurpCommissions, slurpMessageClaims, slurpMessages, slurpThreads } from "../../db/schema/slurp.js";
+import { applySlurpMood, type SlurpMoodShift } from "../slurp/slurp-mood.js";
 import { createAppSettingsStorage } from "./app-settings.storage.js";
 import { createSlurpStorage } from "./slurp.storage.js";
 import { createSlurpPopulationStorage } from "./slurp-population.storage.js";
@@ -59,6 +60,15 @@ export type SlurpThread = {
   creatorUnread: number;
   replyNotBeforeAt: string | null;
   rapport: SlurpRapport;
+  /** How this conversation is going, -100 to 100. See `slurp-mood.ts`. */
+  mood: number;
+  moodUpdatedAt: string | null;
+  /** While in the future, the creator has stepped away from this conversation. */
+  coolUntil: string | null;
+  strikes: number;
+  lastStrikeAt: string | null;
+  /** Short facts the creator knows about this fan, oldest first. */
+  notes: string[];
   createdAt: string;
   updatedAt: string;
 };
@@ -91,6 +101,14 @@ export type SlurpSendResult =
   | { status: "closed" }
   | { status: "insufficient_funds"; required: number }
   | { status: "not_found" };
+
+/**
+ * How many facts one thread keeps.
+ *
+ * A prompt has a budget, and a dossier that grows without limit spends all of it on trivia from
+ * eighteen months ago instead of the conversation in front of it.
+ */
+export const SLURP_THREAD_NOTE_LIMIT = 24;
 
 const now = () => new Date().toISOString();
 const messageUnlocks = new Map<string, Promise<SlurpMessage | null>>();
@@ -147,9 +165,33 @@ export function createSlurpMessagesStorage(db: DB) {
     creatorUnread: int(row.creatorUnread as string),
     replyNotBeforeAt: (row.replyNotBeforeAt as string | null) ?? null,
     rapport: readStoredRapport(json(row.rapport as string)),
+    mood: Number.isFinite(Number(row.mood)) ? Number(row.mood) : 0,
+    moodUpdatedAt: (row.moodUpdatedAt as string | null) ?? null,
+    coolUntil: (row.coolUntil as string | null) ?? null,
+    strikes: int(row.strikes as string),
+    lastStrikeAt: (row.lastStrikeAt as string | null) ?? null,
+    notes: readStoredNotes(row.notes),
     createdAt: String(row.createdAt),
     updatedAt: String(row.updatedAt),
   });
+
+  /**
+   * Notes are generated text written by an earlier reply. A blob written by an older build, or by
+   * hand, must render as a thread with no notes rather than throw the whole inbox away.
+   */
+  function readStoredNotes(raw: unknown): string[] {
+    if (typeof raw !== "string" || !raw.trim()) return [];
+    try {
+      const parsed: unknown = JSON.parse(raw);
+      if (!Array.isArray(parsed)) return [];
+      return parsed
+        .filter((entry): entry is string => typeof entry === "string")
+        .map((entry) => entry.trim())
+        .filter(Boolean);
+    } catch {
+      return [];
+    }
+  }
   const mapCommission = (row: Record<string, unknown>): SlurpCommission => ({
     id: String(row.id),
     threadId: String(row.threadId),
@@ -1110,6 +1152,47 @@ export function createSlurpMessagesStorage(db: DB) {
         .where(eq(slurpThreads.id, threadId));
       const resolved = await storage.getThreadById(threadId);
       return resolved;
+    },
+
+    /**
+     * Record what one generated reply did to the conversation.
+     *
+     * Mood and notes are written together because they arrive together, on the reply that already
+     * ran. Neither costs an extra model call, and neither may fail the reply: a message with good
+     * words and no mood is still the thing the fan asked for.
+     */
+    async recordReplyOutcome(
+      threadId: string,
+      input: { moodShift: SlurpMoodShift; remember: string[] },
+    ): Promise<void> {
+      const thread = await storage.getThreadById(threadId);
+      if (!thread) return;
+      const timestamp = now();
+      const minutesSinceUpdate = thread.moodUpdatedAt
+        ? Math.max(0, (Date.parse(timestamp) - Date.parse(thread.moodUpdatedAt)) / 60_000)
+        : 0;
+      const mood = applySlurpMood({
+        mood: thread.mood,
+        shift: input.moodShift,
+        rapportScore: thread.rapport.score,
+        minutesSinceUpdate,
+      });
+      // Oldest first, deduplicated, capped. A conversation that runs for months would otherwise
+      // grow an unbounded dossier and push everything else out of the prompt.
+      // ponytail: FIFO cap, swap for relevance ranking or decay if threads get long enough to need it.
+      const notes = [...thread.notes];
+      for (const note of input.remember) {
+        if (!notes.some((existing) => existing.toLowerCase() === note.toLowerCase())) notes.push(note);
+      }
+      await db
+        .update(slurpThreads)
+        .set({
+          mood: String(mood),
+          moodUpdatedAt: timestamp,
+          notes: JSON.stringify(notes.slice(-SLURP_THREAD_NOTE_LIMIT)),
+          updatedAt: timestamp,
+        })
+        .where(eq(slurpThreads.id, threadId));
     },
 
     /** Clear one side's unread count and stamp the messages the other side sent. */

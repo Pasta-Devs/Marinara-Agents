@@ -94,7 +94,7 @@ export async function replyToSlurpMessage(
       );
       if (!connection) return { status: "connection_not_found" } as const;
       const messaging = await messagesStore.getCreatorMessaging(thread.creatorAccountId);
-      const content = await generateSlurpMessageReply({
+      const reply = await generateSlurpMessageReply({
         db,
         creator,
         viewer,
@@ -103,14 +103,24 @@ export async function replyToSlurpMessage(
         subscribed,
         dmPolicy: messaging.dmPolicy,
         isRequest,
+        mood: thread.mood,
+        moodUpdatedAt: thread.moodUpdatedAt,
+        notes: thread.notes,
         connection,
         debugMode: input.debugMode,
       });
       const stored = await messagesStore.appendMessage(thread.id, {
         senderAccountId: thread.creatorAccountId,
         role: "creator",
-        content,
+        content: reply.content,
       });
+      // After the message is safely stored. The conversation's mood and what she now knows are
+      // worth keeping, but never at the price of the reply itself.
+      if (stored) {
+        await messagesStore
+          .recordReplyOutcome(thread.id, { moodShift: reply.moodShift, remember: reply.remember })
+          .catch((error: unknown) => logger.warn(error, "[slurp-message] Could not record the reply outcome"));
+      }
       return stored ? ({ status: "replied", message: stored } as const) : ({ status: "ineligible" } as const);
     });
     // The account lock is already held by another Slurp operation on this creator. Nothing was

@@ -6,7 +6,7 @@
  * prompt is told — the history, the rapport, and whether the creator is even awake — so the
  * machinery around it is reused rather than rebuilt.
  */
-import { noodleGeneratedNoodlerReplySchema, type APIProvider, type NoodleAccount } from "@marinara-engine/shared";
+import { type APIProvider, type NoodleAccount } from "@marinara-engine/shared";
 import { isDebugAgentsEnabled } from "../../config/runtime-config.js";
 import type { DB } from "../../db/connection.js";
 import { logDebugOverride } from "../../lib/logger.js";
@@ -33,6 +33,13 @@ import { noodleResponseFormat } from "./slurp-response-format.js";
 import { resolveSlurpCreatorScheduleContext } from "./slurp-creator-schedule.js";
 import { resolveSlurpCreatorAvailability, type SlurpCreatorAvailability } from "./slurp-creator-schedule-context.js";
 import { describeSlurpRapport, type SlurpRapport } from "./slurp-rapport.js";
+import { describeSlurpMood, recoverSlurpMood, slurpMoodTone, type SlurpMoodTone } from "./slurp-mood.js";
+import {
+  readSlurpDmReply,
+  SLURP_NOTE_MAX_LENGTH,
+  SLURP_NOTES_PER_REPLY,
+  type SlurpDmReply,
+} from "./slurp-dm-response.js";
 import { slurpArcDescription } from "./slurp-arc.js";
 import { createSlurpPopulationStorage } from "../storage/slurp-population.storage.js";
 import type { SlurpMessage } from "../storage/slurp-messages.storage.js";
@@ -60,8 +67,12 @@ export function buildSlurpMessageChat(input: {
   isRequest: boolean;
   /** Where the relationship is heading, when it is heading anywhere. */
   arc?: string | null;
+  /** How this conversation has been going. The fast layer rapport cannot express. */
+  moodTone?: SlurpMoodTone;
   /** What the creator has posted lately, so "loved your new set" can be answered. */
   recentPosts?: { title: string | null; content: string; access: string }[];
+  /** Facts kept from earlier in this conversation, beyond the history window. */
+  notes?: string[];
   generationGuidance: string;
   scheduleContext?: string;
   disclosureMode: Parameters<typeof noodlerIdentityInstruction>[0];
@@ -92,9 +103,21 @@ export function buildSlurpMessageChat(input: {
     input.recentPosts && input.recentPosts.length > 0
       ? "Your own recent posts are supplied. If the fan refers to something you posted, answer about that post rather than in general."
       : "",
+    // The history window is sixteen turns. Past that the creator forgot the fan's name, their job,
+    // and every promise she had made, which is the fastest way to break a long conversation.
+    input.notes && input.notes.length > 0
+      ? "You already know some things about this fan from earlier conversations. They are supplied as knownAboutFan. Use them when they fit, and never recite them back as a list."
+      : "",
+    describeSlurpMood(input.moodTone ?? "neutral") ?? "",
     "This is a private chat, so write like one: lowercase is fine, contractions are fine, emojis are fine if they suit the persona.",
     "Keep it to a chat message, not an essay. One to four sentences unless the fan asked something that needs more.",
-    'Return exactly one JSON object with one string field named "content".',
+    'Return exactly one JSON object with three fields: "content", "moodShift" and "remember".',
+    '"content" is your reply, and the only field the fan ever sees.',
+    // A direction, never a value. The stored number is damped by rapport in `slurp-mood.ts`, so a
+    // long-standing fan is forgiven a bad message and a stranger is not. If the model set the mood
+    // outright, one sentence could end a two-year relationship.
+    '"moodShift" is how this last message changed your feeling about the conversation: "up" if you enjoyed it, "same" for anything ordinary, "down" if they were rude, pushy, or tiring, "sharp_down" only for something you would genuinely take offence at. Most messages are "same".',
+    `"remember" is an array of at most ${SLURP_NOTES_PER_REPLY} short facts about this fan worth keeping for later — a name, a job, something happening in their life. Use an empty array when nothing new was said. Never record your own words, and never record anything about payment.`,
     "Return JSON only. No prose outside the JSON object.",
   ]
     .filter(Boolean)
@@ -116,6 +139,7 @@ export function buildSlurpMessageChat(input: {
     relationship: `${describeSlurpRapport(input.rapport, protect(input.viewer.displayName) || "this fan")}${
       input.arc ? ` They are ${input.arc}.` : ""
     }`,
+    ...(input.notes && input.notes.length > 0 ? { knownAboutFan: input.notes.map((note) => protect(note)) } : {}),
     ...(input.recentPosts && input.recentPosts.length > 0
       ? {
           yourRecentPosts: input.recentPosts.map((post) => ({
@@ -162,9 +186,14 @@ export async function generateSlurpMessageReply(input: {
   subscribed: boolean;
   dmPolicy: SlurpDmPolicy;
   isRequest: boolean;
+  /** Stored conversation mood and when it was last written, so silence can heal it first. */
+  mood?: number;
+  moodUpdatedAt?: string | null;
+  /** What the creator already knows about this fan, beyond the last sixteen turns. */
+  notes?: string[];
   connection: GenerationConnection;
   debugMode?: boolean;
-}): Promise<string> {
+}): Promise<SlurpDmReply> {
   const connections = createConnectionsStorage(input.db);
   const fallbackConnection = await connections.getFallbackForMain();
   const provider = withConnectionFallbackProvider({
@@ -214,6 +243,14 @@ export async function generateSlurpMessageReply(input: {
   const messages = buildSlurpMessageChat({
     ...input,
     arc: tie ? slurpArcDescription(tie.arc) : null,
+    // Healed for the time since it was last written, so a fan who returns a day later is not
+    // answered through yesterday's argument.
+    moodTone: slurpMoodTone(
+      recoverSlurpMood(
+        input.mood ?? 0,
+        input.moodUpdatedAt ? Math.max(0, (Date.now() - Date.parse(input.moodUpdatedAt)) / 60_000) : 0,
+      ),
+    ),
     recentPosts,
     availability,
     disclosureMode,
@@ -236,7 +273,7 @@ export async function generateSlurpMessageReply(input: {
     }),
     stream: false,
     debugMode,
-    responseFormat: noodleResponseFormat(input.connection.model, "noodler_reply"),
+    responseFormat: noodleResponseFormat(input.connection.model, "noodler_dm"),
   });
   const content = response.content ?? "";
   logDebugOverride(
@@ -245,9 +282,7 @@ export async function generateSlurpMessageReply(input: {
     content.length,
   );
   const parsed = parseGameJsonish(requireModelAnswer(content, "a direct message"));
-  const generated = noodleGeneratedNoodlerReplySchema.parse(
-    Array.isArray(parsed) && parsed.length === 1 ? parsed[0] : parsed,
-  );
+  const generated = readSlurpDmReply(Array.isArray(parsed) && parsed.length === 1 ? parsed[0] : parsed);
   const protectedContent = protectBoundedNoodlerGeneratedText(
     generated.content,
     disclosureMode,
@@ -255,5 +290,13 @@ export async function generateSlurpMessageReply(input: {
     SLURP_MESSAGE_CONTENT_MAX_LENGTH,
   );
   if (!protectedContent) throw new Error("Slurp direct-message generation returned no usable content.");
-  return protectedContent;
+  return {
+    content: protectedContent,
+    moodShift: generated.moodShift,
+    // A note is model output about the player, stored and fed back into a later prompt. That is a
+    // loop, so it is redacted and bounded on the way in as well as on the way out.
+    remember: generated.remember
+      .map((note) => protectBoundedNoodlerGeneratedText(note, disclosureMode, publicIdentity, SLURP_NOTE_MAX_LENGTH))
+      .filter((note): note is string => Boolean(note)),
+  };
 }

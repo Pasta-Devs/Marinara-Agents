@@ -223,6 +223,21 @@ export const slurpThreads = fileTable(
     replyNotBeforeAt: text("reply_not_before_at"),
     /** Cached rapport, recomputed on every send. Kept here so the inbox sorts without a scan. */
     rapport: text("rapport").notNull().default("{}"),
+    /**
+     * How this conversation is going, from -100 to 100. See `slurp-mood.ts`.
+     *
+     * Rapport measures months and money and cannot move inside one chat, so nothing could express
+     * "she is annoyed with you right now". This is the fast layer that can.
+     */
+    mood: text("mood").notNull().default("0"),
+    moodUpdatedAt: text("mood_updated_at"),
+    /** While set, the creator has stepped away from this conversation and is not replying. */
+    coolUntil: text("cool_until"),
+    /** Cool-off periods this thread has had. Two inside the strike window closes it for good. */
+    strikes: text("strikes").notNull().default("0"),
+    lastStrikeAt: text("last_strike_at"),
+    /** Short facts the creator has learned about this fan. See `slurp-thread-notes.ts`. */
+    notes: text("notes").notNull().default("[]"),
     createdAt: text("created_at").notNull(),
     updatedAt: text("updated_at").notNull(),
   },
