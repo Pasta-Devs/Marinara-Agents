@@ -276,9 +276,26 @@ const ctx = { theme: "cozy-village", seed: 424242 };
 // number is the wrong trade; the field doc is read off 10-art's painter-override
 // table and is more honest than the sentence it replaces. The lane stays binding —
 // raise it again only with new arithmetic written beside it, never by eye.
+//
+// AND THE LORE CLAUSE IS IN THE SAME BUDGET, measured rather than eyeballed: the
+// bare text is 3,992 and the clause slice-3 adds costs 222, for 4,214 against the
+// 4,500 raised above. Both variants are asserted, because the one that ships is
+// whichever the selection decided — and the clause is CONDITIONAL for a reason
+// that outranks the budget: with no entries picked the server appends no lore, so
+// a sentence telling the model lore follows would point it at something it never
+// receives.
 {
   const text = brief.guidance();
   assert.ok(text.length < 4_500, `guidance stays compact (${text.length} chars)`);
+  const withLore = brief.guidance({ lore: true });
+  assert.ok(withLore.length < 4_500, `…and so does the variant that carries the lore clause (${withLore.length})`);
+  assert.ok(!text.includes("LOREBOOK ENTRIES"), "no lore clause when no lore is being sent");
+  assert.ok(withLore.includes("LOREBOOK ENTRIES the player picked follow below"), "…and one when it is");
+  // A STALE THEME ARGUMENT MUST NOT TURN IT ON. This function took a theme string
+  // for six releases and one such call is still in this file; under a bare
+  // boolean parameter that string would read as `true` and ship the clause on a
+  // call carrying no lore at all. The options object is what makes that call inert.
+  assert.equal(brief.guidance("sci-fi-colony"), text, "a leftover theme argument is not a lore flag");
   // THE THEME IS ASKED FOR, NOT DECLARED (0.16.2). This asserted the opposite
   // until this release: `The visual theme is "…" and it is AUTHORITATIVE` was the
   // dropdown's answer stated at a model that had not read the setting yet. The
@@ -25693,6 +25710,537 @@ const fire = (node, type) => Promise.all((node.listeners[type] ?? []).map((fn) =
     "sci-fi-colony",
     "…while three colony tokens still outcount it",
   );
+}
+
+// ── THE PLAYER PICKS LOREBOOK ENTRIES, NOT LOREBOOKS (0.16.2, R-D6) ──────────
+// "the player must be able to select specific lorebook entries rather than the
+// entire lorebook getting sent." Everything below is that sentence, read off the
+// mounted form and the emitted config rather than off the source.
+//
+// FOUR WALLS SIT BETWEEN A TICK AND THE MODEL, and none of them is the one the
+// design first named. The route validates `instructions` at 16,000 characters
+// and then appends the resolved lore to the system message AFTER that parse — it
+// has to, because only the server can resolve macros — so the lore never passes
+// that cap and the "hard 400 into an unwinnable retry" failure the budget rule
+// was written to prevent cannot happen on the lore path at all. What binds
+// instead: the call's own 3,000-token forced-entry budget, each BOOK's own
+// `tokenBudget` (default 2,048 tokens, and not overridable by any caller because
+// it belongs to whoever owns the book), each book's `entryLimit`, and — through a
+// door no character count watches — `z.array(z.string()).max(100)` on the id list
+// itself. The lanes are one per wall, plus the two that pin the wire shape.
+//
+// THE SHIM RULE, and it cost the prototype of this picker its first lane: any
+// picker state a lane must read lives in a JS variable and NEVER in a style
+// string. `PF.el` writes styles as `cssText` and `FakeNode.style` is a bare
+// object, so `entriesBox.style.display` reads back `undefined` here and an
+// expander whose open/closed state lived in the style would be permanently "open"
+// to every lane below.
+{
+  const realGetJson = loadedPF.api.getJson;
+  const realPost = loadedPF.api.postExperienceGeneration;
+  // ROWS SHAPED AS THE ROUTES ANSWER THEM. `GET /lorebooks/` runs every row
+  // through `parseLorebookRow`, so `enabled` is a real boolean and `tokenBudget`
+  // and `entryLimit` are numbers; `GET /lorebooks/:id/entries` runs its rows
+  // through `parseEntryRow`, so `enabled` and `constant` are real booleans too.
+  // Both are staged as the parse leaves them, not as the columns store them.
+  const book = (over) => ({ id: "lb", name: "Book", enabled: true, tokenBudget: 2048, entryLimit: 100, ...over });
+  const entry = (over) => ({
+    id: "e",
+    lorebookId: "lb",
+    name: "Entry",
+    description: "",
+    content: "",
+    enabled: true,
+    constant: false,
+    order: 0,
+    ...over,
+  });
+  const KANTO = book({ id: "lb-kanto", name: "Kanto" });
+  const JOHTO = book({ id: "lb-johto", name: "Johto" });
+  const REGION_ENTRIES = {
+    "lb-kanto": [
+      entry({ id: "e-pallet", lorebookId: "lb-kanto", name: "Pallet Town", description: "a quiet start", content: "P".repeat(400), order: 3 }),
+      entry({ id: "e-viridian", lorebookId: "lb-kanto", name: "Viridian City", content: "V".repeat(600), order: 1 }),
+      entry({ id: "e-off", lorebookId: "lb-kanto", name: "A disabled note", content: "X".repeat(100), enabled: false, order: 2 }),
+      entry({ id: "e-always", lorebookId: "lb-kanto", name: "The region itself", content: "K".repeat(80), constant: true, order: 9 }),
+    ],
+    "lb-johto": [entry({ id: "e-cinnabar", lorebookId: "lb-johto", name: "Cinnabar Island", content: "C".repeat(900), order: 0 })],
+  };
+  const stubLore = (books, entriesByBook) => {
+    loadedPF.api.getJson = async (path) => {
+      if (path === "/connections") return [{ id: "conn-1", name: "Main", model: "m", isDefault: "true" }];
+      if (path === "/lorebooks") return books;
+      const at = /^\/lorebooks\/([^/]+)\/entries$/.exec(path);
+      if (at) return entriesByBook[decodeURIComponent(at[1])] ?? [];
+      return [];
+    };
+  };
+  const settle = async () => {
+    for (let i = 0; i < 32; i++) await Promise.resolve();
+  };
+  const mountWizard = async () => {
+    const el = new FakeNode("div");
+    const launches = [];
+    loadedPF.mountSetup(el, { onLaunch: async (config, name) => void launches.push({ config, name }) });
+    await settle();
+    const at = () => walkNodes(el);
+    const form = {
+      launches,
+      get nodes() {
+        return at();
+      },
+      // The expander carries the open/closed glyph, which is the only place the
+      // shim can read that state from — see the shim-rule banner.
+      get expanders() {
+        return at().filter((node) => node.tagName === "BUTTON" && /^[▸▾] /.test(String(node.textContent)));
+      },
+      get selectAlls() {
+        return at().filter((node) => node.tagName === "BUTTON" && node.textContent === "Select all");
+      },
+      get ticks() {
+        return at().filter((node) => node.type === "checkbox" && String(node.value ?? "") !== "");
+      },
+      get readout() {
+        return at().find((node) => /No entries picked|tokens for the call/.test(String(node.textContent)));
+      },
+      get notes() {
+        return at()
+          .filter((node) => !node.children.length && /^Picked |Untick/.test(String(node.textContent)))
+          .map((node) => node.textContent);
+      },
+      connSel: at().find((node) => node.children.some((option) => option.attrs.value === "conn-1")),
+      launchBtn: at().find((node) => node.tagName === "BUTTON" && String(node.textContent).startsWith("Begin in")),
+    };
+    form.connSel.value = "conn-1";
+    return form;
+  };
+  const tick = async (form, id) => {
+    const box = form.ticks.find((node) => node.value === id);
+    assert.ok(box, `the form offered ${id}`);
+    box.checked = !box.checked;
+    await fire(box, "change");
+    return box;
+  };
+  const launch = async (form) => {
+    await fire(form.launchBtn, "click");
+    await settle();
+    return form.launches[0].config;
+  };
+
+  try {
+    // ── (1) AN EMPTY SELECTION IS TODAY, BYTE FOR BYTE ────────────────────────
+    // The lane that lets the Engine half merge without a regression argument
+    // behind it, and the reason the config key is OMITTED rather than emitted
+    // empty: a `loreEntryIds: []` would be a key no existing chat has, and this
+    // lane would go red on its own assertion. Both halves are pinned — the stored
+    // config AND the body of the call it produces, key order included, because
+    // "byte for byte" is the claim.
+    stubLore([KANTO, JOHTO], REGION_ENTRIES);
+    {
+      const form = await mountWizard();
+      assert.equal(form.expanders.length, 2, "both lorebooks are offered as expanders");
+      assert.equal(form.ticks.length, 0, "…and NOT ONE CHECKBOX until a book is opened");
+      const cfg = await launch(form);
+      assert.deepEqual(
+        Object.keys(cfg.experienceConfig),
+        ["seed", "theme", "generate", "packWanted", "worldName"],
+        "an untouched picker writes the same five keys the config carried before it existed",
+      );
+      const ids = loadedPF.save._configLoreEntryIds({ gameSetupConfig: cfg });
+      assert.deepEqual(ids, [], "…and the reader answers with nothing to send");
+      const bodies = [];
+      loadedPF.api.postExperienceGeneration = async (chatId, body) => {
+        bodies.push(body);
+        return { status: 200, body: { ok: true, data: { scale: "village", name: "Pallet", cast: [] } } };
+      };
+      await brief.generate("chat-empty", { theme: "cozy-village", seed: 7, preferences: "p", lorebookEntryIds: ids });
+      assert.equal(
+        JSON.stringify(bodies[0]),
+        JSON.stringify({ instructions: brief.guidance(), userContent: "p", schema: brief.schema() }),
+        "the call is byte-identical to the one this package sent before the picker: no key, and no lore clause",
+      );
+    }
+
+    // ── (2) THE PICKER SENDS ENTRIES, NEVER BOOKS ─────────────────────────────
+    // The ruling's own constraint, and the wire assertion for it: a flat list of
+    // ENTRY ids in the player's picking order, with no book id anywhere in the
+    // config the launch writes.
+    {
+      const form = await mountWizard();
+      await fire(form.expanders[0], "click");
+      await fire(form.expanders[1], "click");
+      await settle();
+      // LISTED IN THE ORDER THE DROP RULE WILL USE, which is the whole reason the
+      // picker sorts at all: when a selection overruns, the server keeps
+      // constants first and then works down each book by the entry's own position
+      // in it, so a list in storage order would be a promise the mechanism does
+      // not keep. `e-always` is `constant` and sits at order 9; it leads anyway.
+      assert.deepEqual(
+        form.ticks.map((node) => node.value),
+        ["e-always", "e-viridian", "e-pallet", "e-cinnabar"],
+        "constants first, then position in the book — and the disabled entry is not offered at all",
+      );
+      // Ticked across both books in an order that is NONE of the orders anything
+      // else here could produce: not storage order, not the drop order the list
+      // is drawn in, and deliberately not alphabetical either — a sorted wire
+      // would otherwise pass this lane by coincidence.
+      await tick(form, "e-viridian");
+      await tick(form, "e-cinnabar");
+      await tick(form, "e-pallet");
+      const cfg = await launch(form);
+      assert.deepEqual(
+        cfg.experienceConfig.loreEntryIds,
+        ["e-viridian", "e-cinnabar", "e-pallet"],
+        "the wire is the player's own picking order, never a re-sort",
+      );
+      const wire = JSON.stringify(cfg);
+      for (const id of ["lb-kanto", "lb-johto"]) {
+        assert.ok(!wire.includes(id), `and NO BOOK ID reaches the config: ${id}`);
+      }
+      // The untick leg, because a selection you cannot undo is not a selection.
+      const undo = await mountWizard();
+      await fire(undo.expanders[0], "click");
+      await settle();
+      await tick(undo, "e-pallet");
+      await tick(undo, "e-viridian");
+      await tick(undo, "e-pallet");
+      assert.deepEqual(
+        (await launch(undo)).experienceConfig.loreEntryIds,
+        ["e-viridian"],
+        "unticking removes the entry and leaves the rest in their order",
+      );
+      // …and unticking the LAST one takes the key back out with it, which is the
+      // half a lane asserting "the array shrank" would miss.
+      const emptied = await mountWizard();
+      await fire(emptied.expanders[0], "click");
+      await settle();
+      await tick(emptied, "e-pallet");
+      await tick(emptied, "e-pallet");
+      assert.equal(
+        "loreEntryIds" in (await launch(emptied)).experienceConfig,
+        false,
+        "…and a selection ticked and then cleared sends no key, not an empty one",
+      );
+    }
+
+    // ── (2b) SELECT ALL IN THIS BOOK TICKS ENTRIES INDIVIDUALLY (R-D10) ───────
+    // The convenience control the maintainer authorised, and the assertion that
+    // it is only that: it writes through the same `toggleEntry` every checkbox
+    // does, so the wire format is unchanged and the walls still bite.
+    {
+      const form = await mountWizard();
+      await fire(form.selectAlls[0], "click");
+      await settle();
+      assert.equal(form.ticks.filter((node) => node.checked).length, 3, "every offered entry in that book is ticked");
+      assert.deepEqual(
+        form.notes,
+        ["Picked all 3 entries in Kanto."],
+        "…and the control says what it did, in the book's own name",
+      );
+      const cfg = await launch(form);
+      assert.deepEqual(
+        cfg.experienceConfig.loreEntryIds,
+        ["e-always", "e-viridian", "e-pallet"],
+        "select-all is a flat list of ENTRY ids like any other selection",
+      );
+      assert.ok(!JSON.stringify(cfg).includes("lb-kanto"), "…and it sends no book id either");
+    }
+
+    // ── (3) THE BUDGET IS PER BOOK, AND IT IS ENFORCED BEFORE THE CALL ────────
+    // The wall the caller cannot move: each book's own `tokenBudget`, default
+    // 2,048 tokens, applied inside that book. The picker reads it off
+    // `GET /lorebooks/` rather than assuming the default, counts in the Engine's
+    // own arithmetic (`ceil(length / 4)` PER ENTRY — a sum of characters divided
+    // by four is a smaller number and would let through selections the server
+    // then drops), and NAMES THE BOOK each figure belongs to, because one total
+    // over two books with different budgets is the invisible budget in a new
+    // place.
+    {
+      const HEAVY = Array.from({ length: 12 }, (_, i) =>
+        entry({ id: `heavy-${i}`, lorebookId: "lb-heavy", name: `Settlement ${i}`, content: "S".repeat(1500), order: i }),
+      );
+      stubLore([book({ id: "lb-heavy", name: "Gazetteer" })], { "lb-heavy": HEAVY });
+      const form = await mountWizard();
+      await fire(form.expanders[0], "click");
+      await settle();
+      let accepted = 0;
+      for (const node of form.ticks) {
+        node.checked = true;
+        await fire(node, "change");
+        if (node.checked) accepted++;
+      }
+      // 1,500 characters is 375 tokens; five fit 2,048 and the sixth does not.
+      assert.equal(accepted, 5, "the book's own 2,048-token budget stops the sixth entry AT THE TICK");
+      assert.equal(
+        form.readout.textContent,
+        "1875 / 2048 tokens from Gazetteer · 1875 / 3000 tokens for the call (5 entries)",
+        "…and the running count names the book each number belongs to",
+      );
+      assert.deepEqual(
+        form.notes,
+        ["That entry needs 375 tokens and Gazetteer has 173 of its 2048 left. Untick one of its own first."],
+        "…and the refusal says which book ran out and by how much",
+      );
+      assert.equal(
+        (await launch(form)).experienceConfig.loreEntryIds.length,
+        5,
+        "so what is emitted is what the server was always going to keep",
+      );
+      // A BOOK WHOSE OWNER RAISED ITS FIGURE IS BELIEVED, which is the half that
+      // proves the number is read rather than assumed — and it is where the
+      // call's own 3,000-token ceiling takes over as the binding wall.
+      stubLore([book({ id: "lb-heavy", name: "Gazetteer", tokenBudget: 9000 })], { "lb-heavy": HEAVY });
+      const raised = await mountWizard();
+      await fire(raised.expanders[0], "click");
+      await settle();
+      let taken = 0;
+      for (const node of raised.ticks) {
+        node.checked = true;
+        await fire(node, "change");
+        if (node.checked) taken++;
+      }
+      assert.equal(taken, 8, "a 9,000-token book carries eight, and then the CALL's own 3,000 tokens bind");
+      assert.equal(
+        raised.readout.textContent,
+        "3000 / 9000 tokens from Gazetteer · 3000 / 3000 tokens for the call (8 entries)",
+        "…and the readout shows both walls, so the player can see which one they met",
+      );
+    }
+
+    // ── (4) THE COUNT CEILING IS SEPARATE FROM EVERY CHARACTER BUDGET ─────────
+    // The door no character count watches. A 200-entry book of 50-character
+    // entries costs ~2,600 tokens: it clears the call's budget, it clears a
+    // raised book budget, and without a ceiling of its own the picker emits a
+    // 200-id body that the route's `z.array(z.string()).max(100)` refuses
+    // outright — a 400, which the brief ladder turns into `onFailure("refused")`
+    // and the unwinnable retry screen the budgets exist to prevent.
+    {
+      const MANY = Array.from({ length: 200 }, (_, i) =>
+        entry({ id: `many-${i}`, lorebookId: "lb-many", name: `Note ${i}`, content: "m".repeat(50), order: i }),
+      );
+      stubLore([book({ id: "lb-many", name: "Field notes", tokenBudget: 20_000, entryLimit: 200 })], { "lb-many": MANY });
+      const form = await mountWizard();
+      await fire(form.expanders[0], "click");
+      await settle();
+      assert.equal(form.ticks.length, 200, "all 200 are offered — the ceiling is on the SELECTION, not the list");
+      let accepted = 0;
+      for (const node of form.ticks) {
+        node.checked = true;
+        await fire(node, "change");
+        if (node.checked) accepted++;
+      }
+      assert.equal(accepted, 100, "…and exactly 100 are accepted, on a selection every budget above would allow");
+      const ids = (await launch(form)).experienceConfig.loreEntryIds;
+      assert.equal(ids.length, 100, "so the emitted list is one the route's own max(100) will not refuse");
+      // THE SELECT-ALL LEG, AND ITS MESSAGE. Select-all on a book bigger than
+      // what is left takes a PREFIX — R-D10 was answered before this ceiling
+      // existed, so the control carries a cost the ruling could not have had in
+      // front of it. A silent prefix selection is the same class of lie as a
+      // budget the player cannot see, so the message is part of the control.
+      const all = await mountWizard();
+      await fire(all.selectAlls[0], "click");
+      await settle();
+      assert.equal(all.ticks.filter((node) => node.checked).length, 100, "select-all takes the first 100 and stops");
+      assert.deepEqual(
+        all.notes,
+        ["Picked 100 of 200 entries in Field notes. 100 entries is the most the game reads at once. Untick something first."],
+        "…and SAYS how many it took, out of how many, and which wall stopped it",
+      );
+      // AND IT IS A CEILING ON THE SELECTION, NOT ON ANY ONE BOOK. Two books of
+      // 80 entries each, both well inside their own `entryLimit` of 80: the wire
+      // cap is the only thing in the product that can stop the 101st. Without
+      // this leg a per-book clamp at 100 would pass every assertion above while
+      // reporting the wire's rule as the book's.
+      const eighty = (id) =>
+        Array.from({ length: 80 }, (_, i) =>
+          entry({ id: `${id}-${i}`, lorebookId: id, name: `Note ${i}`, content: "m".repeat(50), order: i }),
+        );
+      stubLore(
+        [
+          book({ id: "lb-a", name: "Volume one", tokenBudget: 20_000, entryLimit: 80 }),
+          book({ id: "lb-b", name: "Volume two", tokenBudget: 20_000, entryLimit: 80 }),
+        ],
+        { "lb-a": eighty("lb-a"), "lb-b": eighty("lb-b") },
+      );
+      const across = await mountWizard();
+      await fire(across.selectAlls[0], "click");
+      await fire(across.selectAlls[1], "click");
+      await settle();
+      assert.equal(across.ticks.filter((node) => node.checked).length, 100, "80 from the first book, 20 from the second");
+      assert.deepEqual(
+        across.notes,
+        [
+          "Picked all 80 entries in Volume one.",
+          "Picked 20 of 80 entries in Volume two. 100 entries is the most the game reads at once. Untick something first.",
+        ],
+        "…and the second book's message names the WIRE's ceiling, not its own untouched limit",
+      );
+      // The book's own `entryLimit` is a fourth wall and is read off the same row.
+      stubLore([book({ id: "lb-many", name: "Field notes", tokenBudget: 20_000, entryLimit: 6 })], { "lb-many": MANY });
+      const limited = await mountWizard();
+      await fire(limited.selectAlls[0], "click");
+      await settle();
+      assert.equal(limited.ticks.filter((node) => node.checked).length, 6, "a book that allows six entries gets six");
+      assert.deepEqual(
+        limited.notes,
+        ["Picked 6 of 200 entries in Field notes. Field notes allows 6 entries at a time. Untick one of its own first."],
+        "…and the message names that wall instead of the count ceiling",
+      );
+    }
+
+    // ── (5) A DISABLED BOOK IS NOT OFFERED AT ALL ────────────────────────────
+    // `listEligibleEntriesByIds` refuses every entry of a disabled book however
+    // explicitly it was ticked, so rendering one would be offering a choice the
+    // server has already made.
+    {
+      stubLore([KANTO, { ...JOHTO, enabled: false }], REGION_ENTRIES);
+      const form = await mountWizard();
+      assert.deepEqual(
+        form.expanders.map((node) => node.textContent),
+        ["▸ Kanto"],
+        "the disabled book is not on the form",
+      );
+    }
+
+    // ── (6) THE CALL SAYS WHAT BECAME OF THE PICKS ───────────────────────────
+    // The route answers with `lorebook: {includedEntries, skippedEntries}` and
+    // ONLY when the selection produced lore or produced skips — so an ABSENT key
+    // after a non-empty selection is not "nothing to report", it is EVERY id
+    // refused: a disabled entry, a character or trigger filter, an id that no
+    // longer exists. Saying nothing there is what turns "I ticked Viridian City
+    // and the game did not know about Viridian City" into an unanswerable report.
+    {
+      const seen = [];
+      loadedPF.api.postExperienceGeneration = async (chatId, body) => {
+        seen.push(body);
+        return { status: 200, body: { ok: true, data: { scale: "village", name: "Pallet", cast: [] } } };
+      };
+      const refused = await brief.generate("chat-lore", {
+        theme: "cozy-village",
+        seed: 7,
+        preferences: "p",
+        lorebookEntryIds: ["e-pallet", "e-viridian"],
+      });
+      assert.deepEqual(seen[0].lorebookEntryIds, ["e-pallet", "e-viridian"], "the ids ride the call, not the prose");
+      // THE CLAUSE SHIPS ONLY WHEN THE LORE DOES. The server appends the resolved
+      // entries to this very system message, so the sentence is true here — and
+      // on the empty call in lane (1) it would be pointing the model at lore it
+      // never receives, which is a hallucination prompt rather than a no-op.
+      assert.ok(seen[0].instructions.includes("LOREBOOK ENTRIES"), "…and the guidance says they are coming");
+      assert.ok(
+        refused._repairs.some((line) => line === "lorebook: all 2 picked entries were refused; none reached the model"),
+        "an absent lorebook key after a real selection is recorded as every pick refused",
+      );
+      loadedPF.api.postExperienceGeneration = async () => ({
+        status: 200,
+        body: {
+          ok: true,
+          data: { scale: "village", name: "Pallet", cast: [] },
+          lorebook: { includedEntries: 2, skippedEntries: [{ id: "e-viridian", blockedBy: "location" }] },
+        },
+      });
+      const partial = await brief.generate("chat-lore", {
+        theme: "cozy-village",
+        seed: 7,
+        preferences: "p",
+        lorebookEntryIds: ["e-pallet", "e-viridian", "e-cinnabar"],
+      });
+      assert.ok(
+        partial._repairs.some(
+          (line) => line === "lorebook: 2 of 3 picked entries reached the model, 1 set aside for budget",
+        ),
+        "…and a partial delivery reads the ENGINE'S own counts rather than inventing a second set",
+      );
+      loadedPF.api.postExperienceGeneration = async () => ({
+        status: 200,
+        body: {
+          ok: true,
+          data: { scale: "village", name: "Pallet", cast: [] },
+          lorebook: { includedEntries: 2, skippedEntries: [] },
+        },
+      });
+      const whole = await brief.generate("chat-lore", {
+        theme: "cozy-village",
+        seed: 7,
+        preferences: "p",
+        lorebookEntryIds: ["e-pallet", "e-viridian"],
+      });
+      assert.ok(
+        !whole._repairs.some((line) => line.startsWith("lorebook:")),
+        "…and a selection that arrived whole says nothing, because there is nothing to report",
+      );
+    }
+
+    // ── (7) THE READER IS THE LAST WALL, BECAUSE THE CONFIG IS REWRITABLE ────
+    // `/game/create`'s reuse-an-existing-chat arm rewrites `gameSetupConfig`
+    // wholesale, so "the picker wrote it" is not something a read site may
+    // assume. The route's field is `max(100)` and a longer list is a 400 on the
+    // whole call, for a chat the picker's own ceiling never saw.
+    {
+      const nested = (value) => ({ gameSetupConfig: { experienceConfig: { experienceConfig: { loreEntryIds: value } } } });
+      assert.deepEqual(
+        loadedPF.save._configLoreEntryIds(nested(["a", "b", "a", "", 3, null])),
+        ["a", "b"],
+        "the reader keeps real ids, drops the rest, and counts a repeat once",
+      );
+      assert.deepEqual(
+        loadedPF.save._configLoreEntryIds({ gameSetupConfig: { experienceConfig: { loreEntryIds: ["outer"] } } }),
+        ["outer"],
+        "…at both nesting depths, exactly as the seed and the theme are read",
+      );
+      assert.equal(
+        loadedPF.save._configLoreEntryIds(nested(Array.from({ length: 250 }, (_, i) => `id-${i}`))).length,
+        100,
+        "…and a list the picker never wrote is clipped to what the route accepts",
+      );
+      assert.deepEqual(loadedPF.save._configLoreEntryIds({}), [], "an older chat carries none and sends none");
+    }
+
+    // ── (8) THE WHOLE WIRE, END TO END ───────────────────────────────────────
+    // Every lane above holds one link. This one drives the CHAIN the player
+    // actually walks — the config the wizard wrote, the reader that finds it in
+    // the double-nested home, and the generation call it reaches — because each
+    // half can be right while the two are not connected, and nothing else here
+    // would notice.
+    await withSavePath(async ({ behavior, tick, makeCore }) => {
+      await withGeneration(async ({ responses }) => {
+        const bodies = [];
+        responses.post = async (chatId, body) => {
+          bodies.push(body);
+          return { status: 200, body: { ok: true, data: gateBriefData } };
+        };
+        behavior.get = async () => ({ available: true, status: 200, body: { exists: false } });
+        const configOf = (extra) => ({
+          gameSetupConfig: {
+            experienceConfig: { generate: true, packWanted: false, seed: 4242, theme: "cozy-village", ...extra },
+          },
+        });
+        const picked = makeCore("chat-lore-wire", 4242);
+        picked.host.chatMeta = configOf({ loreEntryIds: ["e-pallet", "e-viridian"] });
+        await loadedPF.save.maybeGenerateBrief(picked);
+        await tick();
+        assert.deepEqual(
+          bodies[0].lorebookEntryIds,
+          ["e-pallet", "e-viridian"],
+          "the ids the wizard stored are the ids the world-writing call carries",
+        );
+        loadedPF.save._briefCache.clear();
+        loadedPF.save._generating.clear();
+        const bare = makeCore("chat-lore-none", 4242);
+        bare.host.chatMeta = configOf({});
+        await loadedPF.save.maybeGenerateBrief(bare);
+        await tick();
+        assert.equal(
+          "lorebookEntryIds" in bodies[1],
+          false,
+          "…and a chat that picked none sends no key, all the way down the same path",
+        );
+      });
+    });
+  } finally {
+    loadedPF.api.getJson = realGetJson;
+    loadedPF.api.postExperienceGeneration = realPost;
+  }
 }
 
 // ── THE CONTENT PACK: THE SCHEMA IS THE CONTRACT (0.13 slice 1) ──────────────
