@@ -59,9 +59,13 @@ assert.match(
   "new Slurp installs must generate automatic posts on demand",
 );
 assert.match(storage, /state: "scheduled"/u);
-assert.match(storage, /ELAPSED_PREPARED_SLOT_MS = 60 \* 60 \* 1000/u);
 assert.match(storage, /ROLLING_DAY_MS = 24 \* 60 \* 60 \* 1000/u);
-assert.match(storage, /Date\.parse\(item\.publishAt\) < at\.getTime\(\) - ELAPSED_PREPARED_SLOT_MS/u);
+// The grace on a late slot is one posting interval, asserted in full further down. It was a fixed
+// hour, which is why this used to pin a constant here.
+assert.match(
+  storage,
+  /Date\.parse\(item\.publishAt\) < at\.getTime\(\) - elapsedPreparedSlotMs\(settings\.postsPerDay\)/u,
+);
 assert.match(storage, /slurpCreatorPostingIntervalMs\(settings\.postsPerDay\)/u);
 assert.match(storage, /hasSlurpCreatorPostingIntervalConflict\(activityTimes, publishMs, settings\.postsPerDay\)/u);
 assert.match(
@@ -138,6 +142,36 @@ for (const postsPerDay of [4, 8, 24]) {
 // The shipped presets document themselves as a ceiling ("at most four posts a day"), and the
 // settings ceiling has to be able to express the rate the doubling used to produce by accident.
 assert.match(storage, /postsPerDay: z\.number\(\)\.int\(\)\.min\(1\)\.max\(96\),/u);
+
+// ── The grace on a late slot tracks the pace ────────────────────────────────
+// Both windows were a hardcoded hour that never learned about `postsPerDay`. At 24 posts a day the
+// grace equalled the spacing, so a slot had one interval to survive any hiccup; at 4 posts a day a
+// slot missed by 61 minutes was destroyed with its replacement still five hours out. Bunching is
+// guarded separately, by refusing to publish within one interval of the creator's last post.
+assert.doesNotMatch(
+  storage,
+  /ELAPSED_PREPARED_SLOT_MS/u,
+  "the fixed one-hour grace must not come back; it belongs to the posting interval",
+);
+assert.match(
+  storage,
+  /const elapsedPreparedSlotMs = \(postsPerDay: number\) => slurpCreatorPostingIntervalMs\(postsPerDay\);/u,
+);
+assert.match(storage, /elapsedPreparedSlotMs\(settings\.postsPerDay\)/u);
+assert.doesNotMatch(reserve, /DAY_MS \/ 24/u, "the reserve's working-set window was the same fixed hour");
+assert.match(reserve, /Date\.parse\(item\.publishAt\) > at\.getTime\(\) - DAY_MS \/ settings\.postsPerDay,/u);
+// The anti-bunching guard is what actually stops a late post landing on top of the next one, so it
+// has to stay for the widened grace to be safe.
+assert.match(
+  storage,
+  /latestCreatorPost\.createdAt\) \+ slurpCreatorPostingIntervalMs\(settings\.postsPerDay\) > at\.getTime\(\)/u,
+);
+// A slot is publishable right up to its interval and retired past it, at every pace.
+for (const postsPerDay of [4, 24, 96]) {
+  const interval = 86_400_000 / postsPerDay;
+  assert.equal(hasSlurpCreatorPostingIntervalConflict([0], interval - 1, postsPerDay), true);
+  assert.equal(hasSlurpCreatorPostingIntervalConflict([0], interval, postsPerDay), false);
+}
 assert.match(settingsUi, /value=\{settings\.postsPerDay\}\s*\n\s*min=\{1\}\s*\n\s*max=\{96\}/u);
 assert.match(routes, /app\.patch\("\/noodler\/auto-post\/schedule\/:slotId"/u);
 assert.match(storage, /item\.id !== current\.id && \(item\.state === "scheduled" \|\| item\.state === "prepared"\)/u);

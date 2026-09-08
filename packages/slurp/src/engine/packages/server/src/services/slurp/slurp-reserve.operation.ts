@@ -44,10 +44,14 @@ export async function prepareNextNoodlerReservePost(db: DB, at = new Date()): Pr
     noodle.listAutoPostEnabledAccounts(),
   ]);
   if (accounts.length === 0) return "ineligible";
+  // A slot leaves the working set once it is a whole interval overdue, which is also when
+  // `reconcileNoodlerPreparedPosts` retires it. This was a hardcoded hour that happened to agree
+  // with that constant and with nothing else: at 4 posts a day a slot stopped being fillable an
+  // hour after its time while its replacement was still five hours away.
   const active = items.filter(
     (item) =>
       (item.state === "scheduled" || item.state === "prepared") &&
-      Date.parse(item.publishAt) > at.getTime() - DAY_MS / 24,
+      Date.parse(item.publishAt) > at.getTime() - DAY_MS / settings.postsPerDay,
   );
   const existingSlot = active
     .filter((item) => item.state === "scheduled")

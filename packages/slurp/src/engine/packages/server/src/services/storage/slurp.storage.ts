@@ -178,11 +178,20 @@ const NOODLER_RESERVE_STATE_ID = "noodler-reserve";
 let slurpSettingsUpdateQueue: Promise<unknown> = Promise.resolve();
 const ROLLING_DAY_MS = 24 * 60 * 60 * 1000;
 /**
- * The reserve poll runs every minute, so a slot this far past its publish time means the server
- * was down or paused. Publishing it now would backdate it, and a long outage would release the
- * whole missed run at once, so an elapsed slot is retired instead.
+ * How long a slot stays publishable after its time.
+ *
+ * The reserve poll runs every minute, so a slot past this means the server was down or paused.
+ * Publishing it now would backdate it, and a long outage would release the whole missed run at
+ * once, so an elapsed slot is retired instead.
+ *
+ * One posting interval, not the fixed hour this used to be. The hour was written when the pace was
+ * a few posts a day and it never learned about the setting: at 24 posts a day the grace equalled
+ * the spacing, so a slot had a single interval to survive any hiccup, while at 4 posts a day a
+ * slot missed by 61 minutes was destroyed even though the next one was five hours out. Bunching is
+ * not what this guards — `publishDueNoodlerPreparedPosts` separately refuses to publish within one
+ * interval of the creator's last post — so the grace can track the pace it belongs to.
  */
-const ELAPSED_PREPARED_SLOT_MS = 60 * 60 * 1000;
+const elapsedPreparedSlotMs = (postsPerDay: number) => slurpCreatorPostingIntervalMs(postsPerDay);
 /** How long published/discarded prepared rows are kept for crash recovery before pruning. */
 const TERMINAL_PREPARED_POST_RETENTION_MS = 30 * 24 * 60 * 60 * 1000;
 
@@ -3194,7 +3203,10 @@ export function createSlurpStorage(db: DB) {
           const current = (await tx.select().from(noodlerPreparedPosts).where(eq(noodlerPreparedPosts.id, item.id)))[0];
           if (!current || current.state !== "prepared" || Date.parse(current.publishAt) > at.getTime()) return false;
           const existingPost = publishedPreparedIds.get(current.id);
-          if (!existingPost && Date.parse(current.publishAt) < at.getTime() - ELAPSED_PREPARED_SLOT_MS) {
+          if (
+            !existingPost &&
+            Date.parse(current.publishAt) < at.getTime() - elapsedPreparedSlotMs(settings.postsPerDay)
+          ) {
             await tx
               .update(noodlerPreparedPosts)
               .set({ state: "discarded", updatedAt: at.toISOString() })
@@ -3386,7 +3398,7 @@ export function createSlurpStorage(db: DB) {
             // every status read and publish pass fail until someone edited storage by hand.
             Number.isNaN(Date.parse(item.publishAt)) ||
             Number.isNaN(Date.parse(item.generatedAt)) ||
-            Date.parse(item.publishAt) < at.getTime() - ELAPSED_PREPARED_SLOT_MS ||
+            Date.parse(item.publishAt) < at.getTime() - elapsedPreparedSlotMs(settings.postsPerDay) ||
             !account ||
             !source ||
             missingSourceAccountIds.has(item.creatorAccountId) ||

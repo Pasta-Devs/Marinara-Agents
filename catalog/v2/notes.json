@@ -36,6 +36,12 @@
     "slurp": {
       "versions": [
         {
+          "version": "1.2.24",
+          "date": "2026-09-08",
+          "notes": "- A late automatic post is no longer thrown away too early. The grace on an overdue slot was a fixed hour that ignored the posting pace, so at a fast pace a slot had barely one gap to survive a hiccup, and at a slow pace a slot missed by an hour was destroyed with its replacement still five hours away. It now follows the posting interval.",
+          "highlight": false
+        },
+        {
           "version": "1.2.23",
           "date": "2026-09-08",
           "notes": "- Posts per day now means posts per day. The scheduler laid down twice the number of slots it was asked for whenever three or more Creators were set up, so every pace — including the named presets — quietly ran at double its stated rate.\n- Fixed the wasted work that came with it. Because the surplus slots were created and then discarded again, most scheduled posts never became anything: one install had 100 discarded slots against 42 published, some destroyed four minutes after they were created. The doubled rate also drained the daily generation budget, which is sized to posts per day, about halfway through the day.\n- Posts per day can now be set as high as 96, so a pace above the old ceiling of 24 can be asked for directly.",
@@ -147,12 +153,6 @@
           "version": "1.2.5",
           "date": "2026-09-07",
           "notes": "- Background audience activity no longer reacts to draft posts.\n- Free subscriptions now enter the Creator audience funnel even when wallet charging is disabled.\n- Story views are idempotent under concurrent requests.\n- Creator-side Inbox threads show the fan identity and correct message direction.\n- Paid-message media paths are server-owned, so callers cannot expose unrelated protected API media.\n- Commission image failures now offer a clear text-only delivery path.",
-          "highlight": false
-        },
-        {
-          "version": "1.2.4",
-          "date": "2026-09-06",
-          "notes": "- Right rails now provide contextual content instead of repeating the main view.\n- Discover now has a compact Top creators leaderboard with Likes and Subscribers modes.\n- Open Inbox conversations show the related Creator context in the right rail.\n- Owned profiles show Creator tools, while other profiles show related Creators.\n- Wallet and Settings no longer reserve duplicate summary rails.",
           "highlight": false
         }
       ]

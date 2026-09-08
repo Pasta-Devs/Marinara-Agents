@@ -1,5 +1,9 @@
 # Slurp release notes
 
+## 1.2.24 — 2026-09-08
+
+- A late automatic post is no longer thrown away too early. The grace on an overdue slot was a fixed hour that ignored the posting pace, so at a fast pace a slot had barely one gap to survive a hiccup, and at a slow pace a slot missed by an hour was destroyed with its replacement still five hours away. It now follows the posting interval.
+
 ## 1.2.23 — 2026-09-08
 
 - Posts per day now means posts per day. The scheduler laid down twice the number of slots it was asked for whenever three or more Creators were set up, so every pace — including the named presets — quietly ran at double its stated rate.
