@@ -96,4 +96,36 @@ assert.match(operation, /mood: recoverSlurpMood\(/u);
 // Only a conversation going well bursts.
 assert.match(operation, /reply\.latitude === "normal" && reply\.moodShift !== "down"/u);
 
+// Being rude in public counts as much as being rude in private. A creator who forgave in the
+// comments what she would not forgive in a DM would not read as one person.
+const commentReply = readFileSync(
+  "packages/slurp/src/engine/packages/server/src/services/slurp/slurp-reply-generation.service.ts",
+  "utf8",
+);
+assert.match(commentReply, /moodShift: generated\.moodShift/u);
+assert.match(commentReply, /noodleResponseFormat\(input\.connection\.model, "noodler_dm"\)/u);
+assert.doesNotMatch(commentReply, /noodleGeneratedNoodlerReplySchema/u);
+
+const creatorReply = readFileSync(
+  "packages/slurp/src/engine/packages/server/src/services/slurp/slurp-creator-reply.operation.ts",
+  "utf8",
+);
+assert.match(creatorReply, /applyExternalMoodShift\(claim\.viewer\.id, claim\.creator\.id, moodShift\)/u);
+// Never at the price of the reply, which is already written by then.
+assert.match(creatorReply, /applyExternalMoodShift[\s\S]{0,120}?\.catch\(/u);
+
+// A generated audience member's feelings are not a relationship the player has.
+const audienceReply = readFileSync(
+  "packages/slurp/src/engine/packages/server/src/services/slurp/slurp-audience-reply.operation.ts",
+  "utf8",
+);
+assert.doesNotMatch(audienceReply, /applyExternalMoodShift/u);
+
+const storage = readFileSync(
+  "packages/slurp/src/engine/packages/server/src/services/storage/slurp-messages.storage.ts",
+  "utf8",
+);
+// An ordinary comment must not cost a storage write on every reply in the world.
+assert.match(storage, /if \(shift === "same"\) return;/u);
+
 console.log("slurp felt mood regression passed");

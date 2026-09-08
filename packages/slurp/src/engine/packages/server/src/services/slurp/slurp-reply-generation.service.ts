@@ -1,6 +1,5 @@
 import {
   NOODLER_REPLY_CONTENT_MAX_LENGTH,
-  noodleGeneratedNoodlerReplySchema,
   type APIProvider,
   type NoodleAccount,
   type NoodleIdentityDisclosure,
@@ -24,6 +23,8 @@ import { createConnectionsStorage } from "../storage/connections.storage.js";
 import { createSlurpStorage } from "../storage/slurp.storage.js";
 import { createSlurpPopulationStorage } from "../storage/slurp-population.storage.js";
 import { slurpArcDescription } from "./slurp-arc.js";
+import { readSlurpDmReply } from "./slurp-dm-response.js";
+import type { SlurpMoodShift } from "./slurp-mood.js";
 import {
   NOODLER_UNTRUSTED_CONTENT_INSTRUCTION,
   noodlerIdentityInstruction,
@@ -78,7 +79,13 @@ export function buildNoodlerCreatorReplyMessages(input: {
     noodlerIdentityInstruction(input.disclosureMode, input.publicIdentity),
     "Keep the reply direct and brief: one or two short sentences, normally under 240 characters.",
     "Let the relationship set the warmth. A stranger gets a friendly but ordinary reply; somebody who has been here a long time or paid for a lot gets recognition, familiarity, and a callback to what they have given you.",
-    'Return exactly one JSON object with one string field named "content".',
+    'Return exactly one JSON object with three fields: "content", "moodShift" and "remember".',
+    '"content" is your reply, and the only field the viewer ever sees.',
+    // The same field the direct-message path reads, so being rude in public counts exactly as
+    // much as being rude in private. A creator who forgave in the comments what she would not
+    // forgive in a DM would not read as one person.
+    '"moodShift" is how this comment changed your feeling about this person: "up" if you enjoyed it, "same" for anything ordinary, "down" if they were rude, pushy, or tiring, "sharp_down" only for something you would genuinely take offence at. Most comments are "same".',
+    '"remember" must be an empty array here.',
     "Return JSON only. No prose outside the JSON object.",
   ]
     .filter(Boolean)
@@ -125,7 +132,7 @@ export async function generateNoodlerCreatorReply(input: {
   parent: NoodleInteraction;
   connection: GenerationConnection;
   debugMode?: boolean;
-}): Promise<string> {
+}): Promise<{ content: string; moodShift: SlurpMoodShift }> {
   const connections = createConnectionsStorage(input.db);
   const fallbackConnection = await connections.getFallbackForMain();
   const provider = withConnectionFallbackProvider({
@@ -178,7 +185,7 @@ export async function generateNoodlerCreatorReply(input: {
     }),
     stream: false,
     debugMode,
-    responseFormat: noodleResponseFormat(input.connection.model, "noodler_reply"),
+    responseFormat: noodleResponseFormat(input.connection.model, "noodler_dm"),
   } as const;
   logDebugOverride(
     debugMode,
@@ -193,9 +200,7 @@ export async function generateNoodlerCreatorReply(input: {
     content.length,
   );
   const parsed = parseGameJsonish(requireModelAnswer(content, "a creator reply"));
-  const generated = noodleGeneratedNoodlerReplySchema.parse(
-    Array.isArray(parsed) && parsed.length === 1 ? parsed[0] : parsed,
-  );
+  const generated = readSlurpDmReply(Array.isArray(parsed) && parsed.length === 1 ? parsed[0] : parsed);
   const protectedContent = protectBoundedNoodlerGeneratedText(
     generated.content,
     disclosureMode,
@@ -203,7 +208,7 @@ export async function generateNoodlerCreatorReply(input: {
     NOODLER_REPLY_CONTENT_MAX_LENGTH,
   );
   if (!protectedContent) throw new Error("Slurp creator reply generation returned no usable content.");
-  return protectedContent;
+  return { content: protectedContent, moodShift: generated.moodShift };
 }
 
 /**

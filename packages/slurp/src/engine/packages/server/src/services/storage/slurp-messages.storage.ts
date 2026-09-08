@@ -1197,6 +1197,26 @@ export function createSlurpMessagesStorage(db: DB) {
     },
 
     /**
+     * Carry what happened in public into the conversation.
+     *
+     * A creator who forgave in the comments what she would not forgive in a direct message would
+     * not read as one person, so a comment moves the same number a DM does.
+     *
+     * ponytail: only lands when a thread already exists. Being rude to somebody you have never
+     * written to is dropped; carry it on the audience tie if that gap starts to matter.
+     */
+    async applyExternalMoodShift(
+      viewerAccountId: string,
+      creatorAccountId: string,
+      shift: SlurpMoodShift,
+    ): Promise<void> {
+      if (shift === "same") return;
+      const thread = await storage.getThread(viewerAccountId, creatorAccountId);
+      if (!thread) return;
+      await storage.recordReplyOutcome(thread.id, { moodShift: shift, remember: [] });
+    },
+
+    /**
      * The creator steps away from this conversation.
      *
      * A strike is recorded at the same time. Two inside `SLURP_STRIKE_WINDOW_DAYS` is what closes

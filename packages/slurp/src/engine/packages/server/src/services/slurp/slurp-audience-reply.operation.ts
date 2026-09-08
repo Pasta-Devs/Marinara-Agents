@@ -99,7 +99,9 @@ export async function drainSlurpAudienceReplies(db: DB, limit = MAX_PER_DRAIN): 
 
       const locked = await tryNoodlerAccountOperation(creator.id, async () => {
         try {
-          const content = await generateNoodlerCreatorReply({
+          // Destructured and dropped: this reply answers a generated audience member, and their
+          // feelings are not a relationship the player has. Only a real viewer moves a mood.
+          const { content } = await generateNoodlerCreatorReply({
             db,
             creator: claim.creator,
             viewer: claim.commenter,

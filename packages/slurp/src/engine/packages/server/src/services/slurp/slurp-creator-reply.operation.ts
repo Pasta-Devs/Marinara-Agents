@@ -4,6 +4,7 @@ import { logger } from "../../lib/logger.js";
 import { createConnectionsStorage } from "../storage/connections.storage.js";
 import { resolveSlurpTextConnection } from "./slurp-connection.js";
 import { createSlurpStorage } from "../storage/slurp.storage.js";
+import { createSlurpMessagesStorage } from "../storage/slurp-messages.storage.js";
 import { tryNoodlerAccountOperation } from "./slurp-account-operation-lock.js";
 import { generateNoodlerCreatorReply } from "./slurp-reply-generation.service.js";
 
@@ -41,8 +42,9 @@ export async function generateAndApplyNoodlerCreatorReply(
     );
     if (claim.status !== "claimed") return claim;
     let content: string;
+    let moodShift;
     try {
-      content = await generateNoodlerCreatorReply({
+      ({ content, moodShift } = await generateNoodlerCreatorReply({
         db,
         creator: claim.creator,
         viewer: claim.viewer,
@@ -50,11 +52,16 @@ export async function generateAndApplyNoodlerCreatorReply(
         parent: claim.parent,
         connection,
         debugMode: input.debugMode,
-      });
+      }));
     } catch (error) {
       await releaseClaim(claim.claimId);
       throw error;
     }
+    // Being rude in public counts as much as being rude in private. Never at the price of the
+    // reply itself, which is already written by this point.
+    await createSlurpMessagesStorage(db)
+      .applyExternalMoodShift(claim.viewer.id, claim.creator.id, moodShift)
+      .catch(() => undefined);
     const interaction = await noodle.finalizeNoodlerCreatorReplyClaim(claim.claimId, content);
     if (!interaction) {
       await releaseClaim(claim.claimId);
