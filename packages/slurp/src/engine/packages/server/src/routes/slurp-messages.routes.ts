@@ -43,7 +43,7 @@ const MESSAGE_MEDIA_EXTENSIONS = new Set([".jpg", ".jpeg", ".png", ".gif", ".web
 async function readSlurpMessageImage(
   req: FastifyRequest,
 ): Promise<{ payload: Record<string, string>; media: { buffer: Buffer; extension: string } }> {
-  let payload: Record<string, string> = {};
+  const payload: Record<string, string> = {};
   let media: { buffer: Buffer; extension: string } | null = null;
   for await (const part of req.parts({ limits: { fileSize: MESSAGE_MEDIA_MAX_BYTES, files: 1 } })) {
     if (part.type === "field") {

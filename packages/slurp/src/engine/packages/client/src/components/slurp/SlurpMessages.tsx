@@ -443,7 +443,6 @@ function SlurpThreadView({
   const draftReply = useDraftSlurpCreatorReply();
   const [draft, setDraft] = useState("");
   const [error, setError] = useState<string | null>(null);
-  const [imageIntent, setImageIntent] = useState<"friendly" | "hostile" | "premium">("friendly");
   const [typing, setTyping] = useState(false);
   const [toolsOpen, setToolsOpen] = useState(false);
   const [activeTipAmount, setActiveTipAmount] = useState<number | null>(null);
