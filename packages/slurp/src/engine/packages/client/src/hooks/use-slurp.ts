@@ -322,14 +322,12 @@ export type SlurpSettings = {
   maxImagesPerRefresh: number;
   maxGeneratedPostsPerRefresh: number;
   maxLikesPerRefresh: number;
-  maxRepostsPerRefresh: number;
   maxRepliesPerRefresh: number;
   allowGalleryImageAttachments: boolean;
   fanActivityRunsPerDay: number;
   audienceReactionBank: string[];
   fanLikesPerRefresh: number;
   fanRepliesPerRefresh: number;
-  fanRepostsPerRefresh: number;
   fanArchetypeWeights: Record<string, number>;
   nightQuiet: boolean;
   onboarding: "not_started" | "in_progress" | "completed";
@@ -1527,7 +1525,7 @@ export function useCreateNoodlerInteraction() {
     }: { postId: string; actorAccountId?: string } & NoodlerCreateInteractionInput) =>
       api.post<NoodleInteraction>(`/slurp/noodler/posts/${encodeURIComponent(postId)}/interactions`, input),
     onMutate: async (input) => {
-      if (input.type !== "like" && input.type !== "repost") return undefined;
+      if (input.type !== "like") return undefined;
       await qc.cancelQueries({ queryKey: noodleKeys.viewer(input.personaId) });
       const previous = qc.getQueryData<NoodlerViewerScope>(noodleKeys.viewer(input.personaId));
       qc.setQueryData<NoodlerViewerScope | undefined>(noodleKeys.viewer(input.personaId), (current) => {
@@ -1592,7 +1590,7 @@ export function useRemoveNoodlerInteraction() {
       return api.delete<NoodleInteraction>(`/slurp/noodler/posts/${encodeURIComponent(postId)}/interactions?${params}`);
     },
     onMutate: async (input) => {
-      if (input.type !== "like" && input.type !== "repost") return undefined;
+      if (input.type !== "like") return undefined;
       await qc.cancelQueries({ queryKey: noodleKeys.viewer(input.personaId) });
       const previous = qc.getQueryData<NoodlerViewerScope>(noodleKeys.viewer(input.personaId));
       qc.setQueryData<NoodlerViewerScope | undefined>(noodleKeys.viewer(input.personaId), (current) => {
@@ -2245,6 +2243,30 @@ export function useSendSlurpCreatorImage() {
       content: string;
     }) =>
       api.post<{ message: SlurpMessage }>(`/slurp/messages/threads/${encodeURIComponent(input.threadId)}/image`, input),
+    onSuccess: () => invalidateSlurpMessages(queryClient),
+  });
+}
+
+export function useSendSlurpViewerImage() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (input: {
+      threadId: string;
+      creatorAccountId: string;
+      personaId: string;
+      file: File;
+      content: string;
+    }) => {
+      const form = new FormData();
+      form.append("personaId", input.personaId);
+      form.append("creatorAccountId", input.creatorAccountId);
+      form.append("content", input.content);
+      form.append("file", input.file);
+      return api.upload<{ message: SlurpMessage; replyStatus: string }>(
+        `/slurp/messages/threads/${encodeURIComponent(input.threadId)}/image-upload`,
+        form,
+      );
+    },
     onSuccess: () => invalidateSlurpMessages(queryClient),
   });
 }

@@ -35,6 +35,7 @@ import {
   useDraftSlurpCreatorReply,
   useSendSlurpCreatorPpv,
   useSendSlurpCreatorReply,
+  useSendSlurpViewerImage,
   useSendSlurpMessage,
   useSlurpCompose,
   useSlurpThread,
@@ -852,25 +853,34 @@ function SlurpThreadView({
                   threadId={thread.id}
                 />
               ) : (
-                <CommissionRequest
-                  disabled={busy || !personaId || !targetCreatorAccountId}
-                  pending={createCommission.isPending}
-                  onSubmit={(brief) => {
-                    if (!personaId || !targetCreatorAccountId) return;
-                    setError(null);
-                    createCommission
-                      .mutateAsync({ personaId, creatorAccountId: targetCreatorAccountId, brief })
-                      .catch((cause: unknown) =>
-                        setError(
-                          cause instanceof Error
-                            ? cause.message
-                            : localizeUi("ui.slurp.messages.commissionFailed", {
-                                defaultValue: "Could not send that request.",
-                              }),
-                        ),
-                      );
-                  }}
-                />
+                <>
+                  <CommissionRequest
+                    disabled={busy || !personaId || !targetCreatorAccountId}
+                    pending={createCommission.isPending}
+                    onSubmit={(brief) => {
+                      if (!personaId || !targetCreatorAccountId) return;
+                      setError(null);
+                      createCommission
+                        .mutateAsync({ personaId, creatorAccountId: targetCreatorAccountId, brief })
+                        .catch((cause: unknown) =>
+                          setError(
+                            cause instanceof Error
+                              ? cause.message
+                              : localizeUi("ui.slurp.messages.commissionFailed", {
+                                  defaultValue: "Could not send that request.",
+                                }),
+                          ),
+                        );
+                    }}
+                  />
+                  {thread && personaId && targetCreatorAccountId && (
+                    <FanImageTool
+                      threadId={thread.id}
+                      creatorAccountId={targetCreatorAccountId}
+                      personaId={personaId}
+                    />
+                  )}
+                </>
               )}
               {ownsCreator && thread && personaId && (
                 <button
@@ -1321,6 +1331,71 @@ function CreatorMessageTools({
               {error}
             </p>
           )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function FanImageTool({
+  threadId,
+  creatorAccountId,
+  personaId,
+}: {
+  threadId: string;
+  creatorAccountId: string;
+  personaId: string;
+}) {
+  const { t: localizeUi } = useUiTranslation();
+  const send = useSendSlurpViewerImage();
+  const [file, setFile] = useState<File | null>(null);
+  const [content, setContent] = useState("");
+  const [open, setOpen] = useState(false);
+  return (
+    <div className="overflow-hidden rounded-xl bg-[var(--slurp-surface)] ring-1 ring-inset ring-[var(--noodle-divider)]">
+      <button
+        type="button"
+        onClick={() => setOpen((value) => !value)}
+        aria-expanded={open}
+        className="flex min-h-11 w-full items-center gap-2 px-3 text-left text-xs font-bold"
+      >
+        <Palette size={14} className="text-[var(--noodle-accent)]" aria-hidden="true" />
+        {localizeUi("ui.slurp.messages.sendImage", { defaultValue: "Send a picture" })}
+      </button>
+      {open && (
+        <div className="flex flex-col gap-2 border-t border-[var(--noodle-divider)] p-3">
+          <input
+            type="file"
+            accept="image/*"
+            onChange={(event) => setFile(event.target.files?.[0] ?? null)}
+            className="text-xs"
+          />
+          <input
+            value={content}
+            maxLength={1000}
+            onChange={(event) => setContent(event.target.value)}
+            placeholder={localizeUi("ui.slurp.messages.imageCaption", {
+              defaultValue: "Say something with it (optional)",
+            })}
+            className="h-10 rounded-lg bg-[var(--slurp-canvas,var(--background))] px-3 text-sm ring-1 ring-inset ring-[var(--noodle-divider)]"
+          />
+          <button
+            type="button"
+            disabled={!file || send.isPending}
+            onClick={() =>
+              file &&
+              void send.mutateAsync({ threadId, creatorAccountId, personaId, file, content }).then(() => {
+                setFile(null);
+                setContent("");
+                setOpen(false);
+              })
+            }
+            className="min-h-10 self-end rounded-lg bg-[var(--noodle-accent)] px-3 text-xs font-bold text-zinc-950 disabled:opacity-50"
+          >
+            {send.isPending
+              ? localizeUi("ui.slurp.messages.sending", { defaultValue: "Sending…" })
+              : localizeUi("ui.slurp.messages.send", { defaultValue: "Send" })}
+          </button>
         </div>
       )}
     </div>

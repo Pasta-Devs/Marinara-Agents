@@ -4,8 +4,9 @@
 //
 // Registered from `slurp.routes.ts`, but kept in its own file: that one is already past two
 // thousand five hundred lines, and nothing here needs the feed helpers it holds.
-import type { FastifyInstance } from "fastify";
+import type { FastifyInstance, FastifyRequest } from "fastify";
 import { z } from "zod";
+import { extname } from "node:path";
 import { createSlurpStorage } from "../services/storage/slurp.storage.js";
 import { createSlurpMessagesStorage } from "../services/storage/slurp-messages.storage.js";
 import { createSlurpPopulationStorage } from "../services/storage/slurp-population.storage.js";
@@ -24,11 +25,46 @@ import { resolveSlurpTextConnection } from "../services/slurp/slurp-connection.j
 import { createConnectionsStorage } from "../services/storage/connections.storage.js";
 import { isDebugAgentsEnabled } from "../config/runtime-config.js";
 import { slurpCommissionDeliveryDelayMs } from "../services/slurp/slurp-messaging.js";
-import { resolveNoodlerMediaAbsolutePath, slurpMessageMediaUrl } from "../services/slurp/slurp-media.js";
+import {
+  isAllowedImageBuffer,
+  resolveNoodlerMediaAbsolutePath,
+  slurpMessageMediaUrl,
+  stageSlurpMessageMedia,
+} from "../services/slurp/slurp-media.js";
 import { logger } from "../lib/logger.js";
 import { resolveSlurpCreatorAvailability } from "../services/slurp/slurp-creator-schedule-context.js";
 
 const personaQuerySchema = z.object({ personaId: z.string().trim().min(1) });
+const MESSAGE_MEDIA_MAX_BYTES = 20 * 1024 * 1024;
+const MESSAGE_MEDIA_EXTENSIONS = new Set([".jpg", ".jpeg", ".png", ".gif", ".webp", ".avif"]);
+
+async function readSlurpMessageImage(
+  req: FastifyRequest,
+): Promise<{ payload: Record<string, string>; media: { buffer: Buffer; extension: string } }> {
+  let payload: Record<string, string> = {};
+  let media: { buffer: Buffer; extension: string } | null = null;
+  for await (const part of req.parts({ limits: { fileSize: MESSAGE_MEDIA_MAX_BYTES, files: 1 } })) {
+    if (part.type === "field") {
+      payload[part.fieldname] = String(part.value);
+      continue;
+    }
+    if (part.fieldname !== "file" || media) {
+      part.file.resume();
+      throw new Error("Upload one image in the file field.");
+    }
+    const extension = extname(part.filename).toLowerCase();
+    if (!MESSAGE_MEDIA_EXTENSIONS.has(extension)) {
+      part.file.resume();
+      throw new Error("Unsupported image file type.");
+    }
+    const buffer = await part.toBuffer();
+    const detected = isAllowedImageBuffer(buffer, extension);
+    if (!detected) throw new Error("Unsupported or invalid image file.");
+    media = { buffer, extension: detected.ext };
+  }
+  if (!media) throw new Error("Upload one image in the file field.");
+  return { payload, media };
+}
 
 const sendSchema = z.object({
   personaId: z.string().trim().min(1),
@@ -734,6 +770,51 @@ export async function slurpMessageRoutes(app: FastifyInstance) {
       return { message: { ...message, imageUrl: slurpMessageMediaUrl(message.id) } };
     } catch (error) {
       drawn.compensate();
+      throw error;
+    }
+  });
+
+  app.post("/messages/threads/:threadId/image-upload", async (req, reply) => {
+    let decoded: Awaited<ReturnType<typeof readSlurpMessageImage>>;
+    try {
+      decoded = await readSlurpMessageImage(req);
+    } catch (error) {
+      return reply.code(400).send({ error: error instanceof Error ? error.message : "Invalid image upload." });
+    }
+    const parsed = z
+      .object({
+        personaId: z.string().min(1),
+        creatorAccountId: z.string().min(1),
+        content: z.string().max(1000).default(""),
+      })
+      .safeParse(decoded.payload);
+    if (!parsed.success) return reply.code(400).send({ error: parsed.error.flatten() });
+    const { threadId } = req.params as { threadId: string };
+    const thread = await messages.getThreadById(threadId);
+    const viewer = await requireViewer(parsed.data.personaId);
+    if (
+      !thread ||
+      !viewer ||
+      thread.viewerAccountId !== viewer.id ||
+      thread.creatorAccountId !== parsed.data.creatorAccountId
+    )
+      return reply.code(404).send({ error: "Thread not found" });
+    const staged = stageSlurpMessageMedia(decoded.media);
+    try {
+      const sent = await messages.appendMessage(thread.id, {
+        senderAccountId: viewer.id,
+        role: "viewer",
+        content: parsed.data.content,
+        imageUrl: slurpMessageMediaUrl("pending"),
+        metadata: { noodlerMediaPath: staged.filePath, uploaded: true },
+      });
+      if (!sent) return reply.code(404).send({ error: "Thread not found" });
+      staged.promote();
+      await messages.setMessageMedia(sent.id, slurpMessageMediaUrl(sent.id), staged.filePath);
+      const outcome = await replyToSlurpMessage(app.db, { threadId, triggerMessageId: sent.id });
+      return { message: { ...sent, imageUrl: slurpMessageMediaUrl(sent.id) }, replyStatus: outcome.status };
+    } catch (error) {
+      staged.compensate();
       throw error;
     }
   });

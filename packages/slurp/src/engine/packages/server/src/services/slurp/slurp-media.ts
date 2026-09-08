@@ -3,7 +3,7 @@ import { basename, dirname, join } from "path";
 import type { NoodlerManagedPost } from "@marinara-engine/shared";
 import { logger } from "../../lib/logger.js";
 import { DATA_DIR } from "../../utils/data-dir.js";
-import { assertInsideDir } from "../../utils/security.js";
+import { assertInsideDir, isAllowedImageBuffer } from "../../utils/security.js";
 import { getSharp } from "../../utils/sharp.js";
 import { stageImageToDisk } from "../image/image-generation.js";
 
@@ -30,6 +30,13 @@ export const NOODLER_MEDIA_URL_PREFIX = "/api/slurp/noodler/posts/";
 /** Access-checked serving URL for a generated direct-message image. */
 export function slurpMessageMediaUrl(messageId: string): string {
   return `/api/slurp/messages/${encodeURIComponent(messageId)}/media`;
+}
+
+export type SlurpMessageMediaUpload = { buffer: Buffer; extension: string };
+
+/** Stage a validated fan upload. The caller promotes it only after the message row exists. */
+export function stageSlurpMessageMedia(upload: SlurpMessageMediaUpload) {
+  return stageImageToDisk(`${NOODLER_MEDIA_PREFIX}messages`, upload.buffer.toString("base64"), upload.extension);
 }
 
 /**
