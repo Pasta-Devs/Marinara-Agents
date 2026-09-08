@@ -70,6 +70,16 @@ assert.match(
   "The wizard must restore the saved image-post preference",
 );
 assert.match(panel, /autoPostingImagesEnabled: imagesEnabled/u, "The wizard must save the image-post preference");
+assert.match(
+  panel,
+  /type Intro = 0 \| 1 \| 2 \| 3 \| 4 \| null[\s\S]*?const LAST_INTRO = 4[\s\S]*?intro === 0[\s\S]*?intro === 1[\s\S]*?intro === 2[\s\S]*?intro === 3[\s\S]*?intro === 4/u,
+  "First-run onboarding must show info, attention, identity, locked-post, and activity screens in order",
+);
+assert.match(
+  panel,
+  /key: "cost"[\s\S]*?key: "images"[\s\S]*?key: "context"/u,
+  "The attention screen must disclose cost, image generation, and local-model limits",
+);
 assert.doesNotMatch(
   panel,
   /imageGenerationUseAvatarReferences: imagesEnabled/u,

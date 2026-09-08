@@ -5,6 +5,8 @@ import {
   ChevronLeft,
   ChevronRight,
   Clock,
+  Coins,
+  Cpu,
   Eye,
   Image as ImageIcon,
   Loader2,
@@ -52,9 +54,9 @@ import { LockedSlurpPostCard } from "./SlurpCreatorPostCard";
 
 type Step = 1 | 2 | 3 | 4 | 5;
 /** The teaching screens that run ahead of the numbered steps on first run. */
-type Intro = 0 | 1 | 2 | 3 | null;
+type Intro = 0 | 1 | 2 | 3 | 4 | null;
 type SetupLane = "easy" | "customize" | null;
-const LAST_INTRO = 3;
+const LAST_INTRO = 4;
 /** "creationFailed" is local to the wizard: the shared resolver reports it as "failed", which
  * reads as a first-post problem even when no creator was ever set up. */
 type CompletionKind = NoodlerOnboardingCompletion | "creationFailed";
@@ -496,7 +498,7 @@ export function SlurpOnboardingWizard({
               className="-mx-5 flex items-center gap-2 border-b border-[var(--noodle-accent)]/25 bg-gradient-to-r from-[var(--noodle-accent)]/20 via-[var(--noodle-accent)]/8 to-transparent px-5 pb-3 pt-2 max-sm:-mx-4 max-sm:gap-1.5 max-sm:px-4 max-sm:pb-2"
               aria-hidden="true"
             >
-              {[0, 1, 2, 3].map((dot) => (
+              {[0, 1, 2, 3, 4].map((dot) => (
                 <span
                   key={dot}
                   className={cn(
@@ -552,8 +554,8 @@ export function SlurpOnboardingWizard({
               <div className="space-y-4 max-sm:space-y-3">
                 <StepHeading
                   icon={<Sparkles size={18} />}
-                  title={t("ui.noodle.noodlerwizard.intro.welcome.title")}
-                  help={t("ui.noodle.noodlerwizard.intro.welcome.help")}
+                  title={t("ui.noodle.noodlerwizard.intro.info.title")}
+                  help={t("ui.noodle.noodlerwizard.intro.info.help")}
                 />
                 <div className="flex items-center gap-4 rounded-xl border border-[var(--noodle-accent)]/25 bg-[var(--noodle-accent)]/10 p-4 max-sm:items-start max-sm:gap-3 max-sm:p-3">
                   <img
@@ -562,18 +564,44 @@ export function SlurpOnboardingWizard({
                     className="h-36 w-auto shrink-0 object-contain max-sm:h-24"
                   />
                   <div className="space-y-3 text-sm leading-6 max-sm:space-y-1.5 max-sm:leading-5">
-                    <p className="font-semibold">{t("ui.noodle.noodlerwizard.intro.welcome.lead")}</p>
-                    <p className="text-[var(--slurp-muted)]">{t("ui.noodle.noodlerwizard.intro.welcome.detail")}</p>
+                    <p className="font-semibold">{t("ui.noodle.noodlerwizard.intro.info.lead")}</p>
+                    <p className="text-[var(--slurp-muted)]">{t("ui.noodle.noodlerwizard.intro.info.detail")}</p>
                   </div>
-                </div>
-                <div className="flex items-start gap-2 rounded-lg border border-[var(--noodle-accent)]/35 bg-[var(--noodle-accent)]/10 px-3 py-2 text-xs leading-5 text-[var(--slurp-muted)]">
-                  <AlertTriangle size={14} className="mt-0.5 shrink-0 text-[var(--noodle-accent)]" />
-                  <p>{t("ui.noodle.noodlehome.noodlerIsStillBeingImplementedAndIsNotUsable")}</p>
                 </div>
               </div>
             )}
 
             {intro === 1 && (
+              <div className="space-y-4 max-sm:space-y-3">
+                <StepHeading
+                  icon={<AlertTriangle size={18} />}
+                  title={t("ui.noodle.noodlerwizard.intro.attention.title")}
+                  help={t("ui.noodle.noodlerwizard.intro.attention.help")}
+                />
+                <div className="space-y-2.5">
+                  {[
+                    { icon: <Coins size={15} />, key: "cost" },
+                    { icon: <ImageIcon size={15} />, key: "images" },
+                    { icon: <Cpu size={15} />, key: "context" },
+                  ].map((item) => (
+                    <div
+                      key={item.key}
+                      className="flex items-start gap-3 rounded-lg border border-[var(--noodle-accent)]/35 bg-[var(--noodle-accent)]/10 px-3 py-2.5 text-sm leading-6"
+                    >
+                      <span className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-[var(--noodle-accent)]/15 text-[var(--noodle-accent)]">
+                        {item.icon}
+                      </span>
+                      <span>{t(`ui.noodle.noodlerwizard.intro.attention.${item.key}`)}</span>
+                    </div>
+                  ))}
+                </div>
+                <p className="rounded-lg border border-[var(--slurp-outline)] px-3 py-2.5 text-xs leading-5 text-[var(--slurp-muted)]">
+                  {t("ui.noodle.noodlerwizard.intro.attention.footer")}
+                </p>
+              </div>
+            )}
+
+            {intro === 2 && (
               <div className="space-y-4 max-sm:space-y-3">
                 <StepHeading
                   icon={<Eye size={18} />}
@@ -627,7 +655,7 @@ export function SlurpOnboardingWizard({
               </div>
             )}
 
-            {intro === 2 && (
+            {intro === 3 && (
               <div className="space-y-4 max-sm:space-y-3">
                 <StepHeading
                   icon={<Lock size={18} />}
@@ -662,7 +690,7 @@ export function SlurpOnboardingWizard({
               </div>
             )}
 
-            {intro === 3 && (
+            {intro === 4 && (
               <div className="space-y-4 max-sm:space-y-3">
                 <StepHeading
                   icon={<Clock size={18} />}

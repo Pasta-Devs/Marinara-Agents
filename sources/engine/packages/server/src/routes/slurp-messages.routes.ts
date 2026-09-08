@@ -9,16 +9,24 @@ import { z } from "zod";
 import { createSlurpStorage } from "../services/storage/slurp.storage.js";
 import { createSlurpMessagesStorage } from "../services/storage/slurp-messages.storage.js";
 import { createSlurpPopulationStorage } from "../services/storage/slurp-population.storage.js";
+import { createCharactersStorage } from "../services/storage/characters.storage.js";
 import { replyToSlurpMessage } from "../services/slurp/slurp-message.operation.js";
 import { SLURP_DM_POLICIES } from "../services/slurp/slurp-messaging.js";
 import { SLURP_DEFAULT_RAPPORT_WEIGHTS } from "../services/slurp/slurp-rapport.js";
+import { activeSlurpStrikes } from "../services/slurp/slurp-stance.js";
 import { existsSync } from "node:fs";
 import { basename, dirname } from "node:path";
 import { generateSlurpCommissionImage } from "../services/slurp/slurp-commission-image.operation.js";
 import { deliverAutomaticSlurpCommission } from "../services/slurp/slurp-commission-delivery.service.js";
+import { buildSlurpMessagePrompt } from "../services/slurp/slurp-message-generation.service.js";
+import { describeSlurpDayVibe } from "../services/slurp/slurp-day-vibe.service.js";
+import { resolveSlurpTextConnection } from "../services/slurp/slurp-connection.js";
+import { createConnectionsStorage } from "../services/storage/connections.storage.js";
+import { isDebugAgentsEnabled } from "../config/runtime-config.js";
 import { slurpCommissionDeliveryDelayMs } from "../services/slurp/slurp-messaging.js";
 import { resolveNoodlerMediaAbsolutePath, slurpMessageMediaUrl } from "../services/slurp/slurp-media.js";
 import { logger } from "../lib/logger.js";
+import { resolveSlurpCreatorAvailability } from "../services/slurp/slurp-creator-schedule-context.js";
 
 const personaQuerySchema = z.object({ personaId: z.string().trim().min(1) });
 
@@ -104,6 +112,30 @@ export async function slurpMessageRoutes(app: FastifyInstance) {
   const messages = createSlurpMessagesStorage(app.db);
   const population = createSlurpPopulationStorage(app.db);
 
+  const creatorPresence = async (
+    creator: NonNullable<Awaited<ReturnType<typeof slurp.getNoodlerAccountById>>>,
+    threadId?: string,
+  ) => {
+    const threadMessages = threadId ? await messages.listMessages(threadId) : [];
+    const latestMessage = threadMessages
+      .filter((message) => message.role === "creator")
+      .reduce<string | null>(
+        (latest, message) => (!latest || message.createdAt > latest ? message.createdAt : latest),
+        null,
+      );
+    const latestPost = (await slurp.listNoodlerPostsByAccount(creator.id, 1))[0] ?? null;
+    const source = await slurp.resolveAccountSource(creator);
+    const availability = source
+      ? await resolveSlurpCreatorAvailability(createCharactersStorage(app.db), source, undefined, new Date())
+      : { online: true, activity: null, minutesUntilOnline: 0 };
+    return {
+      creatorLastActiveAt: latestPost?.createdAt ?? null,
+      creatorLastMessageAt: latestMessage,
+      creatorAutoPosting: Boolean(creator.settings.scheduler.autoPosting?.enabled),
+      creatorAvailability: availability,
+    };
+  };
+
   /** Every route needs the same "is this a real persona" gate, so it lives in one helper. */
   const requireViewer = async (personaId: string) => slurp.getViewer(personaId);
 
@@ -121,10 +153,18 @@ export async function slurpMessageRoutes(app: FastifyInstance) {
         : message,
     );
 
-  /** Re-read a thread and enrich it, so every response carries the same joined shape. */
-  const freshView = async (threadId: string) => {
+  /**
+   * Re-read a thread and enrich it, so every response carries the same joined shape.
+   *
+   * `side` defaults to the fan, which is the safe default: their copy has the rapport score, the
+   * mood, the notes and the strike count stripped. Every thread response goes through here, so a
+   * new endpoint cannot leak the simulation's internals by forgetting to.
+   */
+  const freshView = async (threadId: string, side: "viewer" | "creator" = "viewer") => {
     const thread = await messages.getThreadById(threadId);
-    return thread ? await messages.viewThread(thread) : null;
+    if (!thread) return null;
+    const view = await messages.viewThread(thread);
+    return side === "creator" ? view : { ...view, ...messages.forViewer(thread) };
   };
 
   /**
@@ -189,6 +229,7 @@ export async function slurpMessageRoutes(app: FastifyInstance) {
     const side = thread.viewerAccountId === viewer.id ? "viewer" : "creator";
     await messages.markRead(thread.id, side);
     const creator = await slurp.getNoodlerAccountById(thread.creatorAccountId);
+    if (!creator) return reply.code(404).send({ error: "Creator not found" });
     const counterpart =
       side === "creator"
         ? ((await population.get(thread.viewerAccountId)) ??
@@ -198,16 +239,37 @@ export async function slurpMessageRoutes(app: FastifyInstance) {
     // When the creator last posted, so the thread header can show the same online/away/offline
     // status the profile header does. The status rule is derived from posting activity, and the
     // thread view had no way to see it, which is why it showed nothing.
-    const creatorLatestPost = (await slurp.listNoodlerPostsByAccount(thread.creatorAccountId, 1))[0] ?? null;
     return {
-      thread: await freshView(thread.id),
+      thread: await freshView(thread.id, side),
       messages: await visibleMessages(thread.id, side),
       creator,
       counterpart,
-      creatorLastActiveAt: creatorLatestPost?.createdAt ?? null,
-      creatorAutoPosting: Boolean(creator?.settings.scheduler.autoPosting?.enabled),
+      ...(await creatorPresence(creator, thread.id)),
       messaging: await messages.getCreatorMessaging(thread.creatorAccountId),
       commissions: await messages.listCommissionsForThread(thread.id),
+      // What the info panel renders. Two different answers on purpose: the fan gets words, the
+      // Creator's operator gets the numbers, because one is a relationship and the other is a
+      // business. `slurp-rapport.ts` is explicit that a score must never reach a thread.
+      relationship:
+        side === "creator"
+          ? {
+              side,
+              tier: thread.rapport.tier,
+              score: thread.rapport.score,
+              contributions: thread.rapport.contributions,
+              mood: thread.mood,
+              strikes: activeSlurpStrikes(thread.strikes, thread.lastStrikeAt),
+              notes: thread.notes,
+              coolUntil: thread.coolUntil,
+            }
+          : {
+              side,
+              tier: thread.rapport.tier,
+              // No score and no mood. A meter invites the player to farm it, and a fast one
+              // invites them to test it.
+              spentCoins: await messages.spentWithCreator(thread.viewerAccountId, thread.creatorAccountId),
+              coolUntil: thread.coolUntil,
+            },
     };
   });
 
@@ -232,6 +294,15 @@ export async function slurpMessageRoutes(app: FastifyInstance) {
       messages: thread ? await visibleMessages(thread.id, "viewer") : [],
       commissions: thread ? await messages.listCommissionsForThread(thread.id) : [],
       creator,
+      ...(await creatorPresence(creator, thread?.id)),
+      relationship: thread
+        ? {
+            side: "viewer" as const,
+            tier: thread.rapport.tier,
+            spentCoins: await messages.spentWithCreator(thread.viewerAccountId, thread.creatorAccountId),
+            coolUntil: thread.coolUntil,
+          }
+        : undefined,
       // The client shows the gate before the first message is written, so it must know the
       // policy even when no thread exists yet.
       messaging: await messages.getCreatorMessaging(creator.id),
@@ -343,7 +414,7 @@ export async function slurpMessageRoutes(app: FastifyInstance) {
     });
     if (!message) return reply.code(404).send({ error: "Conversation not found" });
     const thread = await messages.getThread(parsed.data.viewerAccountId, creatorAccountId);
-    return { message, thread: thread ? await freshView(thread.id) : null };
+    return { message, thread: thread ? await freshView(thread.id, "creator") : null };
   });
 
   /**
@@ -375,7 +446,7 @@ export async function slurpMessageRoutes(app: FastifyInstance) {
     if (outcome.status !== "replied") {
       return reply.code(502).send({ error: "Could not draft a reply.", status: outcome.status });
     }
-    return { message: outcome.message, thread: await freshView(thread.id) };
+    return { message: outcome.message, thread: await freshView(thread.id, "creator") };
   });
 
   app.post("/messages/creators/:creatorAccountId/ppv", async (req, reply) => {
@@ -617,6 +688,45 @@ export async function slurpMessageRoutes(app: FastifyInstance) {
     return reply.header("Cache-Control", "private, max-age=300").sendFile(basename(absolute), dirname(absolute));
   });
 
+  app.post("/messages/threads/:threadId/image", async (req, reply) => {
+    const parsed = z
+      .object({
+        personaId: z.string().min(1),
+        creatorAccountId: z.string().min(1),
+        prompt: z.string().trim().min(3).max(1000),
+        content: z.string().max(1000).default(""),
+      })
+      .safeParse(req.body ?? {});
+    if (!parsed.success) return reply.code(400).send({ error: parsed.error.flatten() });
+    const { threadId } = req.params as { threadId: string };
+    const thread = await messages.getThreadById(threadId);
+    if (
+      !thread ||
+      thread.creatorAccountId !== parsed.data.creatorAccountId ||
+      !(await ownsCreator(parsed.data.personaId, thread.creatorAccountId))
+    )
+      return reply.code(404).send({ error: "Thread not found" });
+    const drawn = await generateSlurpCommissionImage(app.db, {
+      creatorAccountId: thread.creatorAccountId,
+      brief: parsed.data.prompt,
+    });
+    if (drawn === "unavailable") return reply.code(503).send({ error: "Image generation is not available." });
+    try {
+      const message = await messages.sendCreatorMessage(thread.creatorAccountId, thread.viewerAccountId, {
+        content: parsed.data.content,
+        imageUrl: slurpMessageMediaUrl("pending"),
+        metadata: { noodlerMediaPath: drawn.mediaPath },
+      });
+      if (!message) return reply.code(404).send({ error: "Thread not found" });
+      drawn.promote();
+      await messages.setMessageMedia(message.id, slurpMessageMediaUrl(message.id), drawn.mediaPath);
+      return { message: { ...message, imageUrl: slurpMessageMediaUrl(message.id) } };
+    } catch (error) {
+      drawn.compensate();
+      throw error;
+    }
+  });
+
   app.post("/messages/threads/:threadId/request", async (req, reply) => {
     const parsed = requestDecisionSchema.safeParse(req.body ?? {});
     if (!parsed.success) return reply.code(400).send({ error: parsed.error.flatten() });
@@ -640,7 +750,7 @@ export async function slurpMessageRoutes(app: FastifyInstance) {
       }
     }
     return {
-      thread: await freshView(threadId),
+      thread: await freshView(threadId, "creator"),
       reply: outcome.status === "replied" ? outcome.message : null,
       replyStatus: outcome.status,
     };
@@ -676,6 +786,74 @@ export async function slurpMessageRoutes(app: FastifyInstance) {
         creatorAccountId,
         patch as Parameters<typeof messages.setCreatorMessaging>[1],
       ),
+    };
+  });
+
+  /**
+   * Exactly what the creator is about to be shown, and why.
+   *
+   * The prompt is produced by `buildSlurpMessagePrompt`, which is the same function the reply
+   * itself runs. A debug view that rebuilds the prompt separately drifts, and then reports
+   * something the model never received — worse than having no debug view.
+   *
+   * Nothing is generated. This is assembly only, so reading it costs nothing.
+   *
+   * The text is redacted exactly as the model sees it. There is deliberately no unprotected mode:
+   * that would leak a concealed Creator's source identity through the debug door and undo
+   * `noodlerConcealedSourceText`.
+   */
+  app.get("/messages/threads/:threadId/prompt", async (req, reply) => {
+    if (!isDebugAgentsEnabled()) return reply.code(404).send({ error: "Not Found" });
+    const parsed = personaQuerySchema.safeParse(req.query);
+    if (!parsed.success) return reply.code(400).send({ error: parsed.error.flatten() });
+    const { threadId } = req.params as { threadId: string };
+    const viewer = await requireViewer(parsed.data.personaId);
+    if (!viewer) return reply.code(404).send({ error: "Slurp persona not found" });
+    const thread = await messages.getThreadById(threadId);
+    if (!thread || (thread.viewerAccountId !== viewer.id && !(await ownsCreator(viewer.id, thread.creatorAccountId))))
+      return reply.code(404).send({ error: "Thread not found" });
+    const creator = await slurp.getNoodlerAccountById(thread.creatorAccountId);
+    const fan = await slurp.getViewer(thread.viewerAccountId);
+    if (!creator || !fan) return reply.code(404).send({ error: "Thread not found" });
+    const settings = await slurp.getSettings();
+    const connection = await resolveSlurpTextConnection(
+      createConnectionsStorage(app.db),
+      settings.generationConnectionId,
+    );
+    if (!connection) return reply.code(409).send({ error: "No text connection is configured." });
+    const subscriptions = await slurp.listSubscriptionsForViewer(thread.viewerAccountId);
+    const messaging = await messages.getCreatorMessaging(thread.creatorAccountId);
+    const built = await buildSlurpMessagePrompt({
+      db: app.db,
+      creator,
+      viewer: fan,
+      history: await messages.listMessages(thread.id, 60),
+      rapport: thread.rapport,
+      subscribed: subscriptions.some((entry) => entry.creatorAccountId === thread.creatorAccountId),
+      dmPolicy: messaging.dmPolicy,
+      isRequest: thread.state === "request",
+      mood: thread.mood,
+      moodUpdatedAt: thread.moodUpdatedAt,
+      notes: thread.notes,
+      dayVibe: await describeSlurpDayVibe(app.db, thread.creatorAccountId),
+      coolingOff: Boolean(thread.coolUntil && thread.coolUntil > new Date().toISOString()),
+      strikes: thread.strikes,
+      connection,
+    });
+    return {
+      // The layers first. This is the section that answers "why did she say that".
+      stance: built.stance,
+      thread: {
+        mood: thread.mood,
+        moodUpdatedAt: thread.moodUpdatedAt,
+        coolUntil: thread.coolUntil,
+        strikes: thread.strikes,
+        notes: thread.notes,
+        rapport: thread.rapport,
+        state: thread.state,
+      },
+      audienceTone: settings.audienceTone,
+      prompt: built.messages,
     };
   });
 

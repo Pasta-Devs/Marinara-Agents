@@ -11,6 +11,8 @@ import { newId } from "../../utils/id-generator.js";
 import type { DB } from "../../db/connection.js";
 import { isFileUniqueConstraintError } from "../../db/file-schema.js";
 import { slurpCommissions, slurpMessageClaims, slurpMessages, slurpThreads } from "../../db/schema/slurp.js";
+import { applySlurpMood, type SlurpMoodShift } from "../slurp/slurp-mood.js";
+import { activeSlurpStrikes } from "../slurp/slurp-stance.js";
 import { createAppSettingsStorage } from "./app-settings.storage.js";
 import { createSlurpStorage } from "./slurp.storage.js";
 import { createSlurpPopulationStorage } from "./slurp-population.storage.js";
@@ -59,6 +61,15 @@ export type SlurpThread = {
   creatorUnread: number;
   replyNotBeforeAt: string | null;
   rapport: SlurpRapport;
+  /** How this conversation is going, -100 to 100. See `slurp-mood.ts`. */
+  mood: number;
+  moodUpdatedAt: string | null;
+  /** While in the future, the creator has stepped away from this conversation. */
+  coolUntil: string | null;
+  strikes: number;
+  lastStrikeAt: string | null;
+  /** Short facts the creator knows about this fan, oldest first. */
+  notes: string[];
   createdAt: string;
   updatedAt: string;
 };
@@ -91,6 +102,14 @@ export type SlurpSendResult =
   | { status: "closed" }
   | { status: "insufficient_funds"; required: number }
   | { status: "not_found" };
+
+/**
+ * How many facts one thread keeps.
+ *
+ * A prompt has a budget, and a dossier that grows without limit spends all of it on trivia from
+ * eighteen months ago instead of the conversation in front of it.
+ */
+export const SLURP_THREAD_NOTE_LIMIT = 24;
 
 const now = () => new Date().toISOString();
 const messageUnlocks = new Map<string, Promise<SlurpMessage | null>>();
@@ -147,9 +166,33 @@ export function createSlurpMessagesStorage(db: DB) {
     creatorUnread: int(row.creatorUnread as string),
     replyNotBeforeAt: (row.replyNotBeforeAt as string | null) ?? null,
     rapport: readStoredRapport(json(row.rapport as string)),
+    mood: Number.isFinite(Number(row.mood)) ? Number(row.mood) : 0,
+    moodUpdatedAt: (row.moodUpdatedAt as string | null) ?? null,
+    coolUntil: (row.coolUntil as string | null) ?? null,
+    strikes: int(row.strikes as string),
+    lastStrikeAt: (row.lastStrikeAt as string | null) ?? null,
+    notes: readStoredNotes(row.notes),
     createdAt: String(row.createdAt),
     updatedAt: String(row.updatedAt),
   });
+
+  /**
+   * Notes are generated text written by an earlier reply. A blob written by an older build, or by
+   * hand, must render as a thread with no notes rather than throw the whole inbox away.
+   */
+  function readStoredNotes(raw: unknown): string[] {
+    if (typeof raw !== "string" || !raw.trim()) return [];
+    try {
+      const parsed: unknown = JSON.parse(raw);
+      if (!Array.isArray(parsed)) return [];
+      return parsed
+        .filter((entry): entry is string => typeof entry === "string")
+        .map((entry) => entry.trim())
+        .filter(Boolean);
+    } catch {
+      return [];
+    }
+  }
   const mapCommission = (row: Record<string, unknown>): SlurpCommission => ({
     id: String(row.id),
     threadId: String(row.threadId),
@@ -1110,6 +1153,132 @@ export function createSlurpMessagesStorage(db: DB) {
         .where(eq(slurpThreads.id, threadId));
       const resolved = await storage.getThreadById(threadId);
       return resolved;
+    },
+
+    /**
+     * Record what one generated reply did to the conversation.
+     *
+     * Mood and notes are written together because they arrive together, on the reply that already
+     * ran. Neither costs an extra model call, and neither may fail the reply: a message with good
+     * words and no mood is still the thing the fan asked for.
+     */
+    async recordReplyOutcome(
+      threadId: string,
+      input: { moodShift: SlurpMoodShift; remember: string[] },
+    ): Promise<void> {
+      const thread = await storage.getThreadById(threadId);
+      if (!thread) return;
+      const timestamp = now();
+      const minutesSinceUpdate = thread.moodUpdatedAt
+        ? Math.max(0, (Date.parse(timestamp) - Date.parse(thread.moodUpdatedAt)) / 60_000)
+        : 0;
+      const mood = applySlurpMood({
+        mood: thread.mood,
+        shift: input.moodShift,
+        rapportScore: thread.rapport.score,
+        minutesSinceUpdate,
+      });
+      // Oldest first, deduplicated, capped. A conversation that runs for months would otherwise
+      // grow an unbounded dossier and push everything else out of the prompt.
+      // ponytail: FIFO cap, swap for relevance ranking or decay if threads get long enough to need it.
+      const notes = [...thread.notes];
+      for (const note of input.remember) {
+        if (!notes.some((existing) => existing.toLowerCase() === note.toLowerCase())) notes.push(note);
+      }
+      await db
+        .update(slurpThreads)
+        .set({
+          mood: String(mood),
+          moodUpdatedAt: timestamp,
+          notes: JSON.stringify(notes.slice(-SLURP_THREAD_NOTE_LIMIT)),
+          updatedAt: timestamp,
+        })
+        .where(eq(slurpThreads.id, threadId));
+    },
+
+    /** Coins this fan has put into this Creator: tips, unlocks and commissions together. */
+    async spentWithCreator(viewerAccountId: string, creatorAccountId: string): Promise<number> {
+      const facts = await storage.rapportFactsFor(viewerAccountId, creatorAccountId);
+      return Math.max(0, Math.round(facts.tippedCoins + facts.unlockedCoins));
+    },
+
+    /**
+     * The thread as the fan is allowed to see it.
+     *
+     * `slurp-rapport.ts` states the rule this keeps: "The score is never shown in a thread." A
+     * number turns a person into a progress bar and teaches the player to farm it. The mood is the
+     * same hazard and worse, because it moves fast enough to be tested against.
+     *
+     * So the fan's copy carries neither, nor the notes, nor the strike count. Stripping it here
+     * rather than in the client is what stops the next endpoint leaking it by default.
+     */
+    forViewer(thread: SlurpThread): SlurpThread {
+      return {
+        ...thread,
+        mood: 0,
+        moodUpdatedAt: null,
+        strikes: 0,
+        lastStrikeAt: null,
+        notes: [],
+        rapport: { ...thread.rapport, score: 0, contributions: [] },
+      };
+    },
+
+    /**
+     * Carry what happened in public into the conversation.
+     *
+     * A creator who forgave in the comments what she would not forgive in a direct message would
+     * not read as one person, so a comment moves the same number a DM does.
+     *
+     * ponytail: only lands when a thread already exists. Being rude to somebody you have never
+     * written to is dropped; carry it on the audience tie if that gap starts to matter.
+     */
+    async applyExternalMoodShift(
+      viewerAccountId: string,
+      creatorAccountId: string,
+      shift: SlurpMoodShift,
+    ): Promise<void> {
+      if (shift === "same") return;
+      const thread = await storage.getThread(viewerAccountId, creatorAccountId);
+      if (!thread) return;
+      await storage.recordReplyOutcome(thread.id, { moodShift: shift, remember: [] });
+    },
+
+    /**
+     * The creator steps away from this conversation.
+     *
+     * A strike is recorded at the same time. Two inside `SLURP_STRIKE_WINDOW_DAYS` is what closes
+     * the thread for good, so the count and the clock have to move together or a pattern could
+     * never be told apart from a bad afternoon.
+     */
+    async beginCoolOff(threadId: string, hours: number): Promise<void> {
+      const thread = await storage.getThreadById(threadId);
+      if (!thread) return;
+      const timestamp = now();
+      await db
+        .update(slurpThreads)
+        .set({
+          coolUntil: new Date(Date.now() + hours * 3_600_000).toISOString(),
+          strikes: String(activeSlurpStrikes(thread.strikes, thread.lastStrikeAt) + 1),
+          lastStrikeAt: timestamp,
+          updatedAt: timestamp,
+        })
+        .where(eq(slurpThreads.id, threadId));
+    },
+
+    /**
+     * The creator ends the conversation.
+     *
+     * `declined` is the state the schema, the localized labels and `admitSlurpThread` already
+     * ship, and that guard already refuses to reopen a declined thread even if the fan subscribes.
+     * So the hard part was built long before anything could reach it.
+     */
+    async closeThreadByCreator(threadId: string): Promise<void> {
+      const timestamp = now();
+      await db
+        .update(slurpThreads)
+        .set({ state: "declined", coolUntil: null, updatedAt: timestamp })
+        .where(eq(slurpThreads.id, threadId));
     },
 
     /** Clear one side's unread count and stamp the messages the other side sent. */
