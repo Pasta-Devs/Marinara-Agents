@@ -38,6 +38,14 @@ export function startNoodleAutoPostScheduler(app: FastifyInstance, registerStop?
   let running: Promise<void> = Promise.resolve();
   let timer: ReturnType<typeof setTimeout> | null = null;
   let consecutiveFailures = 0;
+  // Cosmetic image work backs off on its own clock. It used to feed `consecutiveFailures`, which
+  // is the *publishing* poll's clock, so one creator whose picture could not be drawn — most
+  // commonly because no image connection is configured at all — walked the whole reserve poll out
+  // to thirty minutes and held it there. Artwork is cosmetic and must never decide how often due
+  // posts publish; it still needs a brake of its own, because the backfill retries the same
+  // creator every pass and would otherwise draw one image request a minute forever.
+  let imageWorkFailures = 0;
+  let imageWorkNotBefore = 0;
 
   const schedule = (delay = slurpPollBackoffMs(POLL_MS, consecutiveFailures)) => {
     if (stopped) return;
@@ -62,19 +70,20 @@ export function startNoodleAutoPostScheduler(app: FastifyInstance, registerStop?
       // rather than materializing both tables once a minute for the server's lifetime.
       const noodle = createSlurpStorage(app.db);
       const settings = await noodle.getSettings();
-      // Artwork is independent of the posting schedule: a creator with no picture needs one even
-      // when automatic posting is off, so this runs before the idle check returns.
-      const artwork = await tryBackfillNextNoodlerCreatorArtwork(app.db);
-      if (artwork !== "idle" && artwork !== "unavailable")
-        logger.info("[noodle-autopost] Filled in a creator %s", artwork);
-      // Artwork has no budget of its own, so a connection that always fails would otherwise draw
-      // one image request a minute forever.
-      failed = artwork === "unavailable";
-      // A post whose picture failed published without it. Draw one of them per pass, so the
-      // post gets its image back without a separate scheduler.
-      const redrawn = await createNoodlerNoodleImagesService(app.db).retryNextFailedPostImage();
-      if (redrawn === "retried") logger.info("[noodle-autopost] Redrew a missing post image");
-      failed = failed || redrawn === "failed";
+      if (Date.now() >= imageWorkNotBefore) {
+        // Artwork is independent of the posting schedule: a creator with no picture needs one even
+        // when automatic posting is off, so this runs before the idle check returns.
+        const artwork = await tryBackfillNextNoodlerCreatorArtwork(app.db);
+        if (artwork !== "idle" && artwork !== "unavailable")
+          logger.info("[noodle-autopost] Filled in a creator %s", artwork);
+        // A post whose picture failed published without it. Draw one of them per pass, so the
+        // post gets its image back without a separate scheduler.
+        const redrawn = await createNoodlerNoodleImagesService(app.db).retryNextFailedPostImage();
+        if (redrawn === "retried") logger.info("[noodle-autopost] Redrew a missing post image");
+        const imageWorkFailed = artwork === "unavailable" || redrawn === "failed";
+        imageWorkFailures = imageWorkFailed ? imageWorkFailures + 1 : 0;
+        imageWorkNotBefore = imageWorkFailed ? Date.now() + slurpPollBackoffMs(POLL_MS, imageWorkFailures) : 0;
+      }
       if (noodlerReservePollIsIdle(settings) && !(await noodle.hasNoodlerPreparedPosts())) return;
       const outcome = await runNoodlerAutoPostPoll(app.db);
       if (outcome.published > 0) logger.info("[noodle-autopost] Published %d due Slurp post(s)", outcome.published);

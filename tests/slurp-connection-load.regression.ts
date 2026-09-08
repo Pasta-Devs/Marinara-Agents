@@ -26,7 +26,22 @@ const storage = readFileSync(
 const autoPost = read("slurp-autopost-scheduler.service.ts");
 assert.match(autoPost, /slurpPollBackoffMs\(POLL_MS, consecutiveFailures\)/);
 assert.match(autoPost, /consecutiveFailures = failed \? consecutiveFailures \+ 1 : 0;/);
-assert.match(autoPost, /failed = artwork === "unavailable";/);
+// Cosmetic image work has its own brake and must never touch the publishing poll's clock. It used
+// to set `failed`, so a single creator whose picture could not be drawn — most often because no
+// image connection is configured at all — walked the reserve poll out to thirty minutes and held
+// it there, and due posts stopped going out for a reason that had nothing to do with posting.
+assert.doesNotMatch(
+  autoPost,
+  /failed = artwork === "unavailable"|failed = failed \|\| redrawn === "failed"/u,
+  "artwork and image retries must not feed the publishing poll's backoff",
+);
+assert.match(autoPost, /imageWorkFailures = imageWorkFailed \? imageWorkFailures \+ 1 : 0;/u);
+assert.match(
+  autoPost,
+  /imageWorkNotBefore = imageWorkFailed \? Date\.now\(\) \+ slurpPollBackoffMs\(POLL_MS, imageWorkFailures\) : 0;/u,
+  "a failing image backend must still be backed off, just on its own clock",
+);
+assert.match(autoPost, /if \(Date\.now\(\) >= imageWorkNotBefore\) \{/u);
 
 const fanActivity = read("slurp-fan-activity-scheduler.service.ts");
 assert.match(fanActivity, /schedule\(slurpPollBackoffMs\(POLL_MS, consecutiveFailures\)\)/);

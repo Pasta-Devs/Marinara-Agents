@@ -81,8 +81,16 @@ for (let index = 0; index < 300; index += 1) {
   }
 }
 const total = [...kinds.values()].reduce((sum, value) => sum + value, 0);
-assert.ok((kinds.get("like") ?? 0) / total > 0.7, "most reactions are just a like");
+assert.ok((kinds.get("like") ?? 0) / total > 0.6, "most reactions are still just a like");
 assert.ok((kinds.get("follow") ?? 0) > 0, "some are somebody deciding to follow");
+// Comments were one in ten, which at this budget is one free comment every two and a half hours.
+// The comment section is the part a player reads, and it was the rarest thing the free tier made.
+// Pinned at both ends: too few is the bug this fixes, too many turns every post into a wall.
+const commentShare = (kinds.get("comment") ?? 0) / total;
+assert.ok(
+  commentShare > 0.12 && commentShare < 0.25,
+  `free comments must stay a meaningful minority, got ${(commentShare * 100).toFixed(0)}%`,
+);
 
 // ── Wiring ──────────────────────────────────────────────────────────────────
 const world = readFileSync(
@@ -126,10 +134,13 @@ for (let index = 0; index < 400; index += 1) {
 const pulseTotal = [...pulseKinds.values()].reduce((sum, value) => sum + value, 0);
 assert.ok((pulseKinds.get("comment") ?? 0) > 0, "the free tier has to produce some comments");
 assert.ok(
-  (pulseKinds.get("comment") ?? 0) / pulseTotal < 0.2,
+  (pulseKinds.get("comment") ?? 0) / pulseTotal < 0.25,
   "a comment section where everybody comments is not a comment section",
 );
-assert.ok((pulseKinds.get("like") ?? 0) > (pulseKinds.get("comment") ?? 0) * 4, "likes must dominate comments");
+// Three to one, not four. The free tier's comment share was raised deliberately — at the old one
+// in ten a new install collected one free comment every two and a half hours — so this pins the
+// new ratio rather than the old one. Likes are still what most people leave.
+assert.ok((pulseKinds.get("like") ?? 0) > (pulseKinds.get("comment") ?? 0) * 3, "likes must dominate comments");
 const storage = readFileSync(
   join(import.meta.dirname, "..", "packages/slurp/src/engine/packages/server/src/services/storage/slurp.storage.ts"),
   "utf8",

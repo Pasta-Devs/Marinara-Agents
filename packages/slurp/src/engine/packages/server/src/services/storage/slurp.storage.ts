@@ -235,6 +235,16 @@ export const slurpSettingsSchema = z.object({
   refreshesPerDay: z.number().int().min(0).max(24),
   generationGuidance: z.string().max(20_000),
   audienceTone: z.enum(SLURP_AUDIENCE_TONES),
+  /**
+   * Extra bodies for the free audience comment bank, merged with the shipped ones.
+   *
+   * The free tier writes the highest-volume text on the platform and must never call the model to
+   * do it, so it draws from a fixed bank. A fixed bank of any size eventually repeats, and the
+   * body is the part a reader notices. Storing the bank here makes it two things at once: a list
+   * the player can edit or clear in Settings, and somewhere a rare, cheap generation can leave new
+   * lines behind. One call buys hundreds of comments.
+   */
+  audienceReactionBank: z.array(z.string().min(1).max(120)).max(400),
   worldActivity: z.enum(SLURP_WORLD_ACTIVITY),
   platformScale: z.enum(SLURP_PLATFORM_SCALE),
   generationConnectionId: z.string().nullable(),
@@ -272,7 +282,7 @@ export const slurpSettingsSchema = z.object({
   autoPostingScheduleEnabled: z.boolean(),
   autoPostGenerationMode: z.enum(["pre_generate", "on_demand"]),
   fanActivityEnabled: z.boolean(),
-  fanActivityRunsPerDay: z.number().int().min(1).max(24),
+  fanActivityRunsPerDay: z.number().int().min(1).max(96),
   fanLikesPerRefresh: z.number().int().min(0).max(24),
   fanRepliesPerRefresh: z.number().int().min(0).max(12),
   fanRepostsPerRefresh: z.number().int().min(0).max(12),
@@ -867,7 +877,7 @@ export const DEFAULT_SLURP_SETTINGS: SlurpSettings = {
   // weighs 25 against a notable threshold of 40 (`slurp-event-weight.ts`), so comments group into
   // a single line instead of filling the notification list.
   fanActivityEnabled: true,
-  fanActivityRunsPerDay: 4,
+  fanActivityRunsPerDay: 8,
   // Likes belong to the pulse, which produces them free and continuously; spending a generated
   // batch slot on "who tapped like" buys nothing an RNG cannot. A couple are kept so somebody who
   // just wrote a comment can also be seen liking the post.
@@ -877,6 +887,9 @@ export const DEFAULT_SLURP_SETTINGS: SlurpSettings = {
   // roughly the same like-to-comment ratio the displayed counts in `slurp-reach.ts` already claim.
   fanRepliesPerRefresh: 6,
   fanRepostsPerRefresh: 2,
+  // Ships empty: the shipped bodies carry a new install on their own, and a bank the player never
+  // asked for should not arrive pre-filled with lines they did not choose.
+  audienceReactionBank: [],
   fanArchetypeWeights: {
     ordinary: 1,
     eccentric: 1,

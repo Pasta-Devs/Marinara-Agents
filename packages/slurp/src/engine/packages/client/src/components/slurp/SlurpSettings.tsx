@@ -313,6 +313,7 @@ export function SlurpSettings({
   const [selectedCreatorId, setSelectedCreatorId] = useState<string | null>(null);
   const [customPaceOpen, setCustomPaceOpen] = useState(false);
   const [adsWorldDraft, setAdsWorldDraft] = useState<string | null>(null);
+  const [reactionBankDraft, setReactionBankDraft] = useState<string | null>(null);
   const [saveState, setSaveState] = useState<"idle" | "saving" | "saved" | "error">("idle");
   useEffect(() => {
     if (settings) {
@@ -2000,8 +2001,39 @@ export function SlurpSettings({
                           <NumberSetting
                             value={settings.fanActivityRunsPerDay}
                             min={1}
-                            max={24}
+                            max={96}
                             onSave={(value) => update("fanActivityRunsPerDay", value)}
+                          />
+                        </Field>
+                        <Field
+                          label={t("ui.slurp.settings.audience.reactionBank")}
+                          detail={t("ui.slurp.settings.audience.reactionBankDetail", {
+                            count: settings.audienceReactionBank.length,
+                          })}
+                        >
+                          <textarea
+                            rows={6}
+                            value={reactionBankDraft ?? settings.audienceReactionBank.join("\n")}
+                            onChange={(event) => setReactionBankDraft(event.target.value)}
+                            onBlur={() => {
+                              const draft = reactionBankDraft;
+                              setReactionBankDraft(null);
+                              if (draft === null) return;
+                              // Same rules the server applies, so what the box shows after a save is
+                              // what was actually stored rather than a list that silently lost rows.
+                              const seen = new Set<string>();
+                              const next: string[] = [];
+                              for (const line of draft.split("\n")) {
+                                const body = line.trim().slice(0, 120);
+                                const key = body.toLowerCase();
+                                if (!body || seen.has(key) || next.length >= 400) continue;
+                                seen.add(key);
+                                next.push(body);
+                              }
+                              if (next.join("\n") !== settings.audienceReactionBank.join("\n"))
+                                void update("audienceReactionBank", next);
+                            }}
+                            className="w-full rounded-lg border border-[var(--slurp-outline)] bg-[var(--slurp-canvas)] p-3 text-base focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--slurp-focus)] disabled:opacity-50 sm:text-sm"
                           />
                         </Field>
                         <div className="rounded-lg border border-[var(--border)] p-3 text-xs text-[var(--muted-foreground)]">

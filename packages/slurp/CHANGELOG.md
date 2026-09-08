@@ -1,5 +1,14 @@
 # Slurp release notes
 
+## 1.2.22 — 2026-09-08
+
+- The free audience reactions that arrive while you read now get busier as you add Creators. The budget averaged audience size across posts instead of adding it up, so six Creators produced exactly as few likes, follows, and comments as one, and posting more only diluted it.
+- Free audience comments are now roughly six times more frequent. At six new Creators one arrives about every 25 minutes, where it used to be one every two and a half hours.
+- Added a Free comment bank in Audience settings. It holds the short comments the audience leaves for free, you can edit or clear it, and Slurp tops it up occasionally so the same lines stop repeating.
+- Doubled the shipped free comment lines.
+- Automatic posting no longer slows to one pass every thirty minutes when a Creator's artwork cannot be drawn. A missing image connection used to stall publishing for a reason unrelated to posting.
+- Audience activity runs can now be set up to 96 a day, and the default is 8 a day instead of 4.
+
 ## 1.2.21 — 2026-09-08
 
 - A selected image style profile now applies to every generated image. When prompt interpretation rewrote the prompt, its result went to the image provider without the style being applied again, so the style appeared to work only sometimes.

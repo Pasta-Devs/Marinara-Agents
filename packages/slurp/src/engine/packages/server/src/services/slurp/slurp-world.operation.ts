@@ -291,7 +291,7 @@ export async function advanceSlurpWorld(db: DB, until = new Date()): Promise<Slu
     let pulsed = 0;
     for (const action of pulse) {
       try {
-        if (await applyPulse(db, action)) pulsed += 1;
+        if (await applyPulse(db, action, settings.audienceReactionBank)) pulsed += 1;
       } catch (error) {
         logger.warn(error, "[slurp-world] Could not apply a %s pulse", action.kind);
       }
@@ -520,7 +520,7 @@ async function applyAction(db: DB, action: SlurpWorldAction, at: Date): Promise<
  * highest-volume text on the platform and the least worth reading. The batched run keeps the
  * model, and keeps it for comments that have actually seen the post.
  */
-async function applyPulse(db: DB, action: SlurpPulseAction): Promise<boolean> {
+async function applyPulse(db: DB, action: SlurpPulseAction, reactionBank: readonly string[]): Promise<boolean> {
   const noodle = createSlurpStorage(db);
   const actor = await resolveActor(db, action.actorAccountId);
   if (!actor) return false;
@@ -530,7 +530,7 @@ async function applyPulse(db: DB, action: SlurpPulseAction): Promise<boolean> {
     actorId: actor.id,
     type: isComment ? "reply" : "like",
     // Tier 1 copy, so this stays free: the pulse runs unattended and must never call the model.
-    content: isComment ? slurpAudienceReaction(`${action.postId}:${actor.id}`) : null,
+    content: isComment ? slurpAudienceReaction(`${action.postId}:${actor.id}`, reactionBank) : null,
   });
   if (!result?.created) return false;
   const population = createSlurpPopulationStorage(db);

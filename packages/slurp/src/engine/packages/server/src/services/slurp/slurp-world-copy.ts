@@ -120,7 +120,7 @@ export function slurpAudienceOpener(seed: string): string {
  */
 const REACTION_OPENERS = ["ok", "no because", "sorry but", "genuinely", "listen", "", "", ""] as const;
 
-const REACTIONS = [
+export const SLURP_SHIPPED_REACTIONS = [
   "this is unfair",
   "you never miss",
   "how are you real",
@@ -139,17 +139,46 @@ const REACTIONS = [
   "instant favourite",
   "criminally good",
   "I keep coming back to this one",
+  "not the way I gasped",
+  "you are so unserious",
+  "this is illegal",
+  "brb rethinking my life",
+  "the lighting here",
+  "framed this in my head already",
+  "who allowed this",
+  "consistently unhinged and I love it",
+  "this ate",
+  "no notes",
+  "I need a minute",
+  "you understood the assignment",
+  "this belongs in a museum",
+  "okay but the outfit",
+  "every single time",
+  "I am normal about this",
+  "cannot be doing this to us",
+  "you are showing off now",
+  "well that ruined my morning",
+  "saving this one",
+  "the audacity honestly",
 ] as const;
 
 const REACTION_TAILS = ["", "", "", " 🔥", " 😍", " 🥺", "!!", "…", " ❤️", " 😭"] as const;
 
 /**
- * One low-effort comment. Three banks give well over a thousand distinct lines, which is more
- * than a player will read in a very long time.
+ * One low-effort comment.
+ *
+ * `extraBodies` is the bank the player can edit in Settings, topped up occasionally by
+ * `slurp-reaction-bank.operation.ts`. It is merged with the shipped bodies rather than replacing
+ * them, so a bank that is empty, half-written, or cleared out still leaves the free tier working.
+ *
+ * The body is the part a reader notices — the opener and tail only dress it — so the count that
+ * matters is the number of bodies, not the product of the three banks. Forty shipped bodies is the
+ * floor, and the stored bank is what carries volume past it.
  */
-export function slurpAudienceReaction(seed: string): string {
+export function slurpAudienceReaction(seed: string, extraBodies: readonly string[] = []): string {
+  const bodies = extraBodies.length > 0 ? [...SLURP_SHIPPED_REACTIONS, ...extraBodies] : SLURP_SHIPPED_REACTIONS;
   const opener = REACTION_OPENERS[pickIndex(seed, "reaction-open", REACTION_OPENERS.length)]!;
-  const body = REACTIONS[pickIndex(seed, "reaction", REACTIONS.length)]!;
+  const body = bodies[pickIndex(seed, "reaction", bodies.length)]!;
   const tail = REACTION_TAILS[pickIndex(seed, "reaction-tail", REACTION_TAILS.length)]!;
   return `${opener ? `${opener} ` : ""}${body}${tail}`;
 }

@@ -1663,6 +1663,8 @@
   "ui.slurp.settings.audience.refresh": "Refresh now",
   "ui.slurp.settings.audience.replies": "Replies",
   "ui.slurp.settings.audience.reposts": "Reposts",
+  "ui.slurp.settings.audience.reactionBank": "Free comment bank",
+  "ui.slurp.settings.audience.reactionBankDetail": "One short comment per line. These are written by the audience for free, with no model call. Slurp adds new lines here occasionally. Currently {{count}} stored on top of the shipped ones.",
   "ui.slurp.settings.audience.runsPerDay": "Runs per day",
   "ui.slurp.settings.audience.runsPerDayDetail": "How often Slurp creates audience activity.",
   "ui.slurp.settings.audience.scale.intimate": "Intimate",

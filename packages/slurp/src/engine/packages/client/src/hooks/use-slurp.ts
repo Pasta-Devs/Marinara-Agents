@@ -323,6 +323,7 @@ export type SlurpSettings = {
   maxRepliesPerRefresh: number;
   allowGalleryImageAttachments: boolean;
   fanActivityRunsPerDay: number;
+  audienceReactionBank: string[];
   fanLikesPerRefresh: number;
   fanRepliesPerRefresh: number;
   fanRepostsPerRefresh: number;

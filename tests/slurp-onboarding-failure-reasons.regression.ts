@@ -19,6 +19,7 @@ const parsers = Object.fromEntries(
     "slurp-garnish-generation.service.ts",
     "slurp-message-generation.service.ts",
     "slurp-pending-text.service.ts",
+    "slurp-reaction-bank.operation.ts",
   ].map((file) => [file, read(`${slurpServices}${file}`)] as const),
 );
 const routes = read("packages/slurp/src/engine/packages/server/src/routes/slurp.routes.ts");

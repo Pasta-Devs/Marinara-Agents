@@ -32,7 +32,7 @@ export const SLURP_PULSE_POST_MAX_AGE_HOURS = 48;
 export const SLURP_PULSE_MAX_PER_TICK = 6;
 
 /** Minutes of elapsed time that buy one reaction for a creator of reference size. */
-const MINUTES_PER_REACTION = 4;
+const MINUTES_PER_REACTION = 3;
 
 /** Audience size at which a Creator earns reactions at the reference rate. */
 const REFERENCE_REACH = 3_000;
@@ -122,7 +122,12 @@ export function planSlurpWorldPulse(input: {
   );
   if (fresh.length === 0 || input.audience.length === 0) return [];
 
-  const totalReach = fresh.reduce((sum, target) => sum + Math.max(0, target.creatorReach), 0) / fresh.length;
+  // Sum over distinct Creators rather than average over posts. This divided by `fresh.length`,
+  // which made the name a lie and the dial useless: six Creators pulsed exactly as slowly as one,
+  // and publishing more only diluted the mean, so the two things a player does to make the world
+  // busier both did nothing. Reach belongs to a Creator, so one with eight fresh posts counts once.
+  const reachByCreator = new Map(fresh.map((target) => [target.creatorAccountId, Math.max(0, target.creatorReach)]));
+  const totalReach = [...reachByCreator.values()].reduce((sum, value) => sum + value, 0);
   const budget = slurpPulseBudget(input.elapsedMinutes * activity, totalReach);
   if (budget <= 0) return [];
 
@@ -143,15 +148,17 @@ export function planSlurpWorldPulse(input: {
     const key = `${chosen.target.postId}:${actor}`;
     if (used.has(key)) continue;
     used.add(key);
-    // Roughly one in six reactions is somebody deciding to follow rather than just tapping like,
-    // and one in ten is somebody typing three words. Likes stay the overwhelming majority, which
-    // is the ratio every real feed has and the one `slurp-reach.ts` already claims in its counts.
+    // Roughly one in six reactions is somebody deciding to follow rather than just tapping like.
+    // Comments were one in ten, which at this budget is one free comment every two and a half
+    // hours — the comment section is the part a player actually reads, and it was the rarest
+    // thing the free tier produced. Likes are still the clear majority, as every real feed has
+    // and as `slurp-reach.ts` already claims in its counts.
     const kindRoll = random();
     actions.push({
       creatorAccountId: chosen.target.creatorAccountId,
       postId: chosen.target.postId,
       actorAccountId: actor,
-      kind: kindRoll < 0.1 ? "comment" : kindRoll < 0.26 ? "follow" : "like",
+      kind: kindRoll < 0.18 ? "comment" : kindRoll < 0.34 ? "follow" : "like",
     });
   }
   return actions;
