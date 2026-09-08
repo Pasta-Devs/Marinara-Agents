@@ -27,6 +27,11 @@ export const slurpDmReplySchema = z.object({
   moodShift: z.enum(SLURP_MOOD_SHIFTS).optional().catch(undefined),
   remember: z.array(z.string()).optional().catch(undefined),
   sharePost: z.number().int().min(0).max(4).optional().catch(undefined),
+  image: z
+    .object({ prompt: z.string().trim().min(3).max(1000), caption: z.string().trim().max(500).optional() })
+    .nullable()
+    .optional()
+    .catch(undefined),
 });
 
 export type SlurpDmReply = {
@@ -34,11 +39,14 @@ export type SlurpDmReply = {
   moodShift: SlurpMoodShift;
   remember: string[];
   sharePost?: number;
+  image?: { prompt: string; caption: string };
 };
 
 /** The reply plus what the resolved stance allows the creator to do about the conversation. */
 export type SlurpGeneratedDmReply = SlurpDmReply & {
   latitude: SlurpStanceLatitude;
+  canSendImage: boolean;
+  imageMode: "friendly" | "hostile" | "none";
   sharedPost: { id: string; title: string | null; content: string; access: string; imageUrl: string | null } | null;
 };
 
@@ -63,5 +71,8 @@ export function readSlurpDmReply(value: unknown): SlurpDmReply {
       .filter((note) => note.length > 0)
       .slice(0, SLURP_NOTES_PER_REPLY),
     ...(parsed.data.sharePost === undefined ? {} : { sharePost: parsed.data.sharePost }),
+    ...(parsed.data.image?.prompt
+      ? { image: { prompt: parsed.data.image.prompt, caption: parsed.data.image.caption?.trim() ?? "" } }
+      : {}),
   };
 }

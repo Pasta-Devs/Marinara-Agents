@@ -19,6 +19,8 @@ import { recoverSlurpMood } from "./slurp-mood.js";
 import { activeSlurpStrikes, SLURP_COOL_OFF_HOURS, type SlurpStanceLatitude } from "./slurp-stance.js";
 import { resolveSlurpCreatorAvailability } from "./slurp-creator-schedule-context.js";
 import { slurpReplyPacing, splitSlurpReplyBurst, type SlurpReplyPacing } from "./slurp-messaging.js";
+import { generateSlurpCommissionImage } from "./slurp-commission-image.operation.js";
+import { slurpMessageMediaUrl } from "./slurp-media.js";
 
 export type SlurpReplyOutcome =
   | { status: "replied"; message: SlurpMessage; pacing: SlurpReplyPacing }
@@ -156,6 +158,48 @@ export async function replyToSlurpMessage(
               access: reply.sharedPost.access,
             },
           })) ?? stored;
+      }
+      if (reply.image && reply.canSendImage && input.force !== true) {
+        const imageAllowedBySettings = settings.enableImagePrompts === true;
+        const recentGeneratedImage = history.some(
+          (message) =>
+            message.imageUrl &&
+            typeof message.metadata.generatedContext === "string" &&
+            Date.now() - Date.parse(message.createdAt) < 3 * 60 * 60_000,
+        );
+        const drawn =
+          imageAllowedBySettings && !recentGeneratedImage
+            ? await generateSlurpCommissionImage(db, {
+                creatorAccountId: thread.creatorAccountId,
+                brief: `${reply.image.prompt}\nImage mode: ${reply.imageMode}`,
+              })
+            : "unavailable";
+        if (drawn !== "unavailable") {
+          const price =
+            thread.rapport.tier === "whale" || thread.rapport.tier === "favourite"
+              ? 0
+              : Math.max(1, messaging.ppvPrice || 10);
+          const imageMessage = await messagesStore.appendMessage(thread.id, {
+            senderAccountId: thread.creatorAccountId,
+            role: "creator",
+            kind: price > 0 ? "ppv" : "text",
+            content: reply.image.caption,
+            price,
+            unlockedAt: price > 0 ? null : new Date().toISOString(),
+            metadata: { noodlerMediaPath: drawn.mediaPath, generatedContext: reply.imageMode },
+          });
+          if (!imageMessage) {
+            drawn.compensate();
+          } else {
+            drawn.promote();
+            await messagesStore.setMessageMedia(
+              imageMessage.id,
+              slurpMessageMediaUrl(imageMessage.id),
+              drawn.mediaPath,
+            );
+            stored = imageMessage;
+          }
+        }
       }
       // After the message is safely stored. The conversation's mood and what she now knows are
       // worth keeping, but never at the price of the reply itself.

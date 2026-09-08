@@ -67,6 +67,8 @@ export type SlurpStance = {
   instructions: string[];
   /** Every layer that fed the decision, for the debug panel and the creator panel. */
   evidence: SlurpStanceEvidence[];
+  canSendImage: boolean;
+  imageMode: "friendly" | "hostile" | "none";
 };
 
 export type SlurpStanceInput = {
@@ -153,6 +155,8 @@ export function resolveSlurpStance(input: SlurpStanceInput): SlurpStance {
       latitude: "cool_off",
       instructions: ["You have stepped away from this conversation and you are not talking to this person right now."],
       evidence: [{ layer: "boundary", value: "cooling off", effect: "no reply until the cool-off ends" }],
+      canSendImage: false,
+      imageMode: "none",
     };
   }
 
@@ -224,7 +228,14 @@ export function resolveSlurpStance(input: SlurpStanceInput): SlurpStance {
     instructions.push("Keep this reply short and a little cold. Do not pretend the conversation is going well.");
   }
 
-  return { warmth, latitude, instructions, evidence };
+  const canSendImage = warmth === "warm" || warmth === "close" || (warmth === "cold" && input.tone === "unfiltered");
+  const imageMode = canSendImage ? (warmth === "cold" ? "hostile" : "friendly") : "none";
+  evidence.push({
+    layer: "media latitude",
+    value: imageMode,
+    effect: canSendImage ? "a generated picture is allowed when it fits" : "no generated picture",
+  });
+  return { warmth, latitude, instructions, evidence, canSendImage, imageMode };
 }
 
 const WARMTH_ORDER: SlurpStanceWarmth[] = ["cold", "guarded", "neutral", "warm", "close"];
