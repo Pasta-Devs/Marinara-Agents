@@ -16,6 +16,7 @@ import { SLURP_DM_POLICIES } from "../services/slurp/slurp-messaging.js";
 import { SLURP_DEFAULT_RAPPORT_WEIGHTS } from "../services/slurp/slurp-rapport.js";
 import { activeSlurpStrikes } from "../services/slurp/slurp-stance.js";
 import { readSlurpAudienceTone } from "../services/slurp/slurp-tone.js";
+import { resolveSlurpMediaOffer } from "../services/slurp/slurp-media-offer.js";
 import { existsSync } from "node:fs";
 import { basename, dirname } from "node:path";
 import { generateSlurpCommissionImage } from "../services/slurp/slurp-commission-image.operation.js";
@@ -42,7 +43,7 @@ const MESSAGE_MEDIA_EXTENSIONS = new Set([".jpg", ".jpeg", ".png", ".gif", ".web
 async function readSlurpMessageImage(
   req: FastifyRequest,
 ): Promise<{ payload: Record<string, string>; media: { buffer: Buffer; extension: string } }> {
-  let payload: Record<string, string> = {};
+  const payload: Record<string, string> = {};
   let media: { buffer: Buffer; extension: string } | null = null;
   for await (const part of req.parts({ limits: { fileSize: MESSAGE_MEDIA_MAX_BYTES, files: 1 } })) {
     if (part.type === "field") {
@@ -187,7 +188,14 @@ export async function slurpMessageRoutes(app: FastifyInstance) {
     (await messages.listMessages(threadId)).map((message) =>
       side === "viewer" && message.kind === "ppv" && !message.unlockedAt
         ? { ...message, content: "", imageUrl: null }
-        : message,
+        : side === "viewer" && message.kind === "post_preview" && message.metadata.previewLocked === true
+          ? {
+              ...message,
+              content: "",
+              imageUrl: null,
+              metadata: { ...message.metadata, content: "", imageUrl: null },
+            }
+          : message,
     );
 
   /**
@@ -284,38 +292,26 @@ export async function slurpMessageRoutes(app: FastifyInstance) {
       ...(await creatorPresence(creator, thread.id)),
       messaging: await messages.getCreatorMessaging(thread.creatorAccountId),
       commissions: await messages.listCommissionsForThread(thread.id),
-      // What the info panel renders. Two different answers on purpose: the fan gets words, the
-      // Creator's operator gets the numbers, because one is a relationship and the other is a
-      // business. `slurp-rapport.ts` is explicit that a score must never reach a thread.
-      relationship:
-        side === "creator"
-          ? {
-              side,
-              tier: thread.rapport.tier,
-              score: thread.rapport.score,
-              contributions: thread.rapport.contributions,
-              mood: thread.mood,
-              strikes: activeSlurpStrikes(thread.strikes, thread.lastStrikeAt),
-              notes: thread.notes,
-              coolUntil: thread.coolUntil,
-              dayVibe: await describeSlurpDayVibe(app.db, thread.creatorAccountId),
-              availability: (await creatorPresence(creator, thread.id)).creatorAvailability,
-              audienceTone: readSlurpAudienceTone((await slurp.getSettings()).audienceTone),
-              imageMode:
-                thread.mood <= -40 && readSlurpAudienceTone((await slurp.getSettings()).audienceTone) === "unfiltered"
-                  ? "hostile"
-                  : thread.mood >= 20
-                    ? "friendly"
-                    : "none",
-            }
-          : {
-              side,
-              tier: thread.rapport.tier,
-              // No score and no mood. A meter invites the player to farm it, and a fast one
-              // invites them to test it.
-              spentCoins: await messages.spentWithCreator(thread.viewerAccountId, thread.creatorAccountId),
-              coolUntil: thread.coolUntil,
-            },
+      relationship: {
+        side,
+        tier: thread.rapport.tier,
+        score: thread.rapport.score,
+        contributions: thread.rapport.contributions,
+        mood: thread.mood,
+        strikes: activeSlurpStrikes(thread.strikes, thread.lastStrikeAt),
+        notes: thread.notes,
+        spentCoins: await messages.spentWithCreator(thread.viewerAccountId, thread.creatorAccountId),
+        coolUntil: thread.coolUntil,
+        dayVibe: await describeSlurpDayVibe(app.db, thread.creatorAccountId),
+        availability: (await creatorPresence(creator, thread.id)).creatorAvailability,
+        audienceTone: readSlurpAudienceTone((await slurp.getSettings()).audienceTone),
+        imageMode:
+          thread.mood <= -40 && readSlurpAudienceTone((await slurp.getSettings()).audienceTone) === "unfiltered"
+            ? "hostile"
+            : thread.mood >= 20
+              ? "friendly"
+              : "none",
+      },
     };
   });
 
@@ -345,8 +341,22 @@ export async function slurpMessageRoutes(app: FastifyInstance) {
         ? {
             side: "viewer" as const,
             tier: thread.rapport.tier,
+            score: thread.rapport.score,
+            contributions: thread.rapport.contributions,
+            mood: thread.mood,
+            strikes: activeSlurpStrikes(thread.strikes, thread.lastStrikeAt),
+            notes: thread.notes,
             spentCoins: await messages.spentWithCreator(thread.viewerAccountId, thread.creatorAccountId),
             coolUntil: thread.coolUntil,
+            dayVibe: await describeSlurpDayVibe(app.db, thread.creatorAccountId),
+            availability: (await creatorPresence(creator, thread.id)).creatorAvailability,
+            audienceTone: readSlurpAudienceTone((await slurp.getSettings()).audienceTone),
+            imageMode:
+              thread.mood <= -40 && readSlurpAudienceTone((await slurp.getSettings()).audienceTone) === "unfiltered"
+                ? "hostile"
+                : thread.mood >= 20
+                  ? "friendly"
+                  : "none",
           }
         : undefined,
       // The client shows the gate before the first message is written, so it must know the
@@ -752,6 +762,7 @@ export async function slurpMessageRoutes(app: FastifyInstance) {
         creatorAccountId: z.string().min(1),
         prompt: z.string().trim().min(3).max(1000),
         content: z.string().max(1000).default(""),
+        intent: z.enum(["friendly", "hostile", "premium", "preview"]).default("friendly"),
       })
       .safeParse(req.body ?? {});
     if (!parsed.success) return reply.code(400).send({ error: parsed.error.flatten() });
@@ -763,6 +774,19 @@ export async function slurpMessageRoutes(app: FastifyInstance) {
       !(await ownsCreator(parsed.data.personaId, thread.creatorAccountId))
     )
       return reply.code(404).send({ error: "Thread not found" });
+    if (thread.coolUntil && thread.coolUntil > new Date().toISOString()) {
+      return reply.code(409).send({ error: "This conversation is cooling off." });
+    }
+    const subscribed = (await slurp.listSubscriptionsForViewer(thread.viewerAccountId)).some(
+      (entry) => entry.creatorAccountId === thread.creatorAccountId,
+    );
+    const messaging = await messages.getCreatorMessaging(thread.creatorAccountId);
+    const offer = resolveSlurpMediaOffer({
+      intent: parsed.data.intent,
+      rapportTier: thread.rapport.tier,
+      subscribed,
+      configuredPrice: messaging.ppvPrice,
+    });
     const drawn = await generateSlurpCommissionImage(app.db, {
       creatorAccountId: thread.creatorAccountId,
       brief: parsed.data.prompt,
@@ -771,8 +795,15 @@ export async function slurpMessageRoutes(app: FastifyInstance) {
     try {
       const message = await messages.sendCreatorMessage(thread.creatorAccountId, thread.viewerAccountId, {
         content: parsed.data.content,
+        kind: offer.visibility === "locked" ? "ppv" : "text",
+        price: offer.price,
+        unlockedAt: offer.visibility === "free" ? new Date().toISOString() : null,
         imageUrl: slurpMessageMediaUrl("pending"),
-        metadata: { noodlerMediaPath: drawn.mediaPath },
+        metadata: {
+          noodlerMediaPath: drawn.mediaPath,
+          generatedContext: parsed.data.intent,
+          mediaReason: offer.reason,
+        },
       });
       if (!message) return reply.code(404).send({ error: "Thread not found" });
       drawn.promote();
@@ -825,6 +856,60 @@ export async function slurpMessageRoutes(app: FastifyInstance) {
       return { message: { ...sent, imageUrl: slurpMessageMediaUrl(sent.id) }, replyStatus: outcome.status };
     } catch (error) {
       staged.compensate();
+      throw error;
+    }
+  });
+
+  app.post("/messages/threads/:threadId/viewer-image", async (req, reply) => {
+    const parsed = z
+      .object({
+        personaId: z.string().min(1),
+        creatorAccountId: z.string().min(1),
+        prompt: z.string().trim().min(3).max(1000),
+        content: z.string().max(1000).default(""),
+      })
+      .safeParse(req.body ?? {});
+    if (!parsed.success) return reply.code(400).send({ error: parsed.error.flatten() });
+    const { threadId } = req.params as { threadId: string };
+    const thread = await messages.getThreadById(threadId);
+    const viewer = await requireViewer(parsed.data.personaId);
+    if (
+      !thread ||
+      !viewer ||
+      thread.viewerAccountId !== viewer.id ||
+      thread.creatorAccountId !== parsed.data.creatorAccountId
+    )
+      return reply.code(404).send({ error: "Thread not found" });
+    if (thread.coolUntil && thread.coolUntil > new Date().toISOString())
+      return reply.code(409).send({ error: "This conversation is cooling off." });
+    const recentImage = (await messages.listMessages(thread.id)).some(
+      (message) =>
+        message.role === "viewer" &&
+        message.metadata.generatedContext === "viewer" &&
+        Date.now() - Date.parse(message.createdAt) < 3 * 60 * 60_000,
+    );
+    if (recentImage) return reply.code(429).send({ error: "You can generate another picture later." });
+    const drawn = await generateSlurpCommissionImage(app.db, {
+      creatorAccountId: thread.creatorAccountId,
+      brief: parsed.data.prompt,
+    });
+    if (drawn === "unavailable") return reply.code(503).send({ error: "Image generation is not available." });
+    try {
+      const message = await messages.appendMessage(thread.id, {
+        senderAccountId: viewer.id,
+        role: "viewer",
+        content: parsed.data.content,
+        imageUrl: slurpMessageMediaUrl("pending"),
+        unlockedAt: new Date().toISOString(),
+        metadata: { noodlerMediaPath: drawn.mediaPath, generatedContext: "viewer" },
+      });
+      if (!message) return reply.code(404).send({ error: "Thread not found" });
+      drawn.promote();
+      await messages.setMessageMedia(message.id, slurpMessageMediaUrl(message.id), drawn.mediaPath);
+      const outcome = await replyToSlurpMessage(app.db, { threadId, triggerMessageId: message.id });
+      return { message: { ...message, imageUrl: slurpMessageMediaUrl(message.id) }, replyStatus: outcome.status };
+    } catch (error) {
+      drawn.compensate();
       throw error;
     }
   });
