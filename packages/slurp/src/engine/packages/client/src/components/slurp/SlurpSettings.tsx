@@ -2993,7 +2993,7 @@ function CreatorMessagingGroup({
   setPrice: ReturnType<typeof useSetSlurpCreatorPrice>;
 }) {
   const { t } = useTranslation();
-  const query = useSlurpCreatorMessagingSettings(creatorId);
+  const query = useSlurpCreatorMessagingSettings(creatorId, personaId);
   const messaging = query.data?.messaging;
   const busy = setMessaging.isPending || setPrice.isPending;
   if (query.isLoading) {

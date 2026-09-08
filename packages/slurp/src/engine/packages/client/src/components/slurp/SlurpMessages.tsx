@@ -106,8 +106,11 @@ export function SlurpMessagesView({
     if (initialThreadId) {
       setComposeWith(null);
       setOpenThreadId(initialThreadId);
+    } else {
+      setOpenThreadId(null);
+      setComposeWith(composeWithCreatorAccountId);
     }
-  }, [initialThreadId]);
+  }, [composeWithCreatorAccountId, initialThreadId]);
 
   useEffect(() => {
     onConversationOpenChange?.(Boolean(openThreadId || composeWith));
@@ -507,12 +510,12 @@ function SlurpThreadView({
 
   return (
     <div className="flex min-h-0 flex-1 flex-col bg-[color-mix(in_srgb,var(--slurp-surface)_45%,transparent)]">
-      <div className="flex shrink-0 items-center gap-2 border-b border-[var(--noodle-divider)] bg-[var(--slurp-glass)] px-2 py-2 backdrop-blur-xl">
+      <div className="flex shrink-0 items-center gap-2 border-b border-[var(--noodle-divider)] bg-[var(--slurp-glass)] px-2 py-2.5 backdrop-blur-xl">
         <button
           type="button"
           onClick={onBack}
           className={cn(
-            "flex h-10 w-10 items-center justify-center rounded-full text-[var(--noodle-accent)] hover:bg-[var(--noodle-accent)]/10",
+            "flex h-11 w-11 items-center justify-center rounded-full text-[var(--noodle-accent)] transition-[background-color,transform] hover:bg-[var(--noodle-accent)]/10 active:scale-[0.96] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--slurp-focus)] motion-reduce:transition-none motion-reduce:active:scale-100",
             desktopSplit && "md:hidden",
           )}
           aria-label={localizeUi("ui.slurp.messages.backToInbox", { defaultValue: "Back to inbox" })}
@@ -522,7 +525,7 @@ function SlurpThreadView({
         <button
           type="button"
           onClick={() => headerProfileId && onOpenProfile(headerProfileId)}
-          className="flex min-w-0 flex-1 items-center gap-2 rounded-lg px-1 py-1 text-left hover:bg-[var(--noodle-accent)]/[0.06]"
+          className="flex min-h-11 min-w-0 flex-1 items-center gap-2.5 rounded-xl px-2 py-1 text-left transition-colors hover:bg-[var(--noodle-accent)]/[0.06] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--slurp-focus)] motion-reduce:transition-none"
         >
           {headerAccount && <Avatar account={headerAccount} size="sm" />}
           <span className="min-w-0">
@@ -557,14 +560,14 @@ function SlurpThreadView({
       </div>
 
       {thread?.state === "request" && (
-        <div className="shrink-0 border-b border-[var(--noodle-divider)] bg-amber-500/[0.07] px-4 py-3">
-          <p className="text-xs text-[var(--muted-foreground)]">
+        <div className="mx-3 mt-3 shrink-0 rounded-2xl bg-amber-500/[0.08] px-4 py-3 ring-1 ring-inset ring-amber-500/25">
+          <p className="text-xs leading-5 text-[var(--muted-foreground)]">
             {ownsCreator
               ? localizeUi("ui.slurp.messages.requestForYou", {
-                  defaultValue: "This fan is waiting for you to accept their message request.",
+                  defaultValue: "Accept, decline, or reply to open this conversation.",
                 })
               : localizeUi("ui.slurp.messages.requestPending", {
-                  defaultValue: "Your message is waiting to be accepted. Subscribing gets you through the queue.",
+                  defaultValue: "This request stays pending until the Creator accepts or replies.",
                 })}
           </p>
           {ownsCreator && personaId && thread && (
@@ -573,7 +576,7 @@ function SlurpThreadView({
                 type="button"
                 disabled={resolveRequest.isPending}
                 onClick={() => resolveRequest.mutate({ threadId: thread.id, personaId, decision: "accept" })}
-                className="inline-flex min-h-9 items-center gap-1.5 rounded-lg bg-[var(--noodle-accent)] px-3 text-xs font-bold text-zinc-950 disabled:opacity-50"
+                className="inline-flex min-h-11 items-center gap-1.5 rounded-xl bg-[var(--noodle-accent)] px-4 text-xs font-bold text-zinc-950 transition-transform active:scale-[0.96] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--slurp-focus)] disabled:opacity-50 motion-reduce:transition-none motion-reduce:active:scale-100"
               >
                 <Check size={14} /> {localizeUi("ui.slurp.messages.accept", { defaultValue: "Accept" })}
               </button>
@@ -581,7 +584,7 @@ function SlurpThreadView({
                 type="button"
                 disabled={resolveRequest.isPending}
                 onClick={() => resolveRequest.mutate({ threadId: thread.id, personaId, decision: "decline" })}
-                className="inline-flex min-h-9 items-center gap-1.5 rounded-lg px-3 text-xs font-bold text-[var(--muted-foreground)] ring-1 ring-inset ring-[var(--noodle-divider)] disabled:opacity-50"
+                className="inline-flex min-h-11 items-center gap-1.5 rounded-xl px-4 text-xs font-bold text-[var(--muted-foreground)] ring-1 ring-inset ring-[var(--noodle-divider)] transition-[background-color,transform] hover:bg-[var(--slurp-surface)] active:scale-[0.96] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--slurp-focus)] disabled:opacity-50 motion-reduce:transition-none motion-reduce:active:scale-100"
               >
                 <X size={14} /> {localizeUi("ui.slurp.messages.decline", { defaultValue: "Decline" })}
               </button>
@@ -591,7 +594,7 @@ function SlurpThreadView({
       )}
 
       <div className="min-h-0 flex-1 overflow-y-auto px-3 py-4">
-        <div className="mx-auto flex w-full max-w-2xl flex-col gap-2">
+        <div className="mx-auto flex w-full max-w-2xl flex-col gap-3">
           {messages.length === 0 && messaging && (
             <p className="mx-auto max-w-sm rounded-xl bg-[var(--slurp-surface)] px-4 py-3 text-center text-xs text-[var(--muted-foreground)] ring-1 ring-inset ring-[var(--noodle-divider)]">
               {messaging.dmPolicy === "closed"
@@ -623,7 +626,19 @@ function SlurpThreadView({
             />
           ))}
           {commissions.length > 0 && personaId && (
-            <div className="my-3 flex w-full flex-col gap-2 rounded-2xl bg-[color-mix(in_srgb,var(--slurp-violet)_9%,var(--slurp-surface))] p-2 ring-1 ring-inset ring-[var(--slurp-violet)]/25 shadow-[var(--slurp-shadow-raised)]">
+            <section className="my-3 flex w-full flex-col gap-2 rounded-2xl bg-[color-mix(in_srgb,var(--slurp-violet)_9%,var(--slurp-surface))] p-3 ring-1 ring-inset ring-[var(--slurp-violet)]/25 shadow-[var(--slurp-shadow-raised)]">
+              <div className="flex items-center justify-between gap-3 px-1">
+                <h3 className="flex items-center gap-2 text-sm font-black">
+                  <Palette size={16} className="text-[var(--noodle-accent)]" aria-hidden="true" />
+                  {localizeUi("ui.slurp.messages.commissionSection", { defaultValue: "Commissions" })}
+                </h3>
+                <span className="text-xs font-semibold text-[var(--muted-foreground)]">
+                  {localizeUi("ui.slurp.messages.commissionCount", {
+                    defaultValue: "{{count}} total",
+                    count: commissions.length,
+                  })}
+                </span>
+              </div>
               {commissions.map((commission) => (
                 <CommissionRow
                   key={commission.id}
@@ -632,7 +647,7 @@ function SlurpThreadView({
                   ownsCreator={ownsCreator}
                 />
               ))}
-            </div>
+            </section>
           )}
           {typing && (
             <p
@@ -658,7 +673,10 @@ function SlurpThreadView({
       <div className="shrink-0 border-t border-[var(--noodle-divider)] p-2">
         <div className="mx-auto flex w-full max-w-2xl flex-col gap-2">
           {toolsOpen && (
-            <div className="flex flex-col gap-2 rounded-2xl bg-[var(--slurp-surface-raised)] p-2 ring-1 ring-inset ring-[var(--noodle-divider)] shadow-[var(--slurp-shadow-floating)]">
+            <div className="flex flex-col gap-2 rounded-2xl bg-[var(--slurp-surface-raised)] p-3 ring-1 ring-inset ring-[var(--noodle-divider)] shadow-[var(--slurp-shadow-floating)]">
+              <p className="px-1 text-xs font-black text-[var(--foreground)]">
+                {localizeUi("ui.slurp.messages.chatExtras", { defaultValue: "Chat extras" })}
+              </p>
               {ownsCreator && personaId && thread ? (
                 <CreatorMessageTools
                   creatorAccountId={thread.creatorAccountId}
@@ -703,7 +721,7 @@ function SlurpThreadView({
                         ),
                       );
                   }}
-                  className="self-start rounded-lg px-2 py-1 text-xs font-bold text-[var(--noodle-accent)] ring-1 ring-inset ring-[var(--noodle-accent)]/40 hover:bg-[var(--noodle-accent)]/10 disabled:opacity-50"
+                  className="min-h-11 self-start rounded-xl px-3 text-xs font-bold text-[var(--noodle-accent)] ring-1 ring-inset ring-[var(--noodle-accent)]/40 transition-[background-color,transform] hover:bg-[var(--noodle-accent)]/10 active:scale-[0.96] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--slurp-focus)] disabled:opacity-50 motion-reduce:transition-none motion-reduce:active:scale-100"
                 >
                   {draftReply.isPending
                     ? localizeUi("ui.slurp.messages.drafting", { defaultValue: "Writing…" })
@@ -718,7 +736,7 @@ function SlurpThreadView({
                     type="button"
                     disabled={busy || !personaId || !targetCreatorAccountId}
                     onClick={() => sendTip(amount)}
-                    className="min-h-8 rounded-full px-2.5 text-[0.7rem] font-bold text-[var(--noodle-accent)] ring-1 ring-inset ring-[var(--noodle-accent)]/40 transition-colors hover:bg-[var(--noodle-accent)]/10 disabled:opacity-50"
+                    className="min-h-11 rounded-full px-3 text-xs font-bold text-[var(--noodle-accent)] ring-1 ring-inset ring-[var(--noodle-accent)]/40 transition-[background-color,transform] hover:bg-[var(--noodle-accent)]/10 active:scale-[0.96] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--slurp-focus)] disabled:opacity-50 motion-reduce:transition-none motion-reduce:active:scale-100"
                   >
                     {localizeUi("ui.slurp.messages.tipAmount", { defaultValue: "Tip {{amount}}", amount })}
                   </button>
@@ -739,11 +757,15 @@ function SlurpThreadView({
               aria-expanded={toolsOpen}
               aria-label={localizeUi("ui.slurp.messages.toggleTools", { defaultValue: "Message tools" })}
               className={cn(
-                "flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-[var(--slurp-surface)] text-[var(--noodle-accent)] ring-1 ring-inset ring-[var(--noodle-divider)] transition-colors hover:bg-[var(--noodle-accent)]/10",
+                "flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-[var(--slurp-surface)] text-[var(--noodle-accent)] ring-1 ring-inset ring-[var(--noodle-divider)] transition-[background-color,transform] hover:bg-[var(--noodle-accent)]/10 active:scale-[0.96] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--slurp-focus)] motion-reduce:transition-none motion-reduce:active:scale-100",
                 toolsOpen && "bg-[var(--noodle-accent)]/15 ring-[var(--noodle-accent)]/45",
               )}
             >
-              <Plus size={18} className={cn("transition-transform", toolsOpen && "rotate-45")} />
+              <Plus
+                size={18}
+                className={cn("transition-transform motion-reduce:transition-none", toolsOpen && "rotate-45")}
+                aria-hidden="true"
+              />
             </button>
             <label className="sr-only" htmlFor="slurp-message-draft">
               {localizeUi("ui.slurp.messages.composerLabel", { defaultValue: "Write a message" })}
@@ -767,7 +789,7 @@ function SlurpThreadView({
             <button
               type="submit"
               disabled={busy || !draft.trim() || !personaId || !targetCreatorAccountId}
-              className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-[var(--noodle-accent)] text-zinc-950 transition-[opacity,transform] active:scale-[0.96] disabled:opacity-40 motion-reduce:active:scale-100"
+              className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-[var(--noodle-accent)] text-zinc-950 transition-[opacity,transform] active:scale-[0.96] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--slurp-focus)] disabled:opacity-40 motion-reduce:transition-none motion-reduce:active:scale-100"
               aria-label={localizeUi("ui.slurp.messages.send", { defaultValue: "Send" })}
             >
               <Send size={16} className="!text-zinc-950" />
@@ -792,28 +814,37 @@ function MessageBubble({
 }) {
   const { t: localizeUi } = useUiTranslation();
   const unlock = useUnlockSlurpMessage();
-  const messageImage = useSlurpMediaSrc(message.imageUrl);
+  const messageImage = useSlurpMediaSrc(
+    message.imageUrl
+      ? `${message.imageUrl}${message.imageUrl.includes("?") ? "&" : "?"}personaId=${encodeURIComponent(personaId ?? "")}`
+      : null,
+  );
   const mine = ownsCreator ? message.role === "creator" : message.role === "viewer";
   if (message.kind === "tip") {
     return (
       <p
         className={cn(
-          "inline-flex items-center gap-1.5 self-center rounded-full bg-[var(--noodle-accent)]/12 px-3 py-1 text-[0.7rem] font-bold text-[var(--noodle-accent)]",
+          "inline-flex items-center gap-1.5 self-center rounded-full bg-[var(--noodle-accent)]/12 px-3 py-1.5 text-xs font-bold text-[var(--noodle-accent)] ring-1 ring-inset ring-[var(--noodle-accent)]/15",
         )}
       >
-        {localizeUi("ui.slurp.messages.tipSent", { defaultValue: "Tipped", amount: message.price })}{" "}
+        {localizeUi("ui.slurp.messages.tipSent", { defaultValue: "Tip sent" })}{" "}
         <SlurpCoinAmount amount={message.price} />
       </p>
     );
   }
   return (
-    <div className={cn("flex max-w-[85%] flex-col gap-0.5", mine ? "self-end items-end" : "self-start items-start")}>
+    <div
+      className={cn(
+        "flex max-w-[88%] flex-col gap-1 sm:max-w-[78%]",
+        mine ? "self-end items-end" : "self-start items-start",
+      )}
+    >
       <div
         className={cn(
-          "whitespace-pre-wrap break-words rounded-2xl px-3 py-2 text-sm",
+          "whitespace-pre-wrap break-words rounded-[1.15rem] px-3.5 py-2.5 text-sm leading-relaxed shadow-[var(--slurp-shadow-raised)]",
           mine
-            ? "rounded-br-md bg-[var(--noodle-accent)] text-zinc-950"
-            : "rounded-bl-md bg-[var(--slurp-surface)] ring-1 ring-inset ring-[var(--noodle-divider)]",
+            ? "rounded-br-[0.35rem] bg-[var(--noodle-accent)] text-zinc-950"
+            : "rounded-bl-[0.35rem] bg-[var(--slurp-surface)] ring-1 ring-inset ring-[var(--noodle-divider)]",
         )}
       >
         {message.kind === "ppv" && !message.unlockedAt ? (
@@ -821,7 +852,7 @@ function MessageBubble({
             type="button"
             disabled={!personaId || unlock.isPending}
             onClick={() => personaId && unlock.mutate({ personaId, messageId: message.id })}
-            className="inline-flex items-center gap-1.5 text-left text-[var(--muted-foreground)] underline-offset-2 hover:underline disabled:opacity-60"
+            className="inline-flex min-h-11 items-center gap-1.5 rounded-lg px-1 text-left text-[var(--muted-foreground)] underline-offset-2 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--slurp-focus)] disabled:opacity-60"
           >
             <Lock size={13} aria-hidden="true" />
             {localizeUi("ui.slurp.messages.unlock", {
@@ -848,7 +879,7 @@ function MessageBubble({
             : localizeUi("ui.slurp.messages.unlockFailed", { defaultValue: "Unlock failed." })}
         </p>
       )}
-      <time dateTime={message.createdAt} className="px-1 text-[0.65rem] text-[var(--muted-foreground)]">
+      <time dateTime={message.createdAt} className="px-1 text-xs text-[var(--muted-foreground)]">
         {formatTime(message.createdAt, locale)}
       </time>
     </div>
@@ -984,12 +1015,12 @@ function CreatorMessageTools({
   };
 
   return (
-    <div className="rounded-xl bg-[var(--slurp-surface)] ring-1 ring-inset ring-[var(--noodle-divider)]">
+    <div className="overflow-hidden rounded-xl bg-[var(--slurp-surface)] ring-1 ring-inset ring-[var(--noodle-divider)]">
       <button
         type="button"
         onClick={() => setOpen((value) => !value)}
         aria-expanded={open}
-        className="flex min-h-10 w-full items-center gap-2 px-3 text-left text-xs font-bold"
+        className="flex min-h-11 w-full items-center gap-2 px-3 text-left text-xs font-bold transition-colors hover:bg-[var(--noodle-accent)]/[0.05] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--slurp-focus)] motion-reduce:transition-none"
       >
         <Lock size={14} className="text-[var(--noodle-accent)]" aria-hidden="true" />
         {localizeUi("ui.slurp.messages.sendPpv", { defaultValue: "Send locked content" })}
@@ -1068,9 +1099,14 @@ function CommissionRequest({
       </button>
       {open && (
         <div className="flex flex-col gap-2 border-t border-[var(--noodle-divider)] p-3">
-          <label className="sr-only" htmlFor="slurp-commission-brief">
+          <label className="text-xs font-bold" htmlFor="slurp-commission-brief">
             {localizeUi("ui.slurp.messages.commissionLabel", { defaultValue: "Commission brief" })}
           </label>
+          <p className="text-xs leading-5 text-[var(--muted-foreground)]">
+            {localizeUi("ui.slurp.messages.commissionRequestDetail", {
+              defaultValue: "Describe the finished piece. The Creator will quote a price before you pay.",
+            })}
+          </p>
           <textarea
             id="slurp-commission-brief"
             value={brief}
@@ -1082,18 +1118,21 @@ function CommissionRequest({
             })}
             className="w-full resize-y rounded-lg bg-[var(--slurp-canvas,var(--background))] px-3 py-2 text-sm outline-none ring-1 ring-inset ring-[var(--noodle-divider)] focus:ring-2 focus:ring-[var(--noodle-accent)]"
           />
-          <button
-            type="button"
-            disabled={disabled || pending || !brief.trim()}
-            onClick={() => {
-              onSubmit(brief.trim());
-              setBrief("");
-              setOpen(false);
-            }}
-            className="ml-auto min-h-9 rounded-lg bg-[var(--noodle-accent)] px-3 text-xs font-bold text-zinc-950 disabled:opacity-50"
-          >
-            {localizeUi("ui.slurp.messages.commissionSend", { defaultValue: "Send brief" })}
-          </button>
+          <div className="flex items-center justify-between gap-3">
+            <span className="text-xs tabular-nums text-[var(--muted-foreground)]">{brief.length}/2000</span>
+            <button
+              type="button"
+              disabled={disabled || pending || !brief.trim()}
+              onClick={() => {
+                onSubmit(brief.trim());
+                setBrief("");
+                setOpen(false);
+              }}
+              className="min-h-11 rounded-xl bg-[var(--noodle-accent)] px-4 text-xs font-bold text-zinc-950 transition-transform active:scale-[0.96] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--slurp-focus)] disabled:opacity-50 motion-reduce:transition-none motion-reduce:active:scale-100"
+            >
+              {localizeUi("ui.slurp.messages.commissionSend", { defaultValue: "Send request" })}
+            </button>
+          </div>
         </div>
       )}
     </div>
@@ -1127,7 +1166,7 @@ function CommissionRow({
   const [generateImage, setGenerateImage] = useState(false);
   const [delivery, setDelivery] = useState("");
   const [error, setError] = useState<string | null>(null);
-  const busy = quote.isPending || accept.isPending || deliver.isPending;
+  const busy = quote.isPending || accept.isPending || deliver.isPending || decline.isPending;
   const steps = ["brief", "quoted", "accepted", "delivered"] as const;
   const currentStep = commission.state === "declined" ? -1 : steps.indexOf(commission.state);
 
@@ -1137,21 +1176,35 @@ function CommissionRow({
   };
 
   return (
-    <div className="rounded-xl bg-[color-mix(in_srgb,var(--slurp-violet)_5%,var(--slurp-surface))] p-3 text-xs ring-1 ring-inset ring-[var(--slurp-violet)]/20">
-      <p className="flex items-center gap-1.5 font-bold">
-        <Sparkles size={13} className="text-[var(--noodle-accent)]" aria-hidden="true" />
-        {localizeUi(`ui.slurp.messages.commissionState.${commission.state}`, { defaultValue: commission.state })}
+    <article className="rounded-xl bg-[color-mix(in_srgb,var(--slurp-violet)_5%,var(--slurp-surface))] p-4 text-xs ring-1 ring-inset ring-[var(--slurp-violet)]/20">
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <p className="flex items-center gap-1.5 text-sm font-black">
+            <Sparkles size={15} className="text-[var(--noodle-accent)]" aria-hidden="true" />
+            {localizeUi("ui.slurp.messages.commissionTitle", { defaultValue: "Commission" })}
+          </p>
+          <p className="mt-1 font-semibold text-[var(--muted-foreground)]">
+            {localizeUi(`ui.slurp.messages.commissionState.${commission.state}`, { defaultValue: commission.state })}
+          </p>
+        </div>
         {commission.price > 0 && (
-          <span className="tabular-nums text-[var(--muted-foreground)]">
+          <span className="shrink-0 rounded-full bg-[var(--slurp-surface-raised)] px-2.5 py-1 font-bold tabular-nums text-[var(--noodle-accent)] ring-1 ring-inset ring-[var(--noodle-accent)]/20">
             <SlurpCoinAmount amount={commission.price} />
           </span>
         )}
-      </p>
-      <p className="mt-1 line-clamp-3 text-[var(--muted-foreground)]">{commission.brief}</p>
+      </div>
+      <div className="mt-3 rounded-xl bg-[var(--slurp-surface)]/70 p-3 ring-1 ring-inset ring-[var(--noodle-divider)]">
+        <p className="font-bold">
+          {localizeUi("ui.slurp.messages.commissionLabel", { defaultValue: "Commission brief" })}
+        </p>
+        <p className="mt-1 whitespace-pre-wrap break-words leading-5 text-[var(--muted-foreground)]">
+          {commission.brief}
+        </p>
+      </div>
 
       {currentStep >= 0 && (
         <ol
-          className="mt-3 grid grid-cols-4 gap-1"
+          className="mt-4 grid grid-cols-4 gap-1"
           aria-label={localizeUi("ui.slurp.messages.commissionProgress", { defaultValue: "Commission progress" })}
         >
           {steps.map((step, index) => (
@@ -1167,7 +1220,7 @@ function CommissionRow({
               )}
               <span
                 className={cn(
-                  "relative z-10 flex h-5 w-5 items-center justify-center rounded-full text-[0.6rem] font-black ring-2 ring-[var(--slurp-surface)]",
+                  "relative z-10 flex h-6 w-6 items-center justify-center rounded-full text-xs font-black ring-2 ring-[var(--slurp-surface)]",
                   index <= currentStep
                     ? "bg-[var(--noodle-accent)] text-zinc-950"
                     : "bg-[var(--slurp-surface-raised)] text-[var(--muted-foreground)]",
@@ -1175,7 +1228,7 @@ function CommissionRow({
               >
                 {index < currentStep ? <Check size={11} aria-hidden="true" /> : index + 1}
               </span>
-              <span className="truncate text-[0.6rem] font-semibold text-[var(--muted-foreground)]">
+              <span className="text-xs font-semibold leading-4 text-[var(--muted-foreground)]">
                 {localizeUi(`ui.slurp.messages.commissionStep.${step}`, {
                   defaultValue: step === "accepted" ? "Paid" : step[0]?.toUpperCase() + step.slice(1),
                 })}
@@ -1185,20 +1238,44 @@ function CommissionRow({
         </ol>
       )}
 
+      <p className="mt-3 leading-5 text-[var(--muted-foreground)]">
+        {localizeUi(`ui.slurp.messages.commissionNext.${commission.state}.${ownsCreator ? "creator" : "viewer"}`, {
+          defaultValue:
+            commission.state === "brief"
+              ? ownsCreator
+                ? "Review the brief, then send a price or decline."
+                : "Waiting for the Creator to send a price."
+              : commission.state === "quoted"
+                ? ownsCreator
+                  ? "Waiting for the fan to accept and pay."
+                  : "Accepting pays the quoted amount and starts the work."
+                : commission.state === "accepted"
+                  ? ownsCreator
+                    ? "Payment is complete. Send the finished piece when it is ready."
+                    : "Paid. The Creator is working on your request."
+                  : commission.state === "delivered"
+                    ? "The finished commission is in this chat."
+                    : "This commission is closed.",
+        })}
+      </p>
+
       {ownsCreator && commission.state === "brief" && (
-        <div className="mt-2 flex items-center gap-2">
-          <label htmlFor={`slurp-quote-${commission.id}`} className="sr-only">
+        <div className="mt-3 flex flex-wrap items-end gap-2">
+          <label htmlFor={`slurp-quote-${commission.id}`} className="flex flex-col gap-1 font-bold">
             {localizeUi("ui.slurp.messages.commissionQuoteLabel", { defaultValue: "Quote price" })}
+            <span className="flex h-11 items-center gap-1.5 rounded-xl bg-[var(--slurp-canvas,var(--background))] px-3 ring-1 ring-inset ring-[var(--noodle-divider)] focus-within:ring-2 focus-within:ring-[var(--noodle-accent)]">
+              <SlurpCoin size={15} />
+              <input
+                id={`slurp-quote-${commission.id}`}
+                type="number"
+                min={1}
+                max={9999}
+                value={price}
+                onChange={(event) => setPrice(Math.max(1, Math.floor(Number(event.target.value) || 0)))}
+                className="w-20 bg-transparent text-sm tabular-nums outline-none"
+              />
+            </span>
           </label>
-          <input
-            id={`slurp-quote-${commission.id}`}
-            type="number"
-            min={1}
-            max={9999}
-            value={price}
-            onChange={(event) => setPrice(Math.max(1, Math.floor(Number(event.target.value) || 0)))}
-            className="h-9 w-24 rounded-lg bg-[var(--slurp-canvas,var(--background))] px-2 tabular-nums outline-none ring-1 ring-inset ring-[var(--noodle-divider)] focus:ring-2 focus:ring-[var(--noodle-accent)]"
-          />
           <button
             type="button"
             disabled={busy || price <= 0}
@@ -1208,7 +1285,7 @@ function CommissionRow({
                 localizeUi("ui.slurp.messages.commissionQuoteFailed", { defaultValue: "Could not send that quote." }),
               )
             }
-            className="min-h-9 rounded-lg bg-[var(--noodle-accent)] px-3 font-bold text-zinc-950 disabled:opacity-50"
+            className="min-h-11 rounded-xl bg-[var(--noodle-accent)] px-4 font-bold text-zinc-950 transition-transform active:scale-[0.96] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--slurp-focus)] disabled:opacity-50 motion-reduce:transition-none motion-reduce:active:scale-100"
           >
             {localizeUi("ui.slurp.messages.commissionQuote", { defaultValue: "Quote" })}
           </button>
@@ -1228,7 +1305,7 @@ function CommissionRow({
               }),
             )
           }
-          className="mt-2 min-h-9 rounded-lg px-3 font-bold text-[var(--muted-foreground)] hover:bg-[var(--accent)] hover:text-[var(--foreground)] disabled:opacity-50"
+          className="mt-3 min-h-11 rounded-xl px-3 font-bold text-[var(--muted-foreground)] transition-[background-color,transform] hover:bg-[var(--accent)] hover:text-[var(--foreground)] active:scale-[0.96] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--slurp-focus)] disabled:opacity-50 motion-reduce:transition-none motion-reduce:active:scale-100"
         >
           {ownsCreator
             ? localizeUi("ui.slurp.messages.commissionDecline", { defaultValue: "Decline" })
@@ -1246,16 +1323,16 @@ function CommissionRow({
               localizeUi("ui.slurp.messages.commissionAcceptFailed", { defaultValue: "Not enough coins." }),
             )
           }
-          className="mt-2 min-h-9 rounded-lg bg-[var(--noodle-accent)] px-3 font-bold text-zinc-950 disabled:opacity-50"
+          className="mt-3 inline-flex min-h-11 items-center gap-1.5 rounded-xl bg-[var(--noodle-accent)] px-4 font-bold text-zinc-950 transition-transform active:scale-[0.96] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--slurp-focus)] disabled:opacity-50 motion-reduce:transition-none motion-reduce:active:scale-100"
         >
-          {localizeUi("ui.slurp.messages.commissionAccept", { defaultValue: "Accept for" })}{" "}
+          {localizeUi("ui.slurp.messages.commissionAccept", { defaultValue: "Accept and pay" })}
           <SlurpCoinAmount amount={commission.price} />
         </button>
       )}
 
       {ownsCreator && commission.state === "accepted" && (
-        <div className="mt-2 flex flex-col gap-2">
-          <label className="sr-only" htmlFor={`slurp-deliver-${commission.id}`}>
+        <div className="mt-3 flex flex-col gap-2">
+          <label className="font-bold" htmlFor={`slurp-deliver-${commission.id}`}>
             {localizeUi("ui.slurp.messages.commissionDeliverLabel", { defaultValue: "Delivery" })}
           </label>
           <textarea
@@ -1267,9 +1344,9 @@ function CommissionRow({
             placeholder={localizeUi("ui.slurp.messages.commissionDeliverPlaceholder", {
               defaultValue: "Deliver the finished piece…",
             })}
-            className="w-full resize-y rounded-lg bg-[var(--slurp-canvas,var(--background))] px-3 py-2 outline-none ring-1 ring-inset ring-[var(--noodle-divider)] focus:ring-2 focus:ring-[var(--noodle-accent)]"
+            className="w-full resize-y rounded-xl bg-[var(--slurp-canvas,var(--background))] px-3 py-2.5 text-sm outline-none ring-1 ring-inset ring-[var(--noodle-divider)] focus:ring-2 focus:ring-[var(--noodle-accent)]"
           />
-          <label className="flex min-h-9 items-center gap-2 text-[var(--muted-foreground)]">
+          <label className="flex min-h-11 cursor-pointer items-center gap-2 rounded-xl px-2 text-[var(--muted-foreground)] hover:bg-[var(--slurp-surface)]">
             <input
               type="checkbox"
               checked={generateImage}
@@ -1299,7 +1376,7 @@ function CommissionRow({
                 localizeUi("ui.slurp.messages.commissionDeliverFailed", { defaultValue: "Could not deliver that." }),
               )
             }
-            className="ml-auto min-h-9 rounded-lg bg-[var(--noodle-accent)] px-3 font-bold text-zinc-950 disabled:opacity-50"
+            className="ml-auto min-h-11 rounded-xl bg-[var(--noodle-accent)] px-4 font-bold text-zinc-950 transition-transform active:scale-[0.96] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--slurp-focus)] disabled:opacity-50 motion-reduce:transition-none motion-reduce:active:scale-100"
           >
             {localizeUi("ui.slurp.messages.commissionDeliver", { defaultValue: "Deliver" })}
           </button>
@@ -1311,7 +1388,7 @@ function CommissionRow({
           {error}
         </p>
       )}
-    </div>
+    </article>
   );
 }
 

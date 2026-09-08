@@ -334,7 +334,7 @@ assert.match(
   /message\.kind === "ppv" && !message\.unlockedAt\s*\? \{ \.\.\.message, content: "", imageUrl: null \}/u,
 );
 assert.match(messagesStorage, /kind: "commission_delivery",\s*imageUrl,/u);
-assert.match(messagesView2, /const messageImage = useSlurpMediaSrc\(message\.imageUrl\)/u);
+assert.match(messagesView2, /const messageImage = useSlurpMediaSrc\(\s*message\.imageUrl\s*\?/u);
 assert.match(useSlurpSource, /generateImage\?: boolean/u);
 assert.match(messagesView2, /ui\.slurp\.messages\.generateCommissionImage/u);
 assert.match(messagesView2, /generateImage,/u);

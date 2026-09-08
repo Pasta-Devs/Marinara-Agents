@@ -103,7 +103,7 @@ assert.match(home, /!personaBackedCreator && \([\s\S]*?setAutomationOpen\(true\)
 assert.match(storage, /withoutNoodlerSelfHiddenAccountId\([\s\S]*?row\.sourceEntityId \?\? row\.entityId/u);
 assert.match(shell, /CSS\.supports\?\.\("-webkit-touch-callout", "none"\)/u);
 assert.match(shell, /style=\{\{ paddingBottom: `max\(1rem, \$\{BOTTOM_SAFE_INSET\}\)` \}\}/u);
-assert.match(shell, /pb-\[calc\(56px\+var\(--slurp-bottom-safe-inset\)\)\]/u);
+assert.match(shell, /pb-\[calc\(64px\+var\(--slurp-bottom-safe-inset\)\)\]/u);
 assert.match(shell, /style=\{\{ paddingBottom: BOTTOM_SAFE_INSET \}\}/u);
 assert.doesNotMatch(home, /SlurpMobileHeader/u, "Slurp must not render a duplicate mobile top header");
 assert.match(
@@ -292,12 +292,12 @@ assert.match(
 assert.match(
   shell,
   /aria-hidden="true"[\s\S]*?data-slurp-contextual-rail="blank"/u,
-  "Creator profiles must reserve a non-interactive blank contextual rail",
+  "The shell must keep a non-interactive blank-rail mode for callers that need stable alignment",
 );
 assert.match(
   home,
-  /navigation\.view === "profile"[\s\S]*?\? \("blank" as const\)[\s\S]*?navigation\.view === "hub" \|\| navigation\.view === "search"/u,
-  "Creator profiles must use the blank rail while Home and Discover populate it",
+  /navigation\.view === "hub" \|\| navigation\.view === "search"\)[\s\S]*?\? \("populated" as const\)[\s\S]*?: \("spanning" as const\)/u,
+  "Only Home and Discover reserve the contextual rail by default",
 );
 assert.doesNotMatch(settings, /max-w-\[1096px\]/u, "settings must fill the shared Slurp desktop frame");
 assert.match(settings, /data-slurp-setting-toggle/u);

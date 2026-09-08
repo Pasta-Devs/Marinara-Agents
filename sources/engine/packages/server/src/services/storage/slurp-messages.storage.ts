@@ -6,7 +6,7 @@
 // lines. It composes that storage for accounts, subscriptions, and the wallet instead of
 // reimplementing them, so a DM tip and a profile tip move coins through exactly one code path.
 import { tolerateMissingTables } from "./slurp-host-tables.js";
-import { and, asc, desc, eq } from "../../db/file-query.js";
+import { and, asc, desc, eq, inArray } from "../../db/file-query.js";
 import { newId } from "../../utils/id-generator.js";
 import type { DB } from "../../db/connection.js";
 import { isFileUniqueConstraintError } from "../../db/file-schema.js";
@@ -93,6 +93,8 @@ export type SlurpSendResult =
 const now = () => new Date().toISOString();
 const messageUnlocks = new Map<string, Promise<SlurpMessage | null>>();
 const commissionAccepts = new Map<string, Promise<SlurpCommission | null>>();
+const commissionSettlements = new Map<string, Promise<SlurpCommission | null>>();
+const commissionDeliveries = new Map<string, Promise<SlurpCommission | null>>();
 const int = (value: string | null | undefined, fallback = 0): number => {
   const parsed = Number(value);
   return Number.isFinite(parsed) ? Math.trunc(parsed) : fallback;
@@ -470,6 +472,12 @@ export function createSlurpMessagesStorage(db: DB) {
       await db
         .update(slurpThreads)
         .set({
+          // A reply is an acceptance in practice. This matters most for "Let them answer": the
+          // model may write the Creator's first reply from the request tray, and leaving the row
+          // pending after that reply made the next fan turn look open while automation refused to
+          // continue it. Admission policy gates the first contact, not a conversation the Creator
+          // has already joined.
+          state: input.role === "creator" && thread.state === "request" ? "active" : thread.state,
           lastMessageAt: timestamp,
           lastMessagePreview: slurpMessagePreview(kind, content, price),
           // The reader is whoever did not send. A creator reply clears nothing the viewer owes.
@@ -714,6 +722,20 @@ export function createSlurpMessagesStorage(db: DB) {
      * makes the funnel's paying stages reachable by anyone other than the player.
      */
     async settleAudienceCommission(id: string, decision: "accept" | "decline"): Promise<SlurpCommission | null> {
+      const previous = commissionSettlements.get(id) ?? Promise.resolve(null);
+      const current = previous.catch(() => null).then(() => storage.settleAudienceCommissionUnlocked(id, decision));
+      commissionSettlements.set(id, current);
+      try {
+        return await current;
+      } finally {
+        if (commissionSettlements.get(id) === current) commissionSettlements.delete(id);
+      }
+    },
+
+    async settleAudienceCommissionUnlocked(
+      id: string,
+      decision: "accept" | "decline",
+    ): Promise<SlurpCommission | null> {
       const commission = await storage.getCommission(id);
       if (!commission || commission.state !== "quoted") return commission;
       if (!(await createSlurpPopulationStorage(db).get(commission.viewerAccountId))) return commission;
@@ -854,6 +876,17 @@ export function createSlurpMessagesStorage(db: DB) {
     },
 
     async declineCommission(id: string, by: "creator" | "viewer"): Promise<SlurpCommission | null> {
+      const previous = commissionAccepts.get(id) ?? Promise.resolve(null);
+      const current = previous.catch(() => null).then(() => storage.declineCommissionUnlocked(id, by));
+      commissionAccepts.set(id, current);
+      try {
+        return await current;
+      } finally {
+        if (commissionAccepts.get(id) === current) commissionAccepts.delete(id);
+      }
+    },
+
+    async declineCommissionUnlocked(id: string, by: "creator" | "viewer"): Promise<SlurpCommission | null> {
       const commission = await storage.getCommission(id);
       if (!commission || (commission.state !== "brief" && commission.state !== "quoted")) return commission;
       await db.update(slurpCommissions).set({ state: "declined", updatedAt: now() }).where(eq(slurpCommissions.id, id));
@@ -869,6 +902,21 @@ export function createSlurpMessagesStorage(db: DB) {
     },
 
     async deliverCommission(
+      id: string,
+      content: string,
+      imageUrl: string | null = null,
+    ): Promise<SlurpCommission | null> {
+      const previous = commissionDeliveries.get(id) ?? Promise.resolve(null);
+      const current = previous.catch(() => null).then(() => storage.deliverCommissionUnlocked(id, content, imageUrl));
+      commissionDeliveries.set(id, current);
+      try {
+        return await current;
+      } finally {
+        if (commissionDeliveries.get(id) === current) commissionDeliveries.delete(id);
+      }
+    },
+
+    async deliverCommissionUnlocked(
       id: string,
       content: string,
       imageUrl: string | null = null,
@@ -1039,12 +1087,12 @@ export function createSlurpMessagesStorage(db: DB) {
         .where(eq(slurpThreads.id, threadId));
     },
 
-    /** Threads waiting on a queued reply, oldest first, for the scheduler. */
+    /** Active conversations and pending requests waiting on a queued reply, oldest first. */
     async listThreadsAwaitingReply(limit = 20): Promise<SlurpThread[]> {
       const rows = await db
         .select()
         .from(slurpThreads)
-        .where(eq(slurpThreads.state, "active"))
+        .where(inArray(slurpThreads.state, ["active", "request"]))
         .orderBy(asc(slurpThreads.lastMessageAt))
         .limit(limit);
       const nowMs = Date.now();

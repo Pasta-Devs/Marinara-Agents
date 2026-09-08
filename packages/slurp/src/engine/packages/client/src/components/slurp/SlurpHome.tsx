@@ -110,6 +110,7 @@ import {
   useUpdateNoodlerAutoPosting,
   useUpdateNoodlerFanActivity,
   useUpdateNoodlerStageProfile,
+  useUpdateNoodlerProfileLocation,
   useSlurpSettings,
   useRecordSlurpStoryView,
   useSlurpStoryViews,
@@ -149,7 +150,7 @@ import { SlurpCoin, SlurpCoinAmount } from "./SlurpCoin";
 import { ChatImageLightbox } from "../chat/ChatImageLightbox";
 import { useNearViewportSlurpMediaSrc, useSlurpMediaSrc } from "../../hooks/use-slurp-media-src";
 import { SlurpOnboardingWizard } from "./SlurpOnboardingPanel";
-import { SlurpAgeGate } from "./SlurpAgeGate";
+import { SlurpAgeGate, SlurpConfetti } from "./SlurpAgeGate";
 import { slurpCreatorStatus } from "./slurp-creator-status";
 import {
   Avatar,
@@ -182,6 +183,7 @@ import { formatTime } from "./SlurpDateTime";
 interface SlurpHomeProps {
   navigation: Extract<SlurpNavigationState, { mode: "creator" }>;
   onNavigate: (destination: SlurpNavigationState) => void;
+  onLeave?: () => void;
 }
 
 const NOODLER_FEED_WINDOW_SIZE = 20;
@@ -405,7 +407,7 @@ function errorMessage(error: unknown, fallback: string) {
   return error instanceof Error ? error.message : fallback;
 }
 
-export function SlurpHome({ navigation, onNavigate }: SlurpHomeProps) {
+export function SlurpHome({ navigation, onNavigate, onLeave }: SlurpHomeProps) {
   const { t: localizeUi } = useUiTranslation();
   const accountsQuery = useNoodlerAccounts();
   const connectionCountsQuery = useNoodlerConnectionCounts();
@@ -578,6 +580,7 @@ export function SlurpHome({ navigation, onNavigate }: SlurpHomeProps) {
   const [feedTab, setFeedTab] = useState<"following" | "all">("following");
   const [onboardingMode, setOnboardingMode] = useState<"first-run" | "add-creators" | null>(null);
   const [gateOpen, setGateOpen] = useState(false);
+  const [gateCelebrating, setGateCelebrating] = useState(false);
   const gatePresentedRef = useRef(false);
   const onboardingPresentedRef = useRef(false);
   const viewerQuery = useNoodlerViewer(viewerPersonaId);
@@ -626,6 +629,7 @@ export function SlurpHome({ navigation, onNavigate }: SlurpHomeProps) {
   );
   const createProfile = useCreateNoodlerStageProfile();
   const updateProfile = useUpdateNoodlerStageProfile();
+  const updateProfileLocation = useUpdateNoodlerProfileLocation();
   const uploadAvatar = useUploadNoodlerAvatar();
   const useSourceAvatar = useUseNoodlerSourceAvatar();
   const removeAvatar = useRemoveNoodlerAvatar();
@@ -1090,6 +1094,12 @@ export function SlurpHome({ navigation, onNavigate }: SlurpHomeProps) {
     onNavigate({ mode: "creator", view: "hub" });
   };
 
+  useEffect(() => {
+    if (!gateCelebrating) return;
+    const timer = window.setTimeout(() => setGateCelebrating(false), 1_400);
+    return () => window.clearTimeout(timer);
+  }, [gateCelebrating]);
+
   const closeOnboarding = () => {
     setOnboardingMode(null);
   };
@@ -1315,7 +1325,19 @@ export function SlurpHome({ navigation, onNavigate }: SlurpHomeProps) {
             ? { sourceRevisionToken: draftSourceRevisionToken }
             : {}),
         },
-        { onSuccess, onError },
+        {
+          onSuccess: (profile) => {
+            if (input.location !== undefined && viewerPersonaId) {
+              updateProfileLocation.mutate(
+                { accountId: editingProfileId, personaId: viewerPersonaId, location: input.location },
+                { onSuccess: () => onSuccess(profile), onError },
+              );
+              return;
+            }
+            onSuccess(profile);
+          },
+          onError,
+        },
       );
     } else if (draftNoodleAccountId) {
       createProfile.mutate({ sourceAccountId: draftNoodleAccountId, stageProfile: input }, { onSuccess, onError });
@@ -1457,15 +1479,9 @@ export function SlurpHome({ navigation, onNavigate }: SlurpHomeProps) {
                     ? ("messages" as const)
                     : ("noodler" as const),
     contextualRail:
-      // Every destination reserves the same rail column, so the content column does not
-      // change width as you move between them.
-      navigation.mode === "creator-settings"
-        ? ("blank" as const)
-        : navigation.mode === "creator" && navigation.view === "profile"
-          ? ("blank" as const)
-          : navigation.mode === "creator" && (navigation.view === "hub" || navigation.view === "search")
-            ? ("populated" as const)
-            : ("blank" as const),
+      navigation.mode === "creator" && (navigation.view === "hub" || navigation.view === "search")
+        ? ("populated" as const)
+        : ("spanning" as const),
     homeActive: navigation.mode === "creator" && navigation.view === "hub",
     noodlerUnseenCount,
     accent: NOODLE_PINK,
@@ -1513,6 +1529,7 @@ export function SlurpHome({ navigation, onNavigate }: SlurpHomeProps) {
     // The studio is only meaningful for a persona that operates a Creator.
     hasOperatedCreator: Boolean(myCreatorProfile),
     walletBalanceLabel: `${viewerWalletsQuery.data?.[viewerPersonaId ?? ""]?.coins ?? SLURP_PLACEHOLDER_BALANCE}`,
+    walletBalance: viewerWalletsQuery.data?.[viewerPersonaId ?? ""]?.coins,
     personaBannerUrl: myCreatorProfile?.bannerUrl ?? null,
     onBecomeCreator: shellPersonaAccount
       ? () => {
@@ -1913,7 +1930,7 @@ export function SlurpHome({ navigation, onNavigate }: SlurpHomeProps) {
       </aside>
     ) : undefined;
     return (
-      <NoodleShell {...shellProps} contextualRail={profileRail ? "populated" : "blank"} rightRail={profileRail}>
+      <NoodleShell {...shellProps} contextualRail={profileRail ? "populated" : "spanning"} rightRail={profileRail}>
         <div className="h-full min-h-0 overflow-y-auto">
           <StageProfileView
             key={`${selectedProfile.id}:${shellPersonaAccount?.id ?? "no-viewer"}`}
@@ -2200,7 +2217,7 @@ export function SlurpHome({ navigation, onNavigate }: SlurpHomeProps) {
 
   if (navigation.mode === "creator" && navigation.view === "notifications") {
     return (
-      <NoodleShell {...shellProps} contextualRail={inboxRail ? "populated" : "blank"} rightRail={inboxRail}>
+      <NoodleShell {...shellProps} contextualRail={inboxRail ? "populated" : "spanning"} rightRail={inboxRail}>
         <SlurpInboxView
           personaId={viewerPersonaId}
           ownedCreatorAccountIds={myCreatorProfile ? [myCreatorProfile.id] : []}
@@ -2228,7 +2245,7 @@ export function SlurpHome({ navigation, onNavigate }: SlurpHomeProps) {
 
   if (navigation.mode === "creator" && navigation.view === "messages") {
     return (
-      <NoodleShell {...shellProps} contextualRail={inboxRail ? "populated" : "blank"} rightRail={inboxRail}>
+      <NoodleShell {...shellProps} contextualRail={inboxRail ? "populated" : "spanning"} rightRail={inboxRail}>
         <SlurpInboxView
           personaId={viewerPersonaId}
           ownedCreatorAccountIds={myCreatorProfile ? [myCreatorProfile.id] : []}
@@ -2464,9 +2481,12 @@ export function SlurpHome({ navigation, onNavigate }: SlurpHomeProps) {
         <SlurpAgeGate
           personaName={shellPersonaAccount?.displayName ?? ""}
           onComplete={enterFromGate}
+          onCelebrate={() => setGateCelebrating(true)}
+          onLeave={onLeave}
           isPending={false}
         />
       </Modal>
+      {gateCelebrating && <SlurpConfetti fixed />}
       {reviewModal}
     </NoodleShell>
   );
@@ -4905,9 +4925,13 @@ function ViewerHub({
                 )}
               </div>
             ) : (
-              <p className="px-4 py-6 text-sm text-[var(--muted-foreground)]">
-                {localizeUi("ui.noodle.viewerhub.noSearchResults")}
-              </p>
+              <EmptyState
+                title={localizeUi("ui.noodle.viewerhub.noSearchResults")}
+                detail={localizeUi("ui.slurp.empty.searchDetail")}
+                action={localizeUi("ui.slurp.empty.clearSearch")}
+                onAction={() => onSearchChange("")}
+                icon={Search}
+              />
             )}
           </section>
         )}
@@ -4973,7 +4997,7 @@ function ViewerHub({
             aria-label={localizeUi("ui.slurp.wallet.balance", { amount: walletCoins })}
             title={localizeUi("ui.slurp.wallet.balance", { amount: walletCoins })}
           >
-            <SlurpCoinAmount amount={walletCoins} />
+            <SlurpCoinAmount amount={walletCoins} watchAmount={walletCoins} />
           </button>
         </div>
       </div>
@@ -5004,11 +5028,11 @@ function ViewerHub({
               <span className="h-1.5 w-1.5 rounded-full bg-[var(--slurp-warm)]" aria-hidden="true" />
               <h2 className="text-lg font-black tracking-tight">{localizeUi("ui.slurp.home.latestDrops")}</h2>
             </div>
-            <p className="mt-1 text-xs leading-5 text-[var(--muted-foreground)]">
+            <p className="mt-1 hidden text-xs leading-5 text-[var(--muted-foreground)] sm:block">
               {localizeUi("ui.slurp.home.latestDropsDetail")}
             </p>
           </div>
-          <span className="shrink-0 rounded-full bg-[var(--slurp-surface-raised)] px-2.5 py-1 text-xs font-semibold tabular-nums text-[var(--muted-foreground)] ring-1 ring-inset ring-[var(--noodle-divider)]">
+          <span className="hidden shrink-0 rounded-full bg-[var(--slurp-surface-raised)] px-2.5 py-1 text-xs font-semibold tabular-nums text-[var(--muted-foreground)] ring-1 ring-inset ring-[var(--noodle-divider)] sm:inline-flex">
             {localizeUi("ui.slurp.home.postCount", { count: feed.length })}
           </span>
         </div>
@@ -5102,13 +5126,39 @@ function ViewerHub({
       ) : scope && scope.creators.length > 0 ? (
         <>
           {feed.length === 0 ? (
-            <p className="px-4 py-8 text-xs text-[var(--muted-foreground)]">
-              {searchTerm
-                ? localizeUi("ui.noodle.viewerhub.noSearchResults")
-                : tab === "following"
-                  ? localizeUi("ui.noodle.viewerhub.noFollowedPosts")
-                  : localizeUi("ui.noodle.viewerhub.noPostsYet")}
-            </p>
+            <EmptyState
+              title={
+                searchTerm
+                  ? localizeUi("ui.noodle.viewerhub.noSearchResults")
+                  : tab === "following"
+                    ? localizeUi("ui.noodle.viewerhub.noFollowedPosts")
+                    : localizeUi("ui.noodle.viewerhub.noPostsYet")
+              }
+              detail={
+                searchTerm
+                  ? localizeUi("ui.slurp.empty.searchDetail")
+                  : tab === "following"
+                    ? localizeUi("ui.slurp.empty.followingDetail")
+                    : undefined
+              }
+              action={
+                searchTerm
+                  ? localizeUi("ui.slurp.empty.clearSearch")
+                  : tab === "following"
+                    ? localizeUi("ui.slurp.empty.browseAll")
+                    : authorProfile && onOpenAuthorProfile
+                      ? localizeUi("ui.noodle.viewerhub.viewValue1", { value1: authorProfile.displayName })
+                      : undefined
+              }
+              onAction={
+                searchTerm
+                  ? () => onSearchChange("")
+                  : tab === "following"
+                    ? () => onTabChange("all")
+                    : onOpenAuthorProfile
+              }
+              icon={searchTerm ? Search : UserRound}
+            />
           ) : feedLayout === "wall" ? (
             <SlurpMediaWall
               items={visibleFeed}
@@ -5218,7 +5268,7 @@ function ViewerHub({
         <SlurpMomentViewer
           moment={activeMoment}
           personaId={scope?.viewer.entityId ?? null}
-          isOwner={activeMoment.creator.profile.id === scope?.viewer.id}
+          isOwner={activeMoment.creator.profile.sourceAccountId === scope?.viewer.entityId}
           index={activeMomentIndex}
           total={moments.length}
           unlockPending={unlockPending}
@@ -5463,9 +5513,9 @@ function SlurpWalletView({
                 />
               </div>
               <p className="mt-2 flex items-center gap-2 text-4xl font-black leading-none tabular-nums">
-                <SlurpCoinAmount amount={coins.toLocaleString()} size={26} />
+                <SlurpCoinAmount amount={coins.toLocaleString()} watchAmount={coins} size={26} />
               </p>
-              <p className="mt-1 text-[0.7rem] text-[var(--muted-foreground)]">
+              <p className="mt-1 text-xs text-[var(--muted-foreground)]">
                 {localizeUi("ui.slurp.wallet.readyToSpend", { defaultValue: "Ready to spend" })}
               </p>
             </div>
@@ -5481,7 +5531,7 @@ function SlurpWalletView({
                   ? localizeUi("ui.slurp.wallet.refilling", { defaultValue: "Claiming…" })
                   : localizeUi("ui.slurp.wallet.dailyRefill", { defaultValue: "Daily refill" })}
               </button>
-              <span className="flex items-center gap-1 text-[0.65rem] tabular-nums text-[var(--muted-foreground)]">
+              <span className="flex items-center gap-1 text-xs tabular-nums text-[var(--muted-foreground)]">
                 {refillReady
                   ? localizeUi("ui.slurp.wallet.refillReady", { defaultValue: "Ready now" })
                   : localizeUi("ui.slurp.wallet.refillCountdown", {
@@ -5653,7 +5703,7 @@ function SlurpWalletView({
                             })
                           : entryLabel(entry.kind)}
                       </span>
-                      <span className="block truncate text-[0.7rem] text-[var(--muted-foreground)]">
+                      <span className="block truncate text-xs text-[var(--muted-foreground)]">
                         {[entryNote(entry.kind, entry.note), formatTime(entry.at, i18n.language)]
                           .filter(Boolean)
                           .join(" · ")}
@@ -5956,6 +6006,7 @@ function SlurpMomentViewer({
   const { t: localizeUi } = useUiTranslation();
   const mediaSrc = useSlurpMediaSrc(moment.post.imageUrl, { width: 1600 });
   const recordView = useRecordSlurpStoryView();
+  const recordedStoryViews = useRef(new Set<string>());
   const storyViews = useSlurpStoryViews(moment.post.id, personaId, isOwner);
   const openProfile = () => {
     onClose();
@@ -5963,7 +6014,13 @@ function SlurpMomentViewer({
   };
   useEffect(() => {
     // View recording is best effort. Opening a Story must remain usable when the write is slow.
-    void recordView.mutateAsync({ storyId: moment.post.id, personaId: personaId ?? "" }).catch(() => undefined);
+    const viewKey = `${personaId ?? ""}:${moment.post.id}`;
+    if (!recordedStoryViews.current.has(viewKey)) {
+      recordedStoryViews.current.add(viewKey);
+      void recordView.mutateAsync({ storyId: moment.post.id, personaId: personaId ?? "" }).catch(() => {
+        recordedStoryViews.current.delete(viewKey);
+      });
+    }
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.target instanceof HTMLInputElement || event.target instanceof HTMLTextAreaElement) return;
       if (event.key === "ArrowLeft" && onPrevious) {
@@ -6331,6 +6388,7 @@ function NoodlerPostComposer({
     poll: poll ? { question: poll.question.trim(), options: poll.options.map((option) => option.trim()) } : null,
     format: derivedFormat(),
     postType,
+    linkedPostId: linkedPostId ?? null,
   });
 
   const publish = async () => {
@@ -6944,7 +7002,7 @@ function EmptyState({
         <button
           type="button"
           onClick={onAction}
-          className="mt-5 h-9 rounded-lg border border-[var(--noodle-divider)] px-4 text-xs font-bold hover:bg-[var(--accent)]"
+          className="mt-5 min-h-11 rounded-lg border border-[var(--noodle-divider)] px-4 text-sm font-bold transition-[background-color,transform] hover:bg-[var(--accent)] active:scale-[0.96] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--slurp-focus)] motion-reduce:transition-none motion-reduce:active:scale-100"
         >
           {action}
         </button>

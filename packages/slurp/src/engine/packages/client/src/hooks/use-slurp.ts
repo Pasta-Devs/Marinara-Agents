@@ -75,7 +75,7 @@ export const noodleKeys = {
   // contextTags belongs in the key: it is part of the request, so leaving it
   // out meant switching tab or crossing into evening never refetched.
   ads: (personaId: string, creatorId?: string | null, contextTags: string[] = []) =>
-    [...noodleKeys.noodlerViewers(), "ads", personaId, creatorId ?? "none", contextTags.join(",")] as const,
+    [...noodleKeys.noodlerViewers(), "ads", personaId, creatorId ?? "none", contextTags] as const,
   adPool: () => [...noodleKeys.noodlerRoot(), "ad-pool"] as const,
   adState: (personaId: string) => [...noodleKeys.noodlerViewers(), "ad-state", personaId] as const,
 };
@@ -907,6 +907,18 @@ export function useUpdateNoodlerStageProfile() {
         qc.invalidateQueries({ queryKey: noodleKeys.noodlerViewers() }),
         qc.invalidateQueries({ queryKey: noodleKeys.noodlerReserveStatus() }),
       ]),
+  });
+}
+
+export function useUpdateNoodlerProfileLocation() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (input: { accountId: string; personaId: string; location: string }) =>
+      api.patch<NoodlerStageProfile>(`/slurp/accounts/${encodeURIComponent(input.accountId)}/profile`, {
+        personaId: input.personaId,
+        profile: { location: input.location },
+      }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: noodleKeys.noodlerAccounts() }),
   });
 }
 
@@ -2107,7 +2119,7 @@ export function useRecordSlurpStoryView() {
 
 export function useSlurpStoryViews(storyId: string | null, personaId: string | null, enabled = true) {
   return useQuery({
-    queryKey: [...noodleKeys.noodlerRoot(), "story-views", storyId ?? "none"],
+    queryKey: [...noodleKeys.noodlerRoot(), "story-views", storyId ?? "none", personaId ?? "none"],
     queryFn: () =>
       api.get<{ count: number; viewers: Array<{ id: string; displayName: string; handle: string }> }>(
         `/slurp/noodler/stories/${encodeURIComponent(storyId!)}/views?personaId=${encodeURIComponent(personaId!)}`,
@@ -2138,14 +2150,20 @@ export function useSlurpRapport(creatorAccountId: string | null, personaId: stri
 }
 
 /** A Creator's own message policy and prices, for the panel that edits them. */
-export function useSlurpCreatorMessagingSettings(creatorAccountId: string | null) {
+export function useSlurpCreatorMessagingSettings(creatorAccountId: string | null, personaId: string | null) {
   return useQuery({
-    queryKey: [...noodleKeys.noodlerRoot(), "messages", "creator-settings", creatorAccountId ?? "none"],
+    queryKey: [
+      ...noodleKeys.noodlerRoot(),
+      "messages",
+      "creator-settings",
+      creatorAccountId ?? "none",
+      personaId ?? "none",
+    ],
     queryFn: () =>
       api.get<{ messaging: SlurpCreatorMessaging; subscriptionPrice: number }>(
-        `/slurp/messages/creators/${encodeURIComponent(creatorAccountId!)}/settings`,
+        `/slurp/messages/creators/${encodeURIComponent(creatorAccountId!)}/settings?personaId=${encodeURIComponent(personaId!)}`,
       ),
-    enabled: Boolean(creatorAccountId),
+    enabled: Boolean(creatorAccountId && personaId),
   });
 }
 

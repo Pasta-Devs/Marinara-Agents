@@ -414,6 +414,7 @@ export async function generateNoodlerPost(
   const beat = input.request.noodlerPostGuide?.trim()
     ? null
     : slurpPostBeat(account.id, await noodle.countNoodlerPostsByAccount(account.id), settings.storyRate);
+  const format = input.request.format ?? beat?.format ?? "caption";
   const messages = buildNoodlerPostMessages({
     account,
     sourceCharacterContext,
@@ -422,7 +423,7 @@ export async function generateNoodlerPost(
     publicIdentity,
     recentPosts,
     // A beat carries its own format, so an automatic post stops always being a caption.
-    request: beat ? { ...input.request, format: input.request.format ?? beat.format } : input.request,
+    request: { ...input.request, format },
     beatInstruction: beat ? slurpPostBeatInstruction(beat) : undefined,
     allowImagePrompt: imagesEnabled,
     generationGuidance: settings.generationGuidance,
@@ -452,7 +453,7 @@ export async function generateNoodlerPost(
     debugMode,
     responseFormat: noodleResponseFormat(input.connection.model, "noodler_post", {
       allowImagePrompt: imagesEnabled,
-      contentMaxLength: NOODLER_FORMAT_MAX_LENGTH[input.request.format ?? "caption"],
+      contentMaxLength: NOODLER_FORMAT_MAX_LENGTH[format],
     }),
   } as const;
 
@@ -496,7 +497,6 @@ export async function generateNoodlerPost(
     generated = parseNoodlerPost(content);
   }
 
-  const format = input.request.format ?? "caption";
   const protectedContent = protectBoundedNoodlerGeneratedText(
     generated.content,
     disclosureMode,
@@ -533,7 +533,7 @@ export async function generateNoodlerPost(
     source: "generated" as const,
     access: input.request.access,
     metadata: {
-      noodlerContentFormat: input.request.format ?? "caption",
+      noodlerContentFormat: format,
       // Stamped at creation like a manual post, so a generated locked post honours the configured
       // unlock price and keeps it across refreshes and edits instead of falling back to 1.
       ...(input.request.access === "locked" ? noodlerUnlockPriceMetadata(settings.walletUnlockCost) : {}),

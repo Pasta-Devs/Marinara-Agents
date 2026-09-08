@@ -171,7 +171,7 @@ export type SlurpCreatorAvailability = {
 const ALWAYS_AVAILABLE: SlurpCreatorAvailability = { online: true, activity: null, minutesUntilOnline: 0 };
 
 const minutesOfDay = (time: string): number | null => {
-  const match = /^(\d{1,2}):(\d{2})/.exec(time.trim());
+  const match = /^(\d{1,2}):(\d{2})$/u.exec(time.trim());
   if (!match) return null;
   const hours = Number(match[1]);
   const mins = Number(match[2]);

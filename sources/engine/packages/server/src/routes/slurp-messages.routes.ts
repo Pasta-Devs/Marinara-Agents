@@ -70,6 +70,11 @@ const commissionDeliverySchema = z.object({
   generateImage: z.boolean().optional(),
 });
 
+// Image generation happens before the storage write, so the storage-level delivery queue cannot
+// stop two rapid requests from drawing the same commission at once. Hold the whole route per
+// commission and make the second request retry after the first one finishes.
+const commissionDeliveryRequests = new Set<string>();
+
 const requestDecisionSchema = z.object({
   personaId: z.string().trim().min(1),
   decision: z.enum(["accept", "decline"]),
@@ -251,14 +256,6 @@ export async function slurpMessageRoutes(app: FastifyInstance) {
     if (sent.status === "insufficient_funds")
       return reply.code(402).send({ error: "Not enough coins.", required: sent.required });
 
-    if (sent.thread.state !== "active") {
-      return {
-        thread: (await freshView(sent.thread.id)) ?? sent.thread,
-        message: sent.message,
-        reply: null,
-        replyStatus: "request",
-      };
-    }
     let outcome;
     try {
       outcome = await replyToSlurpMessage(app.db, { threadId: sent.thread.id, triggerMessageId: sent.message.id });
@@ -293,10 +290,10 @@ export async function slurpMessageRoutes(app: FastifyInstance) {
     if (sent.status === "insufficient_funds")
       return reply.code(402).send({ error: "Not enough coins.", required: sent.required });
     // A tip is worth answering, and a thanks that arrives an hour later is not a thanks.
-    const outcome =
-      sent.thread.state === "active"
-        ? await replyToSlurpMessage(app.db, { threadId: sent.thread.id, triggerMessageId: sent.message.id })
-        : { status: "request" as const };
+    const outcome = await replyToSlurpMessage(app.db, {
+      threadId: sent.thread.id,
+      triggerMessageId: sent.message.id,
+    });
     return {
       thread: (await freshView(sent.thread.id)) ?? sent.thread,
       message: sent.message,
@@ -467,47 +464,59 @@ export async function slurpMessageRoutes(app: FastifyInstance) {
   app.post("/messages/commissions/:commissionId/deliver", async (req, reply) => {
     const parsed = commissionDeliverySchema.safeParse(req.body ?? {});
     if (!parsed.success) return reply.code(400).send({ error: parsed.error.flatten() });
-    const commission = await messages.getCommission((req.params as { commissionId: string }).commissionId);
+    const commissionId = (req.params as { commissionId: string }).commissionId;
+    const commission = await messages.getCommission(commissionId);
     if (!commission || !(await ownsCreator(parsed.data.personaId, commission.creatorAccountId)))
       return reply.code(404).send({ error: "Commission not found" });
-    // A commission is somebody paying for a picture, so the delivery can draw it. Generate before
-    // the message is written: a failed drawing must not leave a delivered commission with nothing
-    // in it, and the fan's coins are already spent.
-    let drawn: Awaited<ReturnType<typeof generateSlurpCommissionImage>> | null = null;
-    if (parsed.data.generateImage) {
-      try {
-        drawn = await generateSlurpCommissionImage(app.db, {
-          creatorAccountId: commission.creatorAccountId,
-          brief: commission.brief,
-        });
-      } catch (error) {
-        logger.warn(error, "[slurp-commission] Could not draw the commissioned piece");
-        return reply
-          .code(502)
-          .send({ error: "Could not draw that commission. Try again, or proceed without a generated image." });
-      }
-      if (drawn === "unavailable") {
-        return reply.code(404).send({ error: "No image generation connection is configured." });
-      }
+    if (commission.state !== "accepted") {
+      return reply.code(409).send({ error: "This commission is not ready for delivery." });
     }
-    const delivered = await messages.deliverCommission(
-      commission.id,
-      parsed.data.content,
-      parsed.data.imageUrl ?? null,
-    );
-    if (!delivered || delivered.state !== "delivered" || !delivered.deliveryMessageId) {
-      if (drawn && drawn !== "unavailable") drawn.compensate();
-      return { commission: delivered };
+    if (commissionDeliveryRequests.has(commissionId)) {
+      return reply.code(409).send({ error: "This commission is already being delivered." });
     }
-    if (drawn && drawn !== "unavailable") {
-      drawn.promote();
-      await messages.setMessageMedia(
-        delivered.deliveryMessageId,
-        slurpMessageMediaUrl(delivered.deliveryMessageId),
-        drawn.mediaPath,
+    commissionDeliveryRequests.add(commissionId);
+    try {
+      // A commission is somebody paying for a picture, so the delivery can draw it. Generate before
+      // the message is written: a failed drawing must not leave a delivered commission with nothing
+      // in it, and the fan's coins are already spent.
+      let drawn: Awaited<ReturnType<typeof generateSlurpCommissionImage>> | null = null;
+      if (parsed.data.generateImage) {
+        try {
+          drawn = await generateSlurpCommissionImage(app.db, {
+            creatorAccountId: commission.creatorAccountId,
+            brief: commission.brief,
+          });
+        } catch (error) {
+          logger.warn(error, "[slurp-commission] Could not draw the commissioned piece");
+          return reply
+            .code(502)
+            .send({ error: "Could not draw that commission. Try again, or proceed without a generated image." });
+        }
+        if (drawn === "unavailable") {
+          return reply.code(404).send({ error: "No image generation connection is configured." });
+        }
+      }
+      const delivered = await messages.deliverCommission(
+        commission.id,
+        parsed.data.content,
+        parsed.data.imageUrl ?? null,
       );
+      if (!delivered || delivered.state !== "delivered" || !delivered.deliveryMessageId) {
+        if (drawn && drawn !== "unavailable") drawn.compensate();
+        return { commission: delivered };
+      }
+      if (drawn && drawn !== "unavailable") {
+        drawn.promote();
+        await messages.setMessageMedia(
+          delivered.deliveryMessageId,
+          `${slurpMessageMediaUrl(delivered.deliveryMessageId)}?personaId=${encodeURIComponent(parsed.data.personaId)}`,
+          drawn.mediaPath,
+        );
+      }
+      return { commission: delivered };
+    } finally {
+      commissionDeliveryRequests.delete(commissionId);
     }
-    return { commission: delivered };
   });
 
   /**
@@ -567,9 +576,13 @@ export async function slurpMessageRoutes(app: FastifyInstance) {
   });
 
   app.get("/messages/creators/:creatorAccountId/settings", async (req, reply) => {
+    const parsed = personaQuerySchema.safeParse(req.query);
+    if (!parsed.success) return reply.code(400).send({ error: parsed.error.flatten() });
     const { creatorAccountId } = req.params as { creatorAccountId: string };
     if (!(await slurp.getNoodlerAccountById(creatorAccountId)))
       return reply.code(404).send({ error: "Creator not found" });
+    if (!(await ownsCreator(parsed.data.personaId, creatorAccountId)))
+      return reply.code(403).send({ error: "Only the Creator's owner can read messaging settings." });
     // The weekly price rides along: it is already public on every profile, and the Creator's own
     // settings panel needs it beside the message prices rather than through a second request.
     return {

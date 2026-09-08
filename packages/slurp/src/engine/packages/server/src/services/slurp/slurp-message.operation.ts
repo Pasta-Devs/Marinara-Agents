@@ -51,11 +51,9 @@ export async function replyToSlurpMessage(
     ? await resolveSlurpCreatorAvailability(createCharactersStorage(db), source, undefined, new Date())
     : { online: true, activity: null, minutesUntilOnline: 0 };
   const history = await messagesStore.listMessages(thread.id, 60);
-  // A request gets exactly one answer: a guarded, non-committal one, written before the creator
-  // has decided anything. Any answer at all used to be impossible, so a fan who wrote to a
-  // creator they did not subscribe to wrote into silence forever and the tray read as a bug.
-  // Capping it at one keeps the tray meaningful — the thread still cannot become a conversation
-  // until the creator accepts it.
+  // A request can receive one guarded first answer. Storing that Creator answer promotes the
+  // thread to active, because replying is itself a clear acceptance; after that, schedule and
+  // subscription shape pacing and tone but cannot strand an already-started conversation.
   const isRequest = thread.state === "request";
   if (isRequest && history.some((message) => message.role === "creator")) return { status: "ineligible" };
   const trigger = history.find((message) => message.id === input.triggerMessageId) ?? history[history.length - 1];

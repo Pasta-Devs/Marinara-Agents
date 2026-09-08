@@ -25,6 +25,7 @@ import { slurpAudienceReaction } from "../packages/slurp/src/engine/packages/ser
 
 const root = join(import.meta.dirname, "..", "packages/slurp/src/engine/packages");
 const read = (path: string) => readFileSync(join(root, path), "utf8");
+const messagesRoutes = read("server/src/routes/slurp-messages.routes.ts");
 
 // ── The world must not be silent for a Creator nobody has grown yet ──────────
 // `MIN_BASE_REACH` is 240, and the floors used to be 50 / 100 / 250. A brand-new Creator sat
@@ -103,11 +104,26 @@ assert.ok(whale.score <= 100 && ghost.score >= 0);
 // and was marked `cooling`, then `burnout`, for doing the most engaged thing available.
 assert.match(messagesStorage, /advanceAudienceTie\(viewerAccountId, creatorAccountId, \{ stage: "viewer"/u);
 
-// ── A message request gets exactly one answer ────────────────────────────────
+// ── A Creator answer opens a message request ─────────────────────────────────
 const messageOperation = read("server/src/services/slurp/slurp-message.operation.ts");
 assert.match(messageOperation, /thread\.state !== "active" && thread\.state !== "request"/u);
 assert.match(messageOperation, /isRequest && history\.some\(\(message\) => message\.role === "creator"\)/u);
 assert.doesNotMatch(messageOperation, /isRequest: false/u, "the cautious-first-reply branch was unreachable");
+assert.match(
+  messagesStorage,
+  /state: input\.role === "creator" && thread\.state === "request" \? "active" : thread\.state,/u,
+  "the guarded first answer must open the conversation so later turns can continue",
+);
+assert.match(
+  messagesStorage,
+  /inArray\(slurpThreads\.state, \["active", "request"\]\)/u,
+  "an off-hours request must be visible to the reply scheduler",
+);
+assert.doesNotMatch(
+  messagesRoutes,
+  /if \(sent\.thread\.state !== "active"\) \{\s*return \{/u,
+  "a pending first contact must go through reply pacing instead of returning early forever",
+);
 
 // ── A queued reply has to become visible ─────────────────────────────────────
 // The scheduler wrote offline replies every 60s and neither message query polled, so the whole

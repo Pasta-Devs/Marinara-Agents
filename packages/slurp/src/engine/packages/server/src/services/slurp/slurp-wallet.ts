@@ -229,7 +229,13 @@ function readSubscriptions(value: unknown): Record<string, SlurpWalletSubscripti
     if (!raw || typeof raw !== "object") continue;
     const entry = raw as Record<string, unknown>;
     const price = intOrNull(entry.price);
-    if (typeof entry.paidThroughAt !== "string" || price === null || price < 0) continue;
+    if (
+      typeof entry.paidThroughAt !== "string" ||
+      Number.isNaN(Date.parse(entry.paidThroughAt)) ||
+      price === null ||
+      price < 0
+    )
+      continue;
     out[id] = { paidThroughAt: entry.paidThroughAt, price };
   }
   return out;

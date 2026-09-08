@@ -73,6 +73,8 @@ function SlurpPackageRoot({ element }: { element: CapabilityElement }) {
   const [revision, redraw] = useState(0);
   const navigation = useSlurpUIStore((state) => state.navigation);
   const setNavigation = useSlurpUIStore((state) => state.setNavigation);
+  const close = element.capabilityProps?.onClose;
+  const onLeave = typeof close === "function" ? () => close() : undefined;
 
   useEffect(() => {
     // The host re-dispatches this event whenever capabilityProps change, so the store has to be
@@ -98,7 +100,7 @@ function SlurpPackageRoot({ element }: { element: CapabilityElement }) {
       <QueryClientProvider client={client}>
         <ModalPortalContext.Provider value={element.__portal ?? element}>
           <div className="h-full min-h-0 overflow-hidden bg-[var(--background)] text-[var(--foreground)]">
-            <SlurpHome navigation={navigation} onNavigate={setNavigation} />
+            <SlurpHome navigation={navigation} onNavigate={setNavigation} onLeave={onLeave} />
             <AppDialogRenderer />
           </div>
         </ModalPortalContext.Provider>

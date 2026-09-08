@@ -92,7 +92,7 @@ export async function resolveNoodlerMediaVariant(absolutePath: string, width: nu
   if (existsSync(variantPath)) return variantPath;
   const sharp = await getSharp();
   if (!sharp) return absolutePath;
-  const stagingPath = `${variantPath}.${process.pid}.${Date.now()}.tmp`;
+  const stagingPath = `${variantPath}.${process.pid}.${Date.now()}.${Math.random().toString(36).slice(2)}.tmp`;
   try {
     await sharp(absolutePath)
       .rotate()

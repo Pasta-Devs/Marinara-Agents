@@ -548,9 +548,18 @@ export async function slurpRoutes(app: FastifyInstance) {
   });
 
   app.patch("/accounts/:id/profile", async (req, reply) => {
-    const parsed = z.object({ profile: z.object({ location: z.string().trim().max(120) }) }).safeParse(req.body);
+    const parsed = z
+      .object({ personaId: z.string().trim().min(1), profile: z.object({ location: z.string().trim().max(120) }) })
+      .safeParse(req.body);
     if (!parsed.success) return reply.code(400).send({ error: parsed.error.flatten() });
+    const viewer = await resolveViewerPersona(parsed.data.personaId);
+    if (!viewer) return reply.code(404).send({ error: "Slurp persona not found" });
     const { id } = req.params as { id: string };
+    const account = await noodle.getNoodlerAccountById(id);
+    if (!account) return reply.code(404).send({ error: "Creator account not found" });
+    if (!creatorBelongsToViewer(account, viewer)) {
+      return reply.code(403).send({ error: "Only the Creator's owner can update the profile." });
+    }
     const updated = await noodle.updateAccountProfile(id, { profile: parsed.data.profile });
     if (!updated) return reply.code(404).send({ error: "Creator account not found" });
     return updated;

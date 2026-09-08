@@ -1,5 +1,11 @@
 # Slurp release notes
 
+## 1.2.27 — 2026-09-08
+
+- Polished Slurp's mobile navigation, empty states, wide-screen layouts, and small-text readability without changing the page structure.
+- Spending coins now gives live balances a brief coin animation, with a quiet color-only cue when reduced motion is enabled.
+- The age gate keeps its confetti payoff and now offers a direct way back to Home.
+
 ## 1.2.26 — 2026-09-08
 
 - World-generated commission requests now receive an automatic quote and can complete through the existing audience decision and payment path.

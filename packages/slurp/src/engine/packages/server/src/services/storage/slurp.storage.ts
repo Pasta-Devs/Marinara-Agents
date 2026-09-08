@@ -1784,6 +1784,8 @@ export function createSlurpStorage(db: DB) {
         }
         await tx.delete(noodleAccountSubscriptions).where(eq(noodleAccountSubscriptions.viewerAccountId, personaId));
         await tx.delete(noodlePostUnlocks).where(eq(noodlePostUnlocks.viewerAccountId, personaId));
+        await tx.delete(slurpCommissions).where(eq(slurpCommissions.viewerAccountId, personaId));
+        await tx.delete(slurpEvents).where(eq(slurpEvents.recipientPersonaId, personaId));
         await createAppSettingsStorage(tx).remove(slurpViewerSettingsKey(personaId));
         await tx._fileStore.flush();
       });

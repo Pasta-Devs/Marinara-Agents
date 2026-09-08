@@ -1,4 +1,5 @@
-import type { ReactNode } from "react";
+import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { cn } from "../../lib/utils";
 
 /**
@@ -38,17 +39,68 @@ export function SlurpCoinAmount({
   className,
   size = "1em",
   suffix,
+  watchAmount,
 }: {
   amount: number | string;
   className?: string;
   size?: number | string;
   suffix?: ReactNode;
+  /** A live balance to watch. Prices and ledger amounts deliberately omit this. */
+  watchAmount?: number;
 }) {
+  const reduceMotion = useReducedMotion();
+  const previousAmount = useRef(watchAmount);
+  const [spent, setSpent] = useState<{ amount: number; revision: number } | null>(null);
+
+  useEffect(() => {
+    const previous = previousAmount.current;
+    previousAmount.current = watchAmount;
+    if (watchAmount === undefined || previous === undefined || watchAmount >= previous) return;
+
+    setSpent({ amount: previous - watchAmount, revision: Date.now() });
+    const timer = window.setTimeout(() => setSpent(null), reduceMotion ? 300 : 700);
+    return () => window.clearTimeout(timer);
+  }, [reduceMotion, watchAmount]);
+
   return (
-    <span className={cn("inline-flex items-center gap-1", className)}>
+    <span
+      className={cn(
+        "relative inline-flex items-center gap-1 transition-colors duration-150",
+        spent && "text-[var(--slurp-coral)]",
+        className,
+      )}
+      data-slurp-coin-balance={watchAmount === undefined ? undefined : "true"}
+    >
       <span>{amount}</span>
-      <SlurpCoin size={size} />
+      <motion.span
+        className="inline-flex"
+        animate={
+          spent && !reduceMotion
+            ? { rotate: [0, -16, 8, 0], scale: [1, 0.82, 1], y: [0, 3, 0] }
+            : { rotate: 0, scale: 1, y: 0 }
+        }
+        transition={{ duration: 0.42, ease: "easeOut" }}
+      >
+        <SlurpCoin size={size} />
+      </motion.span>
       {suffix && <span>{suffix}</span>}
+      <AnimatePresence initial={false}>
+        {spent && !reduceMotion && (
+          <motion.span
+            key={spent.revision}
+            initial={{ opacity: 0, scale: 0.8, y: 2 }}
+            animate={{ opacity: 1, scale: 1, y: -12 }}
+            exit={{ opacity: 0, y: -20 }}
+            transition={{ duration: 0.55, ease: "easeOut" }}
+            className="pointer-events-none absolute end-0 top-0 inline-flex items-center gap-0.5 whitespace-nowrap text-xs font-black text-[var(--slurp-coral)]"
+            data-slurp-coin-spent={spent.amount}
+            aria-hidden="true"
+          >
+            −{spent.amount}
+            <SlurpCoin size={12} />
+          </motion.span>
+        )}
+      </AnimatePresence>
     </span>
   );
 }

@@ -36,6 +36,12 @@
     "slurp": {
       "versions": [
         {
+          "version": "1.2.27",
+          "date": "2026-09-08",
+          "notes": "- Polished Slurp's mobile navigation, empty states, wide-screen layouts, and small-text readability without changing the page structure.\n- Spending coins now gives live balances a brief coin animation, with a quiet color-only cue when reduced motion is enabled.\n- The age gate keeps its confetti payoff and now offers a direct way back to Home.",
+          "highlight": false
+        },
+        {
           "version": "1.2.26",
           "date": "2026-09-08",
           "notes": "- World-generated commission requests now receive an automatic quote and can complete through the existing audience decision and payment path.",
@@ -147,12 +153,6 @@
           "version": "1.2.8",
           "date": "2026-09-07",
           "notes": "- Locked media now uses a larger, lightly blurred teaser so viewers can understand the image shape without receiving the original bytes.\n- Replaced the noisy sparkle texture with a denser, lower-cost sparkle veil.\n- Locked and unlocked feed images now use the same preview frame and crop.",
-          "highlight": false
-        },
-        {
-          "version": "1.2.7",
-          "date": "2026-09-07",
-          "notes": "- First Creator posts now run through a durable background queue with bounded retries.\n- The onboarding screen can show Creator setup before first-post generation finishes.",
           "highlight": false
         }
       ]

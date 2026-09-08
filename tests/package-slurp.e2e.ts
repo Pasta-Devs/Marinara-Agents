@@ -99,6 +99,7 @@ test.describe("standalone Slurp package", () => {
       .poll(() => slurp.evaluate((element) => getComputedStyle(element).getPropertyValue("--noodle-accent").trim()))
       .toBe("#FF7EC1");
     await expect(slurp.locator('img[src$="/slurp-logo.png"]:visible').first()).toBeVisible();
+    await expect(slurp.getByRole("button", { name: "Leave Slurp" })).toBeVisible();
     expect(errors).toEqual([]);
   });
 
@@ -135,6 +136,10 @@ test.describe("standalone Slurp package", () => {
     const sectionNavigation = slurp.locator('nav[aria-label="Creator settings sections"]:visible');
     await expect(sectionNavigation).toBeVisible();
     if (testInfo.project.name.includes("mobile")) {
+      const mobileNavigation = slurp.getByRole("navigation", { name: "Slurp navigation" });
+      for (const label of ["Slurp", "Profile", "Inbox", "Discover", "More"]) {
+        await expect(mobileNavigation.getByText(label, { exact: true })).toBeVisible();
+      }
       await expect(sectionNavigation).toHaveClass(/overflow-x-auto/u);
       await expect(sectionNavigation.getByRole("button", { name: "Overview" })).toHaveAttribute("aria-current", "page");
     }

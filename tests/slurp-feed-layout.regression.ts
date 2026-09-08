@@ -7,6 +7,8 @@ const componentsDir = join(root, "packages/slurp/src/engine/packages/client/src/
 const home = readFileSync(join(componentsDir, "SlurpHome.tsx"), "utf8");
 const settings = readFileSync(join(componentsDir, "SlurpSettings.tsx"), "utf8");
 const shell = readFileSync(join(componentsDir, "SlurpShell.tsx"), "utf8");
+const coin = readFileSync(join(componentsDir, "SlurpCoin.tsx"), "utf8");
+const ageGate = readFileSync(join(componentsDir, "SlurpAgeGate.tsx"), "utf8");
 const artwork = readFileSync(
   join(root, "packages/slurp/src/engine/packages/server/src/services/slurp/slurp-artwork.operation.ts"),
   "utf8",
@@ -19,6 +21,43 @@ const images = readFileSync(
 // The feed row must offer both readings of the same feed.
 assert.match(home, /useState<"list" \| "wall">\("list"\)/u, "The feed must default to the list layout");
 assert.match(home, /feedLayout === "wall" \? \(\s*<SlurpMediaWall/u, "The wall layout must replace the post list");
+
+// Small polish stays structural: labeled mobile navigation, useful empty states, and no empty rail.
+const mobileNavigation = shell.slice(
+  shell.indexOf('data-component="NoodleView.MobileBottomNav"'),
+  shell.indexOf("</nav>", shell.indexOf('data-component="NoodleView.MobileBottomNav"')),
+);
+for (const label of [
+  "homeLabel",
+  "ui.slurp.navigation.profile",
+  "ui.slurp.navigation.messages",
+  "ui.slurp.navigation.search",
+  "ui.slurp.navigation.more",
+]) {
+  assert.match(mobileNavigation, new RegExp(label.replaceAll(".", "\\."), "u"), `mobile navigation must show ${label}`);
+}
+assert.match(shell, /h-16 grid-flow-col/u, "mobile navigation must reserve enough height for visible labels");
+assert.match(home, /ui\.slurp\.empty\.clearSearch/u, "empty search must offer a recovery action");
+assert.match(home, /ui\.slurp\.empty\.browseAll/u, "an empty Following feed must offer all creators");
+assert.match(
+  home,
+  /\? \("populated" as const\)\s*: \("spanning" as const\)/u,
+  "routes without content must not reserve a blank rail",
+);
+assert.match(ageGate, /ui\.slurp\.ageGate\.leave/u, "the age gate must offer a direct exit");
+assert.match(ageGate, /setConfetti\(true\)/u, "the age-gate confetti payoff must remain");
+assert.match(ageGate, /onCelebrate\(\);\s*onComplete\(\);/u, "entry must begin while confetti continues");
+assert.match(home, /gateCelebrating && <SlurpConfetti fixed/u, "confetti must survive the age gate closing");
+
+// Only observed live balances animate. Static prices and history keep using the same quiet component.
+assert.match(coin, /watchAmount\?: number/u, "coin amounts must accept an observed live balance");
+assert.match(coin, /data-slurp-coin-spent=\{spent\.amount\}/u, "a balance decrease must render spend feedback");
+assert.match(coin, /spent && !reduceMotion/u, "coin movement must respect reduced motion");
+assert.match(
+  home,
+  /amount=\{coins\.toLocaleString\(\)\} watchAmount=\{coins\}/u,
+  "the Wallet balance must animate spending",
+);
 
 // A locked or text-only post has no tile to draw, so it must not reach the wall.
 const wall = home.slice(home.indexOf("function SlurpMediaWall("), home.indexOf("function StageProfileView("));
@@ -102,8 +141,9 @@ for (const [name, source] of [
 assert.doesNotMatch(shell, /reatorStudio/u, "The shell must not offer a creator studio destination");
 assert.doesNotMatch(home, /goToCreatorStudio/u, "Home must not route to a creator studio");
 
-// Same content width on every destination, and a visible change when you switch.
-assert.doesNotMatch(home, /"spanning" as const/u, "No Slurp destination may span the rail column");
+// Routes only reserve the contextual column when they have content for it.
+assert.match(home, /profileRail \? "populated" : "spanning"/u);
+assert.match(home, /inboxRail \? "populated" : "spanning"/u);
 assert.match(
   shell,
   /<AnimatePresence mode="wait" initial=\{false\}>[\s\S]*?key=\{activeView\}/u,
@@ -135,7 +175,6 @@ assert.doesNotMatch(home, /feedLayout === option\.id && "bg-\[var\(--slurp-surfa
 
 // The coin reads as a coin. It is now a real minted asset rather than a CSS disc with a letter on
 // it, so the check moved to the shared component and its source SVG.
-const coin = readFileSync(join(componentsDir, "SlurpCoin.tsx"), "utf8");
 assert.match(coin, /export const SLURP_COIN_SRC =\s*\n?\s*"data:image\/svg\+xml;base64,/u);
 assert.match(coin, /export function SlurpCoinAmount\(/u);
 assert.match(shell, /<SlurpCoinAmount amount=/u, "balances render through the shared coin component");

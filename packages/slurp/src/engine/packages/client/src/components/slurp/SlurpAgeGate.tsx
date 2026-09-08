@@ -8,6 +8,8 @@ import { useTranslation as useUiTranslation } from "react-i18next";
 interface Props {
   personaName: string;
   onComplete: () => void;
+  onCelebrate?: () => void;
+  onLeave?: () => void;
   isPending: boolean;
 }
 
@@ -28,7 +30,7 @@ function usePrefersReducedMotion(): boolean {
 
 const CARD_NUMBER = "5309 1312 4200 6969";
 
-export function SlurpAgeGate({ personaName, onComplete, isPending }: Props) {
+export function SlurpAgeGate({ personaName, onComplete, onCelebrate, onLeave, isPending }: Props) {
   const { t } = useUiTranslation();
   const tt = (key: string, fallback: string) => t(`ui.noodle.agegate.${key}`, fallback);
   const reducedMotion = usePrefersReducedMotion();
@@ -80,7 +82,7 @@ export function SlurpAgeGate({ personaName, onComplete, isPending }: Props) {
 
   const shownNumber = CARD_NUMBER.slice(0, typed).padEnd(CARD_NUMBER.length, "•");
 
-  // Enter is a one-way door: a second click during the 900ms confetti beat would complete the
+  // Enter is a one-way door: a second click during the confetti beat would complete the
   // gate twice, and an unmount in that window would fire it after the component is gone.
   const entered = useRef(false);
   const wasPending = useRef(isPending);
@@ -107,7 +109,12 @@ export function SlurpAgeGate({ personaName, onComplete, isPending }: Props) {
       onComplete();
       return;
     }
-    enterTimer.current = setTimeout(onComplete, 900);
+    if (onCelebrate) {
+      onCelebrate();
+      onComplete();
+      return;
+    }
+    enterTimer.current = setTimeout(onComplete, 600);
   };
 
   if (!explained) {
@@ -139,18 +146,26 @@ export function SlurpAgeGate({ personaName, onComplete, isPending }: Props) {
         <button
           type="button"
           onClick={() => setExplained(true)}
-          className="h-12 rounded-lg bg-[var(--noodle-accent)] text-base font-black uppercase tracking-wide text-zinc-950 [&_svg]:!text-zinc-950 hover:opacity-90"
+          className="h-12 rounded-lg bg-[var(--noodle-accent)] text-base font-black uppercase tracking-wide text-zinc-950 transition-[opacity,transform] [&_svg]:!text-zinc-950 hover:opacity-90 active:scale-[0.96] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--slurp-focus)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--background)] motion-reduce:transition-none motion-reduce:active:scale-100"
         >
           {tt("explainerContinue", "Got it, continue")}
         </button>
+        {onLeave && (
+          <button
+            type="button"
+            onClick={onLeave}
+            className="min-h-11 rounded-lg text-sm font-semibold text-[var(--muted-foreground)] transition-[color,transform] hover:text-[var(--foreground)] active:scale-[0.96] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--slurp-focus)] motion-reduce:transition-none motion-reduce:active:scale-100"
+          >
+            {t("ui.slurp.ageGate.leave", { defaultValue: "Leave Slurp" })}
+          </button>
+        )}
       </div>
     );
   }
 
   return (
     <div className="relative mx-auto flex w-full max-w-md flex-col gap-5">
-      <GateStyles />
-      {confetti && <Confetti />}
+      {confetti && <SlurpConfetti />}
       <div className="text-center">
         <h2 className="text-lg font-black">{tt("cardTitle", "Confirm that you are 18 or older")}</h2>
         <p className="mt-1 text-xs text-[var(--muted-foreground)]">
@@ -213,15 +228,25 @@ export function SlurpAgeGate({ personaName, onComplete, isPending }: Props) {
         type="button"
         onClick={enter}
         disabled={!charged || !confirmedAdult || isPending}
-        className="h-12 rounded-lg bg-[var(--noodle-accent)] text-base font-black uppercase tracking-wide text-zinc-950 [&_svg]:!text-zinc-950 hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-40"
+        className="h-12 rounded-lg bg-[var(--noodle-accent)] text-base font-black uppercase tracking-wide text-zinc-950 transition-[opacity,transform] [&_svg]:!text-zinc-950 hover:opacity-90 active:scale-[0.96] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--slurp-focus)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--background)] disabled:cursor-not-allowed disabled:opacity-40 motion-reduce:transition-none motion-reduce:active:scale-100"
       >
         {isPending ? <Loader2 size={18} className="mx-auto animate-spin" /> : tt("enter", "Enter Slurp")}
       </button>
+      {onLeave && (
+        <button
+          type="button"
+          onClick={onLeave}
+          disabled={isPending}
+          className="min-h-11 rounded-lg text-sm font-semibold text-[var(--muted-foreground)] transition-[color,transform] hover:text-[var(--foreground)] active:scale-[0.96] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--slurp-focus)] disabled:opacity-50 motion-reduce:transition-none motion-reduce:active:scale-100"
+        >
+          {t("ui.slurp.ageGate.leave", { defaultValue: "Leave Slurp" })}
+        </button>
+      )}
     </div>
   );
 }
 
-function Confetti() {
+export function SlurpConfetti({ fixed = false }: { fixed?: boolean }) {
   // Randomized positions computed in an effect (Math.random is impure — can't run during render).
   const [pieces, setPieces] = useState<Array<{ left: string; delay: string; hue: number }>>([]);
   useEffect(() => {
@@ -234,19 +259,25 @@ function Confetti() {
     );
   }, []);
   return (
-    <div className="pointer-events-none absolute inset-0 z-10 overflow-hidden" aria-hidden="true">
-      {pieces.map((p, i) => (
-        <span
-          key={i}
-          className="agegate-confetti"
-          style={{
-            left: p.left,
-            animationDelay: p.delay,
-            background: `hsl(${p.hue} 90% 60%)`,
-          }}
-        />
-      ))}
-    </div>
+    <>
+      <GateStyles />
+      <div
+        className={`pointer-events-none inset-0 overflow-hidden ${fixed ? "fixed z-[100]" : "absolute z-10"}`}
+        aria-hidden="true"
+      >
+        {pieces.map((p, i) => (
+          <span
+            key={i}
+            className={`agegate-confetti${fixed ? " agegate-confetti-screen" : ""}`}
+            style={{
+              left: p.left,
+              animationDelay: p.delay,
+              background: `hsl(${p.hue} 90% 60%)`,
+            }}
+          />
+        ))}
+      </div>
+    </>
   );
 }
 
@@ -261,6 +292,10 @@ function GateStyles() {
       }
       @keyframes agegate-fall {
         to { transform: translateY(360px) rotate(540deg); opacity: 0; }
+      }
+      .agegate-confetti-screen { animation-name: agegate-fall-screen; }
+      @keyframes agegate-fall-screen {
+        to { transform: translateY(100vh) rotate(540deg); opacity: 0; }
       }
       @media (prefers-reduced-motion: reduce) {
         .agegate-confetti { animation: none; }

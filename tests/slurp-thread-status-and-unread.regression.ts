@@ -26,13 +26,20 @@ assert.match(
   /creatorUnread: input\.role === "viewer" \? String\(thread\.creatorUnread \+ 1\) : "0",/u,
   "a creator message must zero creatorUnread, not carry it forward",
 );
+assert.match(
+  messagesStorage,
+  /state: input\.role === "creator" && thread\.state === "request" \? "active" : thread\.state,/u,
+  "a Creator reply must turn a pending request into an active conversation",
+);
 // The other direction is deliberately untouched: a creator reply must not clear what the viewer
 // has yet to read, which is a different count with a different owner.
 assert.match(
   messagesStorage,
   /viewerUnread: input\.role === "creator" \? String\(thread\.viewerUnread \+ 1\) : String\(thread\.viewerUnread\),/u,
 );
-// The queue this feeds still only wants active threads with something unread.
+// The queue must also pick up pending first contacts. Their first Creator reply promotes them to
+// active; excluding requests here left every off-hours non-subscriber message pending forever.
+assert.match(messagesStorage, /inArray\(slurpThreads\.state, \["active", "request"\]\)/u);
 assert.match(messagesStorage, /thread\.creatorUnread > 0 && \(!thread\.replyNotBeforeAt/u);
 
 // ── Creator status reaches the message thread ───────────────────────────────
