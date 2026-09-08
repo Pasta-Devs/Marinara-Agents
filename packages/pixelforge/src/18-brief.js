@@ -832,23 +832,36 @@ PF.brief = (() => {
 
   /** WHAT THE CALL DID WITH THE PLAYER'S LORE PICKS, WRITTEN DOWN.
    *
-   *  The route answers with `lorebook: {includedEntries, skippedEntries}` — and
-   *  ONLY when the selection produced lore or produced skips. So an ABSENT key
-   *  after a non-empty selection is not "nothing to report": it is every id
-   *  refused, by a disabled book, a character or trigger filter, or an id that no
-   *  longer exists. A package that says nothing there leaves the player with a
-   *  world that quietly did not know about Viridian City and no way to find out
-   *  why, which is the worst shape a bug report can take.
+   *  The route answers with `lorebook: {includedEntries, skippedEntries}` WHENEVER
+   *  a selection was sent — the key is present even when the answer is zero, which
+   *  is what makes `includedEntries: 0` a REPORTED all-refused rather than a guess:
+   *  a disabled book, a character or trigger filter, or an id that no longer
+   *  exists. Saying nothing there leaves the player with a world that quietly did
+   *  not know about Viridian City and no way to find out why, which is the worst
+   *  shape a bug report can take. So that arm keeps the honest message and keeps
+   *  writing the note.
    *
-   *  It rides `_repairs`, which is this module's existing channel for a transport
-   *  fact worth keeping beside the brief it belongs to (the truncation salvage
-   *  note is the precedent), so it is stored with the seal and readable later
-   *  rather than living in one console line the player never sees. */
+   *  AN ABSENT KEY IS THE OTHER THING ENTIRELY, AND IT IS NOT A REFUSAL. This
+   *  package ships against Engines older than the route half: an Engine that
+   *  predates it takes the request field as an unknown key, writes the world
+   *  WITHOUT the lore, and answers with no `lorebook` block because it has none to
+   *  give. That reading used to be "every id refused" — a `console.warn` AND a
+   *  permanent `_repairs` line on the seal, on every lore-using launch, for a
+   *  version skew that is nobody's bug. It is a soft `console.warn` now and
+   *  NOTHING IS STORED: the seal outlives the mismatch, so a line saying the call
+   *  refused the picks would still be sitting in a checkpoint long after the
+   *  Engine that could not report them was updated.
+   *
+   *  The stored notes ride `_repairs`, this module's existing channel for a
+   *  transport fact worth keeping beside the brief it belongs to (the truncation
+   *  salvage note is the precedent), so what IS written is readable later rather
+   *  than living in one console line the player never sees. */
   function noteLore(sealed, count, lorebook) {
     const plural = count === 1 ? "entry" : "entries";
     if (!lorebook || typeof lorebook !== "object") {
-      console.warn(`[pixelforge] the world call refused all ${count} picked lorebook ${plural}`);
-      sealed._repairs.push(`lorebook: all ${count} picked ${plural} were refused; none reached the model`);
+      console.warn(
+        `[pixelforge] this Engine answered the world call with no lorebook report, so the ${count} picked ${plural} probably did not reach it — the picker needs an Engine that carries the lorebook response block`,
+      );
       return;
     }
     // The counts are the ENGINE'S OWN diagnostics, read rather than re-derived:
@@ -857,10 +870,14 @@ PF.brief = (() => {
     const included = typeof lorebook.includedEntries === "number" ? lorebook.includedEntries : 0;
     const skipped = Array.isArray(lorebook.skippedEntries) ? lorebook.skippedEntries.length : 0;
     if (included >= count && !skipped) return;
+    const budget = skipped ? `, ${skipped} set aside for budget` : "";
+    if (!included) {
+      console.warn(`[pixelforge] the world call refused all ${count} picked lorebook ${plural}`);
+      sealed._repairs.push(`lorebook: all ${count} picked ${plural} were refused; none reached the model${budget}`);
+      return;
+    }
     console.warn(`[pixelforge] ${included} of ${count} picked lorebook ${plural} reached the world call`);
-    sealed._repairs.push(
-      `lorebook: ${included} of ${count} picked ${plural} reached the model${skipped ? `, ${skipped} set aside for budget` : ""}`,
-    );
+    sealed._repairs.push(`lorebook: ${included} of ${count} picked ${plural} reached the model${budget}`);
   }
 
   /** The one #5135 generation call with the §5 failure ladder (amended):
@@ -965,9 +982,10 @@ PF.brief = (() => {
           const sealed = validate(salvaged, { theme, seed }, { fromModel: true });
           sealed._repairs.push("transport: salvaged from a truncated response");
           // NOT `noteLore` — the 422 body carries no `lorebook` key whatever the
-          // call did with the picks, so the absent-key reading ("all refused")
-          // would be a claim this path cannot support. What IS true is that the
-          // reply was cut off before it said, and that is what gets written.
+          // call did with the picks, and on THIS path an absent key does not even
+          // separate an Engine that predates the response block from one that
+          // simply got cut off before writing it. What IS true is that the reply
+          // was cut off before it said, and that is what gets written.
           if (loreIds.length)
             sealed._repairs.push(
               `lorebook: ${loreIds.length} picked ${loreIds.length === 1 ? "entry" : "entries"} were sent; the cut-off reply did not say what became of them`,

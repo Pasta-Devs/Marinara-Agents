@@ -171,8 +171,32 @@ const SUFFIX =
 const matches = (token, word) => token === word || (token.startsWith(word) && SUFFIX.test(token.slice(word.length)));
 
 /** Tokens rather than substrings, and then a bounded prefix on top of that. A
- *  token counts once for a kit however many of that kit's words it matches, so
- *  "hydroponics domes" is two votes and not four. */
+ *  token counts once for a kit however many of that kit's words it matches —
+ *  `hits++` sits outside `words.some(…)` and counts the TOKEN, not the word.
+ *
+ *  THAT RULE IS UNOBSERVABLE TODAY, AND THE COMMENT USED TO CLAIM OTHERWISE.
+ *  It offered "hydroponics domes is two votes and not four" as its worked
+ *  example, which is simply false: `hydroponics` fires `hydroponic` and nothing
+ *  else, `domes` fires `dome` and nothing else, so that phrase is two votes
+ *  under either counting rule. A review round then read the rule as an untested
+ *  claim and set out to pin it, on "a colony village" — also false, because
+ *  `colony` and the stem `coloni` diverge at their sixth letter and no token
+ *  starts with both.
+ *
+ *  The precondition, measured over the whole lexicon: both arms of `matches`
+ *  require the token to START WITH the word, so a token can only fire two words
+ *  of one kit if one of those words is a prefix of the other. Exactly one such
+ *  pair exists — `hab` inside `habitat` — and its remainder, "itat", is not in
+ *  SUFFIX, so nothing fires both. Swept across every word × every suffix, the
+ *  most words of one kit any generated token fires is ONE.
+ *
+ *  So the rule is a guard against a lexicon that does not exist yet, and the
+ *  harness carries no lane for it because every lane would pass with `some` and
+ *  without it. THE EDIT THAT ENDS THAT: adding a word whose own kit already
+ *  carries a prefix of it with a live suffix between them — `colonies` beside
+ *  `coloni`, say, or `habitation` beside `hab` if `itation` ever joined SUFFIX.
+ *  On the day that lands, the rule starts deciding real sentences ("a colonies
+ *  village" would tie under it and go sci-fi without it) and wants a lane. */
 const themeFromWords = (text) => {
   const tokens = String(text ?? "")
     .toLowerCase()
@@ -424,9 +448,10 @@ PF.mountSetup = (el, props) => {
   //                           it passes as `currentLocationTokenBudget` for this
   //                           call alone (every other caller keeps 2,048). It is
   //                           the first wall applied and the only global one that
-  //                           binds — the chat-wide default is 8,192 tokens and
+  //                           binds — the chat-wide DEFAULT is 8,192 tokens and
   //                           sits well above it.
-  //   the book's own budget   each book's `tokenBudget`, default 2,048 tokens.
+  //   the book's own budget   each book's `tokenBudget`, default 2,048 tokens,
+  //                           and ZERO MEANS THE BOOK HAS NO WALL OF ITS OWN.
   //                           NOT overridable by any caller: it belongs to
   //                           whoever owns the book, so it is the wall the player
   //                           has to be shown per book rather than in one total.
@@ -449,6 +474,29 @@ PF.mountSetup = (el, props) => {
   // `GET /lorebooks/` returns `tokenBudget` and `entryLimit` per book, so all four
   // are read rather than assumed; the two literals below are the schema defaults,
   // used only when a row does not carry a usable number.
+  //
+  // ── TWO WAYS THESE MIRRORED CONSTANTS CAN GO STALE, NAMED SO THE ENGINE HALF
+  //    HAS TO ANSWER THEM (0.16.2 review) ──────────────────────────────────────
+  // Neither is a bug here today and neither is fixable here: both are facts about
+  // a server route that does not exist yet, and both would make the arithmetic
+  // above OVER-promise, which is the direction that costs the player the call.
+  //
+  //   the 3,000 is a FLOOR THE CHAT CAN UNDERCUT. `resolveLorebookTokenBudget`
+  //   honours a per-chat `lorebookTokenBudget` override, and only its DEFAULT is
+  //   the 8,192 the bullet above leans on. A chat whose owner set 500 makes this
+  //   ceiling far too generous, and the player is told they have 3,000 tokens
+  //   they will not get. If the route ends up passing the chat's own figure, this
+  //   constant has to be read off the response — or the route has to pin 3,000
+  //   for this call regardless of the chat, which is the simpler contract and the
+  //   one the bullet above assumes.
+  //
+  //   the budget state is SHARED WITH LORE NOBODY PICKED. `scanLorebooks` merges
+  //   forced entries with the normally-active ones into one per-book/global
+  //   budget state, so on a chat with auto-activating entries the picks are not
+  //   alone in the budget they are being measured against. This arithmetic counts
+  //   the picks and only the picks. If the new route reuses that path rather than
+  //   resolving the picked ids into a state of their own, an entry this form
+  //   accepted can still be dropped by an entry the player never saw.
   const LORE_MAX_ENTRIES = 100;
   const LORE_CALL_TOKENS = 3_000;
   const LORE_BOOK_TOKENS = 2_048;
@@ -458,11 +506,38 @@ PF.mountSetup = (el, props) => {
    *  characters divided by four is a different (smaller) number and would let
    *  through selections the server then drops. */
   const loreTokens = (text) => Math.ceil(String(text ?? "").length / 4);
-  /** A row's number when it has one, the schema default when it does not. Zero is
-   *  "no budget" on the Engine side and would read as unlimited here, which is the
-   *  one value that must not fall through to the default silently. */
+  /** A row's number when it has a usable one, the schema default when it does
+   *  not. This is the `entryLimit` reader, and it may floor at 1 because the
+   *  route's own `normalizeLorebookEntryLimit` clamps into
+   *  `[LOREBOOK_ENTRY_LIMIT_MIN = 1, MAX = 1000]` — a stored 0 comes back as 1,
+   *  so 0 is a shape this reader only ever sees off a projection the parse never
+   *  touched, and the default is the honest answer to it. */
   const loreNumber = (value, fallback) =>
     typeof value === "number" && Number.isFinite(value) && value > 0 ? Math.floor(value) : fallback;
+  /** THE BOOK'S TOKEN BUDGET, AND `null` IS "THIS BOOK HAS NO WALL OF ITS OWN".
+   *
+   *  Zero is a real, storable, SHIPPED value here and it does not mean "unset":
+   *  `tokenBudget` is normalized with `Math.max(0, …)` and a default of 2,048 for
+   *  anything unparseable, so `GET /lorebooks/` answers 0 for a book whose owner
+   *  set 0 and 2,048 for a book that never had a number. The Engine then reads
+   *  that 0 as NO per-book budget — `lorebookBudget > 0 && lorebookTokens +
+   *  entryTokens > lorebookBudget` — so the wall simply does not run for it.
+   *
+   *  Folding 0 into the 2,048 default (which this reader used to do) is not the
+   *  safe direction it looks like. It refuses selections the server would have
+   *  kept, and the refusal NAMES A NUMBER THE OWNER NEVER SET — "Gazetteer has
+   *  248 of its 2048 left" for a book with no budget at all. Measured: ten
+   *  300-token entries in a 0-budget book, which the call's own 3,000 fits
+   *  exactly, came out six accepted and four refused.
+   *
+   *  A negative reaches the same answer for the same reason: the Engine's gate is
+   *  `> 0`, so anything at or below zero is no wall there and must be no wall
+   *  here. The call's 3,000 and the two count ceilings still bind. */
+  const loreBookTokens = (value) => {
+    if (typeof value !== "number" || !Number.isFinite(value)) return LORE_BOOK_TOKENS;
+    const floored = Math.floor(value);
+    return floored > 0 ? floored : null;
+  };
 
   const loreBox = PF.el("div", {
     style: "display:flex;flex-direction:column;gap:4px;max-height:180px;overflow:auto;" + S.input,
@@ -485,7 +560,11 @@ PF.mountSetup = (el, props) => {
   /** THE RUNNING COUNT IS PER BOOK AND NAMES THE BOOK, because one total over two
    *  books with different budgets is the invisible-budget lie in a new place. The
    *  call's own ceiling follows it, so the player can see which of the two they
-   *  are about to hit. */
+   *  are about to hit.
+   *
+   *  A book with no budget of its own gets no denominator, because there is no
+   *  number to divide by and inventing one is how the old reading came to name a
+   *  figure the owner never set. Its tokens still count toward the call's. */
   const syncLoreBudget = () => {
     if (!lorePicked.length) {
       loreBudgetEl.textContent = "No entries picked — the world is written from your setting alone.";
@@ -494,7 +573,11 @@ PF.mountSetup = (el, props) => {
     const parts = [];
     for (const [bookId, book] of loreBooks) {
       if (!loreCountIn(bookId)) continue;
-      parts.push(`${loreUsedIn(bookId)} / ${book.tokens} tokens from ${book.name}`);
+      parts.push(
+        book.tokens === null
+          ? `${loreUsedIn(bookId)} tokens from ${book.name} (no budget of its own)`
+          : `${loreUsedIn(bookId)} / ${book.tokens} tokens from ${book.name}`,
+      );
     }
     const noun = lorePicked.length === 1 ? "entry" : "entries";
     parts.push(`${loreUsedAll()} / ${LORE_CALL_TOKENS} tokens for the call (${lorePicked.length} ${noun})`);
@@ -530,7 +613,10 @@ PF.mountSetup = (el, props) => {
       return refuse(`${LORE_MAX_ENTRIES} entries is the most the game reads at once. Untick something first.`);
     if (loreCountIn(entry.bookId) >= book.entries)
       return refuse(`${book.name} allows ${book.entries} entries at a time. Untick one of its own first.`);
-    if (loreUsedIn(entry.bookId) + entry.tokens > book.tokens)
+    // …and this wall is SKIPPED ENTIRELY for a book with no budget of its own,
+    // exactly as the Engine skips it. The call's own ceiling below is what stops
+    // such a book, and it is the wall the refusal will then correctly name.
+    if (book.tokens !== null && loreUsedIn(entry.bookId) + entry.tokens > book.tokens)
       return refuse(
         `That entry needs ${entry.tokens} tokens and ${book.name} has ${
           book.tokens - loreUsedIn(entry.bookId)
@@ -606,12 +692,24 @@ PF.mountSetup = (el, props) => {
       PF.el("div", { style: "flex:1;" }, [field("Rating", ratingSel)]),
     ]),
     field("GM connection", connSel),
-    // LISTED IN THE ORDER THE CALL WILL KEEP THEM, and the label says so because
-    // that ordering is not the player's picking order and they cannot see why:
-    // when a selection overruns, the server keeps constants first and then works
-    // down each book in the book's own order, so the list is a PREDICTION of what
-    // survives rather than a promise the mechanism would not keep.
-    field("Lorebook entries to read before writing the world (in the order the call keeps them)", loreBox),
+    // LISTED PER BOOK, IN THE ORDER THE CALL KEEPS THAT BOOK'S OWN ENTRIES — and
+    // the label claims exactly that much and not one word more.
+    //
+    // The label used to read "in the order the call keeps them", which is a
+    // CROSS-BOOK promise this list cannot keep. The server's drop order
+    // (`lorebookSelectionOrder`) sorts every candidate together: constants, then
+    // context matches, then `injectionOrder` across all books at once. This form
+    // renders book by book and sorts inside each one, so it cannot show that
+    // interleave — measured, a book holding an order-9 entry above a book holding
+    // an order-0 one renders `[late, early]` where the call would keep
+    // `[early, late]`. Naming an ordering the UI cannot show is the invisible
+    // budget in a new costume: a claim the player has no way to check.
+    //
+    // The per-book sort stays and is still worth having, because it IS true: it
+    // is the drop rule restricted to one book, and one expanded book is the unit
+    // a player can actually read. Nothing is ever dropped in practice — the four
+    // walls see to that — so this is a fix to the SENTENCE and not to the sort.
+    field("Lorebook entries to read before writing the world (each book in the order the call keeps its own)", loreBox),
     loreBudgetEl,
     errEl,
     PF.el("div", { style: `${S.row}margin-top:14px;justify-content:flex-end;` }, [cancelBtn, launchBtn]),
@@ -681,7 +779,9 @@ PF.mountSetup = (el, props) => {
         const noteEl = PF.el("div", { style: "font:11px/1.5 inherit;opacity:0.75;padding-left:16px;" });
         loreBooks.set(book.id, {
           name,
-          tokens: loreNumber(book.tokenBudget, LORE_BOOK_TOKENS),
+          // `null` here is a book with no budget of its own, which is a value its
+          // owner can set and the Engine honours — see `loreBookTokens`.
+          tokens: loreBookTokens(book.tokenBudget),
           // NOT clamped against the wire's own 100. The two ceilings are separate
           // walls and the refusal message names which one bit, so folding them
           // into one number would make a book whose owner allows 200 entries
@@ -730,9 +830,10 @@ PF.mountSetup = (el, props) => {
               .sort((a, b) => {
                 const constant = (row) => (row.constant === true || row.constant === "true" ? 0 : 1);
                 if (constant(a) !== constant(b)) return constant(a) - constant(b);
-                // Read straight rather than through `loreNumber`, which floors at
-                // 1 because a zero budget means "no budget" — `order` has no such
-                // reading and is signed, so 0 and -5 are ordinary positions.
+                // Read straight rather than through either budget reader: both
+                // treat a non-positive number as something other than itself,
+                // and `order` has no such reading — it is signed, so 0 and -5
+                // are ordinary positions in the book.
                 const at = (row) => (typeof row.order === "number" && Number.isFinite(row.order) ? row.order : 0);
                 return at(a) - at(b);
               });
