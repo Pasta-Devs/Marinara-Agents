@@ -1848,10 +1848,18 @@ PF.save = {
       core?.host && typeof core.host.chatMeta === "object" && core.host.chatMeta !== null ? core.host.chatMeta : {};
     const sealed = this._configBrief(meta, core?.chatId);
     if (!this.briefCompiles(sealed)) return false;
-    // THE SEAL FIRST, THE CONFIG SECOND (0.16.2). The kit is no longer a dropdown
-    // answer the config owns: on a generated world the MODEL chose it, and the
-    // brief is where that choice was written down. Reading the config here would
-    // probe a rebuild in one kit and then install a world in another.
+    // THE SEAL FIRST, THE CONFIG SECOND (0.16.2), AND IT IS A POLICY MATCH RATHER
+    // THAN A REPAIR. The kit is no longer a dropdown answer the config owns: on a
+    // generated world the MODEL chose it, and the brief is where that choice was
+    // written down — so this reads the same pair in the same order as the install
+    // path does. What ordering it this way does NOT do is change this probe's
+    // answer, and the honest version of that is worth more than the tidy one: the
+    // line above has already established that `sealed` compiles, and `build()`
+    // takes its kit off a compiling seal and ignores this argument entirely
+    // (measured — same `brieved`, same `world.theme`, identical zones either way).
+    // The argument is live only on the degrade path, which this call has already
+    // returned from. The reason to match anyway is that the two reads cannot then
+    // drift apart the day one of them starts to matter.
     const theme = sealed?.theme ?? this._configTheme(meta) ?? "cozy-village";
     return !!PF.world.build(this._regenSeed(core, meta), theme, sealed).brieved;
   },
@@ -1988,11 +1996,17 @@ PF.save = {
         const seed = this._regenSeed(core, meta);
         const sealed = this._configBrief(meta, chatId);
         if (!this.briefCompiles(sealed)) return false;
-        // THE THEME READ MOVED BELOW THE SEAL (0.16.2), and the move is the point
-        // rather than a tidy-up: it is `sealed.theme` first now — the kit the model
-        // chose, written into the brief — with the config's answer behind it for a
-        // chat whose brief predates the ladder. It is the same pair `canRebuild`
-        // probes with, and the two must not be able to disagree.
+        // THE THEME READ MOVED BELOW THE SEAL (0.16.2): it is `sealed.theme` first
+        // now — the kit the model chose, written into the brief — with the config's
+        // answer behind it for a chat whose brief predates the ladder. It is the
+        // same pair `canRebuild` probes with, read in the same order for
+        // consistency of POLICY and not because the value decides anything here.
+        // Both places this `theme` reaches are `PF.world.build(seed, theme, sealed)`
+        // — the guard below, and `_installSealedWorld`'s own build — and the line
+        // above has already established that `sealed` compiles, so both take their
+        // kit off the seal and ignore the argument. Contrast the post-seal read at
+        // the bottom of `maybeGenerateBrief`, which is genuinely load-bearing: that
+        // one is handed to `PF.pack.generate`, where nothing else answers.
         const theme = sealed?.theme ?? this._configTheme(meta) ?? "cozy-village";
         if (!PF.world.build(seed, theme, sealed).brieved) return false;
         await this.flush(core, false);

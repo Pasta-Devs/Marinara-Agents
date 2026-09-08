@@ -974,6 +974,15 @@ PF.brief = (() => {
       // a BASE painter both kits draw (the glow uses `windowGlow`, which the colony
       // palette turns from firelight to cold blue), so it would steer a colony to
       // the village on a tile the colony paints itself.
+      //
+      // WHICH IS WHY THE WIZARD'S RESOLVER KEEPS IT, and that is not a copy that
+      // fell behind. This list states what a kit CONTAINS, to a model that has not
+      // seen the art; `KIT_WORDS` in 80-setup reads what a PLAYER MEANT, off
+      // ordinary English connotation. A hearth is genuinely in both kits, and a
+      // player who types "hearth" is genuinely describing a village. Both
+      // statements are true at once, so the word belongs in exactly one of these
+      // two lists and is absent from exactly one — deleting it from the other to
+      // make them match would be making the resolver wrong to make a pair tidy.
       ...(haveThemeIds
         ? [
             `- artTheme: one of ${themeIdList.join(" | ")} — which visual kit the setting belongs in. Choose`,

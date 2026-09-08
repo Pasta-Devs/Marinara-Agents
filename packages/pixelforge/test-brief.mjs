@@ -25463,10 +25463,11 @@ const fire = (node, type) => Promise.all((node.listeners[type] ?? []).map((fn) =
       "the composed line is what satisfies the host's min(1) — it is downstream of the resolver, never upstream",
     );
 
-    // The same trap one field over: `nameIn` ships PRE-FILLED with a real value,
-    // so a player who never touches it still hands `settingOf` a name — and a
-    // colony-shaped campaign name must not be able to vote for a colony kit
-    // through the composed sentence.
+    // The same trap one field over, and `nameIn` ships EMPTY as of 0.16.2 — so the
+    // name reaching `settingOf` is one the player TYPED, which is the version of
+    // this trap that can actually happen. A campaign name is not a claim about the
+    // setting, however sci-fi it sounds, and it must not be able to vote for a
+    // colony kit by riding into the resolver through the composed sentence.
     const named = await mountWizard();
     named.nameIn.value = "Orbital Station Nine";
     await fire(named.nameIn, "input");
@@ -25601,6 +25602,27 @@ const fire = (node, type) => Promise.all((node.listeners[type] ?? []).map((fn) =
   // "coloni" + "st", and the stem is deliberate — this is the assertion that
   // makes the `st`/`sts`/`ist`/`ists` entries load-bearing rather than decorative.
   assert.equal(kit("Everybody here is a colonist."), "sci-fi-colony", '"colonist" votes on the stem, on its own');
+  // THE NOUN FORMS, and these three are here because the first cut of the suffix
+  // list dropped them: bounding the remainder killed a false-positive class and
+  // opened a false-NEGATIVE one, and "Colonization of Mars" resolved to a cozy
+  // village. Each row carries ONLY `-ion`-family evidence — no `dome`, no
+  // `airlock`, no `crew` — so none of them can pass on a neighbour's vote.
+  for (const text of [
+    "The colonisation of the outer belt began here.",
+    "Colonization of Mars, one habitation module at a time.",
+    "A habitation ring turning slowly.",
+  ]) {
+    assert.equal(kit(text), "sci-fi-colony", `the colony's own noun still votes: ${text}`);
+  }
+  // …and the half of that family that was NOT added, held down so a later widening
+  // has to argue with a lane rather than with a comment. "stationary" is `station`
+  // + `ary`, and recovering it costs the false-positive class the whole list
+  // exists to close.
+  assert.equal(
+    kit("The cart stood stationary in the rain."),
+    "cozy-village",
+    '"stationary" is ordinary English, which is why `ary` is not in the set',
+  );
   for (const text of [
     "Terraforming crews and hydroponics domes on a frontier outpost.",
     "Androids and colonies under glass.",
@@ -25618,6 +25640,33 @@ const fire = (node, type) => Promise.all((node.listeners[type] ?? []).map((fn) =
   ]) {
     assert.equal(kit(text), "cozy-village", `and the traps stay in the village: ${text}`);
   }
+  // `hearth` IS EVIDENCE HERE AND IS NOT EVIDENCE IN THE GUIDANCE, deliberately.
+  // 18-brief states what a kit CONTAINS and correctly omits `hearth`, because both
+  // kits paint one; this lexicon reads what a PLAYER MEANT, and nobody reaches for
+  // "hearth" to describe a pressure-sealed habitat. Without a lane the two look
+  // like a copy that fell behind, and the tidying edit is to delete the word.
+  //
+  // A MINIMAL PAIR, because the obvious row does not test anything: "a settlement
+  // built around a great hearth" stays cozy-village with the word deleted too —
+  // zero hits either way, so the default answers and the lane passes for the wrong
+  // reason. These two differ by the hearth alone, and the kit differs with them.
+  assert.equal(
+    kit("A great hearth under a cracked dome."),
+    "cozy-village",
+    '"hearth" is real evidence: it ties the dome, and a tie keeps the village',
+  );
+  assert.equal(
+    kit("A cracked dome."),
+    "sci-fi-colony",
+    "…and the same sentence without it goes the other way — that is the vote, isolated",
+  );
+  // The other half, and it is what makes keeping a shared painter cheap: a vote,
+  // never a veto. Prose already full of colony words is not dragged back by one.
+  assert.equal(
+    kit("A hearth glowing in the airlock corridor of the dome colony."),
+    "sci-fi-colony",
+    "…while three colony tokens still outcount it",
+  );
 }
 
 // ── THE CONTENT PACK: THE SCHEMA IS THE CONTRACT (0.13 slice 1) ──────────────
@@ -32941,6 +32990,47 @@ const layoutFingerprint = (w) => {
       assert.equal(seedAsked, RSEED, "the generation call was made for the world the player is standing in");
       assert.equal(core.sim.world.seed, RSEED, "…and the world it installed carries that same identity");
       assert.notEqual(core.sim.world.seed, CONFIG_SEED, "the rewritten wizard config did NOT move the seed");
+    } finally {
+      loadedPF.brief.generate = realGenerate;
+      loadedPF.pack.generate = realPack;
+      clearRetry();
+      restoreAssets();
+    }
+  });
+
+  // ── LANE 5d2: RUNG 2 IS WHAT THE CALL IS HANDED ──────────────────────────
+  // `generate()`'s `theme` option IS rung 2 of the resolution ladder — the answer
+  // that stands when the model names no kit, or names one this build does not
+  // ship. Every other stub in this file reads `seed` or `onFailure` and ignores
+  // the rest of the bag, so the one option the ladder is ABOUT was unasserted:
+  // hardcoding `"cozy-village"` at the call site left the whole harness green.
+  // The fixture therefore stores a NON-default theme, because a lane written on
+  // the `wizard()` default cannot tell the wizard's answer from the hardcode.
+  await withSavePath(async ({ tick, makeCore }) => {
+    clearRetry();
+    const realGenerate = loadedPF.brief.generate;
+    const realPack = loadedPF.pack.generate;
+    let optionsSeen = null;
+    loadedPF.brief.generate = async (chatId, options) => {
+      optionsSeen = options;
+      return rBrief2;
+    };
+    loadedPF.pack.generate = async (chatId, { brief }) => packFor(brief);
+    try {
+      const meta = { ...wizard({ theme: "sci-fi-colony" }), pixelforgeBrief: rBrief };
+      const core = makeCore("chat-rung2", RSEED);
+      core.host.chatMeta = meta;
+      S.mode = "metadata";
+      assert.equal(S._configTheme(meta), "sci-fi-colony", "the fixture really does carry a non-default kit");
+
+      assert.equal(await S.regenerateStage(core, "brief", "reroll"), true, "the paid re-roll runs");
+      await tick();
+      assert.ok(optionsSeen, "…and the brief call was actually made");
+      assert.equal(
+        optionsSeen.theme,
+        S._configTheme(meta),
+        "the call is handed the wizard's derived answer, not a constant — this IS rung 2",
+      );
     } finally {
       loadedPF.brief.generate = realGenerate;
       loadedPF.pack.generate = realPack;

@@ -40,6 +40,29 @@
 // silently fall behind a third theme: an id can reach PF.art and the brief
 // schema while remaining unreachable through here. The harness pins
 // `PF.setup.kitIds()` against `PF.art.themeIds()` for exactly that.
+//
+// THIS LIST AND THE GUIDANCE'S KIT LIST ANSWER DIFFERENT QUESTIONS, and `hearth`
+// is where that stops being a technicality. 18-brief's guidance states what each
+// kit CONTAINS — facts about the art, read off the painter override table — and
+// it names `hearth` as deliberately absent, correctly: a hearth is a BASE painter
+// that both kits draw, so offering it to the model as evidence would be telling
+// the model a falsehood about the pixels. This list is not evidence about the
+// art. It reads PLAYER INTENT off English connotation, and a player who writes
+// "hearth" means a cozy village — nobody reaches for that word to describe a
+// pressure-sealed habitat. So the word stays here and stays out of there, and
+// neither is a stale copy of the other.
+//
+// It is also a VOTE and not a veto, which is what keeps the connotation claim
+// cheap. Measured as a minimal pair, because a hearth on its own proves nothing
+// — a sentence with no other lexicon word lands on `cozy-village` whether the
+// word is in this list or not, and the default would be masking the miss:
+// "A great hearth under a cracked dome." resolves cozy-village (the hearth ties
+// the dome, and a tie keeps the village) while "A cracked dome." resolves
+// sci-fi-colony. That difference IS the vote. And it stays only a vote — "A
+// hearth glowing in the airlock corridor of the dome colony." is still
+// sci-fi-colony, because three colony tokens outcount one. A shared painter
+// costing the colony a single vote in prose already full of colony words changes
+// no answer. The harness pins all three rows.
 const KIT_WORDS = {
   "cozy-village": [
     "village",
@@ -119,9 +142,28 @@ const KIT_WORDS = {
  *  one that took all three sets. The trade is stated rather than assumed — the
  *  list is a closed vocabulary, so a real word ending this list does not carry
  *  ("domelike", say) is a miss, and the answer to a miss is to add the suffix
- *  here rather than to loosen the match. */
+ *  here rather than to loosen the match.
+ *
+ *  THE `-ion` FAMILY IS HERE BECAUSE THE FIRST CUT OF THIS LIST LOST THE COLONY
+ *  NOUN, and that is the shape of the mistake worth naming: bounding the
+ *  remainder traded a false-POSITIVE class for a false-NEGATIVE one, and only
+ *  the half it was aiming at got measured. `colonisation`, `colonization` and
+ *  `habitation` are the noun forms of the three most on-theme words in the
+ *  lexicon, and every one of them scored zero — so "Colonization of Mars, one
+ *  habitation module at a time." came out a cozy village. Measured over the
+ *  whole lexicon, this family turns 18 tokens ON and none off. Two spellings of
+ *  each, because the STEM decides the remainder: `coloni` + `sation`, but
+ *  `robot` + `ised`.
+ *
+ *  Two suffixes were measured and DELIBERATELY LEFT OUT. `ary` recovers
+ *  `stationary` and re-opens the exact false-positive class this list exists to
+ *  close — "The cart stood stationary in the rain." reads as a space colony.
+ *  `like` recovers `domelike` and nothing else, and the paragraph above already
+ *  carries that one as the acknowledged miss. The collateral that IS accepted is
+ *  `alienation` and `oxygenation`: both stems already vote colony bare, so
+ *  neither is a new class, only a new inflection of an old one. */
 const SUFFIX =
-  /^(s|es|ed|d|ing|er|ers|ies|y|st|sts|ist|ists|land|lands|house|houses|hand|hands|man|men|folk|side|smith|keeper|keepers|al|ic|ics)$/;
+  /^(s|es|ed|d|ing|er|ers|ies|y|st|sts|ist|ists|land|lands|house|houses|hand|hands|man|men|folk|side|smith|keeper|keepers|al|ic|ics|ion|ions|ation|ations|sation|sations|zation|zations|sing|zing|sed|zed|ising|izing|ised|ized)$/;
 /** `st`/`sts`/`ist`/`ists` are in the set for `colonist` = `coloni` + `st`,
  *  which is the multi-line lane's own word; without them that lane passes only
  *  because `dome` and `airlock` also hit, which is a lane passing for the wrong
