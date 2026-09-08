@@ -977,6 +977,47 @@ function MessageBubble({
       </p>
     );
   }
+  if (message.kind === "post_preview") {
+    const preview = message.metadata;
+    const previewTitle = typeof preview.title === "string" ? preview.title : message.content;
+    const previewContent = typeof preview.content === "string" ? preview.content : "";
+    const locked = preview.access === "locked";
+    return (
+      <div
+        className={cn(
+          "flex max-w-[88%] flex-col gap-1 sm:max-w-[78%]",
+          mine ? "self-end items-end" : "self-start items-start",
+        )}
+      >
+        <div className="overflow-hidden rounded-2xl bg-[var(--slurp-surface)] ring-1 ring-inset ring-[var(--noodle-divider)]">
+          {messageImage && (
+            <img
+              src={messageImage}
+              alt={localizeUi("ui.slurp.messages.postPreview", { defaultValue: "Post preview" })}
+              className="max-h-72 w-full object-cover"
+            />
+          )}
+          <div className="px-3.5 py-3">
+            <p className="text-xs font-bold text-[var(--noodle-accent)]">
+              {localizeUi("ui.slurp.messages.postPreview", { defaultValue: "Shared post" })}
+            </p>
+            <p className="mt-1 text-sm font-semibold">{previewTitle}</p>
+            {!locked && previewContent && (
+              <p className="mt-1 whitespace-pre-wrap text-sm leading-relaxed">{previewContent}</p>
+            )}
+            {locked && (
+              <p className="mt-1 text-xs text-[var(--muted-foreground)]">
+                {localizeUi("ui.slurp.messages.lockedPostPreview", { defaultValue: "Paid post preview" })}
+              </p>
+            )}
+          </div>
+        </div>
+        <time dateTime={message.createdAt} className="px-1 text-xs text-[var(--muted-foreground)]">
+          {formatTime(message.createdAt, locale)}
+        </time>
+      </div>
+    );
+  }
   return (
     <div
       className={cn(

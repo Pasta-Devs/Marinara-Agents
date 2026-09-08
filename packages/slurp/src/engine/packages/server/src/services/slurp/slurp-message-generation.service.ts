@@ -70,13 +70,14 @@ export function buildSlurpMessageChat(input: {
   /** Everything about how to behave, already resolved. See `slurp-stance.ts`. */
   stance: SlurpStance;
   /** What the creator has posted lately, so "loved your new set" can be answered. */
-  recentPosts?: { title: string | null; content: string; access: string }[];
+  recentPosts?: { id: string; title: string | null; content: string; access: string; imageUrl: string | null }[];
   /** Facts kept from earlier in this conversation, beyond the history window. */
   notes?: string[];
   generationGuidance: string;
   scheduleContext?: string;
   disclosureMode: Parameters<typeof noodlerIdentityInstruction>[0];
   publicIdentity: Parameters<typeof noodlerIdentityInstruction>[1];
+  recentPosts: Array<{ id: string; title: string | null; content: string; access: string; imageUrl: string | null }>;
 }): ChatMessage[] {
   const protect = (value: string | null | undefined) =>
     protectNoodlerGeneratedIdentity(value, input.disclosureMode, input.publicIdentity) ?? "";
@@ -103,13 +104,14 @@ export function buildSlurpMessageChat(input: {
       : "",
     "This is a private chat, so write like one: lowercase is fine, contractions are fine, emojis are fine if they suit the persona.",
     "Keep it to a chat message, not an essay. One to four sentences unless the fan asked something that needs more.",
-    'Return exactly one JSON object with three fields: "content", "moodShift" and "remember".',
+    'Return exactly one JSON object with four fields: "content", "moodShift", "remember" and "sharePost".',
     '"content" is your reply, and the only field the fan ever sees.',
     // A direction, never a value. The stored number is damped by rapport in `slurp-mood.ts`, so a
     // long-standing fan is forgiven a bad message and a stranger is not. If the model set the mood
     // outright, one sentence could end a two-year relationship.
     '"moodShift" is how this last message changed your feeling about the conversation: "up" if you enjoyed it, "same" for anything ordinary, "down" if they were rude, pushy, or tiring, "sharp_down" only for something you would genuinely take offence at. Most messages are "same".',
     `"remember" is an array of at most ${SLURP_NOTES_PER_REPLY} short facts about this fan worth keeping for later — a name, a job, something happening in their life. Use an empty array when nothing new was said. Never record your own words, and never record anything about payment.`,
+    '"sharePost" is an optional zero-based index into yourRecentPosts. Use it only when sharing one of your recent posts fits the conversation. Otherwise use null.',
     "Return JSON only. No prose outside the JSON object.",
   ]
     .filter(Boolean)
@@ -226,7 +228,13 @@ export async function buildSlurpMessagePrompt(input: SlurpMessagePromptInput): P
       (byAccount.get(input.creator.id) ?? [])
         .filter((post) => post.access !== "draft")
         .slice(0, RECENT_POSTS)
-        .map((post) => ({ title: post.title, content: post.content, access: post.access })),
+        .map((post) => ({
+          id: post.id,
+          title: post.title,
+          content: post.content,
+          access: post.access,
+          imageUrl: post.imageUrl,
+        })),
     )
     .catch(() => []);
   const stance = resolveSlurpStance({
@@ -264,11 +272,11 @@ export async function buildSlurpMessagePrompt(input: SlurpMessagePromptInput): P
   });
   // The redaction rules travel with the prompt. The answer has to be protected with the same two
   // values the question was built from, or a concealed creator can be unmasked by their own reply.
-  return { messages, stance, disclosureMode, publicIdentity };
+  return { messages, stance, disclosureMode, publicIdentity, recentPosts };
 }
 
 export async function generateSlurpMessageReply(input: SlurpMessagePromptInput): Promise<SlurpGeneratedDmReply> {
-  const { messages, stance, disclosureMode, publicIdentity } = await buildSlurpMessagePrompt(input);
+  const { messages, stance, disclosureMode, publicIdentity, recentPosts } = await buildSlurpMessagePrompt(input);
   const connections = createConnectionsStorage(input.db);
   const fallbackConnection = await connections.getFallbackForMain();
   const provider = withConnectionFallbackProvider({
@@ -329,5 +337,8 @@ export async function generateSlurpMessageReply(input: SlurpMessagePromptInput):
     remember: generated.remember
       .map((note) => protectBoundedNoodlerGeneratedText(note, disclosureMode, publicIdentity, SLURP_NOTE_MAX_LENGTH))
       .filter((note): note is string => Boolean(note)),
+    sharePost: generated.sharePost !== undefined && recentPosts[generated.sharePost] ? generated.sharePost : undefined,
+    sharedPost:
+      generated.sharePost !== undefined && recentPosts[generated.sharePost] ? recentPosts[generated.sharePost] : null,
   };
 }

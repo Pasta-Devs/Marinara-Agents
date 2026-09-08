@@ -54,7 +54,15 @@ export function readSlurpCreatorMessaging(value: unknown): SlurpCreatorMessaging
 export type SlurpThreadState = "request" | "active" | "declined";
 
 export type SlurpMessageKind =
-  "text" | "tip" | "ppv" | "system" | "broadcast" | "commission_brief" | "commission_quote" | "commission_delivery";
+  | "text"
+  | "tip"
+  | "ppv"
+  | "system"
+  | "broadcast"
+  | "post_preview"
+  | "commission_brief"
+  | "commission_quote"
+  | "commission_delivery";
 
 /**
  * What happens when a viewer writes to a creator they have no active thread with.
@@ -193,6 +201,7 @@ export function slurpMessagePreview(kind: SlurpMessageKind, content: string, pri
   if (kind === "commission_brief") return `Commission request: ${clamp(trimmed, 50)}`;
   if (kind === "commission_quote") return `Quoted ${price} coins`;
   if (kind === "commission_delivery") return "Delivered a commission";
+  if (kind === "post_preview") return "Shared a post";
   return clamp(trimmed, 80);
 }
 

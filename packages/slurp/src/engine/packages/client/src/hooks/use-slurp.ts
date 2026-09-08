@@ -1941,7 +1941,15 @@ export type SlurpMessage = {
   senderAccountId: string;
   role: "viewer" | "creator";
   kind:
-    "text" | "tip" | "ppv" | "system" | "broadcast" | "commission_brief" | "commission_quote" | "commission_delivery";
+    | "text"
+    | "tip"
+    | "ppv"
+    | "system"
+    | "broadcast"
+    | "post_preview"
+    | "commission_brief"
+    | "commission_quote"
+    | "commission_delivery";
   content: string;
   imageUrl: string | null;
   price: number;

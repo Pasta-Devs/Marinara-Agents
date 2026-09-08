@@ -26,16 +26,21 @@ export const slurpDmReplySchema = z.object({
   // only the simulation reads.
   moodShift: z.enum(SLURP_MOOD_SHIFTS).optional().catch(undefined),
   remember: z.array(z.string()).optional().catch(undefined),
+  sharePost: z.number().int().min(0).max(4).optional().catch(undefined),
 });
 
 export type SlurpDmReply = {
   content: string;
   moodShift: SlurpMoodShift;
   remember: string[];
+  sharePost?: number;
 };
 
 /** The reply plus what the resolved stance allows the creator to do about the conversation. */
-export type SlurpGeneratedDmReply = SlurpDmReply & { latitude: SlurpStanceLatitude };
+export type SlurpGeneratedDmReply = SlurpDmReply & {
+  latitude: SlurpStanceLatitude;
+  sharedPost: { id: string; title: string | null; content: string; access: string; imageUrl: string | null } | null;
+};
 
 /**
  * Read a model answer back, tolerating everything except a missing reply.
@@ -57,5 +62,6 @@ export function readSlurpDmReply(value: unknown): SlurpDmReply {
       .map((note) => note.trim().slice(0, SLURP_NOTE_MAX_LENGTH))
       .filter((note) => note.length > 0)
       .slice(0, SLURP_NOTES_PER_REPLY),
+    ...(parsed.data.sharePost === undefined ? {} : { sharePost: parsed.data.sharePost }),
   };
 }

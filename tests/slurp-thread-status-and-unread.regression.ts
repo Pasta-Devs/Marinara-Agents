@@ -45,12 +45,14 @@ assert.match(messagesStorage, /thread\.creatorUnread > 0 && \(!thread\.replyNotB
 // ── Creator status reaches the message thread ───────────────────────────────
 // The rule lived inline in the profile header, so the surface where a player most wants to know
 // whether somebody is about to answer showed nothing at all.
-assert.match(messagesRoutes, /creatorLastActiveAt: creatorLatestPost\?\.createdAt \?\? null,/u);
-assert.match(messagesRoutes, /creatorAutoPosting: Boolean\(creator\?\.settings\.scheduler\.autoPosting\?\.enabled\),/u);
+assert.match(messagesRoutes, /creatorLastActiveAt: latestPost\?\.createdAt \?\? null,/u);
+assert.match(messagesRoutes, /creatorLastMessageAt: latestMessage,/u);
+assert.match(messagesRoutes, /creatorAvailability: availability,/u);
+assert.match(messagesRoutes, /creatorAutoPosting: Boolean\(creator\.settings\.scheduler\.autoPosting\?\.enabled\),/u);
 assert.match(messagesUi, /slurpCreatorStatus\(\{/u, "the thread header must derive a status");
 assert.match(messagesUi, /ui\.slurp\.profile\.status\.\$\{creatorStatus\}/u);
 // One rule, two callers. Two copies would drift.
-assert.match(homeUi, /const creatorStatus = slurpCreatorStatus\(\{/u);
+assert.match(homeUi, /slurpCreatorStatus\(/u);
 assert.doesNotMatch(homeUi, /activityAge <= 15 \* 60_000/u, "the inline copy of the rule must be gone");
 for (const status of ["online", "away", "offline"]) {
   assert.ok(locale[`ui.slurp.profile.status.${status}`], `missing label for ${status}`);

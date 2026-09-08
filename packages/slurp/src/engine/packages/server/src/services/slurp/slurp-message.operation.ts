@@ -141,6 +141,22 @@ export async function replyToSlurpMessage(
             content: bubble,
           })) ?? stored;
       }
+      if (reply.sharedPost) {
+        stored =
+          (await messagesStore.appendMessage(thread.id, {
+            senderAccountId: thread.creatorAccountId,
+            role: "creator",
+            kind: "post_preview",
+            content: reply.sharedPost.title || reply.sharedPost.content.slice(0, 180),
+            imageUrl: reply.sharedPost.imageUrl,
+            metadata: {
+              postId: reply.sharedPost.id,
+              title: reply.sharedPost.title,
+              content: reply.sharedPost.content,
+              access: reply.sharedPost.access,
+            },
+          })) ?? stored;
+      }
       // After the message is safely stored. The conversation's mood and what she now knows are
       // worth keeping, but never at the price of the reply itself.
       if (stored) {

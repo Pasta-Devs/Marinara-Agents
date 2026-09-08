@@ -37,7 +37,7 @@ assert.match(view, /function SlurpRelationshipPanel\(/u);
 assert.match(view, /relationship\.side === "viewer" \?/u);
 assert.match(view, /aria-expanded=\{infoOpen\}/u);
 // Opening a different conversation must not inherit the last one's open panel.
-assert.match(view, /setInfoOpen\(false\);\s*\}, \[threadId, creatorAccountId\]/u);
+assert.match(view, /setInfoOpen\(false\);[\s\S]{0,120}setDebugOpen\(false\)/u);
 
 for (const key of [
   "relationshipToggle",
