@@ -20,6 +20,22 @@ const storage = readFileSync(
   "utf8",
 );
 const routes = readFileSync(join(root, "packages/slurp/src/engine/packages/server/src/routes/slurp.routes.ts"), "utf8");
+const creatorCard = readFileSync(
+  join(root, "packages/slurp/src/engine/packages/client/src/components/slurp/SlurpCreatorPostCard.tsx"),
+  "utf8",
+);
+const postCard = readFileSync(
+  join(root, "packages/slurp/src/engine/packages/client/src/components/slurp/SlurpPostCard.tsx"),
+  "utf8",
+);
+const fanActivity = readFileSync(
+  join(root, "packages/slurp/src/engine/packages/server/src/services/slurp/slurp-fan-activity.service.ts"),
+  "utf8",
+);
+const responseFormat = readFileSync(
+  join(root, "packages/slurp/src/engine/packages/server/src/services/slurp/slurp-response-format.ts"),
+  "utf8",
+);
 
 assert.match(
   panel,
@@ -122,5 +138,10 @@ assert.match(
   /onRefresh=\{\(\) =>[\s\S]*?viewerQuery\.refetch\(\)[\s\S]*?ui\.slurp\.feed\.refreshed/u,
   "The timeline refresh action must refetch and report completion",
 );
+assert.doesNotMatch(creatorCard, /repost|Repeat2/iu, "Slurp creator cards must not expose repost actions");
+assert.doesNotMatch(postCard, /repost|Repeat2/iu, "Slurp post cards must not expose repost actions");
+assert.doesNotMatch(fanActivity, /fanRepostsPerRefresh|repost/iu, "Synthetic Slurp audience activity must not repost");
+assert.doesNotMatch(responseFormat, /enum: \[[^\]]*repost/iu, "Slurp model output must not request reposts");
+assert.match(routes, /parsed\.data\.type === "repost"[\s\S]*?Reposts are not available in Slurp/u);
 
 console.log("Slurp onboarding regressions passed.");

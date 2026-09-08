@@ -11,7 +11,6 @@ import {
   MoreHorizontal,
   Pencil,
   RefreshCw,
-  Repeat2,
   RotateCcw,
   Share2,
   Smile,
@@ -1061,7 +1060,7 @@ export interface NoodlePostCardCtx {
   deleteNoodlePost: (post: NoodlePostCardModel) => void;
   cancelEditingPost: () => void;
   saveEditedPost: (post: NoodlePostCardModel) => void;
-  reactToPost: (post: NoodlePostCardModel, type: "like" | "repost", active?: boolean) => void;
+  reactToPost: (post: NoodlePostCardModel, type: "like", active?: boolean) => void;
   reactToReply: (post: NoodlePostCardModel, target: NoodleInteraction, active: boolean) => void;
   openReplyComposer: (postId: string, parentInteractionId?: string | null) => void;
   handleReplyChange: (event: ChangeEvent<HTMLTextAreaElement>) => void;
@@ -1072,7 +1071,7 @@ export interface NoodlePostCardCtx {
   /** Present only when the host enables creatorReplyRequest. */
   creatorReplyRequest?: { asked: boolean; setAsked: (asked: boolean) => void };
   appendToReply: (text: string) => void;
-  reactionPendingFor: (postId: string, type: "like" | "repost", parentInteractionId?: string | null) => boolean;
+  reactionPendingFor: (postId: string, type: "like", parentInteractionId?: string | null) => boolean;
   createInteractionPendingFor: (
     postId: string,
     type: NoodleInteractionType,
@@ -1131,7 +1130,7 @@ interface NoodlePostCardControllerOptions {
     },
   ) => Promise<void>;
   deletePost: (post: NoodlePostCardModel) => void;
-  reactToPost: (post: NoodlePostCardModel, type: "like" | "repost", active?: boolean) => void;
+  reactToPost: (post: NoodlePostCardModel, type: "like", active?: boolean) => void;
   reactToReply: (post: NoodlePostCardModel, target: NoodleInteraction, active: boolean) => void;
   submitReply: (
     post: NoodlePostCardModel,
@@ -1147,7 +1146,7 @@ interface NoodlePostCardControllerOptions {
    * silently triggering one. Noodle omits this: its authors have no such reply operation.
    */
   creatorReplyRequest?: boolean;
-  reactionPendingFor: (postId: string, type: "like" | "repost", parentInteractionId?: string | null) => boolean;
+  reactionPendingFor: (postId: string, type: "like", parentInteractionId?: string | null) => boolean;
   createInteractionPendingFor: (
     postId: string,
     type: NoodleInteractionType,
@@ -1542,11 +1541,6 @@ export function NoodlePostCard({ post, ctx }: { post: NoodlePostCardModel; ctx: 
         (interaction) => interaction.type === "like" && interaction.actorAccountId === personaAccount.id,
       )
     : false;
-  const repostedByPersona = personaAccount
-    ? rootPostInteractions.some(
-        (interaction) => interaction.type === "repost" && interaction.actorAccountId === personaAccount.id,
-      )
-    : false;
   const replies = postInteractions.filter((interaction) => interaction.type === "reply");
   const replyById = new Map(replies.map((reply) => [reply.id, reply]));
   const orderedReplies: NoodleInteraction[] = [];
@@ -1568,7 +1562,6 @@ export function NoodlePostCard({ post, ctx }: { post: NoodlePostCardModel; ctx: 
     ? (accountById.get(replyTarget.actorAccountId) ?? replyTarget.actorSnapshot)
     : author;
   const postLikePending = reactionPendingFor(post.id, "like");
-  const postRepostPending = reactionPendingFor(post.id, "repost");
   const postReplyPending = createInteractionPendingFor(post.id, "reply", replyParentInteractionId);
   const pollVotePending = createInteractionPendingFor(post.id, "vote");
   const renderReplyComposer = (nested: boolean) => (
@@ -2032,22 +2025,6 @@ export function NoodlePostCard({ post, ctx }: { post: NoodlePostCardModel; ctx: 
                 )}
               />
               {countInteractions(rootPostInteractions, "like")}
-            </button>
-            <button
-              type="button"
-              className={cn(noodleIconButtonClass, "rounded-full", repostedByPersona && "bg-[var(--noodle-accent)]/10")}
-              disabled={!personaAccount || postRepostPending}
-              onClick={() => reactToPost(post, "repost", repostedByPersona)}
-              title={
-                repostedByPersona
-                  ? localizeUi("ui.noodle.noodlepostcard.undoRepost")
-                  : localizeUi("ui.noodle.noodlepostcard.repost")
-              }
-              aria-busy={postRepostPending}
-              data-noodle-reaction="repost"
-            >
-              <Repeat2 size={24} strokeWidth={1.55} className="-my-1" />
-              {countInteractions(rootPostInteractions, "repost")}
             </button>
             <button
               type="button"

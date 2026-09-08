@@ -957,6 +957,23 @@ export function createSlurpMessagesStorage(db: DB) {
         .where(eq(slurpMessages.id, messageId));
     },
 
+    async setMessageReaction(
+      messageId: string,
+      viewerAccountId: string,
+      reaction: string | null,
+    ): Promise<SlurpMessage | null> {
+      const message = await storage.getMessageById(messageId);
+      if (!message) return null;
+      const thread = await storage.getThreadById(message.threadId);
+      if (!thread || thread.viewerAccountId !== viewerAccountId) return null;
+      const metadata = { ...message.metadata, reaction: reaction === "heart" ? "heart" : null };
+      await db
+        .update(slurpMessages)
+        .set({ metadata: JSON.stringify(metadata) })
+        .where(eq(slurpMessages.id, messageId));
+      return storage.getMessageById(messageId);
+    },
+
     async declineCommission(id: string, by: "creator" | "viewer"): Promise<SlurpCommission | null> {
       const previous = commissionAccepts.get(id) ?? Promise.resolve(null);
       const current = previous.catch(() => null).then(() => storage.declineCommissionUnlocked(id, by));

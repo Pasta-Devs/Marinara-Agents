@@ -14,7 +14,6 @@ import {
   MessageCircle,
   MoreHorizontal,
   Pencil,
-  Repeat2,
   RefreshCw,
   Share2,
   Smile,
@@ -677,11 +676,6 @@ export function SlurpCreatorPostCard({
         (interaction) => interaction.type === "like" && interaction.actorAccountId === personaAccount.id,
       )
     : false;
-  const repostedByPersona = personaAccount
-    ? rootPostInteractions.some(
-        (interaction) => interaction.type === "repost" && interaction.actorAccountId === personaAccount.id,
-      )
-    : false;
   const { replies, replyById, orderedReplies, replyLikesByParentId } = useMemo(() => {
     const nextReplies = postInteractions.filter((interaction) => interaction.type === "reply");
     const nextReplyById = new Map(nextReplies.map((reply) => [reply.id, reply]));
@@ -723,7 +717,6 @@ export function SlurpCreatorPostCard({
     ? (accountById.get(replyTarget.actorAccountId) ?? replyTarget.actorSnapshot)
     : author;
   const postLikePending = reactionPendingFor(post.id, "like");
-  const postRepostPending = reactionPendingFor(post.id, "repost");
   const postReplyPending = createInteractionPendingFor(post.id, "reply", replyParentInteractionId);
   const pollVotePending = createInteractionPendingFor(post.id, "vote");
   const editingExistingPoll = Boolean(poll && pollEditing);
@@ -1259,22 +1252,6 @@ export function SlurpCreatorPostCard({
               )}
             />
             {countInteractions(rootPostInteractions, "like")}
-          </button>
-          <button
-            type="button"
-            className={cn(noodleIconButtonClass, "rounded-lg", repostedByPersona && "bg-[var(--noodle-accent)]/10")}
-            disabled={!personaAccount || postRepostPending}
-            onClick={() => reactToPost(post, "repost", repostedByPersona)}
-            title={
-              repostedByPersona
-                ? localizeUi("ui.noodle.noodlepostcard.undoRepost")
-                : localizeUi("ui.noodle.noodlepostcard.repost")
-            }
-            aria-busy={postRepostPending}
-            data-noodle-reaction="repost"
-          >
-            <Repeat2 size={24} strokeWidth={1.55} className="-my-1" />
-            {countInteractions(rootPostInteractions, "repost")}
           </button>
           <button
             type="button"

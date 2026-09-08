@@ -228,7 +228,6 @@ export async function resolvePersonaAccount(
 
 export function interactionDigestVerb(type: NoodleInteractionType) {
   if (type === "reply") return "replied on";
-  if (type === "repost") return "reposted";
   if (type === "vote") return "voted in";
   return "liked";
 }

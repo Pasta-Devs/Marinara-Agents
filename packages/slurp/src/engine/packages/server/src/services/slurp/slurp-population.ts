@@ -3,7 +3,7 @@
  *
  * Pure, deterministic, and free. This is the module that answers the finding the whole plan
  * started from: Slurp's entire background cast was **twelve accounts** — six ambient profiles and
- * six fan identities with placeholder handles like `quiet_regular`. Every like, reply, and repost
+ * six fan identities with placeholder handles like `quiet_regular`. Every like and reply
  * any Creator ever received came from those twelve, which is why the world read as repetitive,
  * incoherent, thin, and lifeless all at once.
  *

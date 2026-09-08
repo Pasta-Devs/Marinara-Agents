@@ -91,7 +91,7 @@ export function selectNoodlerFanActivities(input: {
   activities: (NoodleGeneratedFanRefresh["activities"][number] & { parentInteractionId?: string | null })[];
   creators: readonly NoodlerFanCreatorCandidate[];
   existingInteractions: readonly Pick<NoodleInteraction, "postId" | "actorAccountId" | "type" | "content">[];
-  quotas: { like: number; reply: number; repost: number };
+  quotas: { like: number; reply: number };
 }): NoodleFanActivityToStore[] {
   const creatorById = new Map(input.creators.map((candidate) => [candidate.creator.id, candidate]));
   const postOwnerById = new Map(
@@ -112,6 +112,7 @@ export function selectNoodlerFanActivities(input: {
   const creatorSlotSeen = new Set<string>();
   const selected: NoodleFanActivityToStore[] = [];
   for (const activity of input.activities) {
+    if (activity.type !== "like" && activity.type !== "reply") continue;
     if (quotas[activity.type] <= 0) continue;
     const creator = creatorById.get(activity.creatorAccountId);
     if (!creator || postOwnerById.get(activity.targetPostId) !== creator.creator.id) continue;
@@ -181,24 +182,21 @@ function describeFanRelationship(persona: {
 
 function buildFanActivityMessages(input: {
   creators: NoodlerFanCreatorCandidate[];
-  settings: Pick<
-    SlurpSettings,
-    "fanLikesPerRefresh" | "fanRepliesPerRefresh" | "fanRepostsPerRefresh" | "audienceTone"
-  >;
+  settings: Pick<SlurpSettings, "fanLikesPerRefresh" | "fanRepliesPerRefresh" | "audienceTone">;
 }): ChatMessage[] {
   const system = [
     "Propose quiet synthetic audience activity for the supplied Slurp posts.",
     "A post's image field describes its attached picture. Treat it as something the actor can see, and never ask to be shown an image that is already described.",
     "Posts marked locked are paid posts. Only subscribers see them, so react to the title and the fact it is paid; never invent or state its hidden contents.",
     "Use only supplied creator IDs, actor handles, and post IDs. Never invent identifiers.",
-    "Likes and reposts have null content. Replies are one short sentence, normally under 180 characters, natural, relevant, and not repetitive.",
+    "Likes have null content. Replies are one short sentence, normally under 180 characters, natural, relevant, and not repetitive.",
     "Each post lists the comments already under it. Never repeat a point somebody has already made.",
     'To answer one of those comments instead of the post, set "parentInteractionId" to that comment\'s id. Leave it out to comment on the post itself. Some replies should answer other people; a comment section where nobody talks to anybody is a list, not a conversation.',
     "Return JSON only with an activities array.",
     "Each actor handle has a weight; prefer higher-weight actors more often, proportionally.",
     slurpAudienceToneInstruction(input.settings.audienceTone),
     "Actors carry traits and a relationship to the creator. Write each reply as that specific person: a long-standing paying regular does not sound like somebody who arrived yesterday, and somebody whose trait is 'emoji only' does not write a paragraph.",
-    `At most ${input.settings.fanLikesPerRefresh} likes, ${input.settings.fanRepliesPerRefresh} replies, and ${input.settings.fanRepostsPerRefresh} reposts total.`,
+    `At most ${input.settings.fanLikesPerRefresh} likes and ${input.settings.fanRepliesPerRefresh} replies total.`,
     `At most ${NOODLE_FAN_ACTIVITY_MAX_ACTIVITIES_PER_CREATOR} activities for any creator.`,
   ].join("\n");
   const creators = input.creators.map((candidate) => ({
@@ -238,7 +236,7 @@ function buildFanActivityMessages(input: {
 
 async function generateFanActivity(input: {
   connection: GenerationConnection;
-  settings: Pick<SlurpSettings, "fanLikesPerRefresh" | "fanRepliesPerRefresh" | "fanRepostsPerRefresh">;
+  settings: Pick<SlurpSettings, "fanLikesPerRefresh" | "fanRepliesPerRefresh">;
   creators: NoodlerFanCreatorCandidate[];
   debugMode: boolean;
 }): Promise<NoodleGeneratedFanRefresh> {
@@ -372,19 +370,13 @@ export async function prepareNoodlerFanCreatorCandidates(input: {
 
 export async function generateNoodlerFanActivityBatch(input: {
   db: DB;
-  settings: Pick<
-    SlurpSettings,
-    "fanLikesPerRefresh" | "fanRepliesPerRefresh" | "fanRepostsPerRefresh" | "audienceTone"
-  >;
+  settings: Pick<SlurpSettings, "fanLikesPerRefresh" | "fanRepliesPerRefresh" | "audienceTone">;
   connection: GenerationConnection;
   creators: NoodlerFanCreatorCandidate[];
   debugMode?: boolean;
 }): Promise<NoodleFanActivityToStore[]> {
   if (input.creators.length === 0) return [];
-  if (
-    input.settings.fanLikesPerRefresh + input.settings.fanRepliesPerRefresh + input.settings.fanRepostsPerRefresh ===
-    0
-  ) {
+  if (input.settings.fanLikesPerRefresh + input.settings.fanRepliesPerRefresh === 0) {
     return [];
   }
   const generated = await generateFanActivity({ ...input, debugMode: input.debugMode === true });
@@ -397,7 +389,6 @@ export async function generateNoodlerFanActivityBatch(input: {
     quotas: {
       like: input.settings.fanLikesPerRefresh,
       reply: input.settings.fanRepliesPerRefresh,
-      repost: input.settings.fanRepostsPerRefresh,
     },
   });
 }

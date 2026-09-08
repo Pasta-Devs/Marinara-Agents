@@ -72,7 +72,7 @@ export const syntheticNoodlerFanIdentityProvider: NoodlerFanIdentityProvider = {
  * Draw fan identities from the generated population instead of the six fixed placeholders above.
  *
  * The six identities in `IDENTITIES` were one per archetype, with handles like `quiet_regular`.
- * Every like, reply, and repost any Creator ever received came from them, which is most of why
+ * Every like and reply any Creator ever received came from them, which is most of why
  * the world read as repetitive and could never remember anybody.
  *
  * This is the swap the plan named: same interface, a real cast behind it. The provider is

@@ -836,7 +836,7 @@ export function SlurpHome({ navigation, onNavigate, onLeave }: SlurpHomeProps) {
     setFeedSearch("");
     onNavigate({ mode: "creator", view: "hub" });
   };
-  const reactToPost = (post: NoodlePostCardModel, type: "like" | "repost", active = false) => {
+  const reactToPost = (post: NoodlePostCardModel, type: "like", active = false) => {
     if (!viewerPersonaId) return;
     const onError = (error: unknown) =>
       toast.error(
@@ -954,7 +954,7 @@ export function SlurpHome({ navigation, onNavigate, onLeave }: SlurpHomeProps) {
   const deleteNoodlePost = async (post: NoodlePostCardModel) => {
     const confirmed = await showConfirmDialog({
       title: localizeUi("ui.noodle.noodlerhome.deleteNoodlerPost"),
-      message: localizeUi("ui.noodle.noodlerhome.thisAlsoRemovesItsLikesRepostsAndReplies"),
+      message: localizeUi("ui.slurp.posts.deleteDetail"),
       confirmLabel: localizeUi("ui.noodle.noodlehome.deletePost"),
       tone: "destructive",
     });

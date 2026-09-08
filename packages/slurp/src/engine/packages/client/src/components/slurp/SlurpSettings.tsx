@@ -2069,14 +2069,6 @@ export function SlurpSettings({
                               onSave={(value) => update("fanRepliesPerRefresh", value)}
                             />
                           </Field>
-                          <Field label={t("ui.slurp.settings.audience.reposts")}>
-                            <NumberSetting
-                              value={settings.fanRepostsPerRefresh}
-                              min={0}
-                              max={12}
-                              onSave={(value) => update("fanRepostsPerRefresh", value)}
-                            />
-                          </Field>
                         </div>
                       </div>
                       <div>

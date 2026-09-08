@@ -1859,6 +1859,7 @@ export async function slurpRoutes(app: FastifyInstance) {
   app.post("/noodler/posts/:id/interactions", async (req, reply) => {
     const parsed = noodlerCreateInteractionSchema.safeParse(req.body);
     if (!parsed.success) return reply.code(400).send({ error: parsed.error.flatten() });
+    if (parsed.data.type === "repost") return reply.code(400).send({ error: "Reposts are not available in Slurp." });
     const { id } = req.params as { id: string };
     const identity = await resolveViewerIdentity(parsed.data.personaId);
     if (!identity?.actor) return reply.code(404).send({ error: "Slurp viewer profile not found" });

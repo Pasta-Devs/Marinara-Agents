@@ -7,6 +7,8 @@ import { assertInsideDir, isAllowedImageBuffer } from "../../utils/security.js";
 import { getSharp } from "../../utils/sharp.js";
 import { stageImageToDisk } from "../image/image-generation.js";
 
+export { isAllowedImageBuffer } from "../../utils/security.js";
+
 // NoodleR-owned media lives under the gallery data dir but in a namespace whose
 // path contains a slash, so the public gallery serve routes (which reject slashes in the
 // chatId segment) can never reach it. Only the access-checked media endpoint serves it.

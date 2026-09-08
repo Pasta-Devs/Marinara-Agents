@@ -100,7 +100,7 @@ function validActivity(value: unknown): value is NoodleFanAcceptedActivity {
   return (
     typeof row.id === "string" &&
     typeof row.creatorId === "string" &&
-    (row.type === "like" || row.type === "reply" || row.type === "repost") &&
+    (row.type === "like" || row.type === "reply") &&
     typeof row.targetPostId === "string" &&
     typeof row.actorId === "string" &&
     (row.content === null || typeof row.content === "string") &&

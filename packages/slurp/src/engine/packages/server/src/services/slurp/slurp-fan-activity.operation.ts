@@ -166,22 +166,21 @@ async function applyAcceptedActivities(
       actorId: activity.actorId,
       actorSnapshot: activity.snapshot as NoodleAuthorSnapshot,
       runId: run.id,
-      type: activity.type as "like" | "reply" | "repost",
+      type: activity.type as "like" | "reply",
       content: activity.content,
       parentInteractionId: activity.parentInteractionId ?? null,
     });
     if (result?.created) {
       created += 1;
       // Fan activity is the highest-volume thing the audience does, and it fed nothing into the
-      // funnel: follower counts barely moved from the very people who were most active. A repost
-      // carries further than a like — it shows you to somebody else's feed — so it ranks higher.
+      // Fan likes and replies are the only audience interactions in Slurp.
       const population = createSlurpPopulationStorage(db);
       // Same guard as `advanceAudienceTie`: a recovered plan written before the population existed
       // still carries `noodler-fan:` archetype ids, and a tie for one is an unresolvable follower.
       if (!activity.actorId.startsWith(NOODLER_FAN_IDENTITY_PREFIX)) {
         await population
           .advanceTie(activity.actorId, activity.creatorId, {
-            stage: activity.type === "repost" ? "follower" : "liker",
+            stage: "liker",
             interactions: 1,
           })
           .catch(() => undefined);

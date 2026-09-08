@@ -271,7 +271,6 @@ export async function persistGeneratedNoodleActivity(input: {
 
   const quotas: Record<NoodleInteractionType, number> = {
     like: input.settings.maxLikesPerRefresh,
-    repost: input.settings.maxRepostsPerRefresh,
     reply: input.settings.maxRepliesPerRefresh,
     vote: input.settings.maxLikesPerRefresh,
   };

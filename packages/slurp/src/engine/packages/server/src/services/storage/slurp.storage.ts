@@ -283,7 +283,6 @@ export const slurpSettingsSchema = z.object({
   maxImagesPerRefresh: z.number().int().min(0).max(24),
   maxGeneratedPostsPerRefresh: z.number().int().min(0).max(24),
   maxLikesPerRefresh: z.number().int().min(0).max(24),
-  maxRepostsPerRefresh: z.number().int().min(0).max(24),
   maxRepliesPerRefresh: z.number().int().min(0).max(24),
   allowGalleryImageAttachments: z.boolean(),
   /**
@@ -298,7 +297,6 @@ export const slurpSettingsSchema = z.object({
   fanActivityRunsPerDay: z.number().int().min(1).max(96),
   fanLikesPerRefresh: z.number().int().min(0).max(24),
   fanRepliesPerRefresh: z.number().int().min(0).max(12),
-  fanRepostsPerRefresh: z.number().int().min(0).max(12),
   fanArchetypeWeights: noodlerFanArchetypeWeightsSchema,
   /**
    * Wallet economy. Off by default: an existing install keeps the presentation-only prices it
@@ -876,7 +874,6 @@ export const DEFAULT_SLURP_SETTINGS: SlurpSettings = {
   maxImagesPerRefresh: 0,
   maxGeneratedPostsPerRefresh: 4,
   maxLikesPerRefresh: 4,
-  maxRepostsPerRefresh: 2,
   maxRepliesPerRefresh: 4,
   allowGalleryImageAttachments: false,
   postsPerDay: 4,
@@ -899,7 +896,6 @@ export const DEFAULT_SLURP_SETTINGS: SlurpSettings = {
   // free. Six across up to twelve Creators is about 24 readable comments a day, which sits at
   // roughly the same like-to-comment ratio the displayed counts in `slurp-reach.ts` already claim.
   fanRepliesPerRefresh: 6,
-  fanRepostsPerRefresh: 2,
   // Ships empty: the shipped bodies carry a new install on their own, and a bank the player never
   // asked for should not arrive pre-filled with lines they did not choose.
   audienceReactionBank: [],
