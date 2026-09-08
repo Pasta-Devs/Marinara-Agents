@@ -688,6 +688,45 @@ export async function slurpMessageRoutes(app: FastifyInstance) {
     return reply.header("Cache-Control", "private, max-age=300").sendFile(basename(absolute), dirname(absolute));
   });
 
+  app.post("/messages/threads/:threadId/image", async (req, reply) => {
+    const parsed = z
+      .object({
+        personaId: z.string().min(1),
+        creatorAccountId: z.string().min(1),
+        prompt: z.string().trim().min(3).max(1000),
+        content: z.string().max(1000).default(""),
+      })
+      .safeParse(req.body ?? {});
+    if (!parsed.success) return reply.code(400).send({ error: parsed.error.flatten() });
+    const { threadId } = req.params as { threadId: string };
+    const thread = await messages.getThreadById(threadId);
+    if (
+      !thread ||
+      thread.creatorAccountId !== parsed.data.creatorAccountId ||
+      !(await ownsCreator(parsed.data.personaId, thread.creatorAccountId))
+    )
+      return reply.code(404).send({ error: "Thread not found" });
+    const drawn = await generateSlurpCommissionImage(app.db, {
+      creatorAccountId: thread.creatorAccountId,
+      brief: parsed.data.prompt,
+    });
+    if (drawn === "unavailable") return reply.code(503).send({ error: "Image generation is not available." });
+    try {
+      const message = await messages.sendCreatorMessage(thread.creatorAccountId, thread.viewerAccountId, {
+        content: parsed.data.content,
+        imageUrl: slurpMessageMediaUrl("pending"),
+        metadata: { noodlerMediaPath: drawn.mediaPath },
+      });
+      if (!message) return reply.code(404).send({ error: "Thread not found" });
+      drawn.promote();
+      await messages.setMessageMedia(message.id, slurpMessageMediaUrl(message.id), drawn.mediaPath);
+      return { message: { ...message, imageUrl: slurpMessageMediaUrl(message.id) } };
+    } catch (error) {
+      drawn.compensate();
+      throw error;
+    }
+  });
+
   app.post("/messages/threads/:threadId/request", async (req, reply) => {
     const parsed = requestDecisionSchema.safeParse(req.body ?? {});
     if (!parsed.success) return reply.code(400).send({ error: parsed.error.flatten() });

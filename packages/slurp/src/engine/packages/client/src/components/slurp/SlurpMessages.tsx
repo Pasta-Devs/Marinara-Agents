@@ -824,6 +824,7 @@ function SlurpThreadView({
                   viewerAccountId={thread.viewerAccountId}
                   personaId={personaId}
                   defaultPpvPrice={messaging?.ppvPrice ?? 0}
+                  threadId={thread.id}
                 />
               ) : (
                 <CommissionRequest

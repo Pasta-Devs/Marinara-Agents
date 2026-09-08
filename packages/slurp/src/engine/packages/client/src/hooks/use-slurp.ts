@@ -2225,6 +2225,21 @@ export function useSendSlurpCreatorPpv() {
   });
 }
 
+export function useSendSlurpCreatorImage() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (input: {
+      threadId: string;
+      creatorAccountId: string;
+      personaId: string;
+      prompt: string;
+      content: string;
+    }) =>
+      api.post<{ message: SlurpMessage }>(`/slurp/messages/threads/${encodeURIComponent(input.threadId)}/image`, input),
+    onSuccess: () => invalidateSlurpMessages(queryClient),
+  });
+}
+
 export function useBroadcastSlurpMessage() {
   const queryClient = useQueryClient();
   return useMutation({
