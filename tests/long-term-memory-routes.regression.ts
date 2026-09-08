@@ -73,6 +73,7 @@ async function main(routeScenario: RouteScenario) {
   let notifyAbortChatComplete: (() => void) | undefined;
   const refineWarnings: any[] = [];
   const largeLoreEntry = `${"A".repeat(13_000)} ${"B".repeat(13_000)}`;
+  let scenarioError: unknown;
   try {
     assert.deepEqual(installed.manifest.permissions, [
       "agent-runtime",
@@ -4849,15 +4850,36 @@ async function main(routeScenario: RouteScenario) {
         404,
       );
     }
+  } catch (error) {
+    scenarioError = error;
   } finally {
-    releaseRuntimeOverride?.();
-    await cleanup?.();
-    await app.close();
-    await rm(dataDir, { recursive: true, force: true });
+    let cleanupError: unknown;
+    try {
+      releaseRuntimeOverride?.();
+    } catch (error) {
+      cleanupError = error;
+    }
+    try {
+      await cleanup?.();
+    } catch (error) {
+      cleanupError ??= error;
+    }
+    try {
+      await app.close();
+    } catch (error) {
+      cleanupError ??= error;
+    }
+    try {
+      await rm(dataDir, { recursive: true, force: true });
+    } catch (error) {
+      cleanupError ??= error;
+    }
     if (previousSecret === undefined) delete process.env.ADMIN_SECRET;
     else process.env.ADMIN_SECRET = previousSecret;
     if (previousRequireSecret === undefined) delete process.env.MARINARA_REQUIRE_ADMIN_SECRET_ON_LOOPBACK;
     else process.env.MARINARA_REQUIRE_ADMIN_SECRET_ON_LOOPBACK = previousRequireSecret;
+    if (scenarioError) throw scenarioError;
+    if (cleanupError) throw cleanupError;
   }
   process.stdout.write(
     "Long-Term Memory routes regression: permissions, malformed drafts, model/debug forwarding, chat draft visibility, client errors, extraction, cleanup ok\n",
