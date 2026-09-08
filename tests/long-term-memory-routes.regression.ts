@@ -2,16 +2,15 @@ import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
 import { dirname } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { runRegressionToCompletion } from "./regression-helpers.ts";
 
-type RouteScenario = "all" | "notes" | "imports" | "drafts" | "scope-identity" | "backup";
-const routeScenario = (process.env.MARINARA_LTM_ROUTE_SCENARIO ?? "all") as RouteScenario;
+export type RouteScenario = "all" | "notes" | "imports" | "drafts" | "scope-identity" | "backup";
 class RouteScenarioComplete extends Error {}
 
-async function main() {
+async function main(routeScenario: RouteScenario) {
   const engineRoot =
     process.env.MARINARA_ENGINE_ROOT ?? join(dirname(fileURLToPath(import.meta.url)), "../../Marinara-Engine");
   const Fastify = (
@@ -4778,7 +4777,12 @@ async function main() {
   );
 }
 
-export const completion = runRegressionToCompletion("long-term-memory-routes", main);
+export function runRouteScenario(routeScenario: RouteScenario) {
+  return runRegressionToCompletion(`long-term-memory-routes-${routeScenario}`, () => main(routeScenario));
+}
+
+const isDirectRun = process.argv[1] && resolve(process.argv[1]) === resolve(fileURLToPath(import.meta.url));
+export const completion = isDirectRun ? runRouteScenario("all") : Promise.resolve();
 void completion.catch((error) => {
   console.error(error);
   process.exitCode = 1;

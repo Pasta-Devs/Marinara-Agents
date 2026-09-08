@@ -1,9 +1,6 @@
-async function main() {
-  process.env.MARINARA_LTM_ROUTE_SCENARIO = "scope-identity";
-  const { completion } = await import("./long-term-memory-routes.regression.ts");
-  await completion;
-}
-void main().catch((error) => {
+import { runRouteScenario } from "./long-term-memory-routes.regression.ts";
+
+void runRouteScenario("scope-identity").catch((error) => {
   console.error(error);
   process.exitCode = 1;
 });
