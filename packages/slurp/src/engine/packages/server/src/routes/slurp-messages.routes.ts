@@ -284,38 +284,26 @@ export async function slurpMessageRoutes(app: FastifyInstance) {
       ...(await creatorPresence(creator, thread.id)),
       messaging: await messages.getCreatorMessaging(thread.creatorAccountId),
       commissions: await messages.listCommissionsForThread(thread.id),
-      // What the info panel renders. Two different answers on purpose: the fan gets words, the
-      // Creator's operator gets the numbers, because one is a relationship and the other is a
-      // business. `slurp-rapport.ts` is explicit that a score must never reach a thread.
-      relationship:
-        side === "creator"
-          ? {
-              side,
-              tier: thread.rapport.tier,
-              score: thread.rapport.score,
-              contributions: thread.rapport.contributions,
-              mood: thread.mood,
-              strikes: activeSlurpStrikes(thread.strikes, thread.lastStrikeAt),
-              notes: thread.notes,
-              coolUntil: thread.coolUntil,
-              dayVibe: await describeSlurpDayVibe(app.db, thread.creatorAccountId),
-              availability: (await creatorPresence(creator, thread.id)).creatorAvailability,
-              audienceTone: readSlurpAudienceTone((await slurp.getSettings()).audienceTone),
-              imageMode:
-                thread.mood <= -40 && readSlurpAudienceTone((await slurp.getSettings()).audienceTone) === "unfiltered"
-                  ? "hostile"
-                  : thread.mood >= 20
-                    ? "friendly"
-                    : "none",
-            }
-          : {
-              side,
-              tier: thread.rapport.tier,
-              // No score and no mood. A meter invites the player to farm it, and a fast one
-              // invites them to test it.
-              spentCoins: await messages.spentWithCreator(thread.viewerAccountId, thread.creatorAccountId),
-              coolUntil: thread.coolUntil,
-            },
+      relationship: {
+        side,
+        tier: thread.rapport.tier,
+        score: thread.rapport.score,
+        contributions: thread.rapport.contributions,
+        mood: thread.mood,
+        strikes: activeSlurpStrikes(thread.strikes, thread.lastStrikeAt),
+        notes: thread.notes,
+        spentCoins: await messages.spentWithCreator(thread.viewerAccountId, thread.creatorAccountId),
+        coolUntil: thread.coolUntil,
+        dayVibe: await describeSlurpDayVibe(app.db, thread.creatorAccountId),
+        availability: (await creatorPresence(creator, thread.id)).creatorAvailability,
+        audienceTone: readSlurpAudienceTone((await slurp.getSettings()).audienceTone),
+        imageMode:
+          thread.mood <= -40 && readSlurpAudienceTone((await slurp.getSettings()).audienceTone) === "unfiltered"
+            ? "hostile"
+            : thread.mood >= 20
+              ? "friendly"
+              : "none",
+      },
     };
   });
 
@@ -345,8 +333,22 @@ export async function slurpMessageRoutes(app: FastifyInstance) {
         ? {
             side: "viewer" as const,
             tier: thread.rapport.tier,
+            score: thread.rapport.score,
+            contributions: thread.rapport.contributions,
+            mood: thread.mood,
+            strikes: activeSlurpStrikes(thread.strikes, thread.lastStrikeAt),
+            notes: thread.notes,
             spentCoins: await messages.spentWithCreator(thread.viewerAccountId, thread.creatorAccountId),
             coolUntil: thread.coolUntil,
+            dayVibe: await describeSlurpDayVibe(app.db, thread.creatorAccountId),
+            availability: (await creatorPresence(creator, thread.id)).creatorAvailability,
+            audienceTone: readSlurpAudienceTone((await slurp.getSettings()).audienceTone),
+            imageMode:
+              thread.mood <= -40 && readSlurpAudienceTone((await slurp.getSettings()).audienceTone) === "unfiltered"
+                ? "hostile"
+                : thread.mood >= 20
+                  ? "friendly"
+                  : "none",
           }
         : undefined,
       // The client shows the gate before the first message is written, so it must know the

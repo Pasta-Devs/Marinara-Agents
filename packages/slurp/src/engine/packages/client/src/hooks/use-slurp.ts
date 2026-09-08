@@ -2009,27 +2009,21 @@ export type SlurpSendResponse = {
  * because a meter invites the player to farm it. The Creator's operator gets every number,
  * because that side is a business rather than a relationship.
  */
-export type SlurpThreadRelationship =
-  | {
-      side: "viewer";
-      tier: string;
-      spentCoins: number;
-      coolUntil: string | null;
-    }
-  | {
-      side: "creator";
-      tier: string;
-      score: number;
-      contributions: { key: string; detail: string; weight: number; points: number }[];
-      mood: number;
-      strikes: number;
-      notes: string[];
-      coolUntil: string | null;
-      dayVibe: string | null;
-      availability: { online: boolean; activity: string | null; minutesUntilOnline: number | null };
-      audienceTone: "warm" | "mixed" | "unfiltered";
-      imageMode: "friendly" | "hostile" | "none";
-    };
+export type SlurpThreadRelationship = {
+  side: "viewer" | "creator";
+  tier: string;
+  score: number;
+  contributions: { key: string; detail: string; weight: number; points: number }[];
+  mood: number;
+  strikes: number;
+  notes: string[];
+  spentCoins: number;
+  coolUntil: string | null;
+  dayVibe: string | null;
+  availability: { online: boolean; activity: string | null; minutesUntilOnline: number | null };
+  audienceTone: "warm" | "mixed" | "unfiltered";
+  imageMode: "friendly" | "hostile" | "none";
+};
 
 export type SlurpPromptDebug = {
   stance: Record<string, unknown>;

@@ -1846,95 +1846,94 @@ function SlurpRelationshipPanel({
           </dt>
           <dd className="font-bold">{localizeUi(`ui.slurp.rapport.tier.${relationship.tier}`)}</dd>
         </div>
-        {relationship.side === "viewer" ? (
-          <div className="flex items-baseline justify-between gap-3">
-            <dt className="text-[var(--muted-foreground)]">
-              {localizeUi("ui.slurp.messages.relationshipSpent", { defaultValue: "Spent with them" })}
-            </dt>
-            <dd className="font-bold">
-              <SlurpCoinAmount amount={relationship.spentCoins} />
-            </dd>
+        <div className="flex items-baseline justify-between gap-3">
+          <dt className="text-[var(--muted-foreground)]">
+            {localizeUi("ui.slurp.messages.relationshipSpent", { defaultValue: "Spent with them" })}
+          </dt>
+          <dd className="font-bold">
+            <SlurpCoinAmount amount={relationship.spentCoins} />
+          </dd>
+        </div>
+        <div className="flex items-baseline justify-between gap-3">
+          <dt className="text-[var(--muted-foreground)]">
+            {localizeUi("ui.slurp.messages.relationshipScore", { defaultValue: "Rapport" })}
+          </dt>
+          <dd className="font-bold tabular-nums">{relationship.score}/100</dd>
+        </div>
+        <div className="flex items-baseline justify-between gap-3">
+          <dt className="text-[var(--muted-foreground)]">
+            {localizeUi("ui.slurp.messages.relationshipMood", { defaultValue: "Conversation mood" })}
+          </dt>
+          <dd className="font-bold capitalize">{moodLabel}</dd>
+        </div>
+        <div
+          aria-label={localizeUi("ui.slurp.messages.moodLevel", { defaultValue: "Conversation mood" })}
+          className="h-1.5 overflow-hidden rounded-full bg-[var(--slurp-surface-raised)]"
+        >
+          <div
+            className={cn(
+              "h-full rounded-full transition-[width]",
+              mood !== null && mood < -25 ? "bg-amber-500" : "bg-[var(--noodle-accent)]",
+            )}
+            style={{ width: `${moodPercent}%` }}
+          />
+        </div>
+        <div className="grid grid-cols-2 gap-2">
+          <InfoChip
+            label={localizeUi("ui.slurp.messages.relationshipTone", { defaultValue: "Tone" })}
+            value={relationship.audienceTone}
+          />
+          <InfoChip
+            label={localizeUi("ui.slurp.messages.relationshipImages", { defaultValue: "Pictures" })}
+            value={relationship.imageMode === "none" ? "Not now" : relationship.imageMode}
+          />
+          <InfoChip
+            label={localizeUi("ui.slurp.messages.relationshipStrikes", { defaultValue: "Strikes" })}
+            value={String(relationship.strikes)}
+          />
+        </div>
+        {relationship.dayVibe && (
+          <p className="rounded-xl bg-[var(--slurp-surface-raised)] px-2.5 py-2 text-[var(--muted-foreground)]">
+            <span className="font-bold text-[var(--foreground)]">
+              {localizeUi("ui.slurp.messages.dayVibe", { defaultValue: "Today" })}:
+            </span>{" "}
+            {relationship.dayVibe}
+          </p>
+        )}
+        <p className="text-[var(--muted-foreground)]">
+          <span className="font-bold text-[var(--foreground)]">
+            {relationship.availability.online ? "Available" : "Away"}
+          </span>
+          {relationship.availability.activity ? ` · ${relationship.availability.activity}` : ""}
+        </p>
+        {relationship.contributions.length > 0 && (
+          <div className="mt-1 flex flex-wrap gap-1">
+            {relationship.contributions
+              .filter((entry) => Math.abs(entry.points) >= 1)
+              .map((entry) => (
+                <span
+                  key={entry.key}
+                  className="rounded-full bg-[var(--slurp-surface-raised)] px-2 py-0.5 text-[0.65rem] text-[var(--muted-foreground)]"
+                >
+                  {entry.detail}
+                  <span className={cn("ml-1 font-bold", entry.points < 0 && "text-red-600 dark:text-red-400")}>
+                    {entry.points > 0 ? `+${entry.points}` : entry.points}
+                  </span>
+                </span>
+              ))}
           </div>
-        ) : (
-          <>
-            <div className="flex items-baseline justify-between gap-3">
-              <dt className="text-[var(--muted-foreground)]">
-                {localizeUi("ui.slurp.messages.relationshipScore", { defaultValue: "Rapport" })}
-              </dt>
-              <dd className="font-bold tabular-nums">{relationship.score}/100</dd>
-            </div>
-            <div className="flex items-baseline justify-between gap-3">
-              <dt className="text-[var(--muted-foreground)]">
-                {localizeUi("ui.slurp.messages.relationshipMood", { defaultValue: "Conversation mood" })}
-              </dt>
-              <dd className="font-bold capitalize">{moodLabel}</dd>
-            </div>
-            <div
-              aria-label={localizeUi("ui.slurp.messages.moodLevel", { defaultValue: "Conversation mood" })}
-              className="h-1.5 overflow-hidden rounded-full bg-[var(--slurp-surface-raised)]"
-            >
-              <div
-                className={cn(
-                  "h-full rounded-full transition-[width]",
-                  mood !== null && mood < -25 ? "bg-amber-500" : "bg-[var(--noodle-accent)]",
-                )}
-                style={{ width: `${moodPercent}%` }}
-              />
-            </div>
-            <div className="grid grid-cols-2 gap-2">
-              <InfoChip
-                label={localizeUi("ui.slurp.messages.relationshipTone", { defaultValue: "Tone" })}
-                value={relationship.audienceTone}
-              />
-              <InfoChip
-                label={localizeUi("ui.slurp.messages.relationshipImages", { defaultValue: "Pictures" })}
-                value={relationship.imageMode === "none" ? "Not now" : relationship.imageMode}
-              />
-            </div>
-            {relationship.dayVibe && (
-              <p className="rounded-xl bg-[var(--slurp-surface-raised)] px-2.5 py-2 text-[var(--muted-foreground)]">
-                <span className="font-bold text-[var(--foreground)]">
-                  {localizeUi("ui.slurp.messages.dayVibe", { defaultValue: "Today" })}:
-                </span>{" "}
-                {relationship.dayVibe}
-              </p>
-            )}
-            <p className="text-[var(--muted-foreground)]">
-              <span className="font-bold text-[var(--foreground)]">
-                {relationship.availability.online ? "Available" : "Away"}
-              </span>
-              {relationship.availability.activity ? ` · ${relationship.availability.activity}` : ""}
-            </p>
-            {relationship.contributions.length > 0 && (
-              <div className="mt-1 flex flex-wrap gap-1">
-                {relationship.contributions
-                  .filter((entry) => Math.abs(entry.points) >= 1)
-                  .map((entry) => (
-                    <span
-                      key={entry.key}
-                      className="rounded-full bg-[var(--slurp-surface-raised)] px-2 py-0.5 text-[0.65rem] text-[var(--muted-foreground)]"
-                    >
-                      {entry.detail}
-                      <span className={cn("ml-1 font-bold", entry.points < 0 && "text-red-600 dark:text-red-400")}>
-                        {entry.points > 0 ? `+${entry.points}` : entry.points}
-                      </span>
-                    </span>
-                  ))}
-              </div>
-            )}
-            {relationship.notes.length > 0 && (
-              <div className="mt-1">
-                <dt className="text-[var(--muted-foreground)]">
-                  {localizeUi("ui.slurp.messages.relationshipNotes", { defaultValue: "What they know about this fan" })}
-                </dt>
-                <ul className="mt-1 list-disc pl-4 leading-5 text-[var(--muted-foreground)]">
-                  {relationship.notes.map((note) => (
-                    <li key={note}>{note}</li>
-                  ))}
-                </ul>
-              </div>
-            )}
-          </>
+        )}
+        {relationship.notes.length > 0 && (
+          <div className="mt-1">
+            <dt className="text-[var(--muted-foreground)]">
+              {localizeUi("ui.slurp.messages.relationshipNotes", { defaultValue: "What they know about this fan" })}
+            </dt>
+            <ul className="mt-1 list-disc pl-4 leading-5 text-[var(--muted-foreground)]">
+              {relationship.notes.map((note) => (
+                <li key={note}>{note}</li>
+              ))}
+            </ul>
+          </div>
         )}
         {cooling && (
           <p className="mt-1 font-semibold text-amber-600 dark:text-amber-400">

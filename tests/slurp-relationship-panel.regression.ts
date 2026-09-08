@@ -27,14 +27,15 @@ assert.match(storage, /forViewer[\s\S]{0,700}?rapport: \{ \.\.\.thread\.rapport,
 // The creator-side routes ask for the full view explicitly, so the default stays the safe one.
 assert.equal((routes.match(/freshView\([^)]*"creator"\)/gu) ?? []).length, 3);
 
-// The panel payload differs by side. A score must never reach the fan's half.
-assert.match(routes, /side === "creator"[\s\S]{0,400}?contributions: thread\.rapport\.contributions/u);
-const viewerBlock = routes.slice(routes.indexOf("spentCoins: await messages.spentWithCreator"));
-assert.doesNotMatch(viewerBlock.slice(0, 300), /score:|mood:/u);
+// Both sides receive the complete relationship state now.
+assert.match(routes, /relationship: \{[\s\S]{0,500}?contributions: thread\.rapport\.contributions/u);
+assert.match(routes, /side,\s*tier: thread\.rapport\.tier,[\s\S]{0,500}?mood: thread\.mood/u);
+assert.match(routes, /spentCoins: await messages\.spentWithCreator/u);
+assert.match(routes, /score: thread\.rapport\.score/u);
 
-// The client renders both, and only shows the numbers on the creator side.
+// The client renders one complete panel for both sides.
 assert.match(view, /function SlurpRelationshipPanel\(/u);
-assert.match(view, /relationship\.side === "viewer" \?/u);
+assert.doesNotMatch(view, /relationship\.side === "viewer" \?/u);
 assert.match(view, /moodLabel/u);
 assert.match(view, /relationship\.dayVibe/u);
 assert.match(view, /relationship\.imageMode/u);
