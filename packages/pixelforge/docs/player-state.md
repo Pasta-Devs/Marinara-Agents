@@ -2810,6 +2810,14 @@ lose up to thirty seconds of position — a cell or two of backtrack, in country
 identically. An ordinary tab close loses nothing; the teardown flush snapshots the live sim
 synchronously.
 
+**0.16.2 adds nothing to either, and it is worth one sentence so nobody goes looking.** The wire
+literal does not move by a byte: `artTheme` is **transport-only** — a property of the request schema
+and of the model's reply, read once by `validate()` and dropped, so it appears in no stored bytes
+this build writes — and `loreEntryIds` is **chat metadata**, one more key in the same
+`experienceConfig` object the seed and the theme have always lived in (§9.2), capped at 100 ids by
+the reader. What the release does move is a `_repairs` line or two on the seal, in the two cases
+where the call had something honest to say about the picks and only then.
+
 ---
 
 ## 11. Accepted limitations
@@ -3361,6 +3369,35 @@ sha256-matched before and after, in both the shipped copies and the regenerated 
 `manifest.json` moved the same three lines a source-only release moves, and **two bakes over the
 same tree were byte-identical**. Every older artifact zip — the re-baked `0.16.0` included — is
 untouched.
+
+**The 0.16.2 bake.** A three-module release over the same twenty-module tree — `18-brief.js` carries
+the theme ladder, the `artTheme` schema field and the conditional lore clause; `80-setup.js` the
+deletions, the word-count kit resolver and the lorebook entry picker; `60-save.js` the post-seal
+theme read and the picked-entry reader — with `test-brief.mjs` and the build script's own `VERSION`
+moving beside them and neither reaching the bundle. **`client.js` at 1,491,752 bytes, the `0.16.2`
+artifact zip at 1,505,201**, both up **65,083** bytes on 0.16.1's 1,426,669 and 1,440,118. The figure
+was reproduced independently of the build rather than read off it, which is the check the 0.11.0 CRLF
+incident is the reason for: concatenating the twenty modules and the wrapper by hand produces a
+buffer that is **byte-identical** to the built one — **1,490,929 bytes of `src/` plus 823** of
+banner, module separators and the IIFE.
+
+- **Both theme tile sheets and `atlas.json` are byte-unchanged, and this time the comparison is
+  against `staging` itself** rather than against the previous bake: all three sha256-match
+  `git show staging:<path>` exactly, **in the shipped copies AND in `build/assets/`** — the second
+  location being the one that matters, because it is gitignored and regenerated from scratch on every
+  bake rather than left alone. `manifest.json` therefore moved the **three lines** a source-only
+  release moves: the version, and `client.js`'s sha256/bytes pair. All ten asset rows are untouched.
+- **Two bakes over the same tree produced byte-identical output** — the same zip hash, the same
+  `client.js`, the same manifest — so the artifact is reproducible rather than merely
+  deterministic-by-design. Every older artifact zip, `0.16.1` included, is untouched.
+- **No catalog entry moved, and the build says so in its own words on every run** — *"excluding
+  incomplete package pixelforge 0.16.2 from every catalog"* — because Pixelforge is in
+  `INCOMPLETE_PACKAGE_IDS`. `scripts/validate-catalog.mjs` prints the matching witness,
+  *"Uncatalogued package manifests valid: pixelforge"*, and the release-notes gate is what forces
+  `CHANGELOG.md` to lead with the version the manifest publishes.
+- **The `?v=` cache key moved with the version**, as it does every release. With the art unchanged
+  that buys nothing again and costs one re-fetch of identical bytes — the honest reading rather than
+  a benefit worth claiming, and the second release running where it is the correct thing to say.
 
 **Older prep, kept because it is the record of how this went the last two times.** **This section
 flipped for 0.14 and has flipped back: the rebuild ran in-cycle rather than being
