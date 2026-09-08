@@ -40,7 +40,9 @@ count rather than by a model, so declining no longer means a cozy village whatev
 village called Hearthvale."* — an empty Setting has no words to ask for anything else. Leave only
 the name empty and your text still picks the kit, whose own default name (*Meridian Base*, for the
 colony) fills the loading screen, the generation call and the world itself; a name you do type
-reaches all three. Type your own Setting and it is used exactly as written, as it always has been.
+reaches all three. Type your own Setting and it is used exactly as written, to the first **8,000
+characters** — what lies past that stays out of the world call, a bound the launch keeps so an
+oversized nested config cannot fail the launch itself.
 
 **Three things the form stopped emitting**, all of them answers it was giving on your behalf: the
 **party list** (Game Mode's own setup owns that question — for this release a Pixelforge game starts

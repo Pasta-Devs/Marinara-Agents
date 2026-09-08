@@ -3374,12 +3374,16 @@ untouched.
 the theme ladder, the `artTheme` schema field and the conditional lore clause; `80-setup.js` the
 deletions, the word-count kit resolver and the lorebook entry picker; `60-save.js` the post-seal
 theme read and the picked-entry reader — with `test-brief.mjs` and the build script's own `VERSION`
-moving beside them and neither reaching the bundle. **`client.js` at 1,491,752 bytes, the `0.16.2`
-artifact zip at 1,505,201**, both up **65,083** bytes on 0.16.1's 1,426,669 and 1,440,118. The figure
-was reproduced independently of the build rather than read off it, which is the check the 0.11.0 CRLF
-incident is the reason for: concatenating the twenty modules and the wrapper by hand produces a
-buffer that is **byte-identical** to the built one — **1,490,929 bytes of `src/` plus 823** of
-banner, module separators and the IIFE.
+moving beside them and neither reaching the bundle. **`client.js` at 1,493,054 bytes, the `0.16.2`
+artifact zip at 1,506,503**, both up **66,385** bytes on 0.16.1's 1,426,669 and 1,440,118. **These are
+the review round's figures and not the first bake's**, which is why the record moved again: the round
+re-baked `80-setup.js` over a race — the lorebook expander's load is memoized as a promise now,
+rather than announced by a boolean set before the await, so a *Select all* pressed while the entries
+are still in the air waits for them instead of ticking an empty book — for **1,302 bytes** in the
+bundle and the same 1,302 in the zip. The figure was reproduced independently of the build rather
+than read off it, which is the check the 0.11.0 CRLF incident is the reason for: concatenating the
+twenty modules and the wrapper by hand produces a buffer that is **byte-identical** to the built one
+— **1,492,231 bytes of `src/` plus 823** of banner, module separators and the IIFE.
 
 - **Both theme tile sheets and `atlas.json` are byte-unchanged, and this time the comparison is
   against `staging` itself** rather than against the previous bake: all three sha256-match

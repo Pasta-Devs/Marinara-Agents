@@ -25971,6 +25971,96 @@ const fire = (node, type) => Promise.all((node.listeners[type] ?? []).map((fn) =
       assert.ok(!JSON.stringify(cfg).includes("lb-kanto"), "…and it sends no book id either");
     }
 
+    // ── (2c) SELECT ALL WHILE THE EXPANDER'S OWN LOAD IS STILL IN THE AIR ─────
+    // The race a `loaded` boolean makes possible, and the reason the slot holds
+    // the in-flight PROMISE instead. The flag was set BEFORE the await, so a
+    // select-all clicked while the expander's request was still outstanding got
+    // an instant "already loaded" answered against an EMPTY `state.rows`: it
+    // ticked nothing, wrote a note reporting that nothing as the truth, and the
+    // entries arrived a moment later beside a control that had already had its
+    // say. Every click here is deliberately NOT awaited — awaiting the first one
+    // is the absence of the bug, so a lane that awaits it can never see this.
+    {
+      let release = null;
+      let calls = 0;
+      const inTheAir = new Promise((resolve) => {
+        release = resolve;
+      });
+      loadedPF.api.getJson = async (path) => {
+        if (path === "/connections") return [{ id: "conn-1", name: "Main", model: "m", isDefault: "true" }];
+        if (path === "/lorebooks") return [KANTO];
+        if (/^\/lorebooks\/[^/]+\/entries$/.test(path)) {
+          calls++;
+          return inTheAir;
+        }
+        return [];
+      };
+      const form = await mountWizard();
+      const opening = fire(form.expanders[0], "click");
+      const picking = fire(form.selectAlls[0], "click");
+      await settle();
+      assert.equal(calls, 1, "two callers, ONE request — the second waits on the first rather than re-asking");
+      assert.equal(form.ticks.length, 0, "…and until it lands there is nothing on the form to tick");
+      release(REGION_ENTRIES["lb-kanto"]);
+      await opening;
+      await picking;
+      await settle();
+      assert.deepEqual(
+        form.ticks.filter((node) => node.checked).map((node) => node.value),
+        ["e-always", "e-viridian", "e-pallet"],
+        "select-all ticks every entry the book offers, on entries that did not exist when it was clicked",
+      );
+      assert.deepEqual(
+        form.notes,
+        ["Picked all 3 entries in Kanto."],
+        "…and the note reports the real count, not the empty book the race handed it",
+      );
+      assert.deepEqual(
+        (await launch(form)).experienceConfig.loreEntryIds,
+        ["e-always", "e-viridian", "e-pallet"],
+        "and the picks reach the config, which is what a silently-empty select-all cost",
+      );
+    }
+
+    // ── (2d) A LOAD THAT FAILED CAN BE ASKED AGAIN ───────────────────────────
+    // The half the memoized slot must not take away. The old boolean cleared
+    // itself in the catch, so a book whose entries failed to load could be
+    // reopened; a promise slot that kept the settled failure forever would turn
+    // one bad request into a book the player can never open again. The slot is
+    // cleared on failure instead, and the next open really does re-ask.
+    {
+      let calls = 0;
+      loadedPF.api.getJson = async (path) => {
+        if (path === "/connections") return [{ id: "conn-1", name: "Main", model: "m", isDefault: "true" }];
+        if (path === "/lorebooks") return [KANTO];
+        if (/^\/lorebooks\/[^/]+\/entries$/.test(path)) {
+          calls++;
+          if (calls === 1) throw new Error("the entries route was unreachable");
+          return REGION_ENTRIES["lb-kanto"];
+        }
+        return [];
+      };
+      const form = await mountWizard();
+      await fire(form.expanders[0], "click");
+      await settle();
+      assert.equal(calls, 1, "the first open asked once");
+      assert.equal(form.ticks.length, 0, "…and had nothing to offer");
+      assert.ok(
+        form.nodes.some((node) => node.textContent === "Could not load this lorebook's entries."),
+        "the book says so rather than sitting under a spinner that never clears",
+      );
+      // Closed and reopened, which is what a player does with a book that failed.
+      await fire(form.expanders[0], "click");
+      await fire(form.expanders[0], "click");
+      await settle();
+      assert.equal(calls, 2, "the second open sends a second request");
+      assert.deepEqual(
+        form.ticks.map((node) => node.value),
+        ["e-always", "e-viridian", "e-pallet"],
+        "…and fills the book the first attempt could not",
+      );
+    }
+
     // ── (3) THE BUDGET IS PER BOOK, AND IT IS ENFORCED BEFORE THE CALL ────────
     // The wall the caller cannot move: each book's own `tokenBudget`, default
     // 2,048 tokens, applied inside that book. The picker reads it off

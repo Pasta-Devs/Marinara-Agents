@@ -26091,7 +26091,6 @@ PF.mountSetup = (el, props) => {
         // that drives it. The style is still written, for the browser; nothing
         // reads it back.
         let open = false;
-        let loaded = false;
         const label = () => `${open ? "▾" : "▸"} ${name}`;
         const expander = PF.el("button", {
           type: "button",
@@ -26105,53 +26104,74 @@ PF.mountSetup = (el, props) => {
         });
         /** Loaded once, on first open or on the first select-all — whichever the
          *  player reaches for. Entries are rendered in the order the drop rule
-         *  uses: constants first, then the entry's own position in the book. */
-        const loadEntries = async () => {
-          if (loaded) return;
-          loaded = true;
-          entriesBox.textContent = "Loading entries…";
-          try {
-            const rows = await PF.api.getJson(`/lorebooks/${encodeURIComponent(book.id)}/entries`);
-            entriesBox.replaceChildren();
-            const offered = (Array.isArray(rows) ? rows : [])
-              .filter((row) => typeof row?.id === "string" && row.id)
-              // A DISABLED ENTRY IS NOT OFFERED EITHER, for the same reason its
-              // book is not: `parseEntryRow` gives a real boolean, the server
-              // refuses one anyway, and not offering it is the honest half.
-              .filter((row) => row.enabled !== false && row.enabled !== "false")
-              .sort((a, b) => {
-                const constant = (row) => (row.constant === true || row.constant === "true" ? 0 : 1);
-                if (constant(a) !== constant(b)) return constant(a) - constant(b);
-                // Read straight rather than through either budget reader: both
-                // treat a non-positive number as something other than itself,
-                // and `order` has no such reading — it is signed, so 0 and -5
-                // are ordinary positions in the book.
-                const at = (row) => (typeof row.order === "number" && Number.isFinite(row.order) ? row.order : 0);
-                return at(a) - at(b);
-              });
-            const state = loreBooks.get(book.id);
-            for (const row of offered) {
-              loreEntries.set(row.id, { bookId: book.id, tokens: loreTokens(row.content) });
-              const cb = PF.el("input", { type: "checkbox", value: row.id });
-              cb.addEventListener("change", () => toggleEntry(row.id, cb));
-              state.rows.push({ id: row.id, cb });
-              const entryName = typeof row.name === "string" && row.name ? row.name : row.id;
-              const text =
-                typeof row.description === "string" && row.description
-                  ? `${entryName} — ${row.description}`
-                  : entryName;
-              entriesBox.appendChild(
-                PF.el("label", { style: "display:flex;gap:8px;align-items:flex-start;font:12px/1.5 inherit;" }, [
-                  cb,
-                  PF.el("span", { text }),
-                ]),
-              );
+         *  uses: constants first, then the entry's own position in the book.
+         *
+         *  THE SLOT HOLDS THE IN-FLIGHT REQUEST AND NOT A `loaded` FLAG (review
+         *  round). A boolean set before the await is a "yes, done" answered to
+         *  the second caller while the first caller's request is still in the
+         *  air: expand a book and hit *Select all* before the entries land and
+         *  select-all returned instantly against an empty `state.rows` — nothing
+         *  ticked, and a note reporting that nothing as the truth. Memoizing the
+         *  PROMISE makes the second caller wait on the first one's request
+         *  instead of racing past it, and no second request is sent either way.
+         *  On FAILURE the slot goes back to null so the next click can try
+         *  again; the reset rides a `.then` rather than the `catch` itself,
+         *  because a request that throws SYNCHRONOUSLY would run the catch before
+         *  the slot was ever filled and the assignment below would then re-fill
+         *  it with a settled promise nothing can retry through. */
+        let loading = null;
+        const loadEntries = () => {
+          if (loading) return loading;
+          const attempt = (async () => {
+            entriesBox.textContent = "Loading entries…";
+            try {
+              const rows = await PF.api.getJson(`/lorebooks/${encodeURIComponent(book.id)}/entries`);
+              entriesBox.replaceChildren();
+              const offered = (Array.isArray(rows) ? rows : [])
+                .filter((row) => typeof row?.id === "string" && row.id)
+                // A DISABLED ENTRY IS NOT OFFERED EITHER, for the same reason its
+                // book is not: `parseEntryRow` gives a real boolean, the server
+                // refuses one anyway, and not offering it is the honest half.
+                .filter((row) => row.enabled !== false && row.enabled !== "false")
+                .sort((a, b) => {
+                  const constant = (row) => (row.constant === true || row.constant === "true" ? 0 : 1);
+                  if (constant(a) !== constant(b)) return constant(a) - constant(b);
+                  // Read straight rather than through either budget reader: both
+                  // treat a non-positive number as something other than itself,
+                  // and `order` has no such reading — it is signed, so 0 and -5
+                  // are ordinary positions in the book.
+                  const at = (row) => (typeof row.order === "number" && Number.isFinite(row.order) ? row.order : 0);
+                  return at(a) - at(b);
+                });
+              const state = loreBooks.get(book.id);
+              for (const row of offered) {
+                loreEntries.set(row.id, { bookId: book.id, tokens: loreTokens(row.content) });
+                const cb = PF.el("input", { type: "checkbox", value: row.id });
+                cb.addEventListener("change", () => toggleEntry(row.id, cb));
+                state.rows.push({ id: row.id, cb });
+                const entryName = typeof row.name === "string" && row.name ? row.name : row.id;
+                const text =
+                  typeof row.description === "string" && row.description
+                    ? `${entryName} — ${row.description}`
+                    : entryName;
+                entriesBox.appendChild(
+                  PF.el("label", { style: "display:flex;gap:8px;align-items:flex-start;font:12px/1.5 inherit;" }, [
+                    cb,
+                    PF.el("span", { text }),
+                  ]),
+                );
+              }
+              if (!offered.length) entriesBox.textContent = "No entries in this lorebook.";
+              return true;
+            } catch {
+              entriesBox.textContent = "Could not load this lorebook's entries.";
+              return false;
             }
-            if (!offered.length) entriesBox.textContent = "No entries in this lorebook.";
-          } catch {
-            entriesBox.textContent = "Could not load this lorebook's entries.";
-            loaded = false;
-          }
+          })();
+          loading = attempt.then((ok) => {
+            if (!ok) loading = null;
+          });
+          return loading;
         };
         const setOpen = (next) => {
           open = next;
