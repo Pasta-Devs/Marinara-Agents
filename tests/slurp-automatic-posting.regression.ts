@@ -73,6 +73,72 @@ const candidateAt = Date.parse("2026-08-27T12:00:00.000Z");
 assert.equal(hasSlurpCreatorPostingIntervalConflict([candidateAt - postingInterval], candidateAt, 8), false);
 assert.equal(hasSlurpCreatorPostingIntervalConflict([candidateAt + postingInterval * 2], candidateAt, 8), false);
 assert.equal(hasSlurpCreatorPostingIntervalConflict([candidateAt - postingInterval + 1], candidateAt, 8), true);
+
+// ── postsPerDay means posts per day ─────────────────────────────────────────
+// The reserve's coverage test and the per-creator spacing rule must use the SAME interval. They
+// did not: coverage used half an interval, so a candidate half an interval after an existing slot
+// read as uncovered, and with a spare Creator to hand the per-creator rule let it through. The
+// reserve laid down twice the requested slots, `reconcileNoodlerPreparedPosts` capped future slots
+// back to `postsPerDay` and discarded the rest, and the rolling daily attempt budget — also
+// `postsPerDay` — ran out halfway through the day. A production install showed the result: slot
+// gaps of 30 minutes for a requested 24 a day, and 100 discarded rows against 42 published.
+const reserve = readFileSync(
+  "packages/slurp/src/engine/packages/server/src/services/slurp/slurp-reserve.operation.ts",
+  "utf8",
+);
+assert.match(
+  reserve,
+  /Math\.abs\(Date\.parse\(existing\) - Date\.parse\(candidate\)\) < DAY_MS \/ settings\.postsPerDay,/u,
+  "reserve slot coverage must span a whole posting interval, not half of one",
+);
+assert.doesNotMatch(
+  reserve,
+  /DAY_MS \/ settings\.postsPerDay \/ 2/u,
+  "the half-interval coverage test is what doubled the daily post count",
+);
+
+// Drive the actual selection rules over a simulated day. Three or more Creators is the case that
+// broke: with only one or two, the per-creator rule masked the disagreement.
+const DAY_MS_TEST = 24 * 60 * 60 * 1000;
+function slotsPlacedInADay(postsPerDay: number, creators: number): number {
+  const interval = DAY_MS_TEST / postsPerDay;
+  const ids = Array.from({ length: creators }, (_, index) => `c${index + 1}`);
+  const placed: Array<{ at: number; creator: string }> = [];
+  for (let poll = 0; poll < 24 * 60; poll += 1) {
+    const now = poll * 60_000;
+    const live = placed.filter((slot) => slot.at > now - interval);
+    const candidate = Array.from({ length: postsPerDay }, (_, i) => now + interval * (i + 1)).find(
+      (time) => !live.some((slot) => Math.abs(slot.at - time) < interval),
+    );
+    if (candidate === undefined) continue;
+    const eligible = ids.filter(
+      (id) =>
+        !hasSlurpCreatorPostingIntervalConflict(
+          live.filter((slot) => slot.creator === id).map((slot) => slot.at),
+          candidate,
+          postsPerDay,
+        ),
+    );
+    if (eligible.length === 0) continue;
+    placed.push({ at: candidate, creator: eligible[0]! });
+  }
+  // Slots laid down for the first full day after the run started.
+  return placed.filter((slot) => slot.at <= DAY_MS_TEST).length;
+}
+for (const postsPerDay of [4, 8, 24]) {
+  for (const creators of [1, 3, 6, 12]) {
+    const placed = slotsPlacedInADay(postsPerDay, creators);
+    assert.ok(
+      placed <= postsPerDay,
+      `postsPerDay=${postsPerDay} with ${creators} creators placed ${placed} slots in a day`,
+    );
+  }
+}
+
+// The shipped presets document themselves as a ceiling ("at most four posts a day"), and the
+// settings ceiling has to be able to express the rate the doubling used to produce by accident.
+assert.match(storage, /postsPerDay: z\.number\(\)\.int\(\)\.min\(1\)\.max\(96\),/u);
+assert.match(settingsUi, /value=\{settings\.postsPerDay\}\s*\n\s*min=\{1\}\s*\n\s*max=\{96\}/u);
 assert.match(routes, /app\.patch\("\/noodler\/auto-post\/schedule\/:slotId"/u);
 assert.match(storage, /item\.id !== current\.id && \(item\.state === "scheduled" \|\| item\.state === "prepared"\)/u);
 assert.match(storage, /hasSlurpCreatorPostingIntervalConflict\(activityTimes, publishMs, settings\.postsPerDay\)/u);

@@ -59,11 +59,19 @@ export async function prepareNextNoodlerReservePost(db: DB, at = new Date()): Pr
 
   if (!existingSlot) {
     const covered = active.map((item) => item.publishAt);
+    // A candidate is covered when an existing slot is within a whole interval of it, matching the
+    // per-creator spacing rule below. This used to be half an interval, and the two disagreeing is
+    // why `postsPerDay` did not mean posts per day: a candidate half an interval after an existing
+    // slot read as uncovered, and with a spare Creator to hand the per-creator rule let it through,
+    // so the reserve laid down twice the requested number of slots. `reconcileNoodlerPreparedPosts`
+    // then capped future slots back to `postsPerDay` and discarded the surplus, which is why a
+    // production install had a hundred discarded rows against forty-two published, some of them
+    // destroyed four minutes after they were created.
     publishAt =
       plannedPublicationTimes(at, settings.postsPerDay).find(
         (candidate) =>
           !covered.some(
-            (existing) => Math.abs(Date.parse(existing) - Date.parse(candidate)) < DAY_MS / settings.postsPerDay / 2,
+            (existing) => Math.abs(Date.parse(existing) - Date.parse(candidate)) < DAY_MS / settings.postsPerDay,
           ),
       ) ?? null;
     if (!publishAt) return "covered";

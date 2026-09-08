@@ -1,5 +1,11 @@
 # Slurp release notes
 
+## 1.2.23 — 2026-09-08
+
+- Posts per day now means posts per day. The scheduler laid down twice the number of slots it was asked for whenever three or more Creators were set up, so every pace — including the named presets — quietly ran at double its stated rate.
+- Fixed the wasted work that came with it. Because the surplus slots were created and then discarded again, most scheduled posts never became anything: one install had 100 discarded slots against 42 published, some destroyed four minutes after they were created. The doubled rate also drained the daily generation budget, which is sized to posts per day, about halfway through the day.
+- Posts per day can now be set as high as 96, so a pace above the old ceiling of 24 can be asked for directly.
+
 ## 1.2.22 — 2026-09-08
 
 - The free audience reactions that arrive while you read now get busier as you add Creators. The budget averaged audience size across posts instead of adding it up, so six Creators produced exactly as few likes, follows, and comments as one, and posting more only diluted it.

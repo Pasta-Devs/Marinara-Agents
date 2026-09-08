@@ -278,7 +278,12 @@ export const slurpSettingsSchema = z.object({
   maxRepostsPerRefresh: z.number().int().min(0).max(24),
   maxRepliesPerRefresh: z.number().int().min(0).max(24),
   allowGalleryImageAttachments: z.boolean(),
-  postsPerDay: z.number().int().min(1).max(24),
+  /**
+   * Posts a day across the whole Creator cast, and now actually that number: the reserve used to
+   * lay down twice as many slots as this asked for. The ceiling is well above the old 24 so a
+   * player who liked the accidental rate can ask for it outright.
+   */
+  postsPerDay: z.number().int().min(1).max(96),
   autoPostingScheduleEnabled: z.boolean(),
   autoPostGenerationMode: z.enum(["pre_generate", "on_demand"]),
   fanActivityEnabled: z.boolean(),

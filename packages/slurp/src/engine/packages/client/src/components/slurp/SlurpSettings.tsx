@@ -727,7 +727,7 @@ export function SlurpSettings({
                       <NumberSetting
                         value={settings.postsPerDay}
                         min={1}
-                        max={24}
+                        max={96}
                         onSave={(value) => save({ autoPostingScheduleEnabled: true, postsPerDay: value })}
                       />
                     </Field>
