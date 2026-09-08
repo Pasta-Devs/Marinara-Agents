@@ -401,6 +401,153 @@ PF.mountSetup = (el, props) => {
   // walkable world; it stops being true the moment the seam lands and the
   // Engine's own Party step runs again.
 
+  // ── THE PER-ENTRY LOREBOOK PICKER (0.16.2, R-D6) ────────────────────────────
+  // "the player must be able to select specific lorebook entries rather than the
+  // entire lorebook getting sent." So the form lists BOOKS, each book expands to
+  // its ENTRIES, the checkboxes are on the entries, and the only thing that ever
+  // leaves this form is a flat list of ENTRY ids. No book id is ever sent.
+  //
+  // THE PACKAGE SELECTS AND THE SERVER ASSEMBLES, which is what keeps this small.
+  // Macro resolution, scope exclusions, the eligibility gates and the
+  // before/depth/after ordering are the Engine's own (`processLorebooks`), and a
+  // package-side re-implementation of any of it would silently disagree with the
+  // Engine's lore in the same chat.
+  //
+  // ── THE WALLS, AND WHY THE PICKER REFUSES INSTEAD OF LETTING THEM DROP ──────
+  // The route drops whole entries when a selection overruns, and it says which —
+  // but a budget the player only meets after paying for the call is the invisible
+  // budget this control exists to remove. So each wall is enforced here, at the
+  // tick, in the Engine's own arithmetic and against the Engine's own numbers:
+  //
+  //   the call's own budget   3,000 tokens across the WHOLE selection. This is
+  //                           the route's `EXPERIENCE_LORE_TOKEN_BUDGET`, which
+  //                           it passes as `currentLocationTokenBudget` for this
+  //                           call alone (every other caller keeps 2,048). It is
+  //                           the first wall applied and the only global one that
+  //                           binds — the chat-wide default is 8,192 tokens and
+  //                           sits well above it.
+  //   the book's own budget   each book's `tokenBudget`, default 2,048 tokens.
+  //                           NOT overridable by any caller: it belongs to
+  //                           whoever owns the book, so it is the wall the player
+  //                           has to be shown per book rather than in one total.
+  //                           ~3,000 tokens is honest across two or more books,
+  //                           or one book whose owner raised its figure; it is
+  //                           NOT honest inside a single default book, and the
+  //                           readout must not pretend otherwise.
+  //   the book's entry limit  each book's `entryLimit`, default 100.
+  //   the wire's own count    `LIMITS.MAX_LOREBOOK_ENTRIES` = 100 across the
+  //                           whole selection, and it is INDEPENDENT of every
+  //                           budget above. Measured: a 200-entry book of
+  //                           50-character entries costs ~2,600 tokens, clears
+  //                           every budget here, and emits a 200-id body that the
+  //                           route's own `z.array().max(100)` refuses outright —
+  //                           a 400, which the brief ladder turns into the
+  //                           unwinnable retry screen the budgets exist to
+  //                           prevent, arriving through the one door no character
+  //                           count watches.
+  //
+  // `GET /lorebooks/` returns `tokenBudget` and `entryLimit` per book, so all four
+  // are read rather than assumed; the two literals below are the schema defaults,
+  // used only when a row does not carry a usable number.
+  const LORE_MAX_ENTRIES = 100;
+  const LORE_CALL_TOKENS = 3_000;
+  const LORE_BOOK_TOKENS = 2_048;
+  const LORE_BOOK_ENTRIES = 100;
+  /** The Engine's own estimate, copied rather than approximated:
+   *  `estimateLorebookTokens` is `ceil(length / 4)` PER ENTRY, so a sum of
+   *  characters divided by four is a different (smaller) number and would let
+   *  through selections the server then drops. */
+  const loreTokens = (text) => Math.ceil(String(text ?? "").length / 4);
+  /** A row's number when it has one, the schema default when it does not. Zero is
+   *  "no budget" on the Engine side and would read as unlimited here, which is the
+   *  one value that must not fall through to the default silently. */
+  const loreNumber = (value, fallback) =>
+    typeof value === "number" && Number.isFinite(value) && value > 0 ? Math.floor(value) : fallback;
+
+  const loreBox = PF.el("div", {
+    style: "display:flex;flex-direction:column;gap:4px;max-height:180px;overflow:auto;" + S.input,
+  });
+  loreBox.textContent = "Loading lorebooks…";
+  const loreBudgetEl = PF.el("div", { style: "font:11px/1.5 inherit;opacity:0.75;margin-top:3px;" });
+  /** id → {bookId, tokens} for every entry the player has been offered. */
+  const loreEntries = new Map();
+  /** bookId → {name, tokens, entries, noteEl} for every book the picker rendered. */
+  const loreBooks = new Map();
+  /** The picked ids IN PICKING ORDER, which is the order they go on the wire. */
+  const lorePicked = [];
+  const loreUsedIn = (bookId) =>
+    lorePicked.reduce(
+      (sum, id) => (loreEntries.get(id)?.bookId === bookId ? sum + loreEntries.get(id).tokens : sum),
+      0,
+    );
+  const loreCountIn = (bookId) => lorePicked.filter((id) => loreEntries.get(id)?.bookId === bookId).length;
+  const loreUsedAll = () => lorePicked.reduce((sum, id) => sum + (loreEntries.get(id)?.tokens ?? 0), 0);
+  /** THE RUNNING COUNT IS PER BOOK AND NAMES THE BOOK, because one total over two
+   *  books with different budgets is the invisible-budget lie in a new place. The
+   *  call's own ceiling follows it, so the player can see which of the two they
+   *  are about to hit. */
+  const syncLoreBudget = () => {
+    if (!lorePicked.length) {
+      loreBudgetEl.textContent = "No entries picked — the world is written from your setting alone.";
+      return;
+    }
+    const parts = [];
+    for (const [bookId, book] of loreBooks) {
+      if (!loreCountIn(bookId)) continue;
+      parts.push(`${loreUsedIn(bookId)} / ${book.tokens} tokens from ${book.name}`);
+    }
+    const noun = lorePicked.length === 1 ? "entry" : "entries";
+    parts.push(`${loreUsedAll()} / ${LORE_CALL_TOKENS} tokens for the call (${lorePicked.length} ${noun})`);
+    loreBudgetEl.textContent = parts.join(" · ");
+  };
+  syncLoreBudget();
+  /** THE ONE PATH INTO THE SELECTION, and every control writes through it — the
+   *  entry checkboxes and the select-all button alike (R-D10). That is what keeps
+   *  the four walls, the per-book readout and the picking order on a single code
+   *  path, and what keeps the wire format a flat list of entry ids however the
+   *  ticks were made.
+   *
+   *  Returns null when the selection changed, or the REASON it refused. Select-all
+   *  reads the reason and writes ONE summary line instead of a hundred. */
+  const toggleEntry = (id, cb, quiet) => {
+    const entry = loreEntries.get(id);
+    const book = entry ? loreBooks.get(entry.bookId) : null;
+    const refuse = (why) => {
+      cb.checked = false;
+      if (!quiet && book) book.noteEl.textContent = why;
+      return why;
+    };
+    if (!cb.checked) {
+      const at = lorePicked.indexOf(id);
+      if (at >= 0) lorePicked.splice(at, 1);
+      if (book) book.noteEl.textContent = "";
+      syncLoreBudget();
+      return null;
+    }
+    if (!entry || !book) return refuse("That entry is no longer on the form — reopen its book and try again.");
+    if (lorePicked.includes(id)) return null;
+    if (lorePicked.length >= LORE_MAX_ENTRIES)
+      return refuse(`${LORE_MAX_ENTRIES} entries is the most the game reads at once. Untick something first.`);
+    if (loreCountIn(entry.bookId) >= book.entries)
+      return refuse(`${book.name} allows ${book.entries} entries at a time. Untick one of its own first.`);
+    if (loreUsedIn(entry.bookId) + entry.tokens > book.tokens)
+      return refuse(
+        `That entry needs ${entry.tokens} tokens and ${book.name} has ${
+          book.tokens - loreUsedIn(entry.bookId)
+        } of its ${book.tokens} left. Untick one of its own first.`,
+      );
+    if (loreUsedAll() + entry.tokens > LORE_CALL_TOKENS)
+      return refuse(
+        `That entry needs ${entry.tokens} tokens and the call has ${
+          LORE_CALL_TOKENS - loreUsedAll()
+        } of its ${LORE_CALL_TOKENS} left. Untick something first.`,
+      );
+    lorePicked.push(id);
+    book.noteEl.textContent = "";
+    syncLoreBudget();
+    return null;
+  };
+
   const errEl = PF.el("div", {
     style: "color:#e0837f;font:600 12px/1.5 inherit;margin-top:10px;white-space:pre-wrap;display:none;",
   });
@@ -459,6 +606,13 @@ PF.mountSetup = (el, props) => {
       PF.el("div", { style: "flex:1;" }, [field("Rating", ratingSel)]),
     ]),
     field("GM connection", connSel),
+    // LISTED IN THE ORDER THE CALL WILL KEEP THEM, and the label says so because
+    // that ordering is not the player's picking order and they cannot see why:
+    // when a selection overruns, the server keeps constants first and then works
+    // down each book in the book's own order, so the list is a PREDICTION of what
+    // survives rather than a promise the mechanism would not keep.
+    field("Lorebook entries to read before writing the world (in the order the call keeps them)", loreBox),
+    loreBudgetEl,
     errEl,
     PF.el("div", { style: `${S.row}margin-top:14px;justify-content:flex-end;` }, [cancelBtn, launchBtn]),
   ]);
@@ -512,6 +666,149 @@ PF.mountSetup = (el, props) => {
     // JSON STRING, which is why the list used to be a column of nanoids). That
     // parse retires WITH its reader rather than being kept warm for a list
     // nothing renders; the Engine's own character picker is where it lives now.
+    try {
+      const books = await PF.api.getJson("/lorebooks");
+      loreBox.replaceChildren();
+      for (const book of Array.isArray(books) ? books : []) {
+        if (typeof book?.id !== "string" || !book.id) continue;
+        // A DISABLED BOOK IS NOT OFFERED. `listEligibleEntriesByIds` refuses every
+        // entry of one however explicitly it was ticked, so rendering it would be
+        // offering a choice the server has already made. `parseLorebookRow` gives
+        // a real boolean here; the string is accepted too, because an unparsed
+        // projection is what every other row read in this file has had to survive.
+        if (book.enabled === false || book.enabled === "false") continue;
+        const name = typeof book.name === "string" && book.name ? book.name : book.id;
+        const noteEl = PF.el("div", { style: "font:11px/1.5 inherit;opacity:0.75;padding-left:16px;" });
+        loreBooks.set(book.id, {
+          name,
+          tokens: loreNumber(book.tokenBudget, LORE_BOOK_TOKENS),
+          // NOT clamped against the wire's own 100. The two ceilings are separate
+          // walls and the refusal message names which one bit, so folding them
+          // into one number would make a book whose owner allows 200 entries
+          // report the wire's limit as the BOOK's rule. `toggleEntry` checks the
+          // wire count first, so the smaller of the two still wins.
+          entries: loreNumber(book.entryLimit, LORE_BOOK_ENTRIES),
+          noteEl,
+          rows: [],
+        });
+        const entriesBox = PF.el("div", { style: "display:none;padding-left:16px;" });
+        // OPENNESS IS A VARIABLE AND NEVER A STYLE READ. `PF.el` writes styles as
+        // `cssText` and the harness's node holds `style` as a bare object, so
+        // `entriesBox.style.display` reads back `undefined` there and an expander
+        // whose state lived in the style would be permanently "open" to every lane
+        // that drives it. The style is still written, for the browser; nothing
+        // reads it back.
+        let open = false;
+        let loaded = false;
+        const label = () => `${open ? "▾" : "▸"} ${name}`;
+        const expander = PF.el("button", {
+          type: "button",
+          style: "background:transparent;border:none;color:inherit;font:600 12px/1.6 inherit;cursor:pointer;",
+          text: label(),
+        });
+        const selectAllBtn = PF.el("button", {
+          type: "button",
+          style: "background:transparent;border:none;color:inherit;font:11px/1.6 inherit;opacity:0.75;cursor:pointer;",
+          text: "Select all",
+        });
+        /** Loaded once, on first open or on the first select-all — whichever the
+         *  player reaches for. Entries are rendered in the order the drop rule
+         *  uses: constants first, then the entry's own position in the book. */
+        const loadEntries = async () => {
+          if (loaded) return;
+          loaded = true;
+          entriesBox.textContent = "Loading entries…";
+          try {
+            const rows = await PF.api.getJson(`/lorebooks/${encodeURIComponent(book.id)}/entries`);
+            entriesBox.replaceChildren();
+            const offered = (Array.isArray(rows) ? rows : [])
+              .filter((row) => typeof row?.id === "string" && row.id)
+              // A DISABLED ENTRY IS NOT OFFERED EITHER, for the same reason its
+              // book is not: `parseEntryRow` gives a real boolean, the server
+              // refuses one anyway, and not offering it is the honest half.
+              .filter((row) => row.enabled !== false && row.enabled !== "false")
+              .sort((a, b) => {
+                const constant = (row) => (row.constant === true || row.constant === "true" ? 0 : 1);
+                if (constant(a) !== constant(b)) return constant(a) - constant(b);
+                // Read straight rather than through `loreNumber`, which floors at
+                // 1 because a zero budget means "no budget" — `order` has no such
+                // reading and is signed, so 0 and -5 are ordinary positions.
+                const at = (row) => (typeof row.order === "number" && Number.isFinite(row.order) ? row.order : 0);
+                return at(a) - at(b);
+              });
+            const state = loreBooks.get(book.id);
+            for (const row of offered) {
+              loreEntries.set(row.id, { bookId: book.id, tokens: loreTokens(row.content) });
+              const cb = PF.el("input", { type: "checkbox", value: row.id });
+              cb.addEventListener("change", () => toggleEntry(row.id, cb));
+              state.rows.push({ id: row.id, cb });
+              const entryName = typeof row.name === "string" && row.name ? row.name : row.id;
+              const text =
+                typeof row.description === "string" && row.description
+                  ? `${entryName} — ${row.description}`
+                  : entryName;
+              entriesBox.appendChild(
+                PF.el("label", { style: "display:flex;gap:8px;align-items:flex-start;font:12px/1.5 inherit;" }, [
+                  cb,
+                  PF.el("span", { text }),
+                ]),
+              );
+            }
+            if (!offered.length) entriesBox.textContent = "No entries in this lorebook.";
+          } catch {
+            entriesBox.textContent = "Could not load this lorebook's entries.";
+            loaded = false;
+          }
+        };
+        const setOpen = (next) => {
+          open = next;
+          entriesBox.style.display = open ? "block" : "none";
+          expander.textContent = label();
+        };
+        expander.addEventListener("click", async () => {
+          setOpen(!open);
+          if (open) await loadEntries();
+        });
+        // SELECT ALL IN THIS BOOK (R-D10), and it TICKS ENTRIES INDIVIDUALLY —
+        // it writes through `toggleEntry` like every other control, so the walls
+        // and the picking order hold and the wire format does not change.
+        //
+        // AND IT NEEDS A MESSAGE, NOT JUST A TICK. With a 100-entry ceiling real,
+        // select-all on a book bigger than what is left takes a PREFIX and refuses
+        // the rest — and a silent prefix selection is the same class of lie as a
+        // budget the player cannot see. So the note says how many it took, out of
+        // how many, and which wall stopped it.
+        selectAllBtn.addEventListener("click", async () => {
+          setOpen(true);
+          await loadEntries();
+          const state = loreBooks.get(book.id);
+          let refusal = null;
+          for (const row of state.rows) {
+            if (row.cb.checked) continue;
+            row.cb.checked = true;
+            const why = toggleEntry(row.id, row.cb, true);
+            if (why && !refusal) refusal = why;
+          }
+          const taken = state.rows.filter((row) => row.cb.checked).length;
+          state.noteEl.textContent = !state.rows.length
+            ? ""
+            : refusal
+              ? `Picked ${taken} of ${state.rows.length} entries in ${name}. ${refusal}`
+              : `Picked all ${taken} ${taken === 1 ? "entry" : "entries"} in ${name}.`;
+        });
+        loreBox.appendChild(
+          PF.el("div", null, [
+            PF.el("div", { style: "display:flex;gap:8px;align-items:center;" }, [expander, selectAllBtn]),
+            noteEl,
+            entriesBox,
+          ]),
+        );
+      }
+      if (!loreBox.children.length)
+        loreBox.textContent = "No lorebooks yet — the world is written from your setting alone.";
+    } catch {
+      loreBox.textContent = "Could not load lorebooks.";
+    }
   })();
 
   launchBtn.addEventListener("click", async () => {
@@ -641,6 +938,18 @@ PF.mountSetup = (el, props) => {
         // is writing. `_configWorldName` reads it at both nesting depths, exactly
         // as the seed and the theme are read (60-save).
         worldName,
+        // THE PICKED ENTRY IDS, IN PICKING ORDER — AND THE KEY IS ABSENT WHEN
+        // NOTHING WAS PICKED. That is not tidiness: an empty array is a config key
+        // no existing chat has, and this release's promise is that a player who
+        // touches this control sends bytes and a player who does not sends exactly
+        // what they sent before it existed. The one spread is what lets the Engine
+        // half land without a regression argument behind it.
+        //
+        // The order is the player's own and never a re-sort. It is NOT the order
+        // the call keeps entries in — that is constants first, then position in
+        // the book, and the list is drawn in it — but re-sorting here would only
+        // invent a third ordering for the same selection.
+        ...(lorePicked.length ? { loreEntryIds: lorePicked.slice() } : {}),
       },
     };
     launchBtn.disabled = true;
