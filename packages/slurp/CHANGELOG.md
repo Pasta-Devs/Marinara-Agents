@@ -1,5 +1,40 @@
 # Slurp release notes
 
+## 1.2.41 — 2026-09-08
+
+- Automatic commissions are delivered through one shared path, so the accept route and the message scheduler always attach the artwork and queue the Creator's note in the same order.
+- A commission delivery note is drawn from a per-commission copy bank instead of one fixed sentence.
+- A failed delivery message refunds the fan instead of leaving the commission stuck.
+- Message threads show a "commission arriving" indicator while a delivery is in flight.
+
+## 1.2.40 — 2026-09-08
+
+- Renamed the development cheat setting to `CHEATS_ENABLED`.
+
+## 1.2.39 — 2026-09-08
+
+- The development wallet editor is now hidden unless the server explicitly enables development cheats.
+
+## 1.2.38 — 2026-09-08
+
+- New Fan wallets start with 50 coins.
+- Development builds include a bounded wallet balance editor for testing.
+- Ambient NPC account rows are removed when the ambient audience is disabled.
+- Creator owners see their own profile as online.
+- Profile navigation only asks to discard actual unsaved edits.
+
+## 1.2.37 — 2026-09-08
+
+- Off-screen feed cards now skip rendering work, and sparkle particles stop entirely outside the viewport.
+- Feed and profile requests now cancel when abandoned and reuse fresh cached data when returning to Slurp.
+- Recent post media stays warm for back-scrolling, while feed sorting and search projections are reused across unrelated renders.
+
+## 1.2.36 — 2026-09-08
+
+- Unlocking a post now flows from a creator-branded purchase sheet into the revealed post without the feed jumping.
+- Purchases sparkle around the Creator and post, while coin trails mark spends and earnings at the action and wallet.
+- Unlocks and subscriptions now refresh every visible wallet balance immediately after payment.
+
 ## 1.2.35 — 2026-09-08
 
 - Mobile navigation is now icon-only with accessible labels retained.

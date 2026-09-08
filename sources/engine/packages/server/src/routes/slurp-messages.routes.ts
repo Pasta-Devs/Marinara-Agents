@@ -15,6 +15,8 @@ import { SLURP_DEFAULT_RAPPORT_WEIGHTS } from "../services/slurp/slurp-rapport.j
 import { existsSync } from "node:fs";
 import { basename, dirname } from "node:path";
 import { generateSlurpCommissionImage } from "../services/slurp/slurp-commission-image.operation.js";
+import { deliverAutomaticSlurpCommission } from "../services/slurp/slurp-commission-delivery.service.js";
+import { slurpCommissionDeliveryDelayMs } from "../services/slurp/slurp-messaging.js";
 import { resolveNoodlerMediaAbsolutePath, slurpMessageMediaUrl } from "../services/slurp/slurp-media.js";
 import { logger } from "../lib/logger.js";
 
@@ -422,6 +424,8 @@ export async function slurpMessageRoutes(app: FastifyInstance) {
     const viewer = await requireViewer(parsed.data.personaId);
     if (!viewer) return reply.code(404).send({ error: "Slurp persona not found" });
     const commission = await messages.createCommission(viewer.id, parsed.data.creatorAccountId, parsed.data.brief);
+    if (commission === "open_request")
+      return reply.code(409).send({ error: "You already have a commission request open with this Creator." });
     if (!commission) return reply.code(403).send({ error: "This Creator is not accepting commissions." });
     // A commission needs a review step. Character Creators quote from the world tick, while a
     // persona-owned Creator can review and negotiate it here without charging the fan first.
@@ -481,22 +485,28 @@ export async function slurpMessageRoutes(app: FastifyInstance) {
       }
       if (!automatic || !drawn || drawn === "unavailable") return { commission: accepted };
 
-      const delivered = await messages.deliverCommission(
-        commission.id,
-        "finished this for you — hope you love it ✨",
-        null,
-      );
-      if (!delivered || delivered.state !== "delivered" || !delivered.deliveryMessageId) {
-        drawn.compensate();
-        return reply.code(500).send({ error: "Could not deliver that commission. Your payment was refunded." });
-      }
+      // Keep the drawing. It is finished, it is paid for, and it now has to survive until the
+      // delivery is due — which may be after a restart, so the file cannot stay staged.
       drawn.promote();
-      await messages.setMessageMedia(
-        delivered.deliveryMessageId,
-        slurpMessageMediaUrl(delivered.deliveryMessageId),
-        drawn.mediaPath,
-      );
-      return { commission: delivered };
+      const deliverAt = new Date(
+        Date.now() + slurpCommissionDeliveryDelayMs({ price: accepted.price, briefLength: commission.brief.length }),
+      ).toISOString();
+      const scheduled = await messages.scheduleCommissionDelivery(commission.id, {
+        deliverAt,
+        mediaPath: drawn.mediaPath,
+      });
+      if (scheduled) return { commission: scheduled };
+
+      // Nothing could be scheduled, so the wait is dropped rather than the delivery. The fan has
+      // paid; handing them the piece now is worse pacing but it is not a loss.
+      const outcome = await deliverAutomaticSlurpCommission(app.db, accepted, drawn.mediaPath);
+      if (outcome.status === "delivered") return { commission: outcome.commission };
+      return reply.code(500).send({
+        error:
+          outcome.status === "refunded"
+            ? "Could not deliver that commission. Your payment was refunded."
+            : "Could not deliver that commission. It is paid for and still in progress.",
+      });
     } finally {
       commissionAcceptRequests.delete(commission.id);
     }
@@ -559,7 +569,12 @@ export async function slurpMessageRoutes(app: FastifyInstance) {
       );
       if (!delivered || delivered.state !== "delivered" || !delivered.deliveryMessageId) {
         if (drawn && drawn !== "unavailable") drawn.compensate();
-        return { commission: delivered };
+        // This used to answer 200 with a null commission after silently refunding the fan.
+        return reply.code(500).send({
+          error: delivered
+            ? "This commission is no longer ready for delivery."
+            : "Could not deliver that commission. The fan's payment was refunded.",
+        });
       }
       if (drawn && drawn !== "unavailable") {
         drawn.promote();

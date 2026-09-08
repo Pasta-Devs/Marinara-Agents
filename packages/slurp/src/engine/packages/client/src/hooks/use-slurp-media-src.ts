@@ -9,6 +9,7 @@ type CachedMedia = {
 };
 
 const mediaCache = new Map<string, CachedMedia>();
+const MEDIA_CACHE_RETENTION_MS = 2 * 60_000;
 
 function variantUrl(imageUrl: string, width?: number): string {
   if (!width || !imageUrl.startsWith("/api/slurp/")) return imageUrl;
@@ -62,7 +63,7 @@ function releaseMedia(imageUrl: string, cached: CachedMedia): void {
     void cached.promise.then((objectUrl) => {
       if (objectUrl) URL.revokeObjectURL(objectUrl);
     });
-  }, 30_000);
+  }, MEDIA_CACHE_RETENTION_MS);
 }
 
 /**

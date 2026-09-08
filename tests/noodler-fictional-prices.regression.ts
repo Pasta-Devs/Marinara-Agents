@@ -85,7 +85,7 @@ const enLocale = JSON.parse(
 
 // Both actions show a price, and the hint says plainly what it does and does not cost.
 assert.match(card, /<NoodlerFictionalPrice amount=\{noodlerUnlockPriceOf\(post\)\} \/>/u);
-assert.match(card, /<NoodlerFictionalPrice amount=\{noodlerSubscriptionPriceOf\(profile\)\} \/>/u);
+assert.match(card, /<NoodlerFictionalPrice[\s\S]*?amount=\{noodlerSubscriptionPriceOf\(profile\)\}[\s\S]*?\/>/u);
 assert.match(card, /title=\{localizeUi\("ui\.noodle\.unlocksheet\.priceHint"\)\}/u);
 assert.match(enLocale["ui.noodle.unlocksheet.price"], /\{\{amount\}\}/u);
 assert.match(enLocale["ui.noodle.unlocksheet.priceHint"], /fictional Slurp roleplay points/iu);

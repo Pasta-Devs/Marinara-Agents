@@ -1,4 +1,4 @@
-import type { CSSProperties } from "react";
+import { useCallback, useEffect, useRef, useState, type CSSProperties } from "react";
 
 type SparkleStyle = CSSProperties & Record<`--slurp-spark-${string}`, string>;
 
@@ -51,28 +51,107 @@ function buildMotes(count: number): SparkleMote[] {
 const STATIC_SPARKLE_FIELD = buildStaticSparkleField();
 const SPARKLE_MOTES = buildMotes(36);
 
-export function SlurpSparkleVeil({ className = "" }: { className?: string }) {
+/** A compact success halo for creator avatars. It stays decorative and becomes a quiet ring with reduced motion. */
+export function SlurpCelebrationRing({ active }: { active: boolean }) {
+  if (!active) return null;
   return (
-    <span className={`slurp-sparkle-veil pointer-events-none absolute inset-0 ${className}`} aria-hidden="true">
-      <span className="slurp-sparkle-field" style={{ backgroundImage: STATIC_SPARKLE_FIELD }} />
-      {SPARKLE_MOTES.map((mote, index) => (
+    <span
+      className="slurp-celebration-ring pointer-events-none absolute -inset-1.5 rounded-full"
+      aria-hidden="true"
+      data-slurp-celebration-ring
+    >
+      {Array.from({ length: 8 }, (_, index) => (
         <span
           key={index}
-          className="slurp-sparkle-mote"
-          style={
-            {
-              left: mote.left,
-              top: mote.top,
-              "--slurp-spark-size": mote.size,
-              "--slurp-spark-move-x": mote.moveX,
-              "--slurp-spark-move-y": mote.moveY,
-              "--slurp-spark-duration": mote.duration,
-              "--slurp-spark-delay": mote.delay,
-              "--slurp-spark-opacity": mote.opacity,
-            } as SparkleStyle
-          }
+          className="slurp-celebration-spark absolute start-1/2 top-1/2 h-1 w-1 rounded-full bg-white"
+          style={{ "--slurp-ring-angle": `${index * 45}deg` } as CSSProperties & { "--slurp-ring-angle": string }}
         />
       ))}
+      <style>{`
+        .slurp-celebration-ring {
+          box-shadow: 0 0 0 1px color-mix(in srgb, var(--noodle-accent) 72%, white),
+            0 0 18px color-mix(in srgb, var(--noodle-accent) 45%, transparent);
+        }
+        .slurp-celebration-spark {
+          opacity: 0.75;
+          transform: translate(-50%, -50%) rotate(var(--slurp-ring-angle)) translateY(-2rem) scale(0.7);
+        }
+        @media (prefers-reduced-motion: no-preference) {
+          .slurp-celebration-ring { animation: slurp-celebration-ring 0.72s ease-out both; }
+          .slurp-celebration-spark {
+            animation: slurp-celebration-spark 0.72s ease-out both;
+          }
+        }
+        @keyframes slurp-celebration-ring {
+          from { opacity: 0; scale: 0.88; }
+          45% { opacity: 1; scale: 1.08; }
+          to { opacity: 0.72; scale: 1; }
+        }
+        @keyframes slurp-celebration-spark {
+          from { opacity: 0; transform: translate(-50%, -50%) rotate(var(--slurp-ring-angle)) translateY(-1.35rem) scale(0.35); }
+          45% { opacity: 1; }
+          to { opacity: 0; transform: translate(-50%, -50%) rotate(var(--slurp-ring-angle)) translateY(-2.5rem) scale(0.8); }
+        }
+      `}</style>
+    </span>
+  );
+}
+
+export function SlurpSparkleVeil({ className = "" }: { className?: string }) {
+  const [inViewport, setInViewport] = useState(false);
+  const observerRef = useRef<IntersectionObserver | null>(null);
+  const observe = useCallback((node: HTMLSpanElement | null) => {
+    observerRef.current?.disconnect();
+    observerRef.current = null;
+    if (!node) return;
+    if (typeof IntersectionObserver === "undefined") {
+      setInViewport(true);
+      return;
+    }
+    const observer = new IntersectionObserver(([entry]) => setInViewport(entry?.isIntersecting === true), {
+      rootMargin: "96px 0px",
+    });
+    observerRef.current = observer;
+    observer.observe(node);
+  }, []);
+  useEffect(
+    () => () => {
+      observerRef.current?.disconnect();
+      observerRef.current = null;
+    },
+    [],
+  );
+
+  return (
+    <span
+      ref={observe}
+      className={`slurp-sparkle-veil pointer-events-none absolute inset-0 ${className}`}
+      aria-hidden="true"
+      data-slurp-sparkles-active={inViewport ? "true" : "false"}
+    >
+      {inViewport && (
+        <>
+          <span className="slurp-sparkle-field" style={{ backgroundImage: STATIC_SPARKLE_FIELD }} />
+          {SPARKLE_MOTES.map((mote, index) => (
+            <span
+              key={index}
+              className="slurp-sparkle-mote"
+              style={
+                {
+                  left: mote.left,
+                  top: mote.top,
+                  "--slurp-spark-size": mote.size,
+                  "--slurp-spark-move-x": mote.moveX,
+                  "--slurp-spark-move-y": mote.moveY,
+                  "--slurp-spark-duration": mote.duration,
+                  "--slurp-spark-delay": mote.delay,
+                  "--slurp-spark-opacity": mote.opacity,
+                } as SparkleStyle
+              }
+            />
+          ))}
+        </>
+      )}
       <style>{`
         .slurp-sparkle-veil {
           contain: paint;

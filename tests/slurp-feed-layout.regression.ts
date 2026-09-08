@@ -8,6 +8,13 @@ const home = readFileSync(join(componentsDir, "SlurpHome.tsx"), "utf8");
 const settings = readFileSync(join(componentsDir, "SlurpSettings.tsx"), "utf8");
 const shell = readFileSync(join(componentsDir, "SlurpShell.tsx"), "utf8");
 const coin = readFileSync(join(componentsDir, "SlurpCoin.tsx"), "utf8");
+const creatorPostCard = readFileSync(join(componentsDir, "SlurpCreatorPostCard.tsx"), "utf8");
+const sparkle = readFileSync(join(componentsDir, "SlurpSparkleVeil.tsx"), "utf8");
+const hooks = readFileSync(join(root, "packages/slurp/src/engine/packages/client/src/hooks/use-slurp.ts"), "utf8");
+const mediaHook = readFileSync(
+  join(root, "packages/slurp/src/engine/packages/client/src/hooks/use-slurp-media-src.ts"),
+  "utf8",
+);
 const ageGate = readFileSync(join(componentsDir, "SlurpAgeGate.tsx"), "utf8");
 const artwork = readFileSync(
   join(root, "packages/slurp/src/engine/packages/server/src/services/slurp/slurp-artwork.operation.ts"),
@@ -57,12 +64,41 @@ assert.match(home, /gateCelebrating && <SlurpConfetti fixed/u, "confetti must su
 
 // Only observed live balances animate. Static prices and history keep using the same quiet component.
 assert.match(coin, /watchAmount\?: number/u, "coin amounts must accept an observed live balance");
-assert.match(coin, /data-slurp-coin-spent=\{spent\.amount\}/u, "a balance decrease must render spend feedback");
-assert.match(coin, /spent && !reduceMotion/u, "coin movement must respect reduced motion");
+assert.match(coin, /data-slurp-coin-spent=/u, "a balance decrease must render spend feedback");
+assert.match(coin, /data-slurp-coin-earned=/u, "a balance increase must render earning feedback");
+assert.match(coin, /export function SlurpCoinBurst/u, "transaction controls must share one coin-trail effect");
+assert.match(coin, /if \(reduceMotion\) return null/u, "coin movement must respect reduced motion");
 assert.match(
   home,
   /amount=\{coins\.toLocaleString\(\)\} watchAmount=\{coins\}/u,
-  "the Wallet balance must animate spending",
+  "the Wallet balance must animate spending and earning",
+);
+assert.match(home, /function SlurpAccessTransition/u, "locked and revealed post shapes need a persistent shell");
+assert.match(home, /layout=\{reduceMotion \? false : "size"\}/u, "post height changes must animate instead of jumping");
+assert.match(home, /mode="popLayout"/u, "the old post must remain while its revealed form enters");
+assert.match(creatorPostCard, /runTransaction/u, "the unlock sheet must stay mounted through payment");
+assert.match(creatorPostCard, /ui\.slurp\.unlocksheet\.bestValue/u, "the subscription offer must carry its value cue");
+assert.match(sparkle, /data-slurp-celebration-ring/u, "creator identity must share the reveal celebration");
+assert.match(sparkle, /new IntersectionObserver/u, "sparkles must observe their viewport visibility");
+assert.match(sparkle, /\{inViewport && \(/u, "off-screen sparkle particles must not remain mounted");
+assert.match(home, /contentVisibility: "auto"/u, "off-screen feed cards must skip unnecessary rendering work");
+assert.match(
+  home,
+  /const \{ moments, feed, searchResults, discoveredCreators, suggestedCreators \} = useMemo/u,
+  "feed projections must stay cached across unrelated renders",
+);
+assert.match(mediaHook, /MEDIA_CACHE_RETENTION_MS = 2 \* 60_000/u, "recent media must stay warm for back-scrolling");
+const viewerQuery = hooks.slice(
+  hooks.indexOf("export function useNoodlerViewer"),
+  hooks.indexOf("export function useNoodlerUnseenCount"),
+);
+assert.match(viewerQuery, /queryFn: async \(\{ signal \}\)/u, "feed requests must support cancellation");
+assert.match(viewerQuery, /staleTime: 30_000[\s\S]*?gcTime: 10 \* 60_000/u, "feed data must survive quick remounts");
+assert.doesNotMatch(viewerQuery, /refetchOnMount: "always"/u, "fresh cached feeds must not refetch on every mount");
+assert.match(
+  hooks,
+  /useUnlockNoodlerPost[\s\S]*?viewer-wallets/u,
+  "unlocking must refresh the shared wallet balance that drives transaction feedback",
 );
 
 // A locked or text-only post has no tile to draw, so it must not reach the wall.
@@ -199,8 +235,13 @@ assert.doesNotMatch(
 );
 assert.match(
   home,
-  /const hasChangedDraft = profileDraft[\s\S]*?if \(!hasChangedDraft\) return true;/u,
-  "Unchanged creator edits must not trigger the discard dialog",
+  /const \[profileDraftDirty, setProfileDraftDirty\] = useState\(false\)/u,
+  "profile editing must track real changes explicitly",
+);
+assert.match(
+  home,
+  /if \(!profileDraftDirty\) return true;/u,
+  "unchanged creator edits must not trigger the discard dialog",
 );
 
 // Banners are environmental covers. They must not receive character avatar references or context.

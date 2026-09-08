@@ -20,6 +20,7 @@ import {
   Smile,
   Trash2,
   Lock,
+  Loader2,
   X,
 } from "lucide-react";
 import { Fragment, useMemo, useRef, useState } from "react";
@@ -66,8 +67,8 @@ import { NoodleAnchoredPopover } from "./NoodleAnchoredPopover";
 import { SlurpLikedBy } from "./SlurpFanCard";
 import { NoodlePollComposer } from "./SlurpPollComposer";
 import { PostImageFrame } from "./PostImageCropEditor";
-import { SlurpSparkleVeil } from "./SlurpSparkleVeil";
-import { SlurpCoin } from "./SlurpCoin";
+import { SlurpCelebrationRing, SlurpSparkleVeil } from "./SlurpSparkleVeil";
+import { SlurpCoin, SlurpCoinBurst } from "./SlurpCoin";
 
 const SLURP_FEED_MEDIA_RATIO_CLASS = "aspect-[4/3] sm:aspect-[16/10]";
 
@@ -93,8 +94,8 @@ export function LockedSlurpPostCard({
   subscribed: boolean;
   unlockPending: boolean;
   subscriptionPending: boolean;
-  onUnlock: (postId: string) => void;
-  onToggleSubscription: (creatorAccountId: string, subscribed: boolean) => void;
+  onUnlock: (postId: string) => void | Promise<void>;
+  onToggleSubscription: (creatorAccountId: string, subscribed: boolean) => void | Promise<void>;
   onManage?: () => void;
   onGenerateImage?: () => void;
   imageGenerationPending?: boolean;
@@ -111,6 +112,7 @@ export function LockedSlurpPostCard({
 }) {
   const { t: localizeUi, i18n } = useUiTranslation();
   const [unlockSheetOpen, setUnlockSheetOpen] = useState(false);
+  const [transaction, setTransaction] = useState<"subscribe" | "unlock" | null>(null);
   const [postMenuOpen, setPostMenuOpen] = useState(false);
   const [demoUnlocked, setDemoUnlocked] = useState(false);
   const likeCount = post.likeCount ?? 0;
@@ -124,6 +126,25 @@ export function LockedSlurpPostCard({
   // No teaser could be built (the route 404s), so drop the broken <img> and keep the frame.
   const [failedMediaSrc, setFailedMediaSrc] = useState<string | null>(null);
   const shownMediaSrc = mediaSrc && mediaSrc !== failedMediaSrc ? mediaSrc : null;
+  const runTransaction = async (kind: "subscribe" | "unlock") => {
+    if (transaction) return;
+    setTransaction(kind);
+    try {
+      if (demo) {
+        await new Promise((resolve) => window.setTimeout(resolve, 420));
+        setDemoUnlocked(true);
+        demo.onReveal?.();
+        setUnlockSheetOpen(false);
+        setTransaction(null);
+        return;
+      }
+      if (kind === "unlock") await onUnlock(post.id);
+      else await onToggleSubscription(profile.id, subscribed);
+    } catch {
+      // The parent owns the error message. Keep the sheet open so the viewer can try again.
+      setTransaction(null);
+    }
+  };
   return (
     <article
       data-noodle-post-id={post.id}
@@ -148,7 +169,10 @@ export function LockedSlurpPostCard({
               : undefined
           }
         >
-          <ProfileInitial profile={profile} />
+          <span className="relative">
+            <ProfileInitial profile={profile} />
+            <SlurpCelebrationRing active={transaction !== null} />
+          </span>
         </button>
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
@@ -227,6 +251,8 @@ export function LockedSlurpPostCard({
             {shownMediaSrc ? (
               <img
                 src={shownMediaSrc}
+                loading="lazy"
+                decoding="async"
                 onError={() => setFailedMediaSrc(shownMediaSrc)}
                 alt={
                   revealed
@@ -279,7 +305,7 @@ export function LockedSlurpPostCard({
                 aria-hidden="true"
               />
             )}
-            {!revealed && shownMediaSrc && <SlurpSparkleVeil />}
+            {!revealed && shownMediaSrc && <SlurpSparkleVeil className={transaction ? "opacity-100" : ""} />}
             {/* The lock is a state cue; the accessible image text already describes the preview. */}
             {!revealed && (
               <span className="pointer-events-none absolute inset-x-0 top-[36%] flex justify-center" aria-hidden="true">
@@ -350,9 +376,10 @@ export function LockedSlurpPostCard({
       </div>
       <Modal
         open={unlockSheetOpen}
-        onClose={() => setUnlockSheetOpen(false)}
+        onClose={() => !transaction && setUnlockSheetOpen(false)}
         title={localizeUi("ui.noodle.unlocksheet.title")}
-        width="max-w-sm"
+        width="max-w-xl"
+        closeDisabled={transaction !== null}
         panelStyle={{
           "--background": "var(--slurp-surface)",
           "--foreground": "var(--slurp-text)",
@@ -361,67 +388,123 @@ export function LockedSlurpPostCard({
           "--accent": "color-mix(in srgb, var(--noodle-accent) 14%, transparent)",
         }}
       >
-        <div data-component="SlurpHome.UnlockSheet" className="divide-y divide-[var(--noodle-divider)]">
-          <button
-            type="button"
-            data-noodler-unlock-action="post"
-            disabled={unlockPending}
-            onClick={() => {
-              setUnlockSheetOpen(false);
-              if (demo) {
-                setDemoUnlocked(true);
-                demo.onReveal?.();
-              } else onUnlock(post.id);
-            }}
-            className="flex min-h-16 w-full items-center gap-3 rounded-lg px-3 py-3 text-left transition-colors hover:bg-[var(--slurp-surface-raised)] disabled:opacity-50"
-          >
-            <Eye size={20} className="shrink-0 text-[var(--noodle-accent)]" />
-            <span className="min-w-0 flex-1">
-              <span className="block text-sm font-bold">{localizeUi("ui.noodle.unlocksheet.unlockThisPost")}</span>
-              <span className="block text-xs text-[var(--muted-foreground)]">
-                {noodlerUnlockCountOf(post) > 0
-                  ? localizeUi("ui.slurp.unlocksheet.unlockedBy", {
-                      defaultValue: "{{count}} people unlocked this",
-                      count: noodlerUnlockCountOf(post),
-                    })
-                  : localizeUi("ui.noodle.unlocksheet.unlockThisPostDetail")}
+        <div data-component="SlurpHome.UnlockSheet" className="relative isolate overflow-hidden px-1 pb-1">
+          {transaction && <SlurpSparkleVeil className="z-20 opacity-80" />}
+          <div className="mb-4 grid gap-3 rounded-2xl bg-[linear-gradient(115deg,color-mix(in_srgb,var(--noodle-accent)_10%,var(--slurp-surface-raised)),color-mix(in_srgb,var(--slurp-violet)_8%,var(--slurp-surface)))] p-3 ring-1 ring-inset ring-white/[0.07] sm:grid-cols-[minmax(0,1fr)_9rem]">
+            <div className="flex min-w-0 items-center gap-3">
+              <span className="relative">
+                <ProfileInitial profile={profile} />
+                <SlurpCelebrationRing active={transaction !== null} />
               </span>
-            </span>
-            <NoodlerFictionalPrice amount={noodlerUnlockPriceOf(post)} />
-          </button>
-          <button
-            type="button"
-            data-noodler-unlock-action="subscribe"
-            disabled={subscriptionPending}
-            onClick={() => {
-              setUnlockSheetOpen(false);
-              if (demo) {
-                setDemoUnlocked(true);
-                demo.onReveal?.();
-              } else onToggleSubscription(profile.id, subscribed);
-            }}
-            className="flex min-h-16 w-full items-center gap-3 rounded-lg px-3 py-3 text-left transition-colors hover:bg-[var(--slurp-surface-raised)] disabled:opacity-50"
-          >
-            <Bell size={20} className="shrink-0 text-[var(--noodle-accent)]" />
-            <span className="min-w-0 flex-1">
-              <span className="block text-sm font-bold">{localizeUi("ui.noodle.unlocksheet.subscribe")}</span>
-              <span className="block text-xs text-[var(--muted-foreground)]">
-                {localizeUi("ui.noodle.unlocksheet.subscribeDetail")}
+              <span className="min-w-0">
+                <span className="block truncate text-sm font-black">{profile.displayName}</span>
+                <span className="block truncate text-xs text-[var(--muted-foreground)]">@{profile.handle}</span>
+                <span className="mt-1 block text-xs leading-5 text-[var(--muted-foreground)]">
+                  {localizeUi("ui.slurp.unlocksheet.fromCreator", {
+                    defaultValue: "See the full post from {{name}}.",
+                    name: profile.displayName,
+                  })}
+                </span>
               </span>
-            </span>
-            <NoodlerFictionalPrice amount={noodlerSubscriptionPriceOf(profile)} />
-          </button>
+            </div>
+            {shownMediaSrc && (
+              <span className="relative hidden aspect-[16/10] overflow-hidden rounded-xl outline outline-1 -outline-offset-1 outline-white/10 sm:block">
+                <img
+                  src={shownMediaSrc}
+                  alt=""
+                  loading="lazy"
+                  decoding="async"
+                  className="h-full w-full object-cover saturate-[0.82]"
+                />
+                <span className="absolute inset-0 bg-black/35" />
+                <span className="absolute inset-0 flex items-center justify-center text-white">
+                  <Lock size={19} strokeWidth={2.25} aria-hidden="true" />
+                </span>
+              </span>
+            )}
+          </div>
+          <div className="grid gap-3">
+            <button
+              type="button"
+              data-noodler-unlock-action="post"
+              disabled={unlockPending || transaction !== null}
+              onClick={() => void runTransaction("unlock")}
+              className="relative flex min-h-[4.75rem] w-full items-center gap-3 overflow-visible rounded-2xl bg-[var(--slurp-surface-raised)] px-4 py-3 text-left shadow-[var(--slurp-shadow-raised)] ring-1 ring-inset ring-white/[0.07] transition-[background-color,transform,box-shadow] hover:bg-[color-mix(in_srgb,var(--noodle-accent)_7%,var(--slurp-surface-raised))] hover:shadow-[var(--slurp-shadow-floating)] active:scale-[0.96] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--slurp-focus)] disabled:opacity-50 motion-reduce:transition-none motion-reduce:active:scale-100"
+            >
+              <SlurpCoinBurst active={transaction === "unlock"} />
+              {transaction === "unlock" ? (
+                <Loader2
+                  size={20}
+                  className="shrink-0 animate-spin text-[var(--noodle-accent)] motion-reduce:animate-none"
+                />
+              ) : (
+                <Eye size={20} className="shrink-0 text-[var(--noodle-accent)]" />
+              )}
+              <span className="min-w-0 flex-1">
+                <span className="block text-sm font-black">
+                  {localizeUi("ui.slurp.unlocksheet.unlockOnce", { defaultValue: "Unlock once" })}
+                </span>
+                <span className="block text-xs text-[var(--muted-foreground)]">
+                  {noodlerUnlockCountOf(post) === 1
+                    ? localizeUi("ui.slurp.unlocksheet.unlockedByOne", { defaultValue: "Unlocked by 1 fan" })
+                    : noodlerUnlockCountOf(post) > 1
+                      ? localizeUi("ui.slurp.unlocksheet.unlockedBy", {
+                          defaultValue: "Unlocked by {{count}} fans",
+                          count: noodlerUnlockCountOf(post),
+                        })
+                      : localizeUi("ui.noodle.unlocksheet.unlockThisPostDetail")}
+                </span>
+              </span>
+              <NoodlerFictionalPrice amount={noodlerUnlockPriceOf(post)} />
+            </button>
+            <button
+              type="button"
+              data-noodler-unlock-action="subscribe"
+              disabled={subscriptionPending || transaction !== null}
+              onClick={() => void runTransaction("subscribe")}
+              className="relative flex min-h-[5.25rem] w-full items-center gap-3 overflow-visible rounded-2xl bg-[linear-gradient(115deg,color-mix(in_srgb,var(--slurp-coral)_22%,var(--slurp-surface-raised)),color-mix(in_srgb,var(--slurp-violet)_20%,var(--slurp-surface-raised)))] px-4 py-3 text-left shadow-[0_18px_42px_-30px_var(--noodle-accent)] ring-1 ring-inset ring-[var(--noodle-accent)]/55 transition-[filter,transform,box-shadow] hover:brightness-110 hover:shadow-[0_22px_48px_-28px_var(--noodle-accent)] active:scale-[0.96] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--slurp-focus)] disabled:opacity-50 motion-reduce:transition-none motion-reduce:active:scale-100"
+            >
+              <SlurpCoinBurst active={transaction === "subscribe"} />
+              {transaction === "subscribe" ? (
+                <Loader2
+                  size={20}
+                  className="shrink-0 animate-spin text-[var(--noodle-accent)] motion-reduce:animate-none"
+                />
+              ) : (
+                <Bell size={20} className="shrink-0 text-[var(--noodle-accent)]" />
+              )}
+              <span className="min-w-0 flex-1">
+                <span className="flex flex-wrap items-center gap-2">
+                  <span className="text-sm font-black">{localizeUi("ui.noodle.unlocksheet.subscribe")}</span>
+                  <span className="rounded-full bg-black/20 px-2 py-0.5 text-[0.62rem] font-black uppercase tracking-[0.08em] text-amber-200 ring-1 ring-inset ring-amber-200/40">
+                    {localizeUi("ui.slurp.unlocksheet.bestValue", { defaultValue: "Best value" })}
+                  </span>
+                </span>
+                <span className="block text-xs text-[var(--muted-foreground)]">
+                  {localizeUi("ui.slurp.unlocksheet.subscribeCreatorDetail", {
+                    defaultValue: "Unlock every post from {{name}} and follow them.",
+                    name: profile.displayName,
+                  })}
+                </span>
+              </span>
+              <NoodlerFictionalPrice
+                amount={noodlerSubscriptionPriceOf(profile)}
+                suffix={localizeUi("ui.slurp.unlocksheet.perWeek", { defaultValue: "/ week" })}
+              />
+            </button>
+          </div>
+          <p className="mt-4 text-center text-[0.68rem] text-[var(--muted-foreground)]">
+            {localizeUi("ui.slurp.unlocksheet.reassurance", {
+              defaultValue: "Fictional SlurpCoins · Cancel anytime",
+            })}
+          </p>
         </div>
       </Modal>
     </article>
   );
 }
 
-/**
- * Fictional prices, presentation only. Nothing is debited, no balance is shown, and access is
- * never gated on funds — so the label carries its own hint saying exactly that, rather than
- * letting a currency symbol imply an economy that does not exist.
- */
+/** Fictional SlurpCoin prices only; the tooltip makes clear that no real money is involved. */
 const NOODLER_DEFAULT_UNLOCK_PRICE = 1;
 const NOODLER_DEFAULT_SUBSCRIPTION_PRICE = 5;
 
@@ -442,7 +525,7 @@ function noodlerSubscriptionPriceOf(profile: unknown): number {
   return typeof price === "number" && price >= 0 ? price : NOODLER_DEFAULT_SUBSCRIPTION_PRICE;
 }
 
-function NoodlerFictionalPrice({ amount }: { amount: number }) {
+function NoodlerFictionalPrice({ amount, suffix }: { amount: number; suffix?: string }) {
   const { t: localizeUi } = useUiTranslation();
   return (
     <span
@@ -451,6 +534,7 @@ function NoodlerFictionalPrice({ amount }: { amount: number }) {
     >
       <span>{localizeUi("ui.noodle.unlocksheet.price", { amount })}</span>
       <SlurpCoin size={15} />
+      {suffix && <span className="text-[0.65rem] font-bold text-[var(--muted-foreground)]">{suffix}</span>}
     </span>
   );
 }

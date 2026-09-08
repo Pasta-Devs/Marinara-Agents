@@ -38,6 +38,7 @@ import {
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { createPortal } from "react-dom";
+import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { toast } from "sonner";
 import {
@@ -81,6 +82,7 @@ import {
   useNoodlerConnectionCounts,
   useSlurpWallet,
   useClaimSlurpDailyRefill,
+  useSetSlurpWalletCoinsForDevelopment,
   useTipSlurpCreator,
   useNoodlerViewerWallets,
   useNoodlerSubscribers,
@@ -148,7 +150,7 @@ import { NoodleAnchoredPopover } from "./NoodleAnchoredPopover";
 import { SlurpFanCard } from "./SlurpFanCard";
 import { LockedSlurpPostCard, SlurpCreatorPostCard } from "./SlurpCreatorPostCard";
 import { SlurpSparkleVeil } from "./SlurpSparkleVeil";
-import { SlurpCoin, SlurpCoinAmount } from "./SlurpCoin";
+import { SlurpCoin, SlurpCoinAmount, SlurpCoinBurst } from "./SlurpCoin";
 import { ChatImageLightbox } from "../chat/ChatImageLightbox";
 import { useNearViewportSlurpMediaSrc, useSlurpMediaSrc } from "../../hooks/use-slurp-media-src";
 import { SlurpOnboardingWizard } from "./SlurpOnboardingPanel";
@@ -189,6 +191,45 @@ interface SlurpHomeProps {
 }
 
 const NOODLER_FEED_WINDOW_SIZE = 20;
+
+/** Keeps a feed slot mounted while its locked and revealed card shapes trade places. */
+function SlurpAccessTransition({ postId, locked, children }: { postId: string; locked: boolean; children: ReactNode }) {
+  const reduceMotion = useReducedMotion();
+  const previousLocked = useRef(locked);
+  const [celebrating, setCelebrating] = useState(false);
+
+  useEffect(() => {
+    const revealed = previousLocked.current && !locked;
+    previousLocked.current = locked;
+    if (!revealed) return;
+    setCelebrating(true);
+    const timer = window.setTimeout(() => setCelebrating(false), reduceMotion ? 350 : 1_000);
+    return () => window.clearTimeout(timer);
+  }, [locked, reduceMotion]);
+
+  return (
+    <motion.div
+      layout={reduceMotion ? false : "size"}
+      transition={{ type: "spring", duration: 0.58, bounce: 0 }}
+      style={{ contentVisibility: "auto", containIntrinsicSize: "auto 720px" }}
+      data-slurp-access-transition={postId}
+    >
+      <AnimatePresence initial={false} mode="popLayout">
+        <motion.div
+          key={locked ? "locked" : "revealed"}
+          className="relative"
+          initial={reduceMotion ? { opacity: 0 } : { opacity: 0, scale: 0.985, filter: "blur(4px)" }}
+          animate={{ opacity: 1, scale: 1, filter: "blur(0px)" }}
+          exit={reduceMotion ? { opacity: 0 } : { opacity: 0, scale: 0.992, filter: "blur(4px)" }}
+          transition={{ duration: reduceMotion ? 0.12 : 0.42, ease: "easeOut" }}
+        >
+          {children}
+          {celebrating && !locked && <SlurpSparkleVeil className="z-20 rounded-xl opacity-80" />}
+        </motion.div>
+      </AnimatePresence>
+    </motion.div>
+  );
+}
 // Starting balance until the wallet earns or spends coins through future transactions.
 const SLURP_PLACEHOLDER_BALANCE = 1111;
 // Stories stay in the shelf for three days. The server still owns post visibility; this is the
@@ -645,6 +686,7 @@ export function SlurpHome({ navigation, onNavigate, onLeave }: SlurpHomeProps) {
   const connectionsQuery = useConnections();
   const connections = (connectionsQuery.data ?? []) as Array<{ id: string; name: string; model?: string }>;
   const [profileDraft, setProfileDraft] = useState<NoodleStageProfileInput | null>(null);
+  const [profileDraftDirty, setProfileDraftDirty] = useState(false);
   const [imagePromptReview, setImagePromptReview] = useState<{
     accountId: string;
     items: ImagePromptReviewItem[];
@@ -708,6 +750,7 @@ export function SlurpHome({ navigation, onNavigate, onLeave }: SlurpHomeProps) {
     setEditingProfileId(null);
     setDraftNoodleAccountId(navigation.sourceAccountId);
     setProfileDraft(null);
+    setProfileDraftDirty(false);
     setCreationStep("disclosure");
     setCreationDisclosure("hinted");
     setDraftGuidance("");
@@ -722,19 +765,7 @@ export function SlurpHome({ navigation, onNavigate, onLeave }: SlurpHomeProps) {
       ? (accountsQuery.data?.find((profile) => profile.id === editingProfileId) ?? null)
       : null;
     if (editing) {
-      const savedDraft: NoodleStageProfileInput = {
-        displayName: editing.displayName,
-        handle: editing.handle,
-        bio: editing.bio,
-        stagePersonality: editing.stagePersonality,
-        disclosureMode: editing.disclosureMode ?? "hinted",
-      };
-      const hasChangedDraft = profileDraft
-        ? (Object.keys(savedDraft) as Array<keyof NoodleStageProfileInput>).some(
-            (key) => profileDraft[key] !== savedDraft[key],
-          )
-        : false;
-      if (!hasChangedDraft) return true;
+      if (!profileDraftDirty) return true;
       return showConfirmDialog({
         title: localizeUi("ui.noodle.noodlerhome.discardProfileChanges"),
         message: localizeUi("ui.noodle.noodlerhome.yourUnsavedStageProfileChangesWillBeLost"),
@@ -745,12 +776,7 @@ export function SlurpHome({ navigation, onNavigate, onLeave }: SlurpHomeProps) {
     // Only real work blocks navigation. Opening the wizard is not a change: the source step used to
     // prompt "Discard profile changes?" with nothing picked, nothing typed, and nothing generated,
     // and a `create-profile` deep link did the same on the disclosure step it lands on.
-    const hasNewDraft = Boolean(
-      profileDraft ||
-      draftGuidance.trim() ||
-      generateProfileDraft.isPending ||
-      (creationStep === "source" && draftNoodleAccountId),
-    );
+    const hasNewDraft = Boolean(profileDraftDirty || draftGuidance.trim() || generateProfileDraft.isPending);
     if (!hasNewDraft) return true;
     return showConfirmDialog({
       title: localizeUi("ui.noodle.noodlerhome.discardProfileChanges"),
@@ -763,6 +789,7 @@ export function SlurpHome({ navigation, onNavigate, onLeave }: SlurpHomeProps) {
     invalidateProfileDraftGeneration();
     setCreationStep(null);
     setProfileDraft(null);
+    setProfileDraftDirty(false);
     setEditingProfileId(null);
     setDraftNoodleAccountId(null);
     setPreviousDraft(null);
@@ -1116,6 +1143,7 @@ export function SlurpHome({ navigation, onNavigate, onLeave }: SlurpHomeProps) {
     setEditingProfileId(null);
     setDraftNoodleAccountId(null);
     setProfileDraft(null);
+    setProfileDraftDirty(false);
     setCreationStep("source");
     setCreationDisclosure("hinted");
     setDraftGuidance("");
@@ -1134,6 +1162,7 @@ export function SlurpHome({ navigation, onNavigate, onLeave }: SlurpHomeProps) {
         : draftNoodleAccountId;
     setCreationStep(null);
     setProfileDraft(null);
+    setProfileDraftDirty(false);
     setDraftNoodleAccountId(null);
     setPreviousDraft(null);
     if (sourceAccountId && navigation.mode === "creator" && navigation.view === "create-profile") {
@@ -1162,6 +1191,7 @@ export function SlurpHome({ navigation, onNavigate, onLeave }: SlurpHomeProps) {
       stagePersonality: profile.stagePersonality,
       disclosureMode: profile.disclosureMode ?? "hinted",
     });
+    setProfileDraftDirty(false);
   };
 
   const closeProfileEditor = async () => {
@@ -1170,6 +1200,7 @@ export function SlurpHome({ navigation, onNavigate, onLeave }: SlurpHomeProps) {
 
   const changeDisclosure = (value: NoodleIdentityDisclosure) => {
     setCreationDisclosure(value);
+    setProfileDraftDirty(true);
     setProfileDraft((current) => (current ? { ...current, disclosureMode: value } : current));
   };
 
@@ -1210,6 +1241,7 @@ export function SlurpHome({ navigation, onNavigate, onLeave }: SlurpHomeProps) {
           setDraftSourceSnapshot(sourceSnapshot ?? null);
           setDraftSourceRevisionToken(sourceRevisionToken ?? null);
           setProfileDraft(stageProfile);
+          setProfileDraftDirty(true);
           setCreationStep("draft");
         },
         onError: (error) => {
@@ -1246,6 +1278,7 @@ export function SlurpHome({ navigation, onNavigate, onLeave }: SlurpHomeProps) {
     const onSuccess = (profile: NoodlerStageProfile & { discardedPreparedPostCount?: number }) => {
       invalidateProfileDraftGeneration();
       setProfileDraft(null);
+      setProfileDraftDirty(false);
       setEditingProfileId(null);
       setDraftNoodleAccountId(null);
       setPreviousDraft(null);
@@ -1422,14 +1455,14 @@ export function SlurpHome({ navigation, onNavigate, onLeave }: SlurpHomeProps) {
   };
 
   const toggleCreatorSubscription = (creatorAccountId: string, subscribed: boolean) => {
-    if (!viewerPersonaId) return;
-    toggleSubscription.mutate(
-      { creatorAccountId, personaId: viewerPersonaId, subscribed },
-      {
-        onError: (error) =>
-          toast.error(errorMessage(error, localizeUi("ui.noodle.noodlerhome.couldNotUpdateYourSubscription"))),
-      },
-    );
+    if (!viewerPersonaId) return Promise.resolve();
+    return toggleSubscription
+      .mutateAsync({ creatorAccountId, personaId: viewerPersonaId, subscribed })
+      .then(() => undefined)
+      .catch((error) => {
+        toast.error(errorMessage(error, localizeUi("ui.noodle.noodlerhome.couldNotUpdateYourSubscription")));
+        throw error;
+      });
   };
 
   const toggleCreatorFollow = (creatorAccountId: string, followed: boolean) => {
@@ -1798,12 +1831,13 @@ export function SlurpHome({ navigation, onNavigate, onLeave }: SlurpHomeProps) {
               setPreviousDraft(null);
               setAcceptSourceChangesForProfileId(null);
             }}
-            onChange={(patch) =>
+            onChange={(patch) => {
+              setProfileDraftDirty(true);
               setProfileDraft((current) => ({
                 ...(current ?? { ...EMPTY_STAGE_PROFILE, disclosureMode: creationDisclosure }),
                 ...patch,
-              }))
-            }
+              }));
+            }}
             sourceAccountId={draftNoodleAccountId}
             accentId={editingProfileId ?? draftNoodleAccountId ?? "new-profile"}
             isEditing={Boolean(editingProfileId)}
@@ -1975,14 +2009,14 @@ export function SlurpHome({ navigation, onNavigate, onLeave }: SlurpHomeProps) {
             onRunNow={submitRunNow}
             runNowPending={runAutoPostNow.isPending}
             onUnlock={(postId) => {
-              if (!viewerPersonaId) return;
-              unlockPost.mutate(
-                { postId, personaId: viewerPersonaId },
-                {
-                  onError: (error) =>
-                    toast.error(errorMessage(error, localizeUi("ui.noodle.noodlerhome.couldNotUnlockThisPost"))),
-                },
-              );
+              if (!viewerPersonaId) return Promise.resolve();
+              return unlockPost
+                .mutateAsync({ postId, personaId: viewerPersonaId })
+                .then(() => undefined)
+                .catch((error) => {
+                  toast.error(errorMessage(error, localizeUi("ui.noodle.noodlerhome.couldNotUnlockThisPost")));
+                  throw error;
+                });
             }}
             unlockPending={unlockPost.isPending}
             onToggleFollow={toggleCreatorFollow}
@@ -2435,14 +2469,14 @@ export function SlurpHome({ navigation, onNavigate, onLeave }: SlurpHomeProps) {
         unlockPending={unlockPost.isPending}
         postCardCtx={postCardCtx}
         onUnlock={(postId) => {
-          if (!viewerPersonaId) return;
-          unlockPost.mutate(
-            { postId, personaId: viewerPersonaId },
-            {
-              onError: (error) =>
-                toast.error(errorMessage(error, localizeUi("ui.noodle.noodlerhome.couldNotUnlockThisPost"))),
-            },
-          );
+          if (!viewerPersonaId) return Promise.resolve();
+          return unlockPost
+            .mutateAsync({ postId, personaId: viewerPersonaId })
+            .then(() => undefined)
+            .catch((error) => {
+              toast.error(errorMessage(error, localizeUi("ui.noodle.noodlerhome.couldNotUnlockThisPost")));
+              throw error;
+            });
         }}
         search={feedSearch}
         onSearchChange={setFeedSearch}
@@ -3624,14 +3658,16 @@ function StageProfileView({
   const followerTotal = connectionCounts[profile.id]?.followers ?? 0;
   const profileLikeTotal = posts.reduce((total, post) => total + (post.likeCount ?? 0), 0);
   const latestActivityAt = posts.reduce((latest, post) => Math.max(latest, Date.parse(post.createdAt)), 0);
-  const creatorStatus = slurpCreatorStatus({
-    lastActiveAt: latestActivityAt || null,
-    autoPostingEnabled: profile.autoPosting.enabled,
-  });
+  const viewingOwnCreator = profile.sourceAccountId === viewerAccount?.entityId;
+  const creatorStatus = viewingOwnCreator
+    ? "online"
+    : slurpCreatorStatus({
+        lastActiveAt: latestActivityAt || null,
+        autoPostingEnabled: profile.autoPosting.enabled,
+      });
   const profileLocation = (profile as NoodlerManagedStageProfile & { location?: string }).location ?? "";
   const profileBioBody = profile.bio.trim();
   const accent = profileAccent(profile.id);
-  const viewingOwnCreator = profile.sourceAccountId === viewerAccount?.entityId;
   const personaBackedCreator = viewerAccounts.some((account) => account.id === profile.sourceAccountId);
   const accessViewerAccounts = viewerAccounts.filter((account) => account.id !== profile.sourceAccountId);
   // Every Slurp Creator profile is operator-managed, so post controls and artwork editing stay
@@ -3843,77 +3879,82 @@ function StageProfileView({
           <EmptyState title={emptyTabTitle} />
         )
       ) : visiblePosts.length > 0 ? (
-        visiblePosts.map((item) =>
-          item.kind === "locked" || item.kind === "controller-locked" ? (
-            <div key={item.post.id} className="p-3 @min-[680px]:px-0">
-              <LockedSlurpPostCard
-                post={item.post}
-                profile={profile}
-                controllerOnly={item.kind === "controller-locked"}
-                subscribed={viewerCreator?.subscribed ?? false}
-                unlockPending={unlockPending}
-                subscriptionPending={subscriptionPending}
-                onUnlock={onUnlock}
-                onToggleSubscription={onToggleSubscription}
-                onManage={() => {
-                  setRevealedManagedPostIds((current) => {
-                    const next = new Set(current);
-                    next.add(item.post.id);
-                    return next;
-                  });
-                }}
-                onGenerateImage={
-                  item.post.imagePrompt
-                    ? () =>
-                        postCardCtx.generatePostImage?.({
-                          id: item.post.id,
-                          authorAccountId: item.post.authorAccountId,
+        visiblePosts.map((item) => {
+          const itemId = item.kind === "locked" || item.kind === "controller-locked" ? item.post.id : item.model.id;
+          const locked = item.kind === "locked" || item.kind === "controller-locked";
+          return (
+            <SlurpAccessTransition key={itemId} postId={itemId} locked={locked}>
+              {item.kind === "locked" || item.kind === "controller-locked" ? (
+                <div className="p-3 @min-[680px]:px-0">
+                  <LockedSlurpPostCard
+                    post={item.post}
+                    profile={profile}
+                    controllerOnly={item.kind === "controller-locked"}
+                    subscribed={viewerCreator?.subscribed ?? false}
+                    unlockPending={unlockPending}
+                    subscriptionPending={subscriptionPending}
+                    onUnlock={onUnlock}
+                    onToggleSubscription={onToggleSubscription}
+                    onManage={() => {
+                      setRevealedManagedPostIds((current) => {
+                        const next = new Set(current);
+                        next.add(item.post.id);
+                        return next;
+                      });
+                    }}
+                    onGenerateImage={
+                      item.post.imagePrompt
+                        ? () =>
+                            postCardCtx.generatePostImage?.({
+                              id: item.post.id,
+                              authorAccountId: item.post.authorAccountId,
+                            })
+                        : undefined
+                    }
+                    imageGenerationPending={postCardCtx.generatingPostImageId === item.post.id}
+                  />
+                </div>
+              ) : item.kind === "managed-reveal" ? (
+                <div>
+                  <div className="flex min-h-11 items-center justify-between gap-3 border-b border-[var(--noodle-divider)] bg-[var(--noodle-accent)]/5 px-4">
+                    <span className="text-xs font-semibold text-[var(--muted-foreground)]">
+                      {localizeUi("ui.noodle.stageprofileview.controllerViewHiddenFrom")}{" "}
+                      {viewerAccount?.displayName ?? localizeUi("ui.noodle.stageprofileview.thisViewer")}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setRevealedManagedPostIds((current) => {
+                          const next = new Set(current);
+                          next.delete(item.model.id);
+                          return next;
                         })
-                    : undefined
-                }
-                imageGenerationPending={postCardCtx.generatingPostImageId === item.post.id}
-              />
-            </div>
-          ) : item.kind === "managed-reveal" ? (
-            <div key={item.model.id}>
-              <div className="flex min-h-11 items-center justify-between gap-3 border-b border-[var(--noodle-divider)] bg-[var(--noodle-accent)]/5 px-4">
-                <span className="text-xs font-semibold text-[var(--muted-foreground)]">
-                  {localizeUi("ui.noodle.stageprofileview.controllerViewHiddenFrom")}{" "}
-                  {viewerAccount?.displayName ?? localizeUi("ui.noodle.stageprofileview.thisViewer")}
-                </span>
-                <button
-                  type="button"
-                  onClick={() =>
-                    setRevealedManagedPostIds((current) => {
-                      const next = new Set(current);
-                      next.delete(item.model.id);
-                      return next;
-                    })
-                  }
-                  className="min-h-11 shrink-0 px-2 text-xs font-bold text-[var(--noodle-accent)]"
-                >
-                  {localizeUi("ui.noodle.stageprofileview.hide")}
-                </button>
-              </div>
-              <SlurpCreatorPostCard
-                surface="profile"
-                post={item.model}
-                ctx={{ ...postCardCtx, personaAccount: null, postManagement: managedCreator }}
-              />
-            </div>
-          ) : (
-            <SlurpCreatorPostCard
-              surface="profile"
-              key={item.model.id}
-              post={item.model}
-              ctx={{
-                ...postCardCtx,
-                personaAccount: viewingOwnCreator ? null : viewerActorAccount,
-                postManagement: managedCreator,
-              }}
-            />
-          ),
-        )
+                      }
+                      className="min-h-11 shrink-0 px-2 text-xs font-bold text-[var(--noodle-accent)]"
+                    >
+                      {localizeUi("ui.noodle.stageprofileview.hide")}
+                    </button>
+                  </div>
+                  <SlurpCreatorPostCard
+                    surface="profile"
+                    post={item.model}
+                    ctx={{ ...postCardCtx, personaAccount: null, postManagement: managedCreator }}
+                  />
+                </div>
+              ) : (
+                <SlurpCreatorPostCard
+                  surface="profile"
+                  post={item.model}
+                  ctx={{
+                    ...postCardCtx,
+                    personaAccount: viewingOwnCreator ? null : viewerActorAccount,
+                    postManagement: managedCreator,
+                  }}
+                />
+              )}
+            </SlurpAccessTransition>
+          );
+        })
       ) : (
         <EmptyState title={emptyTabTitle} />
       )}
@@ -4075,14 +4116,19 @@ function StageProfileView({
               <button
                 type="button"
                 disabled={subscriptionPending}
-                onClick={() => onToggleSubscription(profile.id, viewerCreator.subscribed)}
+                onClick={() =>
+                  void Promise.resolve(onToggleSubscription(profile.id, viewerCreator.subscribed)).catch(
+                    () => undefined,
+                  )
+                }
                 className={cn(
-                  "inline-flex min-h-11 items-center justify-center rounded-lg px-5 text-sm font-bold transition-[background-color,opacity,transform] active:scale-[0.96] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--noodle-accent)] motion-reduce:transition-none motion-reduce:active:scale-100 disabled:cursor-not-allowed disabled:opacity-50",
+                  "relative inline-flex min-h-11 items-center justify-center overflow-visible rounded-lg px-5 text-sm font-bold transition-[background-color,opacity,transform] active:scale-[0.96] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--noodle-accent)] motion-reduce:transition-none motion-reduce:active:scale-100 disabled:cursor-not-allowed disabled:opacity-50",
                   viewerCreator.subscribed
                     ? "border border-[var(--noodle-accent)]/50 bg-[var(--noodle-accent)]/10 text-[var(--noodle-accent-foreground)] hover:bg-[var(--noodle-accent)]/15"
                     : "bg-[var(--noodle-accent)] text-zinc-950 hover:opacity-90",
                 )}
               >
+                <SlurpCoinBurst active={subscriptionPending && !viewerCreator.subscribed} />
                 {viewerCreator.subscribed
                   ? localizeUi("ui.slurp.profile.subscribed")
                   : localizeUi("ui.slurp.profile.subscribe")}
@@ -4778,6 +4824,58 @@ function ViewerHub({
   useEffect(() => {
     if (feedIsOnScreen) onFeedShown();
   }, [feedIsOnScreen, onFeedShown]);
+  const searchTerm = search.trim().toLowerCase();
+  const { moments, feed, searchResults, discoveredCreators, suggestedCreators } = useMemo(() => {
+    const searchable = (value: unknown) => (typeof value === "string" ? value.toLowerCase() : "");
+    const followedCreatorIds = new Set(scope?.viewer.settings.social.followingAccountIds ?? []);
+    const creators = scope?.creators ?? [];
+    // Keep a Creator's active Stories together. This makes one shelf tile a sequence rather than
+    // making the next tap jump to an unrelated Creator.
+    const nextMoments = creators
+      .filter((creator) => tab === "all" || creator.followed)
+      .map((creator) => ({
+        creator,
+        posts: creator.posts
+          .filter((post) => isSlurpStory(post) && new Date(post.createdAt).getTime() >= momentCutoff)
+          .sort((left, right) => new Date(left.createdAt).getTime() - new Date(right.createdAt).getTime()),
+      }))
+      .filter(({ posts }) => posts.length > 0)
+      .sort(
+        (left, right) =>
+          new Date(right.posts[right.posts.length - 1]!.createdAt).getTime() -
+          new Date(left.posts[left.posts.length - 1]!.createdAt).getTime(),
+      )
+      .flatMap(({ creator, posts }) => posts.map((post) => ({ creator, post })));
+    const allPosts = creators.flatMap((creator) =>
+      creator.posts.filter((post) => !isSlurpStory(post)).map((post) => ({ post, creator })),
+    );
+    const matchesSearch = ({ post, creator }: (typeof allPosts)[number]) =>
+      !searchTerm ||
+      (post.title ?? "").toLowerCase().includes(searchTerm) ||
+      (post.content ?? "").toLowerCase().includes(searchTerm) ||
+      searchable(creator.profile.handle).includes(searchTerm) ||
+      searchable(creator.profile.displayName).includes(searchTerm);
+    const newestFirst = (left: (typeof allPosts)[number], right: (typeof allPosts)[number]) =>
+      new Date(right.post.createdAt).getTime() - new Date(left.post.createdAt).getTime();
+    return {
+      moments: nextMoments,
+      feed: allPosts
+        .filter(({ creator }) => tab === "all" || followedCreatorIds.has(creator.profile.id))
+        .filter(matchesSearch)
+        .sort(newestFirst),
+      searchResults: searchTerm ? allPosts.filter(matchesSearch).sort(newestFirst) : [],
+      discoveredCreators: creators.filter(
+        (creator) =>
+          creator.profile.id !== authorProfile?.id &&
+          (!searchTerm ||
+            searchable(creator.profile.handle).includes(searchTerm) ||
+            searchable(creator.profile.displayName).includes(searchTerm)),
+      ),
+      suggestedCreators: creators
+        .filter((creator) => creator.profile.id !== authorProfile?.id && !creator.followed)
+        .slice(0, 3),
+    };
+  }, [authorProfile?.id, momentCutoff, scope, searchTerm, tab]);
   // "Create a persona" is a claim about the user's data, so it waits for the personas query to
   // actually succeed instead of speaking for a cold or failed load.
   if (personas.length === 0) {
@@ -4801,68 +4899,14 @@ function ViewerHub({
       />
     );
   }
-  const searchTerm = search.trim().toLowerCase();
-  const searchable = (value: unknown) => (typeof value === "string" ? value.toLowerCase() : "");
-  const followedCreatorIds = new Set(scope?.viewer.settings.social.followingAccountIds ?? []);
-  const creators = scope?.creators ?? [];
-  // Keep a Creator's active Stories together. This makes one shelf tile a sequence rather than
-  // making the next tap jump to an unrelated Creator.
-  const moments = creators
-    .filter((creator) => tab === "all" || creator.followed)
-    .map((creator) => ({
-      creator,
-      posts: creator.posts
-        .filter((post) => isSlurpStory(post) && new Date(post.createdAt).getTime() >= momentCutoff)
-        .sort((left, right) => new Date(left.createdAt).getTime() - new Date(right.createdAt).getTime()),
-    }))
-    .filter(({ posts }) => posts.length > 0)
-    .sort(
-      (left, right) =>
-        new Date(right.posts[right.posts.length - 1]!.createdAt).getTime() -
-        new Date(left.posts[left.posts.length - 1]!.createdAt).getTime(),
-    )
-    .flatMap(({ creator, posts }) => posts.map((post) => ({ creator, post })));
   const activeMomentIndex = activeMomentId ? moments.findIndex((moment) => moment.post.id === activeMomentId) : -1;
   const activeMoment = activeMomentIndex >= 0 ? moments[activeMomentIndex] : null;
-  const feed = creators
-    .filter((creator) => tab === "all" || followedCreatorIds.has(creator.profile.id))
-    .flatMap((creator) => creator.posts.filter((post) => !isSlurpStory(post)).map((post) => ({ post, creator })))
-    .filter(
-      ({ post, creator }) =>
-        !searchTerm ||
-        (post.title ?? "").toLowerCase().includes(searchTerm) ||
-        (post.content ?? "").toLowerCase().includes(searchTerm) ||
-        searchable(creator.profile.handle).includes(searchTerm) ||
-        searchable(creator.profile.displayName).includes(searchTerm),
-    )
-    .sort((a, b) => new Date(b.post.createdAt).getTime() - new Date(a.post.createdAt).getTime());
-  const searchResults = creators
-    .flatMap((creator) => creator.posts.filter((post) => !isSlurpStory(post)).map((post) => ({ post, creator })))
-    .filter(
-      ({ post, creator }) =>
-        searchTerm &&
-        ((post.title ?? "").toLowerCase().includes(searchTerm) ||
-          (post.content ?? "").toLowerCase().includes(searchTerm) ||
-          searchable(creator.profile.handle).includes(searchTerm) ||
-          searchable(creator.profile.displayName).includes(searchTerm)),
-    )
-    .sort((a, b) => new Date(b.post.createdAt).getTime() - new Date(a.post.createdAt).getTime());
   const visibleFeed = feed.slice(0, visibleFeedCount);
   const openPostItem = openPostId ? (feed.find((item) => item.post.id === openPostId) ?? null) : null;
   // One place decides what clicking a post image does, so the wall, the feed, and the profile
   // all open the same dialog.
   const feedCardCtx = { ...postCardCtx, openPost: setOpenPostId };
   const visibleSearchResults = searchResults.slice(0, visibleFeedCount);
-  const discoveredCreators = creators.filter(
-    (creator) =>
-      creator.profile.id !== authorProfile?.id &&
-      (!searchTerm ||
-        searchable(creator.profile.handle).includes(searchTerm) ||
-        searchable(creator.profile.displayName).includes(searchTerm)),
-  );
-  const suggestedCreators = creators
-    .filter((creator) => creator.profile.id !== authorProfile?.id && !creator.followed)
-    .slice(0, 3);
   // The feed is newest-first, so the divider goes after the *last* new post — the viewer's own
   // posts sitting in that run are not news themselves but must not cut it short. Shown only
   // when there is something on both sides: with no older posts it would sit at the bottom
@@ -4883,29 +4927,30 @@ function ViewerHub({
     }
   }
   const dividerIndex = lastNewIndex >= 0 && lastNewIndex < feed.length - 1 ? lastNewIndex + 1 : -1;
-  const renderFeedPost = ({ post, creator }: (typeof searchResults)[number]) =>
-    post.locked ? (
-      <LockedSlurpPostCard
-        key={post.id}
-        post={post}
-        profile={creator.profile}
-        subscribed={creator.subscribed}
-        unlockPending={unlockPending}
-        subscriptionPending={togglePending}
-        onUnlock={onUnlock}
-        onToggleSubscription={onToggleSubscription}
-        onOpenProfile={postCardCtx.openAuthorProfile}
-      />
-    ) : (
-      <SlurpCreatorPostCard
-        key={post.id}
-        post={toNoodlePostCardModel(post, creator.profile)}
-        ctx={{
-          ...feedCardCtx,
-          personaAccount: creator.profile.id === authorProfile?.id ? null : postCardCtx.personaAccount,
-        }}
-      />
-    );
+  const renderFeedPost = ({ post, creator }: (typeof searchResults)[number]) => (
+    <SlurpAccessTransition key={post.id} postId={post.id} locked={post.locked}>
+      {post.locked ? (
+        <LockedSlurpPostCard
+          post={post}
+          profile={creator.profile}
+          subscribed={creator.subscribed}
+          unlockPending={unlockPending}
+          subscriptionPending={togglePending}
+          onUnlock={onUnlock}
+          onToggleSubscription={onToggleSubscription}
+          onOpenProfile={postCardCtx.openAuthorProfile}
+        />
+      ) : (
+        <SlurpCreatorPostCard
+          post={toNoodlePostCardModel(post, creator.profile)}
+          ctx={{
+            ...feedCardCtx,
+            personaAccount: creator.profile.id === authorProfile?.id ? null : postCardCtx.personaAccount,
+          }}
+        />
+      )}
+    </SlurpAccessTransition>
+  );
 
   if (discoveryOpen) {
     return (
@@ -5415,10 +5460,12 @@ function SlurpWalletView({
   const walletQuery = useSlurpWallet(personaId);
   const studioQuery = useSlurpStudio(personaId);
   const claimRefill = useClaimSlurpDailyRefill();
+  const setDevWalletCoins = useSetSlurpWalletCoinsForDevelopment();
   const payout = useSlurpPayout();
   const toggleSubscription = useToggleNoodlerSubscription();
   const [ledgerMode, setLedgerMode] = useState<"spending" | "earnings">("spending");
   const [countdownNow, setCountdownNow] = useState(() => Date.now());
+  const [devCoins, setDevCoins] = useState("");
   // The wallet stores subscriptions by creator id. Rendering the raw id told the player nothing,
   // so join the managed profiles the same way every other Slurp surface names a creator.
   const creatorsQuery = useNoodlerAccounts();
@@ -5512,6 +5559,7 @@ function SlurpWalletView({
                 </div>
                 <SlurpCoinAmount
                   amount={creator.earnings.coins.toLocaleString()}
+                  watchAmount={creator.earnings.coins}
                   className="mt-2 text-4xl font-black leading-none tabular-nums"
                   size={28}
                 />
@@ -5539,8 +5587,9 @@ function SlurpWalletView({
                     { onError: (error) => toast.error(errorMessage(error)) },
                   )
                 }
-                className="inline-flex min-h-11 items-center justify-center gap-2 rounded-full bg-[var(--noodle-accent)] px-6 text-xs font-black text-zinc-950 shadow-[0_12px_28px_-16px_var(--noodle-accent)] transition-[opacity,transform] hover:opacity-90 active:scale-[0.96] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--slurp-surface)] disabled:opacity-45 motion-reduce:transition-none motion-reduce:active:scale-100"
+                className="relative inline-flex min-h-11 items-center justify-center gap-2 overflow-visible rounded-full bg-[var(--noodle-accent)] px-6 text-xs font-black text-zinc-950 shadow-[0_12px_28px_-16px_var(--noodle-accent)] transition-[opacity,transform] hover:opacity-90 active:scale-[0.96] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--slurp-surface)] disabled:opacity-45 motion-reduce:transition-none motion-reduce:active:scale-100"
               >
+                <SlurpCoinBurst active={payout.isPending} direction="earn" />
                 <ArrowDown size={16} strokeWidth={2.5} aria-hidden="true" />
                 {payout.isPending
                   ? localizeUi("ui.slurp.wallet.moving", { defaultValue: "Moving…" })
@@ -5579,8 +5628,9 @@ function SlurpWalletView({
                 type="button"
                 disabled={!refillReady || !personaId || claimRefill.isPending}
                 onClick={() => personaId && claimRefill.mutate({ personaId })}
-                className="flex min-h-11 items-center gap-2 rounded-full border border-[var(--slurp-violet)]/45 px-4 text-xs font-bold text-[var(--slurp-violet)] transition-[background-color,transform] hover:bg-[var(--slurp-violet)]/10 active:scale-[0.96] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--slurp-focus)] disabled:opacity-65 motion-reduce:transition-none motion-reduce:active:scale-100"
+                className="relative flex min-h-11 items-center gap-2 overflow-visible rounded-full border border-[var(--slurp-violet)]/45 px-4 text-xs font-bold text-[var(--slurp-violet)] transition-[background-color,transform] hover:bg-[var(--slurp-violet)]/10 active:scale-[0.96] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--slurp-focus)] disabled:opacity-65 motion-reduce:transition-none motion-reduce:active:scale-100"
               >
+                <SlurpCoinBurst active={claimRefill.isPending} direction="earn" />
                 <Gift size={16} aria-hidden="true" />
                 {claimRefill.isPending
                   ? localizeUi("ui.slurp.wallet.refilling", { defaultValue: "Claiming…" })
@@ -5605,6 +5655,54 @@ function SlurpWalletView({
             </div>
           </div>
         </section>
+
+        {wallet?.cheatsEnabled && personaId && (
+          <section className="rounded-lg border border-amber-500/35 bg-amber-500/5 p-4">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <p className="text-xs font-black uppercase tracking-[0.12em] text-amber-300">Development wallet</p>
+                <p className="mt-1 text-xs text-[var(--muted-foreground)]">Set the active Fan balance for testing.</p>
+              </div>
+              <form
+                className="flex min-w-0 items-center gap-2"
+                onSubmit={(event) => {
+                  event.preventDefault();
+                  const coinsValue = Number(devCoins);
+                  if (!Number.isSafeInteger(coinsValue) || coinsValue < 0) return;
+                  setDevWalletCoins.mutate(
+                    { personaId, coins: coinsValue },
+                    {
+                      onSuccess: () => {
+                        setDevCoins("");
+                      },
+                      onError: (error) => toast.error(errorMessage(error)),
+                    },
+                  );
+                }}
+              >
+                <label className="sr-only" htmlFor="slurp-dev-coins">
+                  Fan balance
+                </label>
+                <input
+                  id="slurp-dev-coins"
+                  inputMode="numeric"
+                  pattern="[0-9]*"
+                  value={devCoins}
+                  onChange={(event) => setDevCoins(event.target.value)}
+                  placeholder={String(coins)}
+                  className="h-10 w-28 rounded-lg border border-amber-500/35 bg-[var(--background)] px-3 text-sm tabular-nums"
+                />
+                <button
+                  type="submit"
+                  disabled={setDevWalletCoins.isPending || devCoins.trim() === ""}
+                  className="min-h-10 rounded-lg bg-amber-400 px-3 text-xs font-black text-zinc-950 disabled:opacity-50"
+                >
+                  {setDevWalletCoins.isPending ? "Setting..." : "Set coins"}
+                </button>
+              </form>
+            </div>
+          </section>
+        )}
 
         {creator && (
           <div
@@ -6208,7 +6306,7 @@ function SlurpMomentViewer({
               <button
                 type="button"
                 disabled={unlockPending}
-                onClick={() => onUnlock(moment.post.id)}
+                onClick={() => void Promise.resolve(onUnlock(moment.post.id)).catch(() => undefined)}
                 className="inline-flex min-h-11 items-center justify-center gap-2 rounded-lg bg-[var(--noodle-accent)] px-3 text-xs font-bold text-zinc-950 hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--noodle-accent)] disabled:opacity-50 [&_svg]:!text-zinc-950"
               >
                 <Eye size={15} aria-hidden="true" /> {localizeUi("ui.slurp.moments.unlock")}
@@ -6216,7 +6314,11 @@ function SlurpMomentViewer({
               <button
                 type="button"
                 disabled={subscriptionPending}
-                onClick={() => onToggleSubscription(moment.creator.profile.id, moment.creator.subscribed)}
+                onClick={() =>
+                  void Promise.resolve(
+                    onToggleSubscription(moment.creator.profile.id, moment.creator.subscribed),
+                  ).catch(() => undefined)
+                }
                 className="min-h-11 rounded-lg bg-[var(--accent)] px-3 text-xs font-bold ring-1 ring-inset ring-[var(--noodle-divider)] hover:bg-[var(--noodle-accent)]/15 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--noodle-accent)] disabled:opacity-50"
               >
                 {localizeUi("ui.slurp.profile.subscribe")}
@@ -7863,7 +7965,7 @@ function SlurpPayoutRow({ creator, personaId }: { creator: SlurpStudioCreator; p
         <span className="block text-[0.7rem] text-[var(--muted-foreground)]">
           <SlurpCoinAmount amount={creator.payoutAllowance.toLocaleString()} />
           {", from "}
-          <SlurpCoinAmount amount={creator.earnings.coins.toLocaleString()} />
+          <SlurpCoinAmount amount={creator.earnings.coins.toLocaleString()} watchAmount={creator.earnings.coins} />
           {" earned and unspent."}
         </span>
       </span>
@@ -7876,8 +7978,9 @@ function SlurpPayoutRow({ creator, personaId }: { creator: SlurpStudioCreator; p
             { onError: (error) => toast.error(errorMessage(error)) },
           )
         }
-        className="min-h-9 shrink-0 rounded-lg bg-[var(--noodle-accent)] px-3 text-xs font-bold text-zinc-950 disabled:opacity-50"
+        className="relative min-h-10 shrink-0 overflow-visible rounded-lg bg-[var(--noodle-accent)] px-3 text-xs font-bold text-zinc-950 transition-transform active:scale-[0.96] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--slurp-focus)] disabled:opacity-50 motion-reduce:transition-none motion-reduce:active:scale-100"
       >
+        <SlurpCoinBurst active={payout.isPending} direction="earn" />
         {payout.isPending
           ? localizeUi("ui.slurp.studio.payoutPending", { defaultValue: "Withdrawing…" })
           : localizeUi("ui.slurp.studio.payout", { defaultValue: "Withdraw" })}

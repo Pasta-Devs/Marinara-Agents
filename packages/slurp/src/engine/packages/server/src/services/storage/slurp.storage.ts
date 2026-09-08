@@ -6,7 +6,6 @@ import { and, desc, eq, gt, inArray, isNotNull, isNull, like, lt, ne, or } from 
 import {
   createNoodlePoll,
   DEFAULT_NOODLER_CREATOR_REPLIES_PER_24_HOURS,
-  DEFAULT_NOODLE_WALLET_COINS,
   noodleAccountProfileSettingsSchema,
   noodleAccountPrivacySettingsSchema,
   noodleAccountSocialSettingsSchema,
@@ -547,7 +546,7 @@ function emptyNoodleAccountSettings(): NoodleAccountSettings {
     social: {},
     scheduler: { autoPosting: defaultAutoPostingSettings() },
     privacy: { access: { hiddenFromAccountIds: [] } },
-    wallet: { coins: DEFAULT_NOODLE_WALLET_COINS },
+    wallet: { coins: SLURP_DEFAULT_ECONOMY.startingCoins },
   };
 }
 
@@ -665,7 +664,7 @@ export function normalizeNoodleAccountSettings(value: unknown): NoodleAccountSet
     social,
     scheduler: normalizeScheduler(raw.scheduler),
     privacy,
-    wallet: { coins: normalizePersistedInteger(rawWallet.coins) ?? DEFAULT_NOODLE_WALLET_COINS },
+    wallet: { coins: normalizePersistedInteger(rawWallet.coins) ?? SLURP_DEFAULT_ECONOMY.startingCoins },
   };
 }
 
@@ -6047,6 +6046,16 @@ export function createSlurpStorage(db: DB) {
         if (!settings.walletEnabled) return wallet;
         const next = applyStipend(wallet, new Date(), economyFrom(settings));
         return next === wallet ? wallet : writeWallet(viewerAccountId, next);
+      });
+    },
+
+    async setWalletCoinsForDevelopment(viewerAccountId: string, coins: number): Promise<SlurpWallet> {
+      if (!Number.isInteger(coins) || coins < 0) throw new Error("Wallet coins must be a non-negative integer.");
+      const settings = await this.getSettings();
+      return enqueueFinancial(async () => {
+        const wallet = await getWalletNow(viewerAccountId);
+        if (!settings.walletEnabled) return wallet;
+        return writeWallet(viewerAccountId, { ...wallet, coins });
       });
     },
 

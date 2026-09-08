@@ -51,7 +51,7 @@ export type SlurpEconomy = {
  * caps add at most 24/day on top. Nothing here compounds, so no amount of clicking outruns it.
  */
 export const SLURP_DEFAULT_ECONOMY: SlurpEconomy = {
-  startingCoins: 200,
+  startingCoins: 50,
   unlockCost: 3,
   subscriptionCost: 12,
   subscriptionDays: 7,
@@ -65,6 +65,8 @@ export const SLURP_DEFAULT_ECONOMY: SlurpEconomy = {
   engagementDailyCap: 12,
   creatorRevenueSharePercent: 100,
 };
+
+export const SLURP_DEV_CHEAT_MAX_COINS = 9_999_999;
 
 export type SlurpWalletEntryKind =
   | "unlock"

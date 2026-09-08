@@ -36,6 +36,42 @@
     "slurp": {
       "versions": [
         {
+          "version": "1.2.41",
+          "date": "2026-09-08",
+          "notes": "- Automatic commissions are delivered through one shared path, so the accept route and the message scheduler always attach the artwork and queue the Creator's note in the same order.\n- A commission delivery note is drawn from a per-commission copy bank instead of one fixed sentence.\n- A failed delivery message refunds the fan instead of leaving the commission stuck.\n- Message threads show a \"commission arriving\" indicator while a delivery is in flight.",
+          "highlight": false
+        },
+        {
+          "version": "1.2.40",
+          "date": "2026-09-08",
+          "notes": "- Renamed the development cheat setting to `CHEATS_ENABLED`.",
+          "highlight": false
+        },
+        {
+          "version": "1.2.39",
+          "date": "2026-09-08",
+          "notes": "- The development wallet editor is now hidden unless the server explicitly enables development cheats.",
+          "highlight": false
+        },
+        {
+          "version": "1.2.38",
+          "date": "2026-09-08",
+          "notes": "- New Fan wallets start with 50 coins.\n- Development builds include a bounded wallet balance editor for testing.\n- Ambient NPC account rows are removed when the ambient audience is disabled.\n- Creator owners see their own profile as online.\n- Profile navigation only asks to discard actual unsaved edits.",
+          "highlight": false
+        },
+        {
+          "version": "1.2.37",
+          "date": "2026-09-08",
+          "notes": "- Off-screen feed cards now skip rendering work, and sparkle particles stop entirely outside the viewport.\n- Feed and profile requests now cancel when abandoned and reuse fresh cached data when returning to Slurp.\n- Recent post media stays warm for back-scrolling, while feed sorting and search projections are reused across unrelated renders.",
+          "highlight": false
+        },
+        {
+          "version": "1.2.36",
+          "date": "2026-09-08",
+          "notes": "- Unlocking a post now flows from a creator-branded purchase sheet into the revealed post without the feed jumping.\n- Purchases sparkle around the Creator and post, while coin trails mark spends and earnings at the action and wallet.\n- Unlocks and subscriptions now refresh every visible wallet balance immediately after payment.",
+          "highlight": false
+        },
+        {
           "version": "1.2.35",
           "date": "2026-09-08",
           "notes": "- Mobile navigation is now icon-only with accessible labels retained.\n- Mobile navigation icons use the pink Slurp accent in every state.\n- The mobile wallet control is anchored to the top-right corner.",
@@ -117,42 +153,6 @@
           "version": "1.2.22",
           "date": "2026-09-08",
           "notes": "- The free audience reactions that arrive while you read now get busier as you add Creators. The budget averaged audience size across posts instead of adding it up, so six Creators produced exactly as few likes, follows, and comments as one, and posting more only diluted it.\n- Free audience comments are now roughly six times more frequent. At six new Creators one arrives about every 25 minutes, where it used to be one every two and a half hours.\n- Added a Free comment bank in Audience settings. It holds the short comments the audience leaves for free, you can edit or clear it, and Slurp tops it up occasionally so the same lines stop repeating.\n- Doubled the shipped free comment lines.\n- Automatic posting no longer slows to one pass every thirty minutes when a Creator's artwork cannot be drawn. A missing image connection used to stall publishing for a reason unrelated to posting.\n- Audience activity runs can now be set up to 96 a day, and the default is 8 a day instead of 4.",
-          "highlight": false
-        },
-        {
-          "version": "1.2.21",
-          "date": "2026-09-08",
-          "notes": "- A selected image style profile now applies to every generated image. When prompt interpretation rewrote the prompt, its result went to the image provider without the style being applied again, so the style appeared to work only sometimes.",
-          "highlight": false
-        },
-        {
-          "version": "1.2.20",
-          "date": "2026-09-08",
-          "notes": "- Post images now always carry the character's appearance, and a retried image is built the same way the first attempt was.\n- Scheduled Stories now publish as Stories instead of ordinary posts.\n- A Creator's stage voice is now described to the model that writes it, so Creators stop sounding alike.\n- Creating a concealed Creator now fails far less often.\n- A Conversation Schedule can no longer leak the source name into a Hinted or Secret Creator's prompts.\n- Persona-owned Creators now get their appearance, personality, and image references.\n- A first post is no longer lost to a restart or a brief lock, and automatic posts now retry like manual ones.\n- Deleting a Creator now removes their commissions, audience, and queued work.",
-          "highlight": false
-        },
-        {
-          "version": "1.2.19",
-          "date": "2026-09-08",
-          "notes": "- Opening Messages directly from a Creator profile now hides the redundant mobile Inbox header before the first thread record exists.",
-          "highlight": false
-        },
-        {
-          "version": "1.2.18",
-          "date": "2026-09-08",
-          "notes": "- Mobile message threads now show only their conversation header and back button instead of stacking them beneath the Inbox header.",
-          "highlight": false
-        },
-        {
-          "version": "1.2.17",
-          "date": "2026-09-08",
-          "notes": "- Message status pills now have their own metadata line, and the Inbox tab switcher gets out of the way while a conversation is open.",
-          "highlight": false
-        },
-        {
-          "version": "1.2.16",
-          "date": "2026-09-07",
-          "notes": "- Refined the new Inbox to match its concept: full-height desktop conversations, message filters, selected-thread surfaces, compact broadcasts, and a focused message-tools menu.",
           "highlight": false
         }
       ]

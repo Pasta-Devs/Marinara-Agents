@@ -61,7 +61,7 @@ import {
 import { createSlurpMessagesStorage } from "../services/storage/slurp-messages.storage.js";
 import { newId, now } from "../utils/id-generator.js";
 import { NOODLER_SUBSCRIPTION_COST, noodlerUnlockPriceFromMetadata } from "../services/slurp/slurp-prices.js";
-import { slurpDayKey } from "../services/slurp/slurp-wallet.js";
+import { slurpDayKey, SLURP_DEV_CHEAT_MAX_COINS } from "../services/slurp/slurp-wallet.js";
 import { settleAgentJobsWithConcurrencyLimit } from "../services/agents/agent-concurrency.js";
 import { logger } from "../lib/logger.js";
 import { isFileUniqueConstraintError } from "../db/file-schema.js";
@@ -603,6 +603,7 @@ export async function slurpRoutes(app: FastifyInstance) {
     if (nextRefillAt.getTime() <= now.getTime()) nextRefillAt.setDate(nextRefillAt.getDate() + 1);
     return {
       ...wallet,
+      cheatsEnabled: process.env.CHEATS_ENABLED === "true",
       refillFloor: settings.walletStipendFloor,
       nextRefillAt: nextRefillAt.toISOString(),
       refillAvailable:
@@ -616,6 +617,17 @@ export async function slurpRoutes(app: FastifyInstance) {
     const viewer = await resolveViewerPersona(parsed.data.personaId);
     if (!viewer) return reply.code(404).send({ error: "Slurp persona not found" });
     return noodle.claimWalletRefill(viewer.id);
+  });
+
+  app.post("/noodler/viewer/wallet/dev-set", async (req, reply) => {
+    if (process.env.CHEATS_ENABLED !== "true") return reply.code(404).send({ error: "Not found" });
+    const parsed = z
+      .object({ personaId: z.string().trim().min(1), coins: z.number().int().min(0).max(SLURP_DEV_CHEAT_MAX_COINS) })
+      .safeParse(req.body);
+    if (!parsed.success) return reply.code(400).send({ error: parsed.error.flatten() });
+    const viewer = await resolveViewerPersona(parsed.data.personaId);
+    if (!viewer) return reply.code(404).send({ error: "Slurp persona not found" });
+    return noodle.setWalletCoinsForDevelopment(viewer.id, parsed.data.coins);
   });
 
   app.post("/noodler/accounts/:id/tip", async (req, reply) => {

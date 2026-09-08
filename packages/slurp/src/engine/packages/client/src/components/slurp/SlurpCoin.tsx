@@ -50,15 +50,19 @@ export function SlurpCoinAmount({
 }) {
   const reduceMotion = useReducedMotion();
   const previousAmount = useRef(watchAmount);
-  const [spent, setSpent] = useState<{ amount: number; revision: number } | null>(null);
+  const [change, setChange] = useState<{ amount: number; direction: "earn" | "spend"; revision: number } | null>(null);
 
   useEffect(() => {
     const previous = previousAmount.current;
     previousAmount.current = watchAmount;
-    if (watchAmount === undefined || previous === undefined || watchAmount >= previous) return;
+    if (watchAmount === undefined || previous === undefined || watchAmount === previous) return;
 
-    setSpent({ amount: previous - watchAmount, revision: Date.now() });
-    const timer = window.setTimeout(() => setSpent(null), reduceMotion ? 300 : 700);
+    setChange({
+      amount: Math.abs(watchAmount - previous),
+      direction: watchAmount > previous ? "earn" : "spend",
+      revision: Date.now(),
+    });
+    const timer = window.setTimeout(() => setChange(null), reduceMotion ? 450 : 900);
     return () => window.clearTimeout(timer);
   }, [reduceMotion, watchAmount]);
 
@@ -66,7 +70,8 @@ export function SlurpCoinAmount({
     <span
       className={cn(
         "relative inline-flex items-center gap-1 transition-colors duration-150",
-        spent && "text-[var(--slurp-coral)]",
+        change?.direction === "spend" && "text-[var(--slurp-coral)]",
+        change?.direction === "earn" && "text-[var(--slurp-success)]",
         className,
       )}
       data-slurp-coin-balance={watchAmount === undefined ? undefined : "true"}
@@ -75,8 +80,10 @@ export function SlurpCoinAmount({
       <motion.span
         className="inline-flex"
         animate={
-          spent && !reduceMotion
-            ? { rotate: [0, -16, 8, 0], scale: [1, 0.82, 1], y: [0, 3, 0] }
+          change && !reduceMotion
+            ? change.direction === "spend"
+              ? { rotate: [0, -16, 8, 0], scale: [1, 0.82, 1], y: [0, 3, 0] }
+              : { rotate: [0, 10, -5, 0], scale: [1, 1.18, 1], y: [0, -3, 0] }
             : { rotate: 0, scale: 1, y: 0 }
         }
         transition={{ duration: 0.42, ease: "easeOut" }}
@@ -85,22 +92,74 @@ export function SlurpCoinAmount({
       </motion.span>
       {suffix && <span>{suffix}</span>}
       <AnimatePresence initial={false}>
-        {spent && !reduceMotion && (
+        {change && !reduceMotion && (
           <motion.span
-            key={spent.revision}
-            initial={{ opacity: 0, scale: 0.8, y: 2 }}
-            animate={{ opacity: 1, scale: 1, y: -12 }}
-            exit={{ opacity: 0, y: -20 }}
-            transition={{ duration: 0.55, ease: "easeOut" }}
-            className="pointer-events-none absolute end-0 top-0 inline-flex items-center gap-0.5 whitespace-nowrap text-xs font-black text-[var(--slurp-coral)]"
-            data-slurp-coin-spent={spent.amount}
+            key={change.revision}
+            initial={{ opacity: 0, scale: 0.8, y: change.direction === "earn" ? 8 : -2 }}
+            animate={{ opacity: 1, scale: 1, y: change.direction === "earn" ? -14 : 12 }}
+            exit={{ opacity: 0, y: change.direction === "earn" ? -22 : 20 }}
+            transition={{ duration: 0.68, ease: "easeOut" }}
+            className={cn(
+              "pointer-events-none absolute end-0 top-0 inline-flex items-center gap-0.5 whitespace-nowrap text-xs font-black",
+              change.direction === "earn" ? "text-[var(--slurp-success)]" : "text-[var(--slurp-coral)]",
+            )}
+            data-slurp-coin-spent={change.direction === "spend" ? change.amount : undefined}
+            data-slurp-coin-earned={change.direction === "earn" ? change.amount : undefined}
             aria-hidden="true"
           >
-            −{spent.amount}
+            {change.direction === "earn" ? "+" : "−"}
+            {change.amount}
             <SlurpCoin size={12} />
           </motion.span>
         )}
       </AnimatePresence>
     </span>
+  );
+}
+
+/** A small one-shot coin trail for the control where a transaction begins. */
+export function SlurpCoinBurst({
+  active,
+  direction = "spend",
+  className,
+}: {
+  active: boolean;
+  direction?: "earn" | "spend";
+  className?: string;
+}) {
+  const reduceMotion = useReducedMotion();
+  if (reduceMotion) return null;
+
+  return (
+    <AnimatePresence initial={false}>
+      {active && (
+        <motion.span
+          className={cn("pointer-events-none absolute inset-0 z-20 overflow-visible", className)}
+          aria-hidden="true"
+          data-slurp-coin-burst={direction}
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
+        >
+          {[-22, 0, 22].map((x, index) => (
+            <motion.span
+              key={x}
+              className="absolute start-1/2 top-1/2 inline-flex"
+              initial={{ x, y: direction === "earn" ? -30 - index * 5 : -8, opacity: 0, scale: 0.55 }}
+              animate={{
+                x: x * 0.45,
+                y: direction === "earn" ? 7 : 34 + index * 5,
+                opacity: [0, 0.9, 0],
+                scale: [0.55, 0.8, 0.62],
+                rotate: direction === "earn" ? 18 - index * 18 : -18 + index * 18,
+              }}
+              transition={{ duration: 0.72, delay: index * 0.07, ease: "easeOut" }}
+            >
+              <SlurpCoin size={13} />
+            </motion.span>
+          ))}
+        </motion.span>
+      )}
+    </AnimatePresence>
   );
 }
