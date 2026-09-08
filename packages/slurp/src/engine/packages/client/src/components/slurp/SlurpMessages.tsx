@@ -497,9 +497,13 @@ function SlurpThreadView({
   const creatorStatus = ownsCreator
     ? null
     : slurpCreatorStatus({
-        lastActiveAt: threadQuery.data?.creatorLastActiveAt ?? null,
+        // A live conversation is presence. A stale post is not. The schedule only overrides this
+        // when it explicitly says the Creator is away.
+        lastActiveAt: threadQuery.data?.creatorLastMessageAt ?? threadQuery.data?.creatorLastActiveAt ?? null,
         autoPostingEnabled: threadQuery.data?.creatorAutoPosting ?? false,
+        scheduledOnline: threadQuery.data?.creatorAvailability?.online,
       });
+  const creatorActivity = threadQuery.data?.creatorAvailability?.activity;
   const headerProfileId = ownsCreator ? thread?.viewerAccountId : targetCreatorAccountId;
   const busy = send.isPending || tip.isPending || creatorReply.isPending || draftReply.isPending;
 
@@ -647,7 +651,8 @@ function SlurpThreadView({
                           : "bg-zinc-500"
                     }`}
                   />
-                  {localizeUi(`ui.slurp.profile.status.${creatorStatus}`, { defaultValue: creatorStatus })}
+                  {creatorActivity ||
+                    localizeUi(`ui.slurp.profile.status.${creatorStatus}`, { defaultValue: creatorStatus })}
                 </span>
               )}
               {/* Rapport decides how fast and how warmly a Creator answers. The player felt it and

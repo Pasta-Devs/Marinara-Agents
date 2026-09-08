@@ -2082,7 +2082,9 @@ export function useSlurpThread(threadId: string | null, personaId: string | null
         creator: { id: string; handle: string; displayName: string; avatarUrl: string | null } | null;
         counterpart: { id: string; handle: string; displayName: string; avatarUrl: string | null } | null;
         creatorLastActiveAt: string | null;
+        creatorLastMessageAt: string | null;
         creatorAutoPosting: boolean;
+        creatorAvailability?: { online: boolean; activity: string | null; minutesUntilOnline: number | null };
         messaging: SlurpCreatorMessaging;
         commissions: SlurpCommission[];
         subscribed?: boolean;
@@ -2106,9 +2108,14 @@ export function useSlurpCompose(creatorAccountId: string | null, personaId: stri
         thread: SlurpThread | null;
         messages: SlurpMessage[];
         creator: { id: string; handle: string; displayName: string; avatarUrl: string | null } | null;
+        creatorLastActiveAt?: string | null;
+        creatorLastMessageAt?: string | null;
+        creatorAutoPosting?: boolean;
+        creatorAvailability?: { online: boolean; activity: string | null; minutesUntilOnline: number | null };
         messaging: SlurpCreatorMessaging;
         commissions: SlurpCommission[];
         subscribed?: boolean;
+        relationship?: SlurpThreadRelationship;
       }>(
         `/slurp/messages/compose?personaId=${encodeURIComponent(personaId!)}&creatorAccountId=${encodeURIComponent(creatorAccountId!)}`,
       ),

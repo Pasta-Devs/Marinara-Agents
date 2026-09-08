@@ -20,9 +20,16 @@ const ONLINE_MS = 15 * 60_000;
 const AWAY_MS = 24 * 60 * 60_000;
 
 export function slurpCreatorStatus(
-  input: { lastActiveAt: string | number | null | undefined; autoPostingEnabled: boolean },
+  input: {
+    lastActiveAt: string | number | null | undefined;
+    autoPostingEnabled: boolean;
+    /** Schedule availability is authoritative when the Creator has one. */
+    scheduledOnline?: boolean;
+  },
   now: number = Date.now(),
 ): SlurpCreatorStatus {
+  if (input.scheduledOnline === true) return "online";
+  if (input.scheduledOnline === false) return "away";
   const parsed = typeof input.lastActiveAt === "number" ? input.lastActiveAt : Date.parse(input.lastActiveAt ?? "");
   // No posts at all is not the same as a stale one: a Creator who has never posted but is
   // scheduled to is waiting to start, not abandoned.

@@ -9,6 +9,7 @@ import { z } from "zod";
 import { createSlurpStorage } from "../services/storage/slurp.storage.js";
 import { createSlurpMessagesStorage } from "../services/storage/slurp-messages.storage.js";
 import { createSlurpPopulationStorage } from "../services/storage/slurp-population.storage.js";
+import { createCharactersStorage } from "../services/storage/characters.storage.js";
 import { replyToSlurpMessage } from "../services/slurp/slurp-message.operation.js";
 import { SLURP_DM_POLICIES } from "../services/slurp/slurp-messaging.js";
 import { SLURP_DEFAULT_RAPPORT_WEIGHTS } from "../services/slurp/slurp-rapport.js";
@@ -25,6 +26,7 @@ import { isDebugAgentsEnabled } from "../config/runtime-config.js";
 import { slurpCommissionDeliveryDelayMs } from "../services/slurp/slurp-messaging.js";
 import { resolveNoodlerMediaAbsolutePath, slurpMessageMediaUrl } from "../services/slurp/slurp-media.js";
 import { logger } from "../lib/logger.js";
+import { resolveSlurpCreatorAvailability } from "../services/slurp/slurp-creator-schedule-context.js";
 
 const personaQuerySchema = z.object({ personaId: z.string().trim().min(1) });
 
@@ -109,6 +111,30 @@ export async function slurpMessageRoutes(app: FastifyInstance) {
   const slurp = createSlurpStorage(app.db);
   const messages = createSlurpMessagesStorage(app.db);
   const population = createSlurpPopulationStorage(app.db);
+
+  const creatorPresence = async (
+    creator: NonNullable<Awaited<ReturnType<typeof slurp.getNoodlerAccountById>>>,
+    threadId?: string,
+  ) => {
+    const threadMessages = threadId ? await messages.listMessages(threadId) : [];
+    const latestMessage = threadMessages
+      .filter((message) => message.role === "creator")
+      .reduce<string | null>(
+        (latest, message) => (!latest || message.createdAt > latest ? message.createdAt : latest),
+        null,
+      );
+    const latestPost = (await slurp.listNoodlerPostsByAccount(creator.id, 1))[0] ?? null;
+    const source = await slurp.resolveAccountSource(creator);
+    const availability = source
+      ? await resolveSlurpCreatorAvailability(createCharactersStorage(app.db), source, undefined, new Date())
+      : { online: true, activity: null, minutesUntilOnline: 0 };
+    return {
+      creatorLastActiveAt: latestPost?.createdAt ?? null,
+      creatorLastMessageAt: latestMessage,
+      creatorAutoPosting: Boolean(creator.settings.scheduler.autoPosting?.enabled),
+      creatorAvailability: availability,
+    };
+  };
 
   /** Every route needs the same "is this a real persona" gate, so it lives in one helper. */
   const requireViewer = async (personaId: string) => slurp.getViewer(personaId);
@@ -203,6 +229,7 @@ export async function slurpMessageRoutes(app: FastifyInstance) {
     const side = thread.viewerAccountId === viewer.id ? "viewer" : "creator";
     await messages.markRead(thread.id, side);
     const creator = await slurp.getNoodlerAccountById(thread.creatorAccountId);
+    if (!creator) return reply.code(404).send({ error: "Creator not found" });
     const counterpart =
       side === "creator"
         ? ((await population.get(thread.viewerAccountId)) ??
@@ -212,14 +239,12 @@ export async function slurpMessageRoutes(app: FastifyInstance) {
     // When the creator last posted, so the thread header can show the same online/away/offline
     // status the profile header does. The status rule is derived from posting activity, and the
     // thread view had no way to see it, which is why it showed nothing.
-    const creatorLatestPost = (await slurp.listNoodlerPostsByAccount(thread.creatorAccountId, 1))[0] ?? null;
     return {
       thread: await freshView(thread.id, side),
       messages: await visibleMessages(thread.id, side),
       creator,
       counterpart,
-      creatorLastActiveAt: creatorLatestPost?.createdAt ?? null,
-      creatorAutoPosting: Boolean(creator?.settings.scheduler.autoPosting?.enabled),
+      ...(await creatorPresence(creator, thread.id)),
       messaging: await messages.getCreatorMessaging(thread.creatorAccountId),
       commissions: await messages.listCommissionsForThread(thread.id),
       // What the info panel renders. Two different answers on purpose: the fan gets words, the
@@ -269,6 +294,15 @@ export async function slurpMessageRoutes(app: FastifyInstance) {
       messages: thread ? await visibleMessages(thread.id, "viewer") : [],
       commissions: thread ? await messages.listCommissionsForThread(thread.id) : [],
       creator,
+      ...(await creatorPresence(creator, thread?.id)),
+      relationship: thread
+        ? {
+            side: "viewer" as const,
+            tier: thread.rapport.tier,
+            spentCoins: await messages.spentWithCreator(thread.viewerAccountId, thread.creatorAccountId),
+            coolUntil: thread.coolUntil,
+          }
+        : undefined,
       // The client shows the gate before the first message is written, so it must know the
       // policy even when no thread exists yet.
       messaging: await messages.getCreatorMessaging(creator.id),
