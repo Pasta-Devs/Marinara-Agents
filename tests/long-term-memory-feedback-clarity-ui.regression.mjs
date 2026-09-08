@@ -343,24 +343,6 @@ assert.match(vault, /data-ltm-note-actions-desktop[\s\S]*md:flex/u);
 assert.doesNotMatch(vault, /data-ltm-note-actions-desktop[\s\S]*opacity-0/u);
 assert.doesNotMatch(vault, /data-ltm-note-actions-desktop[\s\S]*pointer-events-none/u);
 assert.match(vault, /data-ltm-note-actions-open/u);
-assert.match(vault, /type ArchiveUndoState/u);
-assert.match(vault, /const \[archiveUndo, setArchiveUndo\]/u);
-assert.match(vault, /async function undoArchive/u);
-assert.match(vault, /previousArchiveStatuses/u);
-assert.match(vault, /setArchiveUndo\(\{ notes: archiveUndoNotes \}\)/u);
-assert.match(vault, /archiveUndoFailed/u);
-assert.match(vault, /Promise\.allSettled/u);
-assert.match(vault, /successfulRestores[\s\S]*status: "archived"/u);
-assert.match(
-  vault,
-  /const archiveCompleted\s*=\s*[\s\S]*result\.status === "complete"[\s\S]*ids\.every\(\(id\) => updatedNoteIds\.has\(id\)\)/u,
-);
-assert.match(vault, /if \(archiveCompleted && archiveUndoNotes\.length === ids\.length\) setArchiveUndo/u);
-assert.match(
-  vault,
-  /const allRestored\s*=\s*results\.every[\s\S]*result\.value\.status === "complete"[\s\S]*result\.value\.skippedNoteIds\.length === 0[\s\S]*result\.value\.failedNoteIds\.length === 0[\s\S]*actualIds\.length === expectedIds\.size[\s\S]*new Set\(actualIds\)\.size === expectedIds\.size[\s\S]*actualIds\.every\(\(id\) => expectedIds\.has\(id\)\)[\s\S]*if \(!allRestored\)/u,
-);
-assert.match(vault, /if \(!allRestored\)[\s\S]*Promise\.allSettled[\s\S]*await invalidate\(\);[\s\S]*throw new Error/u);
 assert.equal(locale["ui.longTermMemory.memoryvault.undo"], "Undo");
 assert.equal(locale["ui.longTermMemory.memoryvault.archiveSuccessOne"], "{{count}} memory archived.");
 assert.equal(locale["ui.longTermMemory.memoryvault.archiveSuccessOther"], "{{count}} memories archived.");

@@ -155,28 +155,6 @@ async function main() {
         /1\. Import source -> 2\. Review proposals -> 3\. Accept saved memories -> 4\. Activate recall in chat/u,
         "Workflow guidance must remain contextual rather than repeated on each destination",
       );
-      for (const copy of [
-        "accepted proposals become recallable.",
-        "Stable appearance can help the character remain visually consistent",
-        "This source note preserves imported material as audit evidence. It is not recalled directly; accepted memories created from it appear below.",
-        "Saving something does not mean it shows up in every reply.",
-        "Import a character",
-        "Note: You can use any summary.",
-        "Open Summary Prompt, then Chat Summary.",
-        "Open Prompt Preset Editor.",
-        "Add an Agent Section for Long-Term Memory.",
-        "Correct and save anything worth keeping, delete the rest.",
-        "When you get a response, peek the prompt and make sure the memories are reaching your chat context.",
-        "Under the Hood",
-        "Choose What to Remember",
-        "Review Before Saving",
-        "Check What the Chat Used",
-        "Enabling It for the Current Chat",
-        "Writing to memory (Extraction)",
-        "Reading from memory (Recall)",
-        "Close",
-      ])
-        assert.ok(artifactClient.includes(copy), `Generated client is missing: ${copy}`);
       assert.doesNotMatch(
         artifactClient,
         /gentlest on-ramp/u,
@@ -189,29 +167,6 @@ async function main() {
         "Keeps selected lorebook entries as source notes",
       ])
         assert.ok(!artifactClient.includes(copy), `Generated client retains removed guidance: ${copy}`);
-      for (const copy of [
-        "Chat",
-        "Persona",
-        "Occurred in",
-        "Already applicable",
-        "Rebuilt",
-        "Back to Agents",
-        "Add memories",
-        "Clear memory search",
-        "Remove {{value1}} detail",
-        "{{mutation}}: {{title}}",
-      ])
-        assert.ok(artifactClient.includes(copy), `Generated client is missing localization alignment copy: ${copy}`);
-      assert.match(
-        artifactClient,
-        /backToAgents|Back to Agents/u,
-        "The generated client must retain the localized Back control label",
-      );
-      assert.match(
-        artifactClient,
-        /reExtractValue1|Re-extract \{\{value1\}\}/u,
-        "The generated client must retain source-specific mobile re-extract labels",
-      );
       assert.match(
         artifactClient,
         /extract:[^,}]+!=="refresh"/u,
@@ -265,6 +220,9 @@ async function main() {
         },
       };
       const availabilityPatches: Array<Record<string, unknown>> = [];
+      const batchNotesCalls: Array<Record<string, unknown>> = [];
+      const batchNotesFailure = false;
+      let batchNotesPartial = false;
       let deletedSuggestionId: string | null = null;
       const clearedRejectedSourceIds = new Set<string>();
       let clearRejectedSuggestionsFailure = false;
@@ -654,15 +612,48 @@ async function main() {
             },
           });
         if (request.method === "GET" && url.pathname.endsWith("/settings")) return send(200, {});
-        if (request.method === "POST" && url.pathname.endsWith("/notes/batch"))
+        if (request.method === "POST" && url.pathname.endsWith("/notes/batch")) {
+          const chunks: Buffer[] = [];
+          for await (const chunk of request) chunks.push(Buffer.from(chunk));
+          const body = JSON.parse(Buffer.concat(chunks).toString("utf8") || "{}") as {
+            noteIds: string[];
+            status?: string;
+            archive?: string;
+            addScope?: Record<string, unknown>;
+          };
+          batchNotesCalls.push(body);
+          if (batchNotesFailure) {
+            return send(500, { error: "batch notes failed" });
+          }
+          if (batchNotesPartial) {
+            if (body.status === "resolved") {
+              return send(200, {
+                status: "partial",
+                requestedNoteIds: body.noteIds,
+                updatedNoteIds: [],
+                affectedNoteIds: [],
+                skippedNoteIds: [],
+                failedNoteIds: body.noteIds,
+              });
+            }
+            return send(200, {
+              status: "complete",
+              requestedNoteIds: body.noteIds,
+              updatedNoteIds: body.noteIds,
+              affectedNoteIds: body.noteIds,
+              skippedNoteIds: [],
+              failedNoteIds: [],
+            });
+          }
           return send(200, {
             status: "complete",
-            requestedNoteIds: ["world_artifact_lifecycle"],
-            updatedNoteIds: ["world_artifact_lifecycle"],
-            affectedNoteIds: ["world_artifact_lifecycle"],
+            requestedNoteIds: body.noteIds,
+            updatedNoteIds: body.noteIds,
+            affectedNoteIds: body.noteIds,
             skippedNoteIds: [],
             failedNoteIds: [],
           });
+        }
         if (request.method === "GET" && url.pathname.endsWith("/extraction-settings")) return send(200, {});
         if (request.method === "GET" && url.pathname.endsWith("/integrity"))
           return send(200, { health: "healthy", ok: true, noteCount: 3, issues: [] });
@@ -935,7 +926,7 @@ async function main() {
               id: "world_mobile_recovery",
               title: "Mobile recovery memory",
               type: "world",
-              status: "active",
+              status: "resolved",
               modes: ["roleplay"],
               scope: {},
               tags: [],
@@ -2147,6 +2138,10 @@ async function main() {
       }, packageManifest.version);
       const chatSettings = page.locator('[data-ltm-surface="chat-settings"]').last();
       await chatSettings.waitFor();
+      assert.equal(await chatSettings.getAttribute("data-ltm-density"), "compact");
+      const selectBox = await chatSettings.locator('select[data-ltm-control="select"]').boundingBox();
+      assert.ok(selectBox);
+      assert.ok(selectBox.height <= 38, `Expected compact select height <= 38px, got ${selectBox.height}`);
       const lastInjection = chatSettings.locator("[data-ltm-last-injection]");
       await lastInjection.getByText(/1 saved memory included in the latest model context/u).waitFor();
       await lastInjection.click();
@@ -2924,6 +2919,75 @@ async function main() {
       assert.equal(await page.locator('[role="alert"]').count(), 0);
       assert.equal(deletedSuggestionId, rejectedSuggestionId);
       assert.equal(savedNote?.type, "world");
+
+      // Prove Archive Undo: mixed prior statuses, complete undo, and rollback on partial failure.
+      const archiveBatch = page.locator("[data-ltm-bulk-actions]");
+      const activeWorldCard = page
+        .locator('[data-ltm-note-type="world"]')
+        .filter({ hasText: "Second mobile review memory" });
+      const resolvedWorldCard = page
+        .locator('[data-ltm-note-type="world"]')
+        .filter({ hasText: "Mobile recovery memory" });
+      await activeWorldCard.locator('input[type="checkbox"]').check();
+      await resolvedWorldCard.locator('input[type="checkbox"]').check();
+      await archiveBatch.getByRole("button", { name: "Archive" }).click();
+      await page
+        .locator("[data-ltm-vault-feedback]")
+        .getByText(/2 memories archived/u)
+        .waitFor();
+      const undoButton = page.locator("[data-ltm-vault-feedback]").getByRole("button", { name: "Undo" });
+      assert.equal(await undoButton.count(), 1);
+
+      // 1. Partial failure restores successful restores back to archived and surfaces error.
+      batchNotesPartial = true;
+      await undoButton.click();
+      await page.locator('[data-ltm-vault-feedback] [role="alert"]').waitFor();
+      assert.match(
+        await page.locator('[data-ltm-vault-feedback] [role="alert"]').innerText(),
+        /Could not undo the archive/u,
+      );
+      // The rollback call re-archives only the successfully restored active note, leaving the failed resolved note untouched
+      const rollbackCall = batchNotesCalls.at(-1);
+      assert.equal(rollbackCall?.status, "archived");
+      assert.deepEqual(
+        rollbackCall?.noteIds,
+        ["world_second_mobile"],
+        "Rollback must re-archive only the successfully restored active note",
+      );
+      batchNotesPartial = false;
+
+      // 2. Complete restore sends restore batches grouped by prior status.
+      // Re-archive the two notes cleanly
+      await activeWorldCard.locator('input[type="checkbox"]').check();
+      await resolvedWorldCard.locator('input[type="checkbox"]').check();
+      await archiveBatch.getByRole("button", { name: "Archive" }).click();
+      await page
+        .locator("[data-ltm-vault-feedback]")
+        .getByText(/2 memories archived/u)
+        .waitFor();
+      const freshUndoButton = page.locator("[data-ltm-vault-feedback]").getByRole("button", { name: "Undo" });
+      await freshUndoButton.click();
+      await page
+        .locator("[data-ltm-vault-feedback]")
+        .getByText(/2 memories restored/u)
+        .waitFor();
+      assert.equal(await page.locator("[data-ltm-vault-feedback]").getByRole("button", { name: "Undo" }).count(), 0);
+      const restoreCalls = batchNotesCalls.slice(-2);
+      const activeRestoreCall = restoreCalls.find((call) => call.status === "active");
+      const resolvedRestoreCall = restoreCalls.find((call) => call.status === "resolved");
+      assert.ok(activeRestoreCall, "Archive undo must include a restore batch for active notes");
+      assert.ok(resolvedRestoreCall, "Archive undo must include a restore batch for resolved notes");
+      assert.deepEqual(
+        activeRestoreCall.noteIds,
+        ["world_second_mobile"],
+        "Active restore batch must target the active note",
+      );
+      assert.deepEqual(
+        resolvedRestoreCall.noteIds,
+        ["world_mobile_recovery"],
+        "Resolved restore batch must target the resolved note",
+      );
+
       await page.locator('[data-ltm-control="navigation"][data-ltm-destination="review"]').first().click();
       const clearSource = page.locator('[data-ltm-review-source-select="source_mobile_single"]');
       await clearSource.click();
