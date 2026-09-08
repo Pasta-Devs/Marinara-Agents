@@ -36,10 +36,11 @@ more:** the model picks the visual kit from your own words, as a field of the sa
 that was already being paid for, and when a text fits neither kit it takes the one it fights less. A
 chat that declines generation still gets a kit, derived from the same words by a deterministic word
 count rather than by a model, so declining no longer means a cozy village whatever you wrote. The
-**Game name** is a placeholder too, so an untouched pair composes *"A cozy pixel village called
-Hearthvale."* or *"A small frontier colony called Meridian Base."* — whichever your text asked for —
-and a name you do type reaches the generation call, the loading screen and the world itself. Type
-your own Setting and it is used exactly as written, as it always has been.
+**Game name** is a placeholder too. Leave both boxes empty and the game composes *"A cozy pixel
+village called Hearthvale."* — an empty Setting has no words to ask for anything else. Leave only
+the name empty and your text still picks the kit, whose own default name (*Meridian Base*, for the
+colony) fills the loading screen, the generation call and the world itself; a name you do type
+reaches all three. Type your own Setting and it is used exactly as written, as it always has been.
 
 **Three things the form stopped emitting**, all of them answers it was giving on your behalf: the
 **party list** (Game Mode's own setup owns that question — for this release a Pixelforge game starts
