@@ -41,6 +41,23 @@ export function selectNoodleImageProviderPrompt(input: {
   return hasInternalMarker || copiesPrivateContext || copiesGuidance ? input.rawPrompt : rewrittenPrompt;
 }
 
+/** Recompile an accepted rewrite before it crosses the image-provider boundary. */
+export function prepareNoodleImageProviderPrompt(input: {
+  rewrittenPrompt: string | null | undefined;
+  rawPrompt: string;
+  compilePrompt: (prompt: string) => string;
+  privateContext?: ReadonlyArray<string | null | undefined>;
+  guidanceContext?: ReadonlyArray<string | null | undefined>;
+}): string {
+  const rewrittenPrompt = input.rewrittenPrompt?.trim();
+  return selectNoodleImageProviderPrompt({
+    rewrittenPrompt: rewrittenPrompt ? input.compilePrompt(rewrittenPrompt) : rewrittenPrompt,
+    rawPrompt: input.rawPrompt,
+    privateContext: input.privateContext,
+    guidanceContext: input.guidanceContext,
+  });
+}
+
 /**
  * Recover the visual idea when a weaker timeline model wraps imagePrompt in
  * JSON or repeats Marinara's legacy prompt-assembly labels inside the field.
