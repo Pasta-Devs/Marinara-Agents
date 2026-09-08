@@ -45,7 +45,6 @@ for test in storage extraction-graph extraction-reliability runtime routes-notes
 done
  node "$PWD/../Marinara-Agents/tests/long-term-memory-loading.regression.mjs"
 node "$PWD/../Marinara-Agents/tests/long-term-memory-feedback-clarity-ui.regression.mjs"
-node "$PWD/../Marinara-Agents/tests/long-term-memory-chat-settings-ui.regression.mjs"
 ```
 
 The completion watchdog proof is a direct Node test:
