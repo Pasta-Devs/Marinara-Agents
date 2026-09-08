@@ -1196,6 +1196,34 @@ export function createSlurpMessagesStorage(db: DB) {
         .where(eq(slurpThreads.id, threadId));
     },
 
+    /** Coins this fan has put into this Creator: tips, unlocks and commissions together. */
+    async spentWithCreator(viewerAccountId: string, creatorAccountId: string): Promise<number> {
+      const facts = await storage.rapportFactsFor(viewerAccountId, creatorAccountId);
+      return Math.max(0, Math.round(facts.tippedCoins + facts.unlockedCoins));
+    },
+
+    /**
+     * The thread as the fan is allowed to see it.
+     *
+     * `slurp-rapport.ts` states the rule this keeps: "The score is never shown in a thread." A
+     * number turns a person into a progress bar and teaches the player to farm it. The mood is the
+     * same hazard and worse, because it moves fast enough to be tested against.
+     *
+     * So the fan's copy carries neither, nor the notes, nor the strike count. Stripping it here
+     * rather than in the client is what stops the next endpoint leaking it by default.
+     */
+    forViewer(thread: SlurpThread): SlurpThread {
+      return {
+        ...thread,
+        mood: 0,
+        moodUpdatedAt: null,
+        strikes: 0,
+        lastStrikeAt: null,
+        notes: [],
+        rapport: { ...thread.rapport, score: 0, contributions: [] },
+      };
+    },
+
     /**
      * Carry what happened in public into the conversation.
      *

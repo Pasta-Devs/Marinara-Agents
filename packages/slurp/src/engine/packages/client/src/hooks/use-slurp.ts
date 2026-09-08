@@ -1996,6 +1996,31 @@ export type SlurpSendResponse = {
   typingMs?: number;
 };
 
+/**
+ * What the info panel shows, and it is not the same on both sides.
+ *
+ * The fan gets words. `slurp-rapport.ts` is explicit that the score never reaches a thread,
+ * because a meter invites the player to farm it. The Creator's operator gets every number,
+ * because that side is a business rather than a relationship.
+ */
+export type SlurpThreadRelationship =
+  | {
+      side: "viewer";
+      tier: string;
+      spentCoins: number;
+      coolUntil: string | null;
+    }
+  | {
+      side: "creator";
+      tier: string;
+      score: number;
+      contributions: { key: string; detail: string; weight: number; points: number }[];
+      mood: number;
+      strikes: number;
+      notes: string[];
+      coolUntil: string | null;
+    };
+
 const messageKeys = {
   /** Every messaging query hangs off this, so one prefix invalidates the whole surface. */
   root: () => [...noodleKeys.noodlerRoot(), "messages"],
@@ -2061,6 +2086,7 @@ export function useSlurpThread(threadId: string | null, personaId: string | null
         messaging: SlurpCreatorMessaging;
         commissions: SlurpCommission[];
         subscribed?: boolean;
+        relationship?: SlurpThreadRelationship;
       }>(`/slurp/messages/threads/${encodeURIComponent(threadId!)}?personaId=${encodeURIComponent(personaId!)}`),
     enabled: Boolean(threadId && personaId),
     refetchInterval: threadId && personaId ? 30_000 : false,

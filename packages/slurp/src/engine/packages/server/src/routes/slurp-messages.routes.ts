@@ -12,6 +12,7 @@ import { createSlurpPopulationStorage } from "../services/storage/slurp-populati
 import { replyToSlurpMessage } from "../services/slurp/slurp-message.operation.js";
 import { SLURP_DM_POLICIES } from "../services/slurp/slurp-messaging.js";
 import { SLURP_DEFAULT_RAPPORT_WEIGHTS } from "../services/slurp/slurp-rapport.js";
+import { activeSlurpStrikes } from "../services/slurp/slurp-stance.js";
 import { existsSync } from "node:fs";
 import { basename, dirname } from "node:path";
 import { generateSlurpCommissionImage } from "../services/slurp/slurp-commission-image.operation.js";
@@ -126,10 +127,18 @@ export async function slurpMessageRoutes(app: FastifyInstance) {
         : message,
     );
 
-  /** Re-read a thread and enrich it, so every response carries the same joined shape. */
-  const freshView = async (threadId: string) => {
+  /**
+   * Re-read a thread and enrich it, so every response carries the same joined shape.
+   *
+   * `side` defaults to the fan, which is the safe default: their copy has the rapport score, the
+   * mood, the notes and the strike count stripped. Every thread response goes through here, so a
+   * new endpoint cannot leak the simulation's internals by forgetting to.
+   */
+  const freshView = async (threadId: string, side: "viewer" | "creator" = "viewer") => {
     const thread = await messages.getThreadById(threadId);
-    return thread ? await messages.viewThread(thread) : null;
+    if (!thread) return null;
+    const view = await messages.viewThread(thread);
+    return side === "creator" ? view : { ...view, ...messages.forViewer(thread) };
   };
 
   /**
@@ -205,7 +214,7 @@ export async function slurpMessageRoutes(app: FastifyInstance) {
     // thread view had no way to see it, which is why it showed nothing.
     const creatorLatestPost = (await slurp.listNoodlerPostsByAccount(thread.creatorAccountId, 1))[0] ?? null;
     return {
-      thread: await freshView(thread.id),
+      thread: await freshView(thread.id, side),
       messages: await visibleMessages(thread.id, side),
       creator,
       counterpart,
@@ -213,6 +222,29 @@ export async function slurpMessageRoutes(app: FastifyInstance) {
       creatorAutoPosting: Boolean(creator?.settings.scheduler.autoPosting?.enabled),
       messaging: await messages.getCreatorMessaging(thread.creatorAccountId),
       commissions: await messages.listCommissionsForThread(thread.id),
+      // What the info panel renders. Two different answers on purpose: the fan gets words, the
+      // Creator's operator gets the numbers, because one is a relationship and the other is a
+      // business. `slurp-rapport.ts` is explicit that a score must never reach a thread.
+      relationship:
+        side === "creator"
+          ? {
+              side,
+              tier: thread.rapport.tier,
+              score: thread.rapport.score,
+              contributions: thread.rapport.contributions,
+              mood: thread.mood,
+              strikes: activeSlurpStrikes(thread.strikes, thread.lastStrikeAt),
+              notes: thread.notes,
+              coolUntil: thread.coolUntil,
+            }
+          : {
+              side,
+              tier: thread.rapport.tier,
+              // No score and no mood. A meter invites the player to farm it, and a fast one
+              // invites them to test it.
+              spentCoins: await messages.spentWithCreator(thread.viewerAccountId, thread.creatorAccountId),
+              coolUntil: thread.coolUntil,
+            },
     };
   });
 
@@ -348,7 +380,7 @@ export async function slurpMessageRoutes(app: FastifyInstance) {
     });
     if (!message) return reply.code(404).send({ error: "Conversation not found" });
     const thread = await messages.getThread(parsed.data.viewerAccountId, creatorAccountId);
-    return { message, thread: thread ? await freshView(thread.id) : null };
+    return { message, thread: thread ? await freshView(thread.id, "creator") : null };
   });
 
   /**
@@ -380,7 +412,7 @@ export async function slurpMessageRoutes(app: FastifyInstance) {
     if (outcome.status !== "replied") {
       return reply.code(502).send({ error: "Could not draft a reply.", status: outcome.status });
     }
-    return { message: outcome.message, thread: await freshView(thread.id) };
+    return { message: outcome.message, thread: await freshView(thread.id, "creator") };
   });
 
   app.post("/messages/creators/:creatorAccountId/ppv", async (req, reply) => {
@@ -645,7 +677,7 @@ export async function slurpMessageRoutes(app: FastifyInstance) {
       }
     }
     return {
-      thread: await freshView(threadId),
+      thread: await freshView(threadId, "creator"),
       reply: outcome.status === "replied" ? outcome.message : null,
       replyStatus: outcome.status,
     };

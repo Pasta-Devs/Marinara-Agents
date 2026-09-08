@@ -1,6 +1,7 @@
 import {
   ArrowLeft,
   Check,
+  ChevronDown,
   Loader2,
   Lock,
   MessageCircle,
@@ -41,6 +42,7 @@ import {
   useUnlockSlurpMessage,
   useSlurpWallet,
   type SlurpCommission,
+  type SlurpThreadRelationship,
   type SlurpMessage,
   type SlurpRapport,
   type SlurpThread,
@@ -443,6 +445,7 @@ function SlurpThreadView({
   // Why no answer came. The send route has always reported this and nothing ever read it, so a
   // sleeping creator, a busy thread and a missing connection all looked like the same silence.
   const [replyStatus, setReplyStatus] = useState<string | null>(null);
+  const [infoOpen, setInfoOpen] = useState(false);
   const bottomRef = useRef<HTMLDivElement | null>(null);
 
   const thread = threadQuery.data?.thread ?? null;
@@ -451,6 +454,7 @@ function SlurpThreadView({
   const counterpart = threadQuery.data?.counterpart ?? creator;
   const messaging = threadQuery.data?.messaging;
   const commissions = threadQuery.data?.commissions ?? [];
+  const relationship = "relationship" in (threadQuery.data ?? {}) ? threadQuery.data?.relationship : undefined;
   const commissionTimeline = commissions.map((commission) => {
     const linkedMessages = messages.filter((message) => message.metadata.commissionId === commission.id);
     const latestMessage = linkedMessages.reduce<SlurpMessage | null>(
@@ -510,6 +514,7 @@ function SlurpThreadView({
     setPending(null);
     setTyping(false);
     setReplyStatus(null);
+    setInfoOpen(false);
   }, [threadId, creatorAccountId]);
 
   // Follow the conversation down as it grows, the way every chat surface does.
@@ -651,7 +656,24 @@ function SlurpThreadView({
             </span>
           </span>
         </button>
+        {relationship && (
+          <button
+            type="button"
+            aria-expanded={infoOpen}
+            onClick={() => setInfoOpen((open) => !open)}
+            className="ml-auto flex min-h-11 shrink-0 items-center gap-1 rounded-xl px-2 text-xs font-bold text-[var(--muted-foreground)] transition-colors hover:bg-[var(--slurp-surface)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--slurp-focus)]"
+          >
+            {localizeUi("ui.slurp.messages.relationshipToggle", { defaultValue: "Details" })}
+            <ChevronDown
+              size={14}
+              className={cn("transition-transform", infoOpen && "rotate-180")}
+              aria-hidden="true"
+            />
+          </button>
+        )}
       </div>
+
+      {infoOpen && relationship && <SlurpRelationshipPanel relationship={relationship} locale={i18n.language} />}
 
       {thread?.state === "request" && (
         <div className="mx-3 mt-3 shrink-0 rounded-2xl bg-amber-500/[0.08] px-4 py-3 ring-1 ring-inset ring-amber-500/25">
@@ -1583,6 +1605,99 @@ function CommissionRow({
         </p>
       )}
     </article>
+  );
+}
+
+/**
+ * The dropdown the header opens.
+ *
+ * Two panels, not one, and the difference is deliberate. The fan's copy is qualitative: the server
+ * never sends them the score or the mood, because `slurp-rapport.ts` says a number in a thread
+ * turns a person into a progress bar and teaches the player to farm it. The Creator's operator is
+ * looking at their own business, so they get every figure the simulation used.
+ */
+function SlurpRelationshipPanel({
+  relationship,
+  locale,
+}: {
+  relationship: NonNullable<SlurpThreadRelationship>;
+  locale: string;
+}) {
+  const { t: localizeUi } = useUiTranslation();
+  const cooling = relationship.coolUntil && relationship.coolUntil > new Date().toISOString();
+  return (
+    <div className="mx-3 mt-2 shrink-0 rounded-2xl bg-[var(--slurp-surface)] p-3 text-xs ring-1 ring-inset ring-[var(--noodle-divider)]">
+      <dl className="flex flex-col gap-1.5">
+        <div className="flex items-baseline justify-between gap-3">
+          <dt className="text-[var(--muted-foreground)]">
+            {localizeUi("ui.slurp.messages.relationshipTier", { defaultValue: "Where you stand" })}
+          </dt>
+          <dd className="font-bold">{localizeUi(`ui.slurp.rapport.tier.${relationship.tier}`)}</dd>
+        </div>
+        {relationship.side === "viewer" ? (
+          <div className="flex items-baseline justify-between gap-3">
+            <dt className="text-[var(--muted-foreground)]">
+              {localizeUi("ui.slurp.messages.relationshipSpent", { defaultValue: "Spent with them" })}
+            </dt>
+            <dd className="font-bold">
+              <SlurpCoinAmount amount={relationship.spentCoins} />
+            </dd>
+          </div>
+        ) : (
+          <>
+            <div className="flex items-baseline justify-between gap-3">
+              <dt className="text-[var(--muted-foreground)]">
+                {localizeUi("ui.slurp.messages.relationshipScore", { defaultValue: "Rapport" })}
+              </dt>
+              <dd className="font-bold tabular-nums">{relationship.score}/100</dd>
+            </div>
+            <div className="flex items-baseline justify-between gap-3">
+              <dt className="text-[var(--muted-foreground)]">
+                {localizeUi("ui.slurp.messages.relationshipMood", { defaultValue: "Conversation mood" })}
+              </dt>
+              <dd className="font-bold tabular-nums">{Math.round(relationship.mood)}</dd>
+            </div>
+            {relationship.contributions.length > 0 && (
+              <div className="mt-1 flex flex-wrap gap-1">
+                {relationship.contributions
+                  .filter((entry) => Math.abs(entry.points) >= 1)
+                  .map((entry) => (
+                    <span
+                      key={entry.key}
+                      className="rounded-full bg-[var(--slurp-surface-raised)] px-2 py-0.5 text-[0.65rem] text-[var(--muted-foreground)]"
+                    >
+                      {entry.detail}
+                      <span className={cn("ml-1 font-bold", entry.points < 0 && "text-red-600 dark:text-red-400")}>
+                        {entry.points > 0 ? `+${entry.points}` : entry.points}
+                      </span>
+                    </span>
+                  ))}
+              </div>
+            )}
+            {relationship.notes.length > 0 && (
+              <div className="mt-1">
+                <dt className="text-[var(--muted-foreground)]">
+                  {localizeUi("ui.slurp.messages.relationshipNotes", { defaultValue: "What they know about this fan" })}
+                </dt>
+                <ul className="mt-1 list-disc pl-4 leading-5 text-[var(--muted-foreground)]">
+                  {relationship.notes.map((note) => (
+                    <li key={note}>{note}</li>
+                  ))}
+                </ul>
+              </div>
+            )}
+          </>
+        )}
+        {cooling && (
+          <p className="mt-1 font-semibold text-amber-600 dark:text-amber-400">
+            {localizeUi("ui.slurp.messages.relationshipCooling", {
+              defaultValue: "Not talking right now. Back around {{time}}.",
+              time: formatTime(relationship.coolUntil!, locale),
+            })}
+          </p>
+        )}
+      </dl>
+    </div>
   );
 }
 
