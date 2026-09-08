@@ -188,7 +188,14 @@ export async function slurpMessageRoutes(app: FastifyInstance) {
     (await messages.listMessages(threadId)).map((message) =>
       side === "viewer" && message.kind === "ppv" && !message.unlockedAt
         ? { ...message, content: "", imageUrl: null }
-        : message,
+        : side === "viewer" && message.kind === "post_preview" && message.metadata.previewLocked === true
+          ? {
+              ...message,
+              content: "",
+              imageUrl: null,
+              metadata: { ...message.metadata, content: "", imageUrl: null },
+            }
+          : message,
     );
 
   /**

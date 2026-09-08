@@ -146,6 +146,10 @@ export async function replyToSlurpMessage(
           })) ?? stored;
       }
       if (reply.sharedPost) {
+        const postAccess = reply.sharedPost.access === "locked" ? "locked" : "public";
+        const previewLocked =
+          postAccess === "locked" ||
+          (reply.sharedPost.access !== "public" && thread.rapport.tier !== "whale" && !subscribed);
         stored =
           (await messagesStore.appendMessage(thread.id, {
             senderAccountId: thread.creatorAccountId,
@@ -158,6 +162,8 @@ export async function replyToSlurpMessage(
               title: reply.sharedPost.title,
               content: reply.sharedPost.content,
               access: reply.sharedPost.access,
+              previewLocked,
+              shareReason: reply.sharePost !== undefined ? "relevant" : "tease",
             },
           })) ?? stored;
       }

@@ -1020,7 +1020,7 @@ function MessageBubble({
     const preview = message.metadata;
     const previewTitle = typeof preview.title === "string" ? preview.title : message.content;
     const previewContent = typeof preview.content === "string" ? preview.content : "";
-    const locked = preview.access === "locked";
+    const locked = preview.access === "locked" || preview.previewLocked === true;
     return (
       <div
         className={cn(
@@ -1029,7 +1029,7 @@ function MessageBubble({
         )}
       >
         <div className="overflow-hidden rounded-2xl bg-[var(--slurp-surface)] ring-1 ring-inset ring-[var(--noodle-divider)]">
-          {messageImage && (
+          {messageImage && !locked && (
             <img
               src={messageImage}
               alt={localizeUi("ui.slurp.messages.postPreview", { defaultValue: "Post preview" })}
