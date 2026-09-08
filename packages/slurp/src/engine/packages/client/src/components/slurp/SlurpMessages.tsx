@@ -430,6 +430,35 @@ function SlurpThreadView({
   const counterpart = threadQuery.data?.counterpart ?? creator;
   const messaging = threadQuery.data?.messaging;
   const commissions = threadQuery.data?.commissions ?? [];
+  const commissionTimeline = commissions.map((commission) => {
+    const linkedMessages = messages.filter((message) => message.metadata.commissionId === commission.id);
+    const latestMessage = linkedMessages.reduce<SlurpMessage | null>(
+      (latest, message) => (!latest || message.createdAt > latest.createdAt ? message : latest),
+      null,
+    );
+    const at = latestMessage
+      ? latestMessage.createdAt > commission.updatedAt
+        ? latestMessage.createdAt
+        : commission.updatedAt
+      : commission.updatedAt;
+    return {
+      kind: "commission" as const,
+      at,
+      commission,
+      deliveryMessage: commission.deliveryMessageId
+        ? (messages.find((message) => message.id === commission.deliveryMessageId) ?? null)
+        : null,
+    };
+  });
+  const timeline = [
+    ...messages
+      .filter((message) => typeof message.metadata.commissionId !== "string")
+      .map((message) => ({ kind: "message" as const, at: message.createdAt, message })),
+    ...commissionTimeline,
+  ].sort((left, right) => left.at.localeCompare(right.at));
+  const commissionTimelineKey = commissionTimeline
+    .map(({ commission, at }) => `${commission.id}:${commission.state}:${commission.updatedAt}:${at}`)
+    .join("|");
   const subscribed = thread?.subscribed ?? threadQuery.data?.subscribed ?? false;
   const targetCreatorAccountId = thread?.creatorAccountId ?? creator?.id ?? creatorAccountId;
   const ownsCreator = Boolean(targetCreatorAccountId && ownedCreatorAccountIds.includes(targetCreatorAccountId));
@@ -448,7 +477,7 @@ function SlurpThreadView({
   // Follow the conversation down as it grows, the way every chat surface does.
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ block: "end" });
-  }, [messages.length, typing]);
+  }, [commissionTimelineKey, messages.length, typing]);
 
   /**
    * Hold the reply behind a typing indicator for as long as the server said the creator would
@@ -619,41 +648,24 @@ function SlurpThreadView({
                       })}
             </p>
           )}
-          {messages
-            .filter((message) => typeof message.metadata.commissionId !== "string")
-            .map((message) => (
+          {timeline.map((entry) =>
+            entry.kind === "message" ? (
               <MessageBubble
-                key={message.id}
-                message={message}
+                key={entry.message.id}
+                message={entry.message}
                 locale={i18n.language}
                 personaId={personaId}
                 ownsCreator={ownsCreator}
               />
-            ))}
-          {commissions.length > 0 && personaId && (
-            <section className="my-3 flex w-full flex-col gap-2 rounded-2xl bg-[color-mix(in_srgb,var(--slurp-violet)_9%,var(--slurp-surface))] p-3 ring-1 ring-inset ring-[var(--slurp-violet)]/25 shadow-[var(--slurp-shadow-raised)]">
-              <div className="flex items-center justify-between gap-3 px-1">
-                <h3 className="flex items-center gap-2 text-sm font-black">
-                  <Palette size={16} className="text-[var(--noodle-accent)]" aria-hidden="true" />
-                  {localizeUi("ui.slurp.messages.commissionSection", { defaultValue: "Commissions" })}
-                </h3>
-                <span className="text-xs font-semibold text-[var(--muted-foreground)]">
-                  {localizeUi("ui.slurp.messages.commissionCount", {
-                    defaultValue: "{{count}} total",
-                    count: commissions.length,
-                  })}
-                </span>
-              </div>
-              {commissions.map((commission) => (
-                <CommissionRow
-                  key={commission.id}
-                  commission={commission}
-                  deliveryMessage={messages.find((message) => message.id === commission.deliveryMessageId) ?? null}
-                  personaId={personaId}
-                  ownsCreator={ownsCreator}
-                />
-              ))}
-            </section>
+            ) : personaId ? (
+              <CommissionRow
+                key={entry.commission.id}
+                commission={entry.commission}
+                deliveryMessage={entry.deliveryMessage}
+                personaId={personaId}
+                ownsCreator={ownsCreator}
+              />
+            ) : null,
           )}
           {typing && (
             <p

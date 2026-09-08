@@ -36,6 +36,18 @@
     "slurp": {
       "versions": [
         {
+          "version": "1.2.34",
+          "date": "2026-09-08",
+          "notes": "- Commission cards now move to the latest chat position after every state update, including payment updates without a new message row.",
+          "highlight": false
+        },
+        {
+          "version": "1.2.33",
+          "date": "2026-09-08",
+          "notes": "- Commission cards now follow the chat timeline and move to the latest commission event when they update.\n- The chat scrolls to the current bottom after a commission state change.",
+          "highlight": false
+        },
+        {
           "version": "1.2.32",
           "date": "2026-09-08",
           "notes": "- Commission requests now wait for Creator review instead of receiving an instant quote.\n- Creators can revise an unpaid quote or decline a request before payment.\n- Commission payment now shows loading, success, balance, and error feedback.\n- Delivery cards show image loading feedback while protected artwork is fetched.",
@@ -141,18 +153,6 @@
           "version": "1.2.15",
           "date": "2026-09-07",
           "notes": "- Redesigned Inbox around dedicated Messages and Notifications tabs, with a desktop split conversation view, notification filters, and commissions kept inside their related conversations.",
-          "highlight": false
-        },
-        {
-          "version": "1.2.14",
-          "date": "2026-09-07",
-          "notes": "- The Slurp coin now carries a smaller lowercase letter in white.",
-          "highlight": false
-        },
-        {
-          "version": "1.2.13",
-          "date": "2026-09-07",
-          "notes": "- Updated the Slurp coin artwork.",
           "highlight": false
         }
       ]

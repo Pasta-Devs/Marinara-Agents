@@ -1,5 +1,14 @@
 # Slurp release notes
 
+## 1.2.34 — 2026-09-08
+
+- Commission cards now move to the latest chat position after every state update, including payment updates without a new message row.
+
+## 1.2.33 — 2026-09-08
+
+- Commission cards now follow the chat timeline and move to the latest commission event when they update.
+- The chat scrolls to the current bottom after a commission state change.
+
 ## 1.2.32 — 2026-09-08
 
 - Commission requests now wait for Creator review instead of receiving an instant quote.

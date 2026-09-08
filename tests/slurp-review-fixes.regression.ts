@@ -337,9 +337,15 @@ assert.match(
 assert.match(messagesStorage, /kind: "commission_delivery",\s*imageUrl,/u);
 assert.match(messagesView2, /const messageImage = useSlurpMediaSrc\(\s*message\.imageUrl\s*\?/u);
 assert.match(messagesView2, /message\.metadata\.commissionId !== "string"/u);
-assert.match(messagesView2, /deliveryMessage=\{messages\.find/u);
+assert.match(messagesView2, /deliveryMessage: commission\.deliveryMessageId/u);
 assert.match(messagesView2, /const deliveryImage = useSlurpMediaSrc\(/u);
 assert.match(messagesView2, /commission\.state === "delivered" && deliveryMessage/u);
+assert.match(messagesView2, /const commissionTimeline = commissions\.map/u);
+assert.match(messagesView2, /const at = latestMessage[\s\S]{0,180}?commission\.updatedAt/u);
+assert.match(messagesView2, /const timeline = \[/u);
+assert.match(messagesView2, /commissionTimelineKey/u);
+assert.match(messagesView2, /\[commissionTimelineKey, messages\.length, typing\]/u);
+assert.doesNotMatch(messagesView2, /commissions\.map\(\(commission\) => \(\s*<CommissionRow/u);
 assert.match(messagesView2, /commissionAcceptPending/u);
 assert.match(messagesView2, /getApiErrorMessage\(raw, fallback\)/u);
 assert.match(useSlurpSource, /metadata: Record<string, unknown>;/u);
