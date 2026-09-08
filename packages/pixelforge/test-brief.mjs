@@ -262,10 +262,49 @@ const ctx = { theme: "cozy-village", seed: 424242 };
 }
 
 // 9. Guidance and schema stay within their budgets.
+// THE GUIDANCE CAP IS 4,500 AS OF 0.16.2 — RAISED ONCE, WITH THE ARITHMETIC.
+// Measured at the 0.16.1 tip, `guidance("sci-fi-colony")` was 3,489 characters.
+// This release deletes the theme-authority line and one of its two blank
+// neighbours (105 characters together), leaving 3,384 and a 616-character budget
+// under the old 4,000 — and the `artTheme` field doc that replaces it costs 608,
+// for a total of 3,992. EIGHT characters of slack is not a budget, and the
+// lorebook clause is queued for the same one.
+//
+// 4,000 was this package's own round number and never a route constraint: the
+// ceiling that is real on this path is the route's `instructions` cap of 16,000,
+// of which guidance() is one component. Deleting true content to fit a round
+// number is the wrong trade; the field doc is read off 10-art's painter-override
+// table and is more honest than the sentence it replaces. The lane stays binding —
+// raise it again only with new arithmetic written beside it, never by eye.
+//
+// AND THE LORE CLAUSE IS IN THE SAME BUDGET, measured rather than eyeballed: the
+// bare text is 3,992 and the clause slice-3 adds costs 222, for 4,214 against the
+// 4,500 raised above. Both variants are asserted, because the one that ships is
+// whichever the selection decided — and the clause is CONDITIONAL for a reason
+// that outranks the budget: with no entries picked the server appends no lore, so
+// a sentence telling the model lore follows would point it at something it never
+// receives.
 {
-  const text = brief.guidance("sci-fi-colony");
-  assert.ok(text.length < 4_000, `guidance stays compact (${text.length} chars)`);
-  assert.ok(text.includes("AUTHORITATIVE"), "theme-authority line present");
+  const text = brief.guidance();
+  assert.ok(text.length < 4_500, `guidance stays compact (${text.length} chars)`);
+  const withLore = brief.guidance({ lore: true });
+  assert.ok(withLore.length < 4_500, `…and so does the variant that carries the lore clause (${withLore.length})`);
+  assert.ok(!text.includes("LOREBOOK ENTRIES"), "no lore clause when no lore is being sent");
+  assert.ok(withLore.includes("LOREBOOK ENTRIES the player picked follow below"), "…and one when it is");
+  // A STALE THEME ARGUMENT MUST NOT TURN IT ON. This function took a theme string
+  // for six releases and one such call is still in this file; under a bare
+  // boolean parameter that string would read as `true` and ship the clause on a
+  // call carrying no lore at all. The options object is what makes that call inert.
+  assert.equal(brief.guidance("sci-fi-colony"), text, "a leftover theme argument is not a lore flag");
+  // THE THEME IS ASKED FOR, NOT DECLARED (0.16.2). This asserted the opposite
+  // until this release: `The visual theme is "…" and it is AUTHORITATIVE` was the
+  // dropdown's answer stated at a model that had not read the setting yet. The
+  // dropdown is gone and the question is inverted — the kit is a FIELD of the
+  // brief now, and the model answers it from the player's own words. The
+  // near-identical assertion further down this file reads the PACK's guidance
+  // (61-pack), which this cycle does not touch; the two are not the same line.
+  assert.ok(!text.includes("AUTHORITATIVE"), "no theme is declared at the model any more");
+  assert.ok(text.includes("- artTheme: one of "), "…it is asked for as a field of the brief instead");
   assert.ok(text.includes("do NOT give everyone their own number"), "household teaching line present");
   assert.ok(
     text.includes("lodgers") && text.includes("no limit on how many"),
@@ -24444,11 +24483,19 @@ const fire = (node, type) => Promise.all((node.listeners[type] ?? []).map((fn) =
     await settle(); // the connections/characters load is an async IIFE
     const nodes = walkNodes(el);
     const checkboxes = nodes.filter((node) => node.type === "checkbox");
-    assert.equal(checkboxes.length, 1, "with no characters to pick, the only checkbox is the generation toggle");
+    assert.equal(
+      checkboxes.length,
+      1,
+      "the generation toggle is the only checkbox on the form (0.16.2: no party rows)",
+    );
     return {
       launches,
-      nameIn: nodes.find((node) => node.tagName === "INPUT" && node.value === "Hearthvale"),
-      themeSel: nodes.find((node) => node.children.some((option) => option.attrs.value === "sci-fi-colony")),
+      // LOCATED BY PLACEHOLDER, because the field ships EMPTY now (0.16.2). It
+      // was found by its VALUE, which stopped finding it the moment "Hearthvale"
+      // became a placeholder rather than a pre-fill — and a `find` that misses
+      // returns undefined rather than failing, so every lane touching `nameIn`
+      // would have gone quiet instead of red.
+      nameIn: nodes.find((node) => node.tagName === "INPUT" && node.placeholder === "Hearthvale"),
       launchBtn: nodes.find((node) => node.tagName === "BUTTON" && String(node.textContent).startsWith("Begin in")),
       generateIn: checkboxes[0],
       generateLabel: nodes.find((node) => String(node.textContent).startsWith("Generate a unique world")),
@@ -24456,14 +24503,17 @@ const fire = (node, type) => Promise.all((node.listeners[type] ?? []).map((fn) =
   };
   try {
     const asked = await mountWizard();
-    assert.ok(asked.nameIn && asked.themeSel && asked.launchBtn, "the wizard mounted its name, theme and launch");
-    assert.equal(asked.launchBtn.textContent, "Begin in Hearthvale", "the label starts at the active preset's name");
-    asked.themeSel.value = "sci-fi-colony";
-    await fire(asked.themeSel, "change");
-    assert.equal(asked.launchBtn.textContent, "Begin in Meridian Base", "a theme change carries it");
+    assert.ok(asked.nameIn && asked.launchBtn, "the wizard mounted its name and its launch");
+    assert.equal(asked.launchBtn.textContent, "Begin in Hearthvale", "the label starts at the default world name");
+    // THE THEME-CHANGE LEG IS RETIRED ON PURPOSE (0.16.2), not lost: it drove the
+    // dropdown and asserted the label followed it, and the ruling is that the
+    // theme "should be determined by the player in Game Mode setup via freestyle
+    // input, not a selector". With no control to change, the label answers to the
+    // name field alone — which is what the two lines below have always asserted,
+    // and they are the half of this leg that still has a subject.
     asked.nameIn.value = "Anchorage Nine";
     await fire(asked.nameIn, "input");
-    assert.equal(asked.launchBtn.textContent, "Begin in Anchorage Nine", "and the player's own name wins over both");
+    assert.equal(asked.launchBtn.textContent, "Begin in Anchorage Nine", "and the player's own name is what it says");
 
     assert.equal(asked.generateIn.checked, true, "generation is offered checked — it is what the package is for");
     // HOW MANY CALLS THE TICK COSTS, VERBATIM. The player is the one who pays for
@@ -24551,16 +24601,15 @@ const fire = (node, type) => Promise.all((node.listeners[type] ?? []).map((fn) =
     },
     { id: "conn-art", name: "pictures", provider: "image_generation", isDefault: "false" },
   ];
-  // …and the `/characters` rows the same way: the characters TABLE has no `name`
-  // column at all and keeps the V2 card in `data` as a JSON STRING, so the
-  // wizard's `c.name ?? c.data?.name ?? id` chain fell through to the id for
-  // 100% of rows and the party list was a column of nanoids.
-  const CHARACTERS = [
-    { id: "char-7f3a", data: JSON.stringify({ name: "Wren Ash", description: "a miller" }), comment: "the miller" },
-    { id: "char-bad", data: "{ this is not json", comment: "" },
-  ];
-  loadedPF.api.getJson = async (path) =>
-    path === "/connections" ? CONNECTIONS : path === "/characters" ? CHARACTERS : [];
+  // THE `/characters` FIXTURE IS GONE WITH THE PICKER IT FED (0.16.2). It staged
+  // the raw rows the party list read — the characters TABLE has no `name` column
+  // and keeps the V2 card in `data` as a JSON STRING — and it was the only
+  // regression pin on 0.16.1's parse of that string. The picker is deleted, so
+  // the parse is deleted, so the pin has nothing left to hold: the party belongs
+  // to Game Mode's own setup and this form never asks for it. What replaces the
+  // pin is the opposite assertion, one banner down — the route is never fetched
+  // at all.
+  loadedPF.api.getJson = async (path) => (path === "/connections" ? CONNECTIONS : []);
   const settle = async () => {
     for (let i = 0; i < 16; i++) await Promise.resolve();
   };
@@ -24573,18 +24622,15 @@ const fire = (node, type) => Promise.all((node.listeners[type] ?? []).map((fn) =
     return {
       launches,
       nodes,
-      nameIn: nodes.find((node) => node.tagName === "INPUT" && node.value === "Hearthvale"),
+      // LOCATED BY PLACEHOLDER, because the field ships EMPTY now (0.16.2). It
+      // was found by its VALUE, which stopped finding it the moment "Hearthvale"
+      // became a placeholder rather than a pre-fill — and a `find` that misses
+      // returns undefined rather than failing, so every lane touching `nameIn`
+      // would have gone quiet instead of red.
+      nameIn: nodes.find((node) => node.tagName === "INPUT" && node.placeholder === "Hearthvale"),
       seedIn: nodes.find((node) => node.tagName === "INPUT" && /^\d+$/.test(String(node.value ?? ""))),
       settingIn: nodes.find((node) => node.tagName === "TEXTAREA"),
-      themeSel: nodes.find((node) => node.children.some((option) => option.attrs.value === "sci-fi-colony")),
       connSel: nodes.find((node) => node.children.some((option) => option.attrs.value === "conn-default")),
-      // The one node whose children are ALL party rows: the generate toggle is a
-      // label of the same shape, so "contains one" would match its parent too.
-      partyBox: nodes.find(
-        (node) =>
-          node.children.length > 0 &&
-          node.children.every((child) => child.tagName === "LABEL" && child.children[0]?.type === "checkbox"),
-      ),
       launchBtn: nodes.find((node) => node.tagName === "BUTTON" && String(node.textContent).startsWith("Begin in")),
     };
   };
@@ -24595,9 +24641,20 @@ const fire = (node, type) => Promise.all((node.listeners[type] ?? []).map((fn) =
 
     // ── (1) THE PRESET IS A PLACEHOLDER AND NEVER A VALUE ─────────────────────
     assert.equal(w.settingIn.value, "", "the Setting box starts EMPTY, so an untouched form instructs nothing");
+    // AND THE SUGGESTION UNDER IT NAMES NOBODY (0.16.2). 0.16.1 asserted the
+    // opposite — the placeholder WAS the cozy preset's paragraph, which was
+    // honest while a dropdown could swap it for the colony's. That listener died
+    // with the dropdown, so the same string would have shown village prose to a
+    // player describing a space station, permanently and with no control to
+    // change it. It is a question now, and the question asks for the words the
+    // resolver reads.
     assert.ok(
-      w.settingIn.placeholder.includes("Hearthvale") && w.settingIn.placeholder.includes("Mira"),
-      "…with the theme's prose shown as the suggestion it always was, in the same place and carrying none of it",
+      !/Hearthvale|Mira|Tam|Rook|Amber Hearth|Meridian/.test(w.settingIn.placeholder),
+      "the placeholder names no place and no person the player did not type",
+    );
+    assert.ok(
+      w.settingIn.placeholder.startsWith("Describe the place"),
+      "…and it is still a prompt rather than a blank box: this is now the only place the player's own words exist",
     );
 
     // ── (3) THE CONNECTION LIST, READ AS RAW ROWS ─────────────────────────────
@@ -24619,13 +24676,14 @@ const fire = (node, type) => Promise.all((node.listeners[type] ?? []).map((fn) =
       'the preselection honours the user\'s actual default: `isDefault` is TEXT, `"false"` is truthy, and the old test matched the most-recently-edited row every time',
     );
 
-    // ── (7) THE PARTY LIST NAMES PEOPLE, NOT IDS ──────────────────────────────
-    const partyLabels = w.partyBox.children.map((row) => row.children[1]?.textContent);
-    assert.deepEqual(
-      partyLabels,
-      ["Wren Ash", "char-bad"],
-      "the V2 card is parsed out of the `data` STRING the way the Engine's own picker parses it, with the id surviving only for a card that will not parse",
-    );
+    // ── (7) THE PARTY LIST IS GONE, AND WITH IT ITS ONE REGRESSION PIN ────────
+    // This leg drove the `data`-is-a-JSON-string parse: the party rows rendered
+    // as a column of nanoids until 0.16.1 parsed the card the way the Engine's
+    // own picker does. 0.16.2 deletes the picker — the party belongs to Game
+    // Mode's setup, and this Experience never duplicates or overrides what that
+    // setup collects — so the parse it pinned is deleted too. The replacement is
+    // in the next banner and it is the negative: no party checkboxes mount, and
+    // `/characters` is never fetched.
 
     // ── (2) THE NAME THE PLAYER TYPED REACHES THE GENERATORS ──────────────────
     w.nameIn.value = "Pallet Town";
@@ -24642,11 +24700,19 @@ const fire = (node, type) => Promise.all((node.listeners[type] ?? []).map((fn) =
       "A cozy pixel village called Pallet Town.",
       "an empty Setting composes ONE honest line from what the player DID give — the host's `z.string().min(1)` is satisfied and no cast is invented",
     );
-    assert.ok(cfg.playerGoals.includes("Pallet Town"), "the goals are about the world the player named");
-    assert.ok(cfg.spatialMapInstructions.includes("Pallet Town"), "…and so is the World Map's root location");
+    // 0.16.1 asserted that the goals and the map's root location were about the
+    // world the player NAMED, which was the right fix for a template that named
+    // Hearthvale. 0.16.2 asks the prior question and answers it differently:
+    // nobody asked the player for a goal, and the package does not know enough
+    // about their setting to assert a shape on it.
+    assert.equal(
+      cfg.playerGoals,
+      "",
+      "no goal is written on the player's behalf — the schema's own default is the truthful answer",
+    );
     assert.ok(
-      !cfg.spatialMapInstructions.includes("Children:"),
-      "…which no longer lists four buildings the brief has not invented yet",
+      !("spatialMapInstructions" in cfg),
+      'the map-guidance field is ABSENT, not empty: "the GM should never intend to keep the player bound to a location and the world need not be compact and walkable necessarily" — both halves of what this used to say',
     );
     // THE NEGATIVE IS THE POINT OF THE WHOLE RELEASE, so it is asserted over
     // every field of the config at once rather than one at a time: not one of the
@@ -24656,9 +24722,10 @@ const fire = (node, type) => Promise.all((node.listeners[type] ?? []).map((fn) =
     for (const name of ["Hearthvale", "Mira", "Tam's", "Rook"]) {
       assert.ok(!wire.includes(name), `nothing in the launched config says ${name}`);
     }
-    assert.ok(
-      cfg.genre.startsWith("Cozy pixel-art village RPG"),
-      "the genre stays theme-derived — it names a kind of game, not a place",
+    assert.equal(
+      cfg.genre,
+      "A tile-based pixel-art RPG.",
+      "the genre claims only the renderer: it named a kind of game the player never chose, in a required field that reaches the GM every turn, and the real genre is in `setting` two lines below it",
     );
     assert.equal(
       cfg.experienceConfig.worldName,
@@ -24673,18 +24740,12 @@ const fire = (node, type) => Promise.all((node.listeners[type] ?? []).map((fn) =
       "emitted explicitly, because every engine gate reads `!== false` and an absent key was YES at all five of them",
     );
 
-    // ── THE OTHER THEME COMPOSES ITS OWN LINE, off the same two answers ───────
-    const colony = await mountWizard();
-    colony.themeSel.value = "sci-fi-colony";
-    await fire(colony.themeSel, "change");
-    assert.ok(
-      colony.settingIn.placeholder.startsWith("Meridian Base"),
-      "a theme change swaps the placeholder unconditionally — a placeholder is never the player's text, so there is nothing to trample",
-    );
-    assert.equal(colony.settingIn.value, "", "…and the box the player has not touched is still empty");
-    await fire(colony.launchBtn, "click");
-    assert.equal(colony.launches[0].config.setting, "A small frontier colony called Meridian Base.");
-    assert.ok(colony.launches[0].config.playerGoals.includes("Meridian Base"));
+    // ── THE OTHER THEME'S LEG MOVES TO WHERE THE THEME NOW COMES FROM ─────────
+    // This drove the dropdown to sci-fi-colony and asserted the composed line and
+    // the placeholder followed it. There is no dropdown, and the second kit is
+    // now reached the only way the ruling allows — by what the player typed — so
+    // the leg lands in the next banner as the colony-shaped Setting case, where
+    // it also proves the thing this one could not: that the words decide.
 
     // ── A SETTING THE PLAYER ACTUALLY WROTE STILL WINS, unchanged ─────────────
     const typed = await mountWizard();
@@ -24763,6 +24824,1680 @@ const fire = (node, type) => Promise.all((node.listeners[type] ?? []).map((fn) =
       }
     });
   });
+}
+
+// ── THE KIT IS A FIELD OF THE BRIEF NOW (0.16.2) ─────────────────────────────
+// The theme dropdown is deleted, and the ruling is that the kit is "determined by
+// the player in Game Mode setup via freestyle input, not a selector". Deleting a
+// control that decided something means somebody else has to decide it, and there
+// are exactly two candidates: the MODEL, which is about to read the player's whole
+// setting text inside a call that is already being paid for, and the RESOLVER in
+// 80-setup, which reads the same words with no call at all. The model gets the
+// first vote on a generated world; the resolver answers for a declined one and
+// stands behind the model as rung 2.
+//
+// So `artTheme` becomes a field of the brief: a schema property, a line of
+// guidance asking for it, and a three-rung ladder at the top of validate() that
+// resolves it before any theme-keyed lexicon is read. Everything below is that
+// ladder, its guards, and the three doors that must not be able to disagree.
+{
+  const scifiCtx = { theme: "sci-fi-colony", seed: 4242 };
+  const modelBrief = (extra) => ({
+    scale: "village",
+    name: "Anchorage",
+    cast: [
+      { name: "Vega", role: "lead", kind: "leader", tint: "blue", home: "Anchorage", household: 1 },
+      { name: "Odile", role: "medic", kind: "folk", tint: "rose", home: "Anchorage", household: 2 },
+      { name: "Bex", role: "rigger", kind: "maker", tint: "teal", home: "Anchorage", household: 3 },
+      { name: "Corin", role: "pilot", kind: "wanderer", tint: "green", home: "Anchorage", household: 4 },
+    ],
+    ...extra,
+  });
+  const themeFold = (sealed) => sealed._repairs.filter((entry) => entry.startsWith("artTheme:"));
+
+  // ── (1) THE MODEL CHOOSES THE KIT, AND THE LADDER IS THE ONLY OTHER VOTER ──
+  // Rung 1 is the model's own answer, and it is offered ONLY to the caller that
+  // has one: `validate(raw, ctx, { fromModel: true })`, which generate() passes
+  // and nothing else does. Without that gate a STORED brief's `artTheme` key —
+  // chat metadata, so restorable from a checkpoint, importable, hand-editable —
+  // would outrank its own seal on the #566 revalidate path, and this door and
+  // `foldStored` would answer differently for the same bytes.
+  {
+    await withGeneration(async ({ responses }) => {
+      responses.post = async () => ({
+        status: 200,
+        body: { ok: true, data: modelBrief({ artTheme: "sci-fi-colony" }) },
+      });
+      const sealed = await brief.generate("chat-art-theme", { theme: "cozy-village", seed: 4242 });
+      assert.equal(sealed.theme, "sci-fi-colony", "the generation path really does hand the model's answer to rung 1");
+    });
+    assert.equal(
+      brief.validate(modelBrief({ artTheme: "sci-fi-colony" }), { theme: "cozy-village", seed: 4242 }).theme,
+      "cozy-village",
+      "…and a caller that is NOT a model never gets rung 1 offered: a stored brief cannot outrank its own seal",
+    );
+
+    // RUNG 2 CATCHES EVERY WAY RUNG 1 CAN FAIL, and the assertion is that it lands
+    // on the CALLER's theme rather than on the literal default: an unusable model
+    // answer must not silently demote a colony to a village.
+    for (const answer of ["constructor", 42, undefined, { toString: () => "sci-fi-colony" }]) {
+      const sealed = brief.validate(modelBrief({ artTheme: answer }), scifiCtx, { fromModel: true });
+      assert.equal(sealed.theme, "sci-fi-colony", `an unusable artTheme ${JSON.stringify(answer)} falls to rung 2`);
+    }
+    assert.equal(
+      brief.validate(modelBrief({}), scifiCtx, { fromModel: true }).theme,
+      "sci-fi-colony",
+      "…and so does an absent one",
+    );
+
+    // THE GO/NO-GO SIGNAL FOR THE AUTHORIZED FALLBACK PRE-GENERATION. `foldEnum` is
+    // silent by construction — only `foldAt` records, and `foldAt` lives in
+    // foldStored — so before this entry existed a model answering "steampunk" on
+    // every single call was indistinguishable from one answering correctly, and
+    // the measurement that decides whether to spend a second call had nothing to
+    // read. Written when rung 1 was OFFERED, the model wrote a non-empty string,
+    // and the fold did not return it.
+    for (const answer of ["nonsense-kit", "steampunk"]) {
+      const sealed = brief.validate(modelBrief({ artTheme: answer }), scifiCtx, { fromModel: true });
+      assert.equal(themeFold(sealed).length, 1, `a folded artTheme is RECORDED (${answer})`);
+      assert.ok(
+        themeFold(sealed)[0].includes(JSON.stringify(answer)) && themeFold(sealed)[0].includes("sci-fi-colony"),
+        "…naming both what was answered and what it folded to",
+      );
+    }
+    for (const [label, raw] of [
+      ["a correct answer", modelBrief({ artTheme: "sci-fi-colony" })],
+      ["an absent one", modelBrief({})],
+      ["a non-string", modelBrief({ artTheme: 42 })],
+    ]) {
+      assert.deepEqual(themeFold(brief.validate(raw, scifiCtx, { fromModel: true })), [], `${label} stays silent`);
+    }
+  }
+
+  // ── (2) THE WORKED EXAMPLES STILL COME BACK AS THEMSELVES ──────────────────
+  // The lane that would have caught the first draft of this ladder, which deleted
+  // rung 2 outright and took `defaults()` with it. The prototype-key legs are NOT
+  // restated here: the case above at "THE WORKED EXAMPLE IS PICKED THE SAME WAY"
+  // already asserts whole-`JSON.stringify` equality against the cozy brief for
+  // "retired-theme" plus five prototype keys, which is strictly stronger than any
+  // per-field check written here would be. It stays green under this ladder.
+  {
+    const scifi = brief.defaults("sci-fi-colony", 4242);
+    assert.equal(scifi.theme, "sci-fi-colony", "the colony's worked example is still labelled the colony");
+    assert.equal(scifi.name, "Meridian Base", "…and still carries its own name rather than the village's");
+  }
+
+  // ── (3) THE REPAIR LEXICONS FOLLOW THE RESOLVED THEME, NOT A WIZARD'S ──────
+  // The reason the ladder sits at the TOP of validate() rather than beside the
+  // seal: GATHERING_NOUNS, STOCK_CAST and WILDS_NAMES are all read by the repair
+  // passes further down, so a brief whose kit was decided after pass 6 would mint
+  // a colony's floors out of a village's books. This drives both top-ups at once
+  // with rung 1 and rung 2 pointed at DIFFERENT kits, so it proves the ordering
+  // and the precedence in one launch.
+  //
+  // The one member is deliberately NOT a `host`: the gathering floor runs once
+  // ahead of the cast pass and once behind it, and a model-supplied host spends
+  // the first call, which fills `places` and stops the wilds floor from firing at
+  // all. With no host in the raw cast both floors run — the wilds name off the
+  // theme's own book, then the common room off the host the cast top-up minted.
+  {
+    const sealed = brief.validate(
+      {
+        scale: "village",
+        name: "Anchorage",
+        artTheme: "sci-fi-colony",
+        cast: [{ name: "Vega", role: "rigger", kind: "maker", tint: "blue", home: "Anchorage", household: 1 }],
+      },
+      { theme: "cozy-village", seed: 4242 },
+      { fromModel: true },
+    );
+    assert.equal(sealed.theme, "sci-fi-colony", "rung 1 beat rung 2");
+    assert.equal(sealed.cast.length, 4, "the cast floor top-up fired");
+    const roles = sealed.cast.map((member) => member.role);
+    assert.ok(
+      roles.includes("hydroponics lead") || roles.includes("pad marshal") || roles.includes("salvage scout"),
+      `the minted people came out of the COLONY roster (${roles.join(", ")})`,
+    );
+    assert.ok(
+      !roles.includes("farmer") && !roles.includes("innkeeper") && !roles.includes("forager"),
+      "…and not one of them out of the village's",
+    );
+    const wilds = sealed.places.find((place) => place.kind === "wilds");
+    assert.ok(wilds, "the wilds floor top-up fired too");
+    assert.ok(
+      ["The Mast Field", "The Outer Flats"].includes(wilds.name),
+      `and its name came from the colony's book (${wilds.name})`,
+    );
+    assert.ok(
+      sealed.places.some((place) => place.kind === "gathering" && place.name.includes("Cantina")),
+      "…as did the common room's own noun: a Cantina, not an Inn",
+    );
+  }
+
+  // ── (4) THE PACK IS WRITTEN FOR THE WORLD THAT WAS SEALED ──────────────────
+  // 60-save read ONE theme for the whole sequence and it was the wizard's copy, so
+  // a world the model kitted as a colony had its content pack written for a
+  // village and was then painted in a third answer. The value splits: `configTheme`
+  // is what the brief call is HANDED (its rung 2), and everything below the seal —
+  // the pack, the compile, the install — reads `sealed.theme` first.
+  await withSavePath(async ({ behavior, tick, makeCore }) => {
+    await withGeneration(async ({ responses }) => {
+      const realPack = loadedPF.pack.generate;
+      const packArgs = [];
+      loadedPF.pack.generate = async (chatId, args) => {
+        packArgs.push(args);
+        return null;
+      };
+      responses.post = async () => ({
+        status: 200,
+        body: { ok: true, data: modelBrief({ artTheme: "sci-fi-colony" }) },
+      });
+      behavior.get = async () => ({ available: true, status: 200, body: { exists: false } });
+      try {
+        // NO `theme` IN THE CONFIG AT ALL, which is the honest fixture for this
+        // lane: the kit is not the wizard's answer any more, so the sequence must
+        // be able to run without one and still write the pack for the right world.
+        const cfg = { experienceConfig: { seed: 4242, generate: true, packWanted: true } };
+        const meta = { gameSetupConfig: cfg };
+        const core = makeCore("chat-sealed-kit", 4242);
+        core.host.chatMeta = meta;
+        core.sim = loadedPF.save.restore(meta, "chat-sealed-kit");
+        assert.equal(loadedPF.save.armGate(core, meta), true, "the chat gates for a generated world");
+        await loadedPF.save.maybeGenerateBrief(core);
+        await tick();
+        assert.equal(packArgs.length, 1, "call two went out");
+        assert.equal(
+          packArgs[0].theme,
+          "sci-fi-colony",
+          "the content pack is written for the kit the BRIEF sealed, not for the one the config carried",
+        );
+      } finally {
+        loadedPF.pack.generate = realPack;
+      }
+    });
+  });
+  // …AND A FORCED PACK ON A CHAT WITH NO BRIEF DOES NOT THROW. `sealed` is
+  // provably nullable at the post-seal read: the `if (!sealed) … return` bail
+  // lives INSIDE the call-one gate, and a force always enters the body. Unguarded,
+  // `sealed.theme` threw into the catch and put a retry screen on a world the
+  // player had DECLINED — and the catch swallows it, so the tell is the warning
+  // rather than an exception reaching this line.
+  await withSavePath(async ({ tick, makeCore }) => {
+    await withGeneration(async () => {
+      const realWarn = console.warn;
+      const warnings = [];
+      console.warn = (...args) => warnings.push(args.map(String).join(" "));
+      try {
+        const meta = { gameSetupConfig: { experienceConfig: { seed: 4242, generate: false } } };
+        const core = makeCore("chat-declined-force", 4242);
+        core.host.chatMeta = meta;
+        await loadedPF.save.maybeGenerateBrief(core, { force: "pack" });
+        await tick();
+      } finally {
+        console.warn = realWarn;
+      }
+      assert.deepEqual(
+        warnings.filter((line) => line.includes("failed unexpectedly")),
+        [],
+        "a forced pack on a chat that never sealed a brief reads the theme safely and reaches no catch",
+      );
+    });
+  });
+
+  // ── (5) THE BRIEF NEVER READS THE PLAYER'S BLOB FOR A THEME ────────────────
+  // Structural, and it is the lane that keeps the parser deleted. Two earlier
+  // drafts had this module re-derive the kit from the player's Setting text, which
+  // is (a) a question the wizard has already answered and (b) unanswerable here:
+  // the Setting box is a `rows="3"` textarea joined into a newline-delimited
+  // record, so a "Setting: line" reading loses everything after the first Enter
+  // and a "Setting: segment" reading truncates at a `Tone:` the player typed
+  // themselves. validate()'s options bag has THREE keys and none of them is a
+  // preferences channel; the sweep below is what that absence looks like from
+  // outside.
+  {
+    const blobs = [
+      "World name: Anchorage Nine\nSetting: A sealed hab ring; the crew keeps the reactor alive.\nTone: cold",
+      "World name: Hearthvale\nSetting: A cozy valley of orchards and thatched roofs.",
+      "",
+      "World name: Nine\nSetting: A quiet dome.\nTone: wistful\nSetting: and an airlock that sticks",
+    ];
+    for (const blob of blobs) {
+      const sealed = brief.validate(
+        { scale: "village", name: "Nowhere", cast: [], preferences: blob, setting: blob },
+        { seed: 4242, preferences: blob, setting: blob, userContent: blob },
+      );
+      assert.equal(sealed.theme, "cozy-village", "no theme anywhere means cozy-village, whatever the blob says");
+    }
+  }
+
+  // ── (6) WITH NO ART MODULE, A FUTURE THEME PASSES AND A PROTOTYPE KEY DOES NOT
+  // The no-authority arm, and it exists because folding needs a list to fold
+  // against. Two populations were being conflated: a FUTURE theme this build has
+  // art for but no lexicon entry — which must survive, because folding it would
+  // replace a valid value one screen before setTheme() would have accepted it —
+  // and a string that resolves against Object.prototype, which must not, because
+  // `TABLE["constructor"]` returns a truthy INHERITED value and the
+  // `|| TABLE["cozy-village"]` tail never fires for it.
+  {
+    const realThemeIds = loadedPF.art.themeIds;
+    const bare = { scale: "village", name: "Nowhere", cast: [] };
+    const PROTO = ["constructor", "__proto__", "toString", "valueOf", "hasOwnProperty"];
+    try {
+      loadedPF.art.themeIds = undefined;
+      // (a) A CALLER's theme passes through unfolded at both doors — the
+      // future-theme case, preserved. `swamp-fen` is the roadmap's own example.
+      for (const id of ["sci-fi-colony", "swamp-fen"]) {
+        assert.equal(brief.validate(bare, { theme: id, seed: 7 }).theme, id, `validate passes ${id} through`);
+        assert.equal(brief.foldStored({ ...bare, theme: id }, 7).theme, id, `…and so does foldStored`);
+      }
+      // (b) The MODEL's answer is a different population and is never trusted
+      // here: with no list there is no fold, so rung 1 is skipped outright.
+      for (const key of PROTO.slice(0, 3)) {
+        const sealed = brief.validate(
+          { ...bare, artTheme: key },
+          { theme: "sci-fi-colony", seed: 7 },
+          { fromModel: true },
+        );
+        assert.equal(sealed.theme, "sci-fi-colony", `a hostile model answer (${key}) never displaces the caller's`);
+      }
+      // (b2) …and rung 2 carries untrusted text too, which three drafts of this
+      // work denied. It is an exported function's parameter, it is
+      // `_configTheme(meta)` off player-writable chat metadata, and it is a stored
+      // brief's `sealed.theme` on the #566 path. Unguarded, validate() THREW out
+      // of the STOCK_CAST top-up and defaults() sealed the key into `brief.theme`,
+      // where it travelled on to setTheme, world.build and the pack's catch tables.
+      for (const key of PROTO) {
+        assert.equal(brief.validate(bare, { theme: key, seed: 7 }).theme, "cozy-village", `validate refuses ${key}`);
+        assert.equal(brief.defaults(key, 7).theme, "cozy-village", `…and so does the exported defaults() door`);
+      }
+      // (b3) THE THIRD DOOR, and this leg pins a SCOPE rather than a guard.
+      // `foldStored` runs on every world load and keeps its pre-existing
+      // pass-through: measured, today's build answers identically, and no
+      // measurement in this cycle says that is wrong. The claim the ladder's own
+      // comment makes is "closed at both rungs of validate, and at defaults" —
+      // exactly these three doors and no more. The day somebody widens it, this
+      // lane is what tells them they changed something.
+      for (const key of PROTO) {
+        assert.equal(
+          brief.foldStored({ ...bare, theme: key }, 7).theme,
+          key,
+          `foldStored passes ${key} through, as it always has`,
+        );
+      }
+      // (c) Nothing resolvable at either rung.
+      assert.equal(brief.validate(bare, { theme: "", seed: 7 }).theme, "cozy-village", "an empty theme lands on cozy");
+      assert.equal(brief.validate(bare, { seed: 7 }).theme, "cozy-village", "…and so does no theme at all");
+    } finally {
+      loadedPF.art.themeIds = realThemeIds;
+    }
+  }
+
+  // ── (7) THE SCHEMA STILL FITS THE ROUTE ────────────────────────────────────
+  // The enum is generated from `PF.art.themeIds()` rather than copied, so a third
+  // theme shipping in 10-art reaches this schema the day it lands — and the
+  // assertion is written against the LIST rather than against "both", which is a
+  // two-shaped claim that would survive a third kit.
+  {
+    const shape = brief.schema();
+    const serialized = JSON.stringify(shape);
+    for (const id of loadedPF.art.themeIds()) {
+      assert.ok(shape.properties.artTheme.enum.includes(id), `the schema offers the kit ${id}`);
+      assert.ok(brief.guidance().includes(id), `…and the guidance names it too`);
+    }
+    assert.ok(shape.required.includes("artTheme"), "and the field is required, so a silent omission is not an answer");
+    assert.ok(serialized.length <= 8_000, `the schema still fits the route's cap (${serialized.length} chars)`);
+    assert.ok(brief.guidance().length < 4_500, "and the guidance is still inside its own");
+
+    // THE PARTIAL ART MODULE, WHICH IS WORSE THAN AN ABSENT ONE. schema() and
+    // guidance() are both called BEFORE the network request inside generate()'s
+    // try, whose catch reports `onFailure("network")` — so a `themeIds` that
+    // returns `[]`, returns a non-array, or throws would have burned a paid call
+    // and blamed the network for a type error, from three new sites at once. The
+    // guard is `Array.isArray(x) && x.length` at four places rather than a
+    // truthiness test, because `[]` is truthy and so is a non-array, and both are
+    // exactly the states it is described as preventing.
+    const realThemeIds = loadedPF.art.themeIds;
+    try {
+      for (const [label, stub] of [
+        ["absent", undefined],
+        ["an empty list", () => []],
+        ["a non-array", () => "cozy-village"],
+        [
+          "a throwing reader",
+          () => {
+            throw new TypeError("the art module is half-loaded");
+          },
+        ],
+      ]) {
+        loadedPF.art.themeIds = stub;
+        const partial = brief.schema();
+        assert.ok(!("artTheme" in partial.properties), `with ${label} the property is ABSENT, never an empty enum`);
+        assert.ok(!partial.required.includes("artTheme"), `…and so is the required entry nothing could satisfy`);
+        assert.ok(!brief.guidance().includes("- artTheme:"), `…and the guidance asks for no field the schema lacks`);
+        // The other two doors, for the same reason: all four are on the paid path.
+        assert.equal(
+          brief.validate({ scale: "village", name: "X", cast: [] }, { theme: "cozy-village", seed: 7 }).theme,
+          "cozy-village",
+          `validate() returns rather than throws with ${label}`,
+        );
+        assert.equal(
+          brief.defaults("cozy-village", 7).theme,
+          "cozy-village",
+          `defaults() returns rather than throws with ${label}`,
+        );
+      }
+    } finally {
+      loadedPF.art.themeIds = realThemeIds;
+    }
+  }
+
+  // ── (8) A NEAR-MISS THEME LABEL AND ITS BODY AGREE ─────────────────────────
+  // defaults() is the one door that returns a {theme, name} PAIR, so it is the
+  // only door where a LABEL can disagree with a BODY. The ladder folds; this line
+  // looked the worked example up with the UNFOLDED word, so `defaults("Sci-Fi-
+  // Colony", 7)` came back labelled `sci-fi-colony` carrying Hearthvale and the
+  // cozy example — a shape the pre-0.16.2 code could not produce. One fold at the
+  // top, spent on both reads.
+  //
+  // The property this pins is "an id that has its own worked example ALWAYS gets
+  // that example" — not "label and body always agree", which the
+  // `|| DEFAULT_BRIEFS["cozy-village"]` tail makes impossible to state and which
+  // the future-theme case requires to stay impossible. Note the same call is a
+  // BOOT invariant in 61-pack, so a wrong answer here is a package that does not
+  // load rather than a lane that goes red.
+  {
+    const realThemeIds = loadedPF.art.themeIds;
+    const SWEEP = [
+      "cozy-village",
+      "sci-fi-colony",
+      "Sci-Fi-Colony",
+      "SCI-FI-COLONY",
+      "  sci-fi-colony  ",
+      "swamp-fen",
+      "retired-theme",
+      "constructor",
+      "__proto__",
+      "toString",
+      "valueOf",
+      "hasOwnProperty",
+      "prototype",
+      "0",
+      "length",
+    ];
+    const pairOf = (word) => {
+      const sealed = brief.defaults(word, 7);
+      return `${sealed.theme}/${sealed.name}`;
+    };
+    for (const word of ["Sci-Fi-Colony", "SCI-FI-COLONY", "  sci-fi-colony  "]) {
+      assert.equal(pairOf(word), "sci-fi-colony/Meridian Base", `a near miss resolves whole: ${word}`);
+    }
+    assert.equal(pairOf("sci-fi-colony"), "sci-fi-colony/Meridian Base", "an exact id is unchanged");
+    assert.equal(pairOf("cozy-village"), "cozy-village/Hearthvale", "…as is the other one");
+    assert.equal(pairOf("__proto__"), "cozy-village/Hearthvale", "a prototype key gets the cozy example, labelled cozy");
+    assert.equal(pairOf("constructor"), "cozy-village/Hearthvale", "…and so does the other one");
+    const withArt = SWEEP.map(pairOf);
+    try {
+      // BOTH ARMS, AND THEY AGREE WITH EACH OTHER. This door folds on the
+      // no-authority arm too, against `Object.keys(DEFAULT_BRIEFS)` — the table it
+      // is about to look the body up in. The two alternatives were measured and
+      // both lose something: passing the word through makes EVERY no-authority row
+      // a label disagreeing with its body (`swamp-fen` carrying Hearthvale), and
+      // folding everything to cozy-village makes a SHIPPED id lose its own worked
+      // example. Folding against the brief table gives neither, and it pays more
+      // than either promised — the no-authority arm stops being a separate policy
+      // at all, which is the property that motivated the fold in the first place.
+      loadedPF.art.themeIds = undefined;
+      assert.equal(pairOf("sci-fi-colony"), "sci-fi-colony/Meridian Base", "a shipped id keeps its example with no art");
+      // `swamp-fen` FOLDS here, and it is the one place it does: this door owes a
+      // worked example and has none for it. validate()'s rung 2 passes the same
+      // word through untouched — lane 6(a) asserts exactly that — and the two must
+      // be read together or they look contradictory. What this gives up is the
+      // future-theme case inside defaults(), on an arm no shipped build reaches.
+      assert.equal(pairOf("swamp-fen"), "cozy-village/Hearthvale", "…and an id with no example folds, as it does today");
+      assert.deepEqual(SWEEP.map(pairOf), withArt, "the two arms answer identically on every string in the sweep");
+    } finally {
+      loadedPF.art.themeIds = realThemeIds;
+    }
+  }
+}
+
+// ── THE WIZARD STOPS ASKING WHAT IT SHOULD NEVER HAVE ASKED (0.16.2) ─────────
+// 0.16.1 made this form honest. 0.16.2 makes it SMALLER, and every deletion is a
+// question the package had no business putting or an answer it had no business
+// writing:
+//
+//   the theme dropdown  — "theme should be determined by the player in Game Mode
+//                          setup via freestyle input, not a selector."
+//   the party picker    — the party belongs to Game Mode's own setup; this
+//                          Experience carries only its own parameters and never
+//                          duplicates or overrides what that setup collected.
+//   `genre`/`playerGoals` — preset prose the player never typed, in fields that
+//                          reach the GM's per-turn prompt.
+//   the map guidance    — "the GM should never intend to keep the player bound to
+//                          a location and the world need not be compact and
+//                          walkable necessarily." The FIELD, not the sentence.
+//
+// Deleting the dropdown opens exactly one hole, and it is the reason these lanes
+// exist rather than a diff being enough: a DECLINED world never mints a brief, so
+// no model ever answers `artTheme`, and `PF.world.build(seed, theme, null)` still
+// needs a theme. `themeFromWords` is what fills it — the player's own words,
+// read RAW, before anything is composed from them.
+{
+  const realGetJson = loadedPF.api.getJson;
+  const CONNECTIONS = [{ id: "conn-1", name: "Main", model: "m", isDefault: "true" }];
+  const asked = [];
+  loadedPF.api.getJson = async (path) => {
+    asked.push(path);
+    return path === "/connections" ? CONNECTIONS : [];
+  };
+  const settle = async () => {
+    for (let i = 0; i < 16; i++) await Promise.resolve();
+  };
+  const mountWizard = async () => {
+    const el = new FakeNode("div");
+    const launches = [];
+    loadedPF.mountSetup(el, { onLaunch: async (config, name) => void launches.push({ config, name }) });
+    await settle();
+    const nodes = walkNodes(el);
+    const checkboxes = nodes.filter((node) => node.type === "checkbox");
+    return {
+      launches,
+      nodes,
+      checkboxes,
+      selects: nodes.filter((node) => node.tagName === "SELECT"),
+      // LOCATED BY PLACEHOLDER, because the field ships EMPTY now (0.16.2). It
+      // was found by its VALUE, which stopped finding it the moment "Hearthvale"
+      // became a placeholder rather than a pre-fill — and a `find` that misses
+      // returns undefined rather than failing, so every lane touching `nameIn`
+      // would have gone quiet instead of red.
+      nameIn: nodes.find((node) => node.tagName === "INPUT" && node.placeholder === "Hearthvale"),
+      seedIn: nodes.find((node) => node.tagName === "INPUT" && /^\d+$/.test(String(node.value ?? ""))),
+      settingIn: nodes.find((node) => node.tagName === "TEXTAREA"),
+      connSel: nodes.find((node) => node.children.some((option) => option.attrs.value === "conn-1")),
+      generateIn: checkboxes[0],
+      launchBtn: nodes.find((node) => node.tagName === "BUTTON" && String(node.textContent).startsWith("Begin in")),
+    };
+  };
+  try {
+    // ── (1) THE FORM ASKS WHAT ONLY IT CAN ASK ────────────────────────────────
+    // The control census, read off the mounted DOM rather than off the source,
+    // because the way a deleted control actually bites is a dangling DOM
+    // reference: the row that MOUNTED the theme select is a different line from
+    // the one that built it, and leaving it behind throws inside mountSetup and
+    // the setup view does not render at all.
+    const form = await mountWizard();
+    assert.ok(form.nameIn && form.seedIn && form.settingIn && form.connSel && form.launchBtn, "the form mounted");
+    assert.equal(form.checkboxes.length, 1, "one checkbox: the generation toggle. No party rows.");
+    assert.equal(
+      form.selects.filter((node) => node.children.some((option) => option.attrs.value === "sci-fi-colony")).length,
+      0,
+      "NO THEME SELECT. The kit is not a question this form puts any more",
+    );
+    assert.equal(
+      form.selects.length,
+      4,
+      "…and the four selects left are tone, difficulty, rating and the GM connection",
+    );
+    assert.ok(!asked.includes("/characters"), "and `/characters` is never fetched — there is no list to fill");
+
+    form.nameIn.value = "Pallet Town";
+    form.seedIn.value = "4242";
+    await fire(form.launchBtn, "click");
+    const cfg = form.launches[0].config;
+    assert.deepEqual(cfg.partyCharacterIds, [], "the launch carries an empty party, explicitly");
+    assert.ok(!("spatialMapInstructions" in cfg), "no map-guidance key is emitted at all, on any path");
+    assert.equal(cfg.playerGoals, "", "no goal is written on the player's behalf");
+    assert.equal(cfg.genre, "A tile-based pixel-art RPG.", "and the genre claims the renderer and nothing else");
+
+    // ── (3) NOTHING IN THE LAUNCHED CONFIG NAMES A PLACE THE PLAYER DID NOT ───
+    // 0.16.1's own sweep, kept because in 0.16.2 the package still authors this
+    // text, and widened to the colony's names — which used to be unreachable
+    // without picking the colony from a dropdown and are now reachable by typing.
+    const wire = JSON.stringify(cfg);
+    for (const name of ["Hearthvale", "Mira", "Tam's", "Rook", "Meridian", "Amber Hearth"]) {
+      assert.ok(!wire.includes(name), `nothing in the launched config says ${name}`);
+    }
+    // THE LEG THE CONFIG SWEEP CANNOT SEE. The placeholder is DOM, not config, so
+    // every assertion above passes while a player describing a space station is
+    // shown a paragraph about Mira's inn. It is the one leak deleting the
+    // theme-swap listener opens, and it is where a reader looks first.
+    for (const name of ["Hearthvale", "Mira", "Tam", "Rook", "Meridian", "Amber Hearth"]) {
+      assert.ok(!form.settingIn.placeholder.includes(name), `and neither does the placeholder: ${name}`);
+    }
+
+    // ── (4) A DECLINED WORLD IS THE KIT THE PLAYER'S WORDS ASKED FOR ──────────
+    // The hole deleting the dropdown opens, closed and then walked into. A
+    // declined chat mints no brief, so no model ever answers `artTheme`; without
+    // a resolver over the player's own words every declined world would be a cozy
+    // village forever, whatever they wrote.
+    const colony = await mountWizard();
+    colony.settingIn.value =
+      "A sealed hab ring in orbit above a frozen moon. The crew keeps the reactor and the hydroponics bay alive.";
+    // THE NAME FIELD IS LEFT UNTOUCHED ON PURPOSE, and this is the half that
+    // 0.16.2's first cut got wrong in the other direction. `nameIn` shipped
+    // PRE-FILLED with "Hearthvale"; 0.16.1's theme-swap listener re-synced it and
+    // died with the dropdown, and the kit is derived from text typed AFTER mount,
+    // so a pre-fill could never follow it. Measured before the fix: this exact
+    // setting yielded `theme: "sci-fi-colony"` — a world whose own settlement is
+    // Meridian Base — with `worldName`, `_configWorldName` and the launch button
+    // all saying Hearthvale, which is verbatim the shape 0.16.1 fixed the other
+    // way round. The field is a placeholder now, so the untouched box resolves off
+    // the DERIVED preset.
+    await fire(colony.settingIn, "input");
+    assert.equal(
+      colony.launchBtn.textContent,
+      "Begin in Meridian Base",
+      "the button names the world the launch is about to write, at the control the player reads last",
+    );
+    colony.generateIn.checked = false;
+    await fire(colony.launchBtn, "click");
+    const declinedCfg = colony.launches[0].config;
+    assert.equal(
+      declinedCfg.experienceConfig.theme,
+      "sci-fi-colony",
+      "the words decide the kit, and they are the ONLY thing that decides it now",
+    );
+    assert.equal(declinedCfg.experienceConfig.generate, false, "…on a world that declined the call");
+    // AND THE NAME AGREES WITH THE KIT AT ALL FOUR READERS. This is also the only
+    // pin on `THEME_PRESETS["sci-fi-colony"].name`: mutating "Meridian Base" left
+    // the whole harness green before this line existed, and under the placeholder
+    // fix that field became MORE load-bearing rather than less — it is now the
+    // world name a colony player gets by leaving the field alone.
+    assert.equal(declinedCfg.experienceConfig.worldName, "Meridian Base", "the config carries the colony's own name");
+    assert.equal(colony.launches[0].name, "Meridian Base", "…so does the chat the host is asked to create");
+    assert.equal(
+      loadedPF.save._configWorldName({ gameSetupConfig: declinedCfg }),
+      "Meridian Base",
+      "…and so does the reader that puts it in front of the model and on the loading gate",
+    );
+    const legacy = loadedPF.world.build(declinedCfg.experienceConfig.seed, declinedCfg.experienceConfig.theme, null);
+    assert.equal(legacy.theme, "sci-fi-colony", "and the world the player actually walks into is painted in that kit");
+    assert.equal(legacy.zones.village.name, "Meridian Base", "…down to the name of the settlement it stands up");
+    // Note `20-world.js`'s own name book is what the line above reads, which is a
+    // DIFFERENT source from the wizard preset the three lines before it read. Two
+    // tables holding the same string, and the lane needs both.
+
+    // The box is a `rows="3"` textarea, so multi-line is its DESIGNED shape and
+    // not an edge case. A reader that took only the first line would answer
+    // cozy-village here — measured, and it is why the resolver reads the whole
+    // raw value rather than a line of it.
+    const multi = await mountWizard();
+    multi.settingIn.value =
+      "A quiet place at the edge of things.\nThe dome is cracked and the airlock sticks.\nEverybody here is a colonist.";
+    await fire(multi.launchBtn, "click");
+    assert.equal(
+      multi.launches[0].config.experienceConfig.theme,
+      "sci-fi-colony",
+      "the whole box votes, not its first line",
+    );
+
+    // ── (5) AN EMPTY BOX IS AN HONEST DEFAULT, NOT A LAUNDERED PRESET ─────────
+    // The lane exists to pin WHICH INPUT the resolver was handed, not which
+    // answer came out — because the answer is `cozy-village` either way and that
+    // is exactly how the bug would hide. `settingOf` composes "A cozy pixel
+    // village called Hearthvale." for an untouched box, and that sentence ships
+    // as the config's `setting`; a resolver reading it would be counting the
+    // wizard's own preset words — "cozy pixel village" is a literal in this file
+    // — as the player's evidence.
+    const seen = [];
+    const realResolver = loadedPF.setup.themeFromWords;
+    let empty;
+    try {
+      loadedPF.setup.themeFromWords = (text) => {
+        seen.push(text);
+        return realResolver(text);
+      };
+      empty = await mountWizard();
+      await fire(empty.launchBtn, "click");
+    } finally {
+      loadedPF.setup.themeFromWords = realResolver;
+    }
+    // EVERY CALL, NOT ONE CALL. This asserted `deepEqual(seen, [""])` while the
+    // launch was the resolver's only caller; the launch LABEL is a second one now,
+    // because with the name field shipping empty the button has to fall back to
+    // the derived preset's name or it re-opens the mismatch it exists to close.
+    // What the lane pins is unchanged and is the part that matters — every call
+    // is handed the RAW box, never `settingOf`'s composed sentence — so it is
+    // written over the whole list rather than pinned to a count that will move
+    // again the next time something else needs to know the kit.
+    assert.ok(seen.length > 0, "the resolver was called");
+    assert.deepEqual(
+      [...new Set(seen)],
+      [""],
+      "…and every call was handed the RAW box, which was empty — never the composed sentence",
+    );
+    assert.equal(
+      empty.launches[0].config.experienceConfig.theme,
+      "cozy-village",
+      "…so the answer is the honest default rather than a preset that answered for them",
+    );
+    // …AND THE COMPOSED SENTENCE STILL SHIPS, which is the half that makes the
+    // above worth asserting: the host declares `setting` as `z.string().min(1)`,
+    // so an empty one is a 400. It ships and it does not vote.
+    assert.equal(
+      empty.launches[0].config.setting,
+      "A cozy pixel village called Hearthvale.",
+      "the composed line is what satisfies the host's min(1) — it is downstream of the resolver, never upstream",
+    );
+
+    // The same trap one field over, and `nameIn` ships EMPTY as of 0.16.2 — so the
+    // name reaching `settingOf` is one the player TYPED, which is the version of
+    // this trap that can actually happen. A campaign name is not a claim about the
+    // setting, however sci-fi it sounds, and it must not be able to vote for a
+    // colony kit by riding into the resolver through the composed sentence.
+    const named = await mountWizard();
+    named.nameIn.value = "Orbital Station Nine";
+    await fire(named.nameIn, "input");
+    await fire(named.launchBtn, "click");
+    assert.equal(
+      named.launches[0].config.experienceConfig.theme,
+      "cozy-village",
+      "the campaign name is not evidence about the setting, however sci-fi it sounds",
+    );
+    assert.equal(
+      loadedPF.save._configTheme({ gameSetupConfig: named.launches[0].config }),
+      "cozy-village",
+      "…and the reader that hands the theme to the brief call agrees with the wizard that wrote it",
+    );
+
+    // ── (7) THE CONFIG THE PACKAGE HANDS BACK IS BOUNDED ──────────────────────
+    // `/game/create`'s chooser nests the package's whole returned config inside
+    // itself (`experienceConfig: cfg`) and the route's refine measures THAT
+    // nested copy against 32,000 characters, while `setting` is declared
+    // `z.string().min(1)` with no maximum. So the object this leg measures is the
+    // package's own config — one copy, exactly what the refine sees — and the
+    // Setting box is the only field that can push it over.
+    const huge = await mountWizard();
+    huge.settingIn.value = "riverstone ".repeat(4_000); // 44,000 characters
+    await fire(huge.launchBtn, "click");
+    const bounded = huge.launches[0].config;
+    assert.equal(bounded.setting.length, 8_000, "the Setting the package emits is capped at 8,000 characters");
+    assert.ok(
+      JSON.stringify(bounded).length < 32_000,
+      "…which keeps the nested copy inside the cap that would otherwise 400 the launch on a field the player never sees",
+    );
+    // The doubled shape the chooser actually builds, kept as a strictly LOOSER
+    // second leg: it is larger than the object the refine measures, so it cannot
+    // false-pass, and it is what a reader of NewGameExperienceChooser expects to
+    // see checked.
+    assert.ok(
+      JSON.stringify({ ...bounded, experienceConfig: bounded }).length < 32_000,
+      "…and so does the doubled shape the chooser hands the route",
+    );
+  } finally {
+    loadedPF.api.getJson = realGetJson;
+    loadedPF.save.reset();
+  }
+}
+
+// ── (6) A PRE-0.16.2 CHAT STILL READS ITS OWN THEME ──────────────────────────
+// `_configTheme` is deliberately NOT migrated: a chat created before this release
+// has a dropdown's answer stored, a chat created after has a derived one, and
+// both are strings at the same two nesting depths. The reader cannot tell them
+// apart and must not try.
+{
+  const stored = (theme) => ({ gameSetupConfig: { experienceConfig: { theme } } });
+  const nested = (theme) => ({ gameSetupConfig: { experienceConfig: { experienceConfig: { theme } } } });
+  assert.equal(loadedPF.save._configTheme(stored("sci-fi-colony")), "sci-fi-colony", "the outer depth reads");
+  assert.equal(loadedPF.save._configTheme(nested("sci-fi-colony")), "sci-fi-colony", "…and so does the nested one");
+  assert.equal(loadedPF.save._configTheme(stored("cozy-village")), "cozy-village", "for either shipped kit");
+  assert.equal(loadedPF.save._configTheme({}), null, "and a chat with no config at all still answers null");
+}
+
+// ── (8) THE RESOLVER CAN REACH EVERY SHIPPED KIT ─────────────────────────────
+// The resolver's lexicons are hand-written per kit, so they are the one thing
+// that can silently fall behind a third theme: an id can reach PF.art and the
+// brief schema while remaining unreachable through here, and the failure is
+// invisible — the enum names a kit the wizard can never choose. This is the same
+// check the brief schema gets, pointed at the OTHER decider: the resolver is what
+// answers for the declined world, the interim world, and the rung the model's own
+// answer has to beat.
+{
+  const kits = loadedPF.setup.kitIds();
+  for (const id of loadedPF.art.themeIds()) {
+    assert.ok(kits.includes(id), `the resolver has words for ${id} — every shipped kit is reachable from the box`);
+  }
+  assert.ok(
+    loadedPF.setup.themeFromWords("") === "cozy-village" && loadedPF.setup.themeFromWords(null) === "cozy-village",
+    "…and no input at all is the honest default rather than a throw",
+  );
+  assert.ok(
+    kits.includes(loadedPF.setup.themeFromWords("a village orchard by the mill")) &&
+      loadedPF.art.themeIds().includes(loadedPF.setup.themeFromWords("a village orchard by the mill")),
+    "whatever it returns is a kit that ships — `_configTheme` and the brief's own fold both assume it",
+  );
+}
+
+// ── (9) THE RESOLVER DOES NOT MIS-KIT ORDINARY ENGLISH ───────────────────────
+// Matching was `token.startsWith(word)` against a lexicon that carries "hab",
+// "dome" and "crew", and `cozy-village` scores ZERO on most prose that is not
+// explicitly about farms and inns — so ONE stray token flipped the kit. All
+// three rows below were measured returning `sci-fi-colony`, and the first is the
+// maintainer's own worked example ("Pallet Town… a professor who studies
+// creatures") rendered as a space colony because of the word "Domestic".
+//
+// The fix keeps the prefix and bounds the REMAINDER to a suffix allowlist, which
+// is the only one of four candidate matchers that took all three of: these
+// counterexamples, suffix-carrying prose ("colonies", "terraforming",
+// "hydroponics", "androids" — all of which exact-token matching would silently
+// retire, because "coloni", "hydroponic" and "terraform" are deliberate STEMS),
+// and short-word plurals ("domes", "crews", "domed" — which a minimum-prefix-
+// length rule loses).
+{
+  const kit = (text) => loadedPF.setup.themeFromWords(text);
+  // The three counterexamples, and they are the acceptance bar for the matcher.
+  assert.equal(
+    kit("Pallet Town. A small place by the sea where a professor studies creatures. Domestic and slow."),
+    "cozy-village",
+    'a domestic town is not a colony because "dome" is a prefix of "domestic"',
+  );
+  assert.notEqual(
+    kit("A monastery in the mountains. The monks keep bees and habitually pray at dawn, a habit of centuries."),
+    "sci-fi-colony",
+    '…nor is a monastery of habits, on "hab"',
+  );
+  assert.equal(
+    kit("A Victorian seaside resort. Bathing machines, a pier, gulls, and a crewel-work shop."),
+    "cozy-village",
+    '…nor a crewel-work shop, on "crew" — the row nobody thinks of',
+  );
+  // AND THE OTHER HALF, because a matcher that answers cozy-village to everything
+  // would pass all three above. Genuine colony prose must still get through, and
+  // the stems must still carry their suffixes.
+  assert.equal(
+    kit("A sealed hab ring in orbit above a frozen moon. The crew keeps the reactor and the hydroponics bay alive."),
+    "sci-fi-colony",
+    "real colony prose still resolves — this is the declined-world lane's own sentence",
+  );
+  assert.equal(
+    kit("A quiet place at the edge of things.\nThe dome is cracked and the airlock sticks.\nEverybody here is a colonist."),
+    "sci-fi-colony",
+    "…and so does the multi-line one",
+  );
+  // ONE WORD, ALONE, because the line above passes on `dome` and `airlock` too
+  // and would survive the suffix set losing `st` entirely. "colonist" is
+  // "coloni" + "st", and the stem is deliberate — this is the assertion that
+  // makes the `st`/`sts`/`ist`/`ists` entries load-bearing rather than decorative.
+  assert.equal(kit("Everybody here is a colonist."), "sci-fi-colony", '"colonist" votes on the stem, on its own');
+  // THE NOUN FORMS, and these three are here because the first cut of the suffix
+  // list dropped them: bounding the remainder killed a false-positive class and
+  // opened a false-NEGATIVE one, and "Colonization of Mars" resolved to a cozy
+  // village. Each row carries ONLY `-ion`-family evidence — no `dome`, no
+  // `airlock`, no `crew` — so none of them can pass on a neighbour's vote.
+  for (const text of [
+    "The colonisation of the outer belt began here.",
+    "Colonization of Mars, one habitation module at a time.",
+    "A habitation ring turning slowly.",
+  ]) {
+    assert.equal(kit(text), "sci-fi-colony", `the colony's own noun still votes: ${text}`);
+  }
+  // ONE ROW PER SUB-GROUP, because the three rows above are carried by `ion` and
+  // `sation`/`zation` ALONE. The family went in as four alternations and only two
+  // of them were held down: deleting `ation|ations`, `sing|zing|sed|zed` or
+  // `ising|izing|ised|ized` from the set left this whole harness green, which is
+  // the very shape of miss the family exists to correct — a remainder rule
+  // changed with half the consequence measured.
+  //
+  // `sing|zing|sed|zed` is the one that most needs a lane, because it is the
+  // reason the shipped set deviates from the shorter list that was proposed for
+  // it: `colonising` is `coloni` + `sing`, not `coloni` + `ising`, so the shorter
+  // list would have recovered the NOUN and still lost all four verb forms. That
+  // argument lived in a comment and in nothing the harness could read.
+  //
+  // Every sentence here was measured to carry EXACTLY ONE lexicon token by
+  // EXACTLY ONE route — no `dome`, no `crew`, and no second suffix that could
+  // answer for a deleted one — so each goes red on its own sub-group and on no
+  // other. Both spellings of the verb group are pinned, because the STEM decides
+  // the remainder and `s` and `z` are separate entries in the set.
+  for (const [text, group] of [
+    ["Terraformation of the southern basin.", "ation"], // terraform + ation
+    ["Colonising the outer belt.", "sing"], // coloni + sing
+    ["A colonized world under glass.", "zed"], // coloni + zed
+    ["A robotised workforce.", "ised"], // robot + ised
+  ]) {
+    assert.equal(kit(text), "sci-fi-colony", `only \`${group}\` carries this row: ${text}`);
+  }
+  // …and the half of that family that was NOT added, held down so a later widening
+  // has to argue with a lane rather than with a comment. "stationary" is `station`
+  // + `ary`, and recovering it costs the false-positive class the whole list
+  // exists to close.
+  assert.equal(
+    kit("The cart stood stationary in the rain."),
+    "cozy-village",
+    '"stationary" is ordinary English, which is why `ary` is not in the set',
+  );
+  for (const text of [
+    "Terraforming crews and hydroponics domes on a frontier outpost.",
+    "Androids and colonies under glass.",
+    "Habs, domes, crews, crewmen and airlocks.",
+  ]) {
+    assert.equal(kit(text), "sci-fi-colony", `the stems still carry their suffixes: ${text}`);
+  }
+  // The trap sweep, all of which must stay cozy: every one is a real English word
+  // that a bare prefix match reads as a colony.
+  for (const text of [
+    "A domestic domicile with a domino parlour.",
+    "Cozening merchants, a goatee and a habit.",
+    "A wooden well and a woolen shawl, barnacle-crusted.",
+    "Station wagons on the farm lane.",
+  ]) {
+    assert.equal(kit(text), "cozy-village", `and the traps stay in the village: ${text}`);
+  }
+  // `hearth` IS EVIDENCE HERE AND IS NOT EVIDENCE IN THE GUIDANCE, deliberately.
+  // 18-brief states what a kit CONTAINS and correctly omits `hearth`, because both
+  // kits paint one; this lexicon reads what a PLAYER MEANT, and nobody reaches for
+  // "hearth" to describe a pressure-sealed habitat. Without a lane the two look
+  // like a copy that fell behind, and the tidying edit is to delete the word.
+  //
+  // A MINIMAL PAIR, because the obvious row does not test anything: "a settlement
+  // built around a great hearth" stays cozy-village with the word deleted too —
+  // zero hits either way, so the default answers and the lane passes for the wrong
+  // reason. These two differ by the hearth alone, and the kit differs with them.
+  assert.equal(
+    kit("A great hearth under a cracked dome."),
+    "cozy-village",
+    '"hearth" is real evidence: it ties the dome, and a tie keeps the village',
+  );
+  assert.equal(
+    kit("A cracked dome."),
+    "sci-fi-colony",
+    "…and the same sentence without it goes the other way — that is the vote, isolated",
+  );
+  // The other half, and it is what makes keeping a shared painter cheap: a vote,
+  // never a veto. Prose already full of colony words is not dragged back by one.
+  assert.equal(
+    kit("A hearth glowing in the airlock corridor of the dome colony."),
+    "sci-fi-colony",
+    "…while three colony tokens still outcount it",
+  );
+  // NO LANE FOR "A TOKEN COUNTS ONCE PER KIT", AND THE REASON IS WRITTEN AT
+  // `themeFromWords` RATHER THAN HERE: with today's lexicon that rule cannot be
+  // observed from this side at all — swapping `words.some(…)` for a per-word
+  // tally is an EQUIVALENT mutant, not a live one — so every assertion that
+  // could be written for it would pass in both directions and pin nothing. The
+  // precondition that makes it equivalent, and the lexicon edit that would end
+  // it, are named in that comment.
+}
+
+// ── THE PLAYER PICKS LOREBOOK ENTRIES, NOT LOREBOOKS (0.16.2, R-D6) ──────────
+// "the player must be able to select specific lorebook entries rather than the
+// entire lorebook getting sent." Everything below is that sentence, read off the
+// mounted form and the emitted config rather than off the source.
+//
+// FOUR WALLS SIT BETWEEN A TICK AND THE MODEL, and none of them is the one the
+// design first named. The route validates `instructions` at 16,000 characters
+// and then appends the resolved lore to the system message AFTER that parse — it
+// has to, because only the server can resolve macros — so the lore never passes
+// that cap and the "hard 400 into an unwinnable retry" failure the budget rule
+// was written to prevent cannot happen on the lore path at all. What binds
+// instead: the call's own 3,000-token forced-entry budget, each BOOK's own
+// `tokenBudget` (default 2,048 tokens, and not overridable by any caller because
+// it belongs to whoever owns the book), each book's `entryLimit`, and — through a
+// door no character count watches — `z.array(z.string()).max(100)` on the id list
+// itself. The lanes are one per wall, plus the two that pin the wire shape.
+//
+// THE SHIM RULE, and it cost the prototype of this picker its first lane: any
+// picker state a lane must read lives in a JS variable and NEVER in a style
+// string. `PF.el` writes styles as `cssText` and `FakeNode.style` is a bare
+// object, so `entriesBox.style.display` reads back `undefined` here and an
+// expander whose open/closed state lived in the style would be permanently "open"
+// to every lane below.
+{
+  const realGetJson = loadedPF.api.getJson;
+  const realPost = loadedPF.api.postExperienceGeneration;
+  // ROWS SHAPED AS THE ROUTES ANSWER THEM. `GET /lorebooks/` runs every row
+  // through `parseLorebookRow`, so `enabled` is a real boolean and `tokenBudget`
+  // and `entryLimit` are numbers; `GET /lorebooks/:id/entries` runs its rows
+  // through `parseEntryRow`, so `enabled` and `constant` are real booleans too.
+  // Both are staged as the parse leaves them, not as the columns store them.
+  const book = (over) => ({ id: "lb", name: "Book", enabled: true, tokenBudget: 2048, entryLimit: 100, ...over });
+  const entry = (over) => ({
+    id: "e",
+    lorebookId: "lb",
+    name: "Entry",
+    description: "",
+    content: "",
+    enabled: true,
+    constant: false,
+    order: 0,
+    ...over,
+  });
+  const KANTO = book({ id: "lb-kanto", name: "Kanto" });
+  const JOHTO = book({ id: "lb-johto", name: "Johto" });
+  const REGION_ENTRIES = {
+    "lb-kanto": [
+      entry({ id: "e-pallet", lorebookId: "lb-kanto", name: "Pallet Town", description: "a quiet start", content: "P".repeat(400), order: 3 }),
+      entry({ id: "e-viridian", lorebookId: "lb-kanto", name: "Viridian City", content: "V".repeat(600), order: 1 }),
+      entry({ id: "e-off", lorebookId: "lb-kanto", name: "A disabled note", content: "X".repeat(100), enabled: false, order: 2 }),
+      entry({ id: "e-always", lorebookId: "lb-kanto", name: "The region itself", content: "K".repeat(80), constant: true, order: 9 }),
+    ],
+    "lb-johto": [entry({ id: "e-cinnabar", lorebookId: "lb-johto", name: "Cinnabar Island", content: "C".repeat(900), order: 0 })],
+  };
+  const stubLore = (books, entriesByBook) => {
+    loadedPF.api.getJson = async (path) => {
+      if (path === "/connections") return [{ id: "conn-1", name: "Main", model: "m", isDefault: "true" }];
+      if (path === "/lorebooks") return books;
+      const at = /^\/lorebooks\/([^/]+)\/entries$/.exec(path);
+      if (at) return entriesByBook[decodeURIComponent(at[1])] ?? [];
+      return [];
+    };
+  };
+  const settle = async () => {
+    for (let i = 0; i < 32; i++) await Promise.resolve();
+  };
+  const mountWizard = async () => {
+    const el = new FakeNode("div");
+    const launches = [];
+    loadedPF.mountSetup(el, { onLaunch: async (config, name) => void launches.push({ config, name }) });
+    await settle();
+    const at = () => walkNodes(el);
+    const form = {
+      launches,
+      get nodes() {
+        return at();
+      },
+      // The expander carries the open/closed glyph, which is the only place the
+      // shim can read that state from — see the shim-rule banner.
+      get expanders() {
+        return at().filter((node) => node.tagName === "BUTTON" && /^[▸▾] /.test(String(node.textContent)));
+      },
+      get selectAlls() {
+        return at().filter((node) => node.tagName === "BUTTON" && node.textContent === "Select all");
+      },
+      get ticks() {
+        return at().filter((node) => node.type === "checkbox" && String(node.value ?? "") !== "");
+      },
+      get readout() {
+        return at().find((node) => /No entries picked|tokens for the call/.test(String(node.textContent)));
+      },
+      get notes() {
+        return at()
+          .filter((node) => !node.children.length && /^Picked |Untick/.test(String(node.textContent)))
+          .map((node) => node.textContent);
+      },
+      connSel: at().find((node) => node.children.some((option) => option.attrs.value === "conn-1")),
+      launchBtn: at().find((node) => node.tagName === "BUTTON" && String(node.textContent).startsWith("Begin in")),
+    };
+    form.connSel.value = "conn-1";
+    return form;
+  };
+  const tick = async (form, id) => {
+    const box = form.ticks.find((node) => node.value === id);
+    assert.ok(box, `the form offered ${id}`);
+    box.checked = !box.checked;
+    await fire(box, "change");
+    return box;
+  };
+  const launch = async (form) => {
+    await fire(form.launchBtn, "click");
+    await settle();
+    return form.launches[0].config;
+  };
+
+  try {
+    // ── (1) AN EMPTY SELECTION IS TODAY, BYTE FOR BYTE ────────────────────────
+    // The lane that lets the Engine half merge without a regression argument
+    // behind it, and the reason the config key is OMITTED rather than emitted
+    // empty: a `loreEntryIds: []` would be a key no existing chat has, and this
+    // lane would go red on its own assertion. Both halves are pinned — the stored
+    // config AND the body of the call it produces, key order included, because
+    // "byte for byte" is the claim.
+    stubLore([KANTO, JOHTO], REGION_ENTRIES);
+    {
+      const form = await mountWizard();
+      assert.equal(form.expanders.length, 2, "both lorebooks are offered as expanders");
+      assert.equal(form.ticks.length, 0, "…and NOT ONE CHECKBOX until a book is opened");
+      const cfg = await launch(form);
+      assert.deepEqual(
+        Object.keys(cfg.experienceConfig),
+        ["seed", "theme", "generate", "packWanted", "worldName"],
+        "an untouched picker writes the same five keys the config carried before it existed",
+      );
+      const ids = loadedPF.save._configLoreEntryIds({ gameSetupConfig: cfg });
+      assert.deepEqual(ids, [], "…and the reader answers with nothing to send");
+      const bodies = [];
+      loadedPF.api.postExperienceGeneration = async (chatId, body) => {
+        bodies.push(body);
+        return { status: 200, body: { ok: true, data: { scale: "village", name: "Pallet", cast: [] } } };
+      };
+      await brief.generate("chat-empty", { theme: "cozy-village", seed: 7, preferences: "p", lorebookEntryIds: ids });
+      assert.equal(
+        JSON.stringify(bodies[0]),
+        JSON.stringify({ instructions: brief.guidance(), userContent: "p", schema: brief.schema() }),
+        "the call is byte-identical to the one this package sent before the picker: no key, and no lore clause",
+      );
+    }
+
+    // ── (2) THE PICKER SENDS ENTRIES, NEVER BOOKS ─────────────────────────────
+    // The ruling's own constraint, and the wire assertion for it: a flat list of
+    // ENTRY ids in the player's picking order, with no book id anywhere in the
+    // config the launch writes.
+    {
+      const form = await mountWizard();
+      await fire(form.expanders[0], "click");
+      await fire(form.expanders[1], "click");
+      await settle();
+      // LISTED IN THE ORDER THE DROP RULE WILL USE, which is the whole reason the
+      // picker sorts at all: when a selection overruns, the server keeps
+      // constants first and then works down each book by the entry's own position
+      // in it, so a list in storage order would be a promise the mechanism does
+      // not keep. `e-always` is `constant` and sits at order 9; it leads anyway.
+      assert.deepEqual(
+        form.ticks.map((node) => node.value),
+        ["e-always", "e-viridian", "e-pallet", "e-cinnabar"],
+        "constants first, then position in the book — and the disabled entry is not offered at all",
+      );
+      // …AND THE LABEL CLAIMS THAT AND NOT THE OTHER THING. `lorebookSelectionOrder`
+      // sorts every candidate TOGETHER — constants, then context matches, then
+      // `injectionOrder` across all books at once — so a book-by-book list cannot
+      // show the call's real ordering: the four ticks above are Kanto's three and
+      // then Johto's one, where the call would interleave `e-cinnabar` (order 0)
+      // between them. The label used to promise "in the order the call keeps
+      // them", a cross-book claim out of a per-book list, and the fix was to the
+      // SENTENCE rather than the sort. Pinned exactly, because a label is the one
+      // part of this control the player is asked to trust without being able to
+      // check it.
+      const loreLabel = form.nodes.find(
+        (node) => node.tagName === "LABEL" && String(node.textContent ?? "").startsWith("Lorebook entries"),
+      );
+      assert.equal(
+        loreLabel?.textContent,
+        "Lorebook entries to read before writing the world (each book in the order the call keeps its own)",
+        "the label promises a per-book ordering, which is the only one this list can show",
+      );
+      // Ticked across both books in an order that is NONE of the orders anything
+      // else here could produce: not storage order, not the drop order the list
+      // is drawn in, and deliberately not alphabetical either — a sorted wire
+      // would otherwise pass this lane by coincidence.
+      await tick(form, "e-viridian");
+      await tick(form, "e-cinnabar");
+      await tick(form, "e-pallet");
+      const cfg = await launch(form);
+      assert.deepEqual(
+        cfg.experienceConfig.loreEntryIds,
+        ["e-viridian", "e-cinnabar", "e-pallet"],
+        "the wire is the player's own picking order, never a re-sort",
+      );
+      const wire = JSON.stringify(cfg);
+      for (const id of ["lb-kanto", "lb-johto"]) {
+        assert.ok(!wire.includes(id), `and NO BOOK ID reaches the config: ${id}`);
+      }
+      // The untick leg, because a selection you cannot undo is not a selection.
+      const undo = await mountWizard();
+      await fire(undo.expanders[0], "click");
+      await settle();
+      await tick(undo, "e-pallet");
+      await tick(undo, "e-viridian");
+      await tick(undo, "e-pallet");
+      assert.deepEqual(
+        (await launch(undo)).experienceConfig.loreEntryIds,
+        ["e-viridian"],
+        "unticking removes the entry and leaves the rest in their order",
+      );
+      // …and unticking the LAST one takes the key back out with it, which is the
+      // half a lane asserting "the array shrank" would miss.
+      const emptied = await mountWizard();
+      await fire(emptied.expanders[0], "click");
+      await settle();
+      await tick(emptied, "e-pallet");
+      await tick(emptied, "e-pallet");
+      assert.equal(
+        "loreEntryIds" in (await launch(emptied)).experienceConfig,
+        false,
+        "…and a selection ticked and then cleared sends no key, not an empty one",
+      );
+    }
+
+    // ── (2b) SELECT ALL IN THIS BOOK TICKS ENTRIES INDIVIDUALLY (R-D10) ───────
+    // The convenience control the maintainer authorised, and the assertion that
+    // it is only that: it writes through the same `toggleEntry` every checkbox
+    // does, so the wire format is unchanged and the walls still bite.
+    {
+      const form = await mountWizard();
+      await fire(form.selectAlls[0], "click");
+      await settle();
+      assert.equal(form.ticks.filter((node) => node.checked).length, 3, "every offered entry in that book is ticked");
+      assert.deepEqual(
+        form.notes,
+        ["Picked all 3 entries in Kanto."],
+        "…and the control says what it did, in the book's own name",
+      );
+      const cfg = await launch(form);
+      assert.deepEqual(
+        cfg.experienceConfig.loreEntryIds,
+        ["e-always", "e-viridian", "e-pallet"],
+        "select-all is a flat list of ENTRY ids like any other selection",
+      );
+      assert.ok(!JSON.stringify(cfg).includes("lb-kanto"), "…and it sends no book id either");
+    }
+
+    // ── (2c) SELECT ALL WHILE THE EXPANDER'S OWN LOAD IS STILL IN THE AIR ─────
+    // The race a `loaded` boolean makes possible, and the reason the slot holds
+    // the in-flight PROMISE instead. The flag was set BEFORE the await, so a
+    // select-all clicked while the expander's request was still outstanding got
+    // an instant "already loaded" answered against an EMPTY `state.rows`: it
+    // ticked nothing, wrote a note reporting that nothing as the truth, and the
+    // entries arrived a moment later beside a control that had already had its
+    // say. Every click here is deliberately NOT awaited — awaiting the first one
+    // is the absence of the bug, so a lane that awaits it can never see this.
+    {
+      let release = null;
+      let calls = 0;
+      const inTheAir = new Promise((resolve) => {
+        release = resolve;
+      });
+      loadedPF.api.getJson = async (path) => {
+        if (path === "/connections") return [{ id: "conn-1", name: "Main", model: "m", isDefault: "true" }];
+        if (path === "/lorebooks") return [KANTO];
+        if (/^\/lorebooks\/[^/]+\/entries$/.test(path)) {
+          calls++;
+          return inTheAir;
+        }
+        return [];
+      };
+      const form = await mountWizard();
+      const opening = fire(form.expanders[0], "click");
+      const picking = fire(form.selectAlls[0], "click");
+      await settle();
+      assert.equal(calls, 1, "two callers, ONE request — the second waits on the first rather than re-asking");
+      assert.equal(form.ticks.length, 0, "…and until it lands there is nothing on the form to tick");
+      release(REGION_ENTRIES["lb-kanto"]);
+      await opening;
+      await picking;
+      await settle();
+      assert.deepEqual(
+        form.ticks.filter((node) => node.checked).map((node) => node.value),
+        ["e-always", "e-viridian", "e-pallet"],
+        "select-all ticks every entry the book offers, on entries that did not exist when it was clicked",
+      );
+      assert.deepEqual(
+        form.notes,
+        ["Picked all 3 entries in Kanto."],
+        "…and the note reports the real count, not the empty book the race handed it",
+      );
+      assert.deepEqual(
+        (await launch(form)).experienceConfig.loreEntryIds,
+        ["e-always", "e-viridian", "e-pallet"],
+        "and the picks reach the config, which is what a silently-empty select-all cost",
+      );
+    }
+
+    // ── (2d) A LOAD THAT FAILED CAN BE ASKED AGAIN ───────────────────────────
+    // The half the memoized slot must not take away. The old boolean cleared
+    // itself in the catch, so a book whose entries failed to load could be
+    // reopened; a promise slot that kept the settled failure forever would turn
+    // one bad request into a book the player can never open again. The slot is
+    // cleared on failure instead, and the next open really does re-ask.
+    {
+      let calls = 0;
+      loadedPF.api.getJson = async (path) => {
+        if (path === "/connections") return [{ id: "conn-1", name: "Main", model: "m", isDefault: "true" }];
+        if (path === "/lorebooks") return [KANTO];
+        if (/^\/lorebooks\/[^/]+\/entries$/.test(path)) {
+          calls++;
+          if (calls === 1) throw new Error("the entries route was unreachable");
+          return REGION_ENTRIES["lb-kanto"];
+        }
+        return [];
+      };
+      const form = await mountWizard();
+      await fire(form.expanders[0], "click");
+      await settle();
+      assert.equal(calls, 1, "the first open asked once");
+      assert.equal(form.ticks.length, 0, "…and had nothing to offer");
+      assert.ok(
+        form.nodes.some((node) => node.textContent === "Could not load this lorebook's entries."),
+        "the book says so rather than sitting under a spinner that never clears",
+      );
+      // Closed and reopened, which is what a player does with a book that failed.
+      await fire(form.expanders[0], "click");
+      await fire(form.expanders[0], "click");
+      await settle();
+      assert.equal(calls, 2, "the second open sends a second request");
+      assert.deepEqual(
+        form.ticks.map((node) => node.value),
+        ["e-always", "e-viridian", "e-pallet"],
+        "…and fills the book the first attempt could not",
+      );
+    }
+
+    // ── (3) THE BUDGET IS PER BOOK, AND IT IS ENFORCED BEFORE THE CALL ────────
+    // The wall the caller cannot move: each book's own `tokenBudget`, default
+    // 2,048 tokens, applied inside that book. The picker reads it off
+    // `GET /lorebooks/` rather than assuming the default, counts in the Engine's
+    // own arithmetic (`ceil(length / 4)` PER ENTRY — a sum of characters divided
+    // by four is a smaller number and would let through selections the server
+    // then drops), and NAMES THE BOOK each figure belongs to, because one total
+    // over two books with different budgets is the invisible budget in a new
+    // place.
+    {
+      const HEAVY = Array.from({ length: 12 }, (_, i) =>
+        entry({ id: `heavy-${i}`, lorebookId: "lb-heavy", name: `Settlement ${i}`, content: "S".repeat(1500), order: i }),
+      );
+      stubLore([book({ id: "lb-heavy", name: "Gazetteer" })], { "lb-heavy": HEAVY });
+      const form = await mountWizard();
+      await fire(form.expanders[0], "click");
+      await settle();
+      let accepted = 0;
+      for (const node of form.ticks) {
+        node.checked = true;
+        await fire(node, "change");
+        if (node.checked) accepted++;
+      }
+      // 1,500 characters is 375 tokens; five fit 2,048 and the sixth does not.
+      assert.equal(accepted, 5, "the book's own 2,048-token budget stops the sixth entry AT THE TICK");
+      assert.equal(
+        form.readout.textContent,
+        "1875 / 2048 tokens from Gazetteer · 1875 / 3000 tokens for the call (5 entries)",
+        "…and the running count names the book each number belongs to",
+      );
+      assert.deepEqual(
+        form.notes,
+        ["That entry needs 375 tokens and Gazetteer has 173 of its 2048 left. Untick one of its own first."],
+        "…and the refusal says which book ran out and by how much",
+      );
+      assert.equal(
+        (await launch(form)).experienceConfig.loreEntryIds.length,
+        5,
+        "so what is emitted is what the server was always going to keep",
+      );
+      // A BOOK WHOSE OWNER RAISED ITS FIGURE IS BELIEVED, which is the half that
+      // proves the number is read rather than assumed — and it is where the
+      // call's own 3,000-token ceiling takes over as the binding wall.
+      stubLore([book({ id: "lb-heavy", name: "Gazetteer", tokenBudget: 9000 })], { "lb-heavy": HEAVY });
+      const raised = await mountWizard();
+      await fire(raised.expanders[0], "click");
+      await settle();
+      let taken = 0;
+      for (const node of raised.ticks) {
+        node.checked = true;
+        await fire(node, "change");
+        if (node.checked) taken++;
+      }
+      assert.equal(taken, 8, "a 9,000-token book carries eight, and then the CALL's own 3,000 tokens bind");
+      assert.equal(
+        raised.readout.textContent,
+        "3000 / 9000 tokens from Gazetteer · 3000 / 3000 tokens for the call (8 entries)",
+        "…and the readout shows both walls, so the player can see which one they met",
+      );
+    }
+
+    // ── (3b) `tokenBudget: 0` IS A BOOK WITH NO WALL OF ITS OWN ──────────────
+    // Zero is a real value a book owner can store — `tokenBudget` is normalized
+    // with `Math.max(0, …)`, and only an UNPARSEABLE figure becomes the 2,048
+    // default — and the Engine reads it as no per-book budget at all:
+    // `lorebookBudget > 0 && lorebookTokens + entryTokens > lorebookBudget` never
+    // fires for it. This picker folded 0 into the 2,048 default, which looks like
+    // the safe direction and is not: it refused selections the server would have
+    // kept AND named a number the owner never set while doing it.
+    //
+    // Measured before the fix, and this fixture is that measurement: ten
+    // 300-token entries in a 0-budget book — 3,000 tokens, which the call's own
+    // budget fits EXACTLY — came out six accepted and four refused, under
+    // "Gazetteer has 248 of its 2048 left".
+    {
+      const OPEN = Array.from({ length: 10 }, (_, i) =>
+        entry({ id: `open-${i}`, lorebookId: "lb-open", name: `Settlement ${i}`, content: "S".repeat(1200), order: i }),
+      );
+      stubLore([book({ id: "lb-open", name: "Gazetteer", tokenBudget: 0 })], { "lb-open": OPEN });
+      const form = await mountWizard();
+      await fire(form.expanders[0], "click");
+      await settle();
+      let accepted = 0;
+      for (const node of form.ticks) {
+        node.checked = true;
+        await fire(node, "change");
+        if (node.checked) accepted++;
+      }
+      assert.equal(accepted, 10, "every one of the ten is accepted: the book has no budget and the call's 3,000 fits");
+      assert.deepEqual(form.notes, [], "…and nothing was refused, so no book note was written");
+      assert.equal(
+        form.readout.textContent,
+        "3000 tokens from Gazetteer (no budget of its own) · 3000 / 3000 tokens for the call (10 entries)",
+        "…and the readout gives that book NO denominator rather than inventing one",
+      );
+      assert.ok(
+        !form.readout.textContent.includes("2048"),
+        "…least of all the default figure, which is the number the owner never set",
+      );
+      assert.equal(
+        (await launch(form)).experienceConfig.loreEntryIds.length,
+        10,
+        "so the whole selection reaches the wire, which is what the server was always going to keep",
+      );
+      // AND THE OTHER WALLS STILL BIND, which is what separates "no book budget"
+      // from "no budget". An eleventh entry has nowhere to go, and the refusal
+      // names the wall that actually stopped it: the CALL's, not the book's.
+      stubLore([book({ id: "lb-open", name: "Gazetteer", tokenBudget: 0 })], {
+        "lb-open": [
+          ...OPEN,
+          entry({ id: "open-10", lorebookId: "lb-open", name: "One more", content: "S".repeat(1200), order: 10 }),
+        ],
+      });
+      const over = await mountWizard();
+      await fire(over.selectAlls[0], "click");
+      await settle();
+      assert.equal(over.ticks.filter((node) => node.checked).length, 10, "select-all takes ten of the eleven");
+      assert.deepEqual(
+        over.notes,
+        [
+          "Picked 10 of 11 entries in Gazetteer. That entry needs 300 tokens and the call has 0 of its 3000 left. Untick something first.",
+        ],
+        "…and the message names the CALL's ceiling, because the book no longer has one to name",
+      );
+    }
+
+    // ── (3c) TWO BOOKS, AND THE READOUT'S FIGURES ARE PER BOOK ───────────────
+    // Every readout assertion above stages a SINGLE book, where the per-book
+    // figure and the running total are equal by construction — so rewriting
+    // `loreUsedIn(bookId)` to the global `loreUsedAll()` passes all of them, and
+    // the picker's whole reason for naming books (one total over two books with
+    // different budgets is the invisible budget in a new place) goes unpinned.
+    // Two books at 100 and 200 tokens is the smallest fixture where the two
+    // arithmetics disagree, and every figure below is a different number.
+    {
+      stubLore([book({ id: "lb-one", name: "One" }), book({ id: "lb-two", name: "Two" })], {
+        "lb-one": [entry({ id: "e-one", lorebookId: "lb-one", name: "First", content: "A".repeat(400) })],
+        "lb-two": [entry({ id: "e-two", lorebookId: "lb-two", name: "Second", content: "B".repeat(800) })],
+      });
+      const form = await mountWizard();
+      await fire(form.expanders[0], "click");
+      await fire(form.expanders[1], "click");
+      await settle();
+      await tick(form, "e-one");
+      await tick(form, "e-two");
+      assert.equal(
+        form.readout.textContent,
+        "100 / 2048 tokens from One · 200 / 2048 tokens from Two · 300 / 3000 tokens for the call (2 entries)",
+        "each book is counted against its own budget, and only the call's figure is the sum",
+      );
+    }
+
+    // ── (4) THE COUNT CEILING IS SEPARATE FROM EVERY CHARACTER BUDGET ─────────
+    // The door no character count watches. A 200-entry book of 50-character
+    // entries costs ~2,600 tokens: it clears the call's budget, it clears a
+    // raised book budget, and without a ceiling of its own the picker emits a
+    // 200-id body that the route's `z.array(z.string()).max(100)` refuses
+    // outright — a 400, which the brief ladder turns into `onFailure("refused")`
+    // and the unwinnable retry screen the budgets exist to prevent.
+    {
+      const MANY = Array.from({ length: 200 }, (_, i) =>
+        entry({ id: `many-${i}`, lorebookId: "lb-many", name: `Note ${i}`, content: "m".repeat(50), order: i }),
+      );
+      stubLore([book({ id: "lb-many", name: "Field notes", tokenBudget: 20_000, entryLimit: 200 })], { "lb-many": MANY });
+      const form = await mountWizard();
+      await fire(form.expanders[0], "click");
+      await settle();
+      assert.equal(form.ticks.length, 200, "all 200 are offered — the ceiling is on the SELECTION, not the list");
+      let accepted = 0;
+      for (const node of form.ticks) {
+        node.checked = true;
+        await fire(node, "change");
+        if (node.checked) accepted++;
+      }
+      assert.equal(accepted, 100, "…and exactly 100 are accepted, on a selection every budget above would allow");
+      const ids = (await launch(form)).experienceConfig.loreEntryIds;
+      assert.equal(ids.length, 100, "so the emitted list is one the route's own max(100) will not refuse");
+      // THE SELECT-ALL LEG, AND ITS MESSAGE. Select-all on a book bigger than
+      // what is left takes a PREFIX — R-D10 was answered before this ceiling
+      // existed, so the control carries a cost the ruling could not have had in
+      // front of it. A silent prefix selection is the same class of lie as a
+      // budget the player cannot see, so the message is part of the control.
+      const all = await mountWizard();
+      await fire(all.selectAlls[0], "click");
+      await settle();
+      assert.equal(all.ticks.filter((node) => node.checked).length, 100, "select-all takes the first 100 and stops");
+      assert.deepEqual(
+        all.notes,
+        ["Picked 100 of 200 entries in Field notes. 100 entries is the most the game reads at once. Untick something first."],
+        "…and SAYS how many it took, out of how many, and which wall stopped it",
+      );
+      // AND IT IS A CEILING ON THE SELECTION, NOT ON ANY ONE BOOK. Two books of
+      // 80 entries each, both well inside their own `entryLimit` of 80: the wire
+      // cap is the only thing in the product that can stop the 101st. Without
+      // this leg a per-book clamp at 100 would pass every assertion above while
+      // reporting the wire's rule as the book's.
+      const eighty = (id) =>
+        Array.from({ length: 80 }, (_, i) =>
+          entry({ id: `${id}-${i}`, lorebookId: id, name: `Note ${i}`, content: "m".repeat(50), order: i }),
+        );
+      stubLore(
+        [
+          book({ id: "lb-a", name: "Volume one", tokenBudget: 20_000, entryLimit: 80 }),
+          book({ id: "lb-b", name: "Volume two", tokenBudget: 20_000, entryLimit: 80 }),
+        ],
+        { "lb-a": eighty("lb-a"), "lb-b": eighty("lb-b") },
+      );
+      const across = await mountWizard();
+      await fire(across.selectAlls[0], "click");
+      await fire(across.selectAlls[1], "click");
+      await settle();
+      assert.equal(across.ticks.filter((node) => node.checked).length, 100, "80 from the first book, 20 from the second");
+      assert.deepEqual(
+        across.notes,
+        [
+          "Picked all 80 entries in Volume one.",
+          "Picked 20 of 80 entries in Volume two. 100 entries is the most the game reads at once. Untick something first.",
+        ],
+        "…and the second book's message names the WIRE's ceiling, not its own untouched limit",
+      );
+      // The book's own `entryLimit` is a fourth wall and is read off the same row.
+      stubLore([book({ id: "lb-many", name: "Field notes", tokenBudget: 20_000, entryLimit: 6 })], { "lb-many": MANY });
+      const limited = await mountWizard();
+      await fire(limited.selectAlls[0], "click");
+      await settle();
+      assert.equal(limited.ticks.filter((node) => node.checked).length, 6, "a book that allows six entries gets six");
+      assert.deepEqual(
+        limited.notes,
+        ["Picked 6 of 200 entries in Field notes. Field notes allows 6 entries at a time. Untick one of its own first."],
+        "…and the message names that wall instead of the count ceiling",
+      );
+    }
+
+    // ── (5) A DISABLED BOOK IS NOT OFFERED AT ALL ────────────────────────────
+    // `listEligibleEntriesByIds` refuses every entry of a disabled book however
+    // explicitly it was ticked, so rendering one would be offering a choice the
+    // server has already made.
+    {
+      stubLore([KANTO, { ...JOHTO, enabled: false }], REGION_ENTRIES);
+      const form = await mountWizard();
+      assert.deepEqual(
+        form.expanders.map((node) => node.textContent),
+        ["▸ Kanto"],
+        "the disabled book is not on the form",
+      );
+    }
+
+    // ── (6) THE CALL SAYS WHAT BECAME OF THE PICKS ───────────────────────────
+    // The route answers with `lorebook: {includedEntries, skippedEntries}`
+    // WHENEVER a selection was sent — the key is present even when the answer is
+    // zero. So `includedEntries: 0` is a REPORTED all-refused (a disabled entry,
+    // a character or trigger filter, an id that no longer exists) and gets the
+    // honest message and the stored note: saying nothing there is what turns "I
+    // ticked Viridian City and the game did not know about Viridian City" into an
+    // unanswerable report.
+    //
+    // AN ABSENT KEY IS A DIFFERENT FACT AND CARRIES A DIFFERENT COST, which is
+    // the correction this round makes. An Engine that predates the route half
+    // takes the request field as an unknown key, writes the world without the
+    // lore, and has no block to answer with. Reading that as "every id refused"
+    // put a permanent `_repairs` line on the seal of every lore-using launch
+    // against such an Engine — a claim about the call stored in a checkpoint that
+    // outlives the version skew that produced it. It is a console line and
+    // nothing else now, and the two arms are pinned apart below.
+    {
+      const realWarn = console.warn;
+      const warned = [];
+      console.warn = (...args) => warned.push(args.map(String).join(" "));
+      try {
+        const seen = [];
+        loadedPF.api.postExperienceGeneration = async (chatId, body) => {
+          seen.push(body);
+          return { status: 200, body: { ok: true, data: { scale: "village", name: "Pallet", cast: [] } } };
+        };
+        const older = await brief.generate("chat-lore", {
+          theme: "cozy-village",
+          seed: 7,
+          preferences: "p",
+          lorebookEntryIds: ["e-pallet", "e-viridian"],
+        });
+        assert.deepEqual(seen[0].lorebookEntryIds, ["e-pallet", "e-viridian"], "the ids ride the call, not the prose");
+        // THE CLAUSE SHIPS ONLY WHEN THE LORE DOES. The server appends the
+        // resolved entries to this very system message, so the sentence is true
+        // here — and on the empty call in lane (1) it would be pointing the model
+        // at lore it never receives, which is a hallucination prompt, not a no-op.
+        assert.ok(seen[0].instructions.includes("LOREBOOK ENTRIES"), "…and the guidance says they are coming");
+        assert.equal(
+          older._repairs.filter((line) => line.startsWith("lorebook:")).length,
+          0,
+          "AN ABSENT KEY WRITES NOTHING ON THE SEAL: it is an Engine that predates the block, not a refusal",
+        );
+        assert.equal(warned.length, 1, "…and it is said once, softly, where a maintainer can read it");
+        assert.ok(
+          /no lorebook report/.test(warned[0]) && !/refused/.test(warned[0]),
+          "…in words that name the version skew rather than accusing the call of refusing the picks",
+        );
+        // AND THE ARM IT MUST NOT BE CONFUSED WITH. Same zero outcome, but the
+        // Engine SAID so — key present, `includedEntries: 0` — and that is the
+        // signal the honest message and the stored note were written for.
+        warned.length = 0;
+        loadedPF.api.postExperienceGeneration = async () => ({
+          status: 200,
+          body: {
+            ok: true,
+            data: { scale: "village", name: "Pallet", cast: [] },
+            lorebook: { includedEntries: 0, skippedEntries: [] },
+          },
+        });
+        const refused = await brief.generate("chat-lore", {
+          theme: "cozy-village",
+          seed: 7,
+          preferences: "p",
+          lorebookEntryIds: ["e-pallet", "e-viridian"],
+        });
+        assert.ok(
+          refused._repairs.some(
+            (line) => line === "lorebook: all 2 picked entries were refused; none reached the model",
+          ),
+          "a REPORTED zero is every pick refused, and that one does get written down",
+        );
+        assert.ok(
+          warned.some((line) => /refused all 2 picked lorebook entries/.test(line)),
+          "…and says so in the console too",
+        );
+        loadedPF.api.postExperienceGeneration = async () => ({
+          status: 200,
+          body: {
+            ok: true,
+            data: { scale: "village", name: "Pallet", cast: [] },
+            lorebook: { includedEntries: 2, skippedEntries: [{ id: "e-viridian", blockedBy: "location" }] },
+          },
+        });
+        const partial = await brief.generate("chat-lore", {
+          theme: "cozy-village",
+          seed: 7,
+          preferences: "p",
+          lorebookEntryIds: ["e-pallet", "e-viridian", "e-cinnabar"],
+        });
+        assert.ok(
+          partial._repairs.some(
+            (line) => line === "lorebook: 2 of 3 picked entries reached the model, 1 set aside for budget",
+          ),
+          "…and a partial delivery reads the ENGINE'S own counts rather than inventing a second set",
+        );
+        loadedPF.api.postExperienceGeneration = async () => ({
+          status: 200,
+          body: {
+            ok: true,
+            data: { scale: "village", name: "Pallet", cast: [] },
+            lorebook: { includedEntries: 2, skippedEntries: [] },
+          },
+        });
+        const whole = await brief.generate("chat-lore", {
+          theme: "cozy-village",
+          seed: 7,
+          preferences: "p",
+          lorebookEntryIds: ["e-pallet", "e-viridian"],
+        });
+        assert.ok(
+          !whole._repairs.some((line) => line.startsWith("lorebook:")),
+          "…and a selection that arrived whole says nothing, because there is nothing to report",
+        );
+      } finally {
+        console.warn = realWarn;
+      }
+    }
+
+    // ── (7) THE READER IS THE LAST WALL, BECAUSE THE CONFIG IS REWRITABLE ────
+    // `/game/create`'s reuse-an-existing-chat arm rewrites `gameSetupConfig`
+    // wholesale, so "the picker wrote it" is not something a read site may
+    // assume. The route's field is `max(100)` and a longer list is a 400 on the
+    // whole call, for a chat the picker's own ceiling never saw.
+    {
+      const nested = (value) => ({ gameSetupConfig: { experienceConfig: { experienceConfig: { loreEntryIds: value } } } });
+      assert.deepEqual(
+        loadedPF.save._configLoreEntryIds(nested(["a", "b", "a", "", 3, null])),
+        ["a", "b"],
+        "the reader keeps real ids, drops the rest, and counts a repeat once",
+      );
+      assert.deepEqual(
+        loadedPF.save._configLoreEntryIds({ gameSetupConfig: { experienceConfig: { loreEntryIds: ["outer"] } } }),
+        ["outer"],
+        "…at both nesting depths, exactly as the seed and the theme are read",
+      );
+      assert.equal(
+        loadedPF.save._configLoreEntryIds(nested(Array.from({ length: 250 }, (_, i) => `id-${i}`))).length,
+        100,
+        "…and a list the picker never wrote is clipped to what the route accepts",
+      );
+      assert.deepEqual(loadedPF.save._configLoreEntryIds({}), [], "an older chat carries none and sends none");
+    }
+
+    // ── (8) THE WHOLE WIRE, END TO END ───────────────────────────────────────
+    // Every lane above holds one link. This one drives the CHAIN the player
+    // actually walks — the config the wizard wrote, the reader that finds it in
+    // the double-nested home, and the generation call it reaches — because each
+    // half can be right while the two are not connected, and nothing else here
+    // would notice.
+    await withSavePath(async ({ behavior, tick, makeCore }) => {
+      await withGeneration(async ({ responses }) => {
+        const bodies = [];
+        responses.post = async (chatId, body) => {
+          bodies.push(body);
+          return { status: 200, body: { ok: true, data: gateBriefData } };
+        };
+        behavior.get = async () => ({ available: true, status: 200, body: { exists: false } });
+        const configOf = (extra) => ({
+          gameSetupConfig: {
+            experienceConfig: { generate: true, packWanted: false, seed: 4242, theme: "cozy-village", ...extra },
+          },
+        });
+        const picked = makeCore("chat-lore-wire", 4242);
+        picked.host.chatMeta = configOf({ loreEntryIds: ["e-pallet", "e-viridian"] });
+        await loadedPF.save.maybeGenerateBrief(picked);
+        await tick();
+        assert.deepEqual(
+          bodies[0].lorebookEntryIds,
+          ["e-pallet", "e-viridian"],
+          "the ids the wizard stored are the ids the world-writing call carries",
+        );
+        loadedPF.save._briefCache.clear();
+        loadedPF.save._generating.clear();
+        const bare = makeCore("chat-lore-none", 4242);
+        bare.host.chatMeta = configOf({});
+        await loadedPF.save.maybeGenerateBrief(bare);
+        await tick();
+        assert.equal(
+          "lorebookEntryIds" in bodies[1],
+          false,
+          "…and a chat that picked none sends no key, all the way down the same path",
+        );
+      });
+    });
+  } finally {
+    loadedPF.api.getJson = realGetJson;
+    loadedPF.api.postExperienceGeneration = realPost;
+  }
 }
 
 // ── THE CONTENT PACK: THE SCHEMA IS THE CONTRACT (0.13 slice 1) ──────────────
@@ -32086,6 +33821,47 @@ const layoutFingerprint = (w) => {
       assert.equal(seedAsked, RSEED, "the generation call was made for the world the player is standing in");
       assert.equal(core.sim.world.seed, RSEED, "…and the world it installed carries that same identity");
       assert.notEqual(core.sim.world.seed, CONFIG_SEED, "the rewritten wizard config did NOT move the seed");
+    } finally {
+      loadedPF.brief.generate = realGenerate;
+      loadedPF.pack.generate = realPack;
+      clearRetry();
+      restoreAssets();
+    }
+  });
+
+  // ── LANE 5d2: RUNG 2 IS WHAT THE CALL IS HANDED ──────────────────────────
+  // `generate()`'s `theme` option IS rung 2 of the resolution ladder — the answer
+  // that stands when the model names no kit, or names one this build does not
+  // ship. Every other stub in this file reads `seed` or `onFailure` and ignores
+  // the rest of the bag, so the one option the ladder is ABOUT was unasserted:
+  // hardcoding `"cozy-village"` at the call site left the whole harness green.
+  // The fixture therefore stores a NON-default theme, because a lane written on
+  // the `wizard()` default cannot tell the wizard's answer from the hardcode.
+  await withSavePath(async ({ tick, makeCore }) => {
+    clearRetry();
+    const realGenerate = loadedPF.brief.generate;
+    const realPack = loadedPF.pack.generate;
+    let optionsSeen = null;
+    loadedPF.brief.generate = async (chatId, options) => {
+      optionsSeen = options;
+      return rBrief2;
+    };
+    loadedPF.pack.generate = async (chatId, { brief }) => packFor(brief);
+    try {
+      const meta = { ...wizard({ theme: "sci-fi-colony" }), pixelforgeBrief: rBrief };
+      const core = makeCore("chat-rung2", RSEED);
+      core.host.chatMeta = meta;
+      S.mode = "metadata";
+      assert.equal(S._configTheme(meta), "sci-fi-colony", "the fixture really does carry a non-default kit");
+
+      assert.equal(await S.regenerateStage(core, "brief", "reroll"), true, "the paid re-roll runs");
+      await tick();
+      assert.ok(optionsSeen, "…and the brief call was actually made");
+      assert.equal(
+        optionsSeen.theme,
+        S._configTheme(meta),
+        "the call is handed the wizard's derived answer, not a constant — this IS rung 2",
+      );
     } finally {
       loadedPF.brief.generate = realGenerate;
       loadedPF.pack.generate = realPack;

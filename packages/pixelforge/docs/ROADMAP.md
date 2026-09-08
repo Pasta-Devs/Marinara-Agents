@@ -96,6 +96,25 @@ note** — the GM and the walkable world are running two different casts, which 
 `standing` verb is the first thing to trip over. No group, no ruling and no sequencing decision
 moved.
 
+**Updated 2026-09-08, the 0.16.2 pass.** A ruling pass, and eight maintainer answers taken in one
+round are what move it. 0.16.2 is the deletions release — the theme dropdown, the party picker, the
+preset genre and story goals, and the map-guidance field — plus the three things that had to ride
+with them (the kit resolved inside the generation call, a declined world's kit derived from the same
+words, the package's own config keys bounded) and one new control, the per-entry lorebook picker.
+**S6's DESTINATION is rewritten rather than paid down**, and that is the largest single move in this
+pass: the ruling is that there should be **no separate Pixelforge game-creation menu at all**, so
+the entry stops asking for a form three or four fields wide and asks for a seed field inline in Game
+Mode's own setup. 0.16.2 removes theme from the ask; 0.16.3 removes the form. **S1's two-casts
+integration note is REDIRECTED** — the roster-merge direction it listed first is rejected outright
+(*"names should not be roster-based to begin with"*), and #747 is re-scoped to seeded name tables
+both sides mint from. **Three entries open, all of them filed rather than built this cycle:** **S10**
+— the GM fetching and semantic-searching lorebook entries at play time, which is a *surface* over
+search the Engine already has; **S11** — setup import does not round-trip an Experience's own params,
+so a shared Pixelforge setup restores none of them; and **E8** — seeded name tables, which is the
+degraded world's names and the two-casts agreement recognised as **one** piece of work rather than
+two. **W12 is untouched**, deliberately: street topology is still a partitioner and nothing in this
+release went near it. No group, no ruling and no sequencing decision moved.
+
 **Inspirations — the games checked first (maintainer, 2026-08-28).** When the maintainer asks for a
 feature, these are the games whose systems get looked at before anything is designed. **THE
 REGISTER IS BINDING, and it is the one the Dwarf Fortress direction was already stated in:
@@ -211,7 +230,7 @@ The gaps the roadmap exists to close, in order of how much they matter for *this
 
 ## S — Substrate (load-bearing)
 
-These five gate more of the roadmap than everything else combined. Marked **LOAD-BEARING** with what each gates. **S6 through S9 are deliberately *not* among the five.** S6 and S7 are about the seam between the package and its host rather than about the game: S6 is the channel every other item's configuration arrives through, and S7 is a channel the host is already using that this surface has never answered. S8 and S9 arrived by maintainer ruling in 0.16 and sit here for a different reason — both are about **what a save owes across time**, which is S5's subject matter, and neither gates a feature so much as a promise (S8 the promise that a world you know stays the world you know; S9 the promise that a half-written world is recoverable rather than disposable).
+These five gate more of the roadmap than everything else combined. Marked **LOAD-BEARING** with what each gates. **S6 through S11 are deliberately *not* among the five.** S6 and S7 are about the seam between the package and its host rather than about the game: S6 is the channel every other item's configuration arrives through, and S7 is a channel the host is already using that this surface has never answered. S8 and S9 arrived by maintainer ruling in 0.16 and sit here for a different reason — both are about **what a save owes across time**, which is S5's subject matter, and neither gates a feature so much as a promise (S8 the promise that a world you know stays the world you know; S9 the promise that a half-written world is recoverable rather than disposable). S10 and S11 arrived by maintainer ruling in 0.16.2 and are seam items like S6 and S7 — S10 is a GM-facing read channel over host data (so it belongs with S1's conversation rather than beside it), and S11 is the front door's other half, the one that lets a setup travel.
 
 ### S1. The GM write-back channel — LOAD-BEARING
 
@@ -251,15 +270,35 @@ that the GM has never heard of can never be named at all. That refusal is correc
 must not invent a row for somebody who is not in the world — but it is answering a mismatch rather
 than a mistake, and every further verb that takes an `npc` argument inherits it.
 
-**Three directions, unranked, none of them designed here.** (i) **Feed the Engine the sealed cast** —
-the brief is minted first, so the blueprint call could be given the roster instead of inventing one;
-cheapest, and it makes the Engine's list a projection of the package's. (ii) **Read `gameNpcs` at
-resolve time** — accept either spelling and bind the Engine's person to the nearest package one;
-cheap and lossy, and it cannot conjure a body for somebody the world has no sprite for.
-(iii) **Say the roster in the turn header** — the package already meters prose into the GM's context
-and could name who actually exists, which costs tokens every turn and fixes nothing structurally.
-The choice is a maintainer call and it belongs with W1's second-settlement work, since a second
-settlement multiplies the same problem by the number of towns.
+**Three directions were listed here, unranked. THE FIRST ONE IS NOW REJECTED and the other two are
+moot, by maintainer ruling (R-D7, 2026-09-07):**
+
+> *"Names should not be roster-based to begin with. Seeded name tables should be sufficient."*
+
+So **there is nothing to merge, and merging was the wrong question.** The rejected direction was
+(i) *feed the Engine the sealed cast* — mint the brief first and hand the blueprint call the roster
+instead of letting it invent one. It is rejected in substance, not deferred: the mapping problems it
+would have had to engineer around (`GameNpc` wants `emoji`, `gender` and `pronouns` the brief never
+supplies; `descriptionSource` has a closed value set; a re-roll can clobber live play state) are
+**evidence for the rejection** rather than obstacles to solve, because they are the price of
+synchronising two rosters at all. The other two directions — (ii) reading `gameNpcs` at resolve time
+and binding to the nearest package person, (iii) naming the package's roster in the turn header —
+were both ways of living with a mismatch, and neither is worth building once the mismatch is not
+supposed to exist.
+
+**What replaces all three, in one line:** names are **derived from the same seed on both sides**, so
+the two casts agree by construction, no roster is copied, nothing is synchronised at a first seal,
+and there is no ordering dependency between the two calls. **#747 is re-scoped to that direction**
+rather than closed, and it carries the measurement above because the re-scoped issue still needs it.
+⚠ **It is the same work as the degraded map's name tables** — see **E8**, which is where the two meet
+and where they must be built once rather than twice.
+
+**Everything the measurement establishes is untouched by the ruling.** `62-gm.js`'s `npcNamed` still
+resolves against the live compiled world while the GM is prompted with the Engine's roster, so the
+shipped `standing` verb still refuses a name only `gameNpcs` knows, and the people the walkable world
+knows that the GM has never heard of still cannot be named at all. That refusal stays correct. What
+changes is the fix: seeded tables make the two lists agree, instead of a merge making one a copy of
+the other.
 
 ### S2. Inspect / Use — the second verb — LOAD-BEARING
 
@@ -352,6 +391,54 @@ patch made the second form *honest*; it did not make it unnecessary. **And it na
 one field:** with the presets templated rather than literal, what the package genuinely needs beside
 a Game Mode toggle is theme, seed, generate-or-decline **and a name it can read back** — four, not
 three, unless the host is willing to hand the chat's own name to the experience.
+
+**0.16.2 took a field off that ask by deleting the question rather than moving it, and it took two
+more off the form beside it.** The **theme selector is gone**: the kit is resolved from the player's
+own setting text — by the model inside the generation call that was already being paid for, and by a
+deterministic word count for a chat that declines generation — so there is no theme left to ask
+about on either form. The **party picker is gone** too, on the same reasoning from the other end:
+Game Mode's own setup owns that question, and the honest cost of deleting it a release early is
+written down rather than glossed — **for one release the party question is asked ZERO times**, not
+twice, because the Experience chooser swaps the classic wizard out at step 0, so every Pixelforge
+game this release starts with an empty party. That is acceptable for one release (the villagers are
+NPCs the GM plays, and a party is additive rather than load-bearing for the walkable world) and it is
+a **cost, not a tidy-up** — it is the strongest argument this entry has ever had for landing the seam
+next, and it is why the end-state below is 0.16.3's rather than something further out.
+
+**THE DESTINATION IS REWRITTEN, 2026-09-07, and the maintainer's own words are the specification**
+(ruling R-D2, verbatim):
+
+> *"There should be no separate Pixelforge game creation menu, only when toggled on the seed value
+> should populate in its container where the player can edit it or randomize it if they wish."*
+
+So the end-state this entry walks toward is **not a smaller form**. It is **no package form at all**:
+toggling the Pixelforge Experience on inside Game Mode's own setup populates a **seed field inline**,
+in its own container, editable with a randomize affordance — and nothing else. Every "three fields
+wide" and "four, not three" reading above is therefore **superseded**, kept only as the record of how
+the ask shrank: nobody is asked anything twice because the classic wizard's questions simply stand,
+and the package reads what they produce.
+
+**What the reshaping does to the cost, and it runs the friendly way.** It is a **simplification**
+rather than a bigger job: with the classic path doing the launching, the three losses the Experience
+chooser currently carries — `preferences`, `shareLabels` and the map draft plan — stop needing to be
+carried across the seam at all and simply go away. The five structural requirements the package
+currently forces into `gameSetupConfig` become a **design obligation** of that seam rather than an
+override to argue about, with the recommended shape recorded here so it is not re-derived:
+manifest-declared, Engine-applied, and **visible to the player before they confirm**.
+
+**One reading is folded in and FLAGGED for veto, because the ruling may not have had it in front of
+it:** the Experience toggle subsumes the generate-or-decline choice — Experience on ⇒ a generated
+world — so the end-state carries no separate decline control. The legacy declined path is left
+exactly as it is, neither deleted nor developed (see **E8**). Vetoing that reading costs one
+checkbox.
+
+**Two gating dependencies, so 0.16.3 is not opened half-blind.** The picker 0.16.2 renders lives on
+the package modal this end-state deletes, so a per-entry lorebook surface on the **classic**
+Lorebooks step is a prerequisite rather than a follow-up — filed as an Engine FR, and it is a
+**surface-only** ask (the Engine already resolves an entry-id list end to end through
+`processLorebooks`' forced-entry path, with the eligibility filters intact and a 100-entry cap it
+already truncates to). And the setup-import gap is **S11**, which gets cheap the moment the seed
+field is the Engine's own.
 
 ### S7. The engine's HUD widgets — integrate or suppress *(ANSWERED in 0.16.1 by suppression — maintainer playtest 2, 2026-08-24)*
 
@@ -471,6 +558,54 @@ ready for a row.
 **Pillar:** call economy — the whole point is re-running only what never succeeded, so a half-failed
 creation costs one call rather than a new game. **Secondary tag:** legibility. **Depends on:** W10
 for the `historygen` row; an engine-side answer for `storyboard`, which the package cannot see.
+
+### S10. The GM reads the lorebook — fetch and semantic search at play time *(new — maintainer ruling R-D6, 2026-09-07)*
+
+**What:** the GM should be able to **fetch and semantically search lorebook entries while play is
+running**, not only at world creation. The maintainer's own worked example is the whole item, and it
+is worth quoting because it names the behaviour rather than the mechanism:
+
+> *"Imagine the player starts in Pallet Town, but the GM knows other settlements from the lorebook
+> like Viridian City, Cinnabar Island, etc so when writing the details for a new settlement the
+> player encounters it will discern from the seed and/or the entry contents what it should name this
+> settlement."*
+
+So this is **authoring against existing history**, at the moment a place is first written, rather
+than a bigger context window. 0.16.2 ships the creation-time half — the player ticks entries and they
+ride the one world-writing call — and that half is a **one-shot**: the entries reach the brief and
+nothing reads a lorebook again for the life of the chat.
+
+⚠ **This item is much smaller than it reads, and the entry should say so or it will be sized as
+"build search".** The search **already exists** in the Engine — `GET /lorebooks/search/entries?q=`
+with calibrated-cosine ranking behind it — so the ask is **"expose fetch and search to the GM as a
+budgeted verb"**, which is a channel and a budget, not a retrieval system.
+
+**Pillar:** world coherence, with a call-economy edge — a name taken from lore the player already
+wrote costs nothing to invent and cannot contradict itself. **Secondary tag:** world variety.
+**Depends on:** **S1**'s channel, or whatever shape it takes: this is a GM-facing verb with an
+argument and a result, so it inherits that entry's whole validation and budget conversation, and it
+should be designed with it rather than beside it. **Companion:** the drop and budget rules 0.16.2
+already had to settle for the creation-time half — per-book token budgets are the wall, drops follow
+the mechanism's own order rather than the picking order, and a count ceiling binds independently of
+the character budget — apply here unchanged, because it is the same resolver underneath.
+
+### S11. Setup import does not round-trip an Experience's own params *(new — maintainer ruling R-D8, 2026-09-07)*
+
+**What:** Game Mode's setup can be exported and imported, and an imported Pixelforge setup
+**restores none of Pixelforge**. Measured rather than suspected: `GameSetupWizard.tsx` contains zero
+occurrences of `gameExperienceId` or `experienceConfig`, so importing a shared setup re-activates no
+Experience at all and restores none of `seed`, `generate` or `packWanted` — which means the one thing
+a player would most want to hand somebody else, *the world*, is exactly what does not travel. A seed
+that cannot be shared through the surface built for sharing setups is a seed field with half its
+purpose missing.
+
+**Pillar:** none — front-door plumbing, like **S6**. **Secondary tag:** legibility.
+**Unlocks:** "here, play my world" as a real gesture rather than a copied string and a spoken
+instruction. **Depends on:** an engine-side change, since the import surface is the Engine's.
+**And it gets CHEAP the moment S6's end-state lands** — once the seed lives in Game Mode's own setup
+as an ordinary field rather than inside a package-authored config blob, round-tripping it is whatever
+round-trips every other field on that form. **Sequence it after S6, not before**, or it is paid for
+twice.
 
 ---
 
@@ -1079,6 +1214,46 @@ What it serves, in the order the item asked for it: **name, occupation and where
 **What did NOT ship, and is not a gap so much as a scheduled revisit:** the maintainer's own note that *we'll revisit dialogue generation later*. 0.14 reads the pack E1 seals; it does not change how that pack is written beyond widening the ask (four topics, a sky tag, mostly-stranger lines) and lowering the substance floor to 10. The **overheard pool remains sealed and unread** — 0.13 wrote it, 0.14 does not surface it, and it wants a surface of its own rather than a branch in this window.
 
 **And the whole risk is now a playtest question rather than a design one:** did the free branches stop the maintainer reaching for the narrator? That is answerable only after play, and it is on the deferred-verification list in `docs/player-state.md` §12.3 with his name on it.
+
+### E8. Seeded name tables — the degraded world's names and the two casts, one piece of work *(new — maintainer rulings R-D3 + R-D7, 2026-09-07)*
+
+**Two rulings arrived on the same day, pointing at different problems, and they meet in one piece of
+work. Filing them as one entry is the whole point of the entry.**
+
+**The first half — the degraded map's names, and it is PARKED rather than planned** (R-D3, verbatim):
+
+> *"The fallback doesn't really matter at this point in time. We can revisit it way later down in
+> line in development, but right now it's worthless as we are missing a lot of content and I don't
+> want to bog down development by having to also develop the fallback on the side."*
+
+So **no fallback investment happens until the revisit**: no name mint, no fallback cast work, no
+`61-pack.js` giver or bark work, and — the part worth stating because it is easy to violate by
+accident — **nothing anywhere may claim the fallback improved.** What the revisit starts from is the
+measurement, kept for exactly that purpose: the degraded settlement rotates over three literal names,
+and the people in it are Mira, Tam, Rook and Fen in **every** seed and **both** themes. A world that
+is supposed to be a different world every time currently is not one, and that is what a name table
+fixes.
+
+**The second half — the two casts, and it is a REDIRECTION rather than a deferral** (R-D7, verbatim):
+
+> *"Names should not be roster-based to begin with. Seeded name tables should be sufficient."*
+
+The GM's roster and the walkable world's roster are minted by two independent calls and agreed only
+by accident (the full measurement lives on **S1**, which is where the mismatch surfaces at a verb).
+The rejected fix was to merge them. The ruled fix is that **both sides mint from the same seeded
+table**, so they agree by construction, nothing is copied and nothing is synchronised.
+
+⚠ **The two halves are the same fragment books, and that is why this is one entry.** The tables that
+make the degraded map stop shipping the same four people are the tables that make the two rosters
+agree. **Do not build them twice, and do not build either half early to make the other look cheap** —
+either half built alone pays the whole design cost of a name system and buys one of its two payoffs.
+
+**Pillar:** world variety, with a consequence edge on the roster half (a verb that cannot name
+somebody is a consequence that cannot land). **Secondary tag:** world coherence.
+**Depends on:** nothing technically — a seeded table is a pure function, which is why it fits the
+package's determinism covenant without a single new save field. What it waits on is the maintainer's
+own trigger: *"way later down in line in development"*, once the content the ruling says is missing
+exists. **Companion:** GitHub issue **#747**, re-scoped to this direction rather than closed.
 
 ---
 

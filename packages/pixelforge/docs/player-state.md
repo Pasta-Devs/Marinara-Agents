@@ -2348,6 +2348,41 @@ keeps the trimmed field past that, the reader collapses whitespace runs before c
 reader states its own limit, because a 400-character game name must not take over a loading screen
 or a line of a generation prompt.
 
+**0.16.2 adds a sixth key and changes what one of the other five MEANS.** The sixth is
+**`loreEntryIds`** — the lorebook **entries** the player ticked in the picker, a flat `string[]` of
+entry ids and never book ids, because the ruling that put the picker here is *"the player must be
+able to select specific lorebook entries rather than the entire lorebook getting sent."*
+`_configLoreEntryIds` reads it at both nesting depths like every sibling reader, and it does three
+things at the reader rather than trusting the writer, on `_configWorldName`'s precedent: it **filters**
+to non-empty strings, **dedupes** (the server counts a repeated id once and the wire cap counts it
+twice, so a duplicate is a slot spent on nothing), and **clips at 100**, which is `LORE_ENTRY_IDS_MAX`
+and matches the route's own `z.array(z.string()).max(100)`. The clip is not tidiness: a list past 100
+is a 400 on the whole call — a retry screen, for a chat whose config the picker's own ceiling never
+saw — and `/game/create`'s reuse-an-existing-chat arm rewrites `gameSetupConfig` wholesale, so *"the
+picker wrote it"* is not something a read site may assume. **The key is absent on every chat that
+never opened the picker**, which is most of them and is not a migration: an empty list sends no key at
+all and the brief call is byte-identical to the one this package sent before the picker existed.
+
+**And `theme` stopped being an answer the config OWNS.** Through 0.16.1 it was the dropdown's value
+and every generator downstream read it. From 0.16.2 the dropdown is deleted, so the stored value is
+whatever the wizard's own word-count resolver derived from the player's setting text — and on a
+**generated** world it is outranked: the model names the kit inside the brief call, `validate()`
+resolves the ladder, and the kit the world is actually built in comes off the **seal**
+(`sealed?.theme ?? configTheme ?? "cozy-village"`, read the same way at all three sites that needed
+it). The config's copy is still load-bearing in three places and they are worth naming, because
+"the config theme is dead" would be the easy wrong summary: it is what the brief call is HANDED (the
+ladder's rung 2, and the only door the player's typed words walk through when no model answers), it
+is the whole answer for a **declined** world, and it is the whole answer for a chat created before
+0.16.2 that stored a dropdown's value.
+
+**Three keys the config STOPPED carrying**, and they are deletions rather than migrations because
+nothing ever read them back: the preset `genre` string, the preset `playerGoals` sentence, and
+`spatialMapInstructions`. The last one is deleted outright rather than emptied — the field is
+`.optional()` on the route, and the map-mode inference that reads it is `??`-guarded behind the
+explicit `gameWorldMapMode` this package sets, so removing it changes no branch the package takes.
+What it does cost is real and is on the deferred list rather than hidden: the World Map now roots
+itself with no hint from this package at all.
+
 **Fold-at-read, and the one invalidation rule that is not free.** `packFold(core)` derives what THIS
 world can offer, once, into a slot on the sim — never saved, rebuilt exactly when `core.sim` is,
 like the feature register and the schedule handles. The rule 0.13 had to add is the GATE'S LIFT: two
@@ -2775,6 +2810,14 @@ lose up to thirty seconds of position — a cell or two of backtrack, in country
 identically. An ordinary tab close loses nothing; the teardown flush snapshots the live sim
 synchronously.
 
+**0.16.2 adds nothing to either, and it is worth one sentence so nobody goes looking.** The wire
+literal does not move by a byte: `artTheme` is **transport-only** — a property of the request schema
+and of the model's reply, read once by `validate()` and dropped, so it appears in no stored bytes
+this build writes — and `loreEntryIds` is **chat metadata**, one more key in the same
+`experienceConfig` object the seed and the theme have always lived in (§9.2), capped at 100 ids by
+the reader. What the release does move is a `_repairs` line or two on the seal, in the two cases
+where the call had something honest to say about the picks and only then.
+
 ---
 
 ## 11. Accepted limitations
@@ -2888,6 +2931,20 @@ limitations and are in the release notes as such, rather than being findable onl
 | **maps exported from a stand-in world outlive it.** A world swap severs the block but the World Maps route is additive with no delete, so rows posted from the replaced world stay in the player's collection as records of a place that no longer exists — and always under the same `pf.<fnv32(seed)>` prefix, since the seed never moves | **stated in the confirmation copy**, not hidden: "maps you exported stay in your collection" |
 | **a re-attempt resets the one-shot prose injections.** A world swap builds a fresh `PF.Sim`, so the setting line, zone flavour and NPC personas re-enter the GM's context on later turns. The claim everywhere is "zero **generation** calls", never "spends nothing" | recorded honestly rather than rounded to free |
 | **a brief feature the settlement cannot fit is still dropped silently.** The specials loop stops when the ground runs out, with no log and no notice, exactly as it always has. 0.16 was asked whether such a feature should spill into the wilderness and the answer was no | **maintainer ruling 7**; the drop itself remains **unowned** — it is not what MEGASTRUCTURES (ROADMAP W11) is for, and the roadmap says so |
+
+Added by 0.16.2 — the deletions release. **Two of these are consequences of the deletions rather than
+of anything that was built**, and both are in the release notes as such, because a player who hits
+one has no way to work it out from the screen:
+
+| limitation (0.16.2) | status |
+| ------------------- | ------ |
+| **every Pixelforge game this release starts with an EMPTY party, and the question is asked zero times.** The package's own picker is deleted and the classic Party step never runs, because the Experience chooser swaps the classic wizard out at step 0 — so this is not "asked twice, answered once", it is not asked at all | **accepted for one release** (maintainer ruling R-D1, *"just ship the deletions now"*); the question gets its real owner when the setup seam lands (ROADMAP **S6**). Acceptable because the villagers are NPCs the GM plays and a party is additive rather than load-bearing for the walkable world — a cost, not a tidy-up |
+| **a lorebook entry filtered to *include specific characters* will not reach a Pixelforge world, even when the player explicitly ticks it.** An empty party means the active-character set is empty, so the include filter matches nobody and the entry is refused — in the same release that adds the entry picker, which is what makes it worth a row of its own | **named, not fixed.** Nothing in 0.16.2 can fix it: the party deletion is ruled and the Party step is the seam's. It goes away when the party question finds its owner. In the release notes and on the browser-pass list |
+| **the picker's SERVER half lives in the Engine, and this package ships against Engines that predate it.** On an older Engine the request field is an unknown key: the world is written without the lore and the reply carries no lorebook block at all | **by dependency**, and the reading is deliberately soft. An absent block is a version skew, not a refusal, so it is a `console.warn` and **nothing is stored** — a `_repairs` line saying the picks were refused would outlive the mismatch and still be sitting in a checkpoint long after the Engine was updated. A block that IS present and reports zero included is the other thing entirely, and that one is written down |
+| **a truncated reply cannot say what became of the picks.** The 422 salvage path carries no lorebook block whatever the call did, and on that path an absent block does not even separate an old Engine from one cut off before writing it | recorded rather than guessed: the `_repairs` line says the entries were **sent** and that the cut-off reply did not say what became of them |
+| **the World Map now roots itself with no hint from this package.** `spatialMapInstructions` is deleted outright — root location and all — so nothing tells the host where the world's map should start | **maintainer ruling R-D4**, and the principle is the point: *the GM is never instructed to keep the player bound to a location, and the world need not be compact or walkable.* Verified to change no branch (the field is optional and the map-mode inference is `??`-guarded behind the explicit `gameWorldMapMode`); what it actually looks like is on the browser-pass list |
+| **the player's Setting text is clipped at 8,000 characters** on the way into the config, derived from `capPreferences`' 7,800 clamp | **accepted**, and the cost is stated rather than denied: text past the clip does not reach the GM's per-turn prompt either. The unclipped alternative is a config the host refuses on a field the player never sees |
+| **the declined path's kit is a word count, not a model.** A chat that turns generation off resolves its theme by counting how many of its setting's words each kit's lexicon claims, with a tie or no hits at all landing on `cozy-village` | **by design** — it is deterministic, costs no call, and is the honest default a player who wrote nothing already gets. It can disagree with what the model would have chosen for the same text; whether it agrees often enough to be a floor is on the playtest list |
 
 **On the packless row, and it is a posture rather than a debt.** The compatibility window **rolls
 with the game**: legacy grows as the game grows, old-alpha worlds are never re-supported, and at
@@ -3076,6 +3133,29 @@ path: patch the chat metadata with
 the reconciler assign and re-resolve **exactly once**, the town answer, and a reload restore the same
 sky from the row.
 
+**0.16.2's own items, and all four are setup-form questions the DOM shim cannot answer** — it has no
+layout, no scroll and no focus, so everything below is asserted as far as the write and no further:
+
+1. **The lorebook picker at a real height, with a real library.** Books collapsed by default, one
+   expander per book plus a *Select all*, entries loaded lazily on first open **or** on the first
+   select-all, and the whole thing inside a 180px scroll box. What wants an eye: a library of twenty
+   books against that box, an entry list long enough to scroll inside a box that already scrolls,
+   and whether the per-book refusal note is readable where it renders (under the book header, above
+   its own entries) or is lost above the fold.
+2. **The running budget line, read as a player rather than as an author.** It reads
+   `<used> / <budget> tokens from <book> · <total> / 3000 tokens for the call (N entries)` and it
+   grows a clause per book that has anything ticked. Two questions no assertion answers: does it wrap
+   into something unreadable at three or four books, and does a player understand that a refusal is
+   about **one book's own** budget rather than the call's?
+3. **The empty Setting box and the empty name box, together.** Both are placeholders now, and the
+   launch button re-derives its label from the setting text on every keystroke. What wants watching
+   is the label actually moving — type "hab ring" and the button should stop saying *Begin in
+   Hearthvale* and start saying *Begin in Meridian Base* — because that is the 0.16.1 bug in its
+   other direction and the harness locator for it had to stop finding the field by its value.
+4. **What the World Map does with no root hint.** `spatialMapInstructions` is gone, so the host roots
+   the map on its own. This is the one item here that is a *look at the result*, not a *look at the
+   form*: create a world, open the World Map, and see where it thinks the world starts.
+
 **Still owed from 0.13**, unchanged and not superseded: the journal tab strip at mobile width, the
 scroll reset on a tab switch, the abandon confirm's arming feel, the board receipt line's
 legibility, a long job list at a real height, the tally glyphs, and **tab focus and Escape** through
@@ -3208,6 +3288,26 @@ sky and files the notable line. It is a verification tool and not a shipped verb
 system re-derives, the day-keyed memos purge on inequality, and the wrap-up's tell for the skipped
 span is bounded to stub lines.
 
+**0.16.2 adds two questions to this agenda, and the first one is the release's whole premise.**
+
+- **Does the model actually pick the right kit?** In-brief `artTheme` resolution is a model-behaviour
+  question and the harness cannot touch it: what the harness proves is that a wrong or unknown answer
+  cannot hurt anything (it folds against the shipped id list, and a folded answer is recorded on
+  `_repairs`), never that the answer is good. What is owed is a **spread of freestyle settings** —
+  a cyberpunk sprawl, a desert caravanserai, a submarine station, and a plain "small farming town" —
+  and a look at which kit each landed in and whether the kit fought the text. **This is the
+  measurement that decides whether a separate small pre-generation is ever needed**, and the
+  `artTheme: model answered "x", folded to y` line is the instrument: a model answering badly on
+  every call is visible in `_repairs`, and a model answering well is silent. Beside it, the cheaper
+  question: **does the wizard's own word count agree with the model often enough to be a floor?** It
+  is what a declined world gets, and the two can be compared on the same text for free.
+- **Does a picked lorebook entry actually change the world that comes out?** The maintainer's own
+  worked example is the test: write a book that names other settlements, tick those entries, and see
+  whether the world the model writes takes its names and details from them or invents a second set
+  beside them. Two failure shapes to watch for rather than one — the entries reaching the call and
+  being ignored, and the entries not reaching the call at all (which the console says, and which on
+  an Engine without the route half is the expected answer rather than a bug).
+
 **One thing no playtest can settle, recorded here because it belongs to nobody else:** the Say
 field's **downstream bound**. The package imposes no cap and cannot see what the host does with a
 very long line — whether it is truncated, refused, or passed through. A refusal surfaces as the
@@ -3269,6 +3369,39 @@ sha256-matched before and after, in both the shipped copies and the regenerated 
 `manifest.json` moved the same three lines a source-only release moves, and **two bakes over the
 same tree were byte-identical**. Every older artifact zip — the re-baked `0.16.0` included — is
 untouched.
+
+**The 0.16.2 bake.** A three-module release over the same twenty-module tree — `18-brief.js` carries
+the theme ladder, the `artTheme` schema field and the conditional lore clause; `80-setup.js` the
+deletions, the word-count kit resolver and the lorebook entry picker; `60-save.js` the post-seal
+theme read and the picked-entry reader — with `test-brief.mjs` and the build script's own `VERSION`
+moving beside them and neither reaching the bundle. **`client.js` at 1,493,054 bytes, the `0.16.2`
+artifact zip at 1,506,503**, both up **66,385** bytes on 0.16.1's 1,426,669 and 1,440,118. **These are
+the review round's figures and not the first bake's**, which is why the record moved again: the round
+re-baked `80-setup.js` over a race — the lorebook expander's load is memoized as a promise now,
+rather than announced by a boolean set before the await, so a *Select all* pressed while the entries
+are still in the air waits for them instead of ticking an empty book — for **1,302 bytes** in the
+bundle and the same 1,302 in the zip. The figure was reproduced independently of the build rather
+than read off it, which is the check the 0.11.0 CRLF incident is the reason for: concatenating the
+twenty modules and the wrapper by hand produces a buffer that is **byte-identical** to the built one
+— **1,492,231 bytes of `src/` plus 823** of banner, module separators and the IIFE.
+
+- **Both theme tile sheets and `atlas.json` are byte-unchanged, and this time the comparison is
+  against `staging` itself** rather than against the previous bake: all three sha256-match
+  `git show staging:<path>` exactly, **in the shipped copies AND in `build/assets/`** — the second
+  location being the one that matters, because it is gitignored and regenerated from scratch on every
+  bake rather than left alone. `manifest.json` therefore moved the **three lines** a source-only
+  release moves: the version, and `client.js`'s sha256/bytes pair. All ten asset rows are untouched.
+- **Two bakes over the same tree produced byte-identical output** — the same zip hash, the same
+  `client.js`, the same manifest — so the artifact is reproducible rather than merely
+  deterministic-by-design. Every older artifact zip, `0.16.1` included, is untouched.
+- **No catalog entry moved, and the build says so in its own words on every run** — *"excluding
+  incomplete package pixelforge 0.16.2 from every catalog"* — because Pixelforge is in
+  `INCOMPLETE_PACKAGE_IDS`. `scripts/validate-catalog.mjs` prints the matching witness,
+  *"Uncatalogued package manifests valid: pixelforge"*, and the release-notes gate is what forces
+  `CHANGELOG.md` to lead with the version the manifest publishes.
+- **The `?v=` cache key moved with the version**, as it does every release. With the art unchanged
+  that buys nothing again and costs one re-fetch of identical bytes — the honest reading rather than
+  a benefit worth claiming, and the second release running where it is the correct thing to say.
 
 **Older prep, kept because it is the record of how this went the last two times.** **This section
 flipped for 0.14 and has flipped back: the rebuild ran in-cycle rather than being

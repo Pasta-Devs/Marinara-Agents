@@ -1848,7 +1848,19 @@ PF.save = {
       core?.host && typeof core.host.chatMeta === "object" && core.host.chatMeta !== null ? core.host.chatMeta : {};
     const sealed = this._configBrief(meta, core?.chatId);
     if (!this.briefCompiles(sealed)) return false;
-    const theme = this._configTheme(meta) ?? "cozy-village";
+    // THE SEAL FIRST, THE CONFIG SECOND (0.16.2), AND IT IS A POLICY MATCH RATHER
+    // THAN A REPAIR. The kit is no longer a dropdown answer the config owns: on a
+    // generated world the MODEL chose it, and the brief is where that choice was
+    // written down — so this reads the same pair in the same order as the install
+    // path does. What ordering it this way does NOT do is change this probe's
+    // answer, and the honest version of that is worth more than the tidy one: the
+    // line above has already established that `sealed` compiles, and `build()`
+    // takes its kit off a compiling seal and ignores this argument entirely
+    // (measured — same `brieved`, same `world.theme`, identical zones either way).
+    // The argument is live only on the degrade path, which this call has already
+    // returned from. The reason to match anyway is that the two reads cannot then
+    // drift apart the day one of them starts to matter.
+    const theme = sealed?.theme ?? this._configTheme(meta) ?? "cozy-village";
     return !!PF.world.build(this._regenSeed(core, meta), theme, sealed).brieved;
   },
 
@@ -1981,10 +1993,21 @@ PF.save = {
       // only mode that compiles a world itself: the gated modes hand the ladder
       // a force and the ladder reads its own pair.
       if (mode === "rebuild") {
-        const theme = this._configTheme(meta) ?? "cozy-village";
         const seed = this._regenSeed(core, meta);
         const sealed = this._configBrief(meta, chatId);
         if (!this.briefCompiles(sealed)) return false;
+        // THE THEME READ MOVED BELOW THE SEAL (0.16.2): it is `sealed.theme` first
+        // now — the kit the model chose, written into the brief — with the config's
+        // answer behind it for a chat whose brief predates the ladder. It is the
+        // same pair `canRebuild` probes with, read in the same order for
+        // consistency of POLICY and not because the value decides anything here.
+        // Both places this `theme` reaches are `PF.world.build(seed, theme, sealed)`
+        // — the guard below, and `_installSealedWorld`'s own build — and the line
+        // above has already established that `sealed` compiles, so both take their
+        // kit off the seal and ignore the argument. Contrast the post-seal read at
+        // the bottom of `maybeGenerateBrief`, which is genuinely load-bearing: that
+        // one is handed to `PF.pack.generate`, where nothing else answers.
+        const theme = sealed?.theme ?? this._configTheme(meta) ?? "cozy-village";
         if (!PF.world.build(seed, theme, sealed).brieved) return false;
         await this.flush(core, false);
         if (chatId !== core.chatId) return false;
@@ -2104,7 +2127,16 @@ PF.save = {
     }
     this._generating.add(chatId);
     try {
-      const theme = this._configTheme(meta) ?? "cozy-village";
+      // THE WIZARD'S THEME, AND FROM 0.16.2 IT IS ONE HALF OF A PAIR. It used to
+      // be the whole answer: the dropdown said `sci-fi-colony`, the config stored
+      // it, and every generator downstream of this line read it. The kit is derived
+      // from the player's own Setting text now, and on a GENERATED world the model
+      // gets the deciding vote inside the brief call — so this value is what the
+      // brief call is HANDED (its rung 2, and the only door the wizard's derived
+      // answer walks through), while what the world is BUILT from comes off the
+      // seal below. Still the answer on its own for the interim world, for a
+      // declined chat, and for a pre-0.16.2 chat that stored a dropdown's answer.
+      const configTheme = this._configTheme(meta) ?? "cozy-village";
       // READ-SITE 5 — THE SEED, AND ON A FORCE IT IS THE STANDING WORLD'S
       // (maintainer ruling 8). The seed is the world's identity for the life of
       // the chat, so no recovery path may move it — and the wizard config is not
@@ -2149,9 +2181,21 @@ PF.save = {
       if (briefWanted || force === "brief") {
         let failure = null;
         sealed = await PF.brief.generate(chatId, {
-          theme,
+          // RUNG 2, and it is passed for that reason rather than as a legacy hint:
+          // `generate()`'s `theme` is exactly what reaches `validate()`'s second
+          // rung, which is what answers when the model names no kit or names one
+          // this build does not ship.
+          theme: configTheme,
           seed,
           preferences,
+          // THE PLAYER'S TICKED LORE ENTRIES (0.16.2, R-D6). It rides the CALL
+          // rather than the preferences on purpose: the server resolves the ids
+          // itself — macros, scope exclusions, the eligibility gates, the
+          // before/depth/after ordering — and appends the result to the system
+          // message, so the entries never compete with the player's own
+          // preferences against that field's 8,000-character cap. Empty is the
+          // ordinary case and sends no key at all.
+          lorebookEntryIds: this._configLoreEntryIds(meta),
           onFailure: (kind) => {
             failure = kind;
           },
@@ -2217,6 +2261,22 @@ PF.save = {
         // that knows this chat is owed a pack.
         if (wantsPack) this._packWantedSealed.add(chatId);
       }
+
+      // ── THE KIT THE WORLD IS ACTUALLY BUILT IN, OFF THE SEAL (0.16.2) ───────
+      // Everything below this line — the content pack, the compile, the install —
+      // belongs to the world that was SEALED, and from this release the model is
+      // the one that chose its kit. Reading the wizard's copy here would write a
+      // content pack for a theme the world does not have and then paint the world
+      // in a third one. The config stays behind it for a chat whose brief predates
+      // the ladder, and the literal behind that for a chat with no config at all.
+      //
+      // OPTIONALLY CHAINED, because `sealed` is provably nullable here: the
+      // `if (!sealed) … return` bail lives INSIDE the call-one gate, and a
+      // `force === "pack"` entry always enters this body — so a forced pack on a
+      // chat with no brief would otherwise throw into the catch below and put a
+      // retry screen on a world the player declined. Every sibling read on this
+      // path is already guarded the same way.
+      const theme = sealed?.theme ?? configTheme ?? "cozy-village";
 
       // ── CALL TWO: THE CONTENT PACK ──────────────────────────────────────────
       // Wanted when the formula already says so (the half-sealed chat this visit
@@ -2353,6 +2413,47 @@ PF.save = {
       if (typeof candidate === "string" && candidate) return candidate;
     }
     return null;
+  },
+
+  /** THE LOREBOOK ENTRIES THE PLAYER TICKED (0.16.2, R-D6), from the same
+   *  double-nested config home as the seed, the theme and the name.
+   *
+   *  ENTRY ids and never book ids: the ruling is that "the player must be able to
+   *  select specific lorebook entries rather than the entire lorebook getting
+   *  sent", so the wire format is a flat list and this reader keeps it one.
+   *
+   *  ABSENT ON EVERY CHAT THAT DID NOT USE THE PICKER, which is most of them and
+   *  is not a migration: an empty list here sends no key at all, and the brief
+   *  call is byte-identical to the one this package sent before the picker.
+   *
+   *  CLIPPED AT THE READER, on `_configWorldName`'s precedent and for a sharper
+   *  reason than tidiness. The route's own field is
+   *  `z.array(z.string()).max(100)`, so a list past 100 is a 400 on the whole
+   *  call — the retry screen, for a chat whose config the picker's own ceiling
+   *  never saw. `/game/create`'s reuse-an-existing-chat arm rewrites
+   *  `gameSetupConfig` wholesale, so "the picker wrote it" is not something a
+   *  read site may assume. */
+  LORE_ENTRY_IDS_MAX: 100,
+
+  _configLoreEntryIds(meta) {
+    const setup =
+      meta && typeof meta.gameSetupConfig === "object" && meta.gameSetupConfig !== null ? meta.gameSetupConfig : null;
+    const outer =
+      setup && typeof setup.experienceConfig === "object" && setup.experienceConfig !== null
+        ? setup.experienceConfig
+        : null;
+    const inner =
+      outer && typeof outer.experienceConfig === "object" && outer.experienceConfig !== null
+        ? outer.experienceConfig
+        : null;
+    for (const candidate of [inner?.loreEntryIds, outer?.loreEntryIds]) {
+      if (!Array.isArray(candidate)) continue;
+      // Deduped as well as filtered: the server counts a repeated id once and the
+      // wire cap counts it twice, so a duplicated id is a slot spent on nothing.
+      const ids = [...new Set(candidate.filter((id) => typeof id === "string" && id))];
+      if (ids.length) return ids.slice(0, this.LORE_ENTRY_IDS_MAX);
+    }
+    return [];
   },
 
   /** THE NAME THE PLAYER TYPED IN THE WIZARD (0.16.1), from the same
