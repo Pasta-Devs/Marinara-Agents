@@ -291,9 +291,23 @@ export async function generateNoodlerPostImage(input: {
           styleGuidance,
         })
       : null;
+  // The style profile is an Engine setting, not something the interpretation model owns. The
+  // rewrite is a text transformation, and it freely drops the style's positive tags and wording,
+  // so the rewritten text is compiled again before it reaches the provider. Without this the style
+  // applied only when the rewrite was skipped, failed, or was rejected — which is exactly why the
+  // setting looked intermittent rather than broken. The compiler dedupes against the prompt it is
+  // given, so a rewrite that kept its style is not styled twice.
+  const compiledRewrittenPrompt = rewrittenPrompt
+    ? compileImagePrompt({
+        kind: "illustration",
+        prompt: rewrittenPrompt,
+        styleProfiles: imageSettings.styleProfiles,
+        imageDefaults,
+      })
+    : null;
   const finalPromptBase = redactIdentity(
     selectNoodleImageProviderPrompt({
-      rewrittenPrompt,
+      rewrittenPrompt: compiledRewrittenPrompt?.prompt || rewrittenPrompt,
       rawPrompt: rawProviderPrompt,
       // Art style and the character's image habits are meant to reach the provider, so a rewrite
       // that applies them is doing its job. Personality never belongs in a visual prompt at any

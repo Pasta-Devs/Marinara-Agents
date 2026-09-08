@@ -36,6 +36,12 @@
     "slurp": {
       "versions": [
         {
+          "version": "1.2.21",
+          "date": "2026-09-08",
+          "notes": "- A selected image style profile now applies to every generated image. When prompt interpretation rewrote the prompt, its result went to the image provider without the style being applied again, so the style appeared to work only sometimes.",
+          "highlight": false
+        },
+        {
           "version": "1.2.20",
           "date": "2026-09-08",
           "notes": "- Post images now always carry the character's appearance, and a retried image is built the same way the first attempt was.\n- Scheduled Stories now publish as Stories instead of ordinary posts.\n- A Creator's stage voice is now described to the model that writes it, so Creators stop sounding alike.\n- Creating a concealed Creator now fails far less often.\n- A Conversation Schedule can no longer leak the source name into a Hinted or Secret Creator's prompts.\n- Persona-owned Creators now get their appearance, personality, and image references.\n- A first post is no longer lost to a restart or a brief lock, and automatic posts now retry like manual ones.\n- Deleting a Creator now removes their commissions, audience, and queued work.",
@@ -148,12 +154,6 @@
           "date": "2026-09-06",
           "notes": "- Wallet now keeps the daily refill claim visible until it is actually claimed,\n  and explains the balance threshold when the refill is unavailable.\n- Spending history now names known Creator handles and hides opaque internal IDs.",
           "highlight": false
-        },
-        {
-          "version": "1.2.1",
-          "date": "2026-09-06",
-          "notes": "- Inbox now keeps Chats and Activity in one polished, avatar-led destination with\n  compact rows, colorful event medallions, per-tab unread badges, and safe legacy\n  notification links.\n- Wallet now presents Creator earnings and Fan coins as connected but separate\n  pockets, with clearer transfer limits, avatar-led subscriptions, and distinct\n  Spending and Earnings histories.",
-          "highlight": true
         }
       ]
     }

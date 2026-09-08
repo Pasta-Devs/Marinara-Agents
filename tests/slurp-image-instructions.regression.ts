@@ -135,9 +135,30 @@ for (const source of [images, publicImages]) {
     "art style and image preferences must reach the provider; personality is checked at any length",
   );
   // Both fallback paths — interpretation disabled, and a rejected rewrite — must still carry style.
-  assert.match(source, /compiledDraft/u);
+  assert.match(source, /compiledDraft|compiledPrompt/u);
   // A reviewed prompt is recompiled so the style profile survives the review path.
   assert.match(source, /compiledOverride/u);
+  // The success path must be compiled too. The style profile is an Engine setting, and the
+  // interpretation model is a text transformation that drops style tags and wording. Sending its
+  // output straight to the provider made a selected style apply only when the rewrite was skipped,
+  // failed, or was rejected — the style looked intermittent rather than broken.
+  assert.match(
+    source,
+    /const compiledRewrittenPrompt = rewrittenPrompt\s*\?\s*compileImagePrompt\(\{/u,
+    "a successful rewrite must be recompiled before it reaches the provider",
+  );
+  assert.match(
+    source,
+    /rewrittenPrompt: compiledRewrittenPrompt\?\.prompt \|\| rewrittenPrompt/u,
+    "the provider must receive the recompiled rewrite, not the raw model output",
+  );
+  // The recompile must use the same style inputs as the first compile, or it silently applies the
+  // global default instead of the connection's selected profile.
+  assert.match(
+    source,
+    /prompt: rewrittenPrompt,\s*styleProfiles: imageSettings\.styleProfiles,\s*imageDefaults,/u,
+    "the recompile must use the connection's own style profile and image defaults",
+  );
 }
 
 console.log("Slurp image instruction regressions passed");

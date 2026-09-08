@@ -1,5 +1,9 @@
 # Slurp release notes
 
+## 1.2.21 — 2026-09-08
+
+- A selected image style profile now applies to every generated image. When prompt interpretation rewrote the prompt, its result went to the image provider without the style being applied again, so the style appeared to work only sometimes.
+
 ## 1.2.20 — 2026-09-08
 
 - Post images now always carry the character's appearance, and a retried image is built the same way the first attempt was.
