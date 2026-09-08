@@ -1823,9 +1823,23 @@ function SlurpRelationshipPanel({
 }) {
   const { t: localizeUi } = useUiTranslation();
   const cooling = relationship.coolUntil && relationship.coolUntil > new Date().toISOString();
+  const mood = "mood" in relationship ? relationship.mood : null;
+  const moodLabel =
+    mood === null
+      ? null
+      : mood >= 40
+        ? "warm"
+        : mood >= 10
+          ? "open"
+          : mood > -25
+            ? "neutral"
+            : mood > -60
+              ? "cooling"
+              : "cold";
+  const moodPercent = mood === null ? 0 : Math.max(0, Math.min(100, ((mood + 100) / 200) * 100));
   return (
     <div className="mx-3 mt-2 shrink-0 rounded-2xl bg-[var(--slurp-surface)] p-3 text-xs ring-1 ring-inset ring-[var(--noodle-divider)]">
-      <dl className="flex flex-col gap-1.5">
+      <dl className="flex flex-col gap-3">
         <div className="flex items-baseline justify-between gap-3">
           <dt className="text-[var(--muted-foreground)]">
             {localizeUi("ui.slurp.messages.relationshipTier", { defaultValue: "Where you stand" })}
@@ -1853,8 +1867,44 @@ function SlurpRelationshipPanel({
               <dt className="text-[var(--muted-foreground)]">
                 {localizeUi("ui.slurp.messages.relationshipMood", { defaultValue: "Conversation mood" })}
               </dt>
-              <dd className="font-bold tabular-nums">{Math.round(relationship.mood)}</dd>
+              <dd className="font-bold capitalize">{moodLabel}</dd>
             </div>
+            <div
+              aria-label={localizeUi("ui.slurp.messages.moodLevel", { defaultValue: "Conversation mood" })}
+              className="h-1.5 overflow-hidden rounded-full bg-[var(--slurp-surface-raised)]"
+            >
+              <div
+                className={cn(
+                  "h-full rounded-full transition-[width]",
+                  mood !== null && mood < -25 ? "bg-amber-500" : "bg-[var(--noodle-accent)]",
+                )}
+                style={{ width: `${moodPercent}%` }}
+              />
+            </div>
+            <div className="grid grid-cols-2 gap-2">
+              <InfoChip
+                label={localizeUi("ui.slurp.messages.relationshipTone", { defaultValue: "Tone" })}
+                value={relationship.audienceTone}
+              />
+              <InfoChip
+                label={localizeUi("ui.slurp.messages.relationshipImages", { defaultValue: "Pictures" })}
+                value={relationship.imageMode === "none" ? "Not now" : relationship.imageMode}
+              />
+            </div>
+            {relationship.dayVibe && (
+              <p className="rounded-xl bg-[var(--slurp-surface-raised)] px-2.5 py-2 text-[var(--muted-foreground)]">
+                <span className="font-bold text-[var(--foreground)]">
+                  {localizeUi("ui.slurp.messages.dayVibe", { defaultValue: "Today" })}:
+                </span>{" "}
+                {relationship.dayVibe}
+              </p>
+            )}
+            <p className="text-[var(--muted-foreground)]">
+              <span className="font-bold text-[var(--foreground)]">
+                {relationship.availability.online ? "Available" : "Away"}
+              </span>
+              {relationship.availability.activity ? ` · ${relationship.availability.activity}` : ""}
+            </p>
             {relationship.contributions.length > 0 && (
               <div className="mt-1 flex flex-wrap gap-1">
                 {relationship.contributions
@@ -1895,6 +1945,15 @@ function SlurpRelationshipPanel({
           </p>
         )}
       </dl>
+    </div>
+  );
+}
+
+function InfoChip({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="rounded-xl bg-[var(--slurp-surface-raised)] px-2.5 py-2">
+      <div className="text-[0.6rem] uppercase tracking-[0.08em] text-[var(--muted-foreground)]">{label}</div>
+      <div className="mt-0.5 font-bold capitalize">{value}</div>
     </div>
   );
 }

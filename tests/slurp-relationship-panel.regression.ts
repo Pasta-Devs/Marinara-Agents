@@ -35,6 +35,10 @@ assert.doesNotMatch(viewerBlock.slice(0, 300), /score:|mood:/u);
 // The client renders both, and only shows the numbers on the creator side.
 assert.match(view, /function SlurpRelationshipPanel\(/u);
 assert.match(view, /relationship\.side === "viewer" \?/u);
+assert.match(view, /moodLabel/u);
+assert.match(view, /relationship\.dayVibe/u);
+assert.match(view, /relationship\.imageMode/u);
+assert.match(view, /InfoChip/u);
 assert.match(view, /aria-expanded=\{infoOpen\}/u);
 // Opening a different conversation must not inherit the last one's open panel.
 assert.match(view, /setInfoOpen\(false\);[\s\S]{0,120}setDebugOpen\(false\)/u);

@@ -15,6 +15,7 @@ import { replyToSlurpMessage } from "../services/slurp/slurp-message.operation.j
 import { SLURP_DM_POLICIES } from "../services/slurp/slurp-messaging.js";
 import { SLURP_DEFAULT_RAPPORT_WEIGHTS } from "../services/slurp/slurp-rapport.js";
 import { activeSlurpStrikes } from "../services/slurp/slurp-stance.js";
+import { readSlurpAudienceTone } from "../services/slurp/slurp-tone.js";
 import { existsSync } from "node:fs";
 import { basename, dirname } from "node:path";
 import { generateSlurpCommissionImage } from "../services/slurp/slurp-commission-image.operation.js";
@@ -297,6 +298,15 @@ export async function slurpMessageRoutes(app: FastifyInstance) {
               strikes: activeSlurpStrikes(thread.strikes, thread.lastStrikeAt),
               notes: thread.notes,
               coolUntil: thread.coolUntil,
+              dayVibe: await describeSlurpDayVibe(app.db, thread.creatorAccountId),
+              availability: (await creatorPresence(creator, thread.id)).creatorAvailability,
+              audienceTone: readSlurpAudienceTone((await slurp.getSettings()).audienceTone),
+              imageMode:
+                thread.mood <= -40 && readSlurpAudienceTone((await slurp.getSettings()).audienceTone) === "unfiltered"
+                  ? "hostile"
+                  : thread.mood >= 20
+                    ? "friendly"
+                    : "none",
             }
           : {
               side,

@@ -2025,6 +2025,10 @@ export type SlurpThreadRelationship =
       strikes: number;
       notes: string[];
       coolUntil: string | null;
+      dayVibe: string | null;
+      availability: { online: boolean; activity: string | null; minutesUntilOnline: number | null };
+      audienceTone: "warm" | "mixed" | "unfiltered";
+      imageMode: "friendly" | "hostile" | "none";
     };
 
 export type SlurpPromptDebug = {
