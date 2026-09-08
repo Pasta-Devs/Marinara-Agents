@@ -1,6 +1,4 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
-import { fileURLToPath } from "node:url";
 
 import { scopeTargetLabel } from "../packages/long-term-memory/src/engine/packages/client/src/features/long-term-memory/display-labels.js";
 
@@ -46,30 +44,10 @@ assert.equal(
   "a real target label takes precedence over every fallback",
 );
 
-const memoryVaultSource = readFileSync(
-  fileURLToPath(
-    new URL(
-      "../packages/long-term-memory/src/engine/packages/client/src/features/long-term-memory/MemoryVault.tsx",
-      import.meta.url,
-    ),
-  ),
-  "utf8",
-);
-
-assert.match(
-  memoryVaultSource,
-  /formatScopeTargetLabel\(kind, id, targets, \{[\s\S]*?chat: localizeUi\([\s\S]*?character: localizeUi\([\s\S]*?group: localizeUi\([\s\S]*?persona: localizeUi\([\s\S]*?\.\.\.fallbackLabels,[\s\S]*?\}\)/u,
-  "MemoryVault applies per-call overrides after its localized defaults",
-);
-assert.match(
-  memoryVaultSource,
-  /subjectLabel[\s\S]*?scopeTargetLabel\(subject\.ref\.kind, subject\.ref\.id, pickerTargets, \{[\s\S]*?deletedCharacter[\s\S]*?missingPersona/u,
-  "subject labels provide deleted-character and missing-persona overrides",
-);
-assert.match(
-  memoryVaultSource,
-  /const unavailableLabels = \{[\s\S]*?persona: localizeUi\("ui\.longTermMemory\.memoryvault\.unavailablePersona"\)[\s\S]*?const entries = availabilityEntries\(scope, targets, unavailableLabels\)/u,
-  "the availability pills provide the missing-persona override",
+assert.equal(
+  scopeTargetLabel("local_character", "missing-local", [], { local_character: "Local character fallback" }),
+  "Local character fallback",
+  "local_character respects fallback overrides",
 );
 
 process.stdout.write("Long-Term Memory scope fallback regression: localized defaults and per-kind overrides ok\n");

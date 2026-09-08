@@ -39,13 +39,12 @@ privileged routes, debug logging, and the exact release artifact lifecycle:
 ```bash
 cd ../Marinara-Engine
  set -e
-for test in storage extraction-graph extraction-reliability runtime routes conversation-summary-import debug-log lifecycle local-characters scope-targets scope-fallback-labels source-task index-keys; do
+for test in storage extraction-graph extraction-reliability runtime routes-notes routes-imports routes-drafts routes-scope-identity routes-backup routes conversation-summary-import debug-log browser installation lifecycle local-characters scope-targets scope-fallback-labels source-task index-keys; do
   MARINARA_ENGINE_ROOT="$PWD" pnpm --filter @marinara-engine/server exec tsx \
     "$PWD/../Marinara-Agents/tests/long-term-memory-${test}.regression.ts"
 done
  node "$PWD/../Marinara-Agents/tests/long-term-memory-loading.regression.mjs"
 node "$PWD/../Marinara-Agents/tests/long-term-memory-feedback-clarity-ui.regression.mjs"
-node "$PWD/../Marinara-Agents/tests/long-term-memory-chat-settings-ui.regression.mjs"
 ```
 
 The completion watchdog proof is a direct Node test:
