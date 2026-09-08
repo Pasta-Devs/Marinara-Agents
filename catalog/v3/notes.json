@@ -36,6 +36,12 @@
     "slurp": {
       "versions": [
         {
+          "version": "1.2.25",
+          "date": "2026-09-08",
+          "notes": "- A Creator who answers a message is no longer left marked as owing a reply. The unread count on the Creator's side was never cleared by replying, so an answered conversation stayed in the reply queue forever and the badge never went away.\n- The message thread now shows whether a Creator is online, away, or offline, the same as their profile does.",
+          "highlight": false
+        },
+        {
           "version": "1.2.24",
           "date": "2026-09-08",
           "notes": "- A late automatic post is no longer thrown away too early. The grace on an overdue slot was a fixed hour that ignored the posting pace, so at a fast pace a slot had barely one gap to survive a hiccup, and at a slow pace a slot missed by an hour was destroyed with its replacement still five hours away. It now follows the posting interval.",
@@ -147,12 +153,6 @@
           "version": "1.2.6",
           "date": "2026-09-07",
           "notes": "- Fixed Slurp failing to load when wallet settings were normalized.",
-          "highlight": false
-        },
-        {
-          "version": "1.2.5",
-          "date": "2026-09-07",
-          "notes": "- Background audience activity no longer reacts to draft posts.\n- Free subscriptions now enter the Creator audience funnel even when wallet charging is disabled.\n- Story views are idempotent under concurrent requests.\n- Creator-side Inbox threads show the fan identity and correct message direction.\n- Paid-message media paths are server-owned, so callers cannot expose unrelated protected API media.\n- Commission image failures now offer a clear text-only delivery path.",
           "highlight": false
         }
       ]

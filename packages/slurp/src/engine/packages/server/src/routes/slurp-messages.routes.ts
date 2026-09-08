@@ -187,11 +187,17 @@ export async function slurpMessageRoutes(app: FastifyInstance) {
           (await slurp.getNoodlerAccountById(thread.viewerAccountId)) ??
           (await slurp.getViewer(thread.viewerAccountId).catch(() => null)))
         : creator;
+    // When the creator last posted, so the thread header can show the same online/away/offline
+    // status the profile header does. The status rule is derived from posting activity, and the
+    // thread view had no way to see it, which is why it showed nothing.
+    const creatorLatestPost = (await slurp.listNoodlerPostsByAccount(thread.creatorAccountId, 1))[0] ?? null;
     return {
       thread: await freshView(thread.id),
       messages: await visibleMessages(thread.id, side),
       creator,
       counterpart,
+      creatorLastActiveAt: creatorLatestPost?.createdAt ?? null,
+      creatorAutoPosting: Boolean(creator?.settings.scheduler.autoPosting?.enabled),
       messaging: await messages.getCreatorMessaging(thread.creatorAccountId),
       commissions: await messages.listCommissionsForThread(thread.id),
     };

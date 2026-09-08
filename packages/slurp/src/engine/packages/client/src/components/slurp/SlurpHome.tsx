@@ -150,6 +150,7 @@ import { ChatImageLightbox } from "../chat/ChatImageLightbox";
 import { useNearViewportSlurpMediaSrc, useSlurpMediaSrc } from "../../hooks/use-slurp-media-src";
 import { SlurpOnboardingWizard } from "./SlurpOnboardingPanel";
 import { SlurpAgeGate } from "./SlurpAgeGate";
+import { slurpCreatorStatus } from "./slurp-creator-status";
 import {
   Avatar,
   getNoodleAccentStyle,
@@ -3599,13 +3600,10 @@ function StageProfileView({
   const followerTotal = connectionCounts[profile.id]?.followers ?? 0;
   const profileLikeTotal = posts.reduce((total, post) => total + (post.likeCount ?? 0), 0);
   const latestActivityAt = posts.reduce((latest, post) => Math.max(latest, Date.parse(post.createdAt)), 0);
-  const activityAge = Date.now() - latestActivityAt;
-  const creatorStatus: "online" | "away" | "offline" =
-    activityAge <= 15 * 60_000
-      ? "online"
-      : activityAge <= 24 * 60 * 60_000 || profile.autoPosting.enabled
-        ? "away"
-        : "offline";
+  const creatorStatus = slurpCreatorStatus({
+    lastActiveAt: latestActivityAt || null,
+    autoPostingEnabled: profile.autoPosting.enabled,
+  });
   const profileLocation = (profile as NoodlerManagedStageProfile & { location?: string }).location ?? "";
   const profileBioBody = profile.bio.trim();
   const accent = profileAccent(profile.id);

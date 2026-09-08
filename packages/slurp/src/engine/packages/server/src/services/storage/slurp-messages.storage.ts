@@ -474,7 +474,14 @@ export function createSlurpMessagesStorage(db: DB) {
           lastMessagePreview: slurpMessagePreview(kind, content, price),
           // The reader is whoever did not send. A creator reply clears nothing the viewer owes.
           viewerUnread: input.role === "creator" ? String(thread.viewerUnread + 1) : String(thread.viewerUnread),
-          creatorUnread: input.role === "viewer" ? String(thread.creatorUnread + 1) : String(thread.creatorUnread),
+          // Writing a reply means having read what it answers, so a creator message clears the
+          // creator's own count. This used to leave it standing, and nothing else clears it
+          // server-side — `markRead` is only ever called from the routes the player's own UI hits.
+          // So a thread the creator had already answered stayed "awaiting reply" forever:
+          // `listThreadsAwaitingReply` returned it every minute, the scheduler then skipped it
+          // because the newest message was the creator's own, and the creator-side badge never
+          // cleared. A production thread sat at five unread with the creator's reply on top.
+          creatorUnread: input.role === "viewer" ? String(thread.creatorUnread + 1) : "0",
           replyNotBeforeAt: input.role === "creator" ? null : thread.replyNotBeforeAt,
           rapport: JSON.stringify(rapport),
           updatedAt: timestamp,

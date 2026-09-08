@@ -16,6 +16,7 @@ import { useTranslation as useUiTranslation } from "react-i18next";
 import { useSlurpMediaSrc } from "../../hooks/use-slurp-media-src";
 import { cn } from "../../lib/utils";
 import { Avatar } from "./SlurpShell";
+import { slurpCreatorStatus } from "./slurp-creator-status";
 import { SlurpEmptyArtwork } from "./SlurpEmptyArtwork";
 import { formatTime } from "./SlurpDateTime";
 import { SlurpCoin, SlurpCoinAmount } from "./SlurpCoin";
@@ -427,6 +428,14 @@ function SlurpThreadView({
   const targetCreatorAccountId = thread?.creatorAccountId ?? creator?.id ?? creatorAccountId;
   const ownsCreator = Boolean(targetCreatorAccountId && ownedCreatorAccountIds.includes(targetCreatorAccountId));
   const headerAccount = ownsCreator ? counterpart : creator;
+  // Only meaningful for the Creator side of the conversation. Looking at your own inbox as the
+  // Creator, the counterpart is a fan, and a fan has no posting schedule to read a status from.
+  const creatorStatus = ownsCreator
+    ? null
+    : slurpCreatorStatus({
+        lastActiveAt: threadQuery.data?.creatorLastActiveAt ?? null,
+        autoPostingEnabled: threadQuery.data?.creatorAutoPosting ?? false,
+      });
   const headerProfileId = ownsCreator ? thread?.viewerAccountId : targetCreatorAccountId;
   const busy = send.isPending || tip.isPending || creatorReply.isPending || draftReply.isPending;
 
@@ -522,6 +531,23 @@ function SlurpThreadView({
               <span className="truncate text-[0.7rem] text-[var(--muted-foreground)]">
                 @{headerAccount?.handle ?? ""}
               </span>
+              {/* The same online/away/offline rule the profile header uses. A player deciding
+                  whether to wait for an answer was the one who most needed it and never had it. */}
+              {creatorStatus && (
+                <span className="flex shrink-0 items-center gap-1 text-[0.7rem] text-[var(--muted-foreground)]">
+                  <span
+                    aria-hidden
+                    className={`h-1.5 w-1.5 rounded-full ${
+                      creatorStatus === "online"
+                        ? "bg-emerald-500"
+                        : creatorStatus === "away"
+                          ? "bg-amber-500"
+                          : "bg-zinc-500"
+                    }`}
+                  />
+                  {localizeUi(`ui.slurp.profile.status.${creatorStatus}`, { defaultValue: creatorStatus })}
+                </span>
+              )}
               {/* Rapport decides how fast and how warmly a Creator answers. The player felt it and
                   could never see it, so the one number the whole thread turns on was invisible. */}
               {thread && <SlurpRapportBadge rapport={thread.rapport} ownsCreator={ownsCreator} />}

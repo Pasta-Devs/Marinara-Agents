@@ -1,5 +1,10 @@
 # Slurp release notes
 
+## 1.2.25 — 2026-09-08
+
+- A Creator who answers a message is no longer left marked as owing a reply. The unread count on the Creator's side was never cleared by replying, so an answered conversation stayed in the reply queue forever and the badge never went away.
+- The message thread now shows whether a Creator is online, away, or offline, the same as their profile does.
+
 ## 1.2.24 — 2026-09-08
 
 - A late automatic post is no longer thrown away too early. The grace on an overdue slot was a fixed hour that ignored the posting pace, so at a fast pace a slot had barely one gap to survive a hiccup, and at a slow pace a slot missed by an hour was destroyed with its replacement still five hours away. It now follows the posting interval.

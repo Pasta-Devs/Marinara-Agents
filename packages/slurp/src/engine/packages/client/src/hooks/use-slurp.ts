@@ -1920,6 +1920,8 @@ export function useSlurpThread(threadId: string | null, personaId: string | null
         messages: SlurpMessage[];
         creator: { id: string; handle: string; displayName: string; avatarUrl: string | null } | null;
         counterpart: { id: string; handle: string; displayName: string; avatarUrl: string | null } | null;
+        creatorLastActiveAt: string | null;
+        creatorAutoPosting: boolean;
         messaging: SlurpCreatorMessaging;
         commissions: SlurpCommission[];
         subscribed?: boolean;
