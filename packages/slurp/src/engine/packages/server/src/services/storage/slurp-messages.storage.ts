@@ -603,6 +603,7 @@ export function createSlurpMessagesStorage(db: DB) {
         content: string;
         kind?: SlurpMessageKind;
         price?: number;
+        unlockedAt?: string | null;
         imageUrl?: string | null;
         metadata?: Record<string, unknown>;
       },
@@ -623,6 +624,7 @@ export function createSlurpMessagesStorage(db: DB) {
         content: input.content,
         kind: input.kind,
         price: input.price,
+        unlockedAt: input.unlockedAt,
         imageUrl: input.imageUrl ?? null,
         metadata: input.metadata,
       });

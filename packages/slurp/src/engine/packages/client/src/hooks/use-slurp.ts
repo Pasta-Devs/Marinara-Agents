@@ -2239,6 +2239,7 @@ export function useSendSlurpCreatorImage() {
       personaId: string;
       prompt: string;
       content: string;
+      intent?: "friendly" | "hostile" | "premium";
     }) =>
       api.post<{ message: SlurpMessage }>(`/slurp/messages/threads/${encodeURIComponent(input.threadId)}/image`, input),
     onSuccess: () => invalidateSlurpMessages(queryClient),

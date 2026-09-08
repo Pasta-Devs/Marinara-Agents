@@ -34,6 +34,7 @@ import {
   useResolveSlurpMessageRequest,
   useDraftSlurpCreatorReply,
   useSendSlurpCreatorPpv,
+  useSendSlurpCreatorImage,
   useSendSlurpCreatorReply,
   useSendSlurpViewerImage,
   useSendSlurpMessage,
@@ -442,6 +443,7 @@ function SlurpThreadView({
   const draftReply = useDraftSlurpCreatorReply();
   const [draft, setDraft] = useState("");
   const [error, setError] = useState<string | null>(null);
+  const [imageIntent, setImageIntent] = useState<"friendly" | "hostile" | "premium">("friendly");
   const [typing, setTyping] = useState(false);
   const [toolsOpen, setToolsOpen] = useState(false);
   const [activeTipAmount, setActiveTipAmount] = useState<number | null>(null);
@@ -1242,19 +1244,24 @@ function CreatorMessageTools({
   viewerAccountId,
   personaId,
   defaultPpvPrice,
+  threadId,
 }: {
   creatorAccountId: string;
   viewerAccountId: string;
   personaId: string;
   /** The creator's configured PPV price, used as the opening offer rather than a fixed one. */
   defaultPpvPrice: number;
+  threadId: string;
 }) {
   const { t: localizeUi } = useUiTranslation();
   const sendPpv = useSendSlurpCreatorPpv();
+  const sendImage = useSendSlurpCreatorImage();
   const [open, setOpen] = useState(false);
   const [content, setContent] = useState("");
   const [price, setPrice] = useState(defaultPpvPrice > 0 ? defaultPpvPrice : 10);
   const [error, setError] = useState<string | null>(null);
+  const [imagePrompt, setImagePrompt] = useState("");
+  const [imageIntent, setImageIntent] = useState<"friendly" | "hostile" | "premium">("friendly");
 
   const submit = async () => {
     const body = content.trim();
@@ -1333,6 +1340,51 @@ function CreatorMessageTools({
           )}
         </div>
       )}
+      <div className="border-t border-[var(--noodle-divider)] p-3">
+        <label className="text-xs font-bold" htmlFor="slurp-creator-image-prompt">
+          Generate a picture
+        </label>
+        <textarea
+          id="slurp-creator-image-prompt"
+          value={imagePrompt}
+          rows={2}
+          maxLength={1000}
+          onChange={(event) => setImagePrompt(event.target.value)}
+          className="mt-2 w-full resize-y rounded-lg bg-[var(--slurp-canvas,var(--background))] px-3 py-2 text-sm ring-1 ring-inset ring-[var(--noodle-divider)]"
+          placeholder="What do you want to show them?"
+        />
+        <select
+          value={imageIntent}
+          onChange={(event) => setImageIntent(event.target.value as typeof imageIntent)}
+          className="mt-2 h-9 rounded-lg bg-[var(--slurp-canvas,var(--background))] px-2 text-sm"
+        >
+          <option value="friendly">Friendly</option>
+          <option value="hostile">Hostile</option>
+          <option value="premium">Premium</option>
+        </select>
+        <button
+          type="button"
+          disabled={!imagePrompt.trim() || sendImage.isPending}
+          onClick={() =>
+            void sendImage
+              .mutateAsync({
+                threadId,
+                creatorAccountId,
+                personaId,
+                prompt: imagePrompt.trim(),
+                content: "",
+                intent: imageIntent,
+              })
+              .then(
+                () => setImagePrompt(""),
+                (cause) => setError(cause instanceof Error ? cause.message : "Could not send that picture."),
+              )
+          }
+          className="mt-2 min-h-10 rounded-lg bg-[var(--noodle-accent)] px-3 text-xs font-bold text-zinc-950 disabled:opacity-50"
+        >
+          {sendImage.isPending ? "Making…" : "Generate and send"}
+        </button>
+      </div>
     </div>
   );
 }

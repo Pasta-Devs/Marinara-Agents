@@ -16,6 +16,7 @@ import { SLURP_DM_POLICIES } from "../services/slurp/slurp-messaging.js";
 import { SLURP_DEFAULT_RAPPORT_WEIGHTS } from "../services/slurp/slurp-rapport.js";
 import { activeSlurpStrikes } from "../services/slurp/slurp-stance.js";
 import { readSlurpAudienceTone } from "../services/slurp/slurp-tone.js";
+import { resolveSlurpMediaOffer } from "../services/slurp/slurp-media-offer.js";
 import { existsSync } from "node:fs";
 import { basename, dirname } from "node:path";
 import { generateSlurpCommissionImage } from "../services/slurp/slurp-commission-image.operation.js";
@@ -754,6 +755,7 @@ export async function slurpMessageRoutes(app: FastifyInstance) {
         creatorAccountId: z.string().min(1),
         prompt: z.string().trim().min(3).max(1000),
         content: z.string().max(1000).default(""),
+        intent: z.enum(["friendly", "hostile", "premium", "preview"]).default("friendly"),
       })
       .safeParse(req.body ?? {});
     if (!parsed.success) return reply.code(400).send({ error: parsed.error.flatten() });
@@ -765,6 +767,19 @@ export async function slurpMessageRoutes(app: FastifyInstance) {
       !(await ownsCreator(parsed.data.personaId, thread.creatorAccountId))
     )
       return reply.code(404).send({ error: "Thread not found" });
+    if (thread.coolUntil && thread.coolUntil > new Date().toISOString()) {
+      return reply.code(409).send({ error: "This conversation is cooling off." });
+    }
+    const subscribed = (await slurp.listSubscriptionsForViewer(thread.viewerAccountId)).some(
+      (entry) => entry.creatorAccountId === thread.creatorAccountId,
+    );
+    const messaging = await messages.getCreatorMessaging(thread.creatorAccountId);
+    const offer = resolveSlurpMediaOffer({
+      intent: parsed.data.intent,
+      rapportTier: thread.rapport.tier,
+      subscribed,
+      configuredPrice: messaging.ppvPrice,
+    });
     const drawn = await generateSlurpCommissionImage(app.db, {
       creatorAccountId: thread.creatorAccountId,
       brief: parsed.data.prompt,
@@ -773,8 +788,15 @@ export async function slurpMessageRoutes(app: FastifyInstance) {
     try {
       const message = await messages.sendCreatorMessage(thread.creatorAccountId, thread.viewerAccountId, {
         content: parsed.data.content,
+        kind: offer.visibility === "locked" ? "ppv" : "text",
+        price: offer.price,
+        unlockedAt: offer.visibility === "free" ? new Date().toISOString() : null,
         imageUrl: slurpMessageMediaUrl("pending"),
-        metadata: { noodlerMediaPath: drawn.mediaPath },
+        metadata: {
+          noodlerMediaPath: drawn.mediaPath,
+          generatedContext: parsed.data.intent,
+          mediaReason: offer.reason,
+        },
       });
       if (!message) return reply.code(404).send({ error: "Thread not found" });
       drawn.promote();
