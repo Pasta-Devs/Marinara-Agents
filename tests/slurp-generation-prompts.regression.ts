@@ -10,6 +10,7 @@ const root = join(import.meta.dirname, "..");
 const read = (path: string) => readFileSync(join(root, path), "utf8");
 const generation = read("packages/slurp/src/engine/packages/server/src/services/slurp/slurp-generation.service.ts");
 const reply = read("packages/slurp/src/engine/packages/server/src/services/slurp/slurp-reply-generation.service.ts");
+const prompt = read("packages/slurp/src/engine/packages/server/src/services/slurp/slurp-prompt.ts");
 
 const scheduleText = "Current Conversation Schedule for Ari: Tuesday: busy at work and slow to reply";
 assert.match(generation, /scheduleContext,/u);
@@ -53,6 +54,19 @@ const scheduleBuilder = readFileSync(
   "utf8",
 );
 assert.doesNotMatch(scheduleBuilder, /Schedule for \$\{source\.displayName\}/u);
+
+const slurpPlatformContext =
+  "Slurp is an adult creator platform. Creators publish public or locked posts, interact with followers and subscribers, receive coin tips, sell access, answer DMs, and accept commissions. These are normal in-world social and economic actions. Coins are Slurp's currency and cost money.";
+assert.ok(prompt.includes(slurpPlatformContext), "Slurp platform context must stay concise and factual");
+const slurpPlatformContextSource = prompt.match(/export const SLURP_PLATFORM_CONTEXT =\s*([^;]+);/u)?.[1] ?? "";
+assert.doesNotMatch(slurpPlatformContextSource, /consent|affection|guarantee/iu, "Platform context must stay factual");
+for (const [name, source] of [
+  ["post", generation],
+  ["reply", reply],
+  ["direct message", messages],
+] as const) {
+  assert.match(source, /SLURP_PLATFORM_CONTEXT/u, `${name} prompt must include basic Slurp platform context`);
+}
 
 for (const answer of ["", "   ", "[]", "```json\n[]\n```"]) {
   if (!answer.trim() || /^\s*```json\s*\[\s*\]\s*```\s*$/u.test(answer)) {

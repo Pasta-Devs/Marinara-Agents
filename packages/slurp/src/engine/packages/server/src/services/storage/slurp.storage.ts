@@ -792,9 +792,9 @@ export const LEGACY_SLURP_DEFAULT_GENERATION_GUIDANCE =
 export const SLURP_GUIDANCE_PRESETS = {
   mild: "All Slurp creators and viewers are adults (18+). This is an adult creator page, but a restrained one: posts are flirty, teasing, and suggestive rather than graphic. Innuendo, charm, and anticipation do the work, and locked posts are teased instead of described. Do not write explicit sexual detail. Keep each creator's personality intact: a shy creator flirts shyly, a blunt one flirts bluntly. Ordinary posts about their day, work, and mood stay just as important as the flirty ones.",
   steamy:
-    "All Slurp creators and viewers are adults (18+). This is an adult creator page. Posts are normally sexually suggestive to outright NSFW. Creators will use Slurp to often excite their readers with their posts. The level of NSFW of a post is dependent on the creator's personality, a shy, innocent person will be suggestive, but still overall tame. On the other end of the spectrum, an outgoing personality who has no problems with sex, will often post very explicit material.",
+    "All Slurp creators and viewers are adults (18+). This is an adult creator page. Posts are normally sexually suggestive to outright NSFW. Creators will use Slurp to often excite their readers with their posts. The level of NSFW of a post is dependent on the creator's personality, a shy, innocent person will be suggestive, but still overall tame. On the other end of the spectrum, an outgoing personality who has no problems with sex, will often post very explicit material. When a post is explicit or shows nudity, always use thorough, graphic, horny descriptions. Name the body in dirty everyday words, not clinical ones: tits, nipples, ass, pussy, clit, cock, balls, cum, wet, dripping, hard, leaking. Describe how it looks, feels, and moves. Keep each creator's personality intact.",
   explicit:
-    "All Slurp creators and viewers are adults (18+). This is an explicit adult creator page. Sexual content is the norm here rather than the exception, and creators describe it directly and in detail when it suits them. Tease the locked posts hard and answer flirty comments in kind. Keep each creator's personality intact: a shy creator is explicit shyly, a blunt one is explicit bluntly. Ordinary posts about their day, work, and mood still appear and keep the feed believable.",
+    "All Slurp creators and viewers are adults (18+). This is an explicit adult creator page. Sexual content is the norm here rather than the exception, and creators describe it directly and in detail when it suits them. Tease the locked posts hard and answer flirty comments in kind. Always use thorough, graphic, horny descriptions for nudity and sex. Name the body in dirty everyday words, not clinical ones: tits, nipples, ass, pussy, clit, cock, balls, cum, wet, dripping, hard, leaking. Describe how it looks, feels, and moves. Keep each creator's personality intact: a shy creator is explicit shyly, a blunt one is explicit bluntly. Ordinary posts about their day, work, and mood still appear and keep the feed believable.",
 } as const;
 
 export type SlurpGuidanceLevel = keyof typeof SLURP_GUIDANCE_PRESETS;
@@ -804,10 +804,18 @@ export const NOODLER_DEFAULT_GENERATION_GUIDANCE: string = SLURP_GUIDANCE_PRESET
 /** The middle level shipped with a typo before the levels existed; migrate it forward. */
 export const LEGACY_TYPO_SLURP_DEFAULT_GENERATION_GUIDANCE =
   "All Slurp creators and viewers are adults (18+). This is an adult creator page. Posts are normallly sexually suggestive to outright NSFW. Creators will use Slurp to often excite its readers with their posts. The level of NSFW of a post is dependent on the creator's personality, a shy, innocent person will be suggestive, but still overall tame. On the other end of the spectrum, an outgoing personality who has no problems with sex, will often post very explicit material.";
-export const NOODLER_DEFAULT_IMAGE_GENERATION_PROMPT =
+export const LEGACY_STEAMY_SLURP_DEFAULT_GENERATION_GUIDANCE =
+  "All Slurp creators and viewers are adults (18+). This is an adult creator page. Posts are normally sexually suggestive to outright NSFW. Creators will use Slurp to often excite their readers with their posts. The level of NSFW of a post is dependent on the creator's personality, a shy, innocent person will be suggestive, but still overall tame. On the other end of the spectrum, an outgoing personality who has no problems with sex, will often post very explicit material.";
+export const LEGACY_EXPLICIT_SLURP_DEFAULT_GENERATION_GUIDANCE =
+  "All Slurp creators and viewers are adults (18+). This is an explicit adult creator page. Sexual content is the norm here rather than the exception, and creators describe it directly and in detail when it suits them. Tease the locked posts hard and answer flirty comments in kind. Keep each creator's personality intact: a shy creator is explicit shyly, a blunt one is explicit bluntly. Ordinary posts about their day, work, and mood still appear and keep the feed believable.";
+export const LEGACY_NOODLER_DEFAULT_IMAGE_GENERATION_PROMPT =
   "Create a polished social-media image for an adult Creator post. Match the creator's identity, personality, body, clothing, and established visual details. Follow the post's mood and subject. Describe the pose, expression, setting, lighting, camera angle, composition, and visible details clearly. Flirty, suggestive, sensual, or explicit imagery is allowed when it fits the post and creator, but do not force sexual content into ordinary updates. Keep the image coherent, intentional, and suitable for a public or locked Creator feed.";
-export const NOODLER_DEFAULT_IMAGE_PROMPT_INTERPRETATION =
+export const NOODLER_DEFAULT_IMAGE_GENERATION_PROMPT =
+  "Create a polished social-media image for an adult Creator post. Match the creator's identity, personality, body, clothing, and established visual details. Follow the post's mood and subject. Describe the pose, expression, setting, lighting, camera angle, composition, and visible details clearly. Flirty, suggestive, sensual, or explicit imagery is allowed when it fits the post and creator, but do not force sexual content into ordinary updates. When the image shows nudity or sex, always use thorough, graphic descriptions. Name the body in dirty everyday words, not clinical ones: tits, nipples, ass, pussy, clit, cock, balls, cum, wet, dripping, hard, leaking. Describe how it looks, how it sits, how it catches the light. Keep the image coherent, intentional, and suitable for a public or locked Creator feed.";
+export const LEGACY_NOODLER_DEFAULT_IMAGE_PROMPT_INTERPRETATION =
   "Edit this image prompt into a provider-ready image prompt. Preserve the original subject, action, setting, composition, and visual style. Preserve any explicit style in the original prompt, character context, image instructions, or style guidance. Do not add realistic, photorealistic, photographic, camera, lens, or natural-lighting language unless the supplied context clearly requests that style. Do not convert an anime, cartoon, game, manga, comic, illustration, painterly, fantasy, or stylized character into a realistic image. When no style is specified, keep the prompt style-neutral. Do not invent an art style. Treat image instructions as guidance, not text to copy into the result. Return only the provider-ready image prompt.";
+export const NOODLER_DEFAULT_IMAGE_PROMPT_INTERPRETATION =
+  "Edit this image prompt into a provider-ready image prompt. Preserve the original subject, action, setting, composition, and visual style. Preserve any explicit style in the original prompt, character context, image instructions, or style guidance. Do not add realistic, photorealistic, photographic, camera, lens, or natural-lighting language unless the supplied context clearly requests that style. Do not convert an anime, cartoon, game, manga, comic, illustration, painterly, fantasy, or stylized character into a realistic image. When no style is specified, keep the prompt style-neutral. Do not invent an art style. When the prompt shows nudity or sex, keep thorough, graphic body language and dirty everyday words such as tits, nipples, ass, pussy, clit, cock, balls, cum, wet, dripping, hard, leaking. Do not replace them with clinical or euphemistic wording. Treat image instructions as guidance, not text to copy into the result. Return only the provider-ready image prompt.";
 
 /**
  * The LEGACY_* guidance constants above are every previously shipped default. An install that
@@ -931,15 +939,22 @@ export function normalizeSlurpSettings(raw: unknown): SlurpSettings {
   candidate.generationGuidance =
     rawRecord.generationGuidance === LEGACY_NOODLER_DEFAULT_GENERATION_GUIDANCE ||
     rawRecord.generationGuidance === LEGACY_TYPO_SLURP_DEFAULT_GENERATION_GUIDANCE ||
-    rawRecord.generationGuidance === LEGACY_SLURP_DEFAULT_GENERATION_GUIDANCE
+    rawRecord.generationGuidance === LEGACY_SLURP_DEFAULT_GENERATION_GUIDANCE ||
+    rawRecord.generationGuidance === LEGACY_STEAMY_SLURP_DEFAULT_GENERATION_GUIDANCE
       ? NOODLER_DEFAULT_GENERATION_GUIDANCE
-      : (rawRecord.generationGuidance ?? NOODLER_DEFAULT_GENERATION_GUIDANCE);
+      : rawRecord.generationGuidance === LEGACY_EXPLICIT_SLURP_DEFAULT_GENERATION_GUIDANCE
+        ? SLURP_GUIDANCE_PRESETS.explicit
+        : (rawRecord.generationGuidance ?? NOODLER_DEFAULT_GENERATION_GUIDANCE);
   candidate.imageGenerationPrompt =
-    rawRecord.imageGenerationPrompt === undefined || rawRecord.imageGenerationPrompt === ""
+    rawRecord.imageGenerationPrompt === undefined ||
+    rawRecord.imageGenerationPrompt === "" ||
+    rawRecord.imageGenerationPrompt === LEGACY_NOODLER_DEFAULT_IMAGE_GENERATION_PROMPT
       ? NOODLER_DEFAULT_IMAGE_GENERATION_PROMPT
       : rawRecord.imageGenerationPrompt;
   candidate.imagePromptInterpretation =
-    rawRecord.imagePromptInterpretation === undefined || rawRecord.imagePromptInterpretation === ""
+    rawRecord.imagePromptInterpretation === undefined ||
+    rawRecord.imagePromptInterpretation === "" ||
+    rawRecord.imagePromptInterpretation === LEGACY_NOODLER_DEFAULT_IMAGE_PROMPT_INTERPRETATION
       ? NOODLER_DEFAULT_IMAGE_PROMPT_INTERPRETATION
       : rawRecord.imagePromptInterpretation;
   candidate.nightQuiet = rawRecord.nightQuiet ?? DEFAULT_SLURP_SETTINGS.nightQuiet;

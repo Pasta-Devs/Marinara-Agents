@@ -43,6 +43,7 @@ import {
   type SlurpGeneratedDmReply,
 } from "./slurp-dm-response.js";
 import { slurpArcDescription } from "./slurp-arc.js";
+import { SLURP_PLATFORM_CONTEXT } from "./slurp-prompt.js";
 import { createSlurpPopulationStorage } from "../storage/slurp-population.storage.js";
 import type { SlurpMessage } from "../storage/slurp-messages.storage.js";
 import type { SlurpDmPolicy } from "./slurp-messaging.js";
@@ -83,6 +84,7 @@ export function buildSlurpMessageChat(input: {
     protectNoodlerGeneratedIdentity(value, input.disclosureMode, input.publicIdentity) ?? "";
   const system = [
     "You write exactly one direct message from one Slurp creator to one fan, inside a private chat.",
+    SLURP_PLATFORM_CONTEXT,
     "Write only as the supplied creator's stage persona. Never write the fan's side of the conversation.",
     NOODLER_UNTRUSTED_CONTENT_INSTRUCTION,
     input.generationGuidance.trim(),

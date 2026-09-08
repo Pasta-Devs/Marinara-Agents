@@ -36,6 +36,12 @@
     "slurp": {
       "versions": [
         {
+          "version": "1.2.42",
+          "date": "2026-09-09",
+          "notes": "- Shipped Steamy, Explicit, and image guidance now ask for thorough, graphic body descriptions when a post or picture is already nude or sexual. Unedited installs receive the new wording.",
+          "highlight": false
+        },
+        {
           "version": "1.2.41",
           "date": "2026-09-08",
           "notes": "- Automatic commissions are delivered through one shared path, so the accept route and the message scheduler always attach the artwork and queue the Creator's note in the same order.\n- A commission delivery note is drawn from a per-commission copy bank instead of one fixed sentence.\n- A failed delivery message refunds the fan instead of leaving the commission stuck.\n- Message threads show a \"commission arriving\" indicator while a delivery is in flight.",
@@ -147,12 +153,6 @@
           "version": "1.2.23",
           "date": "2026-09-08",
           "notes": "- Posts per day now means posts per day. The scheduler laid down twice the number of slots it was asked for whenever three or more Creators were set up, so every pace — including the named presets — quietly ran at double its stated rate.\n- Fixed the wasted work that came with it. Because the surplus slots were created and then discarded again, most scheduled posts never became anything: one install had 100 discarded slots against 42 published, some destroyed four minutes after they were created. The doubled rate also drained the daily generation budget, which is sized to posts per day, about halfway through the day.\n- Posts per day can now be set as high as 96, so a pace above the old ceiling of 24 can be asked for directly.",
-          "highlight": false
-        },
-        {
-          "version": "1.2.22",
-          "date": "2026-09-08",
-          "notes": "- The free audience reactions that arrive while you read now get busier as you add Creators. The budget averaged audience size across posts instead of adding it up, so six Creators produced exactly as few likes, follows, and comments as one, and posting more only diluted it.\n- Free audience comments are now roughly six times more frequent. At six new Creators one arrives about every 25 minutes, where it used to be one every two and a half hours.\n- Added a Free comment bank in Audience settings. It holds the short comments the audience leaves for free, you can edit or clear it, and Slurp tops it up occasionally so the same lines stop repeating.\n- Doubled the shipped free comment lines.\n- Automatic posting no longer slows to one pass every thirty minutes when a Creator's artwork cannot be drawn. A missing image connection used to stall publishing for a reason unrelated to posting.\n- Audience activity runs can now be set up to 96 a day, and the default is 8 a day instead of 4.",
           "highlight": false
         }
       ]

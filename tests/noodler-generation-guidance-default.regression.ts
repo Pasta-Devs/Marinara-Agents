@@ -77,10 +77,27 @@ for (const level of levels) assert.match(serverPresets, new RegExp(`\\n  ${level
 // The typo'd build of the middle level must migrate forward rather than look like a user edit.
 assert.doesNotMatch(serverPresets, /normallly/u);
 assert.match(storage, /LEGACY_TYPO_SLURP_DEFAULT_GENERATION_GUIDANCE/u);
+assert.match(storage, /LEGACY_STEAMY_SLURP_DEFAULT_GENERATION_GUIDANCE/u);
+assert.match(storage, /LEGACY_EXPLICIT_SLURP_DEFAULT_GENERATION_GUIDANCE/u);
+assert.match(storage, /LEGACY_NOODLER_DEFAULT_IMAGE_GENERATION_PROMPT/u);
+assert.match(serverPresets, /\n  steamy:\s+"[^"]*tits, nipples, ass, pussy, clit, cock, balls, cum/u);
+assert.match(serverPresets, /\n  explicit:\s+"[^"]*tits, nipples, ass, pussy, clit, cock, balls, cum/u);
+assert.doesNotMatch(serverPresets, /\n  mild:\s+"[^"]*tits, nipples, ass/u);
+assert.match(
+  storage,
+  /NOODLER_DEFAULT_IMAGE_GENERATION_PROMPT =\n  "[^"]*tits, nipples, ass, pussy, clit, cock, balls, cum/u,
+);
+assert.match(storage, /LEGACY_NOODLER_DEFAULT_IMAGE_PROMPT_INTERPRETATION/u);
+assert.match(
+  storage,
+  /NOODLER_DEFAULT_IMAGE_PROMPT_INTERPRETATION =\n  "[^"]*tits, nipples, ass, pussy, clit, cock, balls, cum/u,
+);
 
 // The exact previously shipped prompt migrates, while any customized value remains untouched.
 assert.match(storage, /LEGACY_NOODLER_DEFAULT_GENERATION_GUIDANCE/u);
 assert.match(storage, /rawRecord\.generationGuidance === LEGACY_NOODLER_DEFAULT_GENERATION_GUIDANCE/u);
+assert.match(storage, /rawRecord\.generationGuidance === LEGACY_STEAMY_SLURP_DEFAULT_GENERATION_GUIDANCE/u);
+assert.match(storage, /rawRecord\.imageGenerationPrompt === LEGACY_NOODLER_DEFAULT_IMAGE_GENERATION_PROMPT/u);
 assert.doesNotMatch(generation, /"[^"\n]*NoodleR/u);
 assert.doesNotMatch(stageDraft, /"[^"\n]*NoodleR/u);
 assert.doesNotMatch(replyGeneration, /"[^"\n]*NoodleR/u);
@@ -108,7 +125,8 @@ assert.match(settings, /SLURP_GUIDANCE_PRESETS\[level\]/u, "the spice picker mus
 assert.match(settings, /restoreDefaultImagePrompt/u);
 assert.match(settings, /saveImagePrompt/u);
 assert.match(storage, /NOODLER_DEFAULT_IMAGE_GENERATION_PROMPT/u);
-assert.match(storage, /rawRecord\.imageGenerationPrompt === undefined \|\| rawRecord\.imageGenerationPrompt === ""/u);
+assert.match(storage, /rawRecord\.imageGenerationPrompt === undefined \|\|/u);
+assert.match(storage, /rawRecord\.imageGenerationPrompt === ""/u);
 assert.match(settings, /DEFAULT_SLURP_IMAGE_GENERATION_PROMPT/u);
 
 console.log("NoodleR generation guidance default regressions passed.");

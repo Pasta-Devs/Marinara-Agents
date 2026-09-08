@@ -1,5 +1,9 @@
 # Slurp release notes
 
+## 1.2.42 — 2026-09-09
+
+- Shipped Steamy, Explicit, and image guidance now ask for thorough, graphic body descriptions when a post or picture is already nude or sexual. Unedited installs receive the new wording.
+
 ## 1.2.41 — 2026-09-08
 
 - Automatic commissions are delivered through one shared path, so the accept route and the message scheduler always attach the artwork and queue the Creator's note in the same order.

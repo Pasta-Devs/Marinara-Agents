@@ -44,6 +44,7 @@ import { slurpPostBeat, slurpPostBeatInstruction } from "./slurp-post-beat.js";
 import { resolveSlurpCreatorScheduleContext } from "./slurp-creator-schedule.js";
 import { createChatsStorage } from "../storage/chats.storage.js";
 import { NOODLER_FORMAT_MAX_LENGTH, type NoodlerContentFormat } from "./slurp-content-format.js";
+import { SLURP_PLATFORM_CONTEXT } from "./slurp-prompt.js";
 export { NOODLER_FORMAT_MAX_LENGTH, type NoodlerContentFormat } from "./slurp-content-format.js";
 // The disclosure privacy core lives in a leaf module so tests can execute it instead of grepping
 // this file, which cannot be imported without a database and an LLM provider.
@@ -262,6 +263,7 @@ export function buildNoodlerPostMessages(input: {
   const format = input.request.format ?? "caption";
   const system = [
     "You write exactly one post for one Slurp creator page in Marinara Engine.",
+    SLURP_PLATFORM_CONTEXT,
     "Write only as the supplied Slurp account. Do not create other accounts, interactions, follows, or public timeline activity.",
     NOODLER_UNTRUSTED_CONTENT_INSTRUCTION,
     "Use the Slurp stage profile as supplied.",

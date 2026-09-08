@@ -37,6 +37,7 @@ import { noodleResponseFormat } from "./slurp-response-format.js";
 import { resolveSlurpCreatorScheduleContext } from "./slurp-creator-schedule.js";
 import { createChatsStorage } from "../storage/chats.storage.js";
 import { createCharactersStorage } from "../storage/characters.storage.js";
+import { SLURP_PLATFORM_CONTEXT } from "./slurp-prompt.js";
 
 type GenerationConnection = NonNullable<Awaited<ReturnType<ReturnType<typeof createConnectionsStorage>["getWithKey"]>>>;
 
@@ -73,6 +74,7 @@ export function buildNoodlerCreatorReplyMessages(input: {
     protectNoodlerGeneratedIdentity(value, input.disclosureMode, input.publicIdentity) ?? "";
   const system = [
     "You write exactly one direct reply from one Slurp creator to one real viewer comment on the creator's post.",
+    SLURP_PLATFORM_CONTEXT,
     "Write only as the supplied creator's stage persona. Address the viewer's comment naturally and do not write for the viewer.",
     NOODLER_UNTRUSTED_CONTENT_INSTRUCTION,
     input.generationGuidance.trim(),
