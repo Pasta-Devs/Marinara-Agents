@@ -1395,6 +1395,7 @@
   "ui.slurp.messages.commissionBalanceShort": "You need {{amount}} more coins.",
   "ui.slurp.messages.seenAt": "Seen {{time}}",
   "ui.slurp.messages.replyStatus.queued": "{{name}} has seen this. They are not around right now and will answer later.",
+  "ui.slurp.messages.replyStatus.cooling": "{{name}} has stepped away from this conversation. Give them some time.",
   "ui.slurp.messages.replyStatus.busy": "{{name}} is already writing back. Give it a moment.",
   "ui.slurp.messages.replyStatus.ineligible": "{{name}} is not answering this conversation right now.",
   "ui.slurp.messages.replyStatus.connection_not_found": "No text connection is configured, so nobody can answer yet.",

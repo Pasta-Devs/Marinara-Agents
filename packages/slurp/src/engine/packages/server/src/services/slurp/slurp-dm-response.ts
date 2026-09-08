@@ -11,6 +11,7 @@
  */
 import { z } from "zod";
 import { SLURP_MOOD_SHIFTS, type SlurpMoodShift } from "./slurp-mood.js";
+import type { SlurpStanceLatitude } from "./slurp-stance.js";
 
 /** A note is one short fact. Long enough for a sentence, short enough that twenty of them fit. */
 export const SLURP_NOTE_MAX_LENGTH = 160;
@@ -32,6 +33,9 @@ export type SlurpDmReply = {
   moodShift: SlurpMoodShift;
   remember: string[];
 };
+
+/** The reply plus what the resolved stance allows the creator to do about the conversation. */
+export type SlurpGeneratedDmReply = SlurpDmReply & { latitude: SlurpStanceLatitude };
 
 /**
  * Read a model answer back, tolerating everything except a missing reply.

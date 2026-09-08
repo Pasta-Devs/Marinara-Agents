@@ -20,7 +20,7 @@ assert.match(operation, /markRead\(thread\.id, "creator"\)/u);
 assert.match(operation, /pacing\.mode === "queued" && input\.force !== true/u);
 
 // Every outcome the operation can report has copy, so none of them renders as silence.
-for (const status of ["queued", "busy", "ineligible", "connection_not_found", "failed"]) {
+for (const status of ["queued", "cooling", "busy", "ineligible", "connection_not_found", "failed"]) {
   assert.ok(locales[`ui.slurp.messages.replyStatus.${status}`], `missing reply status copy for ${status}`);
   assert.ok(
     view.includes(`${status}:`) || view.includes(`replyStatus.${status}`),

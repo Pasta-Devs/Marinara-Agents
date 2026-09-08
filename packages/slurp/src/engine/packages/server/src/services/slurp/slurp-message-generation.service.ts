@@ -33,12 +33,14 @@ import { noodleResponseFormat } from "./slurp-response-format.js";
 import { resolveSlurpCreatorScheduleContext } from "./slurp-creator-schedule.js";
 import { resolveSlurpCreatorAvailability, type SlurpCreatorAvailability } from "./slurp-creator-schedule-context.js";
 import { describeSlurpRapport, type SlurpRapport } from "./slurp-rapport.js";
-import { describeSlurpMood, recoverSlurpMood, slurpMoodTone, type SlurpMoodTone } from "./slurp-mood.js";
+import { recoverSlurpMood, slurpMoodTone } from "./slurp-mood.js";
+import { resolveSlurpStance, type SlurpStance } from "./slurp-stance.js";
+import { readSlurpAudienceTone } from "./slurp-tone.js";
 import {
   readSlurpDmReply,
   SLURP_NOTE_MAX_LENGTH,
   SLURP_NOTES_PER_REPLY,
-  type SlurpDmReply,
+  type SlurpGeneratedDmReply,
 } from "./slurp-dm-response.js";
 import { slurpArcDescription } from "./slurp-arc.js";
 import { createSlurpPopulationStorage } from "../storage/slurp-population.storage.js";
@@ -65,10 +67,8 @@ export function buildSlurpMessageChat(input: {
   subscribed: boolean;
   dmPolicy: SlurpDmPolicy;
   isRequest: boolean;
-  /** Where the relationship is heading, when it is heading anywhere. */
-  arc?: string | null;
-  /** How this conversation has been going. The fast layer rapport cannot express. */
-  moodTone?: SlurpMoodTone;
+  /** Everything about how to behave, already resolved. See `slurp-stance.ts`. */
+  stance: SlurpStance;
   /** What the creator has posted lately, so "loved your new set" can be answered. */
   recentPosts?: { title: string | null; content: string; access: string }[];
   /** Facts kept from earlier in this conversation, beyond the history window. */
@@ -86,18 +86,11 @@ export function buildSlurpMessageChat(input: {
     NOODLER_UNTRUSTED_CONTENT_INSTRUCTION,
     input.generationGuidance.trim(),
     noodlerIdentityInstruction(input.disclosureMode, input.publicIdentity),
-    // The whole point of the rapport score: the same words from a stranger and from a whale must
-    // not get the same answer, and the model needs to be told which one it is talking to.
-    "Let the relationship set the warmth. A stranger gets a short, guarded, professional reply. A long-standing paying fan gets warmth, familiarity, and callbacks to what they have paid for.",
-    input.subscribed
-      ? "This fan is a paying subscriber right now. Treat them as one."
-      : "This fan is not subscribed. You may flirt, but paid content stays behind the paywall, and it is fair to say so.",
-    input.isRequest
-      ? "This is an unanswered message request, not an open conversation. Keep it brief and a little cautious."
-      : "",
-    input.availability.online
-      ? ""
-      : `You are not free right now: ${input.availability.activity ?? "you are away"}. Answer anyway, but let it show — you are replying between other things.`,
+    // One resolved position, not one line per signal. Rapport, mood, the day, the arc,
+    // availability and the tone dial all argue in `slurp-stance.ts` and arrive here agreed. Nine
+    // separate lines describing the same person is a contradiction, and a model resolves a
+    // contradiction by averaging it away.
+    ...input.stance.instructions,
     // Without this the creator answered "loved your new set" with a compliment about nothing: the
     // prompt carried the whole conversation and not one thing the conversation was ever about.
     input.recentPosts && input.recentPosts.length > 0
@@ -108,7 +101,6 @@ export function buildSlurpMessageChat(input: {
     input.notes && input.notes.length > 0
       ? "You already know some things about this fan from earlier conversations. They are supplied as knownAboutFan. Use them when they fit, and never recite them back as a list."
       : "",
-    describeSlurpMood(input.moodTone ?? "neutral") ?? "",
     "This is a private chat, so write like one: lowercase is fine, contractions are fine, emojis are fine if they suit the persona.",
     "Keep it to a chat message, not an essay. One to four sentences unless the fan asked something that needs more.",
     'Return exactly one JSON object with three fields: "content", "moodShift" and "remember".',
@@ -136,9 +128,7 @@ export function buildSlurpMessageChat(input: {
       handle: protect(input.viewer.handle),
       subscribed: input.subscribed,
     },
-    relationship: `${describeSlurpRapport(input.rapport, protect(input.viewer.displayName) || "this fan")}${
-      input.arc ? ` They are ${input.arc}.` : ""
-    }`,
+    relationship: describeSlurpRapport(input.rapport, protect(input.viewer.displayName) || "this fan"),
     ...(input.notes && input.notes.length > 0 ? { knownAboutFan: input.notes.map((note) => protect(note)) } : {}),
     ...(input.recentPosts && input.recentPosts.length > 0
       ? {
@@ -175,7 +165,7 @@ export function buildSlurpMessageChat(input: {
   ];
 }
 
-export async function generateSlurpMessageReply(input: {
+export type SlurpMessagePromptInput = {
   db: DB;
   // A `SlurpAccount`, not a bare `NoodleAccount`: resolving the creator's Engine source for the
   // schedule needs the source columns, and only the Slurp account carries them.
@@ -191,28 +181,27 @@ export async function generateSlurpMessageReply(input: {
   moodUpdatedAt?: string | null;
   /** What the creator already knows about this fan, beyond the last sixteen turns. */
   notes?: string[];
+  /** What kind of day the creator is having, already phrased. */
+  dayVibe?: string | null;
+  coolingOff?: boolean;
+  strikes?: number;
   connection: GenerationConnection;
   debugMode?: boolean;
-}): Promise<SlurpDmReply> {
-  const connections = createConnectionsStorage(input.db);
-  const fallbackConnection = await connections.getFallbackForMain();
-  const provider = withConnectionFallbackProvider({
-    primary: createLLMProvider(
-      input.connection.provider,
-      resolveBaseUrl(input.connection),
-      input.connection.apiKey,
-      input.connection.maxContext,
-      input.connection.openrouterProvider,
-      input.connection.maxTokensOverride,
-      input.connection.claudeFastMode === "true",
-      input.connection.treatAsLocalEndpoint === "true",
-      input.connection.defaultParameters,
-    ),
-    primaryConnectionId: input.connection.id,
-    fallbackConnection,
-    fallbackBaseUrl: fallbackConnection ? resolveBaseUrl(fallbackConnection) : "",
-    category: "main",
-  });
+};
+
+/**
+ * Assemble everything the model is about to be shown, and stop there.
+ *
+ * Split out of `generateSlurpMessageReply` so the debug view can render the exact prompt by
+ * running the real builder rather than a second copy of it. A reconstruction drifts, and then it
+ * reports something the model never received, which is worse than no debug view at all.
+ */
+export async function buildSlurpMessagePrompt(input: SlurpMessagePromptInput): Promise<{
+  messages: ChatMessage[];
+  stance: SlurpStance;
+  disclosureMode: Parameters<typeof noodlerIdentityInstruction>[0];
+  publicIdentity: Parameters<typeof noodlerIdentityInstruction>[1];
+}> {
   const slurp = createSlurpStorage(input.db);
   const disclosureMode = input.creator.settings.privacy.identityDisclosure ?? "secret";
   const publicIdentity = await resolveNoodlerPublicIdentity(input.db, input.creator);
@@ -240,9 +229,9 @@ export async function generateSlurpMessageReply(input: {
         .map((post) => ({ title: post.title, content: post.content, access: post.access })),
     )
     .catch(() => []);
-  const messages = buildSlurpMessageChat({
-    ...input,
-    arc: tie ? slurpArcDescription(tie.arc) : null,
+  const stance = resolveSlurpStance({
+    rapportTier: input.rapport.tier,
+    rapportScore: input.rapport.score,
     // Healed for the time since it was last written, so a fan who returns a day later is not
     // answered through yesterday's argument.
     moodTone: slurpMoodTone(
@@ -251,12 +240,53 @@ export async function generateSlurpMessageReply(input: {
         input.moodUpdatedAt ? Math.max(0, (Date.now() - Date.parse(input.moodUpdatedAt)) / 60_000) : 0,
       ),
     ),
+    arc: tie ? slurpArcDescription(tie.arc) : null,
+    dayVibe: input.dayVibe ?? null,
+    availability,
+    subscribed: input.subscribed,
+    isRequest: input.isRequest,
+    // The audience dial reaches private chat for the first time. It governed comments and
+    // reactions only, so a maintainer who chose `unfiltered` still met a uniformly
+    // accommodating creator in every DM.
+    tone: readSlurpAudienceTone(settings.audienceTone),
+    coolingOff: input.coolingOff ?? false,
+    strikes: input.strikes ?? 0,
+  });
+  const messages = buildSlurpMessageChat({
+    ...input,
+    stance,
     recentPosts,
     availability,
     disclosureMode,
     publicIdentity,
     generationGuidance: settings.generationGuidance,
     scheduleContext,
+  });
+  // The redaction rules travel with the prompt. The answer has to be protected with the same two
+  // values the question was built from, or a concealed creator can be unmasked by their own reply.
+  return { messages, stance, disclosureMode, publicIdentity };
+}
+
+export async function generateSlurpMessageReply(input: SlurpMessagePromptInput): Promise<SlurpGeneratedDmReply> {
+  const { messages, stance, disclosureMode, publicIdentity } = await buildSlurpMessagePrompt(input);
+  const connections = createConnectionsStorage(input.db);
+  const fallbackConnection = await connections.getFallbackForMain();
+  const provider = withConnectionFallbackProvider({
+    primary: createLLMProvider(
+      input.connection.provider,
+      resolveBaseUrl(input.connection),
+      input.connection.apiKey,
+      input.connection.maxContext,
+      input.connection.openrouterProvider,
+      input.connection.maxTokensOverride,
+      input.connection.claudeFastMode === "true",
+      input.connection.treatAsLocalEndpoint === "true",
+      input.connection.defaultParameters,
+    ),
+    primaryConnectionId: input.connection.id,
+    fallbackConnection,
+    fallbackBaseUrl: fallbackConnection ? resolveBaseUrl(fallbackConnection) : "",
+    category: "main",
   });
   const debugMode = input.debugMode === true || isDebugAgentsEnabled();
   const response = await provider.chatComplete(messages, {
@@ -292,6 +322,7 @@ export async function generateSlurpMessageReply(input: {
   if (!protectedContent) throw new Error("Slurp direct-message generation returned no usable content.");
   return {
     content: protectedContent,
+    latitude: stance.latitude,
     moodShift: generated.moodShift,
     // A note is model output about the player, stored and fed back into a later prompt. That is a
     // loop, so it is redacted and bounded on the way in as well as on the way out.

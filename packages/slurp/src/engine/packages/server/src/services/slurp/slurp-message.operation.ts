@@ -14,12 +14,16 @@ import { createSlurpStorage } from "../storage/slurp.storage.js";
 import { createSlurpMessagesStorage, type SlurpMessage } from "../storage/slurp-messages.storage.js";
 import { tryNoodlerAccountOperation } from "./slurp-account-operation-lock.js";
 import { generateSlurpMessageReply } from "./slurp-message-generation.service.js";
+import { describeSlurpDayVibe } from "./slurp-day-vibe.service.js";
+import { activeSlurpStrikes, SLURP_COOL_OFF_HOURS, type SlurpStanceLatitude } from "./slurp-stance.js";
 import { resolveSlurpCreatorAvailability } from "./slurp-creator-schedule-context.js";
 import { slurpReplyPacing, type SlurpReplyPacing } from "./slurp-messaging.js";
 
 export type SlurpReplyOutcome =
   | { status: "replied"; message: SlurpMessage; pacing: SlurpReplyPacing }
   | { status: "queued"; pacing: SlurpReplyPacing }
+  /** The creator has stepped away from this conversation. `until` is when they come back. */
+  | { status: "cooling"; until: string }
   | { status: "busy" }
   | { status: "ineligible" }
   | { status: "connection_not_found" }
@@ -45,6 +49,12 @@ export async function replyToSlurpMessage(
     slurp.getViewer(thread.viewerAccountId),
   ]);
   if (!creator || !viewer) return { status: "ineligible" };
+
+  // Nothing outranks a boundary. A creator who has walked away from this conversation has walked
+  // away from it, whatever the rapport, the schedule or the tone dial say.
+  if (thread.coolUntil && thread.coolUntil > new Date().toISOString()) {
+    return { status: "cooling", until: thread.coolUntil };
+  }
 
   const source = await slurp.resolveAccountSource(creator);
   const availability = source
@@ -106,6 +116,9 @@ export async function replyToSlurpMessage(
         mood: thread.mood,
         moodUpdatedAt: thread.moodUpdatedAt,
         notes: thread.notes,
+        dayVibe: await describeSlurpDayVibe(db, thread.creatorAccountId),
+        coolingOff: false,
+        strikes: activeSlurpStrikes(thread.strikes, thread.lastStrikeAt),
         connection,
         debugMode: input.debugMode,
       });
@@ -120,6 +133,11 @@ export async function replyToSlurpMessage(
         await messagesStore
           .recordReplyOutcome(thread.id, { moodShift: reply.moodShift, remember: reply.remember })
           .catch((error: unknown) => logger.warn(error, "[slurp-message] Could not record the reply outcome"));
+        // The reply is written first and the boundary applied after it, so the fan always receives
+        // the words the creator actually left them with rather than silence.
+        await applyBoundary(messagesStore, thread.id, reply.latitude).catch((error: unknown) =>
+          logger.warn(error, "[slurp-message] Could not apply the conversation boundary"),
+        );
       }
       return stored ? ({ status: "replied", message: stored } as const) : ({ status: "ineligible" } as const);
     });
@@ -134,4 +152,23 @@ export async function replyToSlurpMessage(
   } finally {
     await release();
   }
+}
+
+/**
+ * Act on what the creator decided.
+ *
+ * `normal` and `curt` are tone and need nothing done to the thread: the words already carry them.
+ * The other two change the thread's state, and only `slurp-stance.ts` can produce them — which is
+ * where the tone dial caps what is reachable at all.
+ */
+async function applyBoundary(
+  messagesStore: ReturnType<typeof createSlurpMessagesStorage>,
+  threadId: string,
+  latitude: SlurpStanceLatitude,
+): Promise<void> {
+  if (latitude === "cool_off") {
+    await messagesStore.beginCoolOff(threadId, SLURP_COOL_OFF_HOURS);
+    return;
+  }
+  if (latitude === "close") await messagesStore.closeThreadByCreator(threadId);
 }

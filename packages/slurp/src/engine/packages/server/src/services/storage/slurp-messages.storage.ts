@@ -12,6 +12,7 @@ import type { DB } from "../../db/connection.js";
 import { isFileUniqueConstraintError } from "../../db/file-schema.js";
 import { slurpCommissions, slurpMessageClaims, slurpMessages, slurpThreads } from "../../db/schema/slurp.js";
 import { applySlurpMood, type SlurpMoodShift } from "../slurp/slurp-mood.js";
+import { activeSlurpStrikes } from "../slurp/slurp-stance.js";
 import { createAppSettingsStorage } from "./app-settings.storage.js";
 import { createSlurpStorage } from "./slurp.storage.js";
 import { createSlurpPopulationStorage } from "./slurp-population.storage.js";
@@ -1192,6 +1193,43 @@ export function createSlurpMessagesStorage(db: DB) {
           notes: JSON.stringify(notes.slice(-SLURP_THREAD_NOTE_LIMIT)),
           updatedAt: timestamp,
         })
+        .where(eq(slurpThreads.id, threadId));
+    },
+
+    /**
+     * The creator steps away from this conversation.
+     *
+     * A strike is recorded at the same time. Two inside `SLURP_STRIKE_WINDOW_DAYS` is what closes
+     * the thread for good, so the count and the clock have to move together or a pattern could
+     * never be told apart from a bad afternoon.
+     */
+    async beginCoolOff(threadId: string, hours: number): Promise<void> {
+      const thread = await storage.getThreadById(threadId);
+      if (!thread) return;
+      const timestamp = now();
+      await db
+        .update(slurpThreads)
+        .set({
+          coolUntil: new Date(Date.now() + hours * 3_600_000).toISOString(),
+          strikes: String(activeSlurpStrikes(thread.strikes, thread.lastStrikeAt) + 1),
+          lastStrikeAt: timestamp,
+          updatedAt: timestamp,
+        })
+        .where(eq(slurpThreads.id, threadId));
+    },
+
+    /**
+     * The creator ends the conversation.
+     *
+     * `declined` is the state the schema, the localized labels and `admitSlurpThread` already
+     * ship, and that guard already refuses to reopen a declined thread even if the fan subscribes.
+     * So the hard part was built long before anything could reach it.
+     */
+    async closeThreadByCreator(threadId: string): Promise<void> {
+      const timestamp = now();
+      await db
+        .update(slurpThreads)
+        .set({ state: "declined", coolUntil: null, updatedAt: timestamp })
         .where(eq(slurpThreads.id, threadId));
     },
 

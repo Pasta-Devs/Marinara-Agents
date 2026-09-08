@@ -55,6 +55,7 @@ import {
  */
 const SLURP_REPLY_STATUS_FALLBACKS: Record<string, string> = {
   queued: "{{name}} has seen this. They are not around right now and will answer later.",
+  cooling: "{{name}} has stepped away from this conversation. Give them some time.",
   busy: "{{name}} is already writing back. Give it a moment.",
   ineligible: "{{name}} is not answering this conversation right now.",
   connection_not_found: "No text connection is configured, so nobody can answer yet.",

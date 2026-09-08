@@ -16,6 +16,11 @@ import { existsSync } from "node:fs";
 import { basename, dirname } from "node:path";
 import { generateSlurpCommissionImage } from "../services/slurp/slurp-commission-image.operation.js";
 import { deliverAutomaticSlurpCommission } from "../services/slurp/slurp-commission-delivery.service.js";
+import { buildSlurpMessagePrompt } from "../services/slurp/slurp-message-generation.service.js";
+import { describeSlurpDayVibe } from "../services/slurp/slurp-day-vibe.service.js";
+import { resolveSlurpTextConnection } from "../services/slurp/slurp-connection.js";
+import { createConnectionsStorage } from "../services/storage/connections.storage.js";
+import { isDebugAgentsEnabled } from "../config/runtime-config.js";
 import { slurpCommissionDeliveryDelayMs } from "../services/slurp/slurp-messaging.js";
 import { resolveNoodlerMediaAbsolutePath, slurpMessageMediaUrl } from "../services/slurp/slurp-media.js";
 import { logger } from "../lib/logger.js";
@@ -676,6 +681,74 @@ export async function slurpMessageRoutes(app: FastifyInstance) {
         creatorAccountId,
         patch as Parameters<typeof messages.setCreatorMessaging>[1],
       ),
+    };
+  });
+
+  /**
+   * Exactly what the creator is about to be shown, and why.
+   *
+   * The prompt is produced by `buildSlurpMessagePrompt`, which is the same function the reply
+   * itself runs. A debug view that rebuilds the prompt separately drifts, and then reports
+   * something the model never received — worse than having no debug view.
+   *
+   * Nothing is generated. This is assembly only, so reading it costs nothing.
+   *
+   * The text is redacted exactly as the model sees it. There is deliberately no unprotected mode:
+   * that would leak a concealed Creator's source identity through the debug door and undo
+   * `noodlerConcealedSourceText`.
+   */
+  app.get("/messages/threads/:threadId/prompt", async (req, reply) => {
+    if (!isDebugAgentsEnabled()) return reply.code(404).send({ error: "Not Found" });
+    const parsed = personaQuerySchema.safeParse(req.query);
+    if (!parsed.success) return reply.code(400).send({ error: parsed.error.flatten() });
+    const { threadId } = req.params as { threadId: string };
+    const viewer = await requireViewer(parsed.data.personaId);
+    if (!viewer) return reply.code(404).send({ error: "Slurp persona not found" });
+    const thread = await messages.getThreadById(threadId);
+    if (!thread || (thread.viewerAccountId !== viewer.id && !(await ownsCreator(viewer.id, thread.creatorAccountId))))
+      return reply.code(404).send({ error: "Thread not found" });
+    const creator = await slurp.getNoodlerAccountById(thread.creatorAccountId);
+    const fan = await slurp.getViewer(thread.viewerAccountId);
+    if (!creator || !fan) return reply.code(404).send({ error: "Thread not found" });
+    const settings = await slurp.getSettings();
+    const connection = await resolveSlurpTextConnection(
+      createConnectionsStorage(app.db),
+      settings.generationConnectionId,
+    );
+    if (!connection) return reply.code(409).send({ error: "No text connection is configured." });
+    const subscriptions = await slurp.listSubscriptionsForViewer(thread.viewerAccountId);
+    const messaging = await messages.getCreatorMessaging(thread.creatorAccountId);
+    const built = await buildSlurpMessagePrompt({
+      db: app.db,
+      creator,
+      viewer: fan,
+      history: await messages.listMessages(thread.id, 60),
+      rapport: thread.rapport,
+      subscribed: subscriptions.some((entry) => entry.creatorAccountId === thread.creatorAccountId),
+      dmPolicy: messaging.dmPolicy,
+      isRequest: thread.state === "request",
+      mood: thread.mood,
+      moodUpdatedAt: thread.moodUpdatedAt,
+      notes: thread.notes,
+      dayVibe: await describeSlurpDayVibe(app.db, thread.creatorAccountId),
+      coolingOff: Boolean(thread.coolUntil && thread.coolUntil > new Date().toISOString()),
+      strikes: thread.strikes,
+      connection,
+    });
+    return {
+      // The layers first. This is the section that answers "why did she say that".
+      stance: built.stance,
+      thread: {
+        mood: thread.mood,
+        moodUpdatedAt: thread.moodUpdatedAt,
+        coolUntil: thread.coolUntil,
+        strikes: thread.strikes,
+        notes: thread.notes,
+        rapport: thread.rapport,
+        state: thread.state,
+      },
+      audienceTone: settings.audienceTone,
+      prompt: built.messages,
     };
   });
 
