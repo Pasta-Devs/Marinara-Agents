@@ -830,6 +830,39 @@ PF.brief = (() => {
   const capPreferences = (text) =>
     typeof text === "string" && text.length > 7_800 ? `${text.slice(0, 7_800)}…` : text;
 
+  /** WHAT THE CALL DID WITH THE PLAYER'S LORE PICKS, WRITTEN DOWN.
+   *
+   *  The route answers with `lorebook: {includedEntries, skippedEntries}` — and
+   *  ONLY when the selection produced lore or produced skips. So an ABSENT key
+   *  after a non-empty selection is not "nothing to report": it is every id
+   *  refused, by a disabled book, a character or trigger filter, or an id that no
+   *  longer exists. A package that says nothing there leaves the player with a
+   *  world that quietly did not know about Viridian City and no way to find out
+   *  why, which is the worst shape a bug report can take.
+   *
+   *  It rides `_repairs`, which is this module's existing channel for a transport
+   *  fact worth keeping beside the brief it belongs to (the truncation salvage
+   *  note is the precedent), so it is stored with the seal and readable later
+   *  rather than living in one console line the player never sees. */
+  function noteLore(sealed, count, lorebook) {
+    const plural = count === 1 ? "entry" : "entries";
+    if (!lorebook || typeof lorebook !== "object") {
+      console.warn(`[pixelforge] the world call refused all ${count} picked lorebook ${plural}`);
+      sealed._repairs.push(`lorebook: all ${count} picked ${plural} were refused; none reached the model`);
+      return;
+    }
+    // The counts are the ENGINE'S OWN diagnostics, read rather than re-derived:
+    // `skippedEntries` is what its budget actually set aside, so a second count
+    // invented here could only disagree with it.
+    const included = typeof lorebook.includedEntries === "number" ? lorebook.includedEntries : 0;
+    const skipped = Array.isArray(lorebook.skippedEntries) ? lorebook.skippedEntries.length : 0;
+    if (included >= count && !skipped) return;
+    console.warn(`[pixelforge] ${included} of ${count} picked lorebook ${plural} reached the world call`);
+    sealed._repairs.push(
+      `lorebook: ${included} of ${count} picked ${plural} reached the model${skipped ? `, ${skipped} set aside for budget` : ""}`,
+    );
+  }
+
   /** The one #5135 generation call with the §5 failure ladder (amended):
    *  bounded wait; one wait-out on the server's documented-transient 409
    *  chat_busy; one plain re-roll on truncation (the route's maxTokens is
@@ -861,15 +894,39 @@ PF.brief = (() => {
    *  5xx), "refused" (400/422 with nothing salvageable), "network", "timeout". */
   async function generate(
     chatId,
-    { theme, seed, preferences, onProgress, onFailure, budgetMs = 90_000, busyWaitMs = Math.min(15_000, budgetMs / 6) },
+    {
+      theme,
+      seed,
+      preferences,
+      lorebookEntryIds,
+      onProgress,
+      onFailure,
+      budgetMs = 90_000,
+      busyWaitMs = Math.min(15_000, budgetMs / 6),
+    },
   ) {
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), budgetMs);
+    // THE PLAYER'S TICKED LORE ENTRIES (0.16.2, R-D6), AND THE KEY IS ABSENT WHEN
+    // THEY TICKED NONE. The route's field is `.optional()`, so an omitted key and
+    // an empty array mean the same thing to it — but they do not mean the same
+    // thing HERE: a chat whose player never opened the picker must send the exact
+    // body this package sent before the picker existed, guidance included. The
+    // filter is not decoration either; the ids come back out of a config blob the
+    // host rewrites wholesale on its reuse-an-existing-chat arm.
+    const loreIds = Array.isArray(lorebookEntryIds)
+      ? lorebookEntryIds.filter((id) => typeof id === "string" && id)
+      : [];
     try {
       // `theme` no longer reaches the instructions — the model is ASKED for the kit
       // rather than told it. It keeps travelling to validate() below as rung 2,
       // which is the only door the wizard's derived answer has.
-      const base = { instructions: guidance(), userContent: capPreferences(preferences), schema: schema() };
+      const base = {
+        instructions: guidance({ lore: loreIds.length > 0 }),
+        userContent: capPreferences(preferences),
+        schema: schema(),
+        ...(loreIds.length ? { lorebookEntryIds: loreIds } : {}),
+      };
       let response = await PF.api.postExperienceGeneration(chatId, base, controller.signal);
       if (response.status === 409) {
         // chat_busy ships Retry-After: 15 — wait it out once inside the budget
@@ -898,13 +955,23 @@ PF.brief = (() => {
         // revalidate path re-reads STORED bytes — restorable from a checkpoint,
         // importable, hand-editable — and passes nothing, so a stored `artTheme`
         // key can never outrank its own seal.
-        return validate(response.body.data, { theme, seed }, { fromModel: true });
+        const sealed = validate(response.body.data, { theme, seed }, { fromModel: true });
+        if (loreIds.length) noteLore(sealed, loreIds.length, response.body.lorebook);
+        return sealed;
       }
       if (bestRaw) {
         const salvaged = salvageText(bestRaw);
         if (salvaged) {
           const sealed = validate(salvaged, { theme, seed }, { fromModel: true });
           sealed._repairs.push("transport: salvaged from a truncated response");
+          // NOT `noteLore` — the 422 body carries no `lorebook` key whatever the
+          // call did with the picks, so the absent-key reading ("all refused")
+          // would be a claim this path cannot support. What IS true is that the
+          // reply was cut off before it said, and that is what gets written.
+          if (loreIds.length)
+            sealed._repairs.push(
+              `lorebook: ${loreIds.length} picked ${loreIds.length === 1 ? "entry" : "entries"} were sent; the cut-off reply did not say what became of them`,
+            );
           return sealed;
         }
       }
@@ -948,7 +1015,24 @@ PF.brief = (() => {
   // the question is inverted: the model is ASKED which kit the player's own words
   // belong in, as a field of the brief, and the answer comes back through the same
   // call. So there is no theme to state and no parameter to take.
-  function guidance() {
+  //
+  // …EXCEPT ONE, AND IT IS A FACT ABOUT THE CALL RATHER THAN ABOUT THE WORLD
+  // (0.16.2, R-D6). When the player ticked lorebook entries, the server resolves
+  // them and appends them to this very system message, so the closing clause that
+  // tells the model to use them is TRUE. When they ticked none, nothing is
+  // appended, and the same clause would be pointing the model at lore it will
+  // never receive — a hallucination prompt rather than a harmless no-op. So the
+  // clause is conditional on the selection being non-empty, which also keeps the
+  // promise this release makes to every chat that does not use the picker: the
+  // body of the call is byte-for-byte what it was before the picker existed.
+  //
+  // An OPTIONS OBJECT rather than a boolean, deliberately: this function took a
+  // theme string for six releases and a stale `guidance(theme)` call passing one
+  // would read as `true` under a bare boolean and turn the clause on for a call
+  // carrying no lore at all. A missing property on a string is `undefined`, which
+  // is the reading that fails safe.
+  function guidance(opts) {
+    const lore = !!(opts && opts.lore);
     // No art module, no kit list, no field: the schema omits the `artTheme`
     // property on the same condition, and asking for a field the schema does not
     // declare is asking for an answer with nowhere to put it.
@@ -1038,6 +1122,21 @@ PF.brief = (() => {
       "  texture for the map description — it never creates buildings.",
       "",
       "Only the cast, features, and places you name will exist. Keep names in the player's language.",
+      // THE LORE CLAUSE, AND IT SHIPS ONLY WHEN LORE DOES. The entries the player
+      // ticked are appended to this message by the server, below everything above,
+      // which is why "follows below" is a statement of fact and not a figure of
+      // speech. What it asks for is the maintainer's own worked example: a brief
+      // written for a world whose history already names places should take its
+      // names and its details from that history rather than inventing a second
+      // set beside it.
+      ...(lore
+        ? [
+            "",
+            "LOREBOOK ENTRIES the player picked follow below. They are this world's existing history:",
+            "take the settlement's name and its details from them where they fit, contradict none of it,",
+            "and invent nothing it does not contain.",
+          ]
+        : []),
     ].join("\n");
   }
 

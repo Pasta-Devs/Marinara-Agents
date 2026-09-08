@@ -2188,6 +2188,14 @@ PF.save = {
           theme: configTheme,
           seed,
           preferences,
+          // THE PLAYER'S TICKED LORE ENTRIES (0.16.2, R-D6). It rides the CALL
+          // rather than the preferences on purpose: the server resolves the ids
+          // itself — macros, scope exclusions, the eligibility gates, the
+          // before/depth/after ordering — and appends the result to the system
+          // message, so the entries never compete with the player's own
+          // preferences against that field's 8,000-character cap. Empty is the
+          // ordinary case and sends no key at all.
+          lorebookEntryIds: this._configLoreEntryIds(meta),
           onFailure: (kind) => {
             failure = kind;
           },
@@ -2405,6 +2413,47 @@ PF.save = {
       if (typeof candidate === "string" && candidate) return candidate;
     }
     return null;
+  },
+
+  /** THE LOREBOOK ENTRIES THE PLAYER TICKED (0.16.2, R-D6), from the same
+   *  double-nested config home as the seed, the theme and the name.
+   *
+   *  ENTRY ids and never book ids: the ruling is that "the player must be able to
+   *  select specific lorebook entries rather than the entire lorebook getting
+   *  sent", so the wire format is a flat list and this reader keeps it one.
+   *
+   *  ABSENT ON EVERY CHAT THAT DID NOT USE THE PICKER, which is most of them and
+   *  is not a migration: an empty list here sends no key at all, and the brief
+   *  call is byte-identical to the one this package sent before the picker.
+   *
+   *  CLIPPED AT THE READER, on `_configWorldName`'s precedent and for a sharper
+   *  reason than tidiness. The route's own field is
+   *  `z.array(z.string()).max(100)`, so a list past 100 is a 400 on the whole
+   *  call — the retry screen, for a chat whose config the picker's own ceiling
+   *  never saw. `/game/create`'s reuse-an-existing-chat arm rewrites
+   *  `gameSetupConfig` wholesale, so "the picker wrote it" is not something a
+   *  read site may assume. */
+  LORE_ENTRY_IDS_MAX: 100,
+
+  _configLoreEntryIds(meta) {
+    const setup =
+      meta && typeof meta.gameSetupConfig === "object" && meta.gameSetupConfig !== null ? meta.gameSetupConfig : null;
+    const outer =
+      setup && typeof setup.experienceConfig === "object" && setup.experienceConfig !== null
+        ? setup.experienceConfig
+        : null;
+    const inner =
+      outer && typeof outer.experienceConfig === "object" && outer.experienceConfig !== null
+        ? outer.experienceConfig
+        : null;
+    for (const candidate of [inner?.loreEntryIds, outer?.loreEntryIds]) {
+      if (!Array.isArray(candidate)) continue;
+      // Deduped as well as filtered: the server counts a repeated id once and the
+      // wire cap counts it twice, so a duplicated id is a slot spent on nothing.
+      const ids = [...new Set(candidate.filter((id) => typeof id === "string" && id))];
+      if (ids.length) return ids.slice(0, this.LORE_ENTRY_IDS_MAX);
+    }
+    return [];
   },
 
   /** THE NAME THE PLAYER TYPED IN THE WIZARD (0.16.1), from the same
