@@ -6,7 +6,7 @@ package-owned Canvas2D engine. NPC dialogue flows into the normal GM turn loop, 
 (hierarchical spatial context) is read and written as you move, and combat hands off to the
 engine's own vanilla combat — the package never replaces it.
 
-Requires **Marinara Engine 2.4.3+** (capability API 1.10 for `contributions.assets`). It is
+Requires **Marinara Engine 2.4.5+** (capability API 1.10 and full selected-lore world generation). It is
 client-only: no server entrypoint, no restart after install. The package agent definition is a
 runtime-inert stub that satisfies the catalog loader; all behavior lives in `client.js`.
 
@@ -22,7 +22,7 @@ resumes where you left off.
 Since 0.4.0 the wizard's preferences drive what the world *is*, under one rule: **the LLM decides
 what exists, the algorithm decides where every tile goes.** After launch the surface makes one
 host-run structured generation call (`POST /api/game/:chatId/experience-generation`, Engine
-2.4.3-staging+) with bounded guidance and a strict schema; the model returns a compact **World
+2.4.5-staging+) with bounded guidance and a strict schema; the model returns a compact **World
 Brief** — the visual kit, the settlement, a cast with household structure, places, features — and a
 deterministic compiler builds the tile world from it (30 villagers in 6 households → ~6 houses,
 never 30). The brief is validated, repaired, and floored (`src/18-brief.js`, spec in `docs/brief-schema.md`),
@@ -46,16 +46,19 @@ oversized nested config cannot fail the launch itself.
 
 **Three things the form stopped emitting**, all of them answers it was giving on your behalf: the
 **party list** (Game Mode's own setup owns that question — for this release a Pixelforge game starts
-with an empty party, and the picker moves to its real owner in 0.16.3), the preset **genre and story
+with an empty party, and moving the picker to its real owner remains planned), the preset **genre and story
 goals**, and the **map-guidance line**, which is deleted outright rather than rewritten: the GM is
 never to be instructed to keep the player bound to a location, and the world need not be compact or
 walkable.
 
 **And it gained a lorebook entry picker** (0.16.2). Your enabled books are listed; expand one and
 tick the entries the world-writing call should read, or take a whole book at once with *Select all*.
-Selection is **per entry, never per book** — a running count per book says what fits its own token
-budget, and the picks ride the call itself rather than your Setting text, so the two never compete
-for the same field. The server half of this lives in the Engine: on an Engine that predates it the
+Selection is **per entry, never per book**. Since 0.16.3, the picker shows the selected count and an
+approximate token total, and accepts entries beyond ordinary lorebook budgets and count limits.
+Engine checks the complete, expanded prompt against the model's context before generation. If it
+does not fit, the retry screen recommends fewer entries or a connection with a larger context;
+the world stays unsealed. The picks ride the call itself rather than your Setting text, so the two
+never compete for the same field. The server half lives in Engine 2.4.5: on an Engine that predates it the
 picks are ignored, the world is written from your setting alone, and the package says so in the
 console rather than sealing a claim it cannot support. One interaction worth knowing while the party
 is empty: an entry filtered to *include specific characters* matches nobody and is skipped.

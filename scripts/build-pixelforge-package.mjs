@@ -23,9 +23,9 @@ const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const packageRoot = join(repoRoot, "packages/pixelforge");
 const artifactsDir = join(repoRoot, "artifacts");
 
-const VERSION = "0.16.2";
+const VERSION = "0.16.3";
 const CAPABILITY_API = Object.freeze({ major: 1, minor: 10 });
-const ENGINE_MIN = "2.4.3"; // first Engine release with contributions.assets (capability API 1.10)
+const ENGINE_MIN = "2.4.5"; // world-generation selections use full lore entries and explicit context checks
 const MAX_ENGINE_EXCLUSIVE = "4.0.0";
 const BASE_DESCRIPTION =
   "A walkable pixel-art RPG Experience for Game Mode: your setup preferences generate the world — a cozy village or a sci-fi colony — then explore it, talk to NPCs to drive the story, and let the GM narrate, with World Maps integration and the engine's own combat.";

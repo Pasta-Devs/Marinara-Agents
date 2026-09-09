@@ -1547,6 +1547,8 @@ PF.save = {
       // generic below rather than borrowing another stage's sentence.
       case "unavailable":
         return "The engine could not take the request just now — it may be busy with something else.";
+      case "context_limit":
+        return "The selected lore and world request exceed the model’s context limit. Choose fewer lorebook entries or a connection with a larger context.";
       case "network":
         return "The request did not get through.";
       case "timeout":
@@ -2426,15 +2428,8 @@ PF.save = {
    *  is not a migration: an empty list here sends no key at all, and the brief
    *  call is byte-identical to the one this package sent before the picker.
    *
-   *  CLIPPED AT THE READER, on `_configWorldName`'s precedent and for a sharper
-   *  reason than tidiness. The route's own field is
-   *  `z.array(z.string()).max(100)`, so a list past 100 is a 400 on the whole
-   *  call — the retry screen, for a chat whose config the picker's own ceiling
-   *  never saw. `/game/create`'s reuse-an-existing-chat arm rewrites
-   *  `gameSetupConfig` wholesale, so "the picker wrote it" is not something a
-   *  read site may assume. */
-  LORE_ENTRY_IDS_MAX: 100,
-
+   *  Preserve all valid selections. Engine bounds the request body and checks
+   *  model context; clipping here would silently discard the player's choices. */
   _configLoreEntryIds(meta) {
     const setup =
       meta && typeof meta.gameSetupConfig === "object" && meta.gameSetupConfig !== null ? meta.gameSetupConfig : null;
@@ -2448,10 +2443,9 @@ PF.save = {
         : null;
     for (const candidate of [inner?.loreEntryIds, outer?.loreEntryIds]) {
       if (!Array.isArray(candidate)) continue;
-      // Deduped as well as filtered: the server counts a repeated id once and the
-      // wire cap counts it twice, so a duplicated id is a slot spent on nothing.
+      // The same entry belongs in the request only once.
       const ids = [...new Set(candidate.filter((id) => typeof id === "string" && id))];
-      if (ids.length) return ids.slice(0, this.LORE_ENTRY_IDS_MAX);
+      if (ids.length) return ids;
     }
     return [];
   },

@@ -1,5 +1,9 @@
 # Pixelforge release notes
 
+## 0.16.3 — 2026-09-09
+
+Select all the lore entries your world needs, including large entries and selections over 100. The picker and saved settings no longer clip choices to ordinary lorebook budgets. Engine checks the complete prompt against your model's context limit; if it is too large, the retry screen explains how to reduce the selection or use a larger context. Requires Engine 2.4.5 staging or newer.
+
 ## 0.16.2 — 2026-09-08
 
 Tell the game what kind of world you want in your own words and it works out the rest. The theme
