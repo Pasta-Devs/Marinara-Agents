@@ -6,7 +6,7 @@
 // lines. It composes that storage for accounts, subscriptions, and the wallet instead of
 // reimplementing them, so a DM tip and a profile tip move coins through exactly one code path.
 import { tolerateMissingTables } from "./slurp-host-tables.js";
-import { and, asc, desc, eq, gt } from "../../db/file-query.js";
+import { and, asc, desc, eq, gt, isNotNull } from "../../db/file-query.js";
 import { newId } from "../../utils/id-generator.js";
 import type { DB } from "../../db/connection.js";
 import { isFileUniqueConstraintError } from "../../db/file-schema.js";
@@ -1355,6 +1355,200 @@ export function createSlurpMessagesStorage(db: DB) {
         .set({ state: "declined", coolUntil: null, updatedAt: timestamp })
         .where(eq(slurpThreads.id, threadId));
       await createSlurpReplyQueueStorage(db).removeForThread(threadId);
+    },
+
+    /**
+     * Set extended online availability for a thread (hot conversation keeps Creator online).
+     */
+    async setExtendedOnline(threadId: string, until: string | null): Promise<void> {
+      await db
+        .update(slurpThreads)
+        .set({ extendedOnlineUntil: until, updatedAt: now() })
+        .where(eq(slurpThreads.id, threadId));
+    },
+
+    /**
+     * Add scheduled follow-ups to a thread.
+     */
+    async addScheduledFollowUps(
+      threadId: string,
+      followUps: Array<{
+        id: string;
+        scheduledAt: string;
+        type: string;
+        reason: string;
+        context: string;
+        relatedNoteId?: string;
+        sequenceNumber?: number;
+        totalInSequence?: number;
+        recurringPattern?: string;
+      }>,
+    ): Promise<void> {
+      const thread = await db.select().from(slurpThreads).where(eq(slurpThreads.id, threadId)).get();
+      if (!thread) return;
+
+      const existing = thread.scheduledFollowUps ? JSON.parse(thread.scheduledFollowUps) : [];
+      const updated = [...existing, ...followUps];
+
+      await db
+        .update(slurpThreads)
+        .set({ scheduledFollowUps: JSON.stringify(updated), updatedAt: now() })
+        .where(eq(slurpThreads.id, threadId));
+    },
+
+    /**
+     * Remove a specific follow-up by ID.
+     */
+    async removeScheduledFollowUp(threadId: string, followUpId: string): Promise<void> {
+      const thread = await db.select().from(slurpThreads).where(eq(slurpThreads.id, threadId)).get();
+      if (!thread) return;
+
+      const existing = thread.scheduledFollowUps ? JSON.parse(thread.scheduledFollowUps) : [];
+      const updated = existing.filter((f: { id: string }) => f.id !== followUpId);
+
+      await db
+        .update(slurpThreads)
+        .set({ scheduledFollowUps: JSON.stringify(updated), updatedAt: now() })
+        .where(eq(slurpThreads.id, threadId));
+    },
+
+    /**
+     * Get all threads with pending follow-ups that are due.
+     */
+    async getThreadsWithDueFollowUps(now: string = new Date().toISOString()): Promise<
+      Array<{
+        id: string;
+        viewerAccountId: string;
+        creatorAccountId: string;
+        dueFollowUp: {
+          id: string;
+          scheduledAt: string;
+          type: string;
+          reason: string;
+          context: string;
+          relatedNoteId?: string;
+          sequenceNumber?: number;
+          totalInSequence?: number;
+          recurringPattern?: string;
+        };
+      }>
+    > {
+      const threads = await db
+        .select({
+          id: slurpThreads.id,
+          viewerAccountId: slurpThreads.viewerAccountId,
+          creatorAccountId: slurpThreads.creatorAccountId,
+          scheduledFollowUps: slurpThreads.scheduledFollowUps,
+        })
+        .from(slurpThreads)
+        .where(eq(slurpThreads.state, "active"));
+
+      const results: Array<{
+        id: string;
+        viewerAccountId: string;
+        creatorAccountId: string;
+        dueFollowUp: any;
+      }> = [];
+
+      for (const thread of threads) {
+        try {
+          const followUps = JSON.parse(thread.scheduledFollowUps);
+          const dueFollowUp = followUps.find((f: { scheduledAt: string }) => f.scheduledAt <= now);
+          if (dueFollowUp) {
+            results.push({
+              id: thread.id,
+              viewerAccountId: thread.viewerAccountId,
+              creatorAccountId: thread.creatorAccountId,
+              dueFollowUp,
+            });
+          }
+        } catch {
+          // Invalid JSON, skip
+        }
+      }
+
+      return results;
+    },
+
+    /**
+     * Get follow-up analytics for a creator.
+     */
+    async getFollowUpAnalytics(creatorAccountId: string): Promise<{
+      totalScheduled: number;
+      totalSent: number;
+      totalCancelled: number;
+      byType: Record<string, { scheduled: number; sent: number }>;
+      avgResponseRate: number;
+    }> {
+      // Count currently scheduled
+      const threads = await db
+        .select({ scheduledFollowUps: slurpThreads.scheduledFollowUps })
+        .from(slurpThreads)
+        .where(eq(slurpThreads.creatorAccountId, creatorAccountId));
+
+      let totalScheduled = 0;
+      const byType: Record<string, { scheduled: number; sent: number }> = {};
+
+      for (const thread of threads) {
+        try {
+          const followUps = JSON.parse(thread.scheduledFollowUps);
+          totalScheduled += followUps.length;
+          for (const followUp of followUps) {
+            if (!byType[followUp.type]) {
+              byType[followUp.type] = { scheduled: 0, sent: 0 };
+            }
+            byType[followUp.type].scheduled += 1;
+          }
+        } catch {
+          // Invalid JSON, skip
+        }
+      }
+
+      // Count sent follow-ups from message metadata
+      const messages = await db
+        .select({ metadata: slurpMessages.metadata, threadId: slurpMessages.threadId })
+        .from(slurpMessages)
+        .where(and(eq(slurpMessages.role, "creator"), isNotNull(slurpMessages.metadata)));
+
+      let totalSent = 0;
+      let responsesReceived = 0;
+
+      for (const msg of messages) {
+        try {
+          const metadata = JSON.parse(msg.metadata ?? "{}");
+          if (metadata.followUp === true) {
+            totalSent += 1;
+            const type = metadata.followUpType ?? "unknown";
+            if (!byType[type]) {
+              byType[type] = { scheduled: 0, sent: 0 };
+            }
+            byType[type].sent += 1;
+
+            // Check if viewer responded after this follow-up
+            const nextMessages = await db
+              .select({ role: slurpMessages.role })
+              .from(slurpMessages)
+              .where(and(eq(slurpMessages.threadId, msg.threadId), eq(slurpMessages.role, "viewer")))
+              .limit(1);
+
+            if (nextMessages.length > 0) {
+              responsesReceived += 1;
+            }
+          }
+        } catch {
+          // Invalid JSON, skip
+        }
+      }
+
+      const avgResponseRate = totalSent > 0 ? responsesReceived / totalSent : 0;
+
+      return {
+        totalScheduled,
+        totalSent,
+        totalCancelled: 0, // We don't track cancellations separately yet
+        byType,
+        avgResponseRate,
+      };
     },
 
     /**

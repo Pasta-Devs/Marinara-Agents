@@ -128,6 +128,11 @@ const generation = readFileSync(
 assert.match(generation, /knownAboutFan: \{[\s\S]{0,240}?working: known\.working/u);
 assert.match(generation, /protectNoteOperation/u);
 assert.match(generation, /Use forget with the fact's id/u);
+assert.match(generation, /Review the fan's newest message against memory on every reply/u);
+assert.match(
+  generation,
+  /Use an empty array only when the newest message adds, changes, or confirms no personal fact/u,
+);
 
 const storage = readFileSync(
   "packages/slurp/src/engine/packages/server/src/services/storage/slurp-messages.storage.ts",
@@ -135,5 +140,13 @@ const storage = readFileSync(
 );
 assert.match(storage, /applySlurpThreadNotes\(thread\.notes, input\.remember\)/u);
 assert.doesNotMatch(storage, /SLURP_THREAD_NOTE_LIMIT/u);
+
+const view = readFileSync("packages/slurp/src/engine/packages/client/src/components/slurp/SlurpMessages.tsx", "utf8");
+assert.match(view, /const SLURP_MEMORY_TIER_LIMIT = 8/u);
+assert.match(view, /rows\.length\}\/\{SLURP_MEMORY_TIER_LIMIT/u);
+assert.match(view, /rows\.length >= SLURP_MEMORY_TIER_LIMIT/u);
+assert.equal((view.match(/label=\{localizeUi\("ui\.slurp\.messages\.memories"/gu) ?? []).length, 1);
+assert.doesNotMatch(view, /title="What they remember about you"/u);
+assert.doesNotMatch(view, /title="Memories"/u);
 
 console.log("slurp thread notes regression passed");

@@ -27,6 +27,22 @@ export type SlurpThreadNote = {
   id: string;
   text: string;
   tier: SlurpNoteTier;
+  /** Optional tags for categorization: "promise", "task", "recurring", etc. */
+  tags?: string[];
+  /** Optional metadata for promise tracking */
+  metadata?: {
+    type?: "promise" | "task" | "commitment";
+    /** ISO timestamp of last follow-up related to this note */
+    lastFollowUp?: string;
+    /** Count of follow-ups sent for this promise */
+    followUpCount?: number;
+    /** Maximum follow-ups to send */
+    maxFollowUps?: number;
+    /** For recurring promises: "daily", "every 4 hours", etc. */
+    frequency?: string;
+    /** Related to a tip amount */
+    tipAmount?: number;
+  };
 };
 
 export type SlurpNoteOperation =
@@ -209,5 +225,35 @@ export function notesForPrompt(notes: SlurpThreadNote[]): {
   return {
     working: notes.filter((note) => note.tier === "working").map((note) => ({ id: note.id, text: note.text })),
     longTerm: notes.filter((note) => note.tier === "longterm").map((note) => ({ id: note.id, text: note.text })),
+  };
+}
+
+/**
+ * Find promise/commitment notes that might need follow-ups.
+ */
+export function findPromiseNotes(notes: SlurpThreadNote[]): SlurpThreadNote[] {
+  return notes.filter((note) => note.tags?.includes("promise") || note.metadata?.type === "promise");
+}
+
+/**
+ * Check if a note has reached its maximum follow-ups.
+ */
+export function hasReachedMaxFollowUps(note: SlurpThreadNote): boolean {
+  if (!note.metadata?.maxFollowUps) return false;
+  const count = note.metadata.followUpCount ?? 0;
+  return count >= note.metadata.maxFollowUps;
+}
+
+/**
+ * Increment the follow-up count for a promise note.
+ */
+export function incrementFollowUpCount(note: SlurpThreadNote): SlurpThreadNote {
+  return {
+    ...note,
+    metadata: {
+      ...note.metadata,
+      followUpCount: (note.metadata?.followUpCount ?? 0) + 1,
+      lastFollowUp: new Date().toISOString(),
+    },
   };
 }

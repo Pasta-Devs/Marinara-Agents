@@ -246,6 +246,20 @@ export const slurpThreads = fileTable(
      */
     extendedOnlineUntil: text("extended_online_until"),
     /**
+     * Scheduled follow-up messages from Creator (array).
+     *
+     * Allows multiple pending follow-ups for promises, task updates, recurring check-ins, etc.
+     * Each entry: { id, scheduledAt, type, reason, context, relatedNoteId?, sequenceNumber?, totalInSequence? }
+     *
+     * Types:
+     * - reminder: One-time reminder
+     * - promise_delivery: Fulfilling a promise (tip rewards, exclusive content)
+     * - task_update: Progress updates on commissions/tasks
+     * - check_in: Proactive check-in after conversation
+     * - recurring: Repeating updates (daily check-ins, workout logs, etc.)
+     */
+    scheduledFollowUps: text("scheduled_follow_ups").notNull().default("[]"),
+    /**
      * When the pair last emptied this conversation.
      *
      * Commissions outlive a clear because coins moved, but they must not keep hanging in a chat

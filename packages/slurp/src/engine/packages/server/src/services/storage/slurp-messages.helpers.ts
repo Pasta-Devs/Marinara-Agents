@@ -109,6 +109,14 @@ export const mapThread = (row: Record<string, unknown>): SlurpThread => ({
   moodUpdatedAt: (row.moodUpdatedAt as string | null) ?? null,
   coolUntil: (row.coolUntil as string | null) ?? null,
   extendedOnlineUntil: (row.extendedOnlineUntil as string | null) ?? null,
+  scheduledFollowUps: (() => {
+    try {
+      const parsed = JSON.parse(String(row.scheduledFollowUps ?? "[]"));
+      return Array.isArray(parsed) ? parsed : [];
+    } catch {
+      return [];
+    }
+  })(),
   clearedAt: (row.clearedAt as string | null) ?? null,
   threadState: readThreadState(row.threadState, String(row.updatedAt)),
   strikes: int(row.strikes as string),

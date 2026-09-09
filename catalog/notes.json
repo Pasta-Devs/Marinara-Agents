@@ -36,6 +36,12 @@
     "slurp": {
       "versions": [
         {
+          "version": "1.2.63",
+          "date": "2026-09-09",
+          "notes": "- Restored active AI updates for the two-list memory system and made each eight-item limit visible.\n- Removed the duplicate read-only memory sections from Conversation Details. Memories now has one editable panel.",
+          "highlight": true
+        },
+        {
           "version": "1.2.62",
           "date": "2026-09-09",
           "notes": "- Simplified the message plus menu into clear photo, generated photo, tip, commission, and locked-content actions.\n- Added commission entry points in the commission panel and from clear commission wording in a message draft.\n- Added viewer-generated photos to direct messages.",
@@ -147,12 +153,6 @@
           "version": "1.2.44",
           "date": "2026-09-09",
           "notes": "- Creators now keep separate emotional, energy, arousal, adult-intent, and platform-strategy state.\n- Direct-message relationships now track familiarity, interest, sexual comfort, commercial trust, emotional trust, respect, resentment, desire, stance, and adult interaction level.\n- The model can report bounded relationship signals, while the server owns all state changes, decay, limits, and adult-behavior gates.\n- Low energy limits reply bursts and generated media. Arousal and adult intent never override relationship comfort, boundaries, or privacy rules.",
-          "highlight": false
-        },
-        {
-          "version": "1.2.43",
-          "date": "2026-09-09",
-          "notes": "- Direct-message memory is now two lists: recent facts the creator can rewrite or forget, and long-term facts that stay until they are named by id.\n- Existing thread notes migrate into working memory, with overflow kept as long-term facts.",
           "highlight": false
         }
       ]

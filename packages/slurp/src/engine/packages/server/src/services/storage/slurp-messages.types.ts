@@ -35,6 +35,17 @@ export type SlurpThread = {
   moodUpdatedAt: string | null;
   coolUntil: string | null;
   extendedOnlineUntil: string | null;
+  scheduledFollowUps: Array<{
+    id: string;
+    scheduledAt: string;
+    type: string;
+    reason: string;
+    context: string;
+    relatedNoteId?: string;
+    sequenceNumber?: number;
+    totalInSequence?: number;
+    recurringPattern?: string;
+  }>;
   clearedAt: string | null;
   threadState: SlurpConversationState;
   strikes: number;

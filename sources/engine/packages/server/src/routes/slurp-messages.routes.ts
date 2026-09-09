@@ -174,7 +174,7 @@ export async function slurpMessageRoutes(app: FastifyInstance) {
       );
     const latestPost = (await slurp.listNoodlerPostsByAccount(creator.id, 1))[0] ?? null;
     const source = await slurp.resolveAccountSource(creator);
-    const availability = source
+    let availability = source
       ? await resolveSlurpCreatorAvailability(
           createCharactersStorage(app.db),
           source,
@@ -183,6 +183,15 @@ export async function slurpMessageRoutes(app: FastifyInstance) {
           latestPost?.createdAt ?? null,
         )
       : { online: true, activity: null, minutesUntilOnline: 0 };
+
+    // Check if this specific thread has extended online availability
+    if (threadId) {
+      const thread = await messages.getThreadById(threadId);
+      if (thread?.extendedOnlineUntil && thread.extendedOnlineUntil > new Date().toISOString()) {
+        availability = { online: true, activity: "chatting", minutesUntilOnline: 0 };
+      }
+    }
+
     return {
       creatorLastActiveAt: latestPost?.createdAt ?? null,
       creatorLastMessageAt: latestMessage,

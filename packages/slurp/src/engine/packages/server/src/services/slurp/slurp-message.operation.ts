@@ -342,6 +342,73 @@ export async function replyToSlurpMessage(
           }
         }
 
+        // Handle follow-up scheduling if AI signaled intent
+        if (reply.followUp) {
+          try {
+            const { createScheduledFollowUps } = await import("./slurp-follow-up.js");
+
+            // Find if this follow-up relates to a promise note
+            let relatedNoteId: string | undefined;
+            if (reply.followUp.type === "promise_delivery" || reply.followUp.type === "task_update") {
+              const promiseNote = reply.remember.find(
+                (op) =>
+                  op.op === "add" &&
+                  op.text &&
+                  (op.text.toLowerCase().includes("promise") || op.text.toLowerCase().includes("will send")),
+              );
+              if (promiseNote && promiseNote.op === "add") {
+                // This is a new promise being made, we'll get its ID after notes are applied
+                relatedNoteId = undefined; // Will be set after note operations
+              }
+            }
+
+            const followUps = createScheduledFollowUps(
+              {
+                type: reply.followUp.type,
+                timing: reply.followUp.timing,
+                count: reply.followUp.count ?? 1,
+                reason: reply.followUp.reason,
+                context: reply.followUp.context,
+              },
+              new Date(),
+              relatedNoteId,
+            );
+
+            await messagesStore.addScheduledFollowUps(thread.id, followUps);
+            logger.info(
+              "[slurp-message] Scheduled %d follow-up(s) for thread %s: %s",
+              followUps.length,
+              thread.id,
+              reply.followUp.reason,
+            );
+          } catch (error: unknown) {
+            logger.warn(error, "[slurp-message] Could not schedule follow-ups");
+          }
+        } else {
+          // Fallback: detect promises from natural language if AI didn't signal
+          try {
+            const { detectPromiseFromText, createScheduledFollowUps } = await import("./slurp-follow-up.js");
+            const detected = detectPromiseFromText(reply.content);
+            if (detected) {
+              const followUps = createScheduledFollowUps(
+                {
+                  type: detected.type,
+                  timing: detected.timing,
+                  count: 1,
+                  reason: detected.reason,
+                  context: "Auto-detected from message content",
+                },
+                new Date(),
+                undefined,
+              );
+              await messagesStore.addScheduledFollowUps(thread.id, followUps);
+              logger.info("[slurp-message] Auto-detected promise in thread %s: %s", thread.id, detected.reason);
+            }
+          } catch (error: unknown) {
+            logger.warn(error, "[slurp-message] Could not auto-detect promise");
+          }
+        }
+
         await slurp
           .recordCreatorStateSignals(thread.creatorAccountId, reply.stateSignals)
           .catch((error: unknown) => logger.warn(error, "[slurp-message] Could not record creator state signals"));

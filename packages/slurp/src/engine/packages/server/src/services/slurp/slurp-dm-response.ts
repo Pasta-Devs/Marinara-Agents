@@ -48,6 +48,17 @@ export const slurpDmReplySchema = z.object({
     .nullable()
     .optional()
     .catch(undefined),
+  followUp: z
+    .object({
+      type: z.enum(["reminder", "promise_delivery", "task_update", "check_in", "recurring"]),
+      timing: z.string().trim().min(1).max(50),
+      count: z.number().int().min(1).max(10).optional(),
+      reason: z.string().trim().min(1).max(200),
+      context: z.string().trim().max(500).optional(),
+    })
+    .nullable()
+    .optional()
+    .catch(undefined),
 });
 
 export type SlurpDmReply = {
@@ -63,6 +74,13 @@ export type SlurpDmReply = {
     intent: SlurpMediaIntent;
     prompt?: string;
     caption: string;
+  };
+  followUp?: {
+    type: "reminder" | "promise_delivery" | "task_update" | "check_in" | "recurring";
+    timing: string;
+    count?: number;
+    reason: string;
+    context?: string;
   };
 };
 

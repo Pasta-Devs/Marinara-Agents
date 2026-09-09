@@ -1190,4 +1190,50 @@ export async function slurpMessageRoutes(app: FastifyInstance) {
       facts: await messages.rapportFactsFor(viewer.id, creatorAccountId),
     };
   });
+
+  app.post("/messages/threads/:threadId/cancel-follow-up", async (req, reply) => {
+    const parsed = z
+      .object({
+        threadId: z.string().trim().min(1),
+        followUpId: z.string().trim().min(1),
+        personaId: z.string().trim().min(1),
+      })
+      .safeParse({ ...req.params, ...req.body });
+    if (!parsed.success) return reply.code(400).send({ error: "Invalid request" });
+
+    const viewer = await requireViewer(parsed.data.personaId);
+    if (!viewer) return reply.code(404).send({ error: "Slurp persona not found" });
+
+    const thread = await messages.getThreadById(parsed.data.threadId);
+    if (!thread) return reply.code(404).send({ error: "Thread not found" });
+
+    // Only the creator's owner can cancel follow-ups
+    if (!(await ownsCreator(parsed.data.personaId, thread.creatorAccountId))) {
+      return reply.code(403).send({ error: "Only the Creator's owner can cancel follow-ups." });
+    }
+
+    await messages.removeScheduledFollowUp(parsed.data.threadId, parsed.data.followUpId);
+    return { success: true };
+  });
+
+  app.get("/messages/creators/:creatorAccountId/follow-up-analytics", async (req, reply) => {
+    const parsed = z
+      .object({
+        creatorAccountId: z.string().trim().min(1),
+        personaId: z.string().trim().min(1),
+      })
+      .safeParse({ ...req.params, ...req.query });
+    if (!parsed.success) return reply.code(400).send({ error: "Invalid request" });
+
+    const viewer = await requireViewer(parsed.data.personaId);
+    if (!viewer) return reply.code(404).send({ error: "Slurp persona not found" });
+
+    // Only the creator's owner can view analytics
+    if (!(await ownsCreator(parsed.data.personaId, parsed.data.creatorAccountId))) {
+      return reply.code(403).send({ error: "Only the Creator's owner can view analytics." });
+    }
+
+    const analytics = await messages.getFollowUpAnalytics(parsed.data.creatorAccountId);
+    return analytics;
+  });
 }

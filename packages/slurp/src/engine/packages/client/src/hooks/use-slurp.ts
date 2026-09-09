@@ -2574,6 +2574,18 @@ export function useSetSlurpThreadNotes() {
   });
 }
 
+export function useCancelSlurpFollowUp() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (input: { threadId: string; followUpId: string; personaId: string }) =>
+      api.post<{ success: boolean }>(`/slurp/messages/threads/${encodeURIComponent(input.threadId)}/cancel-follow-up`, {
+        followUpId: input.followUpId,
+        personaId: input.personaId,
+      }),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: noodleKeys.noodlerRoot() }),
+  });
+}
+
 /** The rapport breakdown, read only by the Creator edit panel. */
 export function useSlurpRapport(creatorAccountId: string | null, personaId: string | null) {
   return useQuery({

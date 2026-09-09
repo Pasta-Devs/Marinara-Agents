@@ -222,7 +222,9 @@ export function slurpReplyPacing(input: {
   // High reach (subscriber + good rapport) gets check-in reply
   if (reach >= 0.6) {
     // They'll check messages and reply within 10-20 minutes
-    const checkInDelay = Math.round((10 + Math.random() * 10) * MINUTE * moodDrag);
+    // Deterministic based on rapport score for consistency
+    const variance = (input.rapport.score % 10) / 10; // 0.0 to 1.0
+    const checkInDelay = Math.round((10 + variance * 10) * MINUTE * moodDrag);
     const typingMs = calculateTypingDelay(replyLength, momentum, mood, talkativeness, "fast");
     return {
       mode: "delayed",
@@ -234,7 +236,8 @@ export function slurpReplyPacing(input: {
 
   // Medium reach gets delayed check-in reply (30-60 min)
   if (reach >= 0.4) {
-    const checkInDelay = Math.round((30 + Math.random() * 30) * MINUTE * moodDrag);
+    const variance = (input.rapport.score % 10) / 10; // 0.0 to 1.0
+    const checkInDelay = Math.round((30 + variance * 30) * MINUTE * moodDrag);
     const typingMs = calculateTypingDelay(replyLength, momentum, mood, talkativeness, "normal");
     return {
       mode: "delayed",
@@ -265,6 +268,9 @@ export function slurpReplyPacing(input: {
  * Calculate realistic typing delay based on content length and context.
  *
  * Simulates: reading the message, thinking, typing, maybe revising, random distractions.
+ *
+ * Uses deterministic randomness (seeded by reply length) so the same reply always takes
+ * roughly the same time - consistency feels more human than true randomness.
  */
 function calculateTypingDelay(
   replyLength: number,
@@ -273,8 +279,12 @@ function calculateTypingDelay(
   talkativeness: number,
   speed: "instant" | "fast" | "normal" | "slow",
 ): number {
+  // Deterministic "random" based on content length for consistency
+  const seed = replyLength % 1000;
+  const pseudoRandom = (offset: number) => (((seed + offset) * 9301 + 49297) % 233280) / 233280;
+
   // Base thinking time: 3-11 seconds (reading + considering response)
-  const thinkingTime = 3000 + Math.random() * 8000;
+  const thinkingTime = 3000 + pseudoRandom(1) * 8000;
 
   // Typing time: ~40 words per minute = ~200 chars/min
   let typingSpeed = momentum === "hot" ? 250 : 200; // chars per minute
@@ -284,16 +294,17 @@ function calculateTypingDelay(
   const typingTime = (replyLength / typingSpeed) * 60_000;
 
   // Revision time: longer replies = pause to reread
-  const revisionTime = replyLength > 100 ? Math.random() * 5000 : 0;
+  const revisionTime = replyLength > 100 ? pseudoRandom(2) * 5000 : 0;
 
   // Random distraction: 15% chance of +20-90 seconds
-  const distraction = Math.random() < 0.15 ? 20_000 + Math.random() * 70_000 : 0;
+  const distraction = pseudoRandom(3) < 0.15 ? 20_000 + pseudoRandom(4) * 70_000 : 0;
 
   // Mood modifier: delighted = faster, cold = slower
   const moodMultiplier = mood > 60 ? 0.6 : mood < -20 ? 1.8 : 1.0;
 
   // Talkativeness: chatty people type faster (thoughts flow easily)
-  const talkMultiplier = 1 - talkativeness / 200; // 0.5x to 1.0x
+  // FIXED: Was backwards - now 100 talkativeness = 0.5x time (2x faster)
+  const talkMultiplier = 1.5 - talkativeness / 200; // 1.5x (slow) to 0.5x (fast)
 
   const total = (thinkingTime + typingTime + revisionTime) * moodMultiplier * talkMultiplier + distraction;
 
@@ -333,6 +344,7 @@ export function splitSlurpReplyBurst(content: string, allow: boolean, limit = 3)
  * Delay between bubbles in a multi-message burst.
  *
  * Now content-aware and varied to feel natural, not robotic.
+ * Uses deterministic variance based on content for consistency.
  */
 export function slurpReplyBubbleDelayMs(input: {
   bubbleIndex: number;
@@ -346,15 +358,19 @@ export function slurpReplyBubbleDelayMs(input: {
   const mood = input.mood ?? 0;
   const nextLength = input.nextBubble.length;
 
+  // Deterministic "random" based on bubble content
+  const seed = nextLength + input.bubbleIndex * 100;
+  const pseudoRandom = (offset: number) => (((seed + offset) * 9301 + 49297) % 233280) / 233280;
+
   // Base delay: ~20ms per character (realistic typing speed)
   const typingTime = nextLength * 20;
 
   // Thinking pause between messages
   const isAfterThought = /^(actually|also|oh|wait|and|but|plus|or|like)/i.test(input.nextBubble);
-  const thinkingPause = isAfterThought ? 2000 + Math.random() * 6000 : 500 + Math.random() * 2500;
+  const thinkingPause = isAfterThought ? 2000 + pseudoRandom(1) * 6000 : 500 + pseudoRandom(2) * 2500;
 
   // Momentum: hot conversation = sometimes rapid-fire
-  const pacing = momentum === "hot" && Math.random() < 0.3 ? 0.4 : 1.0;
+  const pacing = momentum === "hot" && pseudoRandom(3) < 0.3 ? 0.4 : 1.0;
 
   // Mood: delighted = faster bubbles, cold = slower
   const moodMultiplier = mood > 60 ? 0.7 : mood < -20 ? 1.5 : 1.0;

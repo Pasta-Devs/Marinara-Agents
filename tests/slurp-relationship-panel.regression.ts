@@ -53,7 +53,7 @@ const basicView = view.slice(branchSplit, branchEnd);
 
 // Basic answers what a player needs to play the conversation, and answers it in words.
 // slurp-rapport.ts: a number in a thread turns a person into a progress bar and invites farming.
-for (const section of ["Right now", "What can happen here", "What they remember about you", "Between you"]) {
+for (const section of ["Right now", "What can happen here", "Between you"]) {
   assert.match(basicView, new RegExp(`title="${section}"`, "u"), `basic view needs the ${section} section`);
 }
 assert.doesNotMatch(basicView, /<Meter/u, "basic view must not render a 0-100 meter");
@@ -70,7 +70,6 @@ for (const section of [
   "Boundaries and trust",
   "Rapport breakdown",
   "Context",
-  "Memories",
   "Exact values",
 ]) {
   assert.match(advancedView, new RegExp(`title="${section}"`, "u"), `advanced view needs the ${section} section`);
@@ -109,7 +108,7 @@ for (const gone of [
 // --- The pieces it is built from --------------------------------------------------------
 // Defined once at module scope. Declaring them inside the component remounts every meter and
 // every open section on each render, which is what closed a details block while it was read.
-for (const piece of ["Meter", "DivergingBar", "Stepper", "StatusRow", "Field", "PanelSection", "NoteList"]) {
+for (const piece of ["Meter", "DivergingBar", "Stepper", "StatusRow", "Field", "PanelSection"]) {
   assert.match(view, new RegExp(`^function ${piece}\\(`, "mu"), `${piece} must be a module-scope component`);
 }
 
@@ -125,9 +124,10 @@ assert.match(view, /function DivergingBar\([\s\S]{0,1400}?left-1\/2 w-px/u);
 assert.match(view, /const ADULT_LEVELS = \["ordinary", "suggestive", "provocative", "intimate", "explicit"\]/u);
 // Status is never colour alone: an icon and a sentence carry it in greyscale and forced colours.
 assert.match(view, /function StatusRow\(\{\s*icon: Icon,\s*tone,\s*title,/u);
-// Notes are a list. Joining them with semicolons made one unreadable run of text.
-assert.match(view, /function NoteList\([\s\S]{0,700}?notes\.map\(\(note\) => \(/u);
-assert.doesNotMatch(view, /notes\.map\(\(note\) => note\.text\)\.join/u);
+// Memory has one dedicated editor instead of a read-only copy in either Details view.
+assert.doesNotMatch(advancedView, /title="Memories"/u);
+assert.doesNotMatch(basicView, /title="What they remember about you"/u);
+assert.match(view, /function SlurpMemoriesPanel\(/u);
 
 // Both words are on screen with one selected, so the control cannot be read as naming the
 // mode it would switch to rather than the one already showing.

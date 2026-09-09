@@ -4,6 +4,7 @@ import { startNoodleAutoPostScheduler } from "./slurp-autopost-scheduler.service
 import { startNoodlerFanActivityScheduler } from "./slurp-fan-activity-scheduler.service.js";
 import { startNoodleRefreshScheduler } from "./slurp-refresh-scheduler.service.js";
 import { startSlurpMessageScheduler } from "./slurp-message-scheduler.service.js";
+import { startSlurpFollowUpScheduler } from "./slurp-follow-up-scheduler.service.js";
 import { startSlurpWorldScheduler } from "./slurp-world-scheduler.service.js";
 import { createSlurpActivationLifecycle } from "./slurp-activation-lifecycle.js";
 import { createSlurpStorage } from "../storage/slurp.storage.js";
@@ -59,6 +60,7 @@ export async function activate({
     startNoodlerFanActivityScheduler(app, addTeardown);
     startNoodleRefreshScheduler(app, addTeardown, api.runInternalRoute);
     startSlurpMessageScheduler(app, addTeardown);
+    startSlurpFollowUpScheduler(app, addTeardown);
     startSlurpWorldScheduler(app, addTeardown);
   });
 }

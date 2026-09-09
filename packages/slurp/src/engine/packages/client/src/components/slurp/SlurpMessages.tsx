@@ -90,6 +90,9 @@ const TIP_PRESETS = [5, 15, 50] as const;
 /** How much of a conversation is mounted at once, and how much one "show earlier" adds. */
 const SLURP_MESSAGE_PAGE = 25;
 
+/** The server applies the same limit to each memory tier. */
+const SLURP_MEMORY_TIER_LIMIT = 8;
+
 function isCommissionRequest(content: string): boolean {
   return /\b(commission|custom\s+(art|piece|work)|request\s+(a|an)\s+(image|picture|piece))\b/i.test(content);
 }
@@ -1734,6 +1737,7 @@ function SlurpThreadView({
             ) : drawerMode === "memories" ? (
               <SlurpMemoriesPanel
                 notes={relationship?.notes ?? []}
+                scheduledFollowUps={relationship?.scheduledFollowUps}
                 threadId={threadId}
                 personaId={personaId}
                 onOpenPrompt={threadId ? () => setDrawerMode("prompt") : null}
@@ -1950,6 +1954,88 @@ function SlurpConnectionSwitcher({
   );
 }
 
+function SlurpFollowUpItem({
+  followUp,
+  threadId,
+  personaId,
+  editable,
+}: {
+  followUp: {
+    id: string;
+    scheduledAt: string;
+    type: string;
+    reason: string;
+    context: string;
+    sequenceNumber?: number;
+    totalInSequence?: number;
+  };
+  threadId: string | null;
+  personaId: string | null;
+  editable: boolean;
+}) {
+  const { t: localizeUi } = useUiTranslation();
+  const cancelFollowUp = useCancelSlurpFollowUp();
+
+  const formatTime = (isoString: string) => {
+    const date = new Date(isoString);
+    const now = new Date();
+    const diffMs = date.getTime() - now.getTime();
+    const diffMin = Math.round(diffMs / 60_000);
+
+    if (diffMin < 0) return localizeUi("ui.slurp.messages.followUpOverdue", { defaultValue: "Overdue" });
+    if (diffMin < 60) return `${diffMin}min`;
+    const diffHr = Math.round(diffMin / 60);
+    if (diffHr < 24) return `${diffHr}hr`;
+    const diffDays = Math.round(diffHr / 24);
+    return `${diffDays}d`;
+  };
+
+  const typeLabel =
+    {
+      reminder: localizeUi("ui.slurp.messages.followUpTypeReminder", { defaultValue: "Reminder" }),
+      promise_delivery: localizeUi("ui.slurp.messages.followUpTypePromise", { defaultValue: "Promise" }),
+      task_update: localizeUi("ui.slurp.messages.followUpTypeTask", { defaultValue: "Task update" }),
+      check_in: localizeUi("ui.slurp.messages.followUpTypeCheckIn", { defaultValue: "Check-in" }),
+      recurring: localizeUi("ui.slurp.messages.followUpTypeRecurring", { defaultValue: "Update" }),
+    }[followUp.type] || followUp.type;
+
+  const handleCancel = async () => {
+    if (!threadId || !personaId) return;
+    await cancelFollowUp.mutateAsync({ threadId, followUpId: followUp.id, personaId });
+  };
+
+  return (
+    <li className="flex items-start gap-1.5 rounded-xl bg-[var(--slurp-surface)] px-2.5 py-1.5 text-xs leading-snug">
+      <div className="min-w-0 flex-1">
+        <p className="flex items-center gap-1.5">
+          <span className="rounded bg-[var(--slurp-surface-raised)] px-1.5 py-0.5 text-[0.65rem] font-bold text-[var(--muted-foreground)]">
+            {typeLabel}
+          </span>
+          <span className="text-[0.65rem] text-[var(--muted-foreground)]">in {formatTime(followUp.scheduledAt)}</span>
+          {followUp.sequenceNumber && followUp.totalInSequence && (
+            <span className="text-[0.65rem] text-[var(--muted-foreground)]">
+              ({followUp.sequenceNumber}/{followUp.totalInSequence})
+            </span>
+          )}
+        </p>
+        <p className="mt-0.5 break-words">{followUp.reason}</p>
+        {followUp.context && <p className="mt-0.5 text-[0.65rem] text-[var(--muted-foreground)]">{followUp.context}</p>}
+      </div>
+      {editable && (
+        <button
+          type="button"
+          disabled={cancelFollowUp.isPending}
+          onClick={handleCancel}
+          className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-[var(--muted-foreground)] hover:bg-[var(--slurp-surface-raised)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--slurp-focus)] disabled:opacity-40"
+          aria-label={localizeUi("ui.slurp.messages.cancelFollowUp", { defaultValue: "Cancel follow-up" })}
+        >
+          <X size={14} aria-hidden="true" />
+        </button>
+      )}
+    </li>
+  );
+}
+
 /**
  * What the creator remembers about this fan, and the one place it can be corrected.
  *
@@ -1960,11 +2046,21 @@ function SlurpConnectionSwitcher({
  */
 function SlurpMemoriesPanel({
   notes,
+  scheduledFollowUps,
   threadId,
   personaId,
   onOpenPrompt,
 }: {
   notes: { id: string; text: string; tier: "working" | "longterm" }[];
+  scheduledFollowUps?: Array<{
+    id: string;
+    scheduledAt: string;
+    type: string;
+    reason: string;
+    context: string;
+    sequenceNumber?: number;
+    totalInSequence?: number;
+  }>;
   threadId: string | null;
   personaId: string | null;
   onOpenPrompt: (() => void) | null;
@@ -1998,89 +2094,97 @@ function SlurpMemoriesPanel({
 
   const tierRows = (tier: "working" | "longterm") => notes.filter((note) => note.tier === tier);
 
-  const section = (tier: "working" | "longterm", title: string, hint: string) => (
-    <section className="px-4 py-3">
-      <div className="flex items-center justify-between gap-2">
-        <h3 className="text-xs font-black">{title}</h3>
-        <button
-          type="button"
-          disabled={!editable || setNotes.isPending}
-          onClick={() => {
-            setAddingTier(tier);
-            setEditingId(null);
-            setDraft("");
-          }}
-          className="inline-flex min-h-9 items-center gap-1 rounded-lg px-2 text-[0.7rem] font-bold text-[var(--noodle-accent)] ring-1 ring-inset ring-[var(--noodle-accent)]/35 transition-colors hover:bg-[var(--noodle-accent)]/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--slurp-focus)] disabled:opacity-40"
-        >
-          <Plus size={13} aria-hidden="true" />
-          {localizeUi("ui.slurp.messages.memoryAdd", { defaultValue: "Add" })}
-        </button>
-      </div>
-      <p className="mt-0.5 text-[0.65rem] text-[var(--muted-foreground)]">{hint}</p>
-      <ul className="mt-2 space-y-1.5">
-        {tierRows(tier).length === 0 && addingTier !== tier && (
-          <li className="text-[0.7rem] text-[var(--muted-foreground)]">
-            {localizeUi("ui.slurp.messages.memoryNone", { defaultValue: "Nothing remembered here yet." })}
-          </li>
-        )}
-        {tierRows(tier).map((note) =>
-          editingId === note.id ? (
-            <li key={note.id}>
+  const section = (tier: "working" | "longterm", title: string, hint: string) => {
+    const rows = tierRows(tier);
+    return (
+      <section className="px-4 py-3">
+        <div className="flex items-center justify-between gap-2">
+          <h3 className="text-xs font-black">
+            {title}{" "}
+            <span className="font-normal text-[var(--muted-foreground)]">
+              {rows.length}/{SLURP_MEMORY_TIER_LIMIT}
+            </span>
+          </h3>
+          <button
+            type="button"
+            disabled={!editable || setNotes.isPending || rows.length >= SLURP_MEMORY_TIER_LIMIT}
+            onClick={() => {
+              setAddingTier(tier);
+              setEditingId(null);
+              setDraft("");
+            }}
+            className="inline-flex min-h-9 items-center gap-1 rounded-lg px-2 text-[0.7rem] font-bold text-[var(--noodle-accent)] ring-1 ring-inset ring-[var(--noodle-accent)]/35 transition-colors hover:bg-[var(--noodle-accent)]/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--slurp-focus)] disabled:opacity-40"
+          >
+            <Plus size={13} aria-hidden="true" />
+            {localizeUi("ui.slurp.messages.memoryAdd", { defaultValue: "Add" })}
+          </button>
+        </div>
+        <p className="mt-0.5 text-[0.65rem] text-[var(--muted-foreground)]">{hint}</p>
+        <ul className="mt-2 space-y-1.5">
+          {rows.length === 0 && addingTier !== tier && (
+            <li className="text-[0.7rem] text-[var(--muted-foreground)]">
+              {localizeUi("ui.slurp.messages.memoryNone", { defaultValue: "Nothing remembered here yet." })}
+            </li>
+          )}
+          {rows.map((note) =>
+            editingId === note.id ? (
+              <li key={note.id}>
+                <MemoryEditor
+                  value={draft}
+                  pending={setNotes.isPending}
+                  onChange={setDraft}
+                  onCancel={() => setEditingId(null)}
+                  onSave={() =>
+                    write(notes.map((entry) => (entry.id === note.id ? { ...entry, text: draft.trim() } : entry)))
+                  }
+                />
+              </li>
+            ) : (
+              <li
+                key={note.id}
+                className="flex items-start gap-1.5 rounded-xl bg-[var(--slurp-surface)] px-2.5 py-1.5 text-xs leading-snug"
+              >
+                <span className="min-w-0 flex-1 break-words">{note.text}</span>
+                <button
+                  type="button"
+                  disabled={!editable || setNotes.isPending}
+                  onClick={() => {
+                    setEditingId(note.id);
+                    setAddingTier(null);
+                    setDraft(note.text);
+                  }}
+                  className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-[var(--muted-foreground)] hover:bg-[var(--slurp-surface-raised)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--slurp-focus)] disabled:opacity-40"
+                  aria-label={localizeUi("ui.slurp.messages.memoryEdit", { defaultValue: "Edit memory" })}
+                >
+                  <Pencil size={13} aria-hidden="true" />
+                </button>
+                <button
+                  type="button"
+                  disabled={!editable || setNotes.isPending}
+                  onClick={() => write(notes.filter((entry) => entry.id !== note.id))}
+                  className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-red-600 hover:bg-red-500/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--slurp-focus)] disabled:opacity-40 dark:text-red-400"
+                  aria-label={localizeUi("ui.slurp.messages.memoryDelete", { defaultValue: "Forget this" })}
+                >
+                  <Trash2 size={13} aria-hidden="true" />
+                </button>
+              </li>
+            ),
+          )}
+          {addingTier === tier && (
+            <li>
               <MemoryEditor
                 value={draft}
                 pending={setNotes.isPending}
                 onChange={setDraft}
-                onCancel={() => setEditingId(null)}
-                onSave={() =>
-                  write(notes.map((entry) => (entry.id === note.id ? { ...entry, text: draft.trim() } : entry)))
-                }
+                onCancel={() => setAddingTier(null)}
+                onSave={() => write([...notes, { text: draft.trim(), tier }])}
               />
             </li>
-          ) : (
-            <li
-              key={note.id}
-              className="flex items-start gap-1.5 rounded-xl bg-[var(--slurp-surface)] px-2.5 py-1.5 text-xs leading-snug"
-            >
-              <span className="min-w-0 flex-1 break-words">{note.text}</span>
-              <button
-                type="button"
-                disabled={!editable || setNotes.isPending}
-                onClick={() => {
-                  setEditingId(note.id);
-                  setAddingTier(null);
-                  setDraft(note.text);
-                }}
-                className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-[var(--muted-foreground)] hover:bg-[var(--slurp-surface-raised)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--slurp-focus)] disabled:opacity-40"
-                aria-label={localizeUi("ui.slurp.messages.memoryEdit", { defaultValue: "Edit memory" })}
-              >
-                <Pencil size={13} aria-hidden="true" />
-              </button>
-              <button
-                type="button"
-                disabled={!editable || setNotes.isPending}
-                onClick={() => write(notes.filter((entry) => entry.id !== note.id))}
-                className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-red-600 hover:bg-red-500/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--slurp-focus)] disabled:opacity-40 dark:text-red-400"
-                aria-label={localizeUi("ui.slurp.messages.memoryDelete", { defaultValue: "Forget this" })}
-              >
-                <Trash2 size={13} aria-hidden="true" />
-              </button>
-            </li>
-          ),
-        )}
-        {addingTier === tier && (
-          <li>
-            <MemoryEditor
-              value={draft}
-              pending={setNotes.isPending}
-              onChange={setDraft}
-              onCancel={() => setAddingTier(null)}
-              onSave={() => write([...notes, { text: draft.trim(), tier }])}
-            />
-          </li>
-        )}
-      </ul>
-    </section>
-  );
+          )}
+        </ul>
+      </section>
+    );
+  };
 
   return (
     <div className="divide-y divide-[var(--noodle-divider)]">
@@ -2100,6 +2204,29 @@ function SlurpMemoriesPanel({
         localizeUi("ui.slurp.messages.memoryLongTermHint", {
           defaultValue: "The stable facts. These stay until something updates them.",
         }),
+      )}
+      {scheduledFollowUps && scheduledFollowUps.length > 0 && (
+        <section className="px-4 py-3">
+          <h3 className="pb-2 text-[0.65rem] font-black uppercase tracking-wider text-[var(--muted-foreground)]">
+            {localizeUi("ui.slurp.messages.scheduledFollowUps", { defaultValue: "Scheduled follow-ups" })}
+          </h3>
+          <p className="pb-2 text-[0.65rem] leading-snug text-[var(--muted-foreground)]">
+            {localizeUi("ui.slurp.messages.scheduledFollowUpsHint", {
+              defaultValue: "Messages the Creator will send proactively.",
+            })}
+          </p>
+          <ul className="space-y-1.5">
+            {scheduledFollowUps.map((followUp) => (
+              <SlurpFollowUpItem
+                key={followUp.id}
+                followUp={followUp}
+                threadId={threadId}
+                personaId={personaId}
+                editable={editable}
+              />
+            ))}
+          </ul>
+        </section>
       )}
       {onOpenPrompt && (
         <section className="px-4 py-3">
@@ -3402,7 +3529,7 @@ function PanelSection({
  * Two views, and the split is the one `slurp-rapport.ts` already argued for: a number in a thread
  * turns a person into a progress bar and teaches the player to farm it. So Basic answers what a
  * player needs to play the conversation, entirely in words — where they stand, how she is, what
- * can happen here, what she remembers. Advanced is the whole simulation with every figure the
+ * can happen here. Advanced is the whole simulation with every figure the
  * prompt was built from, for somebody running the Creator rather than talking to her.
  *
  * They are separate views rather than one view with extra rows appended. The old panel added a
@@ -3421,8 +3548,6 @@ function SlurpRelationshipPanel({
   const { creatorState, threadState, availability } = relationship;
   const cooling = Boolean(relationship.coolUntil && relationship.coolUntil > new Date().toISOString());
   const mood = relationship.mood ?? 0;
-  const workingNotes = relationship.notes.filter((note) => note.tier === "working");
-  const longTermNotes = relationship.notes.filter((note) => note.tier === "longterm");
   const blockedBy =
     threadState.posture === "rejecting" || threadState.posture === "defensive"
       ? "She has gone guarded with this fan."
@@ -3635,19 +3760,6 @@ function SlurpRelationshipPanel({
               <Field label="Day vibe" value={relationship.dayVibe ?? "An ordinary day"} />
             </PanelSection>
 
-            <PanelSection
-              icon={Brain}
-              title="Memories"
-              summary={`${workingNotes.length} working · ${longTermNotes.length} long-term`}
-            >
-              <NoteList title="Working memory" notes={workingNotes} hint="These may change as you talk." />
-              <NoteList
-                title="Long-term memory"
-                notes={longTermNotes}
-                hint="These stay until something updates them."
-              />
-            </PanelSection>
-
             {/* The table view every meter above is also readable from, and where the timestamps live. */}
             <PanelSection icon={Search} title="Exact values" summary="Every figure, as text">
               <dl className="grid grid-cols-2 gap-x-3 gap-y-1 tabular-nums">
@@ -3765,23 +3877,6 @@ function SlurpRelationshipPanel({
             </PanelSection>
 
             <PanelSection
-              icon={Brain}
-              title="What they remember about you"
-              summary={`${workingNotes.length + longTermNotes.length} noted`}
-            >
-              {workingNotes.length + longTermNotes.length === 0 ? (
-                <p className="text-[0.68rem] text-[var(--muted-foreground)]">
-                  Nothing yet. Tell them something about yourself and it will show up here.
-                </p>
-              ) : (
-                <>
-                  <NoteList title="Recently" notes={workingNotes} hint="These may change as you talk." />
-                  <NoteList title="For good" notes={longTermNotes} hint="These stay until something updates them." />
-                </>
-              )}
-            </PanelSection>
-
-            <PanelSection
               icon={BriefcaseBusiness}
               title="Between you"
               summary={`${relationship.spentCoins} coins spent`}
@@ -3823,27 +3918,6 @@ function SlurpRelationshipPanel({
           </p>
         </footer>
       )}
-    </div>
-  );
-}
-
-/** Notes, as a list rather than joined with semicolons into one unreadable run. */
-function NoteList({ title, notes, hint }: { title: string; notes: { id: string; text: string }[]; hint: string }) {
-  return (
-    <div>
-      <p className="mb-1 text-[0.7rem] font-bold text-[var(--muted-foreground)]">{title}</p>
-      {notes.length === 0 ? (
-        <p className="text-[0.68rem] text-[var(--muted-foreground)]">None yet.</p>
-      ) : (
-        <ul className="space-y-1">
-          {notes.map((note) => (
-            <li key={note.id} className="rounded-xl bg-[var(--slurp-surface-raised)] px-2.5 py-1.5 leading-snug">
-              {note.text}
-            </li>
-          ))}
-        </ul>
-      )}
-      <p className="mt-1 text-[0.62rem] text-[var(--muted-foreground)]">{hint}</p>
     </div>
   );
 }

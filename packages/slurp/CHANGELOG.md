@@ -1,5 +1,10 @@
 # Slurp release notes
 
+## 1.2.63 — 2026-09-09 [highlight]
+
+- Restored active AI updates for the two-list memory system and made each eight-item limit visible.
+- Removed the duplicate read-only memory sections from Conversation Details. Memories now has one editable panel.
+
 ## 1.2.62 — 2026-09-09
 
 - Simplified the message plus menu into clear photo, generated photo, tip, commission, and locked-content actions.
