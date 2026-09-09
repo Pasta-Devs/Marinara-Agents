@@ -24,6 +24,7 @@ import { cn } from "../../lib/utils";
 import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
+import { formatClockTime, formatDateTime } from "./SlurpDateTime";
 import {
   useSlurpAmbientProfiles,
   useRerollAmbientProfiles,
@@ -1094,7 +1095,7 @@ export function SlurpSettings({
                                 <span className="mt-1 block truncate text-[0.68rem] text-[var(--muted-foreground)]">
                                   {status?.nextPreparedAt
                                     ? t("ui.slurp.settings.creators.nextPost", {
-                                        date: new Date(status.nextPreparedAt).toLocaleString(i18n.language),
+                                        date: formatDateTime(status.nextPreparedAt, i18n.language),
                                       })
                                     : t(`ui.slurp.settings.creators.sourceStatus.${creator.sourceStatus.state}`)}
                                 </span>
@@ -2449,7 +2450,7 @@ function ScheduleSlotEditor({
             ? t("ui.slurp.settings.creators.prepared")
             : t("ui.slurp.settings.creators.scheduled")}
         </span>
-        <span>{new Date(slot.publishAt).toLocaleString(i18n.language)}</span>
+        <span>{formatDateTime(slot.publishAt, i18n.language)}</span>
       </div>
       <div className="flex flex-col gap-2 sm:flex-row">
         <input
@@ -2569,9 +2570,7 @@ function OverviewActivity({
 }) {
   const { t, i18n } = useTranslation();
   const formatTime = (value: string | null | undefined) =>
-    value
-      ? new Date(value).toLocaleTimeString(i18n.language, { hour: "numeric", minute: "2-digit" })
-      : t("ui.slurp.settings.overview.activity.notAvailable");
+    value ? formatClockTime(value, i18n.language) : t("ui.slurp.settings.overview.activity.notAvailable");
   const usage = reserveStatus ? `${reserveStatus.textAttemptsUsed} / ${reserveStatus.postsPerDay}` : "--";
   const fanUsage = fanStatus ? `${fanStatus.usedRuns} / ${fanStatus.runLimit}` : "--";
 
