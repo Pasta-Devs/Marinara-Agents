@@ -11,6 +11,7 @@ import {
 import { isDebugAgentsEnabled } from "../../config/runtime-config.js";
 import { newId } from "../../utils/id-generator.js";
 import type { DB } from "../../db/connection.js";
+import { describeSlurpPostCondition } from "./slurp-post-condition.service.js";
 import { logger, logDebugOverride } from "../../lib/logger.js";
 import { resolveBaseUrl } from "../generation/connection-base-url.js";
 import { clampGenerationMaxOutputTokens } from "../generation/output-token-limits.js";
@@ -225,6 +226,8 @@ export function buildNoodlerPostMessages(input: {
   scheduleContext?: string;
   /** The rotating angle for this post. Absent when the player has directed the post themselves. */
   variationInstruction?: string;
+  /** From `slurp-post-stance.ts`: who this Creator is today. Absent when today is unremarkable. */
+  conditionInstruction?: string;
   /** The project this post continues, with that project's own recent posts. Absent for a loose post. */
   project?: { project: SlurpProject; posts: NoodlerManagedPost[] };
   generatedAt?: Date;
@@ -278,6 +281,7 @@ export function buildNoodlerPostMessages(input: {
     // property of the character, so it gets its own header directly above the timing block it
     // belongs with. The `Content format:` line that also lived here is gone: the system prompt
     // already states the format via NOODLER_FORMAT_PROMPTS.
+    ...(input.conditionInstruction ? [input.conditionInstruction, ""] : []),
     "# Today's schedule",
     protect(input.scheduleContext ?? "") || "No active Conversation Schedule is available for this Creator today.",
     "",
@@ -415,6 +419,10 @@ export async function generateNoodlerPost(
   // nothing about where this thread had got to.
   const projectPosts = project ? await noodle.listPostsByProject(project.id, 4) : [];
   const format = input.request.format ?? variation?.format ?? "caption";
+  // The Creator's own state reached her direct messages and stopped there, so the feed was
+  // written by somebody with no mood, no energy and no memory of last night. A failure here must
+  // never cost a post: an unremarkable day is the same as no block at all.
+  const conditionInstruction = await describeSlurpPostCondition(db, account.id, input.generatedAt ?? new Date());
   const messages = buildNoodlerPostMessages({
     account,
     sourceCharacterContext,
@@ -425,6 +433,7 @@ export async function generateNoodlerPost(
     // A variation carries its own format, so an automatic post stops always being a caption.
     request: { ...input.request, format },
     variationInstruction: variation ? slurpPostVariationInstruction(variation) : undefined,
+    conditionInstruction: conditionInstruction ?? undefined,
     project: project ? { project, posts: projectPosts } : undefined,
     allowImagePrompt: imagesEnabled,
     generationGuidance: settings.generationGuidance,

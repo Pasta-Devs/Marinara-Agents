@@ -1,5 +1,14 @@
 # Slurp release notes
 
+## 1.2.59 — 2026-09-09
+
+- What a Creator posts now depends on how she actually is. Until now her mood, her energy, her day and what she published last night reached her direct messages and stopped there, so the feed was written by somebody with no memory of any of it.
+- A Creator low on energy posts something smaller. One with plenty posts something more involved. Neither ever stops her posting.
+- A Creator who recently published something bolder than usual pulls back for a while afterwards.
+- A strong feeling and a quiet day colour how a post is written, never what it announces.
+- An open tip goal now shapes posts: behind, it asks; nearly met, it says how close; met, it says thank you.
+- How adult a post is stays where it was, in the editable generation guidance. Nothing here overrides it.
+
 ## 1.2.58 — 2026-09-09
 
 - Creators now have short-lived states as well as slow ones: just posted, pleased with how something did, stung by a post going nowhere, tipsy, worn out, rattled, and others. Each one lasts a set time and then stops on its own.
