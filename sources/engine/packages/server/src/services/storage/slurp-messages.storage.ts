@@ -6,7 +6,7 @@
 // lines. It composes that storage for accounts, subscriptions, and the wallet instead of
 // reimplementing them, so a DM tip and a profile tip move coins through exactly one code path.
 import { tolerateMissingTables } from "./slurp-host-tables.js";
-import { and, asc, desc, eq, gt, inArray } from "../../db/file-query.js";
+import { and, asc, desc, eq, gt } from "../../db/file-query.js";
 import { newId } from "../../utils/id-generator.js";
 import type { DB } from "../../db/connection.js";
 import { isFileUniqueConstraintError } from "../../db/file-schema.js";
@@ -27,9 +27,7 @@ import {
 import {
   SLURP_THREAD_STATE_DEFAULT,
   applySlurpThreadStateSignals,
-  decaySlurpThreadState,
   type SlurpCreatorStateSignal,
-  type SlurpThreadState as SlurpConversationState,
 } from "../slurp/slurp-creator-state.js";
 import { activeSlurpStrikes } from "../slurp/slurp-stance.js";
 import { createAppSettingsStorage } from "./app-settings.storage.js";
@@ -43,7 +41,6 @@ import {
   SLURP_DEFAULT_CREATOR_MESSAGING,
   type SlurpCreatorMessaging,
   type SlurpMessageKind,
-  type SlurpThreadState,
 } from "../slurp/slurp-messaging.js";
 import {
   emptySlurpRapportFacts,
@@ -52,148 +49,30 @@ import {
   type SlurpRapportFacts,
 } from "../slurp/slurp-rapport.js";
 import { createSlurpReplyQueueStorage } from "./slurp-reply-queue.storage.js";
-
-export type SlurpMessage = {
-  id: string;
-  threadId: string;
-  senderAccountId: string;
-  role: "viewer" | "creator";
-  kind: SlurpMessageKind;
-  content: string;
-  imageUrl: string | null;
-  price: number;
-  unlockedAt: string | null;
-  readAt: string | null;
-  metadata: Record<string, unknown>;
-  createdAt: string;
-};
-
-export type SlurpThread = {
-  id: string;
-  viewerAccountId: string;
-  creatorAccountId: string;
-  state: SlurpThreadState;
-  openedBy: "viewer" | "creator";
-  requestFeePaid: number;
-  lastMessageAt: string;
-  lastMessagePreview: string;
-  viewerUnread: number;
-  creatorUnread: number;
-  replyNotBeforeAt: string | null;
-  rapport: SlurpRapport;
-  /** How this conversation is going, -100 to 100. See `slurp-mood.ts`. */
-  mood: number;
-  moodUpdatedAt: string | null;
-  /** While in the future, the creator has stepped away from this conversation. */
-  coolUntil: string | null;
-  /** When this conversation was last emptied. Anything older is hidden from the chat. */
-  clearedAt: string | null;
-  threadState: SlurpConversationState;
-  strikes: number;
-  lastStrikeAt: string | null;
-  /** Working and long-term facts the creator knows about this fan. */
-  notes: SlurpThreadNote[];
-  createdAt: string;
-  updatedAt: string;
-};
-
-/** A thread as the inbox renders it: the row plus the creator it belongs to. */
-export type SlurpThreadView = SlurpThread & {
-  creatorHandle: string;
-  creatorDisplayName: string;
-  creatorAvatarUrl: string | null;
-  subscribed: boolean;
-};
-
-export type SlurpCommission = {
-  id: string;
-  threadId: string;
-  viewerAccountId: string;
-  creatorAccountId: string;
-  state: "brief" | "quoted" | "accepted" | "declined" | "delivered";
-  brief: string;
-  price: number;
-  deliveryMessageId: string | null;
-  /** When the automatic delivery is due, when one is scheduled. Null on a hand-delivered piece. */
-  deliverAt: string | null;
-  createdAt: string;
-  updatedAt: string;
-};
-
-export type SlurpSendResult =
-  | { status: "sent"; thread: SlurpThread; message: SlurpMessage }
-  | { status: "closed" }
-  | { status: "insufficient_funds"; required: number }
-  | { status: "not_found" };
+import { DAY, int, json, mapCommission, mapMessage, mapThread, now } from "./slurp-messages.helpers.js";
+import type {
+  SlurpCommission,
+  SlurpMessage,
+  SlurpSendResult,
+  SlurpThread,
+  SlurpThreadView,
+} from "./slurp-messages.types.js";
+import { createSlurpReplyMethods } from "./slurp-reply-methods.js";
+export type {
+  SlurpCommission,
+  SlurpMessage,
+  SlurpSendResult,
+  SlurpThread,
+  SlurpThreadView,
+} from "./slurp-messages.types.js";
 
 export { SLURP_LONGTERM_NOTE_LIMIT, SLURP_WORKING_NOTE_LIMIT } from "../slurp/slurp-thread-notes.js";
 
-const now = () => new Date().toISOString();
 const messageUnlocks = new Map<string, Promise<SlurpMessage | null>>();
 const directMessageTips = new Map<string, Promise<SlurpSendResult>>();
 const commissionAccepts = new Map<string, Promise<SlurpCommission | null>>();
 const commissionSettlements = new Map<string, Promise<SlurpCommission | null>>();
 const commissionDeliveries = new Map<string, Promise<SlurpCommission | null>>();
-const int = (value: string | null | undefined, fallback = 0): number => {
-  const parsed = Number(value);
-  return Number.isFinite(parsed) ? Math.trunc(parsed) : fallback;
-};
-const json = (value: string | null | undefined): Record<string, unknown> => {
-  try {
-    const parsed = JSON.parse(value ?? "{}");
-    return parsed && typeof parsed === "object" && !Array.isArray(parsed) ? (parsed as Record<string, unknown>) : {};
-  } catch {
-    return {};
-  }
-};
-
-function readThreadState(raw: unknown, fallbackUpdatedAt: string): SlurpConversationState {
-  let parsed: Record<string, unknown> = {};
-  if (typeof raw === "string") {
-    try {
-      const value = JSON.parse(raw);
-      if (value && typeof value === "object" && !Array.isArray(value)) parsed = value as Record<string, unknown>;
-    } catch {
-      // Use the defaults for a malformed or pre-state row.
-    }
-  }
-  const number = (key: keyof SlurpConversationState, fallback: number) =>
-    typeof parsed[key] === "number" && Number.isFinite(parsed[key]) ? Number(parsed[key]) : fallback;
-  // `stance` is the pre-rename key. Threads stored before the rename still hold it, and dropping
-  // it silently would reset a defensive conversation to friendly on the next read.
-  const storedPosture = typeof parsed.posture === "string" ? parsed.posture : parsed.stance;
-  const posture =
-    typeof storedPosture === "string" &&
-    ["open", "friendly", "playful", "teasing", "professional", "guarded", "distant", "defensive", "rejecting"].includes(
-      storedPosture,
-    )
-      ? (storedPosture as SlurpConversationState["posture"])
-      : SLURP_THREAD_STATE_DEFAULT.posture;
-  const adultLevel =
-    typeof parsed.adultLevel === "string" &&
-    ["ordinary", "suggestive", "provocative", "intimate", "explicit"].includes(parsed.adultLevel)
-      ? (parsed.adultLevel as SlurpConversationState["adultLevel"])
-      : SLURP_THREAD_STATE_DEFAULT.adultLevel;
-  const state: SlurpConversationState = {
-    posture,
-    familiarity: number("familiarity", SLURP_THREAD_STATE_DEFAULT.familiarity),
-    sexualComfort: number("sexualComfort", SLURP_THREAD_STATE_DEFAULT.sexualComfort),
-    emotionalTrust: number("emotionalTrust", SLURP_THREAD_STATE_DEFAULT.emotionalTrust),
-    respect: number("respect", SLURP_THREAD_STATE_DEFAULT.respect),
-    resentment: number("resentment", SLURP_THREAD_STATE_DEFAULT.resentment),
-    threadDesire: number("threadDesire", SLURP_THREAD_STATE_DEFAULT.threadDesire),
-    adultLevel,
-    updatedAt:
-      typeof parsed.updatedAt === "string" && Number.isFinite(Date.parse(parsed.updatedAt))
-        ? parsed.updatedAt
-        : fallbackUpdatedAt,
-  };
-  const parsedUpdatedAt = Date.parse(state.updatedAt);
-  const elapsedHours = Number.isFinite(parsedUpdatedAt) ? Math.max(0, (Date.now() - parsedUpdatedAt) / 3_600_000) : 0;
-  return elapsedHours > 0 ? decaySlurpThreadState(state, elapsedHours, new Date().toISOString()) : state;
-}
-
-const DAY = 86_400_000;
 
 export function createSlurpMessagesStorage(db: DB) {
   const slurp = createSlurpStorage(db);
@@ -213,59 +92,6 @@ export function createSlurpMessagesStorage(db: DB) {
     };
   };
 
-  const mapMessage = (row: Record<string, unknown>): SlurpMessage => ({
-    id: String(row.id),
-    threadId: String(row.threadId),
-    senderAccountId: String(row.senderAccountId),
-    role: row.role === "creator" ? "creator" : "viewer",
-    kind: String(row.kind) as SlurpMessageKind,
-    content: String(row.content ?? ""),
-    imageUrl: (row.imageUrl as string | null) ?? null,
-    price: int(row.price as string),
-    unlockedAt: (row.unlockedAt as string | null) ?? null,
-    readAt: (row.readAt as string | null) ?? null,
-    metadata: json(row.metadata as string),
-    createdAt: String(row.createdAt),
-  });
-
-  const mapThread = (row: Record<string, unknown>): SlurpThread => ({
-    id: String(row.id),
-    viewerAccountId: String(row.viewerAccountId),
-    creatorAccountId: String(row.creatorAccountId),
-    state: String(row.state) as SlurpThreadState,
-    openedBy: row.openedBy === "creator" ? "creator" : "viewer",
-    requestFeePaid: int(row.requestFeePaid as string),
-    lastMessageAt: String(row.lastMessageAt),
-    lastMessagePreview: String(row.lastMessagePreview ?? ""),
-    viewerUnread: int(row.viewerUnread as string),
-    creatorUnread: int(row.creatorUnread as string),
-    replyNotBeforeAt: (row.replyNotBeforeAt as string | null) ?? null,
-    rapport: readStoredRapport(json(row.rapport as string)),
-    mood: Number.isFinite(Number(row.mood)) ? Number(row.mood) : 0,
-    moodUpdatedAt: (row.moodUpdatedAt as string | null) ?? null,
-    coolUntil: (row.coolUntil as string | null) ?? null,
-    clearedAt: (row.clearedAt as string | null) ?? null,
-    threadState: readThreadState(row.threadState, String(row.updatedAt)),
-    strikes: int(row.strikes as string),
-    lastStrikeAt: (row.lastStrikeAt as string | null) ?? null,
-    notes: readStoredNotes(row.notes),
-    createdAt: String(row.createdAt),
-    updatedAt: String(row.updatedAt),
-  });
-
-  const mapCommission = (row: Record<string, unknown>): SlurpCommission => ({
-    id: String(row.id),
-    threadId: String(row.threadId),
-    viewerAccountId: String(row.viewerAccountId),
-    creatorAccountId: String(row.creatorAccountId),
-    state: String(row.state) as SlurpCommission["state"],
-    brief: String(row.brief),
-    price: int(row.price as string),
-    deliveryMessageId: (row.deliveryMessageId as string | null) ?? null,
-    deliverAt: (row.deliverAt as string | null) ?? null,
-    createdAt: String(row.createdAt),
-    updatedAt: String(row.updatedAt),
-  });
   // `mediaPath` is deliberately absent from `SlurpCommission`: it is a path on the host's disk,
   // and the mapped row is sent to the client.
 
@@ -273,16 +99,8 @@ export function createSlurpMessagesStorage(db: DB) {
    * The cached rapport is a display convenience. A blob written by an older build, or by hand,
    * must render as a cold thread rather than throw the whole inbox away.
    */
-  function readStoredRapport(raw: Record<string, unknown>): SlurpRapport {
-    const score = typeof raw.score === "number" ? raw.score : 0;
-    return {
-      score,
-      tier: (typeof raw.tier === "string" ? raw.tier : "stranger") as SlurpRapport["tier"],
-      contributions: Array.isArray(raw.contributions) ? (raw.contributions as SlurpRapport["contributions"]) : [],
-    };
-  }
-
   const storage = {
+    ...createSlurpReplyMethods(db, () => storage),
     /** Per-creator messaging settings, falling back to the defaults Settings holds. */
     async getCreatorMessaging(creatorAccountId: string): Promise<SlurpCreatorMessaging> {
       return readSlurpCreatorMessaging((await readMessagingBlob())[creatorAccountId], await messagingDefaults());
@@ -410,7 +228,8 @@ export function createSlurpMessagesStorage(db: DB) {
     async rapportFor(viewerAccountId: string, creatorAccountId: string): Promise<SlurpRapport> {
       const messaging = await storage.getCreatorMessaging(creatorAccountId);
       const facts = await storage.rapportFactsFor(viewerAccountId, creatorAccountId);
-      return scoreSlurpRapport(facts, messaging.rapportWeights);
+      // Apply subscriber boost: subscribers gain rapport 1.5x faster from conversation and effort
+      return scoreSlurpRapport(facts, messaging.rapportWeights, { subscriberBoost: true });
     },
 
     /**
@@ -1635,81 +1454,6 @@ export function createSlurpMessagesStorage(db: DB) {
      * At most one reply may be in flight per thread, so a scheduler pass and a live send cannot
      * both answer the same message. Mirrors the creator-reply claim on posts.
      */
-    async claimReply(
-      threadId: string,
-      triggerMessageId: string,
-      creatorAccountId: string,
-    ): Promise<{ status: "claimed"; claimId: string } | { status: "busy" }> {
-      const staleBefore = new Date(Date.now() - 10 * 60_000).toISOString();
-      const stale = await db
-        .select()
-        .from(slurpMessageClaims)
-        .where(
-          and(eq(slurpMessageClaims.threadId, threadId), eq(slurpMessageClaims.creatorAccountId, creatorAccountId)),
-        );
-      for (const row of stale) {
-        if (row.replyMessageId) {
-          const completed = await db.select().from(slurpMessages).where(eq(slurpMessages.id, row.replyMessageId));
-          if (completed.length > 0) {
-            await db.delete(slurpMessageClaims).where(eq(slurpMessageClaims.id, row.id));
-            continue;
-          }
-        }
-        if (row.claimedAt < staleBefore) await db.delete(slurpMessageClaims).where(eq(slurpMessageClaims.id, row.id));
-      }
-      try {
-        const id = newId();
-        await db
-          .insert(slurpMessageClaims)
-          .values({ id, threadId, triggerMessageId, creatorAccountId, replyMessageId: null, claimedAt: now() });
-        return { status: "claimed", claimId: id };
-      } catch (error) {
-        if (!isFileUniqueConstraintError(error, "slurp_message_claims", ["threadId"])) throw error;
-        return { status: "busy" };
-      }
-    },
-
-    async releaseReplyClaim(claimId: string): Promise<void> {
-      await db.delete(slurpMessageClaims).where(eq(slurpMessageClaims.id, claimId));
-    },
-
-    async setReplyNotBefore(threadId: string, value: string | null): Promise<void> {
-      await db
-        .update(slurpThreads)
-        .set({ replyNotBeforeAt: value, updatedAt: now() })
-        .where(eq(slurpThreads.id, threadId));
-    },
-
-    /** Active conversations and pending requests waiting on a queued reply, oldest first. */
-    async listThreadsAwaitingReply(limit = 20): Promise<SlurpThread[]> {
-      const rows = await db
-        .select()
-        .from(slurpThreads)
-        .where(inArray(slurpThreads.state, ["active", "request"]))
-        .orderBy(asc(slurpThreads.lastMessageAt));
-      const nowMs = Date.now();
-      const nowIso = new Date(nowMs).toISOString();
-      const candidates = rows
-        .map(mapThread)
-        .filter(
-          (thread) =>
-            thread.creatorUnread > 0 &&
-            (!thread.coolUntil || thread.coolUntil <= nowIso) &&
-            (!thread.replyNotBeforeAt || Date.parse(thread.replyNotBeforeAt) <= nowMs),
-        );
-      const queue = createSlurpReplyQueueStorage(db);
-      const ready = await Promise.all(
-        candidates.map(async (thread) => {
-          if (await queue.hasPending(thread.id)) return null;
-          // You owe an answer while the fan spoke last. The unread counter alone said "yes" long
-          // after the answer went out, so the scheduler re-answered the same message once per
-          // poll until the fan spoke again. The newest message is the whole obligation.
-          const [newest] = await storage.listMessages(thread.id, 1);
-          return newest?.role === "viewer" ? thread : null;
-        }),
-      );
-      return ready.filter((thread): thread is SlurpThread => thread !== null).slice(0, limit);
-    },
   };
 
   // Messaging tables are newer than some hosts. Reads become empty and writes become no-ops there,

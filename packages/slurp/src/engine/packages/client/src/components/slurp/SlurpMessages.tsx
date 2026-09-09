@@ -969,7 +969,11 @@ function SlurpThreadView({
                   ·{" "}
                   {relationship.availability.online
                     ? localizeUi("ui.slurp.messages.availableNow", { defaultValue: "Available now" })
-                    : localizeUi("ui.slurp.messages.away", { defaultValue: "Away" })}
+                    : relationship.availability.minutesUntilOnline !== null
+                      ? relationship.availability.minutesUntilOnline < 60
+                        ? `Away • Back in ~${Math.round(relationship.availability.minutesUntilOnline)}min`
+                        : `Away • Back in ~${Math.round(relationship.availability.minutesUntilOnline / 60)}hr`
+                      : localizeUi("ui.slurp.messages.away", { defaultValue: "Away" })}
                 </span>
               )}
               {/* Rapport decides how fast and how warmly a Creator answers. The player felt it and
@@ -3612,6 +3616,16 @@ function SlurpRelationshipPanel({
               <div className="grid grid-cols-2 gap-2">
                 <Field label="Availability" value={availability.online ? "Available" : "Away"} />
                 <Field label="Activity" value={availability.activity ?? "Nothing recorded"} />
+                {availability.minutesUntilOnline !== null && !availability.online && (
+                  <Field
+                    label="Back in"
+                    value={
+                      availability.minutesUntilOnline < 60
+                        ? `~${Math.round(availability.minutesUntilOnline)}min`
+                        : `~${Math.round(availability.minutesUntilOnline / 60)}hr`
+                    }
+                  />
+                )}
                 <Field label="Audience tone" value={humanizeValue(relationship.audienceTone)} />
                 <Field
                   label="Pictures"

@@ -160,7 +160,11 @@ const slurpOwnedSourcePaths = [
   "packages/server/src/services/storage/slurp.storage.ts",
   "packages/server/src/services/storage/slurp-financial-queue.ts",
   "packages/server/src/services/storage/slurp-host-tables.ts",
+  "packages/server/src/services/storage/slurp-messages.helpers.ts",
+  "packages/server/src/services/storage/slurp-messages.storage.ts",
+  "packages/server/src/services/storage/slurp-messages.types.ts",
   "packages/server/src/services/storage/slurp-reply-queue.storage.ts",
+  "packages/server/src/services/storage/slurp-reply-methods.ts",
 ];
 // Release builds must bundle the current source; runtime reuse is for explicit non-release verification builds.
 const releaseBuild = process.env.MARINARA_RELEASE_BUILD !== "0";

@@ -81,11 +81,23 @@ export async function replyToSlurpMessage(
 
   const history = await messagesStore.listMessages(thread.id, 60);
 
+  // Check if Creator is still in extended availability window from a previous hot conversation
+  if (thread.extendedOnlineUntil && thread.extendedOnlineUntil > new Date().toISOString()) {
+    availability = { online: true, activity: "chatting", minutesUntilOnline: 0 };
+  }
+
   // Calculate conversation momentum
   const momentumAnalysis = calculateConversationMomentum(
     thread.lastMessageAt,
     history.map((m) => ({ role: m.role as "viewer" | "creator", createdAt: m.createdAt })),
   );
+
+  // Clear extendedOnlineUntil if momentum is no longer hot
+  if (momentumAnalysis.momentum !== "hot" && thread.extendedOnlineUntil) {
+    await messagesStore.setExtendedOnline(thread.id, null).catch((error: unknown) => {
+      logger.warn(error, "[slurp-message] Could not clear extended online for thread %s", thread.id);
+    });
+  }
 
   // Hot momentum extends availability - Creator is still engaged
   if (momentumAnalysis.momentum === "hot" && !availability.online) {
@@ -357,7 +369,22 @@ export async function replyToSlurpMessage(
     // The account lock is already held by another Slurp operation on this creator. Nothing was
     // generated, so the caller may simply try again rather than treat this as a failure.
     if (!locked.acquired) return { status: "busy" };
-    if (locked.value.status === "replied") return { status: "replied", message: locked.value.message, pacing };
+    if (locked.value.status === "replied") {
+      // Recalculate typing delay with actual reply content length
+      const actualReplyLength = locked.value.message.content.length;
+      const recalculatedPacing = slurpReplyPacing({
+        online: availability.online,
+        rapport: thread.rapport,
+        subscribed,
+        messageLength: trigger?.content.length ?? 0,
+        minutesUntilOnline: availability.minutesUntilOnline,
+        mood: currentMood,
+        momentum: momentumAnalysis.momentum,
+        replyLength: actualReplyLength,
+        talkativeness: talkativenessProfile.talkativeness,
+      });
+      return { status: "replied", message: locked.value.message, pacing: recalculatedPacing };
+    }
     return locked.value;
   } catch (error) {
     logger.error(error, "[slurp-message] Reply generation failed for thread %s", thread.id);
