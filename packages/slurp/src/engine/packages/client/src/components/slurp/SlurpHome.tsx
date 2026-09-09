@@ -147,6 +147,7 @@ import {
   useNoodlePostCardController,
 } from "./SlurpPostCard";
 import { NoodleAnchoredPopover } from "./NoodleAnchoredPopover";
+import { SlurpProjectsPanel } from "./SlurpProjectsPanel";
 import { SlurpFanCard } from "./SlurpFanCard";
 import { LockedSlurpPostCard, SlurpCreatorPostCard } from "./SlurpCreatorPostCard";
 import { SlurpSparkleVeil } from "./SlurpSparkleVeil";
@@ -7391,6 +7392,10 @@ function SlurpStudioView({
                   })}
                 </p>
               )}
+
+              {/* What this Creator is posting about, above who is reading it: the thread is the
+                  thing the player steers, and the audience is the result. */}
+              {personaId && <SlurpProjectsPanel personaId={personaId} creatorAccountId={creator.id} />}
 
               {creator.topFans.length > 0 && (
                 <div>

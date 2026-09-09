@@ -159,4 +159,49 @@ const publish = read("services/storage/slurp.storage.ts");
 assert.match(publish, /projectId: typeof payload\.projectId === "string" \? payload\.projectId : null/u);
 assert.match(publish, /await this\.advanceProject\(item\.creatorAccountId, item\.payload\.projectId\)/u);
 
+// ── Routes ──────────────────────────────────────────────────────────────────
+const routes = read("routes/slurp.routes.ts");
+for (const route of [
+  'app.get("/noodler/accounts/:id/projects"',
+  'app.post("/noodler/accounts/:id/projects"',
+  'app.patch("/noodler/accounts/:id/projects/:projectId"',
+  'app.delete("/noodler/accounts/:id/projects/:projectId"',
+  'app.get("/noodler/accounts/:id/projects/:projectId/posts"',
+]) {
+  assert.ok(routes.includes(route), `missing route ${route}`);
+}
+// A project is production notes, not a tip goal: it must never be readable by the audience.
+assert.equal(
+  routes.split("accounts/:id/projects").length - 1,
+  5,
+  "every project route is under the owner-checked creator path",
+);
+assert.match(routes, /Only the Creator's owner can read their projects\./u);
+assert.match(routes, /Only the Creator's owner can open a project\./u);
+assert.match(routes, /Only the Creator's owner can edit a project\./u);
+assert.match(routes, /Only the Creator's owner can delete a project\./u);
+// Posts are only served once the project has been confirmed to belong to this Creator, so a
+// guessed project id cannot read someone else's thread.
+assert.match(routes, /if \(!\(await noodle\.getProject\(creator\.id, projectId\)\)\) \{\s+return reply\.code\(404\)/u);
+
+// ── Studio panel ────────────────────────────────────────────────────────────
+const clientRoot = join(import.meta.dirname, "..", "packages/slurp/src/engine/packages/client/src");
+const readClient = (path: string) => readFileSync(join(clientRoot, path), "utf8");
+const panel = readClient("components/slurp/SlurpProjectsPanel.tsx");
+// Read down and edit the dull ones. A review queue would be unusable at thirty Creators.
+assert.match(panel, /useSlurpProjects/u);
+assert.match(panel, /ui\.slurp\.projects\.pause/u);
+assert.match(panel, /ui\.slurp\.projects\.resume/u);
+assert.match(panel, /ui\.slurp\.projects\.finish/u);
+// "Delete" normally takes the content with it. Say that it does not.
+assert.match(panel, /ui\.slurp\.projects\.deleteNote/u);
+assert.match(readClient("components/slurp/SlurpHome.tsx"), /<SlurpProjectsPanel personaId=\{personaId\}/u);
+// The pace is one familiar control beside the Story rate, not a second settings screen.
+assert.match(readClient("components/slurp/SlurpSettings.tsx"), /ui\.slurp\.settings\.projectRate/u);
+
+const locales = JSON.parse(readClient("localization/locales/en.json")) as Record<string, string>;
+for (const key of ["ui.slurp.projects.heading", "ui.slurp.settings.projectRate", "ui.slurp.projects.status.active"]) {
+  assert.ok(locales[key], `missing English string ${key}`);
+}
+
 console.log("slurp project regression passed");

@@ -748,6 +748,23 @@ export function SlurpSettings({
                       </select>
                     </Field>
                   )}
+                  {settings.autoPostingScheduleEnabled && (
+                    <Field label={t("ui.slurp.settings.projectRate")} detail={t("ui.slurp.settings.projectRateDetail")}>
+                      <select
+                        value={settings.projectRate}
+                        disabled={updateSettings.isPending}
+                        onChange={(event) =>
+                          void update("projectRate", event.target.value as SlurpSettings["projectRate"])
+                        }
+                        className="min-h-11 w-full rounded-lg border border-[var(--slurp-outline)] bg-[var(--slurp-canvas)] px-3 text-base focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--slurp-focus)] disabled:opacity-50 sm:text-sm"
+                      >
+                        <option value="off">{t("ui.slurp.settings.projectRateOff")}</option>
+                        <option value="rare">{t("ui.slurp.settings.projectRateRare")}</option>
+                        <option value="regular">{t("ui.slurp.settings.projectRateRegular")}</option>
+                        <option value="often">{t("ui.slurp.settings.projectRateOften")}</option>
+                      </select>
+                    </Field>
+                  )}
                   {settings.autoPostingScheduleEnabled ? (
                     <Toggle
                       label={t("ui.slurp.settings.quietHours")}

@@ -674,6 +674,103 @@ export function useSetSlurpGoal() {
   });
 }
 
+export type SlurpProject = {
+  id: string;
+  title: string;
+  direction: string;
+  chapters: string[];
+  chapter: number;
+  status: "active" | "paused" | "complete";
+  posts: number;
+  startedAt: string;
+  updatedAt: string;
+};
+
+/**
+ * A Creator's projects.
+ *
+ * Owner-only. A project is production notes, unlike the tip goal beside it, which exists to be
+ * shown to the audience.
+ */
+export function useSlurpProjects(personaId: string | null, creatorAccountId: string | null, enabled = true) {
+  return useQuery({
+    queryKey: [...noodleKeys.noodlerRoot(), "projects", creatorAccountId ?? "none", personaId ?? "none"],
+    queryFn: () =>
+      api.get<{ projects: SlurpProject[] }>(
+        `/slurp/noodler/accounts/${encodeURIComponent(creatorAccountId!)}/projects?personaId=${encodeURIComponent(personaId!)}`,
+      ),
+    enabled: Boolean(personaId) && Boolean(creatorAccountId) && enabled,
+  });
+}
+
+const invalidateSlurpProjects = (qc: ReturnType<typeof useQueryClient>) =>
+  qc.invalidateQueries({ queryKey: [...noodleKeys.noodlerRoot(), "projects"] });
+
+export function useCreateSlurpProject() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({
+      creatorAccountId,
+      ...body
+    }: {
+      creatorAccountId: string;
+      personaId: string;
+      title: string;
+      direction: string;
+      chapters: string[];
+    }) =>
+      api.post<{ project: SlurpProject }>(
+        `/slurp/noodler/accounts/${encodeURIComponent(creatorAccountId)}/projects`,
+        body,
+      ),
+    onSuccess: () => invalidateSlurpProjects(qc),
+  });
+}
+
+export function useUpdateSlurpProject() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({
+      creatorAccountId,
+      projectId,
+      ...body
+    }: {
+      creatorAccountId: string;
+      projectId: string;
+      personaId: string;
+      title?: string;
+      direction?: string;
+      chapters?: string[];
+      chapter?: number;
+      status?: SlurpProject["status"];
+    }) =>
+      api.patch<{ project: SlurpProject }>(
+        `/slurp/noodler/accounts/${encodeURIComponent(creatorAccountId)}/projects/${encodeURIComponent(projectId)}`,
+        body,
+      ),
+    onSuccess: () => invalidateSlurpProjects(qc),
+  });
+}
+
+export function useDeleteSlurpProject() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({
+      creatorAccountId,
+      projectId,
+      personaId,
+    }: {
+      creatorAccountId: string;
+      projectId: string;
+      personaId: string;
+    }) =>
+      api.delete<{ deleted: boolean }>(
+        `/slurp/noodler/accounts/${encodeURIComponent(creatorAccountId)}/projects/${encodeURIComponent(projectId)}?personaId=${encodeURIComponent(personaId)}`,
+      ),
+    onSuccess: () => invalidateSlurpProjects(qc),
+  });
+}
+
 /** The Creator home. Reading it also re-marks the point future deltas are measured from. */
 export function useSlurpStudio(personaId: string | null, enabled = true) {
   return useQuery({

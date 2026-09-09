@@ -164,6 +164,14 @@ import {
   SLURP_GOAL_MAX_TARGET,
   SLURP_GOAL_MIN_TARGET,
 } from "../services/slurp/slurp-goal.js";
+import {
+  SLURP_PROJECT_CHAPTER_MAX_LENGTH,
+  SLURP_PROJECT_DIRECTION_MAX_LENGTH,
+  SLURP_PROJECT_MAX_ACTIVE,
+  SLURP_PROJECT_MAX_CHAPTERS,
+  SLURP_PROJECT_STATUSES,
+  SLURP_PROJECT_TITLE_MAX_LENGTH,
+} from "../services/slurp/slurp-project.js";
 import { readSlurpStudioSnapshot, writeSlurpStudioSnapshot } from "../services/slurp/slurp-studio-snapshot.js";
 import { rerollAmbientNoodleProfiles } from "../services/slurp/slurp-ambient-profile-generation.service.js";
 import { ensureAmbientNoodleAccounts, isAmbientNoodleAccount } from "../services/slurp/slurp-ambient-profiles.js";
@@ -1134,6 +1142,139 @@ export async function slurpRoutes(app: FastifyInstance) {
     }
     const earnings = await noodle.getEarnings(creator.id);
     return { goal: goal ? slurpGoalProgress(goal, earnings.lifetime) : null };
+  });
+
+  /**
+   * A Creator's projects.
+   *
+   * Owner-only, all of them. A project is production notes — what this thread is about, what is
+   * coming next — and the opposite of a tip goal, which exists to be shown. Nothing here reaches
+   * the audience except the posts it produces.
+   */
+  app.get("/noodler/accounts/:id/projects", async (req, reply) => {
+    const parsed = z.object({ personaId: z.string().trim().min(1) }).safeParse(req.query ?? {});
+    if (!parsed.success) return reply.code(400).send({ error: parsed.error.flatten() });
+    const viewer = await resolveViewerPersona(parsed.data.personaId);
+    if (!viewer) return reply.code(404).send({ error: "Slurp persona not found" });
+    const { id } = req.params as { id: string };
+    const creator = await noodle.getNoodlerAccountById(id);
+    if (!creator || !creatorBelongsToViewer(creator, viewer)) {
+      return reply.code(403).send({ error: "Only the Creator's owner can read their projects." });
+    }
+    return { projects: await noodle.listProjects(creator.id) };
+  });
+
+  const projectChapters = z
+    .array(z.string().trim().max(SLURP_PROJECT_CHAPTER_MAX_LENGTH))
+    .max(SLURP_PROJECT_MAX_CHAPTERS);
+
+  /** Open a project. Refused past the active limit rather than opening one that would never post. */
+  app.post("/noodler/accounts/:id/projects", async (req, reply) => {
+    const parsed = z
+      .object({
+        personaId: z.string().trim().min(1),
+        title: z.string().trim().min(1).max(SLURP_PROJECT_TITLE_MAX_LENGTH),
+        direction: z.string().trim().max(SLURP_PROJECT_DIRECTION_MAX_LENGTH).default(""),
+        chapters: projectChapters.default([]),
+      })
+      .safeParse(req.body ?? {});
+    if (!parsed.success) return reply.code(400).send({ error: parsed.error.flatten() });
+    const viewer = await resolveViewerPersona(parsed.data.personaId);
+    if (!viewer) return reply.code(404).send({ error: "Slurp persona not found" });
+    const { id } = req.params as { id: string };
+    const creator = await noodle.getNoodlerAccountById(id);
+    if (!creator || !creatorBelongsToViewer(creator, viewer)) {
+      return reply.code(403).send({ error: "Only the Creator's owner can open a project." });
+    }
+    const project = await noodle.createProject(creator.id, {
+      title: parsed.data.title,
+      direction: parsed.data.direction,
+      chapters: parsed.data.chapters,
+    });
+    if (!project) {
+      return reply
+        .code(409)
+        .send({ error: `A Creator can run ${SLURP_PROJECT_MAX_ACTIVE} projects at once. Pause or finish one first.` });
+    }
+    return { project };
+  });
+
+  /**
+   * Edit a project.
+   *
+   * Posts already published into it keep the chapter they were written for. A feed that rewrote
+   * its own history every time the plan changed would be worse than one with no plan.
+   */
+  app.patch("/noodler/accounts/:id/projects/:projectId", async (req, reply) => {
+    const parsed = z
+      .object({
+        personaId: z.string().trim().min(1),
+        title: z.string().trim().min(1).max(SLURP_PROJECT_TITLE_MAX_LENGTH).optional(),
+        direction: z.string().trim().max(SLURP_PROJECT_DIRECTION_MAX_LENGTH).optional(),
+        chapters: projectChapters.optional(),
+        chapter: z.number().int().min(0).optional(),
+        status: z.enum(SLURP_PROJECT_STATUSES).optional(),
+      })
+      .safeParse(req.body ?? {});
+    if (!parsed.success) return reply.code(400).send({ error: parsed.error.flatten() });
+    const viewer = await resolveViewerPersona(parsed.data.personaId);
+    if (!viewer) return reply.code(404).send({ error: "Slurp persona not found" });
+    const { id, projectId } = req.params as { id: string; projectId: string };
+    const creator = await noodle.getNoodlerAccountById(id);
+    if (!creator || !creatorBelongsToViewer(creator, viewer)) {
+      return reply.code(403).send({ error: "Only the Creator's owner can edit a project." });
+    }
+    const existing = await noodle.getProject(creator.id, projectId);
+    if (!existing) return reply.code(404).send({ error: "Project not found" });
+    const project = await noodle.updateProject(creator.id, projectId, {
+      title: parsed.data.title,
+      direction: parsed.data.direction,
+      chapters: parsed.data.chapters,
+      chapter: parsed.data.chapter,
+      status: parsed.data.status,
+    });
+    if (!project) {
+      return reply
+        .code(409)
+        .send({ error: `A Creator can run ${SLURP_PROJECT_MAX_ACTIVE} projects at once. Pause or finish one first.` });
+    }
+    return { project };
+  });
+
+  /** Forget a project. Its posts stay published and keep pointing at it. */
+  app.delete("/noodler/accounts/:id/projects/:projectId", async (req, reply) => {
+    const parsed = z.object({ personaId: z.string().trim().min(1) }).safeParse(req.query ?? {});
+    if (!parsed.success) return reply.code(400).send({ error: parsed.error.flatten() });
+    const viewer = await resolveViewerPersona(parsed.data.personaId);
+    if (!viewer) return reply.code(404).send({ error: "Slurp persona not found" });
+    const { id, projectId } = req.params as { id: string; projectId: string };
+    const creator = await noodle.getNoodlerAccountById(id);
+    if (!creator || !creatorBelongsToViewer(creator, viewer)) {
+      return reply.code(403).send({ error: "Only the Creator's owner can delete a project." });
+    }
+    if (!(await noodle.deleteProject(creator.id, projectId))) {
+      return reply.code(404).send({ error: "Project not found" });
+    }
+    return { deleted: true };
+  });
+
+  /** One project's own posts, so the Studio can show the thread rather than the whole page. */
+  app.get("/noodler/accounts/:id/projects/:projectId/posts", async (req, reply) => {
+    const parsed = z
+      .object({ personaId: z.string().trim().min(1), limit: z.coerce.number().int().min(1).max(50).default(20) })
+      .safeParse(req.query ?? {});
+    if (!parsed.success) return reply.code(400).send({ error: parsed.error.flatten() });
+    const viewer = await resolveViewerPersona(parsed.data.personaId);
+    if (!viewer) return reply.code(404).send({ error: "Slurp persona not found" });
+    const { id, projectId } = req.params as { id: string; projectId: string };
+    const creator = await noodle.getNoodlerAccountById(id);
+    if (!creator || !creatorBelongsToViewer(creator, viewer)) {
+      return reply.code(403).send({ error: "Only the Creator's owner can read a project." });
+    }
+    if (!(await noodle.getProject(creator.id, projectId))) {
+      return reply.code(404).send({ error: "Project not found" });
+    }
+    return { posts: await noodle.listPostsByProject(projectId, parsed.data.limit) };
   });
 
   /**
