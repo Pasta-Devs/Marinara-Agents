@@ -1987,7 +1987,6 @@ function SlurpRelationshipPanel({ relationship }: { relationship: NonNullable<Sl
             : mood > -60
               ? "cooling"
               : "cold";
-  const moodPercent = mood === null ? 0 : Math.max(0, Math.min(100, ((mood + 100) / 200) * 100));
   const creatorState = relationship.creatorState;
   const threadState = relationship.threadState;
   const band = (value: number) => (value <= 25 ? "low" : value <= 60 ? "medium" : value <= 80 ? "high" : "urgent");

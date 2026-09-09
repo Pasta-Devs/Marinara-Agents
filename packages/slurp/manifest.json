@@ -67,8 +67,8 @@
     },
     {
       "path": "client.js",
-      "sha256": "96ad82e8a2a0c7def543e6c1b75ea29a68637d5b553f1eeba531aa7087535f3e",
-      "bytes": 2805519
+      "sha256": "0dd41ce6d1206fa6187a002346ec0ef75c1c4b3408b678aac9c232d882a9f569",
+      "bytes": 2805464
     },
     {
       "path": "slurp-logo.png",
