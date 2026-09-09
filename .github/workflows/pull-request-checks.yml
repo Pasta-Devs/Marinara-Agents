@@ -40,6 +40,11 @@ jobs:
       - name: Test Memory Nag recall selection
         run: npx tsx tests/memory-nag-selection.regression.ts
 
+      - name: Test Memory Nag ranges and Pixelforge weather contract
+        run: |
+          npx tsx tests/memory-nag-range.regression.ts
+          node tests/pixelforge-weather-contract.regression.mjs
+
       - name: Test Beholder client bundle contract
         run: npx tsx tests/beholder-client-contract.regression.ts
 

@@ -41,6 +41,16 @@
         }
       ]
     },
+    "memory-nag": {
+      "versions": [
+        {
+          "version": "1.1.0",
+          "date": "2026-09-09",
+          "notes": "Choose all unprocessed messages or a specific message range when creating vault memories, so long chats can skip stale history. Closing the progress or prompt window keeps the underlying chat settings open.",
+          "highlight": false
+        }
+      ]
+    },
     "noodle": {
       "versions": [
         {

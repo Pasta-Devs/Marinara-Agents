@@ -401,7 +401,7 @@ const features = [
   },
   {
     id: "memory-nag",
-    version: "1.0.17",
+    version: "1.1.0",
     minEngineVersion: "2.4.4",
     maxEngineExclusive: MAX_ENGINE_EXCLUSIVE,
     name: "Memory Nag",

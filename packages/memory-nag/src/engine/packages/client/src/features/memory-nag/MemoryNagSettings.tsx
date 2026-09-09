@@ -62,6 +62,9 @@ export function MemoryNagSettings({ props }: { props: CapabilityProps }) {
   const [saving, setSaving] = useState(false);
   const [scanning, setScanning] = useState(false);
   const [scanOpen, setScanOpen] = useState(false);
+  const [scanScope, setScanScope] = useState("all");
+  const [rangeStart, setRangeStart] = useState("1");
+  const [rangeEnd, setRangeEnd] = useState("");
   const [promptExpanded, setPromptExpanded] = useState(false);
   const [promptMacrosOpen, setPromptMacrosOpen] = useState(false);
   const [message, setMessage] = useState("");
@@ -196,11 +199,32 @@ export function MemoryNagSettings({ props }: { props: CapabilityProps }) {
     let previousProgress: Pick<MemoryNagScanProgress, "checkpointMessageId" | "processed"> | null = null;
     try {
       await saveSettings();
+      let range: { startMessageId: string; endMessageId: string; afterMessageId?: string } | undefined;
+      if (scanScope === "range") {
+        const start = Number(rangeStart);
+        const end = Number(rangeEnd);
+        const { messageIds } = await memoryNagRequest<{ messageIds: string[] }>(
+          `/scan/${encodeURIComponent(chatId)}`,
+          "GET",
+          undefined,
+          controller.signal,
+        );
+        if (
+          !Number.isSafeInteger(start) ||
+          !Number.isSafeInteger(end) ||
+          start < 1 ||
+          end < start ||
+          end > messageIds.length
+        ) {
+          throw new Error(t("memoryNag.settings.rangeInvalid", { count: messageIds.length }));
+        }
+        range = { startMessageId: messageIds[start - 1], endMessageId: messageIds[end - 1] };
+      }
       while (!controller.signal.aborted) {
         const next = await memoryNagRequest<MemoryNagScanProgress>(
           `/scan/${encodeURIComponent(chatId)}`,
           "POST",
-          undefined,
+          range,
           controller.signal,
         );
         created += next.created;
@@ -218,6 +242,7 @@ export function MemoryNagSettings({ props }: { props: CapabilityProps }) {
           break;
         }
         previousProgress = next;
+        if (range && next.checkpointMessageId) range.afterMessageId = next.checkpointMessageId;
       }
       await vault.refetch();
     } catch (error) {
@@ -333,6 +358,49 @@ export function MemoryNagSettings({ props }: { props: CapabilityProps }) {
           {message}
         </div>
       ) : null}
+      <label className="mn-label">
+        <span>{t("memoryNag.settings.scanScope")}</span>
+        <select
+          className="mari-chrome-field mn-field"
+          disabled={scanning}
+          value={scanScope}
+          onChange={(event) => setScanScope(event.target.value)}
+        >
+          <option value="all">{t("memoryNag.settings.scanAll")}</option>
+          <option value="range">{t("memoryNag.settings.scanRange")}</option>
+        </select>
+      </label>
+      {scanScope === "range" ? (
+        <div className="mn-stack">
+          <p className="mn-muted">{t("memoryNag.settings.rangeHelp")}</p>
+          <div className="mn-number-grid">
+            <label className="mn-label">
+              <span>{t("memoryNag.settings.rangeStart")}</span>
+              <input
+                type="number"
+                min={1}
+                step={1}
+                className="mari-chrome-field mn-field"
+                disabled={scanning}
+                value={rangeStart}
+                onChange={(event) => setRangeStart(event.target.value)}
+              />
+            </label>
+            <label className="mn-label">
+              <span>{t("memoryNag.settings.rangeEnd")}</span>
+              <input
+                type="number"
+                min={Number(rangeStart) || 1}
+                step={1}
+                className="mari-chrome-field mn-field"
+                disabled={scanning}
+                value={rangeEnd}
+                onChange={(event) => setRangeEnd(event.target.value)}
+              />
+            </label>
+          </div>
+        </div>
+      ) : null}
       <div className="mn-actions">
         <button
           id="mn-memory-nag-create-button"
@@ -352,7 +420,7 @@ export function MemoryNagSettings({ props }: { props: CapabilityProps }) {
       {vaultOpen ? <MemoryNagVaultModal props={props} onClose={() => setVaultOpen(false)} /> : null}
       {promptExpanded
         ? createPortal(
-            <div className="mn-overlay" role="presentation">
+            <div className="mn-overlay" role="presentation" data-chat-floating-panel>
               <section
                 ref={promptDialogRef}
                 className="mn-modal mn-prompt-modal mn-shell"
@@ -388,7 +456,7 @@ export function MemoryNagSettings({ props }: { props: CapabilityProps }) {
         : null}
       {promptMacrosOpen
         ? createPortal(
-            <div className="mn-overlay" role="presentation">
+            <div className="mn-overlay" role="presentation" data-chat-floating-panel>
               <section
                 ref={macrosDialogRef}
                 className="mn-modal mn-macro-modal mn-shell"
@@ -423,7 +491,7 @@ export function MemoryNagSettings({ props }: { props: CapabilityProps }) {
         : null}
       {scanOpen
         ? createPortal(
-            <div className="mn-overlay" role="presentation">
+            <div className="mn-overlay" role="presentation" data-chat-floating-panel>
               <section
                 ref={scanDialogRef}
                 className="mn-modal mn-progress-modal mn-shell"
