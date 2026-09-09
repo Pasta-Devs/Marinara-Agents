@@ -2271,12 +2271,12 @@ async function main() {
       assert.match(await healthInfoPanel.innerText(), /Check Settings > Maintenance > Reindex recall data\./u);
 
       const showWorkspacePane = async (pane: "navigator" | "workbench" | "inspector") => {
-        const tab = page.locator(`[data-ltm-workspace-pane-tab="${pane}"]`);
-        if ((await tab.count()) === 0) return;
-        // The pane tab may be rendered inside a CSS-hidden switcher (wider layouts show every pane as a
-        // column and hide the tab rail). Dispatch the click handler directly so the active pane still
-        // switches, keeping the flow working in both the narrow tabbed and wider column layouts.
-        await tab.evaluate((element) => (element as HTMLElement).click());
+        const target = page.locator(`[data-ltm-workspace-pane="${pane}"]`);
+        if (!(await target.isVisible())) {
+          // ResizeObserver renders the mobile tabs asynchronously after a viewport change.
+          await page.locator(`[data-ltm-workspace-pane-tab="${pane}"]`).click();
+        }
+        await target.waitFor({ state: "visible" });
       };
       const missingSources = ["source_deleted", "source_vanished"];
       for (const [index, sourceNoteId] of missingSources.entries()) {
@@ -3333,6 +3333,9 @@ async function main() {
       assert.ok(mobileListScrollable.scrollHeight > mobileListScrollable.clientHeight);
       assert.match(mobileListScrollable.overflowY, /auto|scroll/u);
       assert.equal(mobileListScrollable.pageLocked, false);
+      await mobileDestinationList.evaluate((element) => {
+        element.scrollTop = 0;
+      });
       await mobileDestinationList.hover();
       await page.mouse.wheel(0, 600);
       await page.waitForFunction(
