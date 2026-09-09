@@ -3,6 +3,7 @@ import { readFileSync } from "node:fs";
 
 import {
   applySlurpCreatorStateDelta,
+  SLURP_ENERGY_COST,
   applySlurpThreadStateDelta,
   applySlurpThreadStateSignals,
   decaySlurpCreatorState,
@@ -150,6 +151,39 @@ const fadedCeiling = decaySlurpThreadState(
 );
 assert.equal(fadedCeiling.threadDesire, 0);
 assert.equal(fadedCeiling.adultLevel, "intimate");
+
+// Energy is the only dial here with a mechanical effect, and nothing used to spend it.
+const worked = applySlurpCreatorStateDelta({ ...creator, energy: 60 }, { energy: -SLURP_ENERGY_COST.post }, now);
+assert.equal(worked.energy, 60 - SLURP_ENERGY_COST.post);
+// A commission is the most work done in one go, and a picture is more than nothing.
+assert.ok(SLURP_ENERGY_COST.commission > SLURP_ENERGY_COST.post);
+assert.ok(SLURP_ENERGY_COST.post > SLURP_ENERGY_COST.image);
+assert.ok(SLURP_ENERGY_COST.image > 0);
+// Spending never runs past the floor, however much work lands at once.
+assert.equal(applySlurpCreatorStateDelta({ ...creator, energy: 2 }, { energy: -80 }, now).energy, 0);
+
+// Every path that does work charges for it. Posting is charged at the one storage choke point
+// both the manual and the generated post route through, so neither can skip it.
+const slurpStorage = readFileSync(
+  "packages/slurp/src/engine/packages/server/src/services/storage/slurp.storage.ts",
+  "utf8",
+);
+assert.match(slurpStorage, /async adjustCreatorState\(/u);
+assert.match(slurpStorage, /adjustCreatorState\(post\.authorAccountId, \{ energy: -SLURP_ENERGY_COST\.post \}\)/u);
+// Charged after the transaction resolves: a stored post must never fail over a settings write.
+assert.match(slurpStorage, /const created = await db\.transaction\(/u);
+
+const images = readFileSync(
+  "packages/slurp/src/engine/packages/server/src/services/slurp/slurp-images.service.ts",
+  "utf8",
+);
+assert.match(images, /adjustCreatorState\(input\.account\.id, \{ energy: -SLURP_ENERGY_COST\.image \}\)/u);
+
+const commissions = readFileSync(
+  "packages/slurp/src/engine/packages/server/src/services/slurp/slurp-commission-delivery.service.ts",
+  "utf8",
+);
+assert.match(commissions, /energy: -SLURP_ENERGY_COST\.commission/u);
 
 const messageOperation = readFileSync(
   "packages/slurp/src/engine/packages/server/src/services/slurp/slurp-message.operation.ts",

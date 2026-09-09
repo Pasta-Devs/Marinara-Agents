@@ -36,6 +36,12 @@
     "slurp": {
       "versions": [
         {
+          "version": "1.2.57",
+          "date": "2026-09-09",
+          "notes": "- Creator energy is now spent by doing things. Publishing a post, generating a picture and finishing a commission each cost effort, with a commission costing the most.\n- Until now nothing in the game ever spent energy, so a Creator who published all afternoon finished it more rested than she started. Energy already decided how many messages a reply is broken into and whether a picture can be sent, so it was deciding those from a number that never moved.\n- Energy still recovers over time, so ordinary use will not run a Creator down.\n- A post that is already saved is never lost because the effort could not be recorded.",
+          "highlight": false
+        },
+        {
           "version": "1.2.56",
           "date": "2026-09-09",
           "notes": "- Removed two simulation values that nothing in the game ever changed: the Creator's platform strategy and their current need. Both were shown in the conversation overview as though they meant something, and both were fixed forever at their starting value.\n- Removed two more that repeated work already done better elsewhere. Rapport already scores tips, unlocks and commissions from the real ledger, and the conversation mood already tracks how a conversation is going.\n- A strong feeling now ends. Until now the strength of a feeling faded but the feeling itself never did, so one jealous afternoon left a Creator quietly jealous for the rest of the save.\n- A fan asking for free content now costs a little standing instead of a trust score that no longer exists.\n- Existing conversations keep their guardedness through the change.",
@@ -147,12 +153,6 @@
           "version": "1.2.38",
           "date": "2026-09-08",
           "notes": "- New Fan wallets start with 50 coins.\n- Development builds include a bounded wallet balance editor for testing.\n- Ambient NPC account rows are removed when the ambient audience is disabled.\n- Creator owners see their own profile as online.\n- Profile navigation only asks to discard actual unsaved edits.",
-          "highlight": false
-        },
-        {
-          "version": "1.2.37",
-          "date": "2026-09-08",
-          "notes": "- Off-screen feed cards now skip rendering work, and sparkle particles stop entirely outside the viewport.\n- Feed and profile requests now cancel when abandoned and reuse fresh cached data when returning to Slurp.\n- Recent post media stays warm for back-scrolling, while feed sorting and search projections are reused across unrelated renders.",
           "highlight": false
         }
       ]

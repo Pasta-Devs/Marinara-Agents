@@ -401,6 +401,28 @@ export function applySlurpThreadStateSignals(
   );
 }
 
+/**
+ * What doing something costs a Creator.
+ *
+ * Energy was the only dial in this module with a mechanical effect — it sets the reply burst
+ * limit and gates media — and nothing anywhere ever spent it. It drifted toward 60 on a clock, so
+ * a Creator who published six posts and four pictures in an afternoon ended it more rested than
+ * she started, and "available effort" described nothing that had happened.
+ *
+ * The numbers are in the same units as the recovery below: at a typical gap the drift returns
+ * roughly two and a half points an hour, so a post is about two hours of rest and a commission is
+ * most of a working day. Both are deliberately cheap enough that ordinary use never floors her.
+ *
+ * ponytail: recovery is clock-based, so it accrues while she is awake and posting rather than
+ * only while she is asleep. Reading the Conversation Schedule here would fix that; it needs the
+ * schedule in this pure module, so it waits for the caller that already has it.
+ */
+export const SLURP_ENERGY_COST = {
+  post: 6,
+  image: 4,
+  commission: 12,
+} as const;
+
 /** Silence lowers short-lived drives but leaves trust, respect, and long-term rapport alone. */
 export function decaySlurpCreatorState(state: SlurpCreatorState, hours: number, now: string): SlurpCreatorState {
   const elapsed = Math.max(0, hours);

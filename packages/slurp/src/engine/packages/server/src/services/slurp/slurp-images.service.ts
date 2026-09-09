@@ -3,6 +3,7 @@ import type { DB } from "../../db/connection.js";
 import { logger, logDebugOverride } from "../../lib/logger.js";
 import { newId } from "../../utils/id-generator.js";
 import { createSlurpStorage, type SlurpSettings } from "../storage/slurp.storage.js";
+import { SLURP_ENERGY_COST } from "./slurp-creator-state.js";
 import { getErrorMessage } from "./slurp-public-support.js";
 import { NOODLER_MEDIA_PREFIX, noodlerPostMediaUrl } from "./slurp-media.js";
 import { resolveImageConnectionFallback } from "../generation/media-connection-fallback.js";
@@ -395,6 +396,13 @@ export async function generateNoodlerPostImage(input: {
     },
   );
   const provider = input.imageConnection.provider ?? "image_generation";
+  // Only a picture that exists costs anything. The preview path returns above, and a failed
+  // attempt threw before here, so a Creator is never charged for work that produced nothing.
+  try {
+    await createSlurpStorage(input.db).adjustCreatorState(input.account.id, { energy: -SLURP_ENERGY_COST.image });
+  } catch (error) {
+    logger.warn(error, "[noodler] Could not charge image energy for %s", input.account.id);
+  }
   const file = stageImageToDisk(
     `${NOODLER_MEDIA_PREFIX}${input.account.id}`,
     image.base64,

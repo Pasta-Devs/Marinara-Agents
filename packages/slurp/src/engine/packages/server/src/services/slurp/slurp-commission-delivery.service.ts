@@ -7,6 +7,9 @@
  * Creator's voice. Doing it in two places is how the two paths drift apart.
  */
 import type { DB } from "../../db/connection.js";
+import { logger } from "../../lib/logger.js";
+import { createSlurpStorage } from "../storage/slurp.storage.js";
+import { SLURP_ENERGY_COST } from "./slurp-creator-state.js";
 import { createSlurpMessagesStorage } from "../storage/slurp-messages.storage.js";
 import type { SlurpCommission } from "../storage/slurp-messages.storage.js";
 import { enqueueSlurpPendingText } from "./slurp-pending-text.service.js";
@@ -48,6 +51,15 @@ export async function deliverAutomaticSlurpCommission(
     creatorAccountId: commission.creatorAccountId,
     actorLabel: commission.viewerAccountId,
   });
+  // Finishing a commissioned piece is the most work a Creator does in one go, and until now it
+  // was the only one of the three that already had an emotional consequence but no physical one.
+  try {
+    await createSlurpStorage(db).adjustCreatorState(commission.creatorAccountId, {
+      energy: -SLURP_ENERGY_COST.commission,
+    });
+  } catch (error) {
+    logger.warn(error, "[slurp] Could not charge commission energy for %s", commission.creatorAccountId);
+  }
   return { status: "delivered", commission: delivered };
 }
 

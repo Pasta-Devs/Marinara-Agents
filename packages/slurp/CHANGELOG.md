@@ -1,5 +1,12 @@
 # Slurp release notes
 
+## 1.2.57 — 2026-09-09
+
+- Creator energy is now spent by doing things. Publishing a post, generating a picture and finishing a commission each cost effort, with a commission costing the most.
+- Until now nothing in the game ever spent energy, so a Creator who published all afternoon finished it more rested than she started. Energy already decided how many messages a reply is broken into and whether a picture can be sent, so it was deciding those from a number that never moved.
+- Energy still recovers over time, so ordinary use will not run a Creator down.
+- A post that is already saved is never lost because the effort could not be recorded.
+
 ## 1.2.56 — 2026-09-09
 
 - Removed two simulation values that nothing in the game ever changed: the Creator's platform strategy and their current need. Both were shown in the conversation overview as though they meant something, and both were fixed forever at their starting value.

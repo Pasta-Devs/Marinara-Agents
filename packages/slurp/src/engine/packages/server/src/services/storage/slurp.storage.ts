@@ -188,8 +188,10 @@ import {
   creatorStateDeltaForSignal,
   decaySlurpCreatorState,
   readSlurpCreatorState,
+  SLURP_ENERGY_COST,
   type SlurpCreatorState,
   type SlurpCreatorStateSignal,
+  type SlurpStateDelta,
 } from "../slurp/slurp-creator-state.js";
 
 /** Newest candidates the image-retry poll inspects per pass. */
@@ -1881,6 +1883,19 @@ export function createSlurpStorage(db: DB) {
       const recovered = decaySlurpCreatorState(state, elapsedHours, fallback);
       await settingsStore.set(`${SLURP_CREATOR_STATE_KEY}.${creatorAccountId}`, JSON.stringify(recovered));
       return recovered;
+    },
+
+    /**
+     * Move one Creator's shared state by a bounded delta.
+     *
+     * Separate from `recordCreatorStateSignals` because these callers are not reporting what a
+     * fan did: they are the cost of work the Creator actually performed, and the world owns them.
+     */
+    async adjustCreatorState(creatorAccountId: string, changes: SlurpStateDelta): Promise<SlurpCreatorState> {
+      const current = await this.getCreatorState(creatorAccountId);
+      const next = applySlurpCreatorStateDelta(current, changes, new Date().toISOString());
+      await settingsStore.set(`${SLURP_CREATOR_STATE_KEY}.${creatorAccountId}`, JSON.stringify(next));
+      return next;
     },
 
     async recordCreatorStateSignals(
@@ -3984,7 +3999,7 @@ export function createSlurpStorage(db: DB) {
         createdAt: timestamp,
         updatedAt: timestamp,
       }));
-      return db.transaction(async (tx) => {
+      const created = await db.transaction(async (tx) => {
         for (const row of rows) await tx.insert(noodlePosts).values(row);
         const stored = await tx
           .select()
@@ -3999,6 +4014,18 @@ export function createSlurpStorage(db: DB) {
         const managed = rows.map((row) => byId.get(row.id));
         return managed.every((post) => post) ? (managed as NoodlerManagedPost[]) : null;
       });
+      // Outside the transaction and never able to fail it: a post that is already stored must not
+      // be reported as an error because a settings write for a mood number did not land.
+      if (created) {
+        for (const post of created) {
+          try {
+            await this.adjustCreatorState(post.authorAccountId, { energy: -SLURP_ENERGY_COST.post });
+          } catch (error) {
+            logger.warn(error, "[slurp] Could not charge post energy for %s", post.authorAccountId);
+          }
+        }
+      }
+      return created;
     },
 
     async createPost(
