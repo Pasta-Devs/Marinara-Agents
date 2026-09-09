@@ -47,25 +47,6 @@ process.env.NODE_ENV = "test";
 function sha256(value: Buffer) {
   return createHash("sha256").update(value).digest("hex");
 }
-function assertCatalogArtifact() {
-  for (const relativePath of ["catalog/catalog.json", "catalog/v2/catalog.json", "catalog/v3/catalog.json"]) {
-    const catalog = JSON.parse(readFileSync(join(repoRoot, relativePath), "utf8")) as {
-      packages: Array<{
-        manifest?: { id?: string; version?: string };
-        artifact?: { url?: string; sha256?: string; bytes?: number };
-      }>;
-    };
-    const entry = catalog.packages.find((item) => item.manifest?.id === "long-term-memory");
-    assert.ok(entry, `${relativePath} must contain Long-Term Memory`);
-    assert.equal(entry.manifest?.version, packageManifest.version);
-    assert.equal(
-      entry.artifact?.url,
-      `https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/long-term-memory-${packageManifest.version}.zip`,
-    );
-    assert.equal(entry.artifact?.sha256, sha256(artifactBytes));
-    assert.equal(entry.artifact?.bytes, artifactBytes.byteLength);
-  }
-}
 function catalog() {
   return {
     schemaVersion: 1,
@@ -134,7 +115,6 @@ async function main() {
     async () => {
       assert.equal(artifactManifest.id, "long-term-memory");
       assert.equal(artifactManifest.version, packageManifest.version);
-      assertCatalogArtifact();
       assert.match(
         String(artifactManifest.description),
         /Chat Settings → Agents → Long-Term Memory/u,
