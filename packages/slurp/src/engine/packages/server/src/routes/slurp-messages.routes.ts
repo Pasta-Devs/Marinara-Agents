@@ -997,7 +997,7 @@ export async function slurpMessageRoutes(app: FastifyInstance) {
     const viewer = await requireViewer(parsed.data.personaId);
     if (!viewer) return reply.code(404).send({ error: "Slurp persona not found" });
     const thread = await messages.getThreadById(threadId);
-    if (!thread || (thread.viewerAccountId !== viewer.id && !(await ownsCreator(viewer.id, thread.creatorAccountId))))
+    if (!thread || !(await ownsCreator(viewer.id, thread.creatorAccountId)))
       return reply.code(404).send({ error: "Thread not found" });
     const creator = await slurp.getNoodlerAccountById(thread.creatorAccountId);
     const fan = await slurp.getViewer(thread.viewerAccountId);

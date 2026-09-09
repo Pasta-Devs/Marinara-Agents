@@ -5,6 +5,10 @@ import {
   modelAnswerForCorrection,
   requireModelAnswer,
 } from "../packages/slurp/src/engine/packages/server/src/services/slurp/slurp-model-answer";
+import {
+  noodlerCharacterCanonText,
+  noodlerConcealedSourceText,
+} from "../packages/slurp/src/engine/packages/server/src/services/slurp/slurp-prompt-safety";
 
 const root = join(import.meta.dirname, "..");
 const read = (path: string) => readFileSync(join(root, path), "utf8");
@@ -54,6 +58,27 @@ const scheduleBuilder = readFileSync(
   "utf8",
 );
 assert.doesNotMatch(scheduleBuilder, /Schedule for \$\{source\.displayName\}/u);
+
+const characterCard = {
+  name: "Alex Rivers",
+  description: "Alex is a quiet paramedic.",
+  personality: "He is loyal, guarded, and deeply in love with his boyfriend Daniel.",
+  scenario: "Alex is spending the evening at home with Daniel after a long shift.",
+  backstory: "Daniel has been Alex's boyfriend for three years and Alex always comes home to him.",
+  appearance: "Tall with dark hair.",
+};
+const openCanon = noodlerCharacterCanonText(characterCard, true);
+const concealedCanon = noodlerCharacterCanonText(characterCard, false);
+assert.match(openCanon, /Alex Rivers/u);
+assert.match(openCanon, /boyfriend Daniel/u);
+assert.match(openCanon, /three years/u);
+assert.doesNotMatch(concealedCanon, /Alex Rivers/u);
+assert.match(concealedCanon, /boyfriend Daniel/u);
+assert.match(concealedCanon, /three years/u);
+assert.match(noodlerConcealedSourceText(characterCard), /Backstory:.*three years/u);
+assert.match(messages, /characterCanon/u);
+assert.match(reply, /characterCanon/u);
+assert.match(generation, /sourceCharacterContext/u);
 
 const slurpPlatformContext =
   "Slurp is an adult creator platform. Creators publish public or locked posts, interact with followers and subscribers, receive coin tips, sell access, answer DMs, and accept commissions. These are normal in-world social and economic actions. Coins are Slurp's currency and cost money.";
