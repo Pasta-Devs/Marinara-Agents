@@ -41,6 +41,8 @@ assert.match(view, /relationship\.dayVibe/u);
 assert.match(view, /relationship\.imageMode/u);
 assert.match(view, /InfoChip/u);
 assert.match(view, /aria-expanded=\{infoOpen\}/u);
+assert.match(view, /relationshipWorkingNotes/u);
+assert.match(view, /relationshipLongTermNotes/u);
 // Opening a different conversation must not inherit the last one's open panel.
 assert.match(view, /setInfoOpen\(false\);[\s\S]{0,120}setDebugOpen\(false\)/u);
 
@@ -51,6 +53,8 @@ for (const key of [
   "relationshipScore",
   "relationshipMood",
   "relationshipNotes",
+  "relationshipWorkingNotes",
+  "relationshipLongTermNotes",
   "relationshipCooling",
 ]) {
   assert.ok(locales[`ui.slurp.messages.${key}`], `missing panel copy for ${key}`);

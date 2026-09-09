@@ -42,6 +42,7 @@ import {
   SLURP_NOTES_PER_REPLY,
   type SlurpGeneratedDmReply,
 } from "./slurp-dm-response.js";
+import { notesForPrompt, type SlurpNoteOperation, type SlurpThreadNote } from "./slurp-thread-notes.js";
 import { slurpArcDescription } from "./slurp-arc.js";
 import { SLURP_PLATFORM_CONTEXT } from "./slurp-prompt.js";
 import { createSlurpPopulationStorage } from "../storage/slurp-population.storage.js";
@@ -73,7 +74,7 @@ export function buildSlurpMessageChat(input: {
   /** What the creator has posted lately, so "loved your new set" can be answered. */
   recentPosts?: { id: string; title: string | null; content: string; access: string; imageUrl: string | null }[];
   /** Facts kept from earlier in this conversation, beyond the history window. */
-  notes?: string[];
+  notes?: SlurpThreadNote[];
   generationGuidance: string;
   scheduleContext?: string;
   disclosureMode: Parameters<typeof noodlerIdentityInstruction>[0];
@@ -82,6 +83,7 @@ export function buildSlurpMessageChat(input: {
 }): ChatMessage[] {
   const protect = (value: string | null | undefined) =>
     protectNoodlerGeneratedIdentity(value, input.disclosureMode, input.publicIdentity) ?? "";
+  const known = input.notes && input.notes.length > 0 ? notesForPrompt(input.notes) : null;
   const system = [
     "You write exactly one direct message from one Slurp creator to one fan, inside a private chat.",
     SLURP_PLATFORM_CONTEXT,
@@ -102,7 +104,7 @@ export function buildSlurpMessageChat(input: {
     // The history window is sixteen turns. Past that the creator forgot the fan's name, their job,
     // and every promise she had made, which is the fastest way to break a long conversation.
     input.notes && input.notes.length > 0
-      ? "You already know some things about this fan from earlier conversations. They are supplied as knownAboutFan. Use them when they fit, and never recite them back as a list."
+      ? "You already know some things about this fan from earlier conversations. Working memory is recent and may change. Long-term memory is stable. Use them when they fit, and never recite them back as a list."
       : "",
     "This is a private chat, so write like one: lowercase is fine, contractions are fine, emojis are fine if they suit the persona.",
     "Keep it to a chat message, not an essay. One to four sentences unless the fan asked something that needs more.",
@@ -112,7 +114,7 @@ export function buildSlurpMessageChat(input: {
     // long-standing fan is forgiven a bad message and a stranger is not. If the model set the mood
     // outright, one sentence could end a two-year relationship.
     '"moodShift" is how this last message changed your feeling about the conversation: "up" if you enjoyed it, "same" for anything ordinary, "down" if they were rude, pushy, or tiring, "sharp_down" only for something you would genuinely take offence at. Most messages are "same".',
-    `"remember" is an array of at most ${SLURP_NOTES_PER_REPLY} short facts about this fan worth keeping for later — a name, a job, something happening in their life. Use an empty array when nothing new was said. Never record your own words, and never record anything about payment.`,
+    `"remember" is an array of at most ${SLURP_NOTES_PER_REPLY} memory operations. Each item is {"op":"add"|"replace"|"forget"|"keep","id":string|null,"text":string|null}. Use add with text for a new working fact. Use replace with the fact's id and new text when a fact changed. Use forget with the fact's id when it is no longer true. Use keep with a working id to move that fact into long-term memory. Use an empty array when nothing changed. Never record your own words, and never record anything about payment.`,
     '"sharePost" is an optional zero-based index into yourRecentPosts. Use it only when sharing one of your recent posts fits the conversation. A non-subscriber may receive a friendly locked preview sometimes. Otherwise use null.',
     '"image" is either null or an object with a concrete visual "prompt" and optional short "caption". Use it only when a picture would feel natural, such as showing something, rewarding a warm fan, or making a pointed hostile gesture. Never use it for every reply.',
     "When the conversation is warm or close and the fan has shared something personal, ask one natural follow-up question sometimes. Do not ask a question in every reply, and do not use a question to avoid answering.",
@@ -135,7 +137,14 @@ export function buildSlurpMessageChat(input: {
       subscribed: input.subscribed,
     },
     relationship: describeSlurpRapport(input.rapport, protect(input.viewer.displayName) || "this fan"),
-    ...(input.notes && input.notes.length > 0 ? { knownAboutFan: input.notes.map((note) => protect(note)) } : {}),
+    ...(known
+      ? {
+          knownAboutFan: {
+            working: known.working.map((note) => ({ id: note.id, text: protect(note.text) })),
+            longTerm: known.longTerm.map((note) => ({ id: note.id, text: protect(note.text) })),
+          },
+        }
+      : {}),
     ...(input.recentPosts && input.recentPosts.length > 0
       ? {
           yourRecentPosts: input.recentPosts.map((post) => ({
@@ -186,7 +195,7 @@ export type SlurpMessagePromptInput = {
   mood?: number;
   moodUpdatedAt?: string | null;
   /** What the creator already knows about this fan, beyond the last sixteen turns. */
-  notes?: string[];
+  notes?: SlurpThreadNote[];
   /** What kind of day the creator is having, already phrased. */
   dayVibe?: string | null;
   coolingOff?: boolean;
@@ -279,6 +288,22 @@ export async function buildSlurpMessagePrompt(input: SlurpMessagePromptInput): P
   return { messages, stance, disclosureMode, publicIdentity, recentPosts };
 }
 
+function protectNoteOperation(
+  operation: SlurpNoteOperation,
+  disclosureMode: Parameters<typeof noodlerIdentityInstruction>[0],
+  publicIdentity: Parameters<typeof noodlerIdentityInstruction>[1],
+): SlurpNoteOperation | null {
+  if (operation.op === "forget" || operation.op === "keep") return operation;
+  const text = protectBoundedNoodlerGeneratedText(
+    operation.text,
+    disclosureMode,
+    publicIdentity,
+    SLURP_NOTE_MAX_LENGTH,
+  );
+  if (!text) return null;
+  return operation.op === "add" ? { op: "add", text } : { op: "replace", id: operation.id, text };
+}
+
 export async function generateSlurpMessageReply(input: SlurpMessagePromptInput): Promise<SlurpGeneratedDmReply> {
   const { messages, stance, disclosureMode, publicIdentity, recentPosts } = await buildSlurpMessagePrompt(input);
   const connections = createConnectionsStorage(input.db);
@@ -341,8 +366,8 @@ export async function generateSlurpMessageReply(input: SlurpMessagePromptInput):
     // A note is model output about the player, stored and fed back into a later prompt. That is a
     // loop, so it is redacted and bounded on the way in as well as on the way out.
     remember: generated.remember
-      .map((note) => protectBoundedNoodlerGeneratedText(note, disclosureMode, publicIdentity, SLURP_NOTE_MAX_LENGTH))
-      .filter((note): note is string => Boolean(note)),
+      .map((operation) => protectNoteOperation(operation, disclosureMode, publicIdentity))
+      .filter((operation): operation is SlurpNoteOperation => Boolean(operation)),
     sharePost: generated.sharePost !== undefined && recentPosts[generated.sharePost] ? generated.sharePost : undefined,
     sharedPost:
       generated.sharePost !== undefined && recentPosts[generated.sharePost] ? recentPosts[generated.sharePost] : null,

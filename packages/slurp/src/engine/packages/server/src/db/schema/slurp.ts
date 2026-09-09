@@ -236,7 +236,7 @@ export const slurpThreads = fileTable(
     /** Cool-off periods this thread has had. Two inside the strike window closes it for good. */
     strikes: text("strikes").notNull().default("0"),
     lastStrikeAt: text("last_strike_at"),
-    /** Short facts the creator has learned about this fan. See `slurp-thread-notes.ts`. */
+    /** Working and long-term facts the creator has learned about this fan. See `slurp-thread-notes.ts`. */
     notes: text("notes").notNull().default("[]"),
     createdAt: text("created_at").notNull(),
     updatedAt: text("updated_at").notNull(),

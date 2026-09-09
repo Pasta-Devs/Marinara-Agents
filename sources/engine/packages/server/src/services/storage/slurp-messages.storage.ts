@@ -12,6 +12,12 @@ import type { DB } from "../../db/connection.js";
 import { isFileUniqueConstraintError } from "../../db/file-schema.js";
 import { slurpCommissions, slurpMessageClaims, slurpMessages, slurpThreads } from "../../db/schema/slurp.js";
 import { applySlurpMood, type SlurpMoodShift } from "../slurp/slurp-mood.js";
+import {
+  applySlurpThreadNotes,
+  readStoredNotes,
+  type SlurpNoteOperation,
+  type SlurpThreadNote,
+} from "../slurp/slurp-thread-notes.js";
 import { activeSlurpStrikes } from "../slurp/slurp-stance.js";
 import { createAppSettingsStorage } from "./app-settings.storage.js";
 import { createSlurpStorage } from "./slurp.storage.js";
@@ -68,8 +74,8 @@ export type SlurpThread = {
   coolUntil: string | null;
   strikes: number;
   lastStrikeAt: string | null;
-  /** Short facts the creator knows about this fan, oldest first. */
-  notes: string[];
+  /** Working and long-term facts the creator knows about this fan. */
+  notes: SlurpThreadNote[];
   createdAt: string;
   updatedAt: string;
 };
@@ -103,13 +109,7 @@ export type SlurpSendResult =
   | { status: "insufficient_funds"; required: number }
   | { status: "not_found" };
 
-/**
- * How many facts one thread keeps.
- *
- * A prompt has a budget, and a dossier that grows without limit spends all of it on trivia from
- * eighteen months ago instead of the conversation in front of it.
- */
-export const SLURP_THREAD_NOTE_LIMIT = 24;
+export { SLURP_LONGTERM_NOTE_LIMIT, SLURP_WORKING_NOTE_LIMIT } from "../slurp/slurp-thread-notes.js";
 
 const now = () => new Date().toISOString();
 const messageUnlocks = new Map<string, Promise<SlurpMessage | null>>();
@@ -176,23 +176,6 @@ export function createSlurpMessagesStorage(db: DB) {
     updatedAt: String(row.updatedAt),
   });
 
-  /**
-   * Notes are generated text written by an earlier reply. A blob written by an older build, or by
-   * hand, must render as a thread with no notes rather than throw the whole inbox away.
-   */
-  function readStoredNotes(raw: unknown): string[] {
-    if (typeof raw !== "string" || !raw.trim()) return [];
-    try {
-      const parsed: unknown = JSON.parse(raw);
-      if (!Array.isArray(parsed)) return [];
-      return parsed
-        .filter((entry): entry is string => typeof entry === "string")
-        .map((entry) => entry.trim())
-        .filter(Boolean);
-    } catch {
-      return [];
-    }
-  }
   const mapCommission = (row: Record<string, unknown>): SlurpCommission => ({
     id: String(row.id),
     threadId: String(row.threadId),
@@ -1183,7 +1166,7 @@ export function createSlurpMessagesStorage(db: DB) {
      */
     async recordReplyOutcome(
       threadId: string,
-      input: { moodShift: SlurpMoodShift; remember: string[] },
+      input: { moodShift: SlurpMoodShift; remember: SlurpNoteOperation[] },
     ): Promise<void> {
       const thread = await storage.getThreadById(threadId);
       if (!thread) return;
@@ -1197,19 +1180,12 @@ export function createSlurpMessagesStorage(db: DB) {
         rapportScore: thread.rapport.score,
         minutesSinceUpdate,
       });
-      // Oldest first, deduplicated, capped. A conversation that runs for months would otherwise
-      // grow an unbounded dossier and push everything else out of the prompt.
-      // ponytail: FIFO cap, swap for relevance ranking or decay if threads get long enough to need it.
-      const notes = [...thread.notes];
-      for (const note of input.remember) {
-        if (!notes.some((existing) => existing.toLowerCase() === note.toLowerCase())) notes.push(note);
-      }
       await db
         .update(slurpThreads)
         .set({
           mood: String(mood),
           moodUpdatedAt: timestamp,
-          notes: JSON.stringify(notes.slice(-SLURP_THREAD_NOTE_LIMIT)),
+          notes: JSON.stringify(applySlurpThreadNotes(thread.notes, input.remember)),
           updatedAt: timestamp,
         })
         .where(eq(slurpThreads.id, threadId));

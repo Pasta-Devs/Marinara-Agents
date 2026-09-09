@@ -1,5 +1,10 @@
 # Slurp release notes
 
+## 1.2.43 — 2026-09-09
+
+- Direct-message memory is now two lists: recent facts the creator can rewrite or forget, and long-term facts that stay until they are named by id.
+- Existing thread notes migrate into working memory, with overflow kept as long-term facts.
+
 ## 1.2.42 — 2026-09-09
 
 - Shipped Steamy, Explicit, and image guidance now ask for thorough, graphic body descriptions when a post or picture is already nude or sexual. Unedited installs receive the new wording.

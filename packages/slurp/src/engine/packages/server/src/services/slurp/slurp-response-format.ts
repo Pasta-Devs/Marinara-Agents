@@ -164,7 +164,20 @@ const noodlerDmSchema = {
   properties: {
     content: { type: "string", maxLength: NOODLE_REPLY_HARD_MAX_LENGTH },
     moodShift: { type: "string", enum: ["up", "same", "down", "sharp_down"] },
-    remember: { type: "array", items: { type: "string", maxLength: 160 }, maxItems: 2 },
+    remember: {
+      type: "array",
+      maxItems: 2,
+      items: {
+        type: "object",
+        properties: {
+          op: { type: "string", enum: ["add", "replace", "forget", "keep"] },
+          id: { type: ["string", "null"] },
+          text: { type: ["string", "null"], maxLength: 160 },
+        },
+        required: ["op", "id", "text"],
+        additionalProperties: false,
+      },
+    },
   },
   required: ["content", "moodShift", "remember"],
   additionalProperties: false,

@@ -1409,6 +1409,8 @@
   "ui.slurp.messages.relationshipScore": "Rapport",
   "ui.slurp.messages.relationshipMood": "Conversation mood",
   "ui.slurp.messages.relationshipNotes": "What they know about this fan",
+  "ui.slurp.messages.relationshipWorkingNotes": "Recent facts",
+  "ui.slurp.messages.relationshipLongTermNotes": "Long-term memory",
   "ui.slurp.messages.relationshipCooling": "Not talking right now. Back around {{time}}.",
   "ui.slurp.messages.dayVibe": "Today",
   "ui.slurp.messages.heart": "Heart message",

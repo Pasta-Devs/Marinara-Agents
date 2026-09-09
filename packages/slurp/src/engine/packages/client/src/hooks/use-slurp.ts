@@ -2016,7 +2016,7 @@ export type SlurpThreadRelationship = {
   contributions: { key: string; detail: string; weight: number; points: number }[];
   mood: number;
   strikes: number;
-  notes: string[];
+  notes: { id: string; text: string; tier: "working" | "longterm" }[];
   spentCoins: number;
   coolUntil: string | null;
   dayVibe: string | null;

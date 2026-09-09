@@ -13,12 +13,14 @@ import { z } from "zod";
 import { SLURP_MOOD_SHIFTS, type SlurpMoodShift } from "./slurp-mood.js";
 import type { SlurpStanceLatitude } from "./slurp-stance.js";
 import type { SlurpMediaIntent } from "./slurp-media-offer.js";
+import {
+  readSlurpNoteOperations,
+  SLURP_NOTE_MAX_LENGTH,
+  SLURP_NOTES_PER_REPLY,
+  type SlurpNoteOperation,
+} from "./slurp-thread-notes.js";
 
-/** A note is one short fact. Long enough for a sentence, short enough that twenty of them fit. */
-export const SLURP_NOTE_MAX_LENGTH = 160;
-
-/** Per reply. The creator may notice one or two things, not empty the conversation into storage. */
-export const SLURP_NOTES_PER_REPLY = 2;
+export { SLURP_NOTE_MAX_LENGTH, SLURP_NOTES_PER_REPLY };
 
 export const slurpDmReplySchema = z.object({
   content: z.string(),
@@ -26,7 +28,7 @@ export const slurpDmReplySchema = z.object({
   // written a good reply, and rejecting the envelope would throw that reply away over a detail
   // only the simulation reads.
   moodShift: z.enum(SLURP_MOOD_SHIFTS).optional().catch(undefined),
-  remember: z.array(z.string()).optional().catch(undefined),
+  remember: z.array(z.unknown()).optional().catch(undefined),
   sharePost: z.number().int().min(0).max(4).optional().catch(undefined),
   image: z
     .object({ prompt: z.string().trim().min(3).max(1000), caption: z.string().trim().max(500).optional() })
@@ -49,7 +51,7 @@ export const slurpDmReplySchema = z.object({
 export type SlurpDmReply = {
   content: string;
   moodShift: SlurpMoodShift;
-  remember: string[];
+  remember: SlurpNoteOperation[];
   sharePost?: number;
   image?: { prompt: string; caption: string };
   media?: {
@@ -85,10 +87,7 @@ export function readSlurpDmReply(value: unknown): SlurpDmReply {
   return {
     content: parsed.data.content,
     moodShift: parsed.data.moodShift ?? "same",
-    remember: (parsed.data.remember ?? [])
-      .map((note) => note.trim().slice(0, SLURP_NOTE_MAX_LENGTH))
-      .filter((note) => note.length > 0)
-      .slice(0, SLURP_NOTES_PER_REPLY),
+    remember: readSlurpNoteOperations(parsed.data.remember),
     ...(parsed.data.sharePost === undefined ? {} : { sharePost: parsed.data.sharePost }),
     ...(parsed.data.image?.prompt
       ? { image: { prompt: parsed.data.image.prompt, caption: parsed.data.image.caption?.trim() ?? "" } }

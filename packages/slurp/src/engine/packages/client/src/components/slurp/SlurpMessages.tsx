@@ -1998,15 +1998,31 @@ function SlurpRelationshipPanel({
               ))}
           </div>
         )}
-        {relationship.notes.length > 0 && (
+        {relationship.notes.some((note) => note.tier === "working") && (
           <div className="mt-1">
             <dt className="text-[var(--muted-foreground)]">
-              {localizeUi("ui.slurp.messages.relationshipNotes", { defaultValue: "What they know about this fan" })}
+              {localizeUi("ui.slurp.messages.relationshipWorkingNotes", { defaultValue: "Recent facts" })}
             </dt>
             <ul className="mt-1 list-disc pl-4 leading-5 text-[var(--muted-foreground)]">
-              {relationship.notes.map((note) => (
-                <li key={note}>{note}</li>
-              ))}
+              {relationship.notes
+                .filter((note) => note.tier === "working")
+                .map((note) => (
+                  <li key={note.id}>{note.text}</li>
+                ))}
+            </ul>
+          </div>
+        )}
+        {relationship.notes.some((note) => note.tier === "longterm") && (
+          <div className="mt-1">
+            <dt className="text-[var(--muted-foreground)]">
+              {localizeUi("ui.slurp.messages.relationshipLongTermNotes", { defaultValue: "Long-term memory" })}
+            </dt>
+            <ul className="mt-1 list-disc pl-4 leading-5 text-[var(--muted-foreground)]">
+              {relationship.notes
+                .filter((note) => note.tier === "longterm")
+                .map((note) => (
+                  <li key={note.id}>{note.text}</li>
+                ))}
             </ul>
           </div>
         )}

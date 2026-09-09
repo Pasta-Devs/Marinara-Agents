@@ -56,7 +56,9 @@ assert.deepEqual(readSlurpDmReply("hey"), { content: "hey", moodShift: "same", r
 assert.equal(readSlurpDmReply({ content: "hey", tone: "playful" }).content, "hey", "unknown fields must be dropped");
 assert.equal(readSlurpDmReply({ content: "hey", moodShift: "nonsense" }).moodShift, "same");
 assert.equal(readSlurpDmReply({ content: "hey", remember: ["a", "b", "c"] }).remember.length, 2);
-assert.deepEqual(readSlurpDmReply({ content: "hey", remember: ["  ", "kept"] }).remember, ["kept"]);
+assert.deepEqual(readSlurpDmReply({ content: "hey", remember: ["  ", "kept"] }).remember, [
+  { op: "add", text: "kept" },
+]);
 assert.throws(() => readSlurpDmReply({ moodShift: "up" }), /no usable content/u);
 
 // The contract is defined locally. `@marinara-engine/shared` owns the comment-reply schema and is
@@ -70,15 +72,14 @@ assert.match(generation, /noodleResponseFormat\(input\.connection\.model, "noodl
 
 // Notes are model output about the player, stored and replayed into a later prompt. They are
 // redacted on the way in and on the way out, and they never reach the system block.
-assert.match(generation, /remember: generated\.remember[\s\S]{0,200}?protectBoundedNoodlerGeneratedText/u);
-assert.match(generation, /knownAboutFan: input\.notes\.map\(\(note\) => protect\(note\)\)/u);
+assert.match(generation, /remember: generated\.remember[\s\S]{0,200}?protectNoteOperation/u);
+assert.match(generation, /knownAboutFan: \{[\s\S]{0,240}?working: known\.working/u);
 
 const storage = readFileSync(
   "packages/slurp/src/engine/packages/server/src/services/storage/slurp-messages.storage.ts",
   "utf8",
 );
-assert.match(storage, /SLURP_THREAD_NOTE_LIMIT = 24/u);
-assert.match(storage, /notes\.slice\(-SLURP_THREAD_NOTE_LIMIT\)/u);
+assert.match(storage, /applySlurpThreadNotes\(thread\.notes, input\.remember\)/u);
 
 // The reply is what the fan asked for. Recording the simulation around it must never lose it.
 const operation = readFileSync(
