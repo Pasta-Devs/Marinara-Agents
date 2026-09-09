@@ -385,7 +385,12 @@ export async function slurpMessageRoutes(app: FastifyInstance) {
     if (!parsed.success) return reply.code(400).send({ error: parsed.error.flatten() });
     const viewer = await requireViewer(parsed.data.personaId);
     if (!viewer) return reply.code(404).send({ error: "Slurp persona not found" });
-    const sent = await messages.sendViewerMessage(viewer.id, parsed.data.creatorAccountId, parsed.data.content, parsed.data.requestId);
+    const sent = await messages.sendViewerMessage(
+      viewer.id,
+      parsed.data.creatorAccountId,
+      parsed.data.content,
+      parsed.data.requestId,
+    );
     if (sent.status === "not_found") return reply.code(404).send({ error: "Creator not found" });
     if (sent.status === "closed") return reply.code(403).send({ error: "This Creator is not accepting messages." });
     if (sent.status === "insufficient_funds")
@@ -407,7 +412,10 @@ export async function slurpMessageRoutes(app: FastifyInstance) {
       else tipError = "The message was sent, but the tip could not be sent.";
     }
     try {
-      outcome = await replyToSlurpMessage(app.db, { threadId: sent.thread.id, triggerMessageId: replyTriggerMessageId });
+      outcome = await replyToSlurpMessage(app.db, {
+        threadId: sent.thread.id,
+        triggerMessageId: replyTriggerMessageId,
+      });
     } catch (error) {
       logger.error(error, "[slurp-message] Reply failed after a send in thread %s", sent.thread.id);
       outcome = { status: "failed" as const, error: "Reply generation failed." };

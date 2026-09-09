@@ -36,6 +36,12 @@
     "slurp": {
       "versions": [
         {
+          "version": "1.2.45",
+          "date": "2026-09-09",
+          "notes": "- Slurp messages, replies, and posts now receive the current character canon.\n- Character identity and relationship facts remain available after old conversation turns leave the context window.\n- Concealed identity modes still hide the linked public identity while preserving behavioral canon.",
+          "highlight": false
+        },
+        {
           "version": "1.2.44",
           "date": "2026-09-09",
           "notes": "- Creators now keep separate emotional, energy, arousal, adult-intent, and platform-strategy state.\n- Direct-message relationships now track familiarity, interest, sexual comfort, commercial trust, emotional trust, respect, resentment, desire, stance, and adult interaction level.\n- The model can report bounded relationship signals, while the server owns all state changes, decay, limits, and adult-behavior gates.\n- Low energy limits reply bursts and generated media. Arousal and adult intent never override relationship comfort, boundaries, or privacy rules.",
@@ -147,12 +153,6 @@
           "version": "1.2.26",
           "date": "2026-09-08",
           "notes": "- World-generated commission requests now receive an automatic quote and can complete through the existing audience decision and payment path.",
-          "highlight": false
-        },
-        {
-          "version": "1.2.25",
-          "date": "2026-09-08",
-          "notes": "- A Creator who answers a message is no longer left marked as owing a reply. The unread count on the Creator's side was never cleared by replying, so an answered conversation stayed in the reply queue forever and the badge never went away.\n- The message thread now shows whether a Creator is online, away, or offline, the same as their profile does.",
           "highlight": false
         }
       ]
