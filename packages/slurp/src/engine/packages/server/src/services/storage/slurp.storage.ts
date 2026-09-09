@@ -95,7 +95,12 @@ import {
   SLURP_WORLD_ACTIVITY,
 } from "../slurp/slurp-scale.js";
 import { resolveSlurpCreatorScheduleStatus } from "../slurp/slurp-creator-schedule-context.js";
-import { SLURP_DEFAULT_STORY_RATE, SLURP_STORY_RATE } from "../slurp/slurp-post-variation.js";
+import {
+  SLURP_DEFAULT_PROJECT_RATE,
+  SLURP_DEFAULT_STORY_RATE,
+  SLURP_PROJECT_RATE,
+  SLURP_STORY_RATE,
+} from "../slurp/slurp-post-variation.js";
 import { createSlurpEventsStorage } from "./slurp-events.storage.js";
 import { createSlurpPopulationStorage } from "./slurp-population.storage.js";
 import type { SlurpFunnelStage } from "../slurp/slurp-population.js";
@@ -262,6 +267,8 @@ export const slurpSettingsSchema = z.object({
   imageHeight: z.number().int().min(64).max(4096),
   /** Share of a Creator's automatic posts published as Stories. */
   storyRate: z.enum(SLURP_STORY_RATE),
+  /** Share of a Creator's automatic posts that continue a project rather than standing alone. */
+  projectRate: z.enum(SLURP_PROJECT_RATE),
   /** Stories are shown in their own tall frame, so they carry their own size. */
   storyImageWidth: z.number().int().min(64).max(4096),
   storyImageHeight: z.number().int().min(64).max(4096),
@@ -396,6 +403,9 @@ export type NoodlerPreparedPostPayload = {
   content: string;
   access: NoodlePostAccess;
   imagePrompt: string | null;
+  /** The project chosen when the post was prepared, carried through to publication. */
+  projectId?: string | null;
+  projectChapter?: string | null;
   metadata: Record<string, unknown>;
 };
 
@@ -535,6 +545,9 @@ type NoodlerPostPersistenceInput = {
   metadata?: Record<string, unknown>;
   imageUrl?: string | null;
   imagePrompt?: string | null;
+  /** The project this post was published into, and the chapter it was on. See `slurp-project.ts`. */
+  projectId?: string | null;
+  projectChapter?: string | null;
 };
 
 export type NoodlerCreatorReplyClaimResult =
@@ -874,6 +887,7 @@ export const DEFAULT_SLURP_SETTINGS: SlurpSettings = {
   imageWidth: 1024,
   imageHeight: 1536,
   storyRate: SLURP_DEFAULT_STORY_RATE,
+  projectRate: SLURP_DEFAULT_PROJECT_RATE,
   // 4:5. The composer crops an uploaded Story to whatever ratio is configured here, so the two
   // halves of the feature stay one shape.
   storyImageWidth: 1024,
@@ -3367,6 +3381,8 @@ export function createSlurpStorage(db: DB) {
             parentPostId: null,
             quotePostId: null,
             source: "generated",
+            projectId: typeof payload.projectId === "string" ? payload.projectId : null,
+            projectChapter: typeof payload.projectChapter === "string" ? payload.projectChapter : null,
             access: payload.access === "public" ? "public" : "locked",
             metadata: JSON.stringify({ ...preparedMetadata, noodlerPreparedPostId: current.id }),
             authorSnapshot: JSON.stringify(snapshotForAccount(account)),
@@ -3388,7 +3404,13 @@ export function createSlurpStorage(db: DB) {
             .where(eq(noodlerPreparedPosts.id, current.id));
           return true;
         });
-        if (didPublish) published += 1;
+        if (!didPublish) continue;
+        published += 1;
+        // Outside the transaction on purpose. Advancing is bookkeeping, not part of publishing:
+        // a project that failed to advance must not roll back a post the audience can already see.
+        if (typeof item.payload.projectId === "string" && item.payload.projectId) {
+          await this.advanceProject(item.creatorAccountId, item.payload.projectId);
+        }
       }
       for (const path of discardedMediaPaths) unlinkNoodlerMedia(path);
       return published;
@@ -3931,6 +3953,8 @@ export function createSlurpStorage(db: DB) {
         parentPostId: null,
         quotePostId: null,
         source: input.source ?? "manual",
+        projectId: input.projectId ?? null,
+        projectChapter: input.projectChapter ?? null,
         access: input.access ?? "public",
         metadata: JSON.stringify(input.metadata ?? {}),
         authorSnapshot: JSON.stringify(snapshotForAccount(accounts[index]!)),

@@ -287,6 +287,7 @@ export type SlurpSettings = {
   imageWidth: number;
   imageHeight: number;
   storyRate: "off" | "rare" | "regular" | "often";
+  projectRate: "off" | "rare" | "regular" | "often";
   storyImageWidth: number;
   storyImageHeight: number;
   refreshesPerDay: number;

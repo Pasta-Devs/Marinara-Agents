@@ -5,8 +5,11 @@ import { join } from "node:path";
 import {
   slurpPostVariation,
   slurpPostVariationInstruction,
+  slurpPostProject,
+  slurpProjectSlots,
   slurpStorySlots,
   SLURP_POST_FORMATS,
+  SLURP_PROJECT_RATE,
   SLURP_STORY_RATE,
 } from "../packages/slurp/src/engine/packages/server/src/services/slurp/slurp-post-variation.js";
 
@@ -67,10 +70,7 @@ const generation = read("services/slurp/slurp-generation.service.ts");
 assert.match(generation, /post\.imagePrompt \? .*showed:.* : line/u);
 // "Do not reuse their exact wording" is satisfied by eight captions about one desk.
 assert.match(generation, /Do not repeat a recent post's setting, activity, framing, or wardrobe/u);
-assert.match(
-  generation,
-  /slurpPostVariation\(account\.id, await noodle\.countNoodlerPostsByAccount\(account\.id\), settings\.storyRate\)/u,
-);
+assert.match(generation, /slurpPostVariation\(account\.id, sequence, settings\.storyRate\)/u);
 
 // The automatic path pinned the format and passed a constant guide. Between them they defeated
 // every variety mechanism on the one path that generates most posts.
@@ -138,5 +138,63 @@ assert.match(timing, /A Tuesday morning and a Saturday night are different posts
   // An unset or unknown rate must behave as the shipped default rather than silently disabling.
   assert.deepEqual([...slurpStorySlots(undefined)], [...slurpStorySlots("regular")]);
 }
+
+// ── Project slots ───────────────────────────────────────────────────────────
+// A project post and a Story must never be the same post. A Story is a picture with one short
+// line under it, which is the worst place to move a story on, so the two slot sets stay disjoint.
+for (const projectRate of SLURP_PROJECT_RATE) {
+  for (const storyRate of SLURP_STORY_RATE) {
+    for (const slot of slurpProjectSlots(projectRate)) {
+      assert.ok(!slurpStorySlots(storyRate).has(slot), `${projectRate} collides with ${storyRate} at ${slot}`);
+    }
+  }
+}
+assert.deepEqual([...slurpProjectSlots(undefined)], [...slurpProjectSlots("regular")]);
+assert.equal(slurpProjectSlots("off").size, 0, "off is a real off switch");
+
+const projects = [{ id: "craft" }, { id: "vacation" }];
+
+// Off never claims a post, and a Creator with no projects is unaffected.
+for (let index = 0; index < 40; index += 1) {
+  assert.equal(slurpPostProject("creator-a", index, projects, "off"), null);
+  assert.equal(slurpPostProject("creator-a", index, [], "regular"), null);
+}
+
+// Every active project must actually get posts. Indexing by the post number instead of by the
+// project slot silently starved one of two projects, because consecutive slots are a fixed
+// distance apart and so always land on the same residue.
+for (const creator of ["creator-a", "creator-b", "creator-c", "creator-d"]) {
+  for (const count of [2, 3]) {
+    const many = Array.from({ length: count }, (_, index) => ({ id: `p${index}` }));
+    const claimed: string[] = [];
+    for (let index = 0; index < 200; index += 1) {
+      const project = slurpPostProject(creator, index, many, "regular");
+      if (project) claimed.push(project.id);
+    }
+    assert.ok(claimed.length > 0, `${creator} never ran a project`);
+    for (const project of many) {
+      assert.ok(claimed.includes(project.id), `${creator} starved ${project.id} of ${count}`);
+    }
+    // Consecutive project posts alternate rather than letting one thread run away with the feed.
+    for (let index = 1; index < claimed.length; index += 1) {
+      if (count > 1)
+        assert.notEqual(claimed[index], claimed[index - 1], `${creator} posted ${claimed[index]} twice running`);
+    }
+  }
+}
+
+// Deterministic, and unbothered by nonsense.
+assert.deepEqual(slurpPostProject("creator-a", 9, projects), slurpPostProject("creator-a", 9, projects));
+for (const sequence of [Number.NaN, -4, Number.POSITIVE_INFINITY]) {
+  const project = slurpPostProject("creator-a", sequence, projects);
+  assert.ok(project === null || projects.includes(project), `unusable project for ${sequence}`);
+}
+
+// A project claims some posts and leaves the rest alone. A thread that owned the whole feed would
+// stop being a thread.
+const loose = Array.from({ length: 200 }, (_, index) => slurpPostProject("creator-a", index, projects, "often")).filter(
+  (project) => project === null,
+).length;
+assert.ok(loose > 80, "even at the highest rate most posts must stand alone");
 
 console.log("slurp post variation regression passed");

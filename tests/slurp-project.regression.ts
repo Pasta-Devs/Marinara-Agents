@@ -11,6 +11,7 @@ import {
   SLURP_PROJECT_TITLE_MAX_LENGTH,
   slurpProjectAdvance,
   slurpProjectChapter,
+  slurpProjectInstruction,
   slurpProjectsKey,
 } from "../packages/slurp/src/engine/packages/server/src/services/slurp/slurp-project.js";
 
@@ -107,5 +108,55 @@ assert.match(storage, /async advanceProject\(/u);
 assert.match(storage, /async listPostsByProject\(/u);
 // A full reset must take the projects with it, or a fresh install inherits the last one's threads.
 assert.match(storage, /settings\.remove\(slurpProjectsKey\(accountId\)\)/u);
+
+// ── The prompt block ────────────────────────────────────────────────────────
+const block = slurpProjectInstruction({
+  title: "New body, new me",
+  direction: "From the decision to the result.",
+  chapter: "the consultation",
+  history: ["Booked it — I actually booked it"],
+});
+assert.match(block, /# Ongoing project/u);
+assert.match(block, /New body, new me/u);
+assert.match(block, /the consultation/u);
+assert.match(block, /- Booked it/u);
+// The two failures that turn a project into a summary of itself: repeating the last post, and
+// announcing an outcome the feed has not shown yet.
+assert.match(block, /Do not restate what those posts already said/u);
+assert.match(block, /not shown happening yet/u);
+// The variation still owns place, moment, and framing. Without this line the project block reads
+// as the whole brief and every post in a thread comes out of the same room.
+assert.match(block, /The angle above still decides/u);
+
+// An open-ended project with no history is still a usable block.
+const bare = slurpProjectInstruction({ title: "Renovating the flat", direction: "", chapter: null, history: [] });
+assert.match(bare, /Renovating the flat/u);
+assert.doesNotMatch(bare, /Where you are now/u);
+assert.doesNotMatch(bare, /Your last posts/u);
+
+// ── Generation wiring ───────────────────────────────────────────────────────
+const generation = read("services/slurp/slurp-generation.service.ts");
+// One sequence for both rotations, or the project and the variation drift apart.
+assert.match(generation, /const sequence = await noodle\.countNoodlerPostsByAccount\(account\.id\)/u);
+assert.match(generation, /slurpPostVariation\(account\.id, sequence, settings\.storyRate\)/u);
+assert.match(
+  generation,
+  /slurpPostProject\(account\.id, sequence, await noodle\.listActiveProjects\(account\.id\), settings\.projectRate\)/u,
+);
+// Player direction stands both rotations down: their direction is the subject.
+assert.match(generation, /const directed = Boolean\(input\.request\.noodlerPostGuide\?\.trim\(\)\)/u);
+assert.match(generation, /const project = directed\s+\? null/u);
+// The project's own posts, not the page's: page history says nothing about where this thread got to.
+assert.match(generation, /listPostsByProject\(project\.id, 4\)/u);
+// Project text is untrusted user input like every other supplied value.
+assert.match(generation, /title: protect\(input\.project\.project\.title\)/u);
+assert.match(generation, /direction: protect\(input\.project\.project\.direction\)/u);
+// Both publication paths stamp the post and advance only after the row lands.
+assert.match(generation, /projectId: project\?\.id \?\? null/u);
+assert.match(generation, /if \(project\) await noodle\.advanceProject\(account\.id, project\.id\)/u);
+
+const publish = read("services/storage/slurp.storage.ts");
+assert.match(publish, /projectId: typeof payload\.projectId === "string" \? payload\.projectId : null/u);
+assert.match(publish, /await this\.advanceProject\(item\.creatorAccountId, item\.payload\.projectId\)/u);
 
 console.log("slurp project regression passed");

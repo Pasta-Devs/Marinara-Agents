@@ -130,6 +130,35 @@ export function slurpStorySlots(rate: SlurpStoryRate | undefined): ReadonlySet<n
   }
 }
 
+/** How much of a Creator's automatic output belongs to a project rather than standing alone. */
+export const SLURP_PROJECT_RATE = ["off", "rare", "regular", "often"] as const;
+export type SlurpProjectRate = (typeof SLURP_PROJECT_RATE)[number];
+export const SLURP_DEFAULT_PROJECT_RATE: SlurpProjectRate = "regular";
+
+/**
+ * Which slots of `FORMAT_CYCLE` carry a project post rather than a loose one.
+ *
+ * Odd slots only, because `slurpStorySlots` uses even ones. Keeping the two sets disjoint means a
+ * project post is never also a Story: a Story is a picture with one line under it, which is the
+ * worst possible place to move a story on, and a slot that had to satisfy both would silently
+ * drop one of them.
+ *
+ * `regular` is two of the eight, so a project claims roughly one post in four and the feed still
+ * reads as a life rather than as a serial. `off` is a real off switch.
+ */
+export function slurpProjectSlots(rate: SlurpProjectRate | undefined): ReadonlySet<number> {
+  switch (rate ?? SLURP_DEFAULT_PROJECT_RATE) {
+    case "off":
+      return new Set();
+    case "rare":
+      return new Set([3]);
+    case "often":
+      return new Set([1, 3, 5, 7]);
+    default:
+      return new Set([1, 5]);
+  }
+}
+
 export type SlurpPostVariation = {
   format: SlurpPostFormat;
   /**
@@ -204,4 +233,36 @@ function hash(value: string): number {
   out = Math.imul(out, 0x85ebca6b);
   out ^= out >>> 13;
   return out >>> 0;
+}
+
+/**
+ * The project this post belongs to, or null when it stands alone.
+ *
+ * Selected from the same rotation the variation uses, rather than from a scheduler of its own.
+ * That is what produces an interleaved feed for free — two projects and ordinary posts take turns
+ * because the slots do — and it means a project cannot post twice in a row while another waits.
+ *
+ * `sequence` is the same post count the variation is rotated on, so the caller cannot accidentally
+ * put the project and the variation out of step.
+ */
+export function slurpPostProject<T extends { id: string }>(
+  creatorAccountId: string,
+  sequence: number,
+  projects: readonly T[],
+  rate: SlurpProjectRate = SLURP_DEFAULT_PROJECT_RATE,
+): T | null {
+  if (projects.length === 0) return null;
+  const step = Number.isFinite(sequence) ? Math.max(0, Math.floor(sequence)) : 0;
+  const offset = hash(creatorAccountId);
+  const slots = slurpProjectSlots(rate);
+  if (!slots.has((offset + step) % FORMAT_CYCLE.length)) return null;
+  // Which project slot this is overall, not which post. Indexing projects by `step` looks
+  // equivalent and is not: consecutive project slots are a fixed distance apart, so `step` lands
+  // on the same residue every time and a second project would never be chosen.
+  const cycle = Math.floor(step / FORMAT_CYCLE.length);
+  let ordinal = cycle * slots.size;
+  for (let earlier = cycle * FORMAT_CYCLE.length; earlier < step; earlier += 1) {
+    if (slots.has((offset + earlier) % FORMAT_CYCLE.length)) ordinal += 1;
+  }
+  return projects[ordinal % projects.length] ?? null;
 }

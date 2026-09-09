@@ -39,7 +39,8 @@ import type { NoodleImagePromptReviewItem } from "./slurp-public-images.service.
 import { getErrorMessage } from "./slurp-public-support.js";
 import { noodleResponseFormat } from "./slurp-response-format.js";
 import { buildSlurpPostTimingContext } from "./slurp-post-timing.js";
-import { slurpPostVariation, slurpPostVariationInstruction } from "./slurp-post-variation.js";
+import { slurpPostProject, slurpPostVariation, slurpPostVariationInstruction } from "./slurp-post-variation.js";
+import { slurpProjectChapter, slurpProjectInstruction, type SlurpProject } from "./slurp-project.js";
 import { resolveSlurpCreatorScheduleContext } from "./slurp-creator-schedule.js";
 import { createChatsStorage } from "../storage/chats.storage.js";
 import { NOODLER_FORMAT_MAX_LENGTH, type NoodlerContentFormat } from "./slurp-content-format.js";
@@ -69,6 +70,9 @@ export type PreparedNoodlerPostResult = {
   content: string;
   imagePrompt: string | null;
   access: "public" | "locked";
+  /** The project this post continues, carried through to publication. Null for a loose post. */
+  projectId: string | null;
+  projectChapter: string | null;
   metadata: Record<string, unknown>;
 };
 
@@ -221,6 +225,8 @@ export function buildNoodlerPostMessages(input: {
   scheduleContext?: string;
   /** The rotating angle for this post. Absent when the player has directed the post themselves. */
   variationInstruction?: string;
+  /** The project this post continues, with that project's own recent posts. Absent for a loose post. */
+  project?: { project: SlurpProject; posts: NoodlerManagedPost[] };
   generatedAt?: Date;
   publicationTime?: Date;
 }): ChatMessage[] {
@@ -281,6 +287,22 @@ export function buildNoodlerPostMessages(input: {
     "# Recent Slurp posts",
     formatNoodlerPostHistory(input.recentPosts, protect),
     ...(input.variationInstruction ? ["", input.variationInstruction] : []),
+    ...(input.project
+      ? [
+          "",
+          slurpProjectInstruction({
+            title: protect(input.project.project.title),
+            direction: protect(input.project.project.direction),
+            // Protected like every other supplied value: a Secret Creator who typed their city
+            // into a direction field must not have it read back out through the project block.
+            chapter: protect(slurpProjectChapter(input.project.project) ?? "") || null,
+            history: input.project.posts
+              .slice()
+              .reverse()
+              .map((post) => `${post.title ? `${protect(post.title)} — ` : ""}${protect(post.content)}`),
+          }),
+        ]
+      : []),
     ...(input.request.noodlerPostGuide ? ["", "# Post direction", protect(input.request.noodlerPostGuide)] : []),
   ].join("\n");
   return [
@@ -380,9 +402,18 @@ export async function generateNoodlerPost(
   const sourceCharacterContext = await resolveNoodlerCharacterCanon(db, linkedPublicAccount, disclosureMode);
   // The rotating angle for this post. Skipped when the player has directed the post themselves —
   // their direction is the angle, and a second one would fight it.
-  const variation = input.request.noodlerPostGuide?.trim()
+  // One sequence for both rotations, so the project and the variation cannot drift out of step.
+  const sequence = await noodle.countNoodlerPostsByAccount(account.id);
+  const directed = Boolean(input.request.noodlerPostGuide?.trim());
+  const variation = directed ? null : slurpPostVariation(account.id, sequence, settings.storyRate);
+  // A project claims this post only if the rotation gives it one. Player direction stands both
+  // rotations down for the same reason: their direction is the subject, and a second one fights it.
+  const project = directed
     ? null
-    : slurpPostVariation(account.id, await noodle.countNoodlerPostsByAccount(account.id), settings.storyRate);
+    : slurpPostProject(account.id, sequence, await noodle.listActiveProjects(account.id), settings.projectRate);
+  // The project's own posts, not the page's. The page history is already supplied above and says
+  // nothing about where this thread had got to.
+  const projectPosts = project ? await noodle.listPostsByProject(project.id, 4) : [];
   const format = input.request.format ?? variation?.format ?? "caption";
   const messages = buildNoodlerPostMessages({
     account,
@@ -394,6 +425,7 @@ export async function generateNoodlerPost(
     // A variation carries its own format, so an automatic post stops always being a caption.
     request: { ...input.request, format },
     variationInstruction: variation ? slurpPostVariationInstruction(variation) : undefined,
+    project: project ? { project, posts: projectPosts } : undefined,
     allowImagePrompt: imagesEnabled,
     generationGuidance: settings.generationGuidance,
     scheduleContext,
@@ -495,12 +527,18 @@ export async function generateNoodlerPost(
     ? protectNoodlerGeneratedIdentity(generated.imagePrompt, disclosureMode, publicIdentity)
     : null;
 
+  const projectChapter = project ? slurpProjectChapter(project) : null;
+
   const baseInput = {
     authorAccountId: account.id,
     title: protectedGenerated.title,
     content: protectedGenerated.content,
     source: "generated" as const,
     access: input.request.access,
+    projectId: project?.id ?? null,
+    // Stamped now rather than resolved later, so editing the project cannot rewrite what a
+    // published post was about.
+    projectChapter,
     metadata: {
       noodlerContentFormat: format,
       // Stamped at creation like a manual post, so a generated locked post honours the configured
@@ -518,6 +556,8 @@ export async function generateNoodlerPost(
       content: protectedGenerated.content,
       imagePrompt: draftImagePrompt,
       access: input.request.access,
+      projectId: project?.id ?? null,
+      projectChapter,
       // The scheduled path returns here, before the image-commit branch that stamps the story flag,
       // so a scheduled Story used to publish as an ordinary post. Carry the intent in the prepared
       // payload instead; publishDueNoodlerPreparedPosts drops it again if no image ever attached,
@@ -542,6 +582,9 @@ export async function generateNoodlerPost(
     const posts = await noodle.createNoodlerPosts([main]);
     const post = posts?.at(-1);
     if (!post) throw new Error("Failed to persist the generated Slurp post.");
+    // Advanced here, after the row lands, rather than when the project was chosen: a generation
+    // that failed halfway would otherwise skip a chapter and the thread would have a hole in it.
+    if (project) await noodle.advanceProject(account.id, project.id);
     return post;
   };
 

@@ -156,6 +156,35 @@ export function slurpProjectChapter(project: SlurpProject): string | null {
 }
 
 /**
+ * The project as prompt text. One block, so the caller does not assemble it in three places.
+ *
+ * Takes already-protected strings. Identity protection belongs to the caller that knows the
+ * disclosure mode; passing raw project text through here would leak a Secret Creator's city
+ * because they typed it into a direction field.
+ *
+ * The block states the thread and then refuses two specific failures: restating the last post,
+ * and announcing an outcome the feed has not shown. Both are what turn a project into a summary
+ * of itself rather than a story that is still happening.
+ */
+export function slurpProjectInstruction(input: {
+  title: string;
+  direction: string;
+  chapter: string | null;
+  /** This project's own recent posts, newest last, already formatted and protected. */
+  history: readonly string[];
+}): string {
+  return [
+    "# Ongoing project",
+    `Title: ${input.title}`,
+    ...(input.direction ? [`What this is about: ${input.direction}`] : []),
+    ...(input.chapter ? [`Where you are now: ${input.chapter}`] : []),
+    ...(input.history.length ? ["Your last posts in this project:", ...input.history.map((line) => `- ${line}`)] : []),
+    "This post continues that thread. Do not restate what those posts already said, and do not claim anything has happened that they have not shown happening yet.",
+    "This is what the post is about. The angle above still decides where you are and how the picture is taken.",
+  ].join("\n");
+}
+
+/**
  * Move a project on by one published post.
  *
  * Called after publication, never at generation: a project that advanced when a post was drafted
