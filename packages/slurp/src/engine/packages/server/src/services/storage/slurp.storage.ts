@@ -72,6 +72,21 @@ import {
   type SlurpWalletSpendKind,
 } from "../slurp/slurp-wallet.js";
 import { openSlurpGoal, readSlurpGoal, slurpGoalKey, type SlurpGoal } from "../slurp/slurp-goal.js";
+import {
+  activeSlurpProjects,
+  makeSlurpProject,
+  readSlurpProjects,
+  SLURP_PROJECT_CHAPTER_MAX_LENGTH,
+  SLURP_PROJECT_DIRECTION_MAX_LENGTH,
+  SLURP_PROJECT_MAX_ACTIVE,
+  SLURP_PROJECT_MAX_CHAPTERS,
+  SLURP_PROJECT_TITLE_MAX_LENGTH,
+  slurpProjectAdvance,
+  slurpProjectsKey,
+  SLURP_PROJECT_STATUSES,
+  type SlurpProject,
+  type SlurpProjectStatus,
+} from "../slurp/slurp-project.js";
 import { SLURP_AUDIENCE_TONES, SLURP_DEFAULT_AUDIENCE_TONE } from "../slurp/slurp-tone.js";
 import {
   SLURP_DEFAULT_PLATFORM_SCALE,
@@ -1905,7 +1920,10 @@ export function createSlurpStorage(db: DB) {
           await tx.delete(noodleAccounts).where(inArray(noodleAccounts.id, accountIds));
         }
         const settings = createAppSettingsStorage(tx);
-        for (const accountId of accountIds) await settings.remove(`${SLURP_CREATOR_STATE_KEY}.${accountId}`);
+        for (const accountId of accountIds) {
+          await settings.remove(`${SLURP_CREATOR_STATE_KEY}.${accountId}`);
+          await settings.remove(slurpProjectsKey(accountId));
+        }
         for (const personaId of personaIds) await settings.remove(slurpViewerSettingsKey(personaId));
         await settings.remove(SLURP_SETTINGS_KEY);
         await settings.remove(NOODLE_REFRESH_SCHEDULE_KEY);
@@ -6347,6 +6365,133 @@ export function createSlurpStorage(db: DB) {
       if (!goal) return null;
       await settingsStore.set(slurpGoalKey(creatorAccountId), JSON.stringify(goal));
       return goal;
+    },
+
+    /** Every project this Creator has, newest first. Paused and complete ones are included. */
+    async listProjects(creatorAccountId: string): Promise<SlurpProject[]> {
+      return readSlurpProjects(await settingsStore.get(slurpProjectsKey(creatorAccountId)));
+    },
+
+    /** The projects that may claim a post right now. */
+    async listActiveProjects(creatorAccountId: string): Promise<SlurpProject[]> {
+      return activeSlurpProjects(await this.listProjects(creatorAccountId));
+    },
+
+    async getProject(creatorAccountId: string, projectId: string): Promise<SlurpProject | null> {
+      return (await this.listProjects(creatorAccountId)).find((project) => project.id === projectId) ?? null;
+    },
+
+    /**
+     * Open a project.
+     *
+     * Refuses past `SLURP_PROJECT_MAX_ACTIVE` rather than opening a fourth that would publish too
+     * rarely to follow. Returns null on an unusable title, which is the one field it cannot invent.
+     */
+    async createProject(
+      creatorAccountId: string,
+      input: { title: string; direction?: string; chapters?: string[] },
+    ): Promise<SlurpProject | null> {
+      const projects = await this.listProjects(creatorAccountId);
+      if (activeSlurpProjects(projects).length >= SLURP_PROJECT_MAX_ACTIVE) return null;
+      const project = makeSlurpProject(newId(), input, new Date());
+      if (!project) return null;
+      await settingsStore.set(slurpProjectsKey(creatorAccountId), JSON.stringify([project, ...projects]));
+      return project;
+    },
+
+    /**
+     * Edit a project.
+     *
+     * Only the fields the player owns. `posts` is not one of them: it counts what was published and
+     * a hand-set value would make the Studio disagree with the feed.
+     */
+    async updateProject(
+      creatorAccountId: string,
+      projectId: string,
+      patch: { title?: string; direction?: string; chapters?: string[]; chapter?: number; status?: SlurpProjectStatus },
+    ): Promise<SlurpProject | null> {
+      const projects = await this.listProjects(creatorAccountId);
+      const index = projects.findIndex((project) => project.id === projectId);
+      if (index < 0) return null;
+      const current = projects[index]!;
+      // Resuming a project that would make a fourth active one is refused for the same reason
+      // opening one is: the rotation would starve all of them.
+      if (
+        patch.status === "active" &&
+        current.status !== "active" &&
+        activeSlurpProjects(projects).length >= SLURP_PROJECT_MAX_ACTIVE
+      )
+        return null;
+      const chapters = patch.chapters
+        ? patch.chapters
+            .map((chapter) => chapter.trim().slice(0, SLURP_PROJECT_CHAPTER_MAX_LENGTH))
+            .filter(Boolean)
+            .slice(0, SLURP_PROJECT_MAX_CHAPTERS)
+        : current.chapters;
+      const title =
+        patch.title === undefined ? current.title : patch.title.trim().slice(0, SLURP_PROJECT_TITLE_MAX_LENGTH);
+      if (!title) return null;
+      const chapter = patch.chapter === undefined ? current.chapter : Math.floor(patch.chapter);
+      const next: SlurpProject = {
+        ...current,
+        title,
+        direction:
+          patch.direction === undefined
+            ? current.direction
+            : patch.direction.trim().slice(0, SLURP_PROJECT_DIRECTION_MAX_LENGTH),
+        chapters,
+        // Clamped here as well as on read, so a shortened chapter list cannot leave the pointer
+        // past the end and strand the project one post short of finishing.
+        chapter: Math.min(Math.max(0, chapter), Math.max(0, chapters.length - 1)),
+        status: SLURP_PROJECT_STATUSES.includes(patch.status as SlurpProjectStatus)
+          ? (patch.status as SlurpProjectStatus)
+          : current.status,
+        updatedAt: now(),
+      };
+      projects[index] = next;
+      await settingsStore.set(slurpProjectsKey(creatorAccountId), JSON.stringify(projects));
+      return next;
+    },
+
+    /**
+     * Forget a project.
+     *
+     * Posts published into it keep their `projectId`. Deleting the thread must not delete the feed,
+     * and a post that has already been read cannot be un-published by tidying the Studio.
+     */
+    async deleteProject(creatorAccountId: string, projectId: string): Promise<boolean> {
+      const projects = await this.listProjects(creatorAccountId);
+      const remaining = projects.filter((project) => project.id !== projectId);
+      if (remaining.length === projects.length) return false;
+      await settingsStore.set(slurpProjectsKey(creatorAccountId), JSON.stringify(remaining));
+      return true;
+    },
+
+    /**
+     * Record that a post published into a project.
+     *
+     * Called after publication, never at generation: advancing on a draft would skip a chapter
+     * every time a generation failed.
+     */
+    async advanceProject(creatorAccountId: string, projectId: string): Promise<SlurpProject | null> {
+      const projects = await this.listProjects(creatorAccountId);
+      const index = projects.findIndex((project) => project.id === projectId);
+      if (index < 0) return null;
+      const next = slurpProjectAdvance(projects[index]!, new Date());
+      projects[index] = next;
+      await settingsStore.set(slurpProjectsKey(creatorAccountId), JSON.stringify(projects));
+      return next;
+    },
+
+    /** One project's own posts, newest first, for the Studio and for generation continuity. */
+    async listPostsByProject(projectId: string, limit = 8): Promise<NoodlerManagedPost[]> {
+      const rows = await db
+        .select()
+        .from(noodlePosts)
+        .where(eq(noodlePosts.projectId, projectId))
+        .orderBy(desc(noodlePosts.createdAt))
+        .limit(Math.max(1, Math.min(50, Math.floor(limit))));
+      return rows.map(mapManagedPost);
     },
 
     async getEarnings(creatorAccountId: string): Promise<SlurpEarnings> {

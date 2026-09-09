@@ -51,6 +51,10 @@ export const noodlePosts = fileTable("slurp_posts", {
   parentPostId: text("parent_post_id"),
   quotePostId: text("quote_post_id"),
   source: text("source").notNull().default("manual"),
+  /** The project this post was published into, when one claimed it. See `slurp-project.ts`. */
+  projectId: text("project_id"),
+  /** The chapter the project was on when this post was written. Kept so editing the project cannot rewrite published history. */
+  projectChapter: text("project_chapter"),
   access: text("access").notNull().default("public"),
   metadata: text("metadata").notNull().default("{}"),
   authorSnapshot: text("author_snapshot").notNull().default("{}"),
