@@ -12,6 +12,7 @@ const read = (path: string) => readFileSync(join(root, path), "utf8");
 const generation = read("packages/slurp/src/engine/packages/server/src/services/slurp/slurp-generation.service.ts");
 const reply = read("packages/slurp/src/engine/packages/server/src/services/slurp/slurp-reply-generation.service.ts");
 const prompt = read("packages/slurp/src/engine/packages/server/src/services/slurp/slurp-prompt.ts");
+const imageInstructions = "TEST_IMAGE_GUIDANCE_123";
 
 const scheduleText = "Current Conversation Schedule for Ari: Tuesday: busy at work and slow to reply";
 assert.match(generation, /scheduleContext,/u);
@@ -29,6 +30,25 @@ assert.match(
 // timing instruction that refers to it rather than unlabelled inside the source card.
 assert.match(generation, /"# Today's schedule"/u, "Schedule needs its own header above the timing block");
 assert.match(reply, /scheduleContext/u, "Reply request must carry a schedule slot");
+
+// Image guidance must reach the main post model. Otherwise the model only sees the generic
+// imagePrompt contract, and the later interpretation model has no configured rewrite context.
+assert.match(generation, /imageGenerationPrompt: string;/u);
+assert.match(generation, /imageGenerationPrompt: settings\.imageGenerationPrompt,/u);
+assert.match(
+  generation,
+  /Apply these image directions when writing imagePrompt\. They are instructions to you, not text to copy into imagePrompt/u,
+);
+assert.match(
+  generation,
+  /input\.allowImagePrompt && input\.imageGenerationPrompt\.trim\(\)/u,
+  "image guidance must only be added when image generation is active",
+);
+assert.equal(
+  generation.includes(imageInstructions),
+  false,
+  "the regression marker belongs in the test scenario, not production defaults",
+);
 
 // A Conversation Schedule activity is user-written and can name the source, so it is untrusted
 // content like every other value in these prompts. It was the one field in all three builders that

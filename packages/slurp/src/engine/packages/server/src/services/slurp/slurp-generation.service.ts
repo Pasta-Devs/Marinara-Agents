@@ -222,6 +222,7 @@ export function buildNoodlerPostMessages(input: {
   recentPosts: NoodlerManagedPost[];
   request: Pick<FormattedNoodlerGenerationRequest, "noodlerPostGuide" | "format">;
   allowImagePrompt: boolean;
+  imageGenerationPrompt: string;
   generationGuidance: string;
   scheduleContext?: string;
   /** The rotating angle for this post. Absent when the player has directed the post themselves. */
@@ -264,6 +265,11 @@ export function buildNoodlerPostMessages(input: {
     input.allowImagePrompt
       ? "Return one JSON object with title, content, and imagePrompt. imagePrompt is required and must be a concrete visual description of one photo or image the creator would post now (subject, pose, setting, lighting, framing). Never return null or an empty imagePrompt, and never put the post text or field names in it. Do not create a poll."
       : "Return one JSON object with title and content only. Do not create a poll or image prompt.",
+    ...(input.allowImagePrompt && input.imageGenerationPrompt.trim()
+      ? [
+          `Apply these image directions when writing imagePrompt. They are instructions to you, not text to copy into imagePrompt: ${input.imageGenerationPrompt.trim()}`,
+        ]
+      : []),
     "Return JSON only. No prose outside the JSON object.",
   ].join("\n");
   const user = [
@@ -436,6 +442,7 @@ export async function generateNoodlerPost(
     conditionInstruction: conditionInstruction ?? undefined,
     project: project ? { project, posts: projectPosts } : undefined,
     allowImagePrompt: imagesEnabled,
+    imageGenerationPrompt: settings.imageGenerationPrompt,
     generationGuidance: settings.generationGuidance,
     scheduleContext,
     generatedAt: input.generatedAt ?? new Date(),

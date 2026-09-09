@@ -10,6 +10,7 @@ const root = join(import.meta.dirname, "..");
 const server = "packages/slurp/src/engine/packages/server/src";
 const images = readFileSync(join(root, server, "services/slurp/slurp-images.service.ts"), "utf8");
 const routes = readFileSync(join(root, server, "routes/slurp.routes.ts"), "utf8");
+const rewrite = readFileSync(join(root, server, "services/slurp/slurp-image-prompt-rewrite.ts"), "utf8");
 
 // --- the rewriter is fed the draft, not the rendered template -----------------------------------
 // NOODLE_IMAGE_POST documents itself as terminal ("no LLM pass runs after it") and emits bare
@@ -52,6 +53,14 @@ assert.match(images, /retryStoredPrompt\?: boolean;/u);
 // prompt had that name carefully replaced.
 assert.match(images, /const characterContext = redactIdentity\(/u);
 assert.match(images, /instructions: redactIdentity\(imagePromptInstructions\),/u);
+assert.match(images, /interpretationInstruction: input\.settings\.imagePromptInterpretation,/u);
+assert.match(images, /prompt: rawRewriteInput,/u);
+assert.match(
+  images,
+  /\(imagePromptInstructions \|\| characterContext \|\| styleGuidance\) &&\s*input\.settings\.enableImageInterpretation !== false &&\s*!skipInterpretation/u,
+  "interpretation must require rewrite context, enabled interpretation, and no reviewed override",
+);
+assert.match(rewrite, /getDefaultForAgents\(\)\) \?\? \(await connections\.getFallbackForAgents\(\)\)/u);
 
 // --- the anonymity guard is Secret-only ----------------------------------------------------------
 assert.match(images, /input\.disclosureMode === "secret"\s*\?\s*"Compose so the face cannot be identified/u);
