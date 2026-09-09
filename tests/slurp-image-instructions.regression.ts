@@ -1,7 +1,13 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { selectNoodleImageProviderPrompt } from "../packages/slurp/src/engine/packages/server/src/services/slurp/slurp-image-prompt";
+import { compileImagePrompt } from "../sources/engine/packages/shared/dist/utils/image-prompt-compiler.js";
+import { normalizeImageGenerationProfile } from "../sources/engine/packages/shared/dist/constants/image-generation-defaults.js";
+import { normalizeImageStyleProfileSettings } from "../sources/engine/packages/shared/dist/constants/image-style-profiles.js";
+import {
+  prepareNoodleImageProviderPrompt,
+  selectNoodleImageProviderPrompt,
+} from "../packages/slurp/src/engine/packages/server/src/services/slurp/slurp-image-prompt";
 
 const root = join(import.meta.dirname, "..");
 const rawPrompt = "A person reading beside a window.";
@@ -11,6 +17,33 @@ const internalContext = "User image instructions: preserve the personality notes
 const rewrittenPrompt = "A person reading beside a sunlit window, medium shot.";
 const appearancePrompt = "Appearance: green eyes, short black hair, and a blue jacket.";
 const styleGuidance = "Use a hand-painted editorial watercolor style.";
+
+const animeStyles = normalizeImageStyleProfileSettings({ defaultProfileId: "anime", profiles: [] });
+const emptyPromptPreset = normalizeImageGenerationProfile(
+  { styleProfileId: "anime", automatic1111: { promptPrefix: "", negativePromptPrefix: "" } },
+  "automatic1111",
+).profile;
+const rewrittenProviderPrompt = prepareNoodleImageProviderPrompt({
+  rewrittenPrompt: "A person reading beside a window.",
+  rawPrompt: "A person reading beside a window.",
+  compilePrompt: (prompt) =>
+    compileImagePrompt({
+      kind: "illustration",
+      prompt,
+      styleProfiles: animeStyles,
+      imageDefaults: emptyPromptPreset,
+    }).prompt,
+});
+assert.match(rewrittenProviderPrompt, /anime style/u);
+assert.match(rewrittenProviderPrompt, /visual novel CG/u);
+
+const directCompiledPrompt = compileImagePrompt({
+  kind: "illustration",
+  prompt: "A person reading beside a window.",
+  styleProfiles: animeStyles,
+  imageDefaults: emptyPromptPreset,
+});
+assert.match(directCompiledPrompt.negativePrompt, /photorealistic/u);
 
 // Interpretation success sends the rewritten visual prompt only.
 assert.equal(selectNoodleImageProviderPrompt({ rewrittenPrompt, rawPrompt }), rewrittenPrompt);
@@ -127,13 +160,13 @@ const publicImages = readFileSync(
   "utf8",
 );
 for (const source of [images, publicImages]) {
-  assert.match(source, /selectNoodleImageProviderPrompt/u);
   assert.doesNotMatch(source, /User image instructions:/u);
   assert.match(
     source,
     /privateContext: \[characterPersonality\],\s*guidanceContext: \[configuredImageInstructions, connectionImageInstructions\],/u,
     "art style and image preferences must reach the provider; personality is checked at any length",
   );
+  assert.match(source, /prepareNoodleImageProviderPrompt/u);
   // Both fallback paths — interpretation disabled, and a rejected rewrite — must still carry style.
   assert.match(source, /compiledDraft/u);
   // A reviewed prompt is recompiled so the style profile survives the review path.

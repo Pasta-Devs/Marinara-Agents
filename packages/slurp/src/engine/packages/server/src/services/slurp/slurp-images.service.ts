@@ -27,7 +27,7 @@ import { isConnectionAdmissionFailure, type ConnectionAdmissionMode } from "../g
 import { characterAppearanceFromRow, characterNoodleImageContextFromRow } from "./slurp-public-images.service.js";
 import type { NoodleImagePromptReviewItem, ReviewedNoodleImagePrompt } from "./slurp-public-images.service.js";
 import { characterNameFromRow } from "./slurp-public-support.js";
-import { selectNoodleImageProviderPrompt } from "./slurp-image-prompt.js";
+import { prepareNoodleImageProviderPrompt } from "./slurp-image-prompt.js";
 
 const REVIEWED_IMAGE_CLAIM_LEASE_MS = 2 * 60 * 1000;
 const REVIEWED_IMAGE_CLAIM_RENEW_MS = 30 * 1000;
@@ -240,9 +240,16 @@ export async function generateNoodlerPostImage(input: {
         })
       : null;
   const finalPromptBase = redactIdentity(
-    selectNoodleImageProviderPrompt({
+    prepareNoodleImageProviderPrompt({
       rewrittenPrompt,
       rawPrompt: rawProviderPrompt,
+      compilePrompt: (prompt) =>
+        compileImagePrompt({
+          kind: "illustration",
+          prompt,
+          styleProfiles: imageSettings.styleProfiles,
+          imageDefaults,
+        }).prompt,
       // Art style and the character's image habits are meant to reach the provider, so a rewrite
       // that applies them is doing its job. Personality never belongs in a visual prompt at any
       // length; the instruction fields are guidance and only leak as a copied block.

@@ -22,21 +22,43 @@ resumes where you left off.
 Since 0.4.0 the wizard's preferences drive what the world *is*, under one rule: **the LLM decides
 what exists, the algorithm decides where every tile goes.** After launch the surface makes one
 host-run structured generation call (`POST /api/game/:chatId/experience-generation`, Engine
-2.4.3-staging+) with themed guidance and a strict schema; the model returns a compact **World
-Brief** — settlement, cast with household structure, places, features — and a deterministic
-compiler builds the tile world from it (30 villagers in 6 households → ~6 houses, never 30). The
-brief is validated, repaired, and floored (`src/18-brief.js`, spec in `docs/brief-schema.md`),
+2.4.3-staging+) with bounded guidance and a strict schema; the model returns a compact **World
+Brief** — the visual kit, the settlement, a cast with household structure, places, features — and a
+deterministic compiler builds the tile world from it (30 villagers in 6 households → ~6 houses,
+never 30). The brief is validated, repaired, and floored (`src/18-brief.js`, spec in `docs/brief-schema.md`),
 then sealed into chat metadata; the compiled zones carry the prose the GM sees, metered so it
 never taxes more than one turn.
 
-**Since 0.16.1 the setup form answers nothing on your behalf.** The **Setting** box starts empty and
-shows the theme's own description as a placeholder: it used to arrive pre-filled, which meant leaving
-it alone was an instruction to build the village in that text, cast and all. Left empty it now
-composes one line from what you did give — the theme and the **Game name** — so a world called Pallet
-Town is generated as *"A cozy pixel village called Pallet Town."* and the model names the place you
-named. Your Game name is also carried into the generation call and into the world's goals and map
-root, which it never was before. Type your own Setting and it is used exactly as written, as it
-always has been.
+**Since 0.16.2 the setup form asks nothing it does not need, and answers nothing on your behalf.**
+The **Setting** box starts empty behind a question — *what the place is made of, what the weather
+does, who lives there* — and what you write there is the authority. **There is no theme dropdown any
+more:** the model picks the visual kit from your own words, as a field of the same generation call
+that was already being paid for, and when a text fits neither kit it takes the one it fights less. A
+chat that declines generation still gets a kit, derived from the same words by a deterministic word
+count rather than by a model, so declining no longer means a cozy village whatever you wrote. The
+**Game name** is a placeholder too. Leave both boxes empty and the game composes *"A cozy pixel
+village called Hearthvale."* — an empty Setting has no words to ask for anything else. Leave only
+the name empty and your text still picks the kit, whose own default name (*Meridian Base*, for the
+colony) fills the loading screen, the generation call and the world itself; a name you do type
+reaches all three. Type your own Setting and it is used exactly as written, to the first **8,000
+characters** — what lies past that stays out of the world call, a bound the launch keeps so an
+oversized nested config cannot fail the launch itself.
+
+**Three things the form stopped emitting**, all of them answers it was giving on your behalf: the
+**party list** (Game Mode's own setup owns that question — for this release a Pixelforge game starts
+with an empty party, and the picker moves to its real owner in 0.16.3), the preset **genre and story
+goals**, and the **map-guidance line**, which is deleted outright rather than rewritten: the GM is
+never to be instructed to keep the player bound to a location, and the world need not be compact or
+walkable.
+
+**And it gained a lorebook entry picker** (0.16.2). Your enabled books are listed; expand one and
+tick the entries the world-writing call should read, or take a whole book at once with *Select all*.
+Selection is **per entry, never per book** — a running count per book says what fits its own token
+budget, and the picks ride the call itself rather than your Setting text, so the two never compete
+for the same field. The server half of this lives in the Engine: on an Engine that predates it the
+picks are ignored, the world is written from your setting alone, and the package says so in the
+console rather than sealing a claim it cannot support. One interaction worth knowing while the party
+is empty: an entry filtered to *include specific characters* matches nobody and is skipped.
 
 **Pixelforge chats carry no engine HUD widgets** (roadmap S7). Game Mode's setup normally has the
 model design gauges and counters for the chat's genre, keeps feeding them to the GM, and asks you to
