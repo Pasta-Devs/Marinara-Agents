@@ -116,4 +116,33 @@ const service = readFileSync(
 );
 assert.match(service, /catch \{\s*return null;/u);
 
+// --- The world writes back ---------------------------------------------------------------
+// Every modifier the vocabulary defines is worth nothing until something real produces it.
+const storage = readFileSync("packages/slurp/src/engine/packages/server/src/services/storage/slurp.storage.ts", "utf8");
+// Money in: felt once it is worth feeling, and never able to fail the payment that caused it.
+assert.match(storage, /amount >= SLURP_PAID_WELL_COINS/u);
+assert.match(storage, /addSlurpModifier\(state, "paid_well"/u);
+// Only the crossing fires, so a met goal does not re-fire on every coin after it.
+assert.match(
+  storage,
+  /!slurpGoalProgress\(goal, current\.lifetime\)\.met && slurpGoalProgress\(goal, next\.lifetime\)\.met/u,
+);
+assert.match(storage, /addSlurpModifier\(state, "goal_hit"/u);
+// Publishing costs effort and buys exposure, with a locked post further out than a public one.
+assert.match(
+  storage,
+  /post\.access === "locked" \? SLURP_EXPOSURE_PER_POST\.locked : SLURP_EXPOSURE_PER_POST\.public/u,
+);
+assert.match(storage, /addSlurpModifier\(state, "just_posted"/u);
+
+// The audience reacting reaches the Creator instead of stopping at the counters.
+const world = readFileSync(
+  "packages/slurp/src/engine/packages/server/src/services/slurp/slurp-world.operation.ts",
+  "utf8",
+);
+assert.match(world, /addCreatorModifier\(creatorAccountId, "post_landed"/u);
+assert.match(world, /weight < SLURP_POST_LANDED_REACTIONS/u);
+// A follow moves the funnel where a like does not, so it is not worth the same.
+assert.match(world, /action\.kind === "follow" \? 3 : 1/u);
+
 console.log("slurp post stance regression passed");

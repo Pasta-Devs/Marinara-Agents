@@ -171,6 +171,32 @@ export const SLURP_MODIFIERS: Record<
   },
 };
 
+/**
+ * Coins arriving in one go below which nothing is felt. A one-coin tip is not a good day.
+ *
+ * The threshold matters more than the number: without one, every unlock on the platform would
+ * refresh `paid_well` and a Creator would be permanently pleased about money.
+ */
+export const SLURP_PAID_WELL_COINS = 5;
+
+/**
+ * What publishing costs in privacy, before the access level is taken into account.
+ *
+ * Exposure is the only dial the world writes rather than a fan, and this is the only thing that
+ * writes it. A locked post is further out than a public one — it is the one she made for people
+ * who paid to see it — so it carries the larger share.
+ */
+export const SLURP_EXPOSURE_PER_POST = { public: 8, locked: 16 } as const;
+
+/**
+ * Reactions inside one world pulse that mean a post has landed.
+ *
+ * A follow is the rare one that actually moves the funnel, per `slurp-world-pulse.ts`, so it
+ * counts for more than a like. This is deliberately about one tick rather than a rolling average:
+ * the feeling being modelled is noticing your notifications, not auditing your analytics.
+ */
+export const SLURP_POST_LANDED_REACTIONS = 5;
+
 /** Most that are kept at once. Older ones fall off first: a person is not ten things at a time. */
 export const SLURP_MODIFIER_LIMIT = 4;
 

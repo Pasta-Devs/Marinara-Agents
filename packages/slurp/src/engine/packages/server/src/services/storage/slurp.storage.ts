@@ -71,7 +71,7 @@ import {
   type SlurpWallet,
   type SlurpWalletSpendKind,
 } from "../slurp/slurp-wallet.js";
-import { openSlurpGoal, readSlurpGoal, slurpGoalKey, type SlurpGoal } from "../slurp/slurp-goal.js";
+import { openSlurpGoal, readSlurpGoal, slurpGoalKey, slurpGoalProgress, type SlurpGoal } from "../slurp/slurp-goal.js";
 import {
   activeSlurpProjects,
   makeSlurpProject,
@@ -190,6 +190,8 @@ import {
   decaySlurpCreatorState,
   readSlurpCreatorState,
   SLURP_ENERGY_COST,
+  SLURP_EXPOSURE_PER_POST,
+  SLURP_PAID_WELL_COINS,
   type SlurpCreatorState,
   type SlurpCreatorStateSignal,
   type SlurpModifierKind,
@@ -1390,6 +1392,23 @@ export function createSlurpStorage(db: DB) {
     await settingsStore.set(slurpEarningsKey(creatorAccountId), JSON.stringify(earnings));
     return earnings;
   };
+  /**
+   * Move one Creator's state from inside the storage module.
+   *
+   * The public methods below go through `getCreatorState`, which also decays and writes back. The
+   * internal callers here run inside financial and post paths where that extra write is noise, so
+   * they read, mutate and store in one step. `readSlurpCreatorState` already drops expired
+   * modifiers on the way through, so neither path can accumulate stale ones.
+   */
+  const mutateCreatorStateNow = async (
+    creatorAccountId: string,
+    mutate: (state: SlurpCreatorState) => SlurpCreatorState,
+  ): Promise<void> => {
+    const key = `${SLURP_CREATOR_STATE_KEY}.${creatorAccountId}`;
+    const state = readSlurpCreatorState(await settingsStore.get(key), new Date().toISOString());
+    await settingsStore.set(key, JSON.stringify(mutate(state)));
+  };
+
   const creditEarningsNow = async (
     creatorAccountId: string,
     kind: Exclude<SlurpEarningsEntryKind, "payout" | "reversal">,
@@ -1398,7 +1417,23 @@ export function createSlurpStorage(db: DB) {
   ) => {
     const current = readSlurpEarnings(await settingsStore.get(slurpEarningsKey(creatorAccountId)));
     const next = earnCreatorIncome(current, kind, amount, new Date(), note);
-    if (next !== current) await writeEarnings(creatorAccountId, next);
+    if (next === current) return;
+    await writeEarnings(creatorAccountId, next);
+    // Money landing is the loudest thing the world does to a Creator, and until now it changed
+    // her ledger and nothing else. Never allowed to fail the payment that caused it.
+    try {
+      if (amount >= SLURP_PAID_WELL_COINS) {
+        await mutateCreatorStateNow(creatorAccountId, (state) => addSlurpModifier(state, "paid_well", note ?? kind));
+      }
+      const goal = readSlurpGoal(await settingsStore.get(slurpGoalKey(creatorAccountId)));
+      // Only the crossing counts. Comparing the two ledgers is what keeps a met goal from
+      // re-firing on every coin that arrives after it.
+      if (goal && !slurpGoalProgress(goal, current.lifetime).met && slurpGoalProgress(goal, next.lifetime).met) {
+        await mutateCreatorStateNow(creatorAccountId, (state) => addSlurpModifier(state, "goal_hit", goal.label));
+      }
+    } catch (error) {
+      logger.warn(error, "[slurp] Could not record how earnings felt for %s", creatorAccountId);
+    }
   };
   const getWalletNow = async (viewerAccountId: string): Promise<SlurpWallet> => {
     const settings = normalizeSlurpSettings(await settingsStore.get(SLURP_SETTINGS_KEY));
@@ -4038,9 +4073,15 @@ export function createSlurpStorage(db: DB) {
       if (created) {
         for (const post of created) {
           try {
-            await this.adjustCreatorState(post.authorAccountId, { energy: -SLURP_ENERGY_COST.post });
+            await this.adjustCreatorState(post.authorAccountId, {
+              energy: -SLURP_ENERGY_COST.post,
+              exposure: post.access === "locked" ? SLURP_EXPOSURE_PER_POST.locked : SLURP_EXPOSURE_PER_POST.public,
+            });
+            await mutateCreatorStateNow(post.authorAccountId, (state) =>
+              addSlurpModifier(state, "just_posted", post.id),
+            );
           } catch (error) {
-            logger.warn(error, "[slurp] Could not charge post energy for %s", post.authorAccountId);
+            logger.warn(error, "[slurp] Could not record the cost of a post for %s", post.authorAccountId);
           }
         }
       }

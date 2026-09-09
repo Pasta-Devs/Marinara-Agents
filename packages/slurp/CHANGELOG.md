@@ -1,5 +1,14 @@
 # Slurp release notes
 
+## 1.2.60 — 2026-09-09
+
+- What happens on the platform now reaches the Creator it happens to. Publishing, being paid, reaching a goal and an audience reacting all change how she is, and that then shows in what she posts and how she writes back.
+- Publishing makes a Creator feel exposed for a while, and a locked post more than a public one.
+- Money arriving takes the edge off her day, once it is enough money to notice.
+- Reaching a tip goal is felt, and only when it is actually reached rather than on every coin after it.
+- A post the audience reacts to lands, and a Creator notices. A follow counts for more than a like.
+- None of this can fail the thing that caused it: a payment, a post and a reaction all still go through if the feeling cannot be recorded.
+
 ## 1.2.59 — 2026-09-09
 
 - What a Creator posts now depends on how she actually is. Until now her mood, her energy, her day and what she published last night reached her direct messages and stopped there, so the feed was written by somebody with no memory of any of it.

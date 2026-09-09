@@ -41,6 +41,7 @@ import {
   type SlurpWorldAction,
   type SlurpWorldCreator,
 } from "./slurp-world.js";
+import { SLURP_POST_LANDED_REACTIONS } from "./slurp-creator-state.js";
 import { planSlurpWorldPulse, type SlurpPulseAction } from "./slurp-world-pulse.js";
 
 const TICK_KEY = "slurp.world.tick";
@@ -342,11 +343,29 @@ export async function advanceSlurpWorld(db: DB, until = new Date()): Promise<Slu
       ),
     });
     let pulsed = 0;
+    // A follow is the rare one that actually moves the funnel, so it is worth more than a like.
+    const landedBy = new Map<string, number>();
     for (const action of pulse) {
       try {
-        if (await applyPulse(db, action, settings.audienceReactionBank)) pulsed += 1;
+        if (await applyPulse(db, action, settings.audienceReactionBank)) {
+          pulsed += 1;
+          const weight = action.kind === "follow" ? 3 : 1;
+          landedBy.set(action.creatorAccountId, (landedBy.get(action.creatorAccountId) ?? 0) + weight);
+        }
       } catch (error) {
         logger.warn(error, "[slurp-world] Could not apply a %s pulse", action.kind);
+      }
+    }
+    // The audience reacting is the only channel the world had into a Creator that she could
+    // actually feel, and it went straight into the counters without touching her. This is not a
+    // rolling average on purpose: the thing being modelled is noticing your notifications.
+    const slurpForPulse = createSlurpStorage(db);
+    for (const [creatorAccountId, weight] of landedBy) {
+      if (weight < SLURP_POST_LANDED_REACTIONS) continue;
+      try {
+        await slurpForPulse.addCreatorModifier(creatorAccountId, "post_landed", `${weight} reactions`);
+      } catch (error) {
+        logger.warn(error, "[slurp-world] Could not record a landed post for %s", creatorAccountId);
       }
     }
     // Only spend the pulse clock when the pulse actually bought something. An empty plan leaves

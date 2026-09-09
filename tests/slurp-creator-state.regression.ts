@@ -175,7 +175,7 @@ const slurpStorage = readFileSync(
   "utf8",
 );
 assert.match(slurpStorage, /async adjustCreatorState\(/u);
-assert.match(slurpStorage, /adjustCreatorState\(post\.authorAccountId, \{ energy: -SLURP_ENERGY_COST\.post \}\)/u);
+assert.match(slurpStorage, /adjustCreatorState\(post\.authorAccountId, \{\s*energy: -SLURP_ENERGY_COST\.post,/u);
 // Charged after the transaction resolves: a stored post must never fail over a settings write.
 assert.match(slurpStorage, /const created = await db\.transaction\(/u);
 
