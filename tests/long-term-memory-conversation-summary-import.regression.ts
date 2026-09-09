@@ -192,6 +192,7 @@ async function main() {
         ["chat-conversation:day:27.07.2026", "chat-conversation:week:27.07.2026", "chat-conversation:day:02.08.2026"],
         "day and week DD.MM.YYYY keys must share one chronological order",
       );
+      assert.ok(candidates.samples.length > 0);
       assert.ok(candidates.samples.every((candidate) => candidate.importMode === "conversation"));
       const limitedCandidates = await previewPackageInterop(
         { ...request, limit: 2 },
@@ -351,6 +352,7 @@ async function main() {
           join(dataDir, "long-term-memory"),
           new AbortController().signal,
         );
+        assert.ok(nativeImport.imported.length > 0);
         assert.ok(nativeImport.imported.every((item) => item.note.modes[0] === expectedMode));
       }
 
@@ -378,6 +380,7 @@ async function main() {
         new AbortController().signal,
       );
       assert.equal(imported.counts.sourceNotesWritten, 3);
+      assert.ok(imported.imported.length > 0);
       assert.ok(imported.imported.every((item) => item.created));
       const storage = new LongTermMemoryStorage(join(dataDir, "long-term-memory"));
       const notes = await storage.listNotes({ type: "source" });

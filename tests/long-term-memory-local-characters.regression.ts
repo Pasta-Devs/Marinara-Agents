@@ -89,6 +89,7 @@ async function main() {
     mode: "roleplay",
     createdAt: timestamp,
   });
+  assert.ok(compiled.mutations.length > 0);
   assert.equal(
     compiled.mutations.every((mutation) => mutation.risk === "medium"),
     true,
