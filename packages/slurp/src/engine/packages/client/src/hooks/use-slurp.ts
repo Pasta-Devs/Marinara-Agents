@@ -2224,7 +2224,7 @@ export function useSlurpThread(threadId: string | null, personaId: string | null
         relationship?: SlurpThreadRelationship;
       }>(`/slurp/messages/threads/${encodeURIComponent(threadId!)}?personaId=${encodeURIComponent(personaId!)}`),
     enabled: Boolean(threadId && personaId),
-    refetchInterval: threadId && personaId ? 30_000 : false,
+    refetchInterval: threadId && personaId ? 60_000 : false,
     refetchIntervalInBackground: false,
   });
 }
@@ -2267,7 +2267,7 @@ export function useSlurpCompose(creatorAccountId: string | null, personaId: stri
     enabled: Boolean(creatorAccountId && personaId),
     // Same poll as `useSlurpThread`. Without it a chat opened from a profile never saw the
     // queued off-hours reply, which is most of what the pacing model exists to produce.
-    refetchInterval: creatorAccountId && personaId ? 30_000 : false,
+    refetchInterval: creatorAccountId && personaId ? 60_000 : false,
     refetchIntervalInBackground: false,
   });
 }

@@ -24,7 +24,6 @@ import { useSlurpMediaSrc } from "../../hooks/use-slurp-media-src";
 import { getApiErrorMessage } from "../../lib/api-client";
 import { cn } from "../../lib/utils";
 import { Avatar } from "./SlurpShell";
-import { slurpCreatorStatus } from "./slurp-creator-status";
 import { SlurpEmptyArtwork } from "./SlurpEmptyArtwork";
 import { formatTime } from "./SlurpDateTime";
 import { SlurpCoin, SlurpCoinAmount, SlurpCoinBurst } from "./SlurpCoin";
@@ -510,18 +509,6 @@ function SlurpThreadView({
     .join("|");
   const subscribed = thread?.subscribed ?? threadQuery.data?.subscribed ?? false;
   const headerAccount = ownsCreator ? counterpart : creator;
-  // Only meaningful for the Creator side of the conversation. Looking at your own inbox as the
-  // Creator, the counterpart is a fan, and a fan has no posting schedule to read a status from.
-  const creatorStatus = ownsCreator
-    ? null
-    : slurpCreatorStatus({
-        // A live conversation is presence. A stale post is not. The schedule only overrides this
-        // when it explicitly says the Creator is away.
-        lastActiveAt: threadQuery.data?.creatorLastMessageAt ?? threadQuery.data?.creatorLastActiveAt ?? null,
-        autoPostingEnabled: threadQuery.data?.creatorAutoPosting ?? false,
-        scheduledOnline: threadQuery.data?.creatorAvailability?.online,
-      });
-  const creatorActivity = threadQuery.data?.creatorAvailability?.activity;
   const headerProfileId = ownsCreator ? thread?.viewerAccountId : targetCreatorAccountId;
   const busy = send.isPending || tip.isPending || creatorReply.isPending || draftReply.isPending;
   const promptDebug = useSlurpMessagePrompt(threadId, personaId, debugOpen);
@@ -559,9 +546,14 @@ function SlurpThreadView({
     setCustomTipNote("");
   }, [threadId, creatorAccountId]);
 
-  // Follow the conversation down as it grows, the way every chat surface does.
+  const messageScrollRef = useRef<HTMLDivElement | null>(null);
+  // State refreshes must never move the message viewport. New content only scrolls when the user
+  // was already reading the end of the conversation.
   useEffect(() => {
-    bottomRef.current?.scrollIntoView({ block: "end" });
+    const container = messageScrollRef.current;
+    if (!container || !bottomRef.current) return;
+    const distanceFromBottom = container.scrollHeight - container.scrollTop - container.clientHeight;
+    if (distanceFromBottom <= 96) bottomRef.current.scrollIntoView({ block: "end" });
   }, [commissionTimelineKey, messages.length, typing, pending]);
 
   /**
@@ -691,24 +683,6 @@ function SlurpThreadView({
               <span className="truncate text-[0.7rem] text-[var(--muted-foreground)]">
                 @{headerAccount?.handle ?? ""}
               </span>
-              {/* The same online/away/offline rule the profile header uses. A player deciding
-                  whether to wait for an answer was the one who most needed it and never had it. */}
-              {creatorStatus && (
-                <span className="flex shrink-0 items-center gap-1 text-[0.7rem] text-[var(--muted-foreground)]">
-                  <span
-                    aria-hidden
-                    className={`h-1.5 w-1.5 rounded-full ${
-                      creatorStatus === "online"
-                        ? "bg-emerald-500"
-                        : creatorStatus === "away"
-                          ? "bg-amber-500"
-                          : "bg-zinc-500"
-                    }`}
-                  />
-                  {creatorActivity ||
-                    localizeUi(`ui.slurp.profile.status.${creatorStatus}`, { defaultValue: creatorStatus })}
-                </span>
-              )}
               {/* Rapport decides how fast and how warmly a Creator answers. The player felt it and
                   could never see it, so the one number the whole thread turns on was invisible. */}
               {thread && <SlurpRapportBadge rapport={thread.rapport} ownsCreator={ownsCreator} />}
@@ -783,7 +757,7 @@ function SlurpThreadView({
         </div>
       )}
 
-      <div className="min-h-0 min-w-0 flex-1 overflow-x-hidden overflow-y-auto px-3 py-4">
+      <div ref={messageScrollRef} className="min-h-0 min-w-0 flex-1 overflow-x-hidden overflow-y-auto px-3 py-4">
         <div className="mx-auto flex min-w-0 w-full max-w-2xl flex-col gap-3">
           {messages.length === 0 && messaging && (
             <p className="mx-auto max-w-sm rounded-xl bg-[var(--slurp-surface)] px-4 py-3 text-center text-xs text-[var(--muted-foreground)] ring-1 ring-inset ring-[var(--noodle-divider)]">
@@ -1998,6 +1972,7 @@ function CommissionRow({
  * looking at their own business, so they get every figure the simulation used.
  */
 function SlurpRelationshipPanel({ relationship }: { relationship: NonNullable<SlurpThreadRelationship> }) {
+  const [advanced, setAdvanced] = useState(false);
   const cooling = relationship.coolUntil && relationship.coolUntil > new Date().toISOString();
   const mood = "mood" in relationship ? relationship.mood : null;
   const moodLabel =
@@ -2088,9 +2063,18 @@ function SlurpRelationshipPanel({ relationship }: { relationship: NonNullable<Sl
         <div className="flex items-start justify-between gap-3">
           <div>
             <h2 className="text-sm font-bold">Conversation overview</h2>
-            <p className="mt-0.5 text-[0.68rem] text-[var(--muted-foreground)]">Updated just now</p>
+            <p className="mt-0.5 text-[0.68rem] text-[var(--muted-foreground)]">
+              State changes appear here without moving the chat.
+            </p>
           </div>
-          <Activity size={16} className="mt-0.5 text-[var(--noodle-accent)]" aria-hidden="true" />
+          <button
+            type="button"
+            aria-pressed={advanced}
+            onClick={() => setAdvanced((open) => !open)}
+            className="inline-flex min-h-9 shrink-0 items-center gap-1 rounded-lg px-2 text-[0.7rem] font-bold text-[var(--noodle-accent)] ring-1 ring-inset ring-[var(--noodle-accent)]/30 hover:bg-[var(--noodle-accent)]/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--slurp-focus)]"
+          >
+            <Activity size={14} aria-hidden="true" /> {advanced ? "Basic" : "Advanced"}
+          </button>
         </div>
         <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-4">
           <InfoChip label="Emotion" value={humanize(creatorState.emotion)} />
@@ -2101,7 +2085,7 @@ function SlurpRelationshipPanel({ relationship }: { relationship: NonNullable<Sl
       </header>
       <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-3 pb-4 [scrollbar-gutter:stable]">
         <div className="flex flex-col">
-          <Section icon={Sparkles} title="Current state" summary={stateSummary} open>
+          <Section icon={Sparkles} title="Current situation" summary={conversationSummary} open>
             <div className="grid grid-cols-2 gap-2">
               <InfoChip
                 label="Emotion"
@@ -2114,36 +2098,52 @@ function SlurpRelationshipPanel({ relationship }: { relationship: NonNullable<Sl
                 description="How strongly the feeling is expressed."
               />
               <InfoChip
-                label="Intent"
-                value={humanize(creatorState.intent)}
-                description="What the creator is trying to do now."
+                label="Mood"
+                value={humanize(moodLabel ?? "neutral")}
+                description="How the conversation feels right now."
               />
               <InfoChip
-                label="Strategy"
-                value={humanize(creatorState.strategy)}
-                description="The creator's current platform approach."
+                label="Stance"
+                value={humanize(threadState.stance)}
+                description="How open or guarded the creator is with this fan."
+              />
+            </div>
+            <InfoChip
+              label="Adult interaction"
+              value={humanize(threadState.adultLevel)}
+              description="The current level of adult conversation available here."
+            />
+            <InfoChip
+              label="Conversation desire"
+              value={humanize(band(threadState.threadDesire))}
+              description="How much the creator wants to continue this conversation."
+            />
+          </Section>
+          <Section icon={MessageCircle} title="Creator now" summary={stateSummary} open>
+            <div className="grid grid-cols-2 gap-2">
+              <InfoChip
+                label="Intent"
+                value={humanize(creatorState.intent)}
+                description="The creator's current direction for this interaction."
+              />
+              <InfoChip
+                label="Need"
+                value={creatorState.needs.length ? creatorState.needs.map(humanize).join(", ") : "None recorded"}
+                description="A current need that may affect behavior."
               />
             </div>
             <StateMeter
               label="Arousal"
               value={creatorState.arousal}
               tone="amber"
-              description="Sexual attention. It does not grant permission."
+              description="Current sexual attention. It does not grant permission."
             />
-            <StateMeter label="Energy" value={creatorState.energy} />
-            {creatorState.needs.length > 0 && <InfoChip label="Needs" value={creatorState.needs.join(", ")} />}
-          </Section>
-          <Section icon={MessageCircle} title="Conversation" summary={conversationSummary} open>
-            <div className="grid grid-cols-2 gap-2">
-              <InfoChip label="Stance" value={humanize(threadState.stance)} />
-              <InfoChip label="Adult level" value={humanize(threadState.adultLevel)} />
-            </div>
-            {mood !== null && <StateMeter label="Conversation mood" value={moodPercent} />}
-            <div className="grid grid-cols-2 gap-2">
-              {(["familiarity", "interest", "threadDesire"] as const).map((key) => (
-                <InfoChip key={key} label={humanize(key)} value={humanize(band(threadState[key]))} />
-              ))}
-            </div>
+            <StateMeter
+              label="Energy"
+              value={creatorState.energy}
+              description="Available effort for replies and media."
+            />
+            <StateMeter label="Emotion intensity" value={creatorState.emotionIntensity} />
           </Section>
           <Section icon={ShieldCheck} title="Boundaries" summary={boundarySummary} open={boundary}>
             <div className="grid grid-cols-2 gap-2">
@@ -2157,7 +2157,11 @@ function SlurpRelationshipPanel({ relationship }: { relationship: NonNullable<Sl
                 value={threadState.respect}
                 tone={threadState.respect < 36 ? "red" : "accent"}
               />
-              <StateMeter label="Emotional trust" value={threadState.emotionalTrust} />
+              <StateMeter
+                label="Emotional trust"
+                value={threadState.emotionalTrust}
+                description="Trust built through personal conversation."
+              />
               <StateMeter label="Commercial trust" value={threadState.commercialTrust} />
               <StateMeter
                 label="Resentment"
@@ -2170,6 +2174,58 @@ function SlurpRelationshipPanel({ relationship }: { relationship: NonNullable<Sl
               <InfoChip label="Cool off" value={cooling ? "Active" : "None"} />
             </div>
           </Section>
+          <Section icon={Activity} title="Context" summary={contextSummary}>
+            <div className="grid grid-cols-2 gap-2">
+              <InfoChip
+                label="Availability"
+                value={relationship.availability.online ? "Available" : "Away"}
+                description="Whether the creator is available now."
+              />
+              <InfoChip label="Activity" value={relationship.availability.activity ?? "No current activity"} />
+              <InfoChip
+                label="Images"
+                value={relationship.imageMode === "none" ? "Not now" : humanize(relationship.imageMode)}
+              />
+              <InfoChip label="Day vibe" value={relationship.dayVibe ?? "Not recorded"} />
+            </div>
+            {cooling && (
+              <p className="font-semibold text-amber-600 dark:text-amber-400">Taking space from this conversation.</p>
+            )}
+          </Section>
+          {advanced && (
+            <Section icon={Activity} title="Advanced state" summary="Exact values and model inputs" open>
+              <p className="text-[0.68rem] text-[var(--muted-foreground)]">
+                Advanced state is diagnostic detail. These values guide behavior, but no single value decides the
+                conversation.
+              </p>
+              <div className="grid grid-cols-2 gap-2">
+                {(
+                  [
+                    "familiarity",
+                    "interest",
+                    "sexualComfort",
+                    "commercialTrust",
+                    "emotionalTrust",
+                    "respect",
+                    "resentment",
+                    "threadDesire",
+                  ] as const
+                ).map((key) => (
+                  <InfoChip
+                    key={key}
+                    label={humanize(key === "threadDesire" ? "conversation desire" : key)}
+                    value={`${threadState[key]}/100`}
+                  />
+                ))}
+              </div>
+              <InfoChip
+                label="Platform strategy"
+                value={humanize(creatorState.strategy)}
+                description="The creator's broader platform approach."
+              />
+              <InfoChip label="State updated" value={creatorState.updatedAt} />
+            </Section>
+          )}
           <Section
             icon={Brain}
             title="Memories"
@@ -2188,25 +2244,6 @@ function SlurpRelationshipPanel({ relationship }: { relationship: NonNullable<Sl
                 value={longTermNotes.length ? longTermNotes.map((note) => note.text).join("; ") : "None yet"}
               />
             </div>
-          </Section>
-          <Section icon={Activity} title="Context" summary={contextSummary}>
-            <div className="grid grid-cols-2 gap-2">
-              <InfoChip label="Availability" value={relationship.availability.online ? "Available" : "Away"} />
-              <InfoChip label="Audience tone" value={humanize(relationship.audienceTone)} />
-              <InfoChip
-                label="Images"
-                value={relationship.imageMode === "none" ? "Not now" : humanize(relationship.imageMode)}
-              />
-              <InfoChip label="Day vibe" value={relationship.dayVibe ?? "Not recorded"} />
-            </div>
-            <p className="text-[var(--muted-foreground)]">
-              <span className="font-bold text-[var(--foreground)]">
-                {relationship.availability.online ? "Available" : "Away"}
-              </span>
-              {relationship.availability.activity ? ` · ${relationship.availability.activity}` : ""}
-            </p>
-            {relationship.dayVibe && <p className="text-[var(--muted-foreground)]">{relationship.dayVibe}</p>}
-            {cooling && <p className="font-semibold text-amber-600 dark:text-amber-400">Not talking right now.</p>}
           </Section>
           <Section
             icon={BriefcaseBusiness}
@@ -2232,9 +2269,6 @@ function SlurpRelationshipPanel({ relationship }: { relationship: NonNullable<Sl
             )}
           </Section>
         </div>
-      </div>
-      <div className="sr-only" aria-live="polite">
-        State updated {creatorState.updatedAt}
       </div>
     </div>
   );

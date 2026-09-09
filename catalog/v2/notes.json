@@ -36,6 +36,12 @@
     "slurp": {
       "versions": [
         {
+          "version": "1.2.52",
+          "date": "2026-09-09",
+          "notes": "- The conversation overview now starts with a focused base view and an optional Advanced view for detailed simulation values.\n- Creator availability and activity moved from the chat header into the overview Context section.\n- State refreshes no longer announce every timestamp or move the message viewport, and visible thread polling now runs once per minute.\n- Overview fields now explain arousal, energy, intent, stance, adult interaction, and conversation desire.",
+          "highlight": false
+        },
+        {
           "version": "1.2.51",
           "date": "2026-09-09",
           "notes": "- Creators can now run projects: a titled thread with free-text direction and an optional list of chapters.\n- Automatic posts continue a project on part of the posting rotation, so several projects and ordinary posts interleave in one feed.\n- A project post is never also a Story, and a post you direct yourself ignores the project.\n- The Studio shows each Creator's projects with their chapter and post count, and can pause, resume, finish, or delete one.\n- Deleting a project keeps the posts it produced, and editing a project does not change what published posts were about.\n- A new Projects setting controls how much of a Creator's automatic posting continues a project. Creators with no project are unaffected.",
@@ -147,12 +153,6 @@
           "version": "1.2.33",
           "date": "2026-09-08",
           "notes": "- Commission cards now follow the chat timeline and move to the latest commission event when they update.\n- The chat scrolls to the current bottom after a commission state change.",
-          "highlight": false
-        },
-        {
-          "version": "1.2.32",
-          "date": "2026-09-08",
-          "notes": "- Commission requests now wait for Creator review instead of receiving an instant quote.\n- Creators can revise an unpaid quote or decline a request before payment.\n- Commission payment now shows loading, success, balance, and error feedback.\n- Delivery cards show image loading feedback while protected artwork is fetched.",
           "highlight": false
         }
       ]

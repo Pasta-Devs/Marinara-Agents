@@ -8,6 +8,7 @@ const storage = readFileSync(
   "utf8",
 );
 const view = readFileSync("packages/slurp/src/engine/packages/client/src/components/slurp/SlurpMessages.tsx", "utf8");
+const hook = readFileSync("packages/slurp/src/engine/packages/client/src/hooks/use-slurp.ts", "utf8");
 const locales = JSON.parse(
   readFileSync("packages/slurp/src/engine/packages/client/src/localization/locales/en.json", "utf8"),
 ) as Record<string, string>;
@@ -38,7 +39,7 @@ assert.match(routes, /threadState: thread\.threadState/u);
 assert.match(view, /function SlurpRelationshipPanel\(/u);
 assert.doesNotMatch(view, /relationship\.side === "viewer" \?/u);
 assert.match(view, /moodLabel/u);
-for (const section of ["Current state", "Conversation", "Boundaries", "Memories", "Context", "Business"]) {
+for (const section of ["Current situation", "Creator now", "Boundaries", "Memories", "Context", "Business"]) {
   assert.match(view, new RegExp(`title=\"${section}\"`, "u"));
 }
 for (const field of [
@@ -62,6 +63,13 @@ assert.match(view, /Working memory/u);
 assert.match(view, /Long-term memory/u);
 // Opening a different conversation must not inherit the last one's open panel.
 assert.match(view, /setInfoOpen\(false\);[\s\S]{0,120}setDebugOpen\(false\)/u);
+assert.match(view, /Conversation overview/u);
+assert.match(view, /aria-pressed=\{advanced\}/u);
+assert.match(view, /if \(distanceFromBottom <= 96\)/u);
+assert.doesNotMatch(view, /State updated .*aria-live/u);
+assert.doesNotMatch(view, /creatorStatus &&/u);
+assert.match(hook, /refetchInterval: threadId && personaId \? 60_000 : false/u);
+assert.match(hook, /refetchInterval: creatorAccountId && personaId \? 60_000 : false/u);
 
 // The mobile conversation must contain its header and commission controls instead of widening the viewport.
 assert.match(view, /min-w-0 min-w-0|max-w-full flex-1 items-center gap-2 overflow-hidden/u);

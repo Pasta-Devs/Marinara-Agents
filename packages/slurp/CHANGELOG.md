@@ -1,5 +1,12 @@
 # Slurp release notes
 
+## 1.2.52 — 2026-09-09
+
+- The conversation overview now starts with a focused base view and an optional Advanced view for detailed simulation values.
+- Creator availability and activity moved from the chat header into the overview Context section.
+- State refreshes no longer announce every timestamp or move the message viewport, and visible thread polling now runs once per minute.
+- Overview fields now explain arousal, energy, intent, stance, adult interaction, and conversation desire.
+
 ## 1.2.51 — 2026-09-09
 
 - Creators can now run projects: a titled thread with free-text direction and an optional list of chapters.
