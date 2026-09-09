@@ -1,5 +1,11 @@
 # Slurp release notes
 
+## 1.2.46 — 2026-09-09
+
+- Slurp message details now show creator state, arousal, emotion, energy, intent, strategy, needs, and conversation boundaries.
+- The state panel now uses collapsible sections and its own scroll area so the chat remains usable on small screens.
+- State snapshots are returned to both sides of a conversation and refresh with the existing message polling and mutations.
+
 ## 1.2.45 — 2026-09-09
 
 - Slurp messages, replies, and posts now receive the current character canon.

@@ -316,6 +316,8 @@ export async function slurpMessageRoutes(app: FastifyInstance) {
             : thread.mood >= 20
               ? "friendly"
               : "none",
+        creatorState: await slurp.getCreatorState(thread.creatorAccountId),
+        threadState: thread.threadState,
       },
     };
   });
@@ -362,6 +364,8 @@ export async function slurpMessageRoutes(app: FastifyInstance) {
                 : thread.mood >= 20
                   ? "friendly"
                   : "none",
+            creatorState: await slurp.getCreatorState(thread.creatorAccountId),
+            threadState: thread.threadState,
           }
         : undefined,
       // The client shows the gate before the first message is written, so it must know the

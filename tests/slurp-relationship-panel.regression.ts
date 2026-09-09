@@ -1,5 +1,4 @@
-// Two panels, not one. The fan gets words; the Creator's operator gets the numbers. The split is
-// enforced on the server, because a client-side split leaks the moment a new endpoint forgets it.
+// The relationship panel shows the complete simulation state to both sides of the conversation.
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 
@@ -32,17 +31,34 @@ assert.match(routes, /relationship: \{[\s\S]{0,500}?contributions: thread\.rappo
 assert.match(routes, /side,\s*tier: thread\.rapport\.tier,[\s\S]{0,500}?mood: thread\.mood/u);
 assert.match(routes, /spentCoins: await messages\.spentWithCreator/u);
 assert.match(routes, /score: thread\.rapport\.score/u);
+assert.match(routes, /creatorState: await slurp\.getCreatorState\(thread\.creatorAccountId\)/u);
+assert.match(routes, /threadState: thread\.threadState/u);
 
 // The client renders one complete panel for both sides.
 assert.match(view, /function SlurpRelationshipPanel\(/u);
 assert.doesNotMatch(view, /relationship\.side === "viewer" \?/u);
 assert.match(view, /moodLabel/u);
+for (const section of ["Current state", "Conversation", "Boundaries", "Context and business"]) {
+  assert.match(view, new RegExp(`title=\"${section}\"`, "u"));
+}
+for (const field of [
+  "creatorState.arousal",
+  "creatorState.emotion",
+  "creatorState.energy",
+  "creatorState.intent",
+  "creatorState.strategy",
+  "threadState.sexualComfort",
+  "threadState.adultLevel",
+]) {
+  assert.match(view, new RegExp(field.replace(".", "\\."), "u"));
+}
+assert.match(view, /max-h-\[min\(70vh,38rem\)\].*overflow-y-auto/u);
+assert.match(view, /State updated/u);
 assert.match(view, /relationship\.dayVibe/u);
 assert.match(view, /relationship\.imageMode/u);
 assert.match(view, /InfoChip/u);
 assert.match(view, /aria-expanded=\{infoOpen\}/u);
-assert.match(view, /relationshipWorkingNotes/u);
-assert.match(view, /relationshipLongTermNotes/u);
+assert.match(view, /Saved fan notes/u);
 // Opening a different conversation must not inherit the last one's open panel.
 assert.match(view, /setInfoOpen\(false\);[\s\S]{0,120}setDebugOpen\(false\)/u);
 

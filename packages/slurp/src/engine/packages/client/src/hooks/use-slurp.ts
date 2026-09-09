@@ -2024,6 +2024,29 @@ export type SlurpThreadRelationship = {
   availability: { online: boolean; activity: string | null; minutesUntilOnline: number | null };
   audienceTone: "warm" | "mixed" | "unfiltered";
   imageMode: "friendly" | "hostile" | "none";
+  creatorState: {
+    emotion: string;
+    emotionIntensity: number;
+    energy: number;
+    arousal: number;
+    needs: string[];
+    intent: string;
+    strategy: string;
+    updatedAt: string;
+  };
+  threadState: {
+    stance: string;
+    familiarity: number;
+    interest: number;
+    sexualComfort: number;
+    commercialTrust: number;
+    emotionalTrust: number;
+    respect: number;
+    resentment: number;
+    threadDesire: number;
+    adultLevel: string;
+    updatedAt: string;
+  };
 };
 
 export type SlurpPromptDebug = {
