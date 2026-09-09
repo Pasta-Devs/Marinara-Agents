@@ -1922,6 +1922,17 @@ export function useUpdateNoodlerScheduleSlot() {
   });
 }
 
+export function useRefreshNoodlerConversationSchedule() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (accountId: string) =>
+      api.post<{ state: "active"; blocks: number }>(
+        `/slurp/noodler/accounts/${encodeURIComponent(accountId)}/conversation-schedule/refresh`,
+      ),
+    onSuccess: () => qc.invalidateQueries({ queryKey: noodleKeys.noodlerAccounts() }),
+  });
+}
+
 export function useRunNoodlerAutoPostNow() {
   const qc = useQueryClient();
   return useMutation({

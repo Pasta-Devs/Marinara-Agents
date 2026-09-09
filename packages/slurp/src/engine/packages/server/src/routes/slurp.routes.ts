@@ -142,6 +142,7 @@ import { getErrorMessage, resolvePersonaAccount } from "../services/slurp/slurp-
 import { generateNoodlerCreatorArtwork } from "../services/slurp/slurp-artwork.operation.js";
 import { slurpMessageRoutes } from "./slurp-messages.routes.js";
 import { resolveSlurpTextConnection } from "../services/slurp/slurp-connection.js";
+import { generateSlurpConversationSchedule } from "../services/slurp/slurp-conversation-schedule-generation.js";
 import {
   slurpCreatorReach,
   slurpPostLikeCount,
@@ -590,6 +591,50 @@ export async function slurpRoutes(app: FastifyInstance) {
 
   app.get("/noodler/accounts", async (_req, reply) => {
     return noodle.listNoodlerStageProfiles();
+  });
+
+  app.post("/noodler/accounts/:id/conversation-schedule/refresh", async (req, reply) => {
+    const { id } = req.params as { id: string };
+    const account = await noodle.getNoodlerAccountById(id);
+    const source = account ? await noodle.resolveAccountSource(account) : null;
+    if (!account || !source || source.kind !== "character") {
+      return reply.code(404).send({ error: "A linked Engine character is required." });
+    }
+    const character = await characters.getById(source.entityId);
+    if (!character) return reply.code(404).send({ error: "Linked Engine character not found." });
+    const connection = await resolveSlurpTextConnection(
+      connections,
+      (await noodle.getSettings()).generationConnectionId,
+    );
+    if (!connection) return reply.code(409).send({ error: "Select a text generation connection first." });
+    const data = (typeof character.data === "string" ? JSON.parse(character.data) : character.data) as Record<
+      string,
+      unknown
+    >;
+    const extensions =
+      data.extensions && typeof data.extensions === "object" && !Array.isArray(data.extensions)
+        ? (data.extensions as Record<string, unknown>)
+        : {};
+    const generated = await generateSlurpConversationSchedule(connection, connection.model, {
+      name: String(data.name ?? source.displayName),
+      description: String(data.description ?? ""),
+      personality: String(data.personality ?? ""),
+    });
+    const today = new Date();
+    const monday = new Date(today);
+    monday.setDate(today.getDate() - (today.getDay() === 0 ? 6 : today.getDay() - 1));
+    monday.setHours(0, 0, 0, 0);
+    await characters.update(source.entityId, {
+      extensions: {
+        ...extensions,
+        conversationSchedule: { ...generated, weekStart: monday.toISOString() },
+        conversationSchedulesEnabled: true,
+      },
+    });
+    return {
+      state: "active",
+      blocks: Object.values(generated.days).reduce((count, day) => count + day.length, 0),
+    };
   });
 
   /**

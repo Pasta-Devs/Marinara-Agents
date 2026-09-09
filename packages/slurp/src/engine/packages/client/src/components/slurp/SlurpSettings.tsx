@@ -57,6 +57,7 @@ import {
   useSlurpSettings,
   useUpdateNoodlerAutoPosting,
   useUpdateNoodlerScheduleSlot,
+  useRefreshNoodlerConversationSchedule,
   useUpdateSlurpImageConnections,
   useUpdateSlurpSettings,
   type SlurpSettings,
@@ -343,6 +344,7 @@ export function SlurpSettings({
   const reserveStatusQuery = useNoodlerReserveStatus(section === "overview" || section === "creators");
   const updateAuto = useUpdateNoodlerAutoPosting();
   const updateScheduleSlot = useUpdateNoodlerScheduleSlot();
+  const refreshConversationSchedule = useRefreshNoodlerConversationSchedule();
   const refreshFans = useRefreshNoodlerFanActivityNow();
   const refreshCreators = useRefreshTargetedNoodlerCreatorsNow();
   const updateImages = useUpdateSlurpImageConnections();
@@ -1281,7 +1283,7 @@ export function SlurpSettings({
                               className="inline-flex min-h-11 items-center gap-2 rounded-lg border border-[var(--border)] px-3 text-xs font-semibold hover:bg-[var(--accent)]"
                             >
                               <CalendarClock size={15} />
-                              {t("ui.slurp.settings.creators.schedule")}
+                              {t("ui.slurp.settings.creators.postingSchedule")}
                             </button>
                           </SettingsGroup>
 
@@ -1342,9 +1344,44 @@ export function SlurpSettings({
 
                           {selectedCreator.scheduleStatus &&
                             selectedCreator.scheduleStatus.state !== "not-applicable" && (
-                              <p className="text-xs leading-5 text-[var(--slurp-muted)]">
-                                {t(`ui.slurp.settings.creators.schedule.${selectedCreator.scheduleStatus.state}`)}
-                              </p>
+                              <div className="space-y-2 rounded-lg border border-[var(--border)] p-3">
+                                <p className="text-xs leading-5 text-[var(--slurp-muted)]">
+                                  <span className="font-semibold text-[var(--foreground)]">
+                                    {t("ui.slurp.settings.creators.conversationSchedule")}
+                                  </span>{" "}
+                                  {t(`ui.slurp.settings.creators.schedule.${selectedCreator.scheduleStatus.state}`)}
+                                </p>
+                                {(selectedCreator.scheduleStatus.state === "stale" ||
+                                  selectedCreator.scheduleStatus.state === "missing") && (
+                                  <button
+                                    type="button"
+                                    disabled={refreshConversationSchedule.isPending}
+                                    onClick={() => {
+                                      void showConfirmDialog({
+                                        title: t("ui.slurp.settings.creators.refreshConversationSchedule"),
+                                        message: t("ui.slurp.settings.creators.refreshConversationScheduleConfirm"),
+                                        confirmLabel: t("ui.slurp.settings.creators.refreshConversationSchedule"),
+                                        cancelLabel: t("capabilities.actions.cancel"),
+                                      }).then((confirmed) => {
+                                        if (!confirmed) return;
+                                        refreshConversationSchedule.mutate(selectedCreator.id, {
+                                          onSuccess: () =>
+                                            toast.success(t("ui.slurp.settings.creators.scheduleRefreshed")),
+                                          onError: (error) => toast.error(errorMessage(error)),
+                                        });
+                                      });
+                                    }}
+                                    className="inline-flex min-h-10 items-center gap-2 rounded-lg bg-[var(--noodle-accent)] px-3 text-xs font-bold text-zinc-950 disabled:opacity-50"
+                                  >
+                                    {refreshConversationSchedule.isPending ? (
+                                      <Loader2 size={14} className="animate-spin" />
+                                    ) : (
+                                      <CalendarClock size={14} />
+                                    )}
+                                    {t("ui.slurp.settings.creators.refreshConversationSchedule")}
+                                  </button>
+                                )}
+                              </div>
                             )}
                           {selectedCreator.sourceStatus.state === "missing" && (
                             <p className="rounded-lg border border-red-400/30 bg-red-400/5 p-3 text-xs text-red-300">
