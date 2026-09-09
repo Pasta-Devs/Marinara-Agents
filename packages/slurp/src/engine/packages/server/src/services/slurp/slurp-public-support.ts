@@ -46,7 +46,12 @@ export function parseStringArray(value: unknown): string[] {
   }
 }
 
-export { characterContextFromRow, escapePromptAttribute, escapePromptText } from "./slurp-prompt-safety.js";
+export {
+  characterContextFromRow,
+  escapePromptAttribute,
+  escapePromptText,
+  noodlerCharacterCanonText,
+} from "./slurp-prompt-safety.js";
 
 export function galleryImageUrl(filePath: string, fallbackChatId: string) {
   const filename = basename(filePath.replace(/\\/g, "/"));

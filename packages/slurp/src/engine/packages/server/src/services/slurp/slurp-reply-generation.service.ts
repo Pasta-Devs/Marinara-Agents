@@ -38,6 +38,7 @@ import { resolveSlurpCreatorScheduleContext } from "./slurp-creator-schedule.js"
 import { createChatsStorage } from "../storage/chats.storage.js";
 import { createCharactersStorage } from "../storage/characters.storage.js";
 import { SLURP_PLATFORM_CONTEXT } from "./slurp-prompt.js";
+import { resolveNoodlerCharacterCanon } from "./slurp-source-resolve.js";
 
 type GenerationConnection = NonNullable<Awaited<ReturnType<ReturnType<typeof createConnectionsStorage>["getWithKey"]>>>;
 
@@ -69,6 +70,7 @@ export function buildNoodlerCreatorReplyMessages(input: {
    * actually seen.
    */
   relationship?: string;
+  characterCanon?: string;
 }): ChatMessage[] {
   const protect = (value: string | null | undefined) =>
     protectNoodlerGeneratedIdentity(value, input.disclosureMode, input.publicIdentity) ?? "";
@@ -79,6 +81,9 @@ export function buildNoodlerCreatorReplyMessages(input: {
     NOODLER_UNTRUSTED_CONTENT_INSTRUCTION,
     input.generationGuidance.trim(),
     noodlerIdentityInstruction(input.disclosureMode, input.publicIdentity),
+    input.characterCanon
+      ? "Character canon is permanent identity and relationship context. Stay consistent with it unless the conversation explicitly establishes a change."
+      : "",
     "Keep the reply direct and brief: one or two short sentences, normally under 240 characters.",
     "Let the relationship set the warmth. A stranger gets a friendly but ordinary reply; somebody who has been here a long time or paid for a lot gets recognition, familiarity, and a callback to what they have given you.",
     'Return exactly one JSON object with four fields: "content", "moodShift", "remember" and "stateSignals".',
@@ -117,6 +122,7 @@ export function buildNoodlerCreatorReplyMessages(input: {
     // same fix in buildNoodlerPostMessages.
     scheduleContext:
       protect(input.scheduleContext) || "No active Conversation Schedule is available for this Creator today.",
+    ...(input.characterCanon ? { characterCanon: protect(input.characterCanon) } : {}),
   };
   return [
     { role: "system", content: system },
@@ -159,6 +165,7 @@ export async function generateNoodlerCreatorReply(input: {
   const publicIdentity = await resolveNoodlerPublicIdentity(input.db, input.creator);
   const settings = await createSlurpStorage(input.db).getSettings();
   const source = await createSlurpStorage(input.db).resolveAccountSource(input.creator);
+  const characterCanon = await resolveNoodlerCharacterCanon(input.db, source, disclosureMode);
   const scheduleContext = source
     ? await resolveSlurpCreatorScheduleContext(createCharactersStorage(input.db), source, undefined, new Date())
     : undefined;
@@ -171,6 +178,7 @@ export async function generateNoodlerCreatorReply(input: {
     publicIdentity,
     generationGuidance: settings.generationGuidance,
     scheduleContext,
+    characterCanon,
     relationship,
   });
   const debugMode = input.debugMode === true || isDebugAgentsEnabled();

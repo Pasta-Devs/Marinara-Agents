@@ -49,6 +49,7 @@ import { SLURP_PLATFORM_CONTEXT } from "./slurp-prompt.js";
 import { createSlurpPopulationStorage } from "../storage/slurp-population.storage.js";
 import type { SlurpMessage } from "../storage/slurp-messages.storage.js";
 import type { SlurpDmPolicy } from "./slurp-messaging.js";
+import { resolveNoodlerCharacterCanon } from "./slurp-source-resolve.js";
 
 type GenerationConnection = NonNullable<Awaited<ReturnType<ReturnType<typeof createConnectionsStorage>["getWithKey"]>>>;
 
@@ -78,6 +79,7 @@ export function buildSlurpMessageChat(input: {
   notes?: SlurpThreadNote[];
   threadState?: SlurpThreadState;
   creatorState?: SlurpCreatorState;
+  characterCanon?: string;
   generationGuidance: string;
   scheduleContext?: string;
   disclosureMode: Parameters<typeof noodlerIdentityInstruction>[0];
@@ -94,6 +96,9 @@ export function buildSlurpMessageChat(input: {
     NOODLER_UNTRUSTED_CONTENT_INSTRUCTION,
     input.generationGuidance.trim(),
     noodlerIdentityInstruction(input.disclosureMode, input.publicIdentity),
+    input.characterCanon
+      ? "Character canon is permanent identity and relationship context. Stay consistent with it unless the conversation explicitly establishes a change."
+      : "",
     // One resolved position, not one line per signal. Rapport, mood, the day, the arc,
     // availability and the tone dial all argue in `slurp-stance.ts` and arrive here agreed. Nine
     // separate lines describing the same person is a contradiction, and a model resolves a
@@ -155,6 +160,7 @@ export function buildSlurpMessageChat(input: {
           },
         }
       : {}),
+    ...(input.characterCanon ? { characterCanon: protect(input.characterCanon) } : {}),
     ...(input.threadState
       ? {
           relationshipState: {
@@ -270,6 +276,7 @@ export async function buildSlurpMessagePrompt(input: SlurpMessagePromptInput): P
       ? resolveSlurpCreatorAvailability(characters, source, undefined, new Date())
       : Promise.resolve({ online: true, activity: null, minutesUntilOnline: 0 }),
   ]);
+  const characterCanon = await resolveNoodlerCharacterCanon(input.db, source, disclosureMode);
   // The fan's direction, and what the creator has posted lately. Both were already stored and
   // neither reached the one prompt where a fan is most likely to mention them.
   const tie = await createSlurpPopulationStorage(input.db)
@@ -323,6 +330,7 @@ export async function buildSlurpMessagePrompt(input: SlurpMessagePromptInput): P
     publicIdentity,
     generationGuidance: settings.generationGuidance,
     scheduleContext,
+    characterCanon,
   });
   // The redaction rules travel with the prompt. The answer has to be protected with the same two
   // values the question was built from, or a concealed creator can be unmasked by their own reply.
@@ -404,6 +412,7 @@ export async function generateSlurpMessageReply(input: SlurpMessagePromptInput):
     canSendImage: stance.canSendImage,
     imageMode: stance.imageMode,
     moodShift: generated.moodShift,
+    stateSignals: generated.stateSignals,
     // A note is model output about the player, stored and fed back into a later prompt. That is a
     // loop, so it is redacted and bounded on the way in as well as on the way out.
     remember: generated.remember
