@@ -1,5 +1,11 @@
 # Slurp release notes
 
+## 1.2.45 — 2026-09-09
+
+- Slurp messages, replies, and posts now receive the current character canon.
+- Character identity and relationship facts remain available after old conversation turns leave the context window.
+- Concealed identity modes still hide the linked public identity while preserving behavioral canon.
+
 ## 1.2.44 — 2026-09-09
 
 - Creators now keep separate emotional, energy, arousal, adult-intent, and platform-strategy state.

@@ -57,9 +57,7 @@ export function noodlerConcealedSourceText(data: unknown): string {
   return [
     `Description: ${promptField(source.description)}`,
     `Personality: ${promptField(source.personality)}`,
-    `Scenario: ${promptField(source.scenario)}`,
     `Appearance: ${promptField(source.appearance, extensions.appearance)}`,
-    `Backstory: ${promptField(source.backstory, extensions.backstory)}`,
   ]
     .filter((line) => line.split(": ").slice(1).join(": ").trim())
     .join("\n");

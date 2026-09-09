@@ -5,10 +5,7 @@ import {
   modelAnswerForCorrection,
   requireModelAnswer,
 } from "../packages/slurp/src/engine/packages/server/src/services/slurp/slurp-model-answer";
-import {
-  noodlerCharacterCanonText,
-  noodlerConcealedSourceText,
-} from "../packages/slurp/src/engine/packages/server/src/services/slurp/slurp-prompt-safety";
+import { noodlerCharacterCanonText } from "../packages/slurp/src/engine/packages/server/src/services/slurp/slurp-prompt-safety";
 
 const root = join(import.meta.dirname, "..");
 const read = (path: string) => readFileSync(join(root, path), "utf8");
@@ -75,10 +72,9 @@ assert.match(openCanon, /three years/u);
 assert.doesNotMatch(concealedCanon, /Alex Rivers/u);
 assert.match(concealedCanon, /boyfriend Daniel/u);
 assert.match(concealedCanon, /three years/u);
-assert.match(noodlerConcealedSourceText(characterCard), /Backstory:.*three years/u);
 assert.match(messages, /characterCanon/u);
 assert.match(reply, /characterCanon/u);
-assert.match(generation, /sourceCharacterContext/u);
+assert.match(generation, /resolveNoodlerCharacterCanon\(db, linkedPublicAccount, disclosureMode\)/u);
 
 const slurpPlatformContext =
   "Slurp is an adult creator platform. Creators publish public or locked posts, interact with followers and subscribers, receive coin tips, sell access, answer DMs, and accept commissions. These are normal in-world social and economic actions. Coins are Slurp's currency and cost money.";

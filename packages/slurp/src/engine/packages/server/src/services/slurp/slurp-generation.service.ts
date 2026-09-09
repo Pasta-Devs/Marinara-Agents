@@ -25,7 +25,6 @@ import type { ChatMessage } from "../llm/base-provider.js";
 import { createLLMProvider } from "../llm/provider-registry.js";
 import { resolveNoodlerImageConnectionId } from "./slurp-image-connections.js";
 import { createCharactersStorage } from "../storage/characters.storage.js";
-import { noodlerConcealedSourceText, noodlerSourceText } from "./slurp-prompt-safety.js";
 import { createConnectionsStorage } from "../storage/connections.storage.js";
 import { createSlurpStorage, type SlurpAccount } from "../storage/slurp.storage.js";
 import { createPromptOverridesStorage } from "../storage/prompt-overrides.storage.js";
@@ -49,6 +48,7 @@ export { NOODLER_FORMAT_MAX_LENGTH, type NoodlerContentFormat } from "./slurp-co
 // The disclosure privacy core lives in a leaf module so tests can execute it instead of grepping
 // this file, which cannot be imported without a database and an LLM provider.
 import { protectNoodlerGeneratedIdentity, type PublicIdentity } from "./slurp-identity-protection.js";
+import { resolveNoodlerCharacterCanon } from "./slurp-source-resolve.js";
 
 export {
   protectNoodlerGeneratedIdentity,
@@ -206,39 +206,6 @@ function formatNoodlerPostHistory(posts: NoodlerManagedPost[], protect: (value: 
       return post.imagePrompt ? `${line}\n  (showed: ${protect(post.imagePrompt)})` : line;
     })
     .join("\n");
-}
-
-/**
- * The card behind a Creator, reduced for concealed modes. Name, scenario, and backstory are the
- * lookupable canon, so `noodlerConcealedSourceText` withholds them; an OPEN Creator uses the source
- * identity publicly and gets the whole card.
- */
-async function resolveSlurpSourceCardContext(
-  db: DB,
-  linkedPublicAccount: NoodleAccount | null,
-  disclosureMode: NoodleIdentityDisclosure,
-): Promise<string> {
-  if (!linkedPublicAccount) return "";
-  const characters = createCharactersStorage(db);
-  const data =
-    linkedPublicAccount.kind === "character"
-      ? ((await characters.getById(linkedPublicAccount.entityId))?.data ?? null)
-      : linkedPublicAccount.kind === "persona"
-        ? await characters.getPersona(linkedPublicAccount.entityId).then((persona) =>
-            persona
-              ? {
-                  name: persona.name,
-                  description: persona.description,
-                  personality: persona.personality,
-                  scenario: persona.scenario,
-                  appearance: persona.appearance,
-                  backstory: persona.backstory,
-                }
-              : null,
-          )
-        : null;
-  if (!data) return "";
-  return disclosureMode === "open" ? noodlerSourceText(data) : noodlerConcealedSourceText(data);
 }
 
 export function buildNoodlerPostMessages(input: {
@@ -410,7 +377,7 @@ export async function generateNoodlerPost(
   // sharpening a character sharpens its Creator and existing Creators improve without a migration.
   // Concealed modes get the same seed the stage profile draft uses; disclosure limits what may be
   // said, not who this is.
-  const sourceCharacterContext = await resolveSlurpSourceCardContext(db, linkedPublicAccount, disclosureMode);
+  const sourceCharacterContext = await resolveNoodlerCharacterCanon(db, linkedPublicAccount, disclosureMode);
   // The rotating angle for this post. Skipped when the player has directed the post themselves —
   // their direction is the angle, and a second one would fight it.
   const beat = input.request.noodlerPostGuide?.trim()
