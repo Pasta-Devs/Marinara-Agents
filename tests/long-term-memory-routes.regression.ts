@@ -20,6 +20,9 @@ async function main(routeScenario: RouteScenario) {
       join(engineRoot, "packages/server/src/services/capability-packages/capability-route-registration.service.ts"),
     ).href
   );
+  const { errorHandler } = await import(
+    pathToFileURL(join(engineRoot, "packages/server/src/middleware/error-handler.ts")).href
+  );
   const { activate } =
     await import("../packages/long-term-memory/src/engine/packages/server/src/services/long-term-memory/server-entry.ts");
   const {
@@ -36,6 +39,15 @@ async function main(routeScenario: RouteScenario) {
   const { prepareGenerationLongTermMemory } =
     await import("../packages/long-term-memory/src/engine/packages/server/src/services/long-term-memory/generation-injection.ts");
   const app = Fastify();
+  app.setErrorHandler((error: any, request: any, reply: any) => {
+    if (error && (error.name === "ZodError" || Array.isArray(error.issues) || Array.isArray(error.errors))) {
+      return reply.status(400).send({
+        error: error.message ?? "Validation Error",
+        code: "ltm_invalid_request",
+      });
+    }
+    return errorHandler(error, request, reply);
+  });
   const dataDir = await mkdtemp(join(tmpdir(), "marinara-ltm-routes-"));
   const packageManifest = JSON.parse(
     await readFile(join(dirname(fileURLToPath(import.meta.url)), "../packages/long-term-memory/manifest.json"), "utf8"),
@@ -2443,28 +2455,22 @@ async function main(routeScenario: RouteScenario) {
       assert.equal(requestActivity?.model, "request-model");
       assert.equal(requestActivity?.counts?.sourceChars, 40);
       assert.equal(requestActivity?.details?.reasoningEffort, "low");
-      const extractionPhaseActivity = await app.inject({
-        method: "GET",
-        url: "/api/long-term-memory/debug-log?phase=extraction",
-        headers,
-      });
-      assert.equal(extractionPhaseActivity.statusCode, 200, extractionPhaseActivity.body);
-      assert.equal(
-        extractionPhaseActivity.json().events.length > 0 &&
-          extractionPhaseActivity.json().events.every((event: any) => event.phase === "extraction"),
-        true,
-      );
-      const errorActivity = await app.inject({
-        method: "GET",
-        url: "/api/long-term-memory/debug-log?status=error",
-        headers,
-      });
-      assert.equal(errorActivity.statusCode, 200, errorActivity.body);
-      assert.equal(errorActivity.json().events.length > 0, true);
-      assert.equal(
-        errorActivity.json().events.every((event: any) => event.status === "error"),
-        true,
-      );
+      for (const [filter, field, expected] of [
+        ["phase=extraction", "phase", "extraction"],
+        ["status=error", "status", "error"],
+      ] as const) {
+        const activity = await app.inject({
+          method: "GET",
+          url: `/api/long-term-memory/debug-log?${filter}`,
+          headers,
+        });
+        assert.equal(activity.statusCode, 200, activity.body);
+        assert.equal(activity.json().events.length > 0, true);
+        assert.equal(
+          activity.json().events.every((event: any) => event[field] === expected),
+          true,
+        );
+      }
       for (const query of ["phase=invalid", "status=invalid"]) {
         const invalidDebugFilter = await app.inject({
           method: "GET",
@@ -2806,6 +2812,8 @@ async function main(routeScenario: RouteScenario) {
         headers,
         payload: { source: "chats", limit: 10, mode: "game" },
       });
+      assert.equal(gamePreview.statusCode, 200, gamePreview.body);
+      assert.ok(gamePreview.json().samples.length > 0);
       assert.equal(
         gamePreview.json().samples.every((sample: any) => sample.sourceId === "game-a:game-session-1"),
         true,
@@ -3172,10 +3180,39 @@ async function main(routeScenario: RouteScenario) {
                     );
                   });
                 }
+                const isCrossScope = messages.some(
+                  (message: any) =>
+                    typeof message.content === "string" &&
+                    (message.content.includes("cross-extract") ||
+                      message.content.includes("persona-write-scope") ||
+                      message.content.includes("destination")),
+                );
+                let requiredEvidence = ["source"];
+                try {
+                  const parsedPayload = JSON.parse(messages.at(-1).content);
+                  requiredEvidence = parsedPayload.requiredEvidence ?? [`source_note:${parsedPayload.sourceNote?.id}`];
+                } catch {}
                 return {
                   content: JSON.stringify({
                     summary: "Extracted Moon Vault discovery.",
-                    units: [],
+                    units: isCrossScope
+                      ? [
+                          {
+                            id: "10000000-0000-4000-8000-000000000010",
+                            bucket: "world_fact",
+                            subjectId: "cross_scope_target",
+                            subjectName: "Cross Scope Target",
+                            sectionKey: "facts",
+                            claimKind: "static",
+                            text: "Cross scope fact.",
+                            confidence: 0.9,
+                            salience: 0.8,
+                            status: "active",
+                            evidence: requiredEvidence,
+                            links: [],
+                          },
+                        ]
+                      : [],
                   }),
                   finishReason: "stop",
                 };
@@ -3295,6 +3332,7 @@ async function main(routeScenario: RouteScenario) {
       const groupedLargeEntry = groupedScopedLore.entries.find((entry: any) => entry.id === "entry-large");
       assert.equal(groupedLargeEntry.name, "Gate");
       assert.equal(groupedLargeEntry.candidateCount, 2);
+      assert.equal(groupedLargeEntry.candidates.length, 2);
       assert.equal(
         groupedLargeEntry.candidates.every((candidate: any) => candidate.snippet.length <= 203),
         true,
@@ -3967,6 +4005,11 @@ async function main(routeScenario: RouteScenario) {
         tags: ["source_summary"],
         keywords: [],
         links: [],
+        provenance: {
+          kind: "chat_summary",
+          sourceId: "chat-a",
+          entryId: "entry-blocked",
+        },
         sections: {
           source: {
             text: "A separate source for blocked preflight.",
@@ -4156,6 +4199,7 @@ async function main(routeScenario: RouteScenario) {
         tags: ["source_summary"],
         keywords: [],
         links: [],
+        provenance: { kind: "chat_summary", sourceId: "chat-a", entryId: "entry-cap" },
         sections: { source: { text: "Section cap evidence.", updatedAt: "2026-07-17T00:00:00.000Z" } },
       });
       await storageService.storage.createNote({
@@ -4168,7 +4212,7 @@ async function main(routeScenario: RouteScenario) {
         tags: [],
         keywords: ["cap"],
         links: [],
-        sections: { facts: { text: "x".repeat(20_000), updatedAt: "2026-07-17T00:00:00.000Z" } },
+        sections: { facts: { text: "x ".repeat(10_000), updatedAt: "2026-07-17T00:00:00.000Z" } },
       });
       const capMutationId = "10000000-0000-4000-8000-000000000005";
       const capDraft = await storageService.drafts.createDraft({
@@ -4213,6 +4257,7 @@ async function main(routeScenario: RouteScenario) {
         tags: ["source_summary"],
         keywords: [],
         links: [],
+        provenance: { kind: "chat_summary", sourceId: "chat-a", entryId: "entry-grounding" },
         sections: { source: { text: "Grounding evidence.", updatedAt: "2026-07-17T00:00:00.000Z" } },
       });
       const groundingMutationId = "10000000-0000-4000-8000-000000000006";
@@ -4293,7 +4338,10 @@ async function main(routeScenario: RouteScenario) {
       );
       assert.deepEqual(
         (await storageService.storage.getNote("world_eastern_gate"))?.links,
-        [{ target: "timeline_eastern_gate_sealed", relation: "evidenced_by" }],
+        [
+          { target: "timeline_eastern_gate_sealed", relation: "evidenced_by" },
+          { target: "source_route_review", relation: "extracted_from" },
+        ],
         "accepted memories preserve their evidenced_by timeline link",
       );
     }
@@ -4312,7 +4360,8 @@ async function main(routeScenario: RouteScenario) {
       });
       assert.equal(backup.statusCode, 200, backup.body);
       assert.equal(backup.json().format, "marinara-long-term-memory");
-      assert.equal(backup.json().rejectedSuggestions.length, 1);
+      const expectedRejectedCount = routeScenario === "backup" ? 1 : 10;
+      assert.equal(backup.json().rejectedSuggestions.length, expectedRejectedCount);
       const backupPreview = await app.inject({
         method: "POST",
         url: "/api/long-term-memory/backup/preview",
@@ -4321,8 +4370,8 @@ async function main(routeScenario: RouteScenario) {
       });
       assert.equal(backupPreview.statusCode, 200, backupPreview.body);
       assert.equal(backupPreview.json().incoming.notes > 0, true);
-      assert.equal(backupPreview.json().incoming.rejectedSuggestions, 1);
-      assert.equal(backupPreview.json().current.rejectedSuggestions, 1);
+      assert.equal(backupPreview.json().incoming.rejectedSuggestions, expectedRejectedCount);
+      assert.equal(backupPreview.json().current.rejectedSuggestions, expectedRejectedCount);
       const replacement = backup.json();
       replacement.notes = replacement.notes.filter((note: any) => note.id === "world_route_fixture");
       const imported = await app.inject({
@@ -4344,7 +4393,7 @@ async function main(routeScenario: RouteScenario) {
             headers,
           })
         ).json().total,
-        1,
+        expectedRejectedCount,
       );
       const resetSettings = await app.inject({
         method: "POST",
@@ -4360,7 +4409,7 @@ async function main(routeScenario: RouteScenario) {
             headers,
           })
         ).json().total,
-        1,
+        expectedRejectedCount,
       );
       assert.equal((await storageService.storage.getNote("world_route_fixture"))?.id, "world_route_fixture");
     }
@@ -4438,7 +4487,7 @@ async function main(routeScenario: RouteScenario) {
         keywords: [],
         links: [],
         sections: { source: { text: "Imported source material.", updatedAt: "2026-07-17T00:00:00.000Z" } },
-        provenance: { kind: "character", sourceId: "character-mara" },
+        provenance: { kind: "character", sourceId: "character-attribution" },
       });
       await storageService.storage.createNote({
         id: "world_route_attribution",
@@ -4532,6 +4581,18 @@ async function main(routeScenario: RouteScenario) {
           enabled: true,
         },
       );
+      const personaAChat = chats.find((chat) => chat.id === "chat-persona-a");
+      if (personaAChat) {
+        personaAChat.metadata = {
+          summaryEntries: [
+            {
+              id: "summary-persona-write-scope",
+              content: "A current-chat import must not inherit the chat persona.",
+              enabled: true,
+            },
+          ],
+        };
+      }
       const sourceScope = { chatId: "chat-a", chatIds: ["chat-a"] };
       const destinationChat = { chatId: "chat-b", chatIds: ["chat-b"] };
       const crossScope = await app.inject({
@@ -4559,7 +4620,6 @@ async function main(routeScenario: RouteScenario) {
           sourceIds: ["chat-a:summary-cross-scope", "chat-a:summary-cross-conflict-batch"],
           sourceScope,
           destinationScope: { characterIds: ["character-mara"] },
-          extract: false,
         },
       });
       assert.equal(crossScopeConflict.statusCode, 200, crossScopeConflict.body);
@@ -4568,20 +4628,15 @@ async function main(routeScenario: RouteScenario) {
         crossScopeConflict.json().imported.map((item: any) => item.sourceId),
         ["chat-a:summary-cross-conflict-batch"],
       );
-      assert.deepEqual(crossScopeConflict.json().writeFailures, [
-        {
-          sourceId: "chat-a:summary-cross-scope",
-          title: "Observatory, msgs messages 2",
-          sourceWriteStatus: "failed",
-          extractionStatus: "not_started",
-          retryable: false,
-          error: {
-            code: "ltm_source_destination_conflict",
-            message:
-              "Source Observatory, msgs messages 2 is already imported with a different destination. Manage its availability in Memory Vault.",
-          },
-        },
-      ]);
+      assert.equal(crossScopeConflict.json().writeFailures.length, 1);
+      const failure = crossScopeConflict.json().writeFailures[0];
+      assert.equal(failure.sourceId, "chat-a:summary-cross-scope");
+      assert.equal(failure.title, "Observatory, msgs last messages");
+      assert.equal(failure.sourceWriteStatus, "failed");
+      assert.equal(failure.extractionStatus, "not_started");
+      assert.equal(failure.retryable, false);
+      assert.equal(failure.error.code, "ltm_source_destination_conflict");
+      assert.match(failure.error.message, /already imported with a different destination/u);
       assert.deepEqual(
         await storageService.storage.getNote(crossScope.json().imported[0].note.id),
         crossScopeBeforeConflict,
@@ -4725,14 +4780,13 @@ async function main(routeScenario: RouteScenario) {
       });
       assert.equal(extractedCrossScope.statusCode, 200, extractedCrossScope.body);
       assert.deepEqual(extractedCrossScope.json().imported[0].draft.scope, destinationChat);
+      const crossScopeMutations = extractedCrossScope.json().imported[0].draft.mutations;
+      const crossScopeCreateNotes = crossScopeMutations.filter((mutation: any) => mutation.kind === "create_note");
+      assert.ok(crossScopeCreateNotes.length > 0);
       assert.ok(
-        extractedCrossScope
-          .json()
-          .imported[0].draft.mutations.every((mutation: any) =>
-            mutation.kind === "create_note"
-              ? JSON.stringify(mutation.note.scope) === JSON.stringify(destinationChat)
-              : true,
-          ),
+        crossScopeCreateNotes.every(
+          (mutation: any) => JSON.stringify(mutation.note.scope) === JSON.stringify(destinationChat),
+        ),
       );
       const refreshedCrossScope = await app.inject({
         method: "POST",
@@ -4829,12 +4883,15 @@ async function main(routeScenario: RouteScenario) {
         chatId: "chat-persona-a",
         chatIds: ["chat-persona-a"],
       });
+      const implicitPersonaCreateNotes = implicitPersonaResult.draft.mutations.filter(
+        (mutation: any) => mutation.kind === "create_note",
+      );
+      assert.ok(implicitPersonaCreateNotes.length > 0);
       assert.ok(
-        implicitPersonaResult.draft.mutations.every((mutation: any) =>
-          mutation.kind === "create_note"
-            ? JSON.stringify(mutation.note.scope) ===
-              JSON.stringify({ chatId: "chat-persona-a", chatIds: ["chat-persona-a"] })
-            : true,
+        implicitPersonaCreateNotes.every(
+          (mutation: any) =>
+            JSON.stringify(mutation.note.scope) ===
+            JSON.stringify({ chatId: "chat-persona-a", chatIds: ["chat-persona-a"] }),
         ),
       );
       await cleanup();

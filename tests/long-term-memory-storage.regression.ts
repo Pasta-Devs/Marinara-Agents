@@ -573,18 +573,17 @@ async function main() {
         }),
         /same scope/u,
       );
-      await assert.rejects(
-        storage.createNote({ ...noteInput, id: "world_empty_storage", sections: {} }),
-        (error: any) => error.code === "ltm_empty_sections",
-      );
-      await assert.rejects(
-        storage.projectNote("world_empty_project", "world", () => ({
-          ...noteInput,
-          id: "world_empty_project",
-          sections: {},
-        })),
-        (error: any) => error.code === "ltm_empty_sections",
-      );
+      for (const createEmpty of [
+        () => storage.createNote({ ...noteInput, id: "world_empty_storage", sections: {} }),
+        () =>
+          storage.projectNote("world_empty_project", "world", () => ({
+            ...noteInput,
+            id: "world_empty_project",
+            sections: {},
+          })),
+      ]) {
+        await assert.rejects(createEmpty, (error: any) => error.code === "ltm_empty_sections");
+      }
       assert.equal(await storage.getNote("world_empty_project"), null);
       const keywordIntent = await storage.createNote({
         ...noteInput,
@@ -2102,14 +2101,12 @@ async function main() {
         "invalidated proposals must remain visible with their explicit blocking reason",
       );
       assert.equal(invalidatedReview.counts.mutations, 0, "invalidated drafts must not contribute pending mutations");
-      await assert.rejects(
-        storage.updateNote(deletionTarget.id, { removedSectionKeys: ["history"] }),
-        (error: any) => error.code === "ltm_last_section",
-      );
-      await assert.rejects(
-        storage.updateNote(deletionTarget.id, { sections: {} }),
-        (error: any) => error.code === "ltm_empty_sections",
-      );
+      for (const [patch, expectedCode] of [
+        [{ removedSectionKeys: ["history"] }, "ltm_last_section"],
+        [{ sections: {} }, "ltm_empty_sections"],
+      ] as const) {
+        await assert.rejects(storage.updateNote(deletionTarget.id, patch), (error: any) => error.code === expectedCode);
+      }
       assert.deepEqual(Object.keys((await storage.getNote(deletionTarget.id))!.sections), ["history"]);
 
       const permanentlyDeletedTarget = await storage.createNote({

@@ -74,18 +74,17 @@ async function main() {
     const lines = content.trim().split("\n");
     assert.equal(lines.length < 81, true);
     for (const line of lines) assert.doesNotThrow(() => JSON.parse(line));
-    const errors = await readLtmDebugLog({ status: "error" }, root);
-    assert.equal(errors.length > 0, true);
-    assert.equal(
-      errors.every((event) => event.status === "error"),
-      true,
-    );
-    const retrieval = await readLtmDebugLog({ phase: "retrieval" }, root);
-    assert.equal(retrieval.length > 0, true);
-    assert.equal(
-      retrieval.every((event) => event.phase === "retrieval"),
-      true,
-    );
+    for (const [filter, field, expected] of [
+      [{ status: "error" as const }, "status", "error"],
+      [{ phase: "retrieval" as const }, "phase", "retrieval"],
+    ] as const) {
+      const filtered = await readLtmDebugLog(filter, root);
+      assert.equal(filtered.length > 0, true);
+      assert.equal(
+        filtered.every((event) => event[field] === expected),
+        true,
+      );
+    }
   } finally {
     await rm(root, { recursive: true, force: true });
   }
