@@ -8,6 +8,8 @@ import {
   applySlurpThreadStateSignals,
   decaySlurpCreatorState,
   decaySlurpThreadState,
+  lowerSlurpAdultLevel,
+  nextSlurpAdultLevel,
   slurpAdultLevelIndex,
   slurpIntensityBand,
   SLURP_CREATOR_STATE_DEFAULT,
@@ -57,10 +59,53 @@ const improved = applySlurpThreadStateSignals(
   ["fan_gave_welcome_adult_attention", "fan_paid_for_content"],
   now,
 );
-assert.equal(improved.sexualComfort, 4);
-assert.equal(improved.threadDesire, 3);
+assert.equal(improved.sexualComfort, 6);
+assert.equal(improved.threadDesire, 5);
 assert.equal(improved.commercialTrust, 4);
-assert.equal(improved.adultLevel, "suggestive");
+// One welcome signal no longer grants a ceiling. It is earned below, or it is not held.
+assert.equal(improved.adultLevel, "ordinary");
+
+// The ceiling rises one step at a time and never skips, however far past the bar the state is.
+const earned = (over: Partial<SlurpThreadState>): SlurpThreadState => ({ ...thread, ...over });
+assert.equal(nextSlurpAdultLevel(earned({ sexualComfort: 100, threadDesire: 100 })), "suggestive");
+assert.equal(
+  nextSlurpAdultLevel(earned({ adultLevel: "suggestive", sexualComfort: 100, threadDesire: 100 })),
+  "provocative",
+);
+assert.equal(
+  nextSlurpAdultLevel(earned({ adultLevel: "intimate", sexualComfort: 100, threadDesire: 100 })),
+  "explicit",
+);
+// Every level is reachable. This is the regression: `explicit` used to be unreachable by any path.
+let climbed: SlurpThreadState = earned({ sexualComfort: 100, threadDesire: 100 });
+for (let step = 0; step < 8; step += 1) climbed = { ...climbed, adultLevel: nextSlurpAdultLevel(climbed) };
+assert.equal(climbed.adultLevel, "explicit");
+
+// Comfort alone never buys the top of the range: desire is required and it decays.
+assert.equal(
+  nextSlurpAdultLevel(earned({ adultLevel: "suggestive", sexualComfort: 100, threadDesire: 0 })),
+  "suggestive",
+);
+// Wanting her is not enough. Respect, resentment and a defensive stance each veto a rise alone.
+const wanted = { adultLevel: "suggestive", sexualComfort: 100, threadDesire: 100 } as const;
+assert.equal(nextSlurpAdultLevel(earned({ ...wanted, respect: 10 })), "suggestive");
+assert.equal(nextSlurpAdultLevel(earned({ ...wanted, resentment: 90 })), "suggestive");
+assert.equal(nextSlurpAdultLevel(earned({ ...wanted, stance: "defensive" })), "suggestive");
+// A level the thread stopped holding is lost, one step, whatever earned it.
+assert.equal(nextSlurpAdultLevel(earned({ adultLevel: "explicit", sexualComfort: 0, threadDesire: 0 })), "intimate");
+
+// A refusal caps the ceiling whichever order the model reported the signals in.
+const bothOrders = ["fan_gave_welcome_adult_attention", "fan_pushed_after_refusal"] as const;
+const forwards = applySlurpThreadStateSignals(earned({ sexualComfort: 90, threadDesire: 90 }), [...bothOrders], now);
+const backwards = applySlurpThreadStateSignals(
+  earned({ sexualComfort: 90, threadDesire: 90 }),
+  [...bothOrders].reverse(),
+  now,
+);
+assert.equal(forwards.adultLevel, "ordinary");
+assert.equal(backwards.adultLevel, "ordinary");
+assert.equal(lowerSlurpAdultLevel("explicit", "ordinary"), "ordinary");
+assert.equal(lowerSlurpAdultLevel("suggestive", "intimate"), "suggestive");
 
 const harmed = applySlurpThreadStateDelta({ ...thread, sexualComfort: 5, respect: 5, emotionalTrust: 5 }, refusal, now);
 assert.equal(harmed.sexualComfort, 0);
@@ -81,6 +126,14 @@ const recoveredThread = decaySlurpThreadState({ ...thread, interest: 80, threadD
 assert.ok(recoveredThread.interest < 80);
 assert.ok(recoveredThread.threadDesire < 80);
 assert.ok(recoveredThread.resentment < 80);
+
+const fadedCeiling = decaySlurpThreadState(
+  { ...thread, adultLevel: "explicit", sexualComfort: 100, threadDesire: 62, updatedAt: now },
+  20,
+  now,
+);
+assert.equal(fadedCeiling.threadDesire, 0);
+assert.equal(fadedCeiling.adultLevel, "intimate");
 
 assert.deepEqual(addSlurpDeltas({ interest: 2, resentment: 3 }, { interest: -1, stance: "guarded" }), {
   interest: 1,

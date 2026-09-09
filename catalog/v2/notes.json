@@ -36,6 +36,12 @@
     "slurp": {
       "versions": [
         {
+          "version": "1.2.55",
+          "date": "2026-09-09",
+          "notes": "- Conversations can now become more explicit over time. Until now a conversation could never pass \"suggestive\", however long it ran or however well it went, because nothing in the game could raise it any further.\n- How adult a conversation is allowed to get is now earned. It rises one step at a time, never skips a step, and needs both lasting comfort and present interest to hold where it is.\n- A creator will not escalate with somebody she does not think well of, is holding a grudge against, or has gone guarded with, whatever else is true of the conversation.\n- Interest fading now lowers the conversation back down, the same way it raised it.\n- Pushing after a refusal caps the conversation whichever order the rest of the message is read in.\n- Welcome adult attention builds comfort a little faster, so the full range is reachable in a real conversation.\n- The confirmation for clearing a conversation is translatable instead of English-only.",
+          "highlight": false
+        },
+        {
           "version": "1.2.54",
           "date": "2026-09-09",
           "notes": "- Settings has a Messaging tab.\n- Creators can be told not to answer while you are away, so replies only happen while you are in the conversation. Commissions and the rest of a reply already sent still arrive.\n- How many messages one reply is broken into is now a setting. One keeps every reply in a single message.\n- The DM policy, request fee and paid message price a Creator starts with are now set once in Settings instead of per Creator.",
@@ -147,12 +153,6 @@
           "version": "1.2.36",
           "date": "2026-09-08",
           "notes": "- Unlocking a post now flows from a creator-branded purchase sheet into the revealed post without the feed jumping.\n- Purchases sparkle around the Creator and post, while coin trails mark spends and earnings at the action and wallet.\n- Unlocks and subscriptions now refresh every visible wallet balance immediately after payment.",
-          "highlight": false
-        },
-        {
-          "version": "1.2.35",
-          "date": "2026-09-08",
-          "notes": "- Mobile navigation is now icon-only with accessible labels retained.\n- Mobile navigation icons use the pink Slurp accent in every state.\n- The mobile wallet control is anchored to the top-right corner.",
           "highlight": false
         }
       ]

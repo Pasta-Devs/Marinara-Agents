@@ -226,9 +226,8 @@ export function stateDeltaForSignal(signal: SlurpCreatorStateSignal): SlurpState
       break;
     case "fan_gave_welcome_adult_attention":
       delta.interest = 3;
-      delta.sexualComfort = 4;
-      delta.threadDesire = 3;
-      delta.adultLevel = "suggestive";
+      delta.sexualComfort = 6;
+      delta.threadDesire = 5;
       break;
     case "fan_ignored_creator_question":
       delta.interest = -2;
@@ -364,6 +363,60 @@ export function applySlurpCreatorStateDelta(
   return next;
 }
 
+/**
+ * What one thread must hold to keep each level.
+ *
+ * Comfort is the slow axis: it never decays, so it carries the floor of every step and a ceiling
+ * once earned is not lost to a quiet week. Desire is the fast one and does decay, so holding the
+ * top of the range needs somebody who is still interested now, not somebody who was in March.
+ */
+const ADULT_LEVEL_REQUIREMENT: Record<SlurpAdultLevel, { sexualComfort: number; threadDesire: number }> = {
+  ordinary: { sexualComfort: 0, threadDesire: 0 },
+  suggestive: { sexualComfort: 20, threadDesire: 0 },
+  provocative: { sexualComfort: 40, threadDesire: 30 },
+  intimate: { sexualComfort: 60, threadDesire: 45 },
+  explicit: { sexualComfort: 80, threadDesire: 60 },
+};
+
+/** Below this the ceiling cannot rise. Being wanted is not the same as being thought well of. */
+const ADULT_RESPECT_FLOOR = 40;
+
+/** Above this the ceiling cannot rise. A grudge outranks an appetite. */
+const ADULT_RESENTMENT_CEILING = 40;
+
+/** The more restrictive of two levels. A refusal must never be outranked by an earlier signal. */
+export function lowerSlurpAdultLevel(a: SlurpAdultLevel, b: SlurpAdultLevel): SlurpAdultLevel {
+  return slurpAdultLevelIndex(a) <= slurpAdultLevelIndex(b) ? a : b;
+}
+
+/**
+ * The ceiling this thread has earned, one step from where it is now.
+ *
+ * Nothing here is set by the model. Until this existed the only two writers were one signal that
+ * set `suggestive` and one that set `ordinary`, so `provocative`, `intimate` and `explicit` were
+ * unreachable and every conversation in Slurp was capped two steps below its own top — while the
+ * prompt said, hard, "keep adult behavior at or below its adultLevel".
+ *
+ * A rise is earned, never granted: one step at a time, never skipping, and only while the fan is
+ * somebody she both wants and thinks well of. Respect, resentment and a defensive stance veto a
+ * rise outright. That veto is the whole difference between escalation and pressure paying off,
+ * and it is why the fall is checked first: a level the thread no longer holds goes immediately,
+ * whatever earned it.
+ */
+export function nextSlurpAdultLevel(state: SlurpThreadState): SlurpAdultLevel {
+  const index = slurpAdultLevelIndex(state.adultLevel);
+  const holds = (level: SlurpAdultLevel): boolean => {
+    const need = ADULT_LEVEL_REQUIREMENT[level];
+    return state.sexualComfort >= need.sexualComfort && state.threadDesire >= need.threadDesire;
+  };
+  if (index > 0 && !holds(state.adultLevel)) return SLURP_ADULT_LEVELS[index - 1];
+  if (state.respect < ADULT_RESPECT_FLOOR) return state.adultLevel;
+  if (state.resentment > ADULT_RESENTMENT_CEILING) return state.adultLevel;
+  if (state.stance === "defensive" || state.stance === "rejecting") return state.adultLevel;
+  const next = SLURP_ADULT_LEVELS[index + 1];
+  return next && holds(next) ? next : state.adultLevel;
+}
+
 export function applySlurpThreadStateDelta(
   state: SlurpThreadState,
   changes: SlurpThreadStateDelta,
@@ -371,14 +424,22 @@ export function applySlurpThreadStateDelta(
 ): SlurpThreadState {
   const next = { ...state } as SlurpThreadState & Record<string, unknown>;
   for (const [key, value] of Object.entries(changes)) {
-    if (key === "adultLevel" || key === "stance") {
+    if (key === "stance") {
       next[key] = value;
+      continue;
+    }
+    // Most restrictive wins. The model chooses the order it reports signals in, so last-write-wins
+    // let a refusal and a welcome land in either order and produce a different ceiling each time.
+    if (key === "adultLevel") {
+      next.adultLevel = lowerSlurpAdultLevel(next.adultLevel as SlurpAdultLevel, value as SlurpAdultLevel);
       continue;
     }
     if (typeof value !== "number") continue;
     const current = typeof next[key] === "number" ? next[key] : 0;
     next[key] = clamp(current + value);
   }
+  // After the numbers, never before: a rise is read off the state the signals just produced.
+  next.adultLevel = nextSlurpAdultLevel(next as SlurpThreadState);
   next.updatedAt = now;
   return next;
 }
@@ -417,13 +478,14 @@ export function decaySlurpThreadState(state: SlurpThreadState, hours: number, no
     const distance = target - value;
     return clamp(value + distance * Math.min(1, (elapsed * rate) / 100));
   };
-  return {
+  const decayed: SlurpThreadState = {
     ...state,
     interest: toward(state.interest, 0, 3),
     threadDesire: toward(state.threadDesire, 0, 5),
     resentment: toward(state.resentment, 0, 1),
     updatedAt: now,
   };
+  return { ...decayed, adultLevel: nextSlurpAdultLevel(decayed) };
 }
 
 /** Convert private numeric state into compact words for a model prompt. */

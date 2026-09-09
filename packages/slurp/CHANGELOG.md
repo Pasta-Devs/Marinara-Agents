@@ -1,5 +1,15 @@
 # Slurp release notes
 
+## 1.2.55 — 2026-09-09
+
+- Conversations can now become more explicit over time. Until now a conversation could never pass "suggestive", however long it ran or however well it went, because nothing in the game could raise it any further.
+- How adult a conversation is allowed to get is now earned. It rises one step at a time, never skips a step, and needs both lasting comfort and present interest to hold where it is.
+- A creator will not escalate with somebody she does not think well of, is holding a grudge against, or has gone guarded with, whatever else is true of the conversation.
+- Interest fading now lowers the conversation back down, the same way it raised it.
+- Pushing after a refusal caps the conversation whichever order the rest of the message is read in.
+- Welcome adult attention builds comfort a little faster, so the full range is reachable in a real conversation.
+- The confirmation for clearing a conversation is translatable instead of English-only.
+
 ## 1.2.54 — 2026-09-09
 
 - Settings has a Messaging tab.
