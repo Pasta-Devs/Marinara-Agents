@@ -25,6 +25,22 @@ assert.match(
 );
 assert.match(reply, /scheduleContext/u, "Reply request must carry a schedule slot");
 
+assert.match(
+  generation,
+  /imageGenerationPrompt: string;/u,
+  "Post prompt builder must accept image generation guidance",
+);
+assert.match(
+  generation,
+  /imageGenerationPrompt: settings\.imageGenerationPrompt,/u,
+  "Post generation must pass image generation guidance into the main model prompt",
+);
+assert.match(
+  generation,
+  /Apply these image directions when writing imagePrompt/u,
+  "Main model prompt must explain how to apply image generation guidance",
+);
+
 for (const answer of ["", "   ", "[]", "```json\n[]\n```"]) {
   if (!answer.trim() || /^\s*```json\s*\[\s*\]\s*```\s*$/u.test(answer)) {
     assert.equal(modelAnswerForCorrection(answer), null);

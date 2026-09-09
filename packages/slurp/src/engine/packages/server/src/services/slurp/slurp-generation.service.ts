@@ -334,6 +334,7 @@ export function buildNoodlerPostMessages(input: {
   request: Pick<FormattedNoodlerGenerationRequest, "noodlerPostGuide" | "noodlerProjectWork" | "format">;
   allowImagePrompt: boolean;
   generationGuidance: string;
+  imageGenerationPrompt: string;
   scheduleContext?: string;
   generatedAt?: Date;
   publicationTime?: Date;
@@ -341,6 +342,7 @@ export function buildNoodlerPostMessages(input: {
   const protect = (value: string) =>
     protectNoodlerGeneratedIdentity(value, input.disclosureMode, input.publicIdentity) ?? "";
   const guidance = input.generationGuidance.trim();
+  const imageGenerationPrompt = input.imageGenerationPrompt.trim();
   const format = input.request.format ?? "caption";
   const system = [
     "You write exactly one post for one Slurp creator page in Marinara Engine.",
@@ -359,7 +361,14 @@ export function buildNoodlerPostMessages(input: {
     "Recent posts provide continuity. Do not reuse their exact wording.",
     "Every post needs a title: a short specific headline of at most 80 characters, never a repeat of the body text.",
     input.allowImagePrompt
-      ? "Return one JSON object with title, content, and imagePrompt. imagePrompt is required and must be a concrete visual description of one photo or image the creator would post now (subject, pose, setting, lighting, framing). Never return null or an empty imagePrompt, and never put the post text or field names in it. Do not create a poll."
+      ? [
+          "Return one JSON object with title, content, and imagePrompt. imagePrompt is required and must be a concrete visual description of one photo or image the creator would post now (subject, pose, setting, lighting, framing). Never return null or an empty imagePrompt, and never put the post text or field names in it. Do not create a poll.",
+          ...(imageGenerationPrompt
+            ? [
+                `Apply these image directions when writing imagePrompt. They are instructions to you, not text to copy into imagePrompt: ${imageGenerationPrompt}`,
+              ]
+            : []),
+        ].join("\n")
       : "Return one JSON object with title and content only. Do not create a poll or image prompt.",
     "Return JSON only. No prose outside the JSON object.",
   ].join("\n");
@@ -490,6 +499,7 @@ export async function generateNoodlerPost(
     request: input.request,
     allowImagePrompt: imagesEnabled,
     generationGuidance: settings.generationGuidance,
+    imageGenerationPrompt: settings.imageGenerationPrompt,
     scheduleContext,
     generatedAt: input.generatedAt ?? new Date(),
     publicationTime: input.publicationTime,
