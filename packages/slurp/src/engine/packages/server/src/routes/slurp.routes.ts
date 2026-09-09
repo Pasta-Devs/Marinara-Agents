@@ -1338,7 +1338,7 @@ export async function slurpRoutes(app: FastifyInstance) {
             stage: entry.tie.stage,
             // The direction, not only the position. "Cooling" is a sentence about somebody; a
             // funnel stage on its own is a database row. The column existed and never reached the UI.
-            arc: entry.tie.arc,
+            audienceArc: entry.tie.audienceArc,
             spent: entry.tie.spent,
             interactions: entry.tie.interactions,
             firstSeenAt: entry.tie.firstSeenAt,
@@ -2384,7 +2384,7 @@ export async function slurpRoutes(app: FastifyInstance) {
         avatarUrl: null,
         avatarCrop: null,
         stage: entry.tie.stage,
-        arc: entry.tie.arc,
+        audienceArc: entry.tie.audienceArc,
         traits: entry.member.traits,
         spent: entry.tie.spent,
         followedAt: entry.tie.firstSeenAt,
@@ -2434,7 +2434,7 @@ export async function slurpRoutes(app: FastifyInstance) {
       tie: tie
         ? {
             stage: tie.stage,
-            arc: tie.arc,
+            audienceArc: tie.audienceArc,
             spent: tie.spent,
             interactions: tie.interactions,
             firstSeenAt: tie.firstSeenAt,

@@ -28,7 +28,7 @@ export type SlurpEventKind =
   /** A follower milestone was crossed. */
   | "milestone"
   /** Somebody's relationship with a Creator changed direction: rising, or burning out. */
-  | "arc"
+  | "audience_arc"
   /** Somebody who had drifted away came back. */
   | "returned";
 
@@ -50,7 +50,7 @@ const BASE: Record<SlurpEventKind, number> = {
   // A person changing direction outranks a routine reaction and sits below money. Somebody coming
   // back is the better story of the two, so it is weighted above a change of direction.
   returned: 65,
-  arc: 48,
+  audience_arc: 48,
 };
 
 /**

@@ -23,7 +23,7 @@ export interface NoodlerFanIdentity {
     /** How long they have been around this Creator, in days. */
     knownForDays?: number;
     /** Where the relationship is heading. */
-    arc?: string;
+    audienceArc?: string;
   };
 }
 
@@ -91,7 +91,7 @@ export type NoodlerFanCastMember = {
 /** One member's history with one creator, keyed by creator then by member. */
 export type NoodlerFanTieLookup = ReadonlyMap<
   string,
-  ReadonlyMap<string, { stage: string; spent: number; knownForDays: number; arc: string }>
+  ReadonlyMap<string, { stage: string; spent: number; knownForDays: number; audienceArc: string }>
 >;
 
 export function populationNoodlerFanIdentityProvider(
@@ -111,7 +111,9 @@ export function populationNoodlerFanIdentityProvider(
             persona: {
               traits: member.traits,
               spendTier: member.spendTier,
-              ...(tie ? { stage: tie.stage, spent: tie.spent, knownForDays: tie.knownForDays, arc: tie.arc } : {}),
+              ...(tie
+                ? { stage: tie.stage, spent: tie.spent, knownForDays: tie.knownForDays, audienceArc: tie.audienceArc }
+                : {}),
             },
             snapshot: {
               id: member.id,

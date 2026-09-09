@@ -278,7 +278,7 @@ export async function runNoodlerFanActivity(input: {
                         0,
                         Math.round((at.getTime() - Date.parse(tie.firstSeenAt)) / 86_400_000) || 0,
                       ),
-                      arc: tie.arc,
+                      audienceArc: tie.audienceArc,
                     },
                   ]),
                 ),

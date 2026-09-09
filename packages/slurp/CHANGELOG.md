@@ -1,5 +1,12 @@
 # Slurp release notes
 
+## 1.2.49 — 2026-09-09
+
+- The audience relationship direction is now named the audience arc in the database, the API, and the interface.
+- The notification for a change of direction now uses the `audience_arc` kind.
+- The stored column is renamed, so audience rows written before this release start again at `steady`.
+- The English localization now contains the custom tip labels the message view uses.
+
 ## 1.2.48 — 2026-09-09
 
 - Mobile message headers now contain long creator names, handles, status text, and controls without widening the viewport.

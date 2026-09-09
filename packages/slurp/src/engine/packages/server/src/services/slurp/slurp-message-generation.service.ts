@@ -44,7 +44,7 @@ import {
 } from "./slurp-dm-response.js";
 import { notesForPrompt, type SlurpNoteOperation, type SlurpThreadNote } from "./slurp-thread-notes.js";
 import { slurpIntensityBand, type SlurpCreatorState, type SlurpThreadState } from "./slurp-creator-state.js";
-import { slurpArcDescription } from "./slurp-arc.js";
+import { slurpAudienceArcDescription } from "./slurp-audience-arc.js";
 import { SLURP_PLATFORM_CONTEXT } from "./slurp-prompt.js";
 import { createSlurpPopulationStorage } from "../storage/slurp-population.storage.js";
 import type { SlurpMessage } from "../storage/slurp-messages.storage.js";
@@ -309,7 +309,7 @@ export async function buildSlurpMessagePrompt(input: SlurpMessagePromptInput): P
         input.moodUpdatedAt ? Math.max(0, (Date.now() - Date.parse(input.moodUpdatedAt)) / 60_000) : 0,
       ),
     ),
-    arc: tie ? slurpArcDescription(tie.arc) : null,
+    audienceArc: tie ? slurpAudienceArcDescription(tie.audienceArc) : null,
     dayVibe: input.dayVibe ?? null,
     availability,
     subscribed: input.subscribed,

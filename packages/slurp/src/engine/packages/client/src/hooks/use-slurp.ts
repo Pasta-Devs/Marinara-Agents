@@ -533,7 +533,7 @@ export type SlurpTopFan = {
   handle: string | null;
   traits: string[];
   stage: string;
-  arc?: string;
+  audienceArc?: string;
   spent: number;
   interactions: number;
   firstSeenAt: string;
@@ -596,7 +596,7 @@ export type SlurpEventKind =
   | "comment"
   | "message"
   | "milestone"
-  | "arc"
+  | "audience_arc"
   | "returned";
 
 export type SlurpEventItem = {
@@ -840,7 +840,7 @@ export type SlurpFollowerEntry = {
   avatarUrl: string | null;
   avatarCrop: null;
   stage: string;
-  arc: string;
+  audienceArc: string;
   traits: string[];
   spent: number;
   followedAt: string;
@@ -857,7 +857,7 @@ export type SlurpAudienceMember = {
   joinedAt: string;
   tie: {
     stage: string;
-    arc: string;
+    audienceArc: string;
     spent: number;
     interactions: number;
     firstSeenAt: string;

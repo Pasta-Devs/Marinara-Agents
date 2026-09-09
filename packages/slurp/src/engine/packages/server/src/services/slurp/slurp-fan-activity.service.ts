@@ -20,7 +20,7 @@ import { createConnectionsStorage } from "../storage/connections.storage.js";
 import { resolveSlurpTextConnection } from "./slurp-connection.js";
 import { createSlurpStorage, type SlurpSettings } from "../storage/slurp.storage.js";
 import { slurpAudienceToneInstruction } from "./slurp-tone.js";
-import { slurpArcDescription, type SlurpArc } from "./slurp-arc.js";
+import { slurpAudienceArcDescription, type SlurpAudienceArc } from "./slurp-audience-arc.js";
 import {
   NOODLE_FAN_ACTIVITY_MAX_ACTIVITIES_PER_CREATOR,
   NOODLE_FAN_ACTIVITY_MAX_CREATORS_PER_RUN,
@@ -160,11 +160,11 @@ function describeFanRelationship(persona: {
   stage?: string;
   spent?: number;
   knownForDays?: number;
-  arc?: string;
+  audienceArc?: string;
 }): string {
   const parts: string[] = [];
   if (persona.stage && persona.stage !== "stranger") parts.push(persona.stage);
-  const arc = persona.arc ? slurpArcDescription(persona.arc as SlurpArc) : null;
+  const arc = persona.audienceArc ? slurpAudienceArcDescription(persona.audienceArc as SlurpAudienceArc) : null;
   if (arc) parts.push(arc);
   if (persona.knownForDays !== undefined) {
     parts.push(

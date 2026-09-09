@@ -2,7 +2,7 @@
  * What kind of day this creator is having.
  *
  * The scoring half is pure, like every other Slurp rule module, and deliberately reads state
- * instead of rolling dice. `slurp-arc.ts` states the reason and it applies here without change: "a
+ * instead of rolling dice. `slurp-audience-arc.ts` states the reason and it applies here without change: "a
  * trajectory the player cannot account for is worse than no trajectory, because they would learn
  * to distrust the ones that are real."
  *

@@ -49,8 +49,10 @@ export function SlurpFanCard({
   const facts = member
     ? [
         member.tie ? localizeUi(`ui.slurp.studio.stage.${member.tie.stage}`, { defaultValue: member.tie.stage }) : null,
-        member.tie && member.tie.arc !== "steady"
-          ? localizeUi(`ui.slurp.studio.arc.${member.tie.arc}`, { defaultValue: member.tie.arc })
+        member.tie && member.tie.audienceArc !== "steady"
+          ? localizeUi(`ui.slurp.studio.audienceArc.${member.tie.audienceArc}`, {
+              defaultValue: member.tie.audienceArc,
+            })
           : null,
         member.tie && member.tie.spent > 0
           ? localizeUi("ui.slurp.studio.fanSpent", { defaultValue: "{{count}}", count: member.tie.spent })

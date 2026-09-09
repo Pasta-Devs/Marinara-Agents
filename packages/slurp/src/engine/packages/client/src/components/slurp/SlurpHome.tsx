@@ -7412,7 +7412,9 @@ function SlurpStudioView({
                             {[
                               localizeUi(`ui.slurp.studio.stage.${fan.stage}`, { defaultValue: fan.stage }),
                               // Steady is the default and says nothing worth a line.
-                              fan.arc && fan.arc !== "steady" ? localizeUi(`ui.slurp.studio.arc.${fan.arc}`) : null,
+                              fan.audienceArc && fan.audienceArc !== "steady"
+                                ? localizeUi(`ui.slurp.studio.audienceArc.${fan.audienceArc}`)
+                                : null,
                               fan.spent > 0
                                 ? localizeUi("ui.slurp.studio.fanSpent", {
                                     defaultValue: "{{count}}",
@@ -7807,7 +7809,7 @@ function SlurpNotificationsView({
   const eventAppearance = (kind: string): { icon: LucideIcon; tone: string } => {
     if (kind === "message" || kind === "commission_requested")
       return { icon: MessageCircle, tone: "bg-[var(--noodle-accent)]/14 text-[var(--noodle-accent)]" };
-    if (kind === "comment" || kind === "returned" || kind === "arc")
+    if (kind === "comment" || kind === "returned" || kind === "audience_arc")
       return { icon: Heart, tone: "bg-sky-500/14 text-sky-300" };
     if (kind === "tip") return { icon: Coins, tone: "bg-emerald-500/14 text-emerald-300" };
     if (kind === "unlock" || kind === "ppv_unlock") return { icon: Lock, tone: "bg-violet-500/14 text-violet-300" };

@@ -19,7 +19,7 @@ const base: SlurpStanceInput = {
   rapportTier: "regular",
   rapportScore: 40,
   moodTone: "neutral",
-  arc: null,
+  audienceArc: null,
   dayVibe: null,
   availability: { online: true, activity: null },
   subscribed: false,
@@ -77,7 +77,7 @@ assert.equal(activeSlurpStrikes(1, new Date(at.getTime() - day).toISOString(), a
 assert.equal(activeSlurpStrikes(1, new Date(at.getTime() - (SLURP_STRIKE_WINDOW_DAYS + 1) * day).toISOString(), at), 0);
 assert.equal(activeSlurpStrikes(3, null, at), 0);
 
-// The day vibe reads state and never rolls dice, for the reason `slurp-arc.ts` gives.
+// The day vibe reads state and never rolls dice, for the reason `slurp-audience-arc.ts` gives.
 assert.equal(slurpDayVibe({ earnedToday: 0, averageDaily: 0, daysSinceLastPost: 30 }), "flat");
 assert.equal(slurpDayVibe({ earnedToday: 200, averageDaily: 50, daysSinceLastPost: 1 }), "good");
 assert.equal(slurpDayVibe({ earnedToday: 1, averageDaily: 50, daysSinceLastPost: 1 }), "quiet");

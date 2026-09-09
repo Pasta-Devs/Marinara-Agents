@@ -36,6 +36,12 @@
     "slurp": {
       "versions": [
         {
+          "version": "1.2.49",
+          "date": "2026-09-09",
+          "notes": "- The audience relationship direction is now named the audience arc in the database, the API, and the interface.\n- The notification for a change of direction now uses the `audience_arc` kind.\n- The stored column is renamed, so audience rows written before this release start again at `steady`.\n- The English localization now contains the custom tip labels the message view uses.",
+          "highlight": false
+        },
+        {
           "version": "1.2.48",
           "date": "2026-09-09",
           "notes": "- Mobile message headers now contain long creator names, handles, status text, and controls without widening the viewport.\n- Commission cards now wrap their progress labels and actions within the available mobile width.",
@@ -147,12 +153,6 @@
           "version": "1.2.30",
           "date": "2026-09-08",
           "notes": "- The generated audience can now subscribe to a Creator and pay for it, so subscriber counts and earnings grow with the whole audience rather than with the six ambient profiles alone.\n- Posts now say who liked them: a few names, then the count for everybody else.\n- Creator profiles gained a Followers list, and the Subscribers list no longer drops audience members.\n- Tapping any audience name opens a fan card with their funnel stage, direction, spending, and traits.",
-          "highlight": false
-        },
-        {
-          "version": "1.2.29",
-          "date": "2026-09-08",
-          "notes": "- Commission briefs, quotes, and state changes no longer repeat as ordinary chat messages. The commission card now contains its delivered text and artwork directly.",
           "highlight": false
         }
       ]

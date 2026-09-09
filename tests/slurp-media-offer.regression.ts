@@ -19,7 +19,7 @@ assert.equal(
     rapportTier: "regular",
     rapportScore: 50,
     moodTone: "cold",
-    arc: null,
+    audienceArc: null,
     dayVibe: null,
     availability: { online: true, activity: null },
     subscribed: false,

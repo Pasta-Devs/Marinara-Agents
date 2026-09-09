@@ -15,25 +15,25 @@
 
 import { SLURP_FUNNEL_STAGES, type SlurpFunnelStage } from "./slurp-population.js";
 
-export const SLURP_ARCS = ["steady", "rising", "cooling", "burnout", "returning"] as const;
+export const SLURP_AUDIENCE_ARCS = ["steady", "rising", "cooling", "burnout", "returning"] as const;
 
-export type SlurpArc = (typeof SLURP_ARCS)[number];
+export type SlurpAudienceArc = (typeof SLURP_AUDIENCE_ARCS)[number];
 
 /** Days an arc runs before it is reconsidered. Long enough to be noticed, short enough to move. */
-export const SLURP_ARC_DAYS = 21;
+export const SLURP_AUDIENCE_ARC_DAYS = 21;
 
 /** Below this, somebody has not been around enough for a direction to mean anything. */
 const MIN_INTERACTIONS_FOR_ARC = 3;
 
-export type SlurpArcSubject = {
+export type SlurpAudienceArcSubject = {
   stage: SlurpFunnelStage;
   interactions: number;
   spent: number;
   /** Days since this person last did anything with this Creator. */
   daysSinceSeen: number;
   /** Days since their arc was last set. */
-  daysOnArc: number;
-  arc: SlurpArc;
+  daysOnAudienceArc: number;
+  audienceArc: SlurpAudienceArc;
 };
 
 /**
@@ -44,7 +44,7 @@ export type SlurpArcSubject = {
  * chose it. No seed, and deliberately so — a trajectory the player cannot account for is worse
  * than no trajectory, because they would learn to distrust the ones that are real.
  */
-export function slurpNextArc(subject: SlurpArcSubject): SlurpArc {
+export function slurpNextAudienceArc(subject: SlurpAudienceArcSubject): SlurpAudienceArc {
   const stageIndex = SLURP_FUNNEL_STAGES.indexOf(subject.stage as (typeof SLURP_FUNNEL_STAGES)[number]);
   const interactions = Math.max(0, subject.interactions);
   const daysSinceSeen = Math.max(0, subject.daysSinceSeen);
@@ -69,9 +69,9 @@ export function slurpNextArc(subject: SlurpArcSubject): SlurpArc {
 
   // An arc that has run its course returns to steady rather than persisting forever. Without this
   // the first arc somebody was ever given would describe them permanently.
-  if (subject.arc !== "steady" && subject.daysOnArc >= SLURP_ARC_DAYS) return "steady";
+  if (subject.audienceArc !== "steady" && subject.daysOnAudienceArc >= SLURP_AUDIENCE_ARC_DAYS) return "steady";
 
-  return subject.arc === "returning" && subject.daysOnArc >= 7 ? "steady" : subject.arc;
+  return subject.audienceArc === "returning" && subject.daysOnAudienceArc >= 7 ? "steady" : subject.audienceArc;
 }
 
 /**
@@ -80,13 +80,13 @@ export function slurpNextArc(subject: SlurpArcSubject): SlurpArc {
  * Only transitions a person would actually notice. Sliding back to steady is the absence of news,
  * and reporting it would spend the readable-handful budget on nothing happening.
  */
-export function isNotableArcChange(from: SlurpArc, to: SlurpArc): boolean {
+export function isNotableAudienceArcChange(from: SlurpAudienceArc, to: SlurpAudienceArc): boolean {
   if (from === to) return false;
   return to === "burnout" || to === "returning" || to === "rising";
 }
 
 /** One clause describing the direction, for the relationship line in a prompt. */
-export function slurpArcDescription(arc: SlurpArc): string | null {
+export function slurpAudienceArcDescription(arc: SlurpAudienceArc): string | null {
   switch (arc) {
     case "rising":
       return "getting more into you lately";

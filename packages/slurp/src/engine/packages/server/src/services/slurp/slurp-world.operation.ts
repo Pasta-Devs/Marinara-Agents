@@ -20,7 +20,7 @@ import { isAmbientNoodleAccount } from "./slurp-ambient-profiles.js";
 import { tryNoodleOperation } from "./slurp-operation-lock.js";
 import { slurpCreatorReach } from "./slurp-reach.js";
 import { slurpMembersActiveAt } from "./slurp-population.js";
-import { isNotableArcChange, slurpNextArc } from "./slurp-arc.js";
+import { isNotableAudienceArcChange, slurpNextAudienceArc } from "./slurp-audience-arc.js";
 import { slurpAudiencePaidThrough, slurpAudienceSubscriptionDecision } from "./slurp-audience-subscription.js";
 import { slurpPlatformScaleMultiplier, slurpWorldActivityMultiplier } from "./slurp-scale.js";
 import {
@@ -194,19 +194,21 @@ export async function advanceSlurpWorld(db: DB, until = new Date()): Promise<Slu
     for (const account of elapsedDays >= CHURN_MIN_ELAPSED_DAYS ? accounts : []) {
       for (const tie of await population.listTiesForCreator(account.id)) {
         if (tie.stage === "stranger") continue;
-        const next = slurpNextArc({
+        const next = slurpNextAudienceArc({
           stage: tie.stage,
           interactions: tie.interactions,
           spent: tie.spent,
           daysSinceSeen: (until.getTime() - Date.parse(tie.lastSeenAt)) / 86_400_000 || 0,
-          daysOnArc: tie.arcSince ? (until.getTime() - Date.parse(tie.arcSince)) / 86_400_000 || 0 : 999,
-          arc: tie.arc,
+          daysOnAudienceArc: tie.audienceArcSince
+            ? (until.getTime() - Date.parse(tie.audienceArcSince)) / 86_400_000 || 0
+            : 999,
+          audienceArc: tie.audienceArc,
         });
-        if (next === tie.arc) continue;
-        await population.setTieArc(tie.id, next).catch(() => undefined);
+        if (next === tie.audienceArc) continue;
+        await population.setTieAudienceArc(tie.id, next).catch(() => undefined);
         // Only a change somebody would notice. Sliding back to steady is the absence of news.
-        if (isNotableArcChange(tie.arc, next)) {
-          await noodle.recordCreatorEvent(account.id, next === "returning" ? "returned" : "arc", {
+        if (isNotableAudienceArcChange(tie.audienceArc, next)) {
+          await noodle.recordCreatorEvent(account.id, next === "returning" ? "returned" : "audience_arc", {
             actorLabel: tie.memberId,
             subjectId: next,
           });

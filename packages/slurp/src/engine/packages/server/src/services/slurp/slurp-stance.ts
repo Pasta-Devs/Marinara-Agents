@@ -75,8 +75,8 @@ export type SlurpStanceInput = {
   rapportTier: SlurpRapportTier;
   rapportScore: number;
   moodTone: SlurpMoodTone;
-  /** From `slurp-arc.ts`, already phrased. Null when the relationship is going nowhere in particular. */
-  arc: string | null;
+  /** From `slurp-audience-arc.ts`, already phrased. Null when the relationship is going nowhere in particular. */
+  audienceArc: string | null;
   /** From `slurp-day-vibe.ts`, already phrased. Null on an ordinary day. */
   dayVibe: string | null;
   availability: { online: boolean; activity: string | null };
@@ -186,9 +186,9 @@ export function resolveSlurpStance(input: SlurpStanceInput): SlurpStance {
     evidence.push({ layer: "day", value: input.dayVibe, effect: "colours the reply only" });
   }
 
-  if (input.arc) {
-    instructions.push(`About this person: they are ${input.arc}.`);
-    evidence.push({ layer: "arc", value: input.arc, effect: "context for the relationship" });
+  if (input.audienceArc) {
+    instructions.push(`About this person: they are ${input.audienceArc}.`);
+    evidence.push({ layer: "audience arc", value: input.audienceArc, effect: "context for the relationship" });
   }
 
   // Rule 5. Shape, not warmth.

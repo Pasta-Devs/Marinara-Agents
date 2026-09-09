@@ -421,11 +421,11 @@ export const slurpAudienceTies = fileTable(
      * Where this relationship is heading, as opposed to where it stands.
      *
      * steady | rising | cooling | burnout | returning. The stage says somebody is a subscriber; the
-     * arc says whether they are on their way in or on their way out, which is the part worth
+     * The audience arc says whether they are on their way in or on their way out, which is the part worth
      * telling the player about.
      */
-    arc: text("arc").notNull().default("steady"),
-    arcSince: text("arc_since"),
+    audienceArc: text("audience_arc").notNull().default("steady"),
+    audienceArcSince: text("audience_arc_since"),
     /**
      * When this member's subscription to this Creator is paid up to.
      *
