@@ -127,6 +127,7 @@ export async function replyToSlurpMessage(
         mood: thread.mood,
         moodUpdatedAt: thread.moodUpdatedAt,
         notes: thread.notes,
+        threadState: thread.threadState,
         dayVibe: await describeSlurpDayVibe(db, thread.creatorAccountId),
         coolingOff: false,
         strikes: activeSlurpStrikes(thread.strikes, thread.lastStrikeAt),
@@ -216,7 +217,11 @@ export async function replyToSlurpMessage(
       // worth keeping, but never at the price of the reply itself.
       if (stored) {
         await messagesStore
-          .recordReplyOutcome(thread.id, { moodShift: reply.moodShift, remember: reply.remember })
+          .recordReplyOutcome(thread.id, {
+            moodShift: reply.moodShift,
+            remember: reply.remember,
+            stateSignals: reply.stateSignals,
+          })
           .catch((error: unknown) => logger.warn(error, "[slurp-message] Could not record the reply outcome"));
         // The reply is written first and the boundary applied after it, so the fan always receives
         // the words the creator actually left them with rather than silence.

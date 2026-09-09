@@ -81,13 +81,14 @@ export function buildNoodlerCreatorReplyMessages(input: {
     noodlerIdentityInstruction(input.disclosureMode, input.publicIdentity),
     "Keep the reply direct and brief: one or two short sentences, normally under 240 characters.",
     "Let the relationship set the warmth. A stranger gets a friendly but ordinary reply; somebody who has been here a long time or paid for a lot gets recognition, familiarity, and a callback to what they have given you.",
-    'Return exactly one JSON object with three fields: "content", "moodShift" and "remember".',
+    'Return exactly one JSON object with four fields: "content", "moodShift", "remember" and "stateSignals".',
     '"content" is your reply, and the only field the viewer ever sees.',
     // The same field the direct-message path reads, so being rude in public counts exactly as
     // much as being rude in private. A creator who forgave in the comments what she would not
     // forgive in a DM would not read as one person.
     '"moodShift" is how this comment changed your feeling about this person: "up" if you enjoyed it, "same" for anything ordinary, "down" if they were rude, pushy, or tiring, "sharp_down" only for something you would genuinely take offence at. Most comments are "same".',
     '"remember" must be an empty array here.',
+    '"stateSignals" must be an empty array here.',
     "Return JSON only. No prose outside the JSON object.",
   ]
     .filter(Boolean)

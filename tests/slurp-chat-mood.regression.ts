@@ -51,8 +51,13 @@ assert.equal(slurpMoodTone(-80), "cold");
 
 // A reply with good words and no envelope is still the thing the fan asked for. Never fail a
 // message because the simulation's extra fields were missing.
-assert.deepEqual(readSlurpDmReply({ content: "hey" }), { content: "hey", moodShift: "same", remember: [] });
-assert.deepEqual(readSlurpDmReply("hey"), { content: "hey", moodShift: "same", remember: [] });
+assert.deepEqual(readSlurpDmReply({ content: "hey" }), {
+  content: "hey",
+  moodShift: "same",
+  remember: [],
+  stateSignals: [],
+});
+assert.deepEqual(readSlurpDmReply("hey"), { content: "hey", moodShift: "same", remember: [], stateSignals: [] });
 assert.equal(readSlurpDmReply({ content: "hey", tone: "playful" }).content, "hey", "unknown fields must be dropped");
 assert.equal(readSlurpDmReply({ content: "hey", moodShift: "nonsense" }).moodShift, "same");
 assert.equal(readSlurpDmReply({ content: "hey", remember: ["a", "b", "c"] }).remember.length, 2);

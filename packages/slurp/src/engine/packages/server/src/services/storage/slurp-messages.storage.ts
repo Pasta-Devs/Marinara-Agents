@@ -18,6 +18,12 @@ import {
   type SlurpNoteOperation,
   type SlurpThreadNote,
 } from "../slurp/slurp-thread-notes.js";
+import {
+  SLURP_THREAD_STATE_DEFAULT,
+  applySlurpThreadStateSignals,
+  type SlurpCreatorStateSignal,
+  type SlurpThreadState as SlurpConversationState,
+} from "../slurp/slurp-creator-state.js";
 import { activeSlurpStrikes } from "../slurp/slurp-stance.js";
 import { createAppSettingsStorage } from "./app-settings.storage.js";
 import { createSlurpStorage } from "./slurp.storage.js";
@@ -72,6 +78,7 @@ export type SlurpThread = {
   moodUpdatedAt: string | null;
   /** While in the future, the creator has stepped away from this conversation. */
   coolUntil: string | null;
+  threadState: SlurpConversationState;
   strikes: number;
   lastStrikeAt: string | null;
   /** Working and long-term facts the creator knows about this fan. */
@@ -129,6 +136,45 @@ const json = (value: string | null | undefined): Record<string, unknown> => {
   }
 };
 
+function readThreadState(raw: unknown, fallbackUpdatedAt: string): SlurpThreadState {
+  let parsed: Record<string, unknown> = {};
+  if (typeof raw === "string") {
+    try {
+      const value = JSON.parse(raw);
+      if (value && typeof value === "object" && !Array.isArray(value)) parsed = value as Record<string, unknown>;
+    } catch {
+      // Use the defaults for a malformed or pre-state row.
+    }
+  }
+  const number = (key: keyof SlurpConversationState, fallback: number) =>
+    typeof parsed[key] === "number" && Number.isFinite(parsed[key]) ? Number(parsed[key]) : fallback;
+  const stance =
+    typeof parsed.stance === "string" &&
+    ["open", "friendly", "playful", "teasing", "professional", "guarded", "distant", "defensive", "rejecting"].includes(
+      parsed.stance,
+    )
+      ? (parsed.stance as SlurpConversationState["stance"])
+      : SLURP_THREAD_STATE_DEFAULT.stance;
+  const adultLevel =
+    typeof parsed.adultLevel === "string" &&
+    ["ordinary", "suggestive", "provocative", "intimate", "explicit"].includes(parsed.adultLevel)
+      ? (parsed.adultLevel as SlurpConversationState["adultLevel"])
+      : SLURP_THREAD_STATE_DEFAULT.adultLevel;
+  return {
+    stance,
+    familiarity: number("familiarity", SLURP_THREAD_STATE_DEFAULT.familiarity),
+    interest: number("interest", SLURP_THREAD_STATE_DEFAULT.interest),
+    sexualComfort: number("sexualComfort", SLURP_THREAD_STATE_DEFAULT.sexualComfort),
+    commercialTrust: number("commercialTrust", SLURP_THREAD_STATE_DEFAULT.commercialTrust),
+    emotionalTrust: number("emotionalTrust", SLURP_THREAD_STATE_DEFAULT.emotionalTrust),
+    respect: number("respect", SLURP_THREAD_STATE_DEFAULT.respect),
+    resentment: number("resentment", SLURP_THREAD_STATE_DEFAULT.resentment),
+    threadDesire: number("threadDesire", SLURP_THREAD_STATE_DEFAULT.threadDesire),
+    adultLevel,
+    updatedAt: typeof parsed.updatedAt === "string" ? parsed.updatedAt : fallbackUpdatedAt,
+  };
+}
+
 const DAY = 86_400_000;
 
 export function createSlurpMessagesStorage(db: DB) {
@@ -169,6 +215,7 @@ export function createSlurpMessagesStorage(db: DB) {
     mood: Number.isFinite(Number(row.mood)) ? Number(row.mood) : 0,
     moodUpdatedAt: (row.moodUpdatedAt as string | null) ?? null,
     coolUntil: (row.coolUntil as string | null) ?? null,
+    threadState: readThreadState(row.threadState, String(row.updatedAt)),
     strikes: int(row.strikes as string),
     lastStrikeAt: (row.lastStrikeAt as string | null) ?? null,
     notes: readStoredNotes(row.notes),
@@ -442,6 +489,7 @@ export function createSlurpMessagesStorage(db: DB) {
         creatorUnread: "0",
         replyNotBeforeAt: null,
         rapport: "{}",
+        threadState: "{}",
         createdAt: timestamp,
         updatedAt: timestamp,
       };
@@ -1166,7 +1214,7 @@ export function createSlurpMessagesStorage(db: DB) {
      */
     async recordReplyOutcome(
       threadId: string,
-      input: { moodShift: SlurpMoodShift; remember: SlurpNoteOperation[] },
+      input: { moodShift: SlurpMoodShift; remember: SlurpNoteOperation[]; stateSignals?: SlurpCreatorStateSignal[] },
     ): Promise<void> {
       const thread = await storage.getThreadById(threadId);
       if (!thread) return;
@@ -1186,6 +1234,9 @@ export function createSlurpMessagesStorage(db: DB) {
           mood: String(mood),
           moodUpdatedAt: timestamp,
           notes: JSON.stringify(applySlurpThreadNotes(thread.notes, input.remember)),
+          threadState: JSON.stringify(
+            applySlurpThreadStateSignals(thread.threadState, input.stateSignals ?? [], timestamp),
+          ),
           updatedAt: timestamp,
         })
         .where(eq(slurpThreads.id, threadId));
@@ -1215,6 +1266,7 @@ export function createSlurpMessagesStorage(db: DB) {
         strikes: 0,
         lastStrikeAt: null,
         notes: [],
+        threadState: { ...SLURP_THREAD_STATE_DEFAULT, updatedAt: thread.updatedAt },
         rapport: { ...thread.rapport, score: 0, contributions: [] },
       };
     },

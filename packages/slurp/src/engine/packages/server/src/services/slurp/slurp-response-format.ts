@@ -178,8 +178,30 @@ const noodlerDmSchema = {
         additionalProperties: false,
       },
     },
+    stateSignals: {
+      type: "array",
+      maxItems: 3,
+      items: {
+        type: "string",
+        enum: [
+          "fan_shared_personal_fact",
+          "fan_remembered_creator_detail",
+          "fan_gave_respectful_compliment",
+          "fan_gave_welcome_adult_attention",
+          "fan_ignored_creator_question",
+          "fan_pushed_after_refusal",
+          "fan_requested_free_content",
+          "fan_paid_for_content",
+          "fan_completed_commission",
+          "fan_returned_after_silence",
+          "fan_mentioned_another_creator",
+          "fan_apologized",
+          "fan_broke_a_promise",
+        ],
+      },
+    },
   },
-  required: ["content", "moodShift", "remember"],
+  required: ["content", "moodShift", "remember", "stateSignals"],
   additionalProperties: false,
 } as const;
 

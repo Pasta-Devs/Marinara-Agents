@@ -19,6 +19,7 @@ import {
   SLURP_NOTES_PER_REPLY,
   type SlurpNoteOperation,
 } from "./slurp-thread-notes.js";
+import { SLURP_CREATOR_STATE_SIGNALS, type SlurpCreatorStateSignal } from "./slurp-creator-state.js";
 
 export { SLURP_NOTE_MAX_LENGTH, SLURP_NOTES_PER_REPLY };
 
@@ -29,6 +30,7 @@ export const slurpDmReplySchema = z.object({
   // only the simulation reads.
   moodShift: z.enum(SLURP_MOOD_SHIFTS).optional().catch(undefined),
   remember: z.array(z.unknown()).optional().catch(undefined),
+  stateSignals: z.array(z.enum(SLURP_CREATOR_STATE_SIGNALS)).max(3).optional().catch(undefined),
   sharePost: z.number().int().min(0).max(4).optional().catch(undefined),
   image: z
     .object({ prompt: z.string().trim().min(3).max(1000), caption: z.string().trim().max(500).optional() })
@@ -52,6 +54,7 @@ export type SlurpDmReply = {
   content: string;
   moodShift: SlurpMoodShift;
   remember: SlurpNoteOperation[];
+  stateSignals: SlurpCreatorStateSignal[];
   sharePost?: number;
   image?: { prompt: string; caption: string };
   media?: {
@@ -81,13 +84,14 @@ export function readSlurpDmReply(value: unknown): SlurpDmReply {
   const parsed = slurpDmReplySchema.safeParse(value);
   if (!parsed.success) {
     // The one required field. A string answer with no envelope at all is still usable.
-    if (typeof value === "string") return { content: value, moodShift: "same", remember: [] };
+    if (typeof value === "string") return { content: value, moodShift: "same", remember: [], stateSignals: [] };
     throw new Error("Slurp direct-message generation returned no usable content.");
   }
   return {
     content: parsed.data.content,
     moodShift: parsed.data.moodShift ?? "same",
     remember: readSlurpNoteOperations(parsed.data.remember),
+    stateSignals: parsed.data.stateSignals ?? [],
     ...(parsed.data.sharePost === undefined ? {} : { sharePost: parsed.data.sharePost }),
     ...(parsed.data.image?.prompt
       ? { image: { prompt: parsed.data.image.prompt, caption: parsed.data.image.caption?.trim() ?? "" } }

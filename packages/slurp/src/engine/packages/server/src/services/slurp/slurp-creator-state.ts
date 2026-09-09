@@ -128,6 +128,22 @@ export type SlurpCreatorStateSignal =
   | "fan_apologized"
   | "fan_broke_a_promise";
 
+export const SLURP_CREATOR_STATE_SIGNALS = [
+  "fan_shared_personal_fact",
+  "fan_remembered_creator_detail",
+  "fan_gave_respectful_compliment",
+  "fan_gave_welcome_adult_attention",
+  "fan_ignored_creator_question",
+  "fan_pushed_after_refusal",
+  "fan_requested_free_content",
+  "fan_paid_for_content",
+  "fan_completed_commission",
+  "fan_returned_after_silence",
+  "fan_mentioned_another_creator",
+  "fan_apologized",
+  "fan_broke_a_promise",
+] as const satisfies readonly SlurpCreatorStateSignal[];
+
 export type SlurpStateDelta = {
   emotion?: SlurpCreatorEmotion;
   intent?: SlurpAdultIntent;
