@@ -74,6 +74,11 @@ const sendSchema = z.object({
   // Bounded at the trust boundary: this text reaches a model prompt, and an unbounded body
   // would let one message push the whole conversation out of the context window.
   content: z.string().trim().min(1).max(2000),
+  requestId: z.string().trim().min(8).max(100).optional(),
+  tip: z
+    .object({ amount: z.number().int().min(1).max(9999), note: z.string().trim().max(280).default("") })
+    .nullable()
+    .optional(),
 });
 
 const tipSchema = z.object({
@@ -380,15 +385,29 @@ export async function slurpMessageRoutes(app: FastifyInstance) {
     if (!parsed.success) return reply.code(400).send({ error: parsed.error.flatten() });
     const viewer = await requireViewer(parsed.data.personaId);
     if (!viewer) return reply.code(404).send({ error: "Slurp persona not found" });
-    const sent = await messages.sendViewerMessage(viewer.id, parsed.data.creatorAccountId, parsed.data.content);
+    const sent = await messages.sendViewerMessage(viewer.id, parsed.data.creatorAccountId, parsed.data.content, parsed.data.requestId);
     if (sent.status === "not_found") return reply.code(404).send({ error: "Creator not found" });
     if (sent.status === "closed") return reply.code(403).send({ error: "This Creator is not accepting messages." });
     if (sent.status === "insufficient_funds")
       return reply.code(402).send({ error: "Not enough coins.", required: sent.required });
 
     let outcome;
+    let tipError: string | null = null;
+    let replyTriggerMessageId = sent.message.id;
+    if (parsed.data.tip) {
+      const tipped = await messages.tipInThread(
+        viewer.id,
+        parsed.data.creatorAccountId,
+        parsed.data.tip.amount,
+        parsed.data.tip.note,
+        parsed.data.requestId,
+      );
+      if (tipped.status === "sent") replyTriggerMessageId = tipped.message.id;
+      else if (tipped.status === "insufficient_funds") tipError = "Not enough coins for the attached tip.";
+      else tipError = "The message was sent, but the tip could not be sent.";
+    }
     try {
-      outcome = await replyToSlurpMessage(app.db, { threadId: sent.thread.id, triggerMessageId: sent.message.id });
+      outcome = await replyToSlurpMessage(app.db, { threadId: sent.thread.id, triggerMessageId: replyTriggerMessageId });
     } catch (error) {
       logger.error(error, "[slurp-message] Reply failed after a send in thread %s", sent.thread.id);
       outcome = { status: "failed" as const, error: "Reply generation failed." };
@@ -401,6 +420,7 @@ export async function slurpMessageRoutes(app: FastifyInstance) {
       // The client shows the typing indicator for this long before revealing the reply, so the
       // pacing the model was given and the pacing the player sees are the same number.
       typingMs: "pacing" in outcome ? outcome.pacing.typingMs : 0,
+      tipError,
     };
   });
 

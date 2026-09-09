@@ -2000,6 +2000,7 @@ export type SlurpSendResponse = {
   reply: SlurpMessage | null;
   replyStatus: string;
   typingMs?: number;
+  tipError?: string | null;
 };
 
 /**
@@ -2153,8 +2154,13 @@ export function useSlurpCompose(creatorAccountId: string | null, personaId: stri
 export function useSendSlurpMessage() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (input: { personaId: string; creatorAccountId: string; content: string }) =>
-      api.post<SlurpSendResponse>("/slurp/messages/send", input),
+    mutationFn: (input: {
+      personaId: string;
+      creatorAccountId: string;
+      content: string;
+      requestId?: string;
+      tip?: { amount: number; note?: string } | null;
+    }) => api.post<SlurpSendResponse>("/slurp/messages/send", input),
     onSuccess: () => invalidateSlurpMessages(queryClient),
   });
 }

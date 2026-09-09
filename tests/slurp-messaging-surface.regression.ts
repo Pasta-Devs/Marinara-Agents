@@ -97,7 +97,10 @@ assert.match(messageStorage, /createSlurpPopulationStorage\(db\)\.get\(viewerAcc
 // Delayed Creator bubbles must not erase a Viewer message that arrived after the batch started.
 assert.match(messageStorage, /const currentRows = await tx\.select\(\)\.from\(slurpThreads\)/u);
 assert.match(messageStorage, /newerViewerMessage/u);
-assert.match(messageStorage, /creatorUnread: newerViewerMessage \? current\.creatorUnread : "0"/u);
+assert.match(
+  messageStorage,
+  /creatorUnread:\s*input\.role === "viewer" \? String\(Number\(current\.creatorUnread\) \+ 1\) : current\.creatorUnread/u,
+);
 assert.match(messageStorage, /\.slice\(0, limit\)/u, "pending filtering must happen before the reply limit");
 assert.match(
   replyScheduler,

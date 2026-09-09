@@ -121,6 +121,7 @@ export { SLURP_LONGTERM_NOTE_LIMIT, SLURP_WORKING_NOTE_LIMIT } from "../slurp/sl
 
 const now = () => new Date().toISOString();
 const messageUnlocks = new Map<string, Promise<SlurpMessage | null>>();
+const directMessageTips = new Map<string, Promise<SlurpSendResult>>();
 const commissionAccepts = new Map<string, Promise<SlurpCommission | null>>();
 const commissionSettlements = new Map<string, Promise<SlurpCommission | null>>();
 const commissionDeliveries = new Map<string, Promise<SlurpCommission | null>>();
@@ -1144,13 +1145,22 @@ export function createSlurpMessagesStorage(db: DB) {
       viewerAccountId: string,
       creatorAccountId: string,
       content: string,
+      requestId?: string,
     ): Promise<SlurpSendResult> {
       const opened = await storage.openThread(viewerAccountId, creatorAccountId, "viewer");
       if (opened.status !== "ok") return opened;
+      if (requestId) {
+        const existing = (await storage.listMessages(opened.thread.id)).find(
+          (message) => message.role === "viewer" && message.metadata.requestId === requestId,
+        );
+        if (existing) return { status: "sent", thread: opened.thread, message: existing };
+      }
       const message = await storage.appendMessage(opened.thread.id, {
+        id: requestId ? `dm:${requestId}:message` : undefined,
         senderAccountId: viewerAccountId,
         role: "viewer",
         content,
+        metadata: requestId ? { requestId } : undefined,
       });
       if (!message) return { status: "not_found" };
       await slurp.recordCreatorEvent(creatorAccountId, "message", {
@@ -1174,21 +1184,62 @@ export function createSlurpMessagesStorage(db: DB) {
       creatorAccountId: string,
       amount: number,
       note: string,
+      requestId?: string,
+    ): Promise<SlurpSendResult> {
+      if (requestId) {
+        const key = `${viewerAccountId}:${creatorAccountId}:${requestId}`;
+        const previous = directMessageTips.get(key) ?? Promise.resolve(null);
+        const current = previous
+          .catch(() => null)
+          .then(() => storage.tipInThreadUnlocked(viewerAccountId, creatorAccountId, amount, note, requestId));
+        directMessageTips.set(key, current);
+        try {
+          return await current;
+        } finally {
+          if (directMessageTips.get(key) === current) directMessageTips.delete(key);
+        }
+      }
+      return storage.tipInThreadUnlocked(viewerAccountId, creatorAccountId, amount, note);
+    },
+
+    async tipInThreadUnlocked(
+      viewerAccountId: string,
+      creatorAccountId: string,
+      amount: number,
+      note: string,
+      requestId?: string,
     ): Promise<SlurpSendResult> {
       const opened = await storage.openThread(viewerAccountId, creatorAccountId, "viewer");
       if (opened.status !== "ok") return opened;
+      if (requestId) {
+        const existing = (await storage.listMessages(opened.thread.id)).find(
+          (message) => message.kind === "tip" && message.metadata.requestId === requestId,
+        );
+        if (existing) return { status: "sent", thread: opened.thread, message: existing };
+      }
       const settings = await slurp.getSettings();
       if (settings.walletEnabled) {
         const charged = await slurp.tipCreator(viewerAccountId, creatorAccountId, amount);
         if (!charged) return { status: "insufficient_funds", required: amount };
       }
-      const message = await storage.appendMessage(opened.thread.id, {
-        senderAccountId: viewerAccountId,
-        role: "viewer",
-        kind: "tip",
-        content: note,
-        price: amount,
-      });
+      let message: SlurpMessage | null;
+      try {
+        message = await storage.appendMessage(opened.thread.id, {
+          id: requestId ? `dm:${requestId}:tip` : undefined,
+          senderAccountId: viewerAccountId,
+          role: "viewer",
+          kind: "tip",
+          content: note,
+          price: amount,
+          metadata: requestId ? { requestId } : undefined,
+        });
+      } catch (error) {
+        if (settings.walletEnabled) {
+          await slurp.refundCoins(viewerAccountId, amount, "failed direct-message tip");
+          await slurp.reverseCreatorIncome(creatorAccountId, amount, "failed direct-message tip");
+        }
+        throw error;
+      }
       if (!message) {
         if (settings.walletEnabled) {
           await slurp.refundCoins(viewerAccountId, amount, "failed direct-message tip");

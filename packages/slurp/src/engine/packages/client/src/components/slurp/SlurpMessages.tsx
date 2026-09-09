@@ -448,6 +448,9 @@ function SlurpThreadView({
   const [activeTipAmount, setActiveTipAmount] = useState<number | null>(null);
   const [customTipAmount, setCustomTipAmount] = useState("");
   const [customTipNote, setCustomTipNote] = useState("");
+  const [composerTipAmount, setComposerTipAmount] = useState(0);
+  const [composerTipNote, setComposerTipNote] = useState("");
+  const [sendRequestId, setSendRequestId] = useState<string | null>(null);
   // The fan's own words, held on screen until the server's copy of them arrives.
   const [pending, setPending] = useState<{ content: string; id: string | null } | null>(null);
   // Why no answer came. The send route has always reported this and nothing ever read it, so a
@@ -545,6 +548,11 @@ function SlurpThreadView({
     setInfoOpen(false);
     setDebugOpen(false);
     setPreparingImage(false);
+    setError(null);
+    setComposerTipAmount(0);
+    setComposerTipNote("");
+    setCustomTipAmount("");
+    setCustomTipNote("");
   }, [threadId, creatorAccountId]);
 
   // Follow the conversation down as it grows, the way every chat surface does.
@@ -583,6 +591,12 @@ function SlurpThreadView({
     setReplyStatus(null);
     const startedAt = Date.now();
     if (!ownsCreator) setTyping(true);
+    const requestId =
+      sendRequestId ??
+      (typeof crypto !== "undefined" && "randomUUID" in crypto
+        ? crypto.randomUUID()
+        : `${Date.now()}-${Math.random()}`);
+    setSendRequestId(requestId);
     try {
       // On a Creator-side thread the player is the Creator, so the message goes the other way.
       // Sending through the viewer route here opened a second conversation from the persona to
@@ -597,9 +611,19 @@ function SlurpThreadView({
         setPending({ content, id: written.message.id });
         return;
       }
-      const result = await send.mutateAsync({ personaId, creatorAccountId: targetCreatorAccountId, content });
+      const result = await send.mutateAsync({
+        personaId,
+        creatorAccountId: targetCreatorAccountId,
+        content,
+        requestId,
+        tip: composerTipAmount > 0 ? { amount: composerTipAmount, note: composerTipNote.trim() } : null,
+      });
+      setSendRequestId(null);
       setPending({ content, id: result.message.id });
       setReplyStatus(result.replyStatus ?? null);
+      if (result.tipError) setError(result.tipError);
+      setComposerTipAmount(0);
+      setComposerTipNote("");
       holdTyping(result.reply ? (result.typingMs ?? 0) : 0, startedAt);
     } catch (cause) {
       // Put the words back in the box. Losing a typed message to a failed request is the one
@@ -984,6 +1008,36 @@ function SlurpThreadView({
                   {localizeUi("ui.slurp.messages.sendCustomTip", { defaultValue: "Send tip" })}
                 </button>
               </div>
+              {!ownsCreator && (
+                <div className="flex flex-wrap items-center gap-2 border-t border-[var(--noodle-divider)] pt-2">
+                  <span className="text-xs font-bold text-[var(--muted-foreground)]">
+                    {localizeUi("ui.slurp.messages.tipWithMessage", { defaultValue: "Tip with message" })}
+                  </span>
+                  {TIP_PRESETS.map((amount) => (
+                    <button
+                      key={`composer-tip-${amount}`}
+                      type="button"
+                      aria-pressed={composerTipAmount === amount}
+                      onClick={() => setComposerTipAmount((current) => (current === amount ? 0 : amount))}
+                      className={cn(
+                        "min-h-9 rounded-full px-2.5 text-xs font-bold ring-1 ring-inset ring-[var(--noodle-accent)]/40",
+                        composerTipAmount === amount && "bg-[var(--noodle-accent)] text-zinc-950",
+                      )}
+                    >
+                      {amount}
+                    </button>
+                  ))}
+                  {composerTipAmount > 0 && (
+                    <input
+                      value={composerTipNote}
+                      maxLength={280}
+                      onChange={(event) => setComposerTipNote(event.target.value)}
+                      placeholder={localizeUi("ui.slurp.messages.tipNotePlaceholder", { defaultValue: "Tip note" })}
+                      className="h-9 min-w-32 flex-1 rounded-full bg-[var(--slurp-surface)] px-3 text-xs outline-none ring-1 ring-inset ring-[var(--noodle-divider)] focus:ring-2 focus:ring-[var(--slurp-focus)]"
+                    />
+                  )}
+                </div>
+              )}
             </div>
           )}
           <form
