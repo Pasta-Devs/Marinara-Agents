@@ -1,5 +1,12 @@
 # Slurp release notes
 
+## 1.2.58 — 2026-09-09
+
+- Creators now have short-lived states as well as slow ones: just posted, pleased with how something did, stung by a post going nowhere, tipsy, worn out, rattled, and others. Each one lasts a set time and then stops on its own.
+- Added exposure: how far out on a limb a Creator is in public right now. It rises with what they publish rather than with anything one fan says, and it fades overnight.
+- The conversation overview shows both, so you can see what a Creator is reacting to.
+- Nothing writes these yet beyond the state itself. The next release connects them to what actually happens on the platform.
+
 ## 1.2.57 — 2026-09-09
 
 - Creator energy is now spent by doing things. Publishing a post, generating a picture and finishing a commission each cost effort, with a commission costing the most.

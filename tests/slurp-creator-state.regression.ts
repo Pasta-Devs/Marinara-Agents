@@ -2,12 +2,18 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 
 import {
+  activeSlurpModifiers,
+  addSlurpModifier,
   applySlurpCreatorStateDelta,
   SLURP_ENERGY_COST,
+  SLURP_MODIFIERS,
+  SLURP_MODIFIER_LIMIT,
+  slurpModifierLines,
   applySlurpThreadStateDelta,
   applySlurpThreadStateSignals,
   decaySlurpCreatorState,
   decaySlurpThreadState,
+  readSlurpCreatorState,
   lowerSlurpAdultLevel,
   nextSlurpAdultLevel,
   slurpAdultLevelIndex,
@@ -185,6 +191,56 @@ const commissions = readFileSync(
 );
 assert.match(commissions, /energy: -SLURP_ENERGY_COST\.commission/u);
 
+// Modifiers expire by clock, so nothing has to sweep them.
+const at = new Date("2026-09-09T12:00:00.000Z");
+const posted = addSlurpModifier(creator, "just_posted", "post 3f2a", at);
+assert.equal(posted.modifiers.length, 1);
+assert.equal(posted.modifiers[0]?.kind, "just_posted");
+assert.deepEqual(slurpModifierLines(posted, at), [SLURP_MODIFIERS.just_posted.line]);
+// One hour later the same modifier is over and says nothing.
+const later = new Date(at.getTime() + SLURP_MODIFIERS.just_posted.hours * 3_600_000 + 1_000);
+assert.deepEqual(activeSlurpModifiers(posted, later), []);
+assert.deepEqual(slurpModifierLines(posted, later), []);
+
+// The numeric part lands once. Posting four times in an hour is one feeling, not four charges.
+const oneCharge = addSlurpModifier(posted, "just_posted", "post 9c11", at);
+assert.equal(oneCharge.modifiers.length, 1);
+assert.equal(oneCharge.arousal, posted.arousal);
+// A different feeling does charge, and does stack.
+const alsoTired = addSlurpModifier(posted, "tired", "long day", at);
+assert.equal(alsoTired.modifiers.length, 2);
+assert.equal(alsoTired.energy, creator.energy + SLURP_MODIFIERS.tired.delta.energy!);
+
+// A person is not ten things at once.
+let crowded = creator;
+for (const kind of ["just_posted", "tired", "rattled", "tipsy", "paid_well", "goal_hit"] as const) {
+  crowded = addSlurpModifier(crowded, kind, "x", at);
+}
+assert.equal(crowded.modifiers.length, SLURP_MODIFIER_LIMIT);
+
+// Stored modifiers are untrusted: an unknown kind, a bad date and an expired entry are all dropped.
+const parsed = readSlurpCreatorState(
+  JSON.stringify({
+    exposure: 70,
+    modifiers: [
+      { kind: "not_a_feeling", until: "2999-01-01T00:00:00.000Z", source: "x" },
+      { kind: "tired", until: "not a date", source: "x" },
+      { kind: "rattled", until: "2000-01-01T00:00:00.000Z", source: "x" },
+      { kind: "tipsy", until: "2999-01-01T00:00:00.000Z", source: "x" },
+    ],
+  }),
+  now,
+);
+assert.equal(parsed.exposure, 70);
+assert.deepEqual(
+  parsed.modifiers.map((modifier) => modifier.kind),
+  ["tipsy"],
+);
+
+// Exposure is a feeling about last night, so it is mostly gone by morning.
+const morning = decaySlurpCreatorState({ ...creator, exposure: 90 }, 8, now);
+assert.ok(morning.exposure < 10);
+
 const messageOperation = readFileSync(
   "packages/slurp/src/engine/packages/server/src/services/slurp/slurp-message.operation.ts",
   "utf8",
@@ -200,6 +256,8 @@ assert.match(generation, /creatorState\?: SlurpCreatorState/u);
 assert.match(generation, /Arousal is not permission/u);
 assert.match(generation, /A sales intent is not personal intimacy/u);
 assert.match(generation, /stateSignals: generated\.stateSignals/u);
+assert.match(generation, /happeningNow: slurpModifierLines\(input\.creatorState\)/u);
+assert.match(generation, /exposure: slurpIntensityBand\(input\.creatorState\.exposure\)/u);
 const storage = readFileSync("packages/slurp/src/engine/packages/server/src/services/storage/slurp.storage.ts", "utf8");
 assert.match(storage, /for \(const accountId of accountIds\)[\s\S]{0,160}?SLURP_CREATOR_STATE_KEY/u);
 

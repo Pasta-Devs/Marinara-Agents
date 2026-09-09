@@ -2133,7 +2133,9 @@ export type SlurpThreadRelationship = {
     emotionIntensity: number;
     energy: number;
     arousal: number;
+    exposure: number;
     intent: string;
+    modifiers: Array<{ kind: string; until: string; source: string }>;
     updatedAt: string;
   };
   threadState: {

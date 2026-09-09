@@ -184,6 +184,7 @@ import { pruneNoodleRefreshRuns } from "./slurp-refresh-run-retention.js";
 import { noodlerPostImageRetryAttempts, NOODLER_POST_IMAGE_RETRY_LIMIT } from "../slurp/slurp-image-retry.js";
 import { enqueueSlurpFinancial } from "./slurp-financial-queue.js";
 import {
+  addSlurpModifier,
   applySlurpCreatorStateDelta,
   creatorStateDeltaForSignal,
   decaySlurpCreatorState,
@@ -191,6 +192,7 @@ import {
   SLURP_ENERGY_COST,
   type SlurpCreatorState,
   type SlurpCreatorStateSignal,
+  type SlurpModifierKind,
   type SlurpStateDelta,
 } from "../slurp/slurp-creator-state.js";
 
@@ -1894,6 +1896,23 @@ export function createSlurpStorage(db: DB) {
     async adjustCreatorState(creatorAccountId: string, changes: SlurpStateDelta): Promise<SlurpCreatorState> {
       const current = await this.getCreatorState(creatorAccountId);
       const next = applySlurpCreatorStateDelta(current, changes, new Date().toISOString());
+      await settingsStore.set(`${SLURP_CREATOR_STATE_KEY}.${creatorAccountId}`, JSON.stringify(next));
+      return next;
+    },
+
+    /**
+     * Record that something happened to this Creator that will be true for a while.
+     *
+     * The one-off numeric change rides along inside `addSlurpModifier`, so callers never have to
+     * know which dials a feeling moves — they say what happened and the table decides.
+     */
+    async addCreatorModifier(
+      creatorAccountId: string,
+      kind: SlurpModifierKind,
+      source: string,
+    ): Promise<SlurpCreatorState> {
+      const current = await this.getCreatorState(creatorAccountId);
+      const next = addSlurpModifier(current, kind, source);
       await settingsStore.set(`${SLURP_CREATOR_STATE_KEY}.${creatorAccountId}`, JSON.stringify(next));
       return next;
     },

@@ -66,12 +66,130 @@ export type SlurpThreadPosture = (typeof SLURP_THREAD_POSTURES)[number];
 export const SLURP_ADULT_LEVELS = ["ordinary", "suggestive", "provocative", "intimate", "explicit"] as const;
 export type SlurpAdultLevel = (typeof SLURP_ADULT_LEVELS)[number];
 
+/**
+ * Something that is true of a Creator for a while, and then is not.
+ *
+ * The dials below are accumulators: they answer "how much" and they move slowly. A great many
+ * things worth knowing about a person are not accumulators — she posted ten minutes ago, a set
+ * sold well this morning, she has had a drink. Each of those wanted a dial of its own, and a dial
+ * per feeling is how a state model grows to forty columns that the prompt then averages away.
+ *
+ * So they are one list with a clock instead. A modifier carries a prompt line and expires by
+ * timestamp, which means no scheduler ticks it and no migration is needed to add another: adding
+ * a feeling is adding a row to SLURP_MODIFIERS, never a column to storage.
+ */
+export const SLURP_MODIFIER_KINDS = [
+  "just_posted",
+  "post_landed",
+  "post_flopped",
+  "afterglow",
+  "overexposed",
+  "paid_well",
+  "goal_hit",
+  "lapse_sting",
+  "tipsy",
+  "tired",
+  "rattled",
+] as const;
+
+export type SlurpModifierKind = (typeof SLURP_MODIFIER_KINDS)[number];
+
+export type SlurpCreatorModifier = {
+  kind: SlurpModifierKind;
+  /** When it stops applying. Expiry is read off the clock, so nothing has to tick it. */
+  until: string;
+  /** What put it there, in a few words, for the panel. Never reaches the model. */
+  source: string;
+};
+
+/**
+ * Every modifier, with what it does and how long it lasts.
+ *
+ * The numeric part is applied once, when the modifier arrives. The line is what persists while it
+ * is active. That split is deliberate: a lasting consequence belongs on a dial where it can be
+ * seen and decayed, and a modifier that also nudged numbers every read would compound silently
+ * for as long as it ran.
+ */
+export const SLURP_MODIFIERS: Record<
+  SlurpModifierKind,
+  { line: string; hours: number; delta: Omit<SlurpStateDelta, "adultLevel" | "posture"> }
+> = {
+  just_posted: {
+    line: "You posted a few minutes ago and you keep checking how it is doing.",
+    hours: 1,
+    delta: { arousal: 4 },
+  },
+  post_landed: {
+    line: "Something you posted is doing well and you are pleased with yourself.",
+    hours: 6,
+    delta: { emotion: "proud", emotionIntensity: 12, arousal: 6 },
+  },
+  post_flopped: {
+    line: "Something you posted has gone nowhere, and you have noticed.",
+    hours: 8,
+    delta: { emotion: "lonely", emotionIntensity: 10, energy: -4 },
+  },
+  afterglow: {
+    line: "You are coming down from something and you feel unguarded.",
+    hours: 2,
+    delta: { arousal: -20, emotion: "content", emotionIntensity: 8 },
+  },
+  overexposed: {
+    line: "You went further than you usually do and you are not sure how you feel about it yet.",
+    hours: 10,
+    delta: { arousal: -12, emotion: "embarrassed", emotionIntensity: 14 },
+  },
+  paid_well: {
+    line: "Money came in today and it has taken the edge off.",
+    hours: 12,
+    delta: { emotion: "content", emotionIntensity: 10, energy: 5 },
+  },
+  goal_hit: {
+    line: "You hit the goal you asked them for. Say something about it.",
+    hours: 24,
+    delta: { emotion: "excited", emotionIntensity: 20, energy: 8 },
+  },
+  lapse_sting: {
+    line: "Somebody who had been around a long time has gone quiet, and it is sitting with you.",
+    hours: 12,
+    delta: { emotion: "hurt", emotionIntensity: 14 },
+  },
+  tipsy: {
+    line: "You have had a drink or two.",
+    hours: 3,
+    delta: { arousal: 10, energy: -8 },
+  },
+  tired: {
+    line: "You are running on nothing and it shows.",
+    hours: 4,
+    delta: { energy: -15 },
+  },
+  rattled: {
+    line: "Somebody was unpleasant earlier and you have not shaken it off.",
+    hours: 4,
+    delta: { emotion: "anxious", emotionIntensity: 12 },
+  },
+};
+
+/** Most that are kept at once. Older ones fall off first: a person is not ten things at a time. */
+export const SLURP_MODIFIER_LIMIT = 4;
+
 export type SlurpCreatorState = {
   emotion: SlurpCreatorEmotion;
   emotionIntensity: number;
   energy: number;
   arousal: number;
+  /**
+   * How far out on a limb this Creator currently is in public.
+   *
+   * Every other dial here is moved by what one fan did in one conversation. This one is moved by
+   * what she published to everybody, which is the only channel the world had into her mood at
+   * all. It is what produces the morning after: post something bold at midnight, wake up exposed,
+   * and write differently all day because of something no fan said to you.
+   */
+  exposure: number;
   intent: SlurpAdultIntent;
+  modifiers: SlurpCreatorModifier[];
   updatedAt: string;
 };
 
@@ -124,6 +242,7 @@ export type SlurpStateDelta = {
   intent?: SlurpAdultIntent;
   energy?: number;
   arousal?: number;
+  exposure?: number;
   emotionIntensity?: number;
   familiarity?: number;
   sexualComfort?: number;
@@ -145,7 +264,9 @@ export const SLURP_CREATOR_STATE_DEFAULT: Omit<SlurpCreatorState, "updatedAt"> =
   emotionIntensity: 35,
   energy: 60,
   arousal: 25,
+  exposure: 0,
   intent: "none",
+  modifiers: [],
 };
 
 export const SLURP_THREAD_STATE_DEFAULT: Omit<SlurpThreadState, "updatedAt"> = {
@@ -249,6 +370,43 @@ export function creatorStateDeltaForSignal(signal: SlurpCreatorStateSignal): Slu
   }
 }
 
+/** The modifiers still running at `at`. Expiry is a clock read, so nothing has to sweep them. */
+export function activeSlurpModifiers(state: SlurpCreatorState, at = new Date()): SlurpCreatorModifier[] {
+  return state.modifiers.filter((modifier) => {
+    const until = Date.parse(modifier.until);
+    return Number.isFinite(until) && until > at.getTime();
+  });
+}
+
+/** What the active modifiers tell the model, in the order they arrived. */
+export function slurpModifierLines(state: SlurpCreatorState, at = new Date()): string[] {
+  return activeSlurpModifiers(state, at).map((modifier) => SLURP_MODIFIERS[modifier.kind].line);
+}
+
+/**
+ * Add one modifier and apply its one-off change.
+ *
+ * Re-adding a kind that is already running refreshes it rather than stacking a second copy, so a
+ * Creator who posts four times in an hour is "just posted" once and is not charged for it four
+ * times over. Expired entries are dropped on the way through, which is the only sweep there is.
+ */
+export function addSlurpModifier(
+  state: SlurpCreatorState,
+  kind: SlurpModifierKind,
+  source: string,
+  at = new Date(),
+): SlurpCreatorState {
+  const definition = SLURP_MODIFIERS[kind];
+  const until = new Date(at.getTime() + definition.hours * 3_600_000).toISOString();
+  const running = activeSlurpModifiers(state, at);
+  const already = running.some((modifier) => modifier.kind === kind);
+  const kept = running.filter((modifier) => modifier.kind !== kind);
+  const modifiers = [...kept, { kind, until, source }].slice(-SLURP_MODIFIER_LIMIT);
+  // The numbers move only when the feeling is new. A refresh extends the line, nothing more.
+  const next = already ? { ...state } : applySlurpCreatorStateDelta(state, definition.delta, at.toISOString());
+  return { ...next, modifiers, updatedAt: at.toISOString() };
+}
+
 export function readSlurpCreatorState(raw: unknown, fallbackUpdatedAt: string): SlurpCreatorState {
   const value = typeof raw === "string" ? parseSlurpStateJson(raw) : raw;
   const record = value && typeof value === "object" && !Array.isArray(value) ? (value as Record<string, unknown>) : {};
@@ -260,11 +418,28 @@ export function readSlurpCreatorState(raw: unknown, fallbackUpdatedAt: string): 
   const intent = SLURP_ADULT_INTENTS.includes(record.intent as SlurpAdultIntent)
     ? (record.intent as SlurpAdultIntent)
     : SLURP_CREATOR_STATE_DEFAULT.intent;
+  const now = Date.now();
+  const modifiers = Array.isArray(record.modifiers)
+    ? record.modifiers
+        .filter((entry): entry is SlurpCreatorModifier => {
+          if (!entry || typeof entry !== "object" || Array.isArray(entry)) return false;
+          const candidate = entry as Record<string, unknown>;
+          if (!SLURP_MODIFIER_KINDS.includes(candidate.kind as SlurpModifierKind)) return false;
+          if (typeof candidate.until !== "string") return false;
+          const until = Date.parse(candidate.until);
+          // An expired entry is dropped on read, so the list cannot grow without a sweep.
+          return Number.isFinite(until) && until > now;
+        })
+        .map((entry) => ({ kind: entry.kind, until: entry.until, source: String(entry.source ?? "") }))
+        .slice(-SLURP_MODIFIER_LIMIT)
+    : SLURP_CREATOR_STATE_DEFAULT.modifiers;
   return {
     emotion,
+    modifiers,
     emotionIntensity: number("emotionIntensity", SLURP_CREATOR_STATE_DEFAULT.emotionIntensity),
     energy: number("energy", SLURP_CREATOR_STATE_DEFAULT.energy),
     arousal: number("arousal", SLURP_CREATOR_STATE_DEFAULT.arousal),
+    exposure: number("exposure", SLURP_CREATOR_STATE_DEFAULT.exposure),
     intent,
     updatedAt:
       typeof record.updatedAt === "string" && Number.isFinite(Date.parse(record.updatedAt))
@@ -301,7 +476,8 @@ export function applySlurpCreatorStateDelta(
       continue;
     }
     if (typeof value !== "number") continue;
-    const numericKey = key as "emotionIntensity" | "energy" | "arousal";
+    if (key === "modifiers") continue;
+    const numericKey = key as "emotionIntensity" | "energy" | "arousal" | "exposure";
     next[numericKey] = clamp(value + next[numericKey]);
   }
   next.updatedAt = now;
@@ -442,6 +618,9 @@ export function decaySlurpCreatorState(state: SlurpCreatorState, hours: number, 
     emotionIntensity,
     energy: toward(state.energy, 60, 8),
     arousal: toward(state.arousal, 25, 20),
+    // Being far out on a limb is a feeling about last night, so it is mostly gone by morning.
+    exposure: toward(state.exposure, 0, 12),
+    modifiers: activeSlurpModifiers(state, new Date(now)),
     updatedAt: now,
   };
 }

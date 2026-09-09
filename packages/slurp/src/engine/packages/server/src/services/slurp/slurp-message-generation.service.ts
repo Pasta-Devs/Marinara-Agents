@@ -34,6 +34,7 @@ import { resolveSlurpCreatorScheduleContext } from "./slurp-creator-schedule.js"
 import { resolveSlurpCreatorAvailability, type SlurpCreatorAvailability } from "./slurp-creator-schedule-context.js";
 import { describeSlurpRapport, type SlurpRapport } from "./slurp-rapport.js";
 import { recoverSlurpMood, slurpMoodTone } from "./slurp-mood.js";
+import { slurpModifierLines } from "./slurp-creator-state.js";
 import { resolveSlurpStance, type SlurpStance } from "./slurp-stance.js";
 import { readSlurpAudienceTone } from "./slurp-tone.js";
 import {
@@ -115,7 +116,7 @@ export function buildSlurpMessageChat(input: {
       ? "You already know some things about this fan from earlier conversations. Working memory is recent and may change. Long-term memory is stable. Use them when they fit, and never recite them back as a list."
       : "",
     input.creatorState
-      ? "The Creator state describes current feeling, energy, sexual attention, and intent. Let it shape behavior without replacing the supplied personality. Arousal is not permission. A sales intent is not personal intimacy. A high value never overrides a boundary, cool-off, privacy rule, or the relationship state."
+      ? "The Creator state describes current feeling, energy, sexual attention, public exposure, and intent. happeningNow lists things that are true of the Creator right now and will not be true tomorrow; let them colour the reply without becoming its subject. Let it shape behavior without replacing the supplied personality. Arousal is not permission. A sales intent is not personal intimacy. A high value never overrides a boundary, cool-off, privacy rule, or the relationship state."
       : "",
     input.threadState
       ? "The relationship state is specific to this fan. Keep adult behavior at or below its adultLevel. Low sexualComfort, low respect, high resentment, a defensive posture, or a rejecting posture must reduce or stop adult escalation even when the Creator is aroused."
@@ -182,7 +183,11 @@ export function buildSlurpMessageChat(input: {
             emotionIntensity: slurpIntensityBand(input.creatorState.emotionIntensity),
             energy: slurpIntensityBand(input.creatorState.energy),
             arousal: slurpIntensityBand(input.creatorState.arousal),
+            exposure: slurpIntensityBand(input.creatorState.exposure),
             intent: input.creatorState.intent,
+            // Short-lived things that are true right now. They are already phrased, because the
+            // model reads them as sentences rather than as another set of values to weigh.
+            happeningNow: slurpModifierLines(input.creatorState),
           },
         }
       : {}),

@@ -2200,6 +2200,15 @@ function SlurpRelationshipPanel({
               value={humanize(creatorState.intent)}
               description="The creator's current direction for this interaction."
             />
+            <InfoChip
+              label="Right now"
+              value={
+                creatorState.modifiers.length
+                  ? creatorState.modifiers.map((modifier) => humanize(modifier.kind)).join(", ")
+                  : "Nothing in particular"
+              }
+              description="Short-lived things that are true today and will not be tomorrow."
+            />
             <StateMeter
               label="Arousal"
               value={creatorState.arousal}
@@ -2212,6 +2221,12 @@ function SlurpRelationshipPanel({
               description="Available effort for replies and media."
             />
             <StateMeter label="Emotion intensity" value={creatorState.emotionIntensity} />
+            <StateMeter
+              label="Exposure"
+              value={creatorState.exposure}
+              tone="amber"
+              description="How far out on a limb they are in public right now. It fades overnight."
+            />
           </Section>
           <Section icon={ShieldCheck} title="Boundaries" summary={boundarySummary} open={boundary}>
             <div className="grid grid-cols-2 gap-2">
