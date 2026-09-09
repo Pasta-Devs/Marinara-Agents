@@ -36,6 +36,12 @@
     "slurp": {
       "versions": [
         {
+          "version": "1.2.47",
+          "date": "2026-09-09",
+          "notes": "- The conversation overview now has a sticky summary, readable state labels, and independent scrolling.\n- Creator state, conversation state, boundaries, memories, context, and business data now use expandable sections and information boxes.\n- Working memory and long-term memory are shown separately with an explanation of how they differ.",
+          "highlight": false
+        },
+        {
           "version": "1.2.46",
           "date": "2026-09-09",
           "notes": "- Slurp message details now show creator state, arousal, emotion, energy, intent, strategy, needs, and conversation boundaries.\n- The state panel now uses collapsible sections and its own scroll area so the chat remains usable on small screens.\n- State snapshots are returned to both sides of a conversation and refresh with the existing message polling and mutations.",
@@ -147,12 +153,6 @@
           "version": "1.2.28",
           "date": "2026-09-08",
           "notes": "- Pending messages now enter the Creator's paced reply queue. A Creator reply accepts the request, so conversations continue even when they began while the Creator was away or the fan was not subscribed.\n- Character-controlled Creators can quote fan commissions themselves and generate the finished commission after the fan explicitly accepts and pays.\n- Refined the chat and commission cards with clearer state guidance, larger controls, stronger focus and press feedback, and cleaner coin labels.",
-          "highlight": false
-        },
-        {
-          "version": "1.2.27",
-          "date": "2026-09-08",
-          "notes": "- Polished Slurp's mobile navigation, empty states, wide-screen layouts, and small-text readability without changing the page structure.\n- Spending coins now gives live balances a brief coin animation, with a quiet color-only cue when reduced motion is enabled.\n- The age gate keeps its confetti payoff and now offers a direct way back to Home.",
           "highlight": false
         }
       ]

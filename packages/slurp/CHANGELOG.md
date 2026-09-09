@@ -1,5 +1,11 @@
 # Slurp release notes
 
+## 1.2.47 — 2026-09-09
+
+- The conversation overview now has a sticky summary, readable state labels, and independent scrolling.
+- Creator state, conversation state, boundaries, memories, context, and business data now use expandable sections and information boxes.
+- Working memory and long-term memory are shown separately with an explanation of how they differ.
+
 ## 1.2.46 — 2026-09-09
 
 - Slurp message details now show creator state, arousal, emotion, energy, intent, strategy, needs, and conversation boundaries.

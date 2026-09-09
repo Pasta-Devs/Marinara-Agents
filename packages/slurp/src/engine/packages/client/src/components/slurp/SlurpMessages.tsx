@@ -1,5 +1,8 @@
 import {
   ArrowLeft,
+  Activity,
+  Brain,
+  BriefcaseBusiness,
   Check,
   ChevronDown,
   Heart,
@@ -11,6 +14,7 @@ import {
   Plus,
   Search,
   Send,
+  ShieldCheck,
   Sparkles,
   X,
 } from "lucide-react";
@@ -2015,19 +2019,25 @@ function SlurpRelationshipPanel({ relationship }: { relationship: NonNullable<Sl
     threadState.stance === "defensive" ||
     threadState.sexualComfort < 36 ||
     threadState.respect < 36;
-  const stateSummary = `${creatorState.emotion} · ${band(creatorState.arousal)} arousal · ${band(creatorState.energy)} energy`;
-  const conversationSummary = `${moodLabel ?? "neutral"} · ${threadState.stance} · ${threadState.adultLevel}`;
+  const humanize = (value: string) =>
+    value.replaceAll("_", " ").replace(/\b\w/gu, (character) => character.toUpperCase());
+  const stateSummary = `${humanize(creatorState.emotion)} · ${humanize(band(creatorState.arousal))} arousal · ${humanize(band(creatorState.energy))} energy`;
+  const conversationSummary = `${humanize(moodLabel ?? "neutral")} · ${humanize(threadState.stance)} · ${humanize(threadState.adultLevel)}`;
   const boundarySummary = boundary ? "Adult escalation blocked" : "Adult escalation allowed";
-  const contextSummary = `${relationship.availability.online ? "Available" : "Away"} · ${relationship.audienceTone} · ${relationship.notes.length} notes`;
+  const contextSummary = `${relationship.availability.online ? "Available" : "Away"} · ${humanize(relationship.audienceTone)}`;
+  const workingNotes = relationship.notes.filter((note) => note.tier === "working");
+  const longTermNotes = relationship.notes.filter((note) => note.tier === "longterm");
   const progress = (value: number) => `${Math.max(0, Math.min(100, value))}%`;
   const StateMeter = ({
     label,
     value,
     tone = "accent",
+    description,
   }: {
     label: string;
     value: number;
     tone?: "accent" | "amber" | "red";
+    description?: string;
   }) => (
     <div>
       <div className="mb-1 flex justify-between gap-2 text-[0.7rem]">
@@ -2043,9 +2053,11 @@ function SlurpRelationshipPanel({ relationship }: { relationship: NonNullable<Sl
           style={{ width: progress(value) }}
         />
       </div>
+      {description && <p className="mt-1 text-[0.65rem] text-[var(--muted-foreground)]">{description}</p>}
     </div>
   );
   const Section = ({
+    icon: Icon,
     title,
     summary,
     children,
@@ -2054,93 +2066,170 @@ function SlurpRelationshipPanel({ relationship }: { relationship: NonNullable<Sl
     title: string;
     summary: string;
     children: ReactNode;
+    icon: typeof Activity;
     open?: boolean;
   }) => (
     <details open={open} className="border-b border-[var(--noodle-divider)] last:border-b-0">
-      <summary className="flex cursor-pointer list-none items-center justify-between gap-3 py-2.5 font-bold [&::-webkit-details-marker]:hidden">
-        <span>{title}</span>
+      <summary className="group flex min-h-11 cursor-pointer list-none items-center justify-between gap-3 py-2.5 font-bold [&::-webkit-details-marker]:hidden">
+        <span className="flex min-w-0 items-center gap-2">
+          <Icon size={15} className="shrink-0 text-[var(--noodle-accent)]" aria-hidden="true" />
+          <span>{title}</span>
+        </span>
         <span className="truncate text-right text-[0.68rem] font-normal text-[var(--muted-foreground)]">{summary}</span>
       </summary>
       <div className="space-y-2 pb-3">{children}</div>
     </details>
   );
   return (
-    <div className="mx-3 mt-2 max-h-[min(70vh,38rem)] shrink-0 overflow-y-auto rounded-2xl bg-[var(--slurp-surface)] p-3 text-xs ring-1 ring-inset ring-[var(--noodle-divider)]">
-      <div className="flex flex-col">
-        <Section title="Current state" summary={stateSummary} open>
-          <div className="grid grid-cols-2 gap-2">
-            <InfoChip label="Emotion" value={creatorState.emotion} />
-            <InfoChip label="Intensity" value={band(creatorState.emotionIntensity)} />
-            <InfoChip label="Intent" value={creatorState.intent} />
-            <InfoChip label="Strategy" value={creatorState.strategy} />
+    <div className="mx-3 mt-2 flex max-h-[min(78vh,44rem)] min-h-0 shrink-0 flex-col overflow-hidden rounded-2xl bg-[var(--slurp-surface)] text-xs ring-1 ring-inset ring-[var(--noodle-divider)]">
+      <header className="shrink-0 border-b border-[var(--noodle-divider)] p-3">
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <h2 className="text-sm font-bold">Conversation overview</h2>
+            <p className="mt-0.5 text-[0.68rem] text-[var(--muted-foreground)]">Updated just now</p>
           </div>
-          <StateMeter label="Arousal" value={creatorState.arousal} tone="amber" />
-          <StateMeter label="Energy" value={creatorState.energy} />
-          {creatorState.needs.length > 0 && <InfoChip label="Needs" value={creatorState.needs.join(", ")} />}
-        </Section>
-        <Section title="Conversation" summary={conversationSummary} open>
-          <div className="grid grid-cols-2 gap-2">
-            <InfoChip label="Stance" value={threadState.stance} />
-            <InfoChip label="Adult level" value={threadState.adultLevel} />
-          </div>
-          {mood !== null && <StateMeter label="Conversation mood" value={moodPercent} />}
-          <div className="grid grid-cols-2 gap-2">
-            {(["familiarity", "interest", "threadDesire"] as const).map((key) => (
-              <InfoChip key={key} label={key} value={band(threadState[key])} />
-            ))}
-          </div>
-        </Section>
-        <Section title="Boundaries" summary={boundarySummary} open={boundary}>
-          <div className="grid grid-cols-2 gap-2">
-            <StateMeter
-              label="Sexual comfort"
-              value={threadState.sexualComfort}
-              tone={threadState.sexualComfort < 36 ? "red" : "accent"}
-            />
-            <StateMeter
-              label="Respect"
-              value={threadState.respect}
-              tone={threadState.respect < 36 ? "red" : "accent"}
-            />
-            <StateMeter label="Emotional trust" value={threadState.emotionalTrust} />
-            <StateMeter label="Commercial trust" value={threadState.commercialTrust} />
-            <StateMeter
-              label="Resentment"
-              value={threadState.resentment}
-              tone={threadState.resentment > 60 ? "red" : "amber"}
-            />
-          </div>
-          <div className="grid grid-cols-2 gap-2">
-            <InfoChip label="Strikes" value={String(relationship.strikes)} />
-            <InfoChip label="Cool off" value={cooling ? "Active" : "None"} />
-          </div>
-        </Section>
-        <Section title="Context and business" summary={contextSummary}>
-          <div className="grid grid-cols-2 gap-2">
-            <InfoChip label="Rapport" value={`${relationship.tier} · ${relationship.score}/100`} />
-            <InfoChip label="Spent" value={`${relationship.spentCoins} coins`} />
-            <InfoChip label="Tone" value={relationship.audienceTone} />
-            <InfoChip label="Images" value={relationship.imageMode === "none" ? "Not now" : relationship.imageMode} />
-          </div>
-          <p className="text-[var(--muted-foreground)]">
-            <span className="font-bold text-[var(--foreground)]">
-              {relationship.availability.online ? "Available" : "Away"}
-            </span>
-            {relationship.availability.activity ? ` · ${relationship.availability.activity}` : ""}
-          </p>
-          {relationship.dayVibe && <p className="text-[var(--muted-foreground)]">{relationship.dayVibe}</p>}
-          {relationship.notes.length > 0 && (
-            <div className="text-[var(--muted-foreground)]">
-              <p className="font-bold text-[var(--foreground)]">Saved fan notes</p>
-              <ul className="list-disc pl-4">
-                {relationship.notes.map((note) => (
-                  <li key={note.id}>{note.text}</li>
-                ))}
-              </ul>
+          <Activity size={16} className="mt-0.5 text-[var(--noodle-accent)]" aria-hidden="true" />
+        </div>
+        <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-4">
+          <InfoChip label="Emotion" value={humanize(creatorState.emotion)} />
+          <InfoChip label="Arousal" value={humanize(band(creatorState.arousal))} tone="amber" />
+          <InfoChip label="Energy" value={humanize(band(creatorState.energy))} />
+          <InfoChip label="Conversation" value={humanize(threadState.adultLevel)} />
+        </div>
+      </header>
+      <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-3 pb-4 [scrollbar-gutter:stable]">
+        <div className="flex flex-col">
+          <Section icon={Sparkles} title="Current state" summary={stateSummary} open>
+            <div className="grid grid-cols-2 gap-2">
+              <InfoChip
+                label="Emotion"
+                value={humanize(creatorState.emotion)}
+                description="The creator's current feeling."
+              />
+              <InfoChip
+                label="Intensity"
+                value={humanize(band(creatorState.emotionIntensity))}
+                description="How strongly the feeling is expressed."
+              />
+              <InfoChip
+                label="Intent"
+                value={humanize(creatorState.intent)}
+                description="What the creator is trying to do now."
+              />
+              <InfoChip
+                label="Strategy"
+                value={humanize(creatorState.strategy)}
+                description="The creator's current platform approach."
+              />
             </div>
-          )}
-          {cooling && <p className="font-semibold text-amber-600 dark:text-amber-400">Not talking right now.</p>}
-        </Section>
+            <StateMeter
+              label="Arousal"
+              value={creatorState.arousal}
+              tone="amber"
+              description="Sexual attention. It does not grant permission."
+            />
+            <StateMeter label="Energy" value={creatorState.energy} />
+            {creatorState.needs.length > 0 && <InfoChip label="Needs" value={creatorState.needs.join(", ")} />}
+          </Section>
+          <Section icon={MessageCircle} title="Conversation" summary={conversationSummary} open>
+            <div className="grid grid-cols-2 gap-2">
+              <InfoChip label="Stance" value={humanize(threadState.stance)} />
+              <InfoChip label="Adult level" value={humanize(threadState.adultLevel)} />
+            </div>
+            {mood !== null && <StateMeter label="Conversation mood" value={moodPercent} />}
+            <div className="grid grid-cols-2 gap-2">
+              {(["familiarity", "interest", "threadDesire"] as const).map((key) => (
+                <InfoChip key={key} label={humanize(key)} value={humanize(band(threadState[key]))} />
+              ))}
+            </div>
+          </Section>
+          <Section icon={ShieldCheck} title="Boundaries" summary={boundarySummary} open={boundary}>
+            <div className="grid grid-cols-2 gap-2">
+              <StateMeter
+                label="Sexual comfort"
+                value={threadState.sexualComfort}
+                tone={threadState.sexualComfort < 36 ? "red" : "accent"}
+              />
+              <StateMeter
+                label="Respect"
+                value={threadState.respect}
+                tone={threadState.respect < 36 ? "red" : "accent"}
+              />
+              <StateMeter label="Emotional trust" value={threadState.emotionalTrust} />
+              <StateMeter label="Commercial trust" value={threadState.commercialTrust} />
+              <StateMeter
+                label="Resentment"
+                value={threadState.resentment}
+                tone={threadState.resentment > 60 ? "red" : "amber"}
+              />
+            </div>
+            <div className="grid grid-cols-2 gap-2">
+              <InfoChip label="Strikes" value={String(relationship.strikes)} />
+              <InfoChip label="Cool off" value={cooling ? "Active" : "None"} />
+            </div>
+          </Section>
+          <Section
+            icon={Brain}
+            title="Memories"
+            summary={`${workingNotes.length} working · ${longTermNotes.length} long-term`}
+          >
+            <p className="text-[0.68rem] text-[var(--muted-foreground)]">
+              Working memories may change. Long-term memories remain until updated.
+            </p>
+            <div className="grid gap-2 sm:grid-cols-2">
+              <InfoChip
+                label="Working memory"
+                value={workingNotes.length ? workingNotes.map((note) => note.text).join("; ") : "None yet"}
+              />
+              <InfoChip
+                label="Long-term memory"
+                value={longTermNotes.length ? longTermNotes.map((note) => note.text).join("; ") : "None yet"}
+              />
+            </div>
+          </Section>
+          <Section icon={Activity} title="Context" summary={contextSummary}>
+            <div className="grid grid-cols-2 gap-2">
+              <InfoChip label="Availability" value={relationship.availability.online ? "Available" : "Away"} />
+              <InfoChip label="Audience tone" value={humanize(relationship.audienceTone)} />
+              <InfoChip
+                label="Images"
+                value={relationship.imageMode === "none" ? "Not now" : humanize(relationship.imageMode)}
+              />
+              <InfoChip label="Day vibe" value={relationship.dayVibe ?? "Not recorded"} />
+            </div>
+            <p className="text-[var(--muted-foreground)]">
+              <span className="font-bold text-[var(--foreground)]">
+                {relationship.availability.online ? "Available" : "Away"}
+              </span>
+              {relationship.availability.activity ? ` · ${relationship.availability.activity}` : ""}
+            </p>
+            {relationship.dayVibe && <p className="text-[var(--muted-foreground)]">{relationship.dayVibe}</p>}
+            {cooling && <p className="font-semibold text-amber-600 dark:text-amber-400">Not talking right now.</p>}
+          </Section>
+          <Section
+            icon={BriefcaseBusiness}
+            title="Business"
+            summary={`${humanize(relationship.tier)} · ${relationship.spentCoins} coins`}
+          >
+            <div className="grid grid-cols-2 gap-2">
+              <InfoChip label="Rapport" value={`${humanize(relationship.tier)} · ${relationship.score}/100`} />
+              <InfoChip label="Spent" value={`${relationship.spentCoins} coins`} />
+              <InfoChip label="Strikes" value={String(relationship.strikes)} />
+              <InfoChip label="Cool off" value={cooling ? "Active" : "None"} />
+            </div>
+            {relationship.contributions.length > 0 && (
+              <div className="grid gap-1.5">
+                {relationship.contributions.map((entry) => (
+                  <InfoChip
+                    key={entry.key}
+                    label={entry.detail}
+                    value={entry.points > 0 ? `+${entry.points}` : String(entry.points)}
+                  />
+                ))}
+              </div>
+            )}
+          </Section>
+        </div>
       </div>
       <div className="sr-only" aria-live="polite">
         State updated {creatorState.updatedAt}
@@ -2149,11 +2238,29 @@ function SlurpRelationshipPanel({ relationship }: { relationship: NonNullable<Sl
   );
 }
 
-function InfoChip({ label, value }: { label: string; value: string }) {
+function InfoChip({
+  label,
+  value,
+  description,
+  tone = "default",
+}: {
+  label: string;
+  value: string;
+  description?: string;
+  tone?: "default" | "amber";
+}) {
   return (
-    <div className="rounded-xl bg-[var(--slurp-surface-raised)] px-2.5 py-2">
+    <div
+      className={cn(
+        "min-w-0 rounded-xl bg-[var(--slurp-surface-raised)] px-2.5 py-2",
+        tone === "amber" && "ring-1 ring-inset ring-amber-500/40",
+      )}
+    >
       <div className="text-[0.6rem] uppercase tracking-[0.08em] text-[var(--muted-foreground)]">{label}</div>
-      <div className="mt-0.5 font-bold capitalize">{value}</div>
+      <div className="mt-0.5 break-words font-bold capitalize">{value}</div>
+      {description && (
+        <div className="mt-1 text-[0.65rem] leading-snug text-[var(--muted-foreground)]">{description}</div>
+      )}
     </div>
   );
 }

@@ -38,7 +38,7 @@ assert.match(routes, /threadState: thread\.threadState/u);
 assert.match(view, /function SlurpRelationshipPanel\(/u);
 assert.doesNotMatch(view, /relationship\.side === "viewer" \?/u);
 assert.match(view, /moodLabel/u);
-for (const section of ["Current state", "Conversation", "Boundaries", "Context and business"]) {
+for (const section of ["Current state", "Conversation", "Boundaries", "Memories", "Context", "Business"]) {
   assert.match(view, new RegExp(`title=\"${section}\"`, "u"));
 }
 for (const field of [
@@ -52,13 +52,14 @@ for (const field of [
 ]) {
   assert.match(view, new RegExp(field.replace(".", "\\."), "u"));
 }
-assert.match(view, /max-h-\[min\(70vh,38rem\)\].*overflow-y-auto/u);
+assert.match(view, /max-h-\[min\(78vh,44rem\)\]/u);
 assert.match(view, /State updated/u);
 assert.match(view, /relationship\.dayVibe/u);
 assert.match(view, /relationship\.imageMode/u);
 assert.match(view, /InfoChip/u);
 assert.match(view, /aria-expanded=\{infoOpen\}/u);
-assert.match(view, /Saved fan notes/u);
+assert.match(view, /Working memory/u);
+assert.match(view, /Long-term memory/u);
 // Opening a different conversation must not inherit the last one's open panel.
 assert.match(view, /setInfoOpen\(false\);[\s\S]{0,120}setDebugOpen\(false\)/u);
 
