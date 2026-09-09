@@ -35,6 +35,7 @@ import {
 } from "../services/slurp/slurp-media.js";
 import { logger } from "../lib/logger.js";
 import { resolveSlurpCreatorAvailability } from "../services/slurp/slurp-creator-schedule-context.js";
+import { selectSlurpAttentionCommissions } from "../services/slurp/slurp-inbox-attention.js";
 
 const personaQuerySchema = z.object({ personaId: z.string().trim().min(1) });
 const MESSAGE_MEDIA_MAX_BYTES = 20 * 1024 * 1024;
@@ -254,6 +255,16 @@ export async function slurpMessageRoutes(app: FastifyInstance) {
           null,
       })),
     );
+    const [viewerCommissionLists, creatorCommissionLists] = await Promise.all([
+      Promise.all(threads.map((thread) => messages.listCommissionsForThread(thread.id))),
+      Promise.all(operated.map((creatorAccountId) => messages.listOpenCommissionsForCreator(creatorAccountId))),
+    ]);
+    const attentionCommissions = selectSlurpAttentionCommissions({
+      viewerThreadIds: new Set(threads.map((thread) => thread.id)),
+      operatedCreatorIds: new Set(operated),
+      viewerCommissions: viewerCommissionLists.flat(),
+      creatorCommissions: creatorCommissionLists.flat(),
+    });
     return {
       threads: threads
         .filter((thread) => thread.state !== "declined")
@@ -262,6 +273,7 @@ export async function slurpMessageRoutes(app: FastifyInstance) {
       unread: threads.reduce((sum, thread) => sum + thread.viewerUnread, 0),
       // Unread on the Creator side is what the player owes an answer to.
       inboundUnread: inboundViews.reduce((sum, thread) => sum + thread.creatorUnread, 0),
+      attentionCommissions,
     };
   });
 

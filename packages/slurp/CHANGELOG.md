@@ -2,14 +2,12 @@
 
 ## 1.2.61 — 2026-09-09
 
-- The conversation Details panel is rebuilt as two views instead of one long list.
-- Basic is the default and answers what you need to play the conversation, in words rather than numbers: how it is going, whether they are around, how far things have got, what they remember, and where you stand.
-- Advanced switches the whole panel to the full simulation: every figure the reply was built from, what moved the rapport score, and an exact-values list in plain text.
-- Both view names are on the switch with the current one selected, so it is clear which you are looking at.
-- How far a conversation has got is drawn as five ranked steps, so you can see there is further to go.
-- How it is going is drawn from a centre point, so warm and cold read as opposite directions.
-- Every state carries an icon and a sentence as well as a colour, so none of it needs colour alone.
-- What they remember is a list again instead of one run-on line.
+- Inbox is now a catch-up hub: current requests and commissions share one attention tray, recent messages stay visible, and activity is summarized without duplicating direct messages.
+- Repeated activity opens as a notification stack with its people and events intact.
+- Messages now use the full width, with a denser conversation list, match-by-match search, and a compact commission ribbon.
+- Details and prompt diagnostics overlay the chat as a desktop drawer or mobile sheet. Broadcast moved to each Creator's Studio card.
+- Conversation Details has separate Basic and Advanced views. Basic explains rapport, mood, availability, progress and memories in words; Advanced shows the complete simulation and exact values.
+- Progress uses ranked steps, mood uses a centred scale, memories use a readable list, and every state has text or an icon as well as colour.
 
 ## 1.2.60 — 2026-09-09
 

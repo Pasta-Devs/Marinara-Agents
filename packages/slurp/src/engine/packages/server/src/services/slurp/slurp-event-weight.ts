@@ -93,9 +93,17 @@ export type SlurpEventLike = {
   createdAt: string;
 };
 
-export type SlurpEventGroup =
-  | { type: "single"; event: SlurpEventLike }
-  | { type: "group"; kind: SlurpEventKind; count: number; total: number; latestAt: string; ids: string[] };
+export type SlurpEventGroup<TEvent extends SlurpEventLike = SlurpEventLike> =
+  | { type: "single"; event: TEvent }
+  | {
+      type: "group";
+      kind: SlurpEventKind;
+      count: number;
+      total: number;
+      latestAt: string;
+      ids: string[];
+      events: TEvent[];
+    };
 
 /**
  * Collapse a list into what a person can actually read.
@@ -106,9 +114,12 @@ export type SlurpEventGroup =
  * Input is expected newest-first; the order of notable events is preserved rather than re-sorted,
  * because a feed that reorders itself by importance is hard to follow when you already read the top.
  */
-export function groupSlurpEvents(events: readonly SlurpEventLike[]): SlurpEventGroup[] {
-  const out: SlurpEventGroup[] = [];
-  const grouped = new Map<SlurpEventKind, { count: number; total: number; latestAt: string; ids: string[] }>();
+export function groupSlurpEvents<TEvent extends SlurpEventLike>(events: readonly TEvent[]): SlurpEventGroup<TEvent>[] {
+  const out: SlurpEventGroup<TEvent>[] = [];
+  const grouped = new Map<
+    SlurpEventKind,
+    { count: number; total: number; latestAt: string; ids: string[]; events: TEvent[] }
+  >();
   for (const event of events) {
     if (event.weight >= SLURP_EVENT_NOTABLE) {
       out.push({ type: "single", event });
@@ -119,6 +130,7 @@ export function groupSlurpEvents(events: readonly SlurpEventLike[]): SlurpEventG
       existing.count += 1;
       existing.total += Number.isFinite(event.amount) ? Math.max(0, event.amount) : 0;
       existing.ids.push(event.id);
+      existing.events.push(event);
       if (event.createdAt > existing.latestAt) existing.latestAt = event.createdAt;
     } else {
       grouped.set(event.kind, {
@@ -126,11 +138,17 @@ export function groupSlurpEvents(events: readonly SlurpEventLike[]): SlurpEventG
         total: Number.isFinite(event.amount) ? Math.max(0, event.amount) : 0,
         latestAt: event.createdAt,
         ids: [event.id],
+        events: [event],
       });
     }
   }
   for (const [kind, value] of grouped) {
-    out.push({ type: "group", kind, ...value });
+    if (value.count === 1) out.push({ type: "single", event: value.events[0]! });
+    else out.push({ type: "group", kind, ...value });
   }
-  return out;
+  return out.sort((left, right) => {
+    const leftAt = left.type === "single" ? left.event.createdAt : left.latestAt;
+    const rightAt = right.type === "single" ? right.event.createdAt : right.latestAt;
+    return rightAt.localeCompare(leftAt);
+  });
 }

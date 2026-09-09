@@ -1331,7 +1331,7 @@ export async function slurpRoutes(app: FastifyInstance) {
     const actorIds = [
       ...new Set(items.concat(unseen).flatMap((event) => (event.actorLabel ? [event.actorLabel] : []))),
     ];
-    const names = new Map<string, string>();
+    const actors = new Map<string, { displayName: string; avatarUrl: string | null }>();
     await Promise.all(
       actorIds.map(async (id) => {
         // Three id spaces reach this field: a persona, a Slurp account (ambient profiles), and a
@@ -1339,19 +1339,22 @@ export async function slurpRoutes(app: FastifyInstance) {
         // wired into it, so every world-driven event — the questions and commissions that are the
         // whole obligation layer — rendered as "Someone".
         const persona = await noodle.getViewer(id).catch(() => null);
-        const name =
-          persona?.displayName ??
-          (await noodle.getNoodlerAccountById(id))?.displayName ??
-          (await population.get(id))?.displayName ??
-          null;
-        if (name) names.set(id, name);
+        const account = await noodle.getNoodlerAccountById(id);
+        const member = await population.get(id);
+        const actor = persona ?? account ?? member;
+        if (actor)
+          actors.set(id, {
+            displayName: actor.displayName,
+            avatarUrl: actor.avatarUrl ?? null,
+          });
       }),
     );
     const named = (list: typeof items) =>
       list.map((event) => ({
         ...event,
         subjectId: event.subjectId ? (commissionThreads.get(event.subjectId) ?? event.subjectId) : null,
-        actorLabel: event.actorLabel ? (names.get(event.actorLabel) ?? null) : null,
+        actorLabel: event.actorLabel ? (actors.get(event.actorLabel)?.displayName ?? null) : null,
+        actorAvatarUrl: event.actorLabel ? (actors.get(event.actorLabel)?.avatarUrl ?? null) : null,
       }));
     return {
       items: groupSlurpEvents(named(items)),

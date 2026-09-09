@@ -612,6 +612,7 @@ export type SlurpEventItem = {
   creatorAccountId: string | null;
   subjectId: string | null;
   actorLabel: string | null;
+  actorAvatarUrl: string | null;
   amount: number;
   weight: number;
   createdAt: string;
@@ -620,7 +621,15 @@ export type SlurpEventItem = {
 
 export type SlurpEventGroup =
   | { type: "single"; event: SlurpEventItem }
-  | { type: "group"; kind: SlurpEventKind; count: number; total: number; latestAt: string; ids: string[] };
+  | {
+      type: "group";
+      kind: SlurpEventKind;
+      count: number;
+      total: number;
+      latestAt: string;
+      ids: string[];
+      events: SlurpEventItem[];
+    };
 
 /** The notification stream. `unseen` is what happened while you were away. */
 export function useSlurpNotifications(personaId: string | null, enabled = true) {
@@ -2199,6 +2208,7 @@ export function useSlurpThreads(personaId: string | null) {
         >;
         unread: number;
         inboundUnread: number;
+        attentionCommissions: Array<SlurpCommission & { side: "viewer" | "creator" }>;
       }>(`/slurp/messages/threads?personaId=${encodeURIComponent(personaId!)}`),
     enabled: Boolean(personaId),
     // A creator who is offline answers minutes or hours later, through the scheduler. Without a

@@ -185,7 +185,7 @@ assert.doesNotMatch(home, /goToCreatorStudio/u, "Home must not route to a creato
 
 // Routes only reserve the contextual column when they have content for it.
 assert.match(home, /profileRail \? "populated" : "spanning"/u);
-assert.match(home, /inboxRail \? "populated" : "spanning"/u);
+assert.match(home, /view === "messages"[\s\S]*?contextualRail="spanning"/u);
 assert.match(
   shell,
   /<AnimatePresence mode="wait" initial=\{false\}>[\s\S]*?key=\{activeView\}/u,

@@ -15,32 +15,46 @@ const messageStorage = readFileSync(
   "utf8",
 );
 const routes = readFileSync("packages/slurp/src/engine/packages/server/src/routes/slurp.routes.ts", "utf8");
+const messageRoutes = readFileSync(
+  "packages/slurp/src/engine/packages/server/src/routes/slurp-messages.routes.ts",
+  "utf8",
+);
 
 assert.match(english, /"ui\.slurp\.navigation\.messages": "Inbox"/u);
-assert.match(home, /ui\.slurp\.inbox\.chats/u);
-assert.match(home, /ui\.slurp\.inbox\.activity/u);
+assert.match(home, /function SlurpInboxHub/u);
+assert.match(home, /slurp-inbox-messages/u);
+assert.match(home, /slurp-inbox-activity/u);
 assert.doesNotMatch(shell, /onOpenNotifications/u);
-assert.match(home, /role="tablist"/u);
-assert.match(home, /role="tab"[\s\S]*?aria-selected=/u);
-assert.match(home, /hidden=\{tab !== "chats"\}[\s\S]*?<SlurpMessagesView/u, "Chats must remain mounted across tabs");
-assert.match(
-  home,
-  /if \(tab !== "activity" \|\| !personaId\) return;[\s\S]*?markSeen\(personaId\)/u,
-  "opening Chats must not mark Activity seen",
-);
+const inbox = home.slice(home.indexOf("function SlurpInboxHub("), home.indexOf("function SlurpPayoutRow("));
+assert.doesNotMatch(inbox, /role="tablist"|role="tab"/u);
+assert.doesNotMatch(inbox, /return \(\) => markSeen\(personaId\)/u, "opening Inbox must not mark Activity seen");
+assert.match(inbox, /onClick=\{\(\) => markSeen\(personaId\)\}/u, "Activity keeps an explicit read action");
 assert.match(store, /state\.navigation\.view === "notifications"[\s\S]*?view: "notifications"/u);
-assert.match(home, /initialTab="activity"/u, "legacy Notifications navigation must open Activity");
-assert.match(home, /inboxThreadsQuery\.data\?\.unread[\s\S]*?notificationsQuery\.data\?\.unseenCount/u);
-assert.match(messages, /<Avatar[\s\S]*?thread\.creatorDisplayName/u);
+assert.match(home, /initialActivity/u, "legacy Notifications navigation must focus Activity");
+assert.match(home, /notificationsQuery\.data\?\.unseenCount[\s\S]*?inboxThreadsQuery\.data\?\.unread/u);
+assert.match(inbox, /<MessageCircle[\s\S]*?<Avatar[\s\S]*?thread\.creatorDisplayName/u);
+assert.match(inbox, /absolute -bottom-1 -end-1[\s\S]*?<MessageCircle/u, "every hub avatar needs a message badge");
 assert.match(messages, /active:scale-\[0\.96\]/u);
 assert.match(home, /eventAppearance[\s\S]*?MessageCircle[\s\S]*?Coins[\s\S]*?Lock[\s\S]*?Crown/u);
-assert.match(home, /group\.event\.kind === "message" \|\| group\.event\.kind === "commission_requested"/u);
+assert.match(inbox, /event\.kind !== "message"/u, "message events must be removed from Activity");
 assert.match(
   messageStorage,
   /recordCreatorEvent\(creatorAccountId, "commission_requested", \{[\s\S]*?subjectId: opened\.thread\.id/u,
 );
 assert.match(routes, /messages\.getCommission\(id\)[\s\S]*?commissionThreads\.set\(id, commission\.threadId\)/u);
-assert.match(home, /items\.filter[\s\S]*?!unseenIds\.has/u, "Activity must not repeat unseen events");
+assert.match(messageRoutes, /threads\.map\(\(thread\) => messages\.listCommissionsForThread\(thread\.id\)\)/u);
+assert.match(messageRoutes, /listOpenCommissionsForCreator[\s\S]*?selectSlurpAttentionCommissions/u);
+assert.match(inbox, /attentionCommissions/u);
+assert.doesNotMatch(inbox, /render\(unseen[\s\S]*?render\(items/u, "Activity must render one deduplicated feed");
+assert.match(messages, /workspace\?: boolean/u);
+assert.match(home, /contextualRail="spanning"/u, "Inbox and Messages reclaim the contextual rail");
+assert.doesNotMatch(messages.slice(0, messages.indexOf("export function BroadcastPanel")), /<BroadcastPanel/u);
+assert.match(home, /<BroadcastPanel creatorAccountId=\{creator\.id\}/u, "Broadcast belongs to each Studio Creator");
+assert.doesNotMatch(messages, /\{infoOpen && relationship/u, "Details must not render inline");
+assert.match(messages, /<dialog[\s\S]*?drawerMode === "prompt"/u, "Details and prompt diagnostics share a drawer");
+assert.match(messages, /messageSearchMatches[\s\S]*?scrollIntoView/u, "conversation search must navigate to matches");
+assert.match(messages, /event\.key !== "Escape"[\s\S]*?searchTriggerRef\.current\?\.focus/u);
+assert.match(messages, /id=\{entry\.kind === "message" \? `slurp-message-\$\{entry\.message\.id\}`/u);
 assert.match(home, /ui\.slurp\.wallet\.creatorEarnings/u);
 assert.match(home, /ui\.slurp\.wallet\.fanWallet/u);
 assert.match(home, /creatorAccountId: creator\.id, personaId, amount: creator\.payoutAllowance/u);

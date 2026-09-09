@@ -50,6 +50,11 @@ const event = (id: string, kind: SlurpEventLike["kind"], amount = 0, createdAt =
   amount,
   weight: slurpEventWeight(kind, amount),
   createdAt,
+  actorLabel: `Actor ${id}`,
+  actorAvatarUrl: `/avatars/${id}.webp`,
+  subjectId: `subject-${id}`,
+  creatorAccountId: `creator-${id}`,
+  seenAt: null,
 });
 
 const grouped = groupSlurpEvents([
@@ -65,14 +70,20 @@ const singles = grouped.filter((entry) => entry.type === "single");
 const groups = grouped.filter((entry) => entry.type === "group");
 assert.deepEqual(
   singles.map((entry) => (entry.type === "single" ? entry.event.id : "")),
-  ["a", "e"],
-  "only notable events keep their own line",
+  ["a", "e", "f"],
+  "notable events and one-item low-priority buckets keep their own line",
 );
 const comments = groups.find((entry) => entry.type === "group" && entry.kind === "comment");
 assert.ok(comments && comments.type === "group");
 assert.equal(comments.count, 3);
 assert.equal(comments.latestAt, "2026-09-05T11:00:00.000Z", "a group carries its newest timestamp");
 assert.deepEqual(comments.ids, ["b", "c", "d"]);
+assert.deepEqual(
+  comments.events.map((entry) => entry.id),
+  ["b", "c", "d"],
+  "group children preserve their newest-first input order",
+);
+assert.deepEqual(comments.events[0], event("b", "comment"), "grouping must preserve complete child event fields");
 
 // Money groups carry a total, so "14 unlocks" can say what they were worth.
 const money = groupSlurpEvents([event("g", "unlock", 3), event("h", "unlock", 5)]);
@@ -88,6 +99,8 @@ assert.deepEqual(
 );
 
 assert.deepEqual(groupSlurpEvents([]), []);
+const oneRoutineEvent = event("one", "comment");
+assert.deepEqual(groupSlurpEvents([oneRoutineEvent]), [{ type: "single", event: oneRoutineEvent }]);
 assert.ok(SLURP_EVENT_NOTABLE > 0);
 
 // ── Wiring ──────────────────────────────────────────────────────────────────
@@ -115,13 +128,22 @@ const routes = read("server/src/routes/slurp.routes.ts");
 assert.match(routes, /app\.get\("\/noodler\/notifications"/u);
 assert.match(routes, /app\.post\("\/noodler\/notifications\/seen"/u);
 // Actor ids are resolved to names: "abc-123 subscribed" is the failure this surface exists to fix.
-assert.match(routes, /names\.get\(event\.actorLabel\)/u);
+assert.match(routes, /actors\.get\(event\.actorLabel\)\?\.displayName/u);
+assert.match(routes, /actorAvatarUrl:[\s\S]*?actors\.get\(event\.actorLabel\)\?\.avatarUrl/u);
 
 const home = read("client/src/components/slurp/SlurpHome.tsx");
 assert.match(home, /function SlurpNotificationsView/u);
 assert.match(home, /function SlurpInboxView/u, "messages and activity must share one Inbox surface");
-assert.match(home, /initialTab: "chats" \| "activity"/u);
-assert.match(home, /mutate: markSeen[\s\S]*?tab !== "activity"[\s\S]*?markSeen\(personaId\)/u);
+assert.match(home, /function SlurpInboxHub/u);
+assert.doesNotMatch(home, /initialTab: "chats" \| "activity"/u);
+assert.doesNotMatch(home, /tab !== "activity"[\s\S]*?markSeen\(personaId\)/u);
+assert.match(home, /aria-expanded=\{isOpen\}[\s\S]*?group\.events\.map/u);
+assert.match(home, /setExpanded\(\(current\) => \{[\s\S]*?else next\.add\(key\);[\s\S]*?return next;/u);
+assert.doesNotMatch(
+  home,
+  /setExpanded\(\(current\) => \{[^}]*markSeen\(personaId\)/u,
+  "expanding an Activity group must not mark it read",
+);
 // Rows with nowhere to go are content, not fake buttons. Actionable rows retain a keyboard-visible
 // focus ring and the same restrained press feedback as the rest of Slurp.
 assert.match(home, /destination \? \([\s\S]*?<button[\s\S]*?focus-visible:ring-2[\s\S]*?: \([\s\S]*?<div/u);

@@ -19,7 +19,7 @@ import {
   Trash2,
   X,
 } from "lucide-react";
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useTranslation as useUiTranslation } from "react-i18next";
 import { useSlurpMediaSrc } from "../../hooks/use-slurp-media-src";
 import { getApiErrorMessage } from "../../lib/api-client";
@@ -106,6 +106,7 @@ export function SlurpMessagesView({
   onOpenProfile,
   onThreadContextChange,
   onConversationOpenChange,
+  workspace = false,
 }: {
   personaId: string | null;
   /** Creator profiles this persona owns, so their request trays can be answered from here. */
@@ -117,6 +118,8 @@ export function SlurpMessagesView({
   onOpenProfile: (accountId: string) => void;
   onThreadContextChange?: (thread: SlurpMessageThreadContext | null) => void;
   onConversationOpenChange?: (open: boolean) => void;
+  /** Keep the conversation list in its full Messages workspace even before a thread is chosen. */
+  workspace?: boolean;
 }) {
   const { t: localizeUi, i18n } = useUiTranslation();
   const [openThreadId, setOpenThreadId] = useState<string | null>(initialThreadId);
@@ -176,9 +179,6 @@ export function SlurpMessagesView({
     filter === "requests" ? [] : filter === "unread" ? active.filter((thread) => thread.viewerUnread > 0) : active;
   const unread =
     threads.reduce((total, thread) => total + thread.viewerUnread, 0) + (threadsQuery.data?.inboundUnread ?? 0);
-  // Broadcasting is per creator, so it only makes sense once this persona owns one.
-  const broadcastCreatorId = ownedCreatorAccountIds[0] ?? null;
-
   const conversationOpen = Boolean(openThreadId || composeWith);
   const closeConversation = () => {
     setOpenThreadId(null);
@@ -187,6 +187,16 @@ export function SlurpMessagesView({
 
   const inbox = (
     <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto px-3 py-4 sm:px-4">
+      <div className="flex min-h-10 items-center justify-between gap-3">
+        <h2 className="text-sm font-black">
+          {localizeUi("ui.slurp.messages.conversations", { defaultValue: "Conversations" })}
+        </h2>
+        {unread > 0 && (
+          <span className="shrink-0 rounded-full bg-[var(--noodle-accent)]/12 px-2.5 py-1 text-[0.7rem] font-bold tabular-nums text-[var(--noodle-accent)]">
+            {localizeUi("ui.slurp.messages.unreadTotal", { defaultValue: "{{count}} unread", count: unread })}
+          </span>
+        )}
+      </div>
       <div className="flex items-center gap-2">
         <div className="relative min-w-0 flex-1">
           <Search
@@ -206,11 +216,6 @@ export function SlurpMessagesView({
             className="h-11 w-full rounded-xl bg-[linear-gradient(135deg,var(--slurp-surface-raised),var(--slurp-surface))] pl-9 pr-3 text-base shadow-[var(--slurp-shadow-raised)] outline-none ring-1 ring-inset ring-white/[0.06] focus:ring-2 focus:ring-[var(--slurp-focus)] sm:text-sm"
           />
         </div>
-        {unread > 0 && (
-          <span className="shrink-0 rounded-full bg-[var(--noodle-accent)]/12 px-2.5 py-1 text-[0.7rem] font-bold tabular-nums text-[var(--noodle-accent)]">
-            {localizeUi("ui.slurp.messages.unreadTotal", { defaultValue: "{{count}} unread", count: unread })}
-          </span>
-        )}
       </div>
 
       <div
@@ -225,7 +230,7 @@ export function SlurpMessagesView({
             aria-pressed={filter === option}
             onClick={() => setFilter(option)}
             className={cn(
-              "min-h-9 rounded-full px-3 text-xs font-semibold text-[var(--muted-foreground)] ring-1 ring-inset ring-[var(--noodle-divider)] transition-colors",
+              "min-h-11 rounded-full px-3 text-xs font-semibold text-[var(--muted-foreground)] ring-1 ring-inset ring-[var(--noodle-divider)] transition-colors",
               filter === option && "bg-[var(--noodle-accent)] text-zinc-950 ring-[var(--noodle-accent)]",
             )}
           >
@@ -235,10 +240,6 @@ export function SlurpMessagesView({
           </button>
         ))}
       </div>
-
-      {broadcastCreatorId && personaId && (
-        <BroadcastPanel creatorAccountId={broadcastCreatorId} personaId={personaId} />
-      )}
 
       {visibleInbound.length > 0 && (
         <section
@@ -324,20 +325,41 @@ export function SlurpMessagesView({
     </div>
   );
 
-  if (!conversationOpen) return <div className="mx-auto flex h-full w-full max-w-5xl flex-1 flex-col">{inbox}</div>;
+  if (!conversationOpen && !workspace)
+    return <div className="mx-auto flex h-full w-full max-w-5xl flex-1 flex-col">{inbox}</div>;
 
   return (
-    <div className="mx-auto grid h-full min-h-0 w-full max-w-6xl flex-1 md:grid-cols-[minmax(20rem,24rem)_minmax(0,1fr)]">
-      <aside className="hidden min-h-0 border-r border-[var(--noodle-divider)] md:flex">{inbox}</aside>
-      <SlurpThreadView
-        threadId={openThreadId}
-        creatorAccountId={composeWith}
-        personaId={personaId}
-        ownedCreatorAccountIds={ownedCreatorAccountIds}
-        onBack={closeConversation}
-        onOpenProfile={onOpenProfile}
-        desktopSplit
-      />
+    <div className="grid h-full min-h-0 w-full flex-1 md:grid-cols-[minmax(19rem,22rem)_minmax(0,1fr)]">
+      <aside
+        className={cn("min-h-0 border-e border-[var(--noodle-divider)]", conversationOpen ? "hidden md:flex" : "flex")}
+      >
+        {inbox}
+      </aside>
+      {conversationOpen ? (
+        <SlurpThreadView
+          threadId={openThreadId}
+          creatorAccountId={composeWith}
+          personaId={personaId}
+          ownedCreatorAccountIds={ownedCreatorAccountIds}
+          onBack={closeConversation}
+          onOpenProfile={onOpenProfile}
+          desktopSplit
+        />
+      ) : (
+        <div className="hidden min-h-0 items-center justify-center bg-[color-mix(in_srgb,var(--slurp-surface)_45%,transparent)] px-6 text-center md:flex">
+          <div className="max-w-xs">
+            <MessageCircle size={28} className="mx-auto text-[var(--noodle-accent)]" aria-hidden="true" />
+            <p className="mt-3 text-sm font-bold">
+              {localizeUi("ui.slurp.messages.chooseConversation", { defaultValue: "Choose a conversation" })}
+            </p>
+            <p className="mt-1 text-xs leading-5 text-[var(--muted-foreground)]">
+              {localizeUi("ui.slurp.messages.chooseConversationDetail", {
+                defaultValue: "Messages, requests, and commission conversations open here.",
+              })}
+            </p>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -362,7 +384,7 @@ function ThreadRow({
       onClick={onOpen}
       aria-current={selected ? "true" : undefined}
       className={cn(
-        "group flex min-h-[5rem] w-full items-center gap-3 rounded-xl border border-transparent px-3 py-3 text-start transition-[background-color,border-color,transform] hover:bg-[var(--noodle-accent)]/[0.07] active:scale-[0.98] focus-visible:z-10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--slurp-focus)] motion-reduce:transition-none motion-reduce:active:scale-100",
+        "group flex min-h-16 w-full items-center gap-3 rounded-xl border border-transparent px-3 py-2 text-start transition-[background-color,border-color,transform] hover:bg-[var(--noodle-accent)]/[0.07] active:scale-[0.96] focus-visible:z-10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--slurp-focus)] motion-reduce:transition-none motion-reduce:active:scale-100",
         selected &&
           "border-[var(--noodle-accent)]/40 bg-[var(--noodle-accent)]/[0.11] shadow-[var(--slurp-shadow-raised)]",
       )}
@@ -463,20 +485,27 @@ function SlurpThreadView({
   // Why no answer came. The send route has always reported this and nothing ever read it, so a
   // sleeping creator, a busy thread and a missing connection all looked like the same silence.
   const [replyStatus, setReplyStatus] = useState<string | null>(null);
-  const [infoOpen, setInfoOpen] = useState(false);
-  const [debugOpen, setDebugOpen] = useState(false);
+  const [drawerMode, setDrawerMode] = useState<"details" | "prompt" | null>(null);
+  const [messageSearchOpen, setMessageSearchOpen] = useState(false);
+  const [messageSearch, setMessageSearch] = useState("");
+  const [messageSearchIndex, setMessageSearchIndex] = useState(0);
+  const [commissionRibbonOpen, setCommissionRibbonOpen] = useState(false);
   const [preparingImage, setPreparingImage] = useState(false);
   const bottomRef = useRef<HTMLDivElement | null>(null);
+  const drawerRef = useRef<HTMLDialogElement | null>(null);
+  const drawerTriggerRef = useRef<HTMLButtonElement | null>(null);
+  const searchTriggerRef = useRef<HTMLButtonElement | null>(null);
+  const messageSearchInputRef = useRef<HTMLInputElement | null>(null);
 
   const thread = threadQuery.data?.thread ?? null;
-  const messages = threadQuery.data?.messages ?? [];
+  const messages = useMemo(() => threadQuery.data?.messages ?? [], [threadQuery.data?.messages]);
   const creator = threadQuery.data?.creator;
   const counterpart = threadQuery.data?.counterpart ?? creator;
   const targetCreatorAccountId = thread?.creatorAccountId ?? creator?.id ?? creatorAccountId;
   const ownsCreator = Boolean(targetCreatorAccountId && ownedCreatorAccountIds.includes(targetCreatorAccountId));
   const draftStorageKey = `slurp-message-draft:${personaId ?? "none"}:${targetCreatorAccountId ?? "none"}`;
   const messaging = threadQuery.data?.messaging;
-  const commissions = threadQuery.data?.commissions ?? [];
+  const commissions = useMemo(() => threadQuery.data?.commissions ?? [], [threadQuery.data?.commissions]);
   const relationship = "relationship" in (threadQuery.data ?? {}) ? threadQuery.data?.relationship : undefined;
   const commissionTimeline = commissions.map((commission) => {
     const linkedMessages = messages.filter((message) => message.metadata.commissionId === commission.id);
@@ -515,7 +544,24 @@ function SlurpThreadView({
   const headerAccount = ownsCreator ? counterpart : creator;
   const headerProfileId = ownsCreator ? thread?.viewerAccountId : targetCreatorAccountId;
   const busy = send.isPending || tip.isPending || creatorReply.isPending || draftReply.isPending;
-  const promptDebug = useSlurpMessagePrompt(threadId, personaId, debugOpen);
+  const promptDebug = useSlurpMessagePrompt(threadId, personaId, drawerMode === "prompt");
+  const activeCommission = useMemo(
+    () =>
+      [...commissions].sort((left, right) => {
+        const leftFinal = left.state === "declined" || left.state === "delivered";
+        const rightFinal = right.state === "declined" || right.state === "delivered";
+        if (leftFinal !== rightFinal) return leftFinal ? 1 : -1;
+        return right.updatedAt.localeCompare(left.updatedAt);
+      })[0] ?? null,
+    [commissions],
+  );
+  const messageSearchMatches = useMemo(() => {
+    const needle = messageSearch.trim().toLocaleLowerCase();
+    if (!needle) return [];
+    return messages
+      .filter((message) => message.content.toLocaleLowerCase().includes(needle))
+      .map((message) => message.id);
+  }, [messageSearch, messages]);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -540,8 +586,11 @@ function SlurpThreadView({
     setPending(null);
     setTyping(false);
     setReplyStatus(null);
-    setInfoOpen(false);
-    setDebugOpen(false);
+    setDrawerMode(null);
+    setMessageSearchOpen(false);
+    setMessageSearch("");
+    setMessageSearchIndex(0);
+    setCommissionRibbonOpen(false);
     setPreparingImage(false);
     setError(null);
     setComposerTipAmount(0);
@@ -549,6 +598,47 @@ function SlurpThreadView({
     setCustomTipAmount("");
     setCustomTipNote("");
   }, [threadId, creatorAccountId]);
+
+  useEffect(() => {
+    setMessageSearchIndex(0);
+  }, [messageSearch]);
+
+  useEffect(() => {
+    if (!messageSearchOpen) return;
+    messageSearchInputRef.current?.focus();
+  }, [messageSearchOpen]);
+
+  useEffect(() => {
+    const match = messageSearchMatches[messageSearchIndex];
+    if (match) {
+      const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+      document
+        .getElementById(`slurp-message-${match}`)
+        ?.scrollIntoView({ block: "center", behavior: reduceMotion ? "auto" : "smooth" });
+    }
+  }, [messageSearchIndex, messageSearchMatches]);
+
+  useEffect(() => {
+    const dialog = drawerRef.current;
+    if (!dialog) return;
+    if (drawerMode && !dialog.open) {
+      drawerTriggerRef.current = document.activeElement as HTMLButtonElement | null;
+      dialog.showModal();
+      document.body.style.overflow = "hidden";
+    } else if (!drawerMode && dialog.open) {
+      dialog.close();
+    }
+    return () => {
+      document.body.style.overflow = "";
+    };
+  }, [drawerMode]);
+
+  const closeDrawer = () => {
+    const trigger = drawerTriggerRef.current;
+    setDrawerMode(null);
+    document.body.style.overflow = "";
+    window.requestAnimationFrame(() => trigger?.focus());
+  };
 
   const messageScrollRef = useRef<HTMLDivElement | null>(null);
   // State refreshes must never move the message viewport. New content only scrolls when the user
@@ -687,6 +777,14 @@ function SlurpThreadView({
               <span className="truncate text-[0.7rem] text-[var(--muted-foreground)]">
                 @{headerAccount?.handle ?? ""}
               </span>
+              {relationship && (
+                <span className="truncate text-[0.7rem] text-[var(--muted-foreground)]">
+                  ·{" "}
+                  {relationship.availability.online
+                    ? localizeUi("ui.slurp.messages.availableNow", { defaultValue: "Available now" })
+                    : localizeUi("ui.slurp.messages.away", { defaultValue: "Away" })}
+                </span>
+              )}
               {/* Rapport decides how fast and how warmly a Creator answers. The player felt it and
                   could never see it, so the one number the whole thread turns on was invisible. */}
               {thread && <SlurpRapportBadge rapport={thread.rapport} ownsCreator={ownsCreator} />}
@@ -695,69 +793,173 @@ function SlurpThreadView({
         </button>
         {relationship && (
           <button
+            ref={drawerMode === "details" ? drawerTriggerRef : undefined}
             type="button"
-            aria-expanded={infoOpen}
-            onClick={() => setInfoOpen((open) => !open)}
+            aria-haspopup="dialog"
+            onClick={() => setDrawerMode("details")}
             className="ml-auto flex min-h-11 min-w-0 max-w-[5.5rem] shrink items-center gap-1 overflow-hidden rounded-xl px-1.5 text-xs font-bold text-[var(--muted-foreground)] transition-colors hover:bg-[var(--slurp-surface)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--slurp-focus)] sm:max-w-none sm:shrink-0 sm:px-2"
           >
             <span className="truncate">
               {localizeUi("ui.slurp.messages.relationshipToggle", { defaultValue: "Details" })}
             </span>
-            <ChevronDown
-              size={14}
-              className={cn("transition-transform", infoOpen && "rotate-180")}
-              aria-hidden="true"
-            />
+            <ChevronDown size={14} className="-rotate-90 rtl:rotate-90" aria-hidden="true" />
           </button>
         )}
         {threadId && (
           <button
             type="button"
-            aria-expanded={debugOpen}
-            onClick={() => setDebugOpen((open) => !open)}
+            aria-haspopup="dialog"
+            onClick={() => setDrawerMode("prompt")}
+            className="flex min-h-11 w-11 shrink-0 items-center justify-center rounded-xl text-[var(--muted-foreground)] transition-[background-color,transform] hover:bg-[var(--slurp-surface)] active:scale-[0.96] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--slurp-focus)] motion-reduce:transition-none motion-reduce:active:scale-100"
+            aria-label={localizeUi("ui.slurp.messages.promptDetails", { defaultValue: "Prompt details" })}
+            title={localizeUi("ui.slurp.messages.promptDetails", { defaultValue: "Prompt details" })}
+          >
+            <Brain size={15} aria-hidden="true" />
+          </button>
+        )}
+        {threadId && (
+          <button
+            ref={searchTriggerRef}
+            type="button"
+            aria-expanded={messageSearchOpen}
+            onClick={() => setMessageSearchOpen((open) => !open)}
             className="flex min-h-11 w-11 shrink-0 items-center justify-center rounded-xl text-[var(--muted-foreground)] transition-colors hover:bg-[var(--slurp-surface)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--slurp-focus)]"
-            aria-label={localizeUi("ui.slurp.messages.promptDebug", { defaultValue: "Show prompt details" })}
-            title={localizeUi("ui.slurp.messages.promptDebug", { defaultValue: "Show prompt details" })}
+            aria-label={localizeUi("ui.slurp.messages.searchConversation", { defaultValue: "Search conversation" })}
+            title={localizeUi("ui.slurp.messages.searchConversation", { defaultValue: "Search conversation" })}
           >
             <Search size={15} aria-hidden="true" />
           </button>
         )}
       </div>
 
-      {infoOpen && relationship && (
-        <SlurpRelationshipPanel
-          relationship={relationship}
-          resetting={resetThread.isPending}
-          onReset={
-            threadId && personaId
-              ? () => {
-                  setError(null);
-                  void showConfirmDialog({
-                    title: localizeUi("ui.slurp.messages.resetTitle", { defaultValue: "Clear this conversation?" }),
-                    message: localizeUi("ui.slurp.messages.resetDetail", {
-                      defaultValue:
-                        "Every message here is deleted, and what they remember of it goes with them. Coins, unlocks and commissions are kept. This cannot be undone.",
-                    }),
-                    confirmLabel: localizeUi("ui.slurp.messages.resetConfirm", { defaultValue: "Clear it" }),
+      {messageSearchOpen && (
+        <div className="flex min-h-12 shrink-0 items-center gap-2 border-b border-[var(--noodle-divider)] bg-[var(--slurp-glass)] px-3 backdrop-blur-xl">
+          <label className="sr-only" htmlFor="slurp-conversation-search">
+            {localizeUi("ui.slurp.messages.searchConversation", { defaultValue: "Search conversation" })}
+          </label>
+          <input
+            ref={messageSearchInputRef}
+            id="slurp-conversation-search"
+            type="search"
+            value={messageSearch}
+            onChange={(event) => setMessageSearch(event.target.value)}
+            onKeyDown={(event) => {
+              if (event.key !== "Escape") return;
+              setMessageSearchOpen(false);
+              searchTriggerRef.current?.focus();
+            }}
+            placeholder={localizeUi("ui.slurp.messages.searchConversationPlaceholder", {
+              defaultValue: "Search this conversation…",
+            })}
+            className="h-10 min-w-0 flex-1 rounded-xl bg-[var(--slurp-surface)] px-3 text-base outline-none ring-1 ring-inset ring-[var(--noodle-divider)] focus:ring-2 focus:ring-[var(--slurp-focus)] sm:text-sm"
+          />
+          <span role="status" className="shrink-0 text-[0.68rem] tabular-nums text-[var(--muted-foreground)]">
+            {messageSearch.trim()
+              ? messageSearchMatches.length > 0
+                ? localizeUi("ui.slurp.messages.searchPosition", {
+                    defaultValue: "{{position}} of {{count}}",
+                    position: messageSearchIndex + 1,
+                    count: messageSearchMatches.length,
                   })
-                    .then((confirmed) => {
-                      if (confirmed) return resetThread.mutateAsync({ threadId, personaId });
-                    })
-                    .catch((cause: unknown) =>
-                      setError(
-                        cause instanceof Error
-                          ? cause.message
-                          : localizeUi("ui.slurp.messages.resetFailed", {
-                              defaultValue: "Could not clear this conversation.",
-                            }),
-                      ),
-                    );
-                }
-              : null
-          }
-        />
+                : localizeUi("ui.slurp.messages.noMatches", { defaultValue: "No matches" })
+              : ""}
+          </span>
+          {["previous", "next"].map((direction) => (
+            <button
+              key={direction}
+              type="button"
+              disabled={messageSearchMatches.length === 0}
+              onClick={() =>
+                setMessageSearchIndex((current) =>
+                  direction === "previous"
+                    ? (current - 1 + messageSearchMatches.length) % messageSearchMatches.length
+                    : (current + 1) % messageSearchMatches.length,
+                )
+              }
+              className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg text-[var(--muted-foreground)] transition-[background-color,transform] hover:bg-[var(--slurp-surface)] active:scale-[0.96] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--slurp-focus)] disabled:opacity-35 motion-reduce:transition-none motion-reduce:active:scale-100"
+              aria-label={localizeUi(`ui.slurp.messages.search.${direction}`, {
+                defaultValue: direction === "previous" ? "Previous match" : "Next match",
+              })}
+            >
+              {direction === "previous" ? <ChevronDown size={16} className="rotate-180" /> : <ChevronDown size={16} />}
+            </button>
+          ))}
+          <button
+            type="button"
+            onClick={() => {
+              setMessageSearchOpen(false);
+              searchTriggerRef.current?.focus();
+            }}
+            className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg text-[var(--muted-foreground)] transition-[background-color,transform] hover:bg-[var(--slurp-surface)] active:scale-[0.96] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--slurp-focus)] motion-reduce:transition-none motion-reduce:active:scale-100"
+            aria-label={localizeUi("ui.slurp.messages.closeSearch", { defaultValue: "Close search" })}
+          >
+            <X size={16} aria-hidden="true" />
+          </button>
+        </div>
       )}
-      {debugOpen && <SlurpPromptDebugPanel query={promptDebug} />}
+
+      {activeCommission && (
+        <div className="shrink-0 border-b border-[var(--noodle-divider)] bg-[var(--slurp-surface)]/55 px-3 py-1.5">
+          <button
+            type="button"
+            aria-expanded={commissionRibbonOpen}
+            onClick={() => setCommissionRibbonOpen((open) => !open)}
+            className="mx-auto flex min-h-11 w-full max-w-2xl items-center gap-2.5 rounded-xl px-2 text-start transition-[background-color,transform] hover:bg-[var(--noodle-accent)]/[0.05] active:scale-[0.96] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--slurp-focus)] motion-reduce:transition-none motion-reduce:active:scale-100"
+          >
+            <BriefcaseBusiness size={17} className="shrink-0 text-[var(--noodle-accent)]" aria-hidden="true" />
+            <span className="min-w-0 flex-1">
+              <span className="block truncate text-xs font-bold capitalize">
+                {localizeUi("ui.slurp.messages.commissionRibbon", {
+                  defaultValue: "Commission · {{state}}",
+                  state: activeCommission.state,
+                })}
+              </span>
+              <span className="block truncate text-[0.68rem] text-[var(--muted-foreground)]">
+                {activeCommission.state === "delivered"
+                  ? localizeUi("ui.slurp.messages.commissionDeliveredHint", {
+                      defaultValue: "The finished commission is in this chat",
+                    })
+                  : activeCommission.brief}
+              </span>
+            </span>
+            <ChevronDown
+              size={15}
+              className={cn(
+                "shrink-0 transition-transform motion-reduce:transition-none",
+                commissionRibbonOpen && "rotate-180",
+              )}
+              aria-hidden="true"
+            />
+          </button>
+          {commissionRibbonOpen && (
+            <div className="mx-auto grid w-full max-w-2xl gap-2 px-2 pb-2 pt-1 text-xs sm:grid-cols-[1fr_auto]">
+              <p className="min-w-0 break-words leading-5 text-[var(--muted-foreground)]">{activeCommission.brief}</p>
+              <p className="font-bold tabular-nums">
+                <SlurpCoinAmount amount={activeCommission.price} />
+              </p>
+              <ol
+                className="flex items-center gap-1.5 sm:col-span-2"
+                aria-label={localizeUi("ui.slurp.messages.commissionProgress", { defaultValue: "Commission progress" })}
+              >
+                {["brief", "quoted", "accepted", "delivered"].map((state, index) => {
+                  const current = ["brief", "quoted", "accepted", "delivered"].indexOf(activeCommission.state);
+                  return (
+                    <li
+                      key={state}
+                      className={cn(
+                        "h-1.5 flex-1 rounded-full",
+                        index <= current ? "bg-[var(--noodle-accent)]" : "bg-[var(--accent)]",
+                      )}
+                    >
+                      <span className="sr-only">{state}</span>
+                    </li>
+                  );
+                })}
+              </ol>
+            </div>
+          )}
+        </div>
+      )}
 
       {thread?.state === "request" && (
         <div className="mx-3 mt-3 shrink-0 rounded-2xl bg-amber-500/[0.08] px-4 py-3 ring-1 ring-inset ring-amber-500/25">
@@ -823,7 +1025,11 @@ function SlurpThreadView({
                 ? new Date(timeline[index - 1]!.at).toLocaleDateString(i18n.language, { dateStyle: "medium" })
                 : null;
             return (
-              <div key={entry.kind === "message" ? entry.message.id : entry.commission.id} className="contents">
+              <div
+                key={entry.kind === "message" ? entry.message.id : entry.commission.id}
+                id={entry.kind === "message" ? `slurp-message-${entry.message.id}` : undefined}
+                className="contents scroll-mt-28"
+              >
                 {date !== previousDate && (
                   <div className="self-center py-2 text-[0.65rem] font-bold text-[var(--muted-foreground)]">{date}</div>
                 )}
@@ -1096,7 +1302,7 @@ function SlurpThreadView({
                 }
               }}
               placeholder={localizeUi("ui.slurp.messages.composerPlaceholder", { defaultValue: "Write a message…" })}
-              className="max-h-40 min-h-11 w-full flex-1 resize-y rounded-xl bg-[var(--slurp-surface)] px-3 py-2.5 text-sm outline-none ring-1 ring-inset ring-[var(--noodle-divider)] focus:ring-2 focus:ring-[var(--noodle-accent)]"
+              className="max-h-40 min-h-11 w-full flex-1 resize-y rounded-xl bg-[var(--slurp-surface)] px-3 py-2.5 text-base outline-none ring-1 ring-inset ring-[var(--noodle-divider)] focus:ring-2 focus:ring-[var(--noodle-accent)] sm:text-sm"
             />
             <button
               type="submit"
@@ -1109,6 +1315,102 @@ function SlurpThreadView({
           </form>
         </div>
       </div>
+
+      <dialog
+        ref={drawerRef}
+        onClose={closeDrawer}
+        onCancel={(event) => {
+          event.preventDefault();
+          closeDrawer();
+        }}
+        onClick={(event) => {
+          if (event.target === event.currentTarget) closeDrawer();
+        }}
+        aria-labelledby="slurp-conversation-drawer-title"
+        className="fixed inset-x-0 bottom-0 top-auto m-0 ms-auto h-auto max-h-[82dvh] w-full max-w-none overflow-hidden rounded-t-2xl bg-[var(--slurp-canvas,var(--background))] p-0 text-[var(--foreground)] shadow-[var(--slurp-shadow-floating)] backdrop:bg-black/55 md:inset-y-0 md:end-0 md:start-auto md:h-full md:max-h-none md:w-[min(28rem,92vw)] md:rounded-none md:rounded-s-2xl"
+      >
+        <div className="flex max-h-[82dvh] min-h-0 flex-col overscroll-contain md:h-full md:max-h-none">
+          <header className="flex min-h-14 shrink-0 items-center gap-3 border-b border-[var(--noodle-divider)] px-4">
+            <h2 id="slurp-conversation-drawer-title" className="min-w-0 flex-1 truncate text-sm font-black">
+              {drawerMode === "prompt"
+                ? localizeUi("ui.slurp.messages.promptDetails", { defaultValue: "Prompt details" })
+                : localizeUi("ui.slurp.messages.details", { defaultValue: "Details" })}
+            </h2>
+            <button
+              type="button"
+              onClick={closeDrawer}
+              className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl text-[var(--muted-foreground)] transition-[background-color,transform] hover:bg-[var(--slurp-surface)] active:scale-[0.96] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--slurp-focus)] motion-reduce:transition-none motion-reduce:active:scale-100"
+              aria-label={localizeUi("ui.slurp.messages.closeDetails", { defaultValue: "Close details" })}
+            >
+              <X size={18} aria-hidden="true" />
+            </button>
+          </header>
+          <div className="min-h-0 flex-1 overflow-y-auto pb-[max(1rem,env(safe-area-inset-bottom))]">
+            {drawerMode === "prompt" ? (
+              <SlurpPromptDebugPanel query={promptDebug} />
+            ) : (
+              <>
+                {headerAccount && (
+                  <section className="flex items-center gap-3 px-4 py-4">
+                    <Avatar account={headerAccount} size="md" />
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate text-sm font-black">{headerAccount.displayName}</p>
+                      <p className="truncate text-xs text-[var(--muted-foreground)]">@{headerAccount.handle}</p>
+                      {thread && <SlurpRapportBadge rapport={thread.rapport} ownsCreator={ownsCreator} />}
+                    </div>
+                    {headerProfileId && (
+                      <button
+                        type="button"
+                        onClick={() => onOpenProfile(headerProfileId)}
+                        className="min-h-10 shrink-0 rounded-xl px-3 text-xs font-bold text-[var(--noodle-accent)] ring-1 ring-inset ring-[var(--noodle-accent)]/35 transition-[background-color,transform] hover:bg-[var(--noodle-accent)]/10 active:scale-[0.96] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--slurp-focus)] motion-reduce:transition-none motion-reduce:active:scale-100"
+                      >
+                        {localizeUi("ui.slurp.messages.viewProfile", { defaultValue: "View profile" })}
+                      </button>
+                    )}
+                  </section>
+                )}
+                {relationship && (
+                  <SlurpRelationshipPanel
+                    relationship={relationship}
+                    resetting={resetThread.isPending}
+                    onReset={
+                      threadId && personaId
+                        ? () => {
+                            setError(null);
+                            void showConfirmDialog({
+                              title: localizeUi("ui.slurp.messages.resetTitle", {
+                                defaultValue: "Clear this conversation?",
+                              }),
+                              message: localizeUi("ui.slurp.messages.resetDetail", {
+                                defaultValue:
+                                  "Every message here is deleted, and what they remember of it goes with them. Coins, unlocks and commissions are kept. This cannot be undone.",
+                              }),
+                              confirmLabel: localizeUi("ui.slurp.messages.resetConfirm", {
+                                defaultValue: "Clear it",
+                              }),
+                            })
+                              .then((confirmed) => {
+                                if (confirmed) return resetThread.mutateAsync({ threadId, personaId });
+                              })
+                              .catch((cause: unknown) =>
+                                setError(
+                                  cause instanceof Error
+                                    ? cause.message
+                                    : localizeUi("ui.slurp.messages.resetFailed", {
+                                        defaultValue: "Could not clear this conversation.",
+                                      }),
+                                ),
+                              );
+                          }
+                        : null
+                    }
+                  />
+                )}
+              </>
+            )}
+          </div>
+        </div>
+      </dialog>
     </div>
   );
 }
@@ -1291,7 +1593,7 @@ function MessageBubble({
  * Collapsed until asked for: it is a creator-side tool sitting on top of a fan-side inbox, and an
  * always-open textarea there reads like the place you write to whoever you last spoke to.
  */
-function BroadcastPanel({ creatorAccountId, personaId }: { creatorAccountId: string; personaId: string }) {
+export function BroadcastPanel({ creatorAccountId, personaId }: { creatorAccountId: string; personaId: string }) {
   const { t: localizeUi } = useUiTranslation();
   const broadcast = useBroadcastSlurpMessage();
   const [open, setOpen] = useState(false);
@@ -1359,7 +1661,7 @@ function BroadcastPanel({ creatorAccountId, personaId }: { creatorAccountId: str
               type="button"
               disabled={!draft.trim() || broadcast.isPending}
               onClick={() => void submit()}
-              className="min-h-9 shrink-0 rounded-lg bg-[var(--noodle-accent)] px-3 text-xs font-bold text-zinc-950 disabled:opacity-50"
+              className="min-h-11 shrink-0 rounded-lg bg-[var(--noodle-accent)] px-3 text-xs font-bold text-zinc-950 disabled:opacity-50"
             >
               {localizeUi("ui.slurp.messages.broadcastSend", { defaultValue: "Send broadcast" })}
             </button>

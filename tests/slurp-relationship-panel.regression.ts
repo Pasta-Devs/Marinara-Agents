@@ -138,9 +138,9 @@ assert.match(view, /role="group"\s*aria-label="Detail level"/u);
 assert.match(view, /max-h-\[min\(78vh,44rem\)\]/u);
 assert.match(view, /relationship\.dayVibe/u);
 assert.match(view, /relationship\.imageMode/u);
-assert.match(view, /aria-expanded=\{infoOpen\}/u);
-// Opening a different conversation must not inherit the last one's open panel.
-assert.match(view, /setInfoOpen\(false\);[\s\S]{0,120}setDebugOpen\(false\)/u);
+assert.match(view, /<dialog[\s\S]*?aria-labelledby="slurp-conversation-drawer-title"/u);
+// Opening a different conversation must not inherit the last one's drawer state.
+assert.match(view, /setDrawerMode\(null\);[\s\S]{0,180}setMessageSearchOpen\(false\)/u);
 assert.match(view, /Conversation overview/u);
 assert.match(view, /if \(distanceFromBottom <= 96\)/u);
 assert.doesNotMatch(view, /creatorStatus &&/u);
@@ -152,6 +152,8 @@ assert.match(view, /min-w-0 min-w-0|max-w-full flex-1 items-center gap-2 overflo
 assert.match(view, /overflow-x-hidden overflow-y-auto/u);
 assert.match(view, /min-w-0 max-w-full overflow-hidden rounded-xl/u);
 assert.match(view, /grid min-w-0 grid-cols-4/u);
+assert.match(view, /md:w-\[min\(28rem,92vw\)\]/u, "details must become a desktop trailing drawer");
+assert.match(view, /max-h-\[82dvh\]/u, "details must become a mobile bottom sheet");
 
 for (const key of [
   "relationshipToggle",

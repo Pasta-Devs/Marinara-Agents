@@ -5,6 +5,7 @@ import {
   Bell,
   Bookmark,
   BookmarkCheck,
+  BriefcaseBusiness,
   Check,
   ChevronDown,
   ChevronLeft,
@@ -39,7 +40,7 @@ import {
 import type { LucideIcon } from "lucide-react";
 import { createPortal } from "react-dom";
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
-import { Fragment, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { Fragment, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { toast } from "sonner";
 import {
   NOODLER_POST_CONTENT_MAX_LENGTH,
@@ -93,6 +94,7 @@ import {
   useSlurpThreads,
   useMarkSlurpNotificationsSeen,
   type SlurpEventGroup,
+  type SlurpEventItem,
   type SlurpStudioCreator,
   useSetSlurpGoal,
   useSlurpPayout,
@@ -171,7 +173,7 @@ import {
   NOODLE_PINK,
 } from "./SlurpShell";
 import { SlurpProfileSurface } from "./SlurpProfileSurface";
-import { SlurpMessagesView, type SlurpMessageThreadContext } from "./SlurpMessages";
+import { BroadcastPanel, SlurpMessagesView } from "./SlurpMessages";
 import { SlurpSettings, SlurpSettingsSidebar } from "./SlurpSettings";
 import { NoodleImageComposer } from "./SlurpImageComposer";
 import { NoodlePollComposer } from "./SlurpPollComposer";
@@ -620,7 +622,6 @@ export function SlurpHome({ navigation, onNavigate, onLeave }: SlurpHomeProps) {
   };
   const [feedSearch, setFeedSearch] = useState("");
   const [discoverRank, setDiscoverRank] = useState<"likes" | "subscribers">("likes");
-  const [inboxThreadContext, setInboxThreadContext] = useState<SlurpMessageThreadContext | null>(null);
   const discoveryInputRef = useRef<HTMLInputElement | null>(null);
   const [feedTab, setFeedTab] = useState<"following" | "all">("following");
   const [onboardingMode, setOnboardingMode] = useState<"first-run" | "add-creators" | null>(null);
@@ -2212,58 +2213,16 @@ export function SlurpHome({ navigation, onNavigate, onLeave }: SlurpHomeProps) {
     );
   }
 
-  const inboxRail = inboxThreadContext ? (
-    <aside
-      className="relative hidden w-[20rem] shrink-0 overflow-hidden px-4 py-5 @min-[1280px]:block"
-      aria-labelledby="slurp-conversation-rail-heading"
-    >
-      <div className="sticky top-4">
-        <section className="rounded-2xl bg-[var(--slurp-surface)] p-4 text-center shadow-[var(--slurp-shadow-floating)] ring-1 ring-inset ring-[var(--noodle-divider)]">
-          <div className="mx-auto w-fit rounded-full bg-[var(--slurp-canvas)] p-1 ring-1 ring-white/10">
-            <ProfileInitial
-              profile={{
-                id: inboxThreadContext.creatorAccountId,
-                displayName: inboxThreadContext.creatorDisplayName,
-                handle: inboxThreadContext.creatorHandle,
-                avatarUrl: inboxThreadContext.creatorAvatarUrl,
-              }}
-            />
-          </div>
-          <h2 id="slurp-conversation-rail-heading" className="mt-3 truncate text-sm font-black">
-            {inboxThreadContext.creatorDisplayName}
-          </h2>
-          <p className="truncate text-xs text-[var(--muted-foreground)]">@{inboxThreadContext.creatorHandle}</p>
-          <span className="mt-3 inline-flex items-center gap-1.5 rounded-full bg-[var(--accent)] px-2.5 py-1 text-[0.68rem] font-bold text-[var(--muted-foreground)]">
-            <Heart size={11} fill={inboxThreadContext.subscribed ? "currentColor" : "none"} aria-hidden="true" />
-            {inboxThreadContext.subscribed
-              ? localizeUi("ui.slurp.inbox.subscribed", { defaultValue: "Subscribed" })
-              : localizeUi("ui.slurp.inbox.conversation", { defaultValue: "Conversation" })}
-          </span>
-          <button
-            type="button"
-            onClick={() =>
-              onNavigate({ mode: "creator", view: "profile", accountId: inboxThreadContext.creatorAccountId })
-            }
-            className="mt-4 min-h-10 w-full rounded-full border border-[color-mix(in_srgb,var(--noodle-accent)_54%,var(--noodle-divider))] px-4 text-xs font-bold text-[var(--noodle-accent-foreground)] transition-colors hover:bg-[var(--noodle-accent)]/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--noodle-accent)]"
-          >
-            {localizeUi("ui.slurp.settings.creators.viewProfile")}
-          </button>
-        </section>
-      </div>
-    </aside>
-  ) : undefined;
-
   if (navigation.mode === "creator" && navigation.view === "notifications") {
     return (
-      <NoodleShell {...shellProps} contextualRail={inboxRail ? "populated" : "spanning"} rightRail={inboxRail}>
+      <NoodleShell {...shellProps} contextualRail="spanning">
         <SlurpInboxView
           personaId={viewerPersonaId}
           ownedCreatorAccountIds={myCreatorProfile ? [myCreatorProfile.id] : []}
           composeWithCreatorAccountId={null}
-          initialTab="activity"
+          initialActivity
           onBack={exitToCreatorHub}
           onOpenProfile={(accountId) => onNavigate({ mode: "creator", view: "profile", accountId })}
-          onThreadContextChange={setInboxThreadContext}
         />
       </NoodleShell>
     );
@@ -2283,15 +2242,14 @@ export function SlurpHome({ navigation, onNavigate, onLeave }: SlurpHomeProps) {
 
   if (navigation.mode === "creator" && navigation.view === "messages") {
     return (
-      <NoodleShell {...shellProps} contextualRail={inboxRail ? "populated" : "spanning"} rightRail={inboxRail}>
+      <NoodleShell {...shellProps} contextualRail="spanning">
         <SlurpInboxView
           personaId={viewerPersonaId}
           ownedCreatorAccountIds={myCreatorProfile ? [myCreatorProfile.id] : []}
           composeWithCreatorAccountId={navigation.creatorAccountId ?? null}
-          initialTab="chats"
+          initialActivity={false}
           onBack={exitToCreatorHub}
           onOpenProfile={(accountId) => onNavigate({ mode: "creator", view: "profile", accountId })}
-          onThreadContextChange={setInboxThreadContext}
         />
       </NoodleShell>
     );
@@ -7325,6 +7283,8 @@ function SlurpStudioView({
                 </span>
               </button>
 
+              {personaId && <BroadcastPanel creatorAccountId={creator.id} personaId={personaId} />}
+
               <div className="grid grid-cols-3 gap-2">
                 {[
                   {
@@ -7625,129 +7585,350 @@ function SlurpGoalEditor({ creator, personaId }: { creator: SlurpStudioCreator; 
   );
 }
 
+function SlurpInboxHub({
+  personaId,
+  initialActivity,
+  onOpenMessages,
+  onOpenProfile,
+}: {
+  personaId: string | null;
+  initialActivity: boolean;
+  onOpenMessages: (threadId?: string | null) => void;
+  onOpenProfile: (accountId: string) => void;
+}) {
+  const { t: localizeUi, i18n } = useUiTranslation();
+  const threadsQuery = useSlurpThreads(personaId);
+  const [search, setSearch] = useState("");
+  const activityRef = useRef<HTMLElement | null>(null);
+  const viewerThreads = threadsQuery.data?.threads ?? [];
+  const inboundThreads = (threadsQuery.data?.inbound ?? []).map((thread) => ({
+    ...thread,
+    creatorDisplayName:
+      thread.counterpartName ?? localizeUi("ui.slurp.messages.unknownFan", { defaultValue: "Someone" }),
+    creatorHandle: thread.counterpartHandle ?? "",
+    creatorAvatarUrl: null,
+    viewerUnread: thread.creatorUnread,
+    inboxSide: "creator" as const,
+  }));
+  const allThreads = [
+    ...viewerThreads.map((thread) => ({ ...thread, inboxSide: "viewer" as const })),
+    ...inboundThreads,
+  ].sort((left, right) => right.lastMessageAt.localeCompare(left.lastMessageAt));
+  const needle = search.trim().toLocaleLowerCase();
+  const visibleThreads = allThreads.filter((thread) =>
+    `${thread.creatorDisplayName} ${thread.creatorHandle} ${thread.lastMessagePreview}`
+      .toLocaleLowerCase()
+      .includes(needle),
+  );
+  const attentionCommissions = threadsQuery.data?.attentionCommissions ?? [];
+  const commissionThreadIds = new Set(attentionCommissions.map((commission) => commission.threadId));
+  const requestRows = inboundThreads.filter((thread) => thread.state === "request");
+  const attention = [
+    ...requestRows.map((thread) => ({
+      id: `request-${thread.id}`,
+      threadId: thread.id,
+      icon: MessageCircle,
+      title: localizeUi("ui.slurp.inbox.messageRequest", { defaultValue: "Message request" }),
+      context: localizeUi("ui.slurp.inbox.messageRequestContext", {
+        defaultValue: "{{who}} wrote to your Creator",
+        who: thread.creatorDisplayName,
+      }),
+      action: localizeUi("ui.slurp.inbox.review", { defaultValue: "Review" }),
+    })),
+    ...attentionCommissions.map((commission) => {
+      const thread = allThreads.find((candidate) => candidate.id === commission.threadId);
+      const creatorSide = commission.side === "creator";
+      const title = creatorSide
+        ? commission.state === "brief"
+          ? localizeUi("ui.slurp.inbox.commissionNeedsQuote", { defaultValue: "Commission needs a quote" })
+          : localizeUi("ui.slurp.inbox.commissionReady", { defaultValue: "Commission ready to deliver" })
+        : localizeUi("ui.slurp.inbox.commissionQuoted", { defaultValue: "Commission quote received" });
+      return {
+        id: `commission-${commission.id}`,
+        threadId: commission.threadId,
+        icon: BriefcaseBusiness,
+        title,
+        context: localizeUi("ui.slurp.inbox.commissionContext", {
+          defaultValue: "{{who}} · {{amount}} coins",
+          who: thread?.creatorDisplayName ?? localizeUi("ui.slurp.events.someone", { defaultValue: "Someone" }),
+          amount: commission.price,
+        }),
+        action: localizeUi("ui.slurp.inbox.openChat", { defaultValue: "Open chat" }),
+      };
+    }),
+  ];
+  const unread = (threadsQuery.data?.unread ?? 0) + (threadsQuery.data?.inboundUnread ?? 0);
+
+  useEffect(() => {
+    if (!initialActivity) return;
+    activityRef.current?.scrollIntoView({ block: "start" });
+    activityRef.current?.querySelector<HTMLElement>("button")?.focus({ preventScroll: true });
+  }, [initialActivity]);
+
+  return (
+    <div className="h-full overflow-y-auto px-3 py-4 sm:px-5 sm:py-5">
+      <div className="mx-auto flex w-full max-w-7xl flex-col gap-6">
+        <div className="relative">
+          <Search
+            size={17}
+            aria-hidden="true"
+            className="pointer-events-none absolute start-4 top-1/2 -translate-y-1/2 text-[var(--muted-foreground)]"
+          />
+          <label className="sr-only" htmlFor="slurp-inbox-search">
+            {localizeUi("ui.slurp.inbox.searchLabel", { defaultValue: "Search inbox" })}
+          </label>
+          <input
+            id="slurp-inbox-search"
+            type="search"
+            value={search}
+            onChange={(event) => setSearch(event.target.value)}
+            placeholder={localizeUi("ui.slurp.inbox.searchPlaceholder", {
+              defaultValue: "Search messages and activity…",
+            })}
+            className="h-12 w-full rounded-2xl bg-[linear-gradient(135deg,var(--slurp-surface-raised),var(--slurp-surface))] ps-11 pe-4 text-base shadow-[var(--slurp-shadow-raised)] outline-none ring-1 ring-inset ring-white/[0.06] focus:ring-2 focus:ring-[var(--slurp-focus)] sm:text-sm"
+          />
+        </div>
+
+        {attention.length > 0 && (
+          <section
+            aria-labelledby="slurp-needs-attention"
+            className="overflow-hidden rounded-2xl bg-[linear-gradient(145deg,var(--slurp-surface-raised),var(--slurp-surface))] p-2 shadow-[var(--slurp-shadow-raised)] ring-1 ring-inset ring-white/[0.065]"
+          >
+            <header className="flex items-center gap-2 px-2 pb-2 pt-1.5 sm:px-3">
+              <div className="min-w-0 flex-1">
+                <h2 id="slurp-needs-attention" className="text-sm font-black">
+                  {localizeUi("ui.slurp.inbox.needsAttention", { defaultValue: "Needs attention" })}
+                </h2>
+                <p className="text-xs text-[var(--muted-foreground)]">
+                  {localizeUi("ui.slurp.inbox.waiting", { defaultValue: "Things waiting for you" })}
+                </p>
+              </div>
+              <span className="inline-flex h-6 min-w-6 items-center justify-center rounded-full bg-[var(--noodle-accent)]/14 px-2 text-[0.7rem] font-black tabular-nums text-[var(--noodle-accent)]">
+                {attention.length}
+              </span>
+            </header>
+            <div className="divide-y divide-white/[0.055]">
+              {attention.slice(0, 3).map((item) => {
+                const Icon = item.icon;
+                return (
+                  <button
+                    key={item.id}
+                    type="button"
+                    onClick={() => onOpenMessages(item.threadId)}
+                    className="group flex min-h-14 w-full items-center gap-3 rounded-xl px-2 py-2 text-start transition-[background-color,transform] hover:bg-[var(--noodle-accent)]/[0.055] active:scale-[0.96] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--slurp-focus)] motion-reduce:transition-none motion-reduce:active:scale-100 sm:px-3"
+                  >
+                    <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-[var(--noodle-accent)]/12 text-[var(--noodle-accent)]">
+                      <Icon size={18} strokeWidth={2} aria-hidden="true" />
+                    </span>
+                    <span className="min-w-0 flex-1">
+                      <span className="block truncate text-sm font-bold">{item.title}</span>
+                      <span className="block truncate text-xs text-[var(--muted-foreground)]">{item.context}</span>
+                    </span>
+                    <span className="hidden min-h-10 shrink-0 items-center rounded-lg px-3 text-xs font-bold text-[var(--noodle-accent)] sm:inline-flex">
+                      {item.action}
+                    </span>
+                    <ChevronRight
+                      size={17}
+                      className="shrink-0 text-[var(--muted-foreground)] sm:hidden rtl:-scale-x-100"
+                      aria-hidden="true"
+                    />
+                  </button>
+                );
+              })}
+            </div>
+            {attention.length > 3 && (
+              <button
+                type="button"
+                onClick={() => onOpenMessages(null)}
+                className="min-h-11 w-full rounded-xl px-3 text-start text-xs font-bold text-[var(--noodle-accent)] transition-[background-color,transform] hover:bg-[var(--noodle-accent)]/[0.055] active:scale-[0.96] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--slurp-focus)] motion-reduce:transition-none motion-reduce:active:scale-100"
+              >
+                {localizeUi("ui.slurp.inbox.moreAttention", {
+                  defaultValue: "{{count}} more requiring attention",
+                  count: attention.length - 3,
+                })}
+              </button>
+            )}
+          </section>
+        )}
+
+        <div className="grid items-start gap-6 min-[58rem]:grid-cols-[minmax(0,3fr)_minmax(20rem,2fr)]">
+          <section aria-labelledby="slurp-inbox-messages" className="min-w-0">
+            <header className="mb-3 flex min-h-11 items-center gap-2">
+              <MessageCircle size={19} className="text-[var(--noodle-accent)]" aria-hidden="true" />
+              <h2 id="slurp-inbox-messages" className="text-base font-black">
+                {localizeUi("ui.slurp.inbox.messages", { defaultValue: "Messages" })}
+              </h2>
+              {unread > 0 && (
+                <span className="rounded-full bg-[var(--noodle-accent)]/13 px-2 py-1 text-[0.68rem] font-bold tabular-nums text-[var(--noodle-accent)]">
+                  {localizeUi("ui.slurp.inbox.unread", { defaultValue: "{{count}} unread", count: unread })}
+                </span>
+              )}
+              <button
+                type="button"
+                onClick={() => onOpenMessages(null)}
+                className="ms-auto min-h-11 rounded-lg px-2 text-xs font-bold text-[var(--noodle-accent)] transition-[background-color,transform] hover:bg-[var(--noodle-accent)]/10 active:scale-[0.96] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--slurp-focus)] motion-reduce:transition-none motion-reduce:active:scale-100"
+              >
+                {localizeUi("ui.slurp.inbox.seeAllMessages", { defaultValue: "See all messages" })}
+              </button>
+            </header>
+            <div className="flex flex-col gap-2">
+              {threadsQuery.isPending ? (
+                <p className="rounded-2xl bg-[var(--slurp-surface)] px-5 py-8 text-center text-xs text-[var(--muted-foreground)] ring-1 ring-inset ring-white/[0.05]">
+                  {localizeUi("ui.slurp.inbox.loadingMessages", { defaultValue: "Loading messages…" })}
+                </p>
+              ) : visibleThreads.length === 0 ? (
+                <p className="rounded-2xl bg-[var(--slurp-surface)] px-5 py-8 text-center text-xs text-[var(--muted-foreground)] ring-1 ring-inset ring-white/[0.05]">
+                  {needle
+                    ? localizeUi("ui.slurp.inbox.noSearchResults", { defaultValue: "No matching conversations" })
+                    : localizeUi("ui.slurp.messages.emptyTitle", { defaultValue: "No conversations yet" })}
+                </p>
+              ) : (
+                visibleThreads.slice(0, 3).map((thread, index) => (
+                  <button
+                    key={thread.id}
+                    type="button"
+                    onClick={() => onOpenMessages(thread.id)}
+                    className={cn(
+                      "flex min-h-[4.5rem] w-full items-center gap-3 rounded-2xl bg-[var(--slurp-surface)] px-3 py-2.5 text-start shadow-[var(--slurp-shadow-raised)] ring-1 ring-inset ring-white/[0.05] transition-[background-color,transform] hover:bg-[var(--slurp-surface-raised)] active:scale-[0.96] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--slurp-focus)] motion-reduce:transition-none motion-reduce:active:scale-100",
+                      index === 2 && "max-[39rem]:hidden",
+                    )}
+                  >
+                    <span className="relative shrink-0">
+                      <Avatar
+                        account={{ displayName: thread.creatorDisplayName, avatarUrl: thread.creatorAvatarUrl }}
+                        size="md"
+                      />
+                      <span className="absolute -bottom-1 -end-1 flex h-5 w-5 items-center justify-center rounded-full bg-[var(--noodle-accent)] text-zinc-950 ring-2 ring-[var(--slurp-surface)]">
+                        <MessageCircle size={11} strokeWidth={2.5} aria-hidden="true" />
+                      </span>
+                    </span>
+                    <span className="min-w-0 flex-1">
+                      <span
+                        className={cn("block truncate text-sm", thread.viewerUnread > 0 ? "font-black" : "font-bold")}
+                      >
+                        {thread.creatorDisplayName}
+                      </span>
+                      <span className="block truncate text-[0.7rem] text-[var(--muted-foreground)]">
+                        {thread.creatorHandle ? `@${thread.creatorHandle}` : ""}
+                        {thread.inboxSide === "creator"
+                          ? localizeUi("ui.slurp.inbox.toCreator", { defaultValue: " · To your Creator" })
+                          : ""}
+                      </span>
+                      <span
+                        className={cn(
+                          "block truncate text-xs",
+                          thread.viewerUnread > 0 ? "font-semibold" : "text-[var(--muted-foreground)]",
+                        )}
+                      >
+                        {thread.lastMessagePreview ||
+                          localizeUi("ui.slurp.messages.noMessages", { defaultValue: "No messages yet" })}
+                      </span>
+                    </span>
+                    <span className="flex shrink-0 flex-col items-end gap-1 self-stretch py-1">
+                      <time
+                        dateTime={thread.lastMessageAt}
+                        className="text-[0.65rem] tabular-nums text-[var(--muted-foreground)]"
+                      >
+                        {formatTime(thread.lastMessageAt, i18n.language)}
+                      </time>
+                      {thread.viewerUnread > 0 && (
+                        <span className="inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-[var(--noodle-accent)] px-1.5 text-[0.65rem] font-black tabular-nums text-zinc-950">
+                          {thread.viewerUnread}
+                        </span>
+                      )}
+                    </span>
+                  </button>
+                ))
+              )}
+            </div>
+          </section>
+
+          <section ref={activityRef} aria-labelledby="slurp-inbox-activity" className="min-w-0 scroll-mt-4">
+            <SlurpNotificationsView
+              personaId={personaId}
+              onBack={() => undefined}
+              onOpenMessages={onOpenMessages}
+              onOpenProfile={onOpenProfile}
+              embedded
+              search={search}
+              hiddenSubjectIds={commissionThreadIds}
+            />
+          </section>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function SlurpInboxView({
   personaId,
   ownedCreatorAccountIds,
   composeWithCreatorAccountId,
-  initialTab,
+  initialActivity,
   onBack,
   onOpenProfile,
-  onThreadContextChange,
 }: {
   personaId: string | null;
   ownedCreatorAccountIds: string[];
   composeWithCreatorAccountId: string | null;
-  initialTab: "chats" | "activity";
+  initialActivity: boolean;
   onBack: () => void;
   onOpenProfile: (accountId: string) => void;
-  onThreadContextChange: (thread: SlurpMessageThreadContext | null) => void;
 }) {
   const { t: localizeUi } = useUiTranslation();
-  const [tab, setTab] = useState<"chats" | "activity">(initialTab);
-  const [activityThreadId, setActivityThreadId] = useState<string | null>(null);
+  const [workspaceOpen, setWorkspaceOpen] = useState(Boolean(composeWithCreatorAccountId));
+  const [composeCreatorId, setComposeCreatorId] = useState(composeWithCreatorAccountId);
+  const [selectedThreadId, setSelectedThreadId] = useState<string | null>(null);
   const [threadOpen, setThreadOpen] = useState(false);
-  const threadsQuery = useSlurpThreads(personaId);
-  const notificationsQuery = useSlurpNotifications(personaId);
-  const { mutate: markSeen } = useMarkSlurpNotificationsSeen();
-  const chatUnread = (threadsQuery.data?.unread ?? 0) + (threadsQuery.data?.inboundUnread ?? 0);
-  const activityUnread = notificationsQuery.data?.unseenCount ?? 0;
-  const handleThreadContextChange = useCallback(
-    (thread: SlurpMessageThreadContext | null) => {
-      setThreadOpen(Boolean(thread));
-      onThreadContextChange(thread);
-    },
-    [onThreadContextChange],
-  );
+  const openMessages = (threadId: string | null = null) => {
+    setComposeCreatorId(null);
+    setSelectedThreadId(threadId);
+    setWorkspaceOpen(true);
+  };
 
   useEffect(() => {
-    if (tab !== "activity" || !personaId) return;
-    return () => markSeen(personaId);
-  }, [tab, personaId, markSeen]);
-
-  useEffect(() => {
-    if (tab === "activity") onThreadContextChange(null);
-  }, [onThreadContextChange, tab]);
+    if (composeWithCreatorAccountId) {
+      setComposeCreatorId(composeWithCreatorAccountId);
+      setWorkspaceOpen(true);
+    }
+  }, [composeWithCreatorAccountId]);
 
   return (
     <NoodlerFrame
-      onBack={onBack}
-      title={localizeUi("ui.slurp.navigation.messages", { defaultValue: "Inbox" })}
+      onBack={
+        workspaceOpen
+          ? () => {
+              setWorkspaceOpen(false);
+              setComposeCreatorId(null);
+              setSelectedThreadId(null);
+            }
+          : onBack
+      }
+      title={localizeUi(workspaceOpen ? "ui.slurp.inbox.messagesTitle" : "ui.slurp.navigation.messages", {
+        defaultValue: workspaceOpen ? "Messages" : "Inbox",
+      })}
       action={<span />}
       hideHeaderOnMobile={threadOpen}
     >
-      <div className="flex h-full min-h-0 flex-col">
-        {!threadOpen && (
-          <div
-            className="mx-auto grid w-full max-w-6xl grid-cols-2 border-b border-white/[0.055] px-3 pt-1 sm:px-5"
-            role="tablist"
-            aria-label={localizeUi("ui.slurp.navigation.messages", { defaultValue: "Inbox" })}
-          >
-            {(["chats", "activity"] as const).map((option) => (
-              <button
-                key={option}
-                type="button"
-                role="tab"
-                aria-selected={tab === option}
-                aria-controls={`slurp-inbox-${option}-panel`}
-                tabIndex={tab === option ? 0 : -1}
-                onClick={() => {
-                  if (option === "activity") setActivityThreadId(null);
-                  setTab(option);
-                }}
-                onKeyDown={(event) => {
-                  if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") return;
-                  event.preventDefault();
-                  const next = option === "chats" ? "activity" : "chats";
-                  if (next === "activity") setActivityThreadId(null);
-                  setTab(next);
-                  event.currentTarget.parentElement
-                    ?.querySelector<HTMLButtonElement>(`button[data-inbox-tab="${next}"]`)
-                    ?.focus();
-                }}
-                data-inbox-tab={option}
-                className={cn(
-                  "relative flex min-h-11 items-center justify-center gap-2 px-3 text-sm font-semibold text-[var(--muted-foreground)] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--slurp-focus)]",
-                  tab === option &&
-                    "text-[var(--noodle-accent)] after:absolute after:inset-x-5 after:bottom-0 after:h-0.5 after:rounded-full after:bg-[var(--noodle-accent)]",
-                )}
-              >
-                <span>
-                  {option === "chats"
-                    ? localizeUi("ui.slurp.inbox.chats", { defaultValue: "Messages" })
-                    : localizeUi("ui.slurp.inbox.activity", { defaultValue: "Notifications" })}
-                </span>
-                {(option === "chats" ? chatUnread : activityUnread) > 0 && (
-                  <span className="inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-[var(--noodle-accent)] px-1.5 text-[0.62rem] font-black tabular-nums text-zinc-950">
-                    {Math.min(option === "chats" ? chatUnread : activityUnread, 99)}
-                  </span>
-                )}
-              </button>
-            ))}
-          </div>
-        )}
-        <div id="slurp-inbox-chats-panel" role="tabpanel" hidden={tab !== "chats"} className="min-h-0 flex-1">
+      <div className="h-full min-h-0">
+        {workspaceOpen ? (
           <SlurpMessagesView
             personaId={personaId}
-            composeWithCreatorAccountId={composeWithCreatorAccountId}
-            initialThreadId={activityThreadId}
+            composeWithCreatorAccountId={composeCreatorId}
+            initialThreadId={selectedThreadId}
             ownedCreatorAccountIds={ownedCreatorAccountIds}
             onOpenProfile={onOpenProfile}
-            onThreadContextChange={handleThreadContextChange}
             onConversationOpenChange={setThreadOpen}
+            workspace
           />
-        </div>
-        <div id="slurp-inbox-activity-panel" role="tabpanel" hidden={tab !== "activity"} className="min-h-0 flex-1">
-          <SlurpNotificationsView
+        ) : (
+          <SlurpInboxHub
             personaId={personaId}
-            onBack={onBack}
-            onOpenMessages={(threadId) => {
-              setActivityThreadId(threadId);
-              setTab("chats");
-            }}
+            initialActivity={initialActivity}
+            onOpenMessages={openMessages}
             onOpenProfile={onOpenProfile}
-            embedded
           />
-        </div>
+        )}
       </div>
     </NoodlerFrame>
   );
@@ -7760,9 +7941,8 @@ function SlurpInboxView({
  * no surface for a subscriber, a tip, an unlock, or a loss. The world could be made as alive as
  * you like and the player would still see none of it.
  *
- * The unseen block is shown first and separately, because the first ten seconds of a session are
- * the product. Marking seen happens on leaving rather than on arriving, so the catch-up does not
- * vanish out from under the person reading it.
+ * Activity stays subordinate to direct messages in the Inbox hub. Repeated low-priority events
+ * expand in place, while read state only changes through an explicit action or destination visit.
  */
 function SlurpNotificationsView({
   personaId,
@@ -7770,46 +7950,58 @@ function SlurpNotificationsView({
   onOpenMessages,
   onOpenProfile,
   embedded = false,
+  search = "",
+  hiddenSubjectIds = new Set<string>(),
 }: {
   personaId: string | null;
   onBack: () => void;
   onOpenMessages: (threadId: string | null) => void;
   onOpenProfile: (accountId: string) => void;
   embedded?: boolean;
+  search?: string;
+  hiddenSubjectIds?: ReadonlySet<string>;
 }) {
   const { t: localizeUi, i18n } = useUiTranslation();
   const notificationsQuery = useSlurpNotifications(personaId);
   const { mutate: markSeen } = useMarkSlurpNotificationsSeen();
   const unseen = notificationsQuery.data?.unseen ?? [];
   const items = notificationsQuery.data?.items ?? [];
-  const [filter, setFilter] = useState<"all" | "mentions" | "payments" | "social">("all");
+  const [expanded, setExpanded] = useState<Set<string>>(() => new Set());
   const unseenIds = new Set(unseen.flatMap((entry) => (entry.type === "single" ? [entry.event.id] : entry.ids)));
-
-  const matchesFilter = (group: SlurpEventGroup) => {
-    if (filter === "all") return true;
-    const kind = group.type === "single" ? group.event.kind : group.kind;
-    if (filter === "mentions") return kind === "comment" || kind === "message" || kind === "returned";
-    if (filter === "payments")
-      return kind === "tip" || kind === "unlock" || kind === "ppv_unlock" || kind.startsWith("commission_");
-    return kind === "subscribed" || kind === "followers" || kind === "lapsed" || kind === "milestone";
-  };
-
-  const describe = (group: SlurpEventGroup) => {
-    if (group.type === "group") {
-      return localizeUi(`ui.slurp.events.group.${group.kind}`, {
-        defaultValue: "{{count}} × {{kind}}",
-        count: group.count,
-        total: group.total,
-        kind: group.kind,
-      });
-    }
-    const { kind, amount, actorLabel } = group.event;
+  const describeEvent = (event: SlurpEventItem) => {
+    const { kind, amount, actorLabel } = event;
     return localizeUi(`ui.slurp.events.single.${kind}`, {
       defaultValue: kind,
       amount,
       who: actorLabel ?? localizeUi("ui.slurp.events.someone", { defaultValue: "Someone" }),
     });
   };
+
+  const groupTitle = (kind: SlurpEventItem["kind"]) =>
+    localizeUi(`ui.slurp.events.category.${kind}`, {
+      defaultValue:
+        kind === "tip"
+          ? "Tips"
+          : kind === "subscribed" || kind === "lapsed" || kind === "returned"
+            ? "Subscriptions"
+            : kind === "unlock" || kind === "ppv_unlock"
+              ? "Paid post unlocks"
+              : kind === "comment"
+                ? "Comments"
+                : "Activity",
+    });
+
+  const groupSummary = (group: Extract<SlurpEventGroup, { type: "group" }>) =>
+    group.total > 0
+      ? localizeUi("ui.slurp.events.coinsReceived", {
+          defaultValue: "{{count}} coins received",
+          count: group.total,
+        })
+      : localizeUi(`ui.slurp.events.group.${group.kind}`, {
+          defaultValue: "{{count}} new updates",
+          count: group.count,
+          total: group.total,
+        });
 
   const eventAppearance = (kind: string): { icon: LucideIcon; tone: string } => {
     if (kind === "message" || kind === "commission_requested")
@@ -7824,19 +8016,183 @@ function SlurpNotificationsView({
     return { icon: Bell, tone: "bg-white/[0.06] text-[var(--muted-foreground)]" };
   };
 
+  const activityGroups = items.flatMap<SlurpEventGroup>((group) => {
+    const events = (group.type === "single" ? [group.event] : group.events).filter(
+      (event) => event.kind !== "message" && !(event.subjectId && hiddenSubjectIds.has(event.subjectId)),
+    );
+    if (events.length === 0) return [];
+    if (events.length === 1) return [{ type: "single", event: events[0]! }];
+    return [
+      {
+        type: "group",
+        kind: events[0]!.kind,
+        count: events.length,
+        total: events.reduce((sum, event) => sum + Math.max(0, event.amount), 0),
+        latestAt: events.reduce(
+          (latest, event) => (event.createdAt > latest ? event.createdAt : latest),
+          events[0]!.createdAt,
+        ),
+        ids: events.map((event) => event.id),
+        events,
+      },
+    ];
+  });
+  const visibleGroups = activityGroups.filter((group) => {
+    const events = group.type === "single" ? [group.event] : group.events;
+    const needle = search.trim().toLocaleLowerCase();
+    if (!needle) return true;
+    const haystack = [
+      group.type === "group" ? groupTitle(group.kind) : "",
+      ...events.map((event) => `${event.actorLabel ?? ""} ${describeEvent(event)}`),
+    ]
+      .join(" ")
+      .toLocaleLowerCase();
+    return haystack.includes(needle);
+  });
+
   const render = (groups: SlurpEventGroup[]) =>
     groups.map((group) => {
       const key = group.type === "single" ? group.event.id : `${group.kind}-${group.ids.length}`;
       const at = group.type === "single" ? group.event.createdAt : group.latestAt;
-      const actionable =
-        group.type === "single" && (group.event.kind === "message" || group.event.kind === "commission_requested");
-      const creatorId = group.type === "single" ? group.event.creatorAccountId : null;
+      if (group.type === "group") {
+        const isOpen = expanded.has(key);
+        const regionId = `slurp-activity-group-${group.kind}-${group.ids[0]}`;
+        const avatars = group.events.slice(0, 3);
+        return (
+          <li key={key} className="relative isolate pt-1.5">
+            <span
+              className="pointer-events-none absolute inset-x-3 top-0 h-4 rounded-t-xl bg-[var(--slurp-surface)]/45 ring-1 ring-inset ring-white/[0.035]"
+              aria-hidden="true"
+            />
+            <div className="relative overflow-hidden rounded-2xl bg-[var(--slurp-surface)] shadow-[var(--slurp-shadow-raised)] ring-1 ring-inset ring-white/[0.055]">
+              <button
+                type="button"
+                aria-expanded={isOpen}
+                aria-controls={regionId}
+                onClick={() =>
+                  setExpanded((current) => {
+                    const next = new Set(current);
+                    if (next.has(key)) next.delete(key);
+                    else next.add(key);
+                    return next;
+                  })
+                }
+                className="flex min-h-[4.5rem] w-full items-center gap-3 px-3 py-2.5 text-start transition-[background-color,transform] hover:bg-[var(--noodle-accent)]/[0.045] active:scale-[0.96] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--slurp-focus)] motion-reduce:transition-none motion-reduce:active:scale-100"
+              >
+                <span className="flex w-[4.25rem] shrink-0 -space-x-3 rtl:space-x-reverse">
+                  {avatars.map((event) => {
+                    const appearance = eventAppearance(event.kind);
+                    const EventIcon = appearance.icon;
+                    return event.actorAvatarUrl ? (
+                      <span key={event.id} className="rounded-full ring-2 ring-[var(--slurp-surface)]">
+                        <Avatar
+                          account={{ displayName: event.actorLabel ?? "", avatarUrl: event.actorAvatarUrl }}
+                          size="xs"
+                        />
+                      </span>
+                    ) : (
+                      <span
+                        key={event.id}
+                        className={cn(
+                          "flex h-8 w-8 items-center justify-center rounded-full ring-2 ring-[var(--slurp-surface)]",
+                          appearance.tone,
+                        )}
+                      >
+                        <EventIcon size={14} aria-hidden="true" />
+                      </span>
+                    );
+                  })}
+                </span>
+                <span className="min-w-0 flex-1">
+                  <span className="flex items-center gap-2">
+                    <span className="truncate text-sm font-bold">{groupTitle(group.kind)}</span>
+                    <span className="inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-[var(--accent)] px-1.5 text-[0.65rem] font-black tabular-nums text-[var(--muted-foreground)]">
+                      {group.count}
+                    </span>
+                  </span>
+                  <span className="block truncate text-xs text-[var(--muted-foreground)]">{groupSummary(group)}</span>
+                </span>
+                <ChevronDown
+                  size={17}
+                  className={cn(
+                    "shrink-0 text-[var(--muted-foreground)] transition-transform motion-reduce:transition-none",
+                    isOpen && "rotate-180",
+                  )}
+                  aria-hidden="true"
+                />
+              </button>
+              {isOpen && (
+                <ul
+                  id={regionId}
+                  className="divide-y divide-white/[0.055] border-t border-[var(--noodle-divider)] px-2"
+                >
+                  {group.events.map((event) => {
+                    const appearance = eventAppearance(event.kind);
+                    const EventIcon = appearance.icon;
+                    const destination = event.creatorAccountId ? () => onOpenProfile(event.creatorAccountId!) : null;
+                    const row = (
+                      <>
+                        {event.actorAvatarUrl ? (
+                          <Avatar
+                            account={{ displayName: event.actorLabel ?? "", avatarUrl: event.actorAvatarUrl }}
+                            size="xs"
+                          />
+                        ) : (
+                          <span
+                            className={cn(
+                              "flex h-8 w-8 shrink-0 items-center justify-center rounded-full",
+                              appearance.tone,
+                            )}
+                          >
+                            <EventIcon size={14} aria-hidden="true" />
+                          </span>
+                        )}
+                        <span className="min-w-0 flex-1 text-xs font-semibold leading-5">{describeEvent(event)}</span>
+                        <time
+                          dateTime={event.createdAt}
+                          className="shrink-0 text-[0.65rem] tabular-nums text-[var(--muted-foreground)]"
+                        >
+                          {formatTime(event.createdAt, i18n.language)}
+                        </time>
+                        {destination && (
+                          <ChevronRight
+                            size={14}
+                            className="shrink-0 text-[var(--muted-foreground)] rtl:-scale-x-100"
+                            aria-hidden="true"
+                          />
+                        )}
+                      </>
+                    );
+                    return (
+                      <li key={event.id}>
+                        {destination ? (
+                          <button
+                            type="button"
+                            onClick={destination}
+                            className="flex min-h-12 w-full items-center gap-2.5 rounded-lg px-2 py-2 text-start transition-[background-color,transform] hover:bg-[var(--noodle-accent)]/[0.045] active:scale-[0.96] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--slurp-focus)] motion-reduce:transition-none motion-reduce:active:scale-100"
+                          >
+                            {row}
+                          </button>
+                        ) : (
+                          <div className="flex min-h-12 items-center gap-2.5 px-2 py-2">{row}</div>
+                        )}
+                      </li>
+                    );
+                  })}
+                </ul>
+              )}
+            </div>
+          </li>
+        );
+      }
+      const actionable = group.event.kind === "commission_requested";
+      const creatorId = group.event.creatorAccountId;
       const destination = actionable
-        ? () => onOpenMessages(group.type === "single" ? group.event.subjectId : null)
+        ? () => onOpenMessages(group.event.subjectId)
         : creatorId
           ? () => onOpenProfile(creatorId)
           : null;
-      const appearance = eventAppearance(group.type === "single" ? group.event.kind : group.kind);
+      const appearance = eventAppearance(group.event.kind);
       const EventIcon = appearance.icon;
       const content = (
         <>
@@ -7844,7 +8200,7 @@ function SlurpNotificationsView({
             <span className={cn("flex h-9 w-9 shrink-0 items-center justify-center rounded-full", appearance.tone)}>
               <EventIcon size={17} strokeWidth={2} aria-hidden="true" />
             </span>
-            <span className="min-w-0 pt-0.5 text-sm font-semibold leading-5">{describe(group)}</span>
+            <span className="min-w-0 pt-0.5 text-sm font-semibold leading-5">{describeEvent(group.event)}</span>
           </span>
           <time dateTime={at} className="shrink-0 text-[0.65rem] tabular-nums text-[var(--muted-foreground)]">
             {formatTime(at, i18n.language)}
@@ -7869,78 +8225,43 @@ function SlurpNotificationsView({
     });
 
   const content = (
-    <div className="mx-auto flex w-full max-w-3xl flex-col px-3 py-3 sm:px-5 sm:py-5">
-      <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-        <div
-          className="flex flex-wrap gap-1.5"
-          role="group"
-          aria-label={localizeUi("ui.slurp.events.filters", { defaultValue: "Notification filters" })}
-        >
-          {(["all", "mentions", "payments", "social"] as const).map((option) => (
-            <button
-              key={option}
-              type="button"
-              aria-pressed={filter === option}
-              onClick={() => setFilter(option)}
-              className={cn(
-                "min-h-9 rounded-full px-3 text-xs font-semibold capitalize text-[var(--muted-foreground)] ring-1 ring-inset ring-[var(--noodle-divider)] transition-colors hover:text-[var(--foreground)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--slurp-focus)]",
-                filter === option &&
-                  "bg-[var(--noodle-accent)] text-zinc-950 ring-[var(--noodle-accent)] hover:text-zinc-950",
-              )}
-            >
-              {localizeUi(`ui.slurp.events.filter.${option}`, {
-                defaultValue: option[0]?.toUpperCase() + option.slice(1),
-              })}
-            </button>
-          ))}
-        </div>
+    <div className="flex w-full flex-col">
+      <header className="mb-3 flex min-h-11 items-center gap-2">
+        <Bell size={19} className="text-[var(--noodle-accent)]" aria-hidden="true" />
+        <h2 id="slurp-inbox-activity" className="text-base font-black">
+          {localizeUi("ui.slurp.inbox.activityTitle", { defaultValue: "Activity" })}
+        </h2>
         {unseen.length > 0 && personaId && (
           <button
             type="button"
             onClick={() => markSeen(personaId)}
-            className="min-h-9 rounded-lg px-2 text-xs font-bold text-[var(--noodle-accent)] hover:bg-[var(--noodle-accent)]/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--slurp-focus)]"
+            className="ms-auto min-h-11 rounded-lg px-2 text-xs font-bold text-[var(--noodle-accent)] transition-[background-color,transform] hover:bg-[var(--noodle-accent)]/10 active:scale-[0.96] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--slurp-focus)] motion-reduce:transition-none motion-reduce:active:scale-100"
           >
-            {localizeUi("ui.slurp.events.markAllRead", { defaultValue: "Mark all as read" })}
+            {localizeUi("ui.slurp.events.markAllRead", { defaultValue: "Mark as read" })}
           </button>
         )}
-      </div>
-      {unseen.length > 0 && (
-        <section aria-labelledby="slurp-catch-up" className="pb-2">
-          <h2
-            id="slurp-catch-up"
-            className="flex items-center gap-2 px-2 text-xs font-semibold text-[var(--noodle-accent)] before:h-px before:flex-1 before:bg-[var(--noodle-accent)]/25 after:h-px after:flex-1 after:bg-[var(--noodle-accent)]/25"
-          >
-            {localizeUi("ui.slurp.events.whileAway", { defaultValue: "While you were away" })}
-          </h2>
-          <ul className="mt-1 flex flex-col divide-y divide-white/[0.055] rounded-2xl bg-[var(--slurp-surface)] px-2 ring-1 ring-inset ring-[var(--noodle-divider)]">
-            {render(unseen.filter(matchesFilter))}
-          </ul>
-        </section>
+      </header>
+      {notificationsQuery.isPending ? (
+        <p className="rounded-2xl bg-[var(--slurp-surface)] px-5 py-8 text-center text-xs text-[var(--muted-foreground)] ring-1 ring-inset ring-white/[0.05]">
+          {localizeUi("ui.slurp.inbox.loadingActivity", { defaultValue: "Loading activity…" })}
+        </p>
+      ) : visibleGroups.length === 0 ? (
+        <p className="rounded-2xl bg-[var(--slurp-surface)] px-5 py-8 text-center text-xs text-[var(--muted-foreground)] ring-1 ring-inset ring-white/[0.05]">
+          {localizeUi("ui.slurp.events.empty", {
+            defaultValue: "Nothing has happened yet. Post something and give the audience a reason.",
+          })}
+        </p>
+      ) : (
+        <ul className="flex flex-col gap-2">{render(visibleGroups)}</ul>
       )}
-
-      <section aria-labelledby="slurp-all-events" className="pt-2">
-        <h2 id="slurp-all-events" className="px-2 text-xs font-semibold text-[var(--muted-foreground)]">
-          {localizeUi("ui.slurp.events.all", { defaultValue: "Everything" })}
-        </h2>
-        {items.length === 0 ? (
-          <p className="px-2 py-6 text-center text-xs text-[var(--muted-foreground)]">
-            {localizeUi("ui.slurp.events.empty", {
-              defaultValue: "Nothing has happened yet. Post something and give the audience a reason.",
-            })}
-          </p>
-        ) : (
-          <ul className="mt-1 flex flex-col divide-y divide-white/[0.055] rounded-2xl bg-[var(--slurp-surface)] px-2 ring-1 ring-inset ring-[var(--noodle-divider)]">
-            {render(
-              items.filter((group) => {
-                if (!matchesFilter(group)) return false;
-                return group.type === "single"
-                  ? !unseenIds.has(group.event.id)
-                  : group.ids.every((id) => !unseenIds.has(id));
-              }),
-            )}
-          </ul>
-        )}
-      </section>
+      <span className="sr-only" aria-live="polite">
+        {unseenIds.size > 0
+          ? localizeUi("ui.slurp.inbox.unreadActivity", {
+              defaultValue: "{{count}} unread activity items",
+              count: unseenIds.size,
+            })
+          : ""}
+      </span>
     </div>
   );
   if (embedded) return content;
