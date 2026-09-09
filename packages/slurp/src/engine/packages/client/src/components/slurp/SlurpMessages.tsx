@@ -16,12 +16,14 @@ import {
   Send,
   ShieldCheck,
   Sparkles,
+  Trash2,
   X,
 } from "lucide-react";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { useTranslation as useUiTranslation } from "react-i18next";
 import { useSlurpMediaSrc } from "../../hooks/use-slurp-media-src";
 import { getApiErrorMessage } from "../../lib/api-client";
+import { showConfirmDialog } from "../../lib/app-dialogs";
 import { cn } from "../../lib/utils";
 import { Avatar } from "./SlurpShell";
 import { SlurpEmptyArtwork } from "./SlurpEmptyArtwork";
@@ -35,6 +37,7 @@ import {
   useDeliverSlurpCommission,
   useQuoteSlurpCommission,
   useResolveSlurpMessageRequest,
+  useResetSlurpThread,
   useDraftSlurpCreatorReply,
   useSendSlurpCreatorPpv,
   useSendSlurpCreatorImage,
@@ -441,6 +444,7 @@ function SlurpThreadView({
   const send = useSendSlurpMessage();
   const tip = useTipInSlurpThread();
   const resolveRequest = useResolveSlurpMessageRequest();
+  const resetThread = useResetSlurpThread();
   const createCommission = useCreateSlurpCommission();
   const creatorReply = useSendSlurpCreatorReply();
   const draftReply = useDraftSlurpCreatorReply();
@@ -720,7 +724,39 @@ function SlurpThreadView({
         )}
       </div>
 
-      {infoOpen && relationship && <SlurpRelationshipPanel relationship={relationship} />}
+      {infoOpen && relationship && (
+        <SlurpRelationshipPanel
+          relationship={relationship}
+          resetting={resetThread.isPending}
+          onReset={
+            threadId && personaId
+              ? () => {
+                  setError(null);
+                  void showConfirmDialog({
+                    title: localizeUi("ui.slurp.messages.resetTitle", { defaultValue: "Clear this conversation?" }),
+                    message: localizeUi("ui.slurp.messages.resetDetail", {
+                      defaultValue:
+                        "Every message here is deleted, and what they remember of it goes with them. Coins, unlocks and commissions are kept. This cannot be undone.",
+                    }),
+                    confirmLabel: localizeUi("ui.slurp.messages.resetConfirm", { defaultValue: "Clear it" }),
+                  })
+                    .then((confirmed) => {
+                      if (confirmed) return resetThread.mutateAsync({ threadId, personaId });
+                    })
+                    .catch((cause: unknown) =>
+                      setError(
+                        cause instanceof Error
+                          ? cause.message
+                          : localizeUi("ui.slurp.messages.resetFailed", {
+                              defaultValue: "Could not clear this conversation.",
+                            }),
+                      ),
+                    );
+                }
+              : null
+          }
+        />
+      )}
       {debugOpen && <SlurpPromptDebugPanel query={promptDebug} />}
 
       {thread?.state === "request" && (
@@ -1971,7 +2007,15 @@ function CommissionRow({
  * turns a person into a progress bar and teaches the player to farm it. The Creator's operator is
  * looking at their own business, so they get every figure the simulation used.
  */
-function SlurpRelationshipPanel({ relationship }: { relationship: NonNullable<SlurpThreadRelationship> }) {
+function SlurpRelationshipPanel({
+  relationship,
+  onReset,
+  resetting,
+}: {
+  relationship: NonNullable<SlurpThreadRelationship>;
+  onReset: (() => void) | null;
+  resetting: boolean;
+}) {
   const [advanced, setAdvanced] = useState(false);
   const cooling = relationship.coolUntil && relationship.coolUntil > new Date().toISOString();
   const mood = "mood" in relationship ? relationship.mood : null;
@@ -1990,6 +2034,8 @@ function SlurpRelationshipPanel({ relationship }: { relationship: NonNullable<Sl
   const creatorState = relationship.creatorState;
   const threadState = relationship.threadState;
   const band = (value: number) => (value <= 25 ? "low" : value <= 60 ? "medium" : value <= 80 ? "high" : "urgent");
+  // Basic reads as a word, advanced reads as the number behind the word. Same value either way.
+  const figure = (value: number) => (advanced ? `${value}/100` : humanize(band(value)));
   const boundary =
     threadState.stance === "rejecting" ||
     threadState.stance === "defensive" ||
@@ -2066,24 +2112,68 @@ function SlurpRelationshipPanel({ relationship }: { relationship: NonNullable<Sl
               State changes appear here without moving the chat.
             </p>
           </div>
+          {/* One label, pressed or not. Swapping the word between "Advanced" and "Basic" left it
+              ambiguous whether the button named the current mode or the one it would switch to. */}
           <button
             type="button"
             aria-pressed={advanced}
             onClick={() => setAdvanced((open) => !open)}
-            className="inline-flex min-h-9 shrink-0 items-center gap-1 rounded-lg px-2 text-[0.7rem] font-bold text-[var(--noodle-accent)] ring-1 ring-inset ring-[var(--noodle-accent)]/30 hover:bg-[var(--noodle-accent)]/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--slurp-focus)]"
+            className={cn(
+              "inline-flex min-h-9 shrink-0 items-center gap-1 rounded-lg px-2 text-[0.7rem] font-bold ring-1 ring-inset focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--slurp-focus)]",
+              advanced
+                ? "bg-[var(--noodle-accent)] text-zinc-950 ring-transparent"
+                : "text-[var(--noodle-accent)] ring-[var(--noodle-accent)]/30 hover:bg-[var(--noodle-accent)]/10",
+            )}
           >
-            <Activity size={14} aria-hidden="true" /> {advanced ? "Basic" : "Advanced"}
+            <Activity size={14} aria-hidden="true" /> Advanced
           </button>
         </div>
+        {/* The toggle used to append one section far below the fold, so pressing it looked like
+            nothing happened. Advanced is a mode now: the summary chips swap the band word for the
+            figure the simulation actually used, and the exact-values section opens at the top. */}
         <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-4">
           <InfoChip label="Emotion" value={humanize(creatorState.emotion)} />
-          <InfoChip label="Arousal" value={humanize(band(creatorState.arousal))} tone="amber" />
-          <InfoChip label="Energy" value={humanize(band(creatorState.energy))} />
+          <InfoChip label="Arousal" value={figure(creatorState.arousal)} tone="amber" />
+          <InfoChip label="Energy" value={figure(creatorState.energy)} />
           <InfoChip label="Conversation" value={humanize(threadState.adultLevel)} />
         </div>
       </header>
       <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-3 pb-4 [scrollbar-gutter:stable]">
         <div className="flex flex-col">
+          {advanced && (
+            <Section icon={Activity} title="Advanced state" summary="Exact values and model inputs" open>
+              <p className="text-[0.68rem] text-[var(--muted-foreground)]">
+                Advanced state is diagnostic detail. These values guide behavior, but no single value decides the
+                conversation.
+              </p>
+              <div className="grid grid-cols-2 gap-2">
+                {(
+                  [
+                    "familiarity",
+                    "interest",
+                    "sexualComfort",
+                    "commercialTrust",
+                    "emotionalTrust",
+                    "respect",
+                    "resentment",
+                    "threadDesire",
+                  ] as const
+                ).map((key) => (
+                  <InfoChip
+                    key={key}
+                    label={humanize(key === "threadDesire" ? "conversation desire" : key)}
+                    value={`${threadState[key]}/100`}
+                  />
+                ))}
+              </div>
+              <InfoChip
+                label="Platform strategy"
+                value={humanize(creatorState.strategy)}
+                description="The creator's broader platform approach."
+              />
+              <InfoChip label="State updated" value={creatorState.updatedAt} />
+            </Section>
+          )}
           <Section icon={Sparkles} title="Current situation" summary={conversationSummary} open>
             <div className="grid grid-cols-2 gap-2">
               <InfoChip
@@ -2118,7 +2208,7 @@ function SlurpRelationshipPanel({ relationship }: { relationship: NonNullable<Sl
               description="How much the creator wants to continue this conversation."
             />
           </Section>
-          <Section icon={MessageCircle} title="Creator now" summary={stateSummary} open>
+          <Section icon={MessageCircle} title="Creator now" summary={stateSummary} open={advanced}>
             <div className="grid grid-cols-2 gap-2">
               <InfoChip
                 label="Intent"
@@ -2191,40 +2281,6 @@ function SlurpRelationshipPanel({ relationship }: { relationship: NonNullable<Sl
               <p className="font-semibold text-amber-600 dark:text-amber-400">Taking space from this conversation.</p>
             )}
           </Section>
-          {advanced && (
-            <Section icon={Activity} title="Advanced state" summary="Exact values and model inputs" open>
-              <p className="text-[0.68rem] text-[var(--muted-foreground)]">
-                Advanced state is diagnostic detail. These values guide behavior, but no single value decides the
-                conversation.
-              </p>
-              <div className="grid grid-cols-2 gap-2">
-                {(
-                  [
-                    "familiarity",
-                    "interest",
-                    "sexualComfort",
-                    "commercialTrust",
-                    "emotionalTrust",
-                    "respect",
-                    "resentment",
-                    "threadDesire",
-                  ] as const
-                ).map((key) => (
-                  <InfoChip
-                    key={key}
-                    label={humanize(key === "threadDesire" ? "conversation desire" : key)}
-                    value={`${threadState[key]}/100`}
-                  />
-                ))}
-              </div>
-              <InfoChip
-                label="Platform strategy"
-                value={humanize(creatorState.strategy)}
-                description="The creator's broader platform approach."
-              />
-              <InfoChip label="State updated" value={creatorState.updatedAt} />
-            </Section>
-          )}
           <Section
             icon={Brain}
             title="Memories"
@@ -2269,6 +2325,21 @@ function SlurpRelationshipPanel({ relationship }: { relationship: NonNullable<Sl
           </Section>
         </div>
       </div>
+      {onReset && (
+        <footer className="shrink-0 border-t border-[var(--noodle-divider)] p-3">
+          <button
+            type="button"
+            disabled={resetting}
+            onClick={onReset}
+            className="inline-flex min-h-9 items-center gap-1.5 rounded-lg px-2 text-[0.7rem] font-bold text-red-600 ring-1 ring-inset ring-red-500/30 hover:bg-red-500/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--slurp-focus)] disabled:opacity-50 dark:text-red-400"
+          >
+            <Trash2 size={14} aria-hidden="true" /> Clear conversation
+          </button>
+          <p className="mt-1.5 text-[0.65rem] text-[var(--muted-foreground)]">
+            Deletes every message here and what they remember of it. Coins, unlocks and commissions are kept.
+          </p>
+        </footer>
+      )}
     </div>
   );
 }

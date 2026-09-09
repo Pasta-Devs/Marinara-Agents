@@ -2515,6 +2515,16 @@ export function useResolveSlurpMessageRequest() {
   });
 }
 
+/** Empty one conversation. Every message goes; what the fan paid for does not. */
+export function useResetSlurpThread() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (input: { threadId: string; personaId: string }) =>
+      api.post<{ thread: SlurpThread }>(`/slurp/messages/threads/${encodeURIComponent(input.threadId)}/reset`, input),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: noodleKeys.noodlerRoot() }),
+  });
+}
+
 /** The rapport breakdown, read only by the Creator edit panel. */
 export function useSlurpRapport(creatorAccountId: string | null, personaId: string | null) {
   return useQuery({

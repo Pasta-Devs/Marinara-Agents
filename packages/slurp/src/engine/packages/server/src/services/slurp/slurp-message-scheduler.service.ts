@@ -59,13 +59,13 @@ export function startSlurpMessageScheduler(app: FastifyInstance, registerStop?: 
       }
       for (const thread of await storage.listThreadsAwaitingReply()) {
         if (stopped) break;
-        const unreadViewer = (await storage.listMessages(thread.id)).findLast(
-          (message) => message.role === "viewer" && !message.readAt,
-        );
-        if (unreadViewer) {
+        // `listThreadsAwaitingReply` only returns threads the fan spoke last in, so the newest
+        // message is the one being answered.
+        const [trigger] = await storage.listMessages(thread.id, 1);
+        if (trigger?.role === "viewer") {
           const outcome = await replyToSlurpMessage(app.db, {
             threadId: thread.id,
-            triggerMessageId: unreadViewer.id,
+            triggerMessageId: trigger.id,
             force: true,
           });
           // `replyToSlurpMessage` reports a provider failure instead of rejecting. Discarding it

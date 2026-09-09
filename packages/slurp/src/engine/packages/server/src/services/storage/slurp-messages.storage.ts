@@ -681,6 +681,19 @@ export function createSlurpMessagesStorage(db: DB) {
           latestRows[0]?.role === "viewer" && latestRows[0].id !== claimRows[0]?.triggerMessageId;
         await tx.insert(slurpMessages).values(first);
         if (rows.length > 0) await tx.insert(slurpReplyBubbles).values(rows);
+        // Answering is reading. Nothing cleared this before, so `listThreadsAwaitingReply` kept
+        // handing the same answered message back to the queued-reply scheduler and the creator
+        // re-answered it once a minute, forever, until the fan spoke again. A message that landed
+        // while this reply was being written is a fresh obligation and stays unread.
+        if (!newerViewerMessage) {
+          for (const row of await tx
+            .select()
+            .from(slurpMessages)
+            .where(and(eq(slurpMessages.threadId, threadId), eq(slurpMessages.role, "viewer")))) {
+            if (row.readAt) continue;
+            await tx.update(slurpMessages).set({ readAt: timestamp }).where(eq(slurpMessages.id, row.id));
+          }
+        }
         await tx
           .update(slurpMessageClaims)
           .set({ replyMessageId: first.id })
@@ -692,7 +705,7 @@ export function createSlurpMessagesStorage(db: DB) {
             lastMessageAt: timestamp,
             lastMessagePreview: slurpMessagePreview("text", first.content, 0),
             viewerUnread: String(Number(current.viewerUnread) + 1),
-            creatorUnread: current.creatorUnread,
+            creatorUnread: newerViewerMessage ? current.creatorUnread : "0",
             replyNotBeforeAt: newerViewerMessage ? current.replyNotBeforeAt : null,
             rapport: JSON.stringify(rapport),
             updatedAt: timestamp,
@@ -1506,6 +1519,44 @@ export function createSlurpMessagesStorage(db: DB) {
       await createSlurpReplyQueueStorage(db).removeForThread(threadId);
     },
 
+    /**
+     * Wipe the conversation and leave the pair where they started.
+     *
+     * Everything derived from the messages goes with them: the queued bubbles, the reply claim,
+     * the unread counts, the mood, the notes and the per-fan state. Keeping any of it would leave
+     * the creator remembering a conversation the fan can no longer see, which reads as a haunting
+     * rather than a reset. What money bought does not: spend, unlocks and commissions are ledgered
+     * outside this thread and rapport is computed from them.
+     */
+    async resetThread(threadId: string): Promise<void> {
+      const timestamp = now();
+      await createSlurpReplyQueueStorage(db).removeForThread(threadId);
+      for (const row of await db.select().from(slurpMessageClaims).where(eq(slurpMessageClaims.threadId, threadId))) {
+        await db.delete(slurpMessageClaims).where(eq(slurpMessageClaims.id, row.id));
+      }
+      for (const row of await db.select().from(slurpMessages).where(eq(slurpMessages.threadId, threadId))) {
+        await db.delete(slurpMessages).where(eq(slurpMessages.id, row.id));
+      }
+      await db
+        .update(slurpThreads)
+        .set({
+          lastMessageAt: timestamp,
+          lastMessagePreview: "",
+          viewerUnread: "0",
+          creatorUnread: "0",
+          replyNotBeforeAt: null,
+          mood: "0",
+          moodUpdatedAt: null,
+          coolUntil: null,
+          threadState: "{}",
+          strikes: "0",
+          lastStrikeAt: null,
+          notes: "[]",
+          updatedAt: timestamp,
+        })
+        .where(eq(slurpThreads.id, threadId));
+    },
+
     /** Clear one side's unread count and stamp the messages the other side sent. */
     async markRead(threadId: string, side: "viewer" | "creator"): Promise<void> {
       const timestamp = now();
@@ -1589,20 +1640,27 @@ export function createSlurpMessagesStorage(db: DB) {
         .where(inArray(slurpThreads.state, ["active", "request"]))
         .orderBy(asc(slurpThreads.lastMessageAt));
       const nowMs = Date.now();
+      const nowIso = new Date(nowMs).toISOString();
       const candidates = rows
         .map(mapThread)
         .filter(
           (thread) =>
-            thread.creatorUnread > 0 && (!thread.replyNotBeforeAt || Date.parse(thread.replyNotBeforeAt) <= nowMs),
+            thread.creatorUnread > 0 &&
+            (!thread.coolUntil || thread.coolUntil <= nowIso) &&
+            (!thread.replyNotBeforeAt || Date.parse(thread.replyNotBeforeAt) <= nowMs),
         );
       const queue = createSlurpReplyQueueStorage(db);
-      const pending = await Promise.all(
-        candidates.map(async (thread) => [thread, await queue.hasPending(thread.id)] as const),
+      const ready = await Promise.all(
+        candidates.map(async (thread) => {
+          if (await queue.hasPending(thread.id)) return null;
+          // You owe an answer while the fan spoke last. The unread counter alone said "yes" long
+          // after the answer went out, so the scheduler re-answered the same message once per
+          // poll until the fan spoke again. The newest message is the whole obligation.
+          const [newest] = await storage.listMessages(thread.id, 1);
+          return newest?.role === "viewer" ? thread : null;
+        }),
       );
-      return pending
-        .filter(([, hasPending]) => !hasPending)
-        .slice(0, limit)
-        .map(([thread]) => thread);
+      return ready.filter((thread): thread is SlurpThread => thread !== null).slice(0, limit);
     },
   };
 

@@ -36,6 +36,12 @@
     "slurp": {
       "versions": [
         {
+          "version": "1.2.53",
+          "date": "2026-09-09",
+          "notes": "- A creator no longer re-answers the same message once a minute. A conversation waits for a reply only while the fan spoke last, so an answered message is answered once.\n- Answering a fan now clears the Creator inbox badge and marks their message read, and a creator taking space from a conversation is no longer polled for a reply.\n- A conversation can be cleared from the overview: every message in it is deleted, along with the mood, notes and state derived from them. Coins, unlocks and commissions are kept.\n- The Advanced switch in the conversation overview now visibly changes the panel: the exact values open at the top and the summary chips show figures instead of bands.",
+          "highlight": false
+        },
+        {
           "version": "1.2.52",
           "date": "2026-09-09",
           "notes": "- The conversation overview now starts with a focused base view and an optional Advanced view for detailed simulation values.\n- Creator availability and activity moved from the chat header into the overview Context section.\n- State refreshes no longer announce every timestamp or move the message viewport, and visible thread polling now runs once per minute.\n- Overview fields now explain arousal, energy, intent, stance, adult interaction, and conversation desire.",
@@ -147,12 +153,6 @@
           "version": "1.2.34",
           "date": "2026-09-08",
           "notes": "- Commission cards now move to the latest chat position after every state update, including payment updates without a new message row.",
-          "highlight": false
-        },
-        {
-          "version": "1.2.33",
-          "date": "2026-09-08",
-          "notes": "- Commission cards now follow the chat timeline and move to the latest commission event when they update.\n- The chat scrolls to the current bottom after a commission state change.",
           "highlight": false
         }
       ]

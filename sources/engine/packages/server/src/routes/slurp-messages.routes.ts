@@ -323,6 +323,28 @@ export async function slurpMessageRoutes(app: FastifyInstance) {
   });
 
   /**
+   * Empty this conversation and start it over.
+   *
+   * Scoped exactly like reading the thread: either side of this pair may do it, a thread id alone
+   * may not. Destructive and deliberate, so it is its own endpoint rather than a flag on send.
+   */
+  app.post("/messages/threads/:threadId/reset", async (req, reply) => {
+    const parsed = personaQuerySchema.safeParse(req.body ?? {});
+    if (!parsed.success) return reply.code(400).send({ error: parsed.error.flatten() });
+    const { threadId } = req.params as { threadId: string };
+    const viewer = await requireViewer(parsed.data.personaId);
+    if (!viewer) return reply.code(404).send({ error: "Slurp persona not found" });
+    const thread = await messages.getThreadById(threadId);
+    if (!thread || (thread.viewerAccountId !== viewer.id && !(await ownsCreator(viewer.id, thread.creatorAccountId))))
+      return reply.code(404).send({ error: "Thread not found" });
+    await messages.resetThread(thread.id);
+    const side = thread.viewerAccountId === viewer.id ? "viewer" : "creator";
+    // Empty, but read back through the masking helper all the same: every route that returns a
+    // thread's messages goes through one door.
+    return { thread: await freshView(thread.id, side), messages: await visibleMessages(thread.id, side) };
+  });
+
+  /**
    * The conversation with one creator, whether or not it has started.
    *
    * Returns a null thread rather than creating one, so opening a Creator's chat from their

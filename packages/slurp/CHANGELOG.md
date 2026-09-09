@@ -1,5 +1,12 @@
 # Slurp release notes
 
+## 1.2.53 — 2026-09-09
+
+- A creator no longer re-answers the same message once a minute. A conversation waits for a reply only while the fan spoke last, so an answered message is answered once.
+- Answering a fan now clears the Creator inbox badge and marks their message read, and a creator taking space from a conversation is no longer polled for a reply.
+- A conversation can be cleared from the overview: every message in it is deleted, along with the mood, notes and state derived from them. Coins, unlocks and commissions are kept.
+- The Advanced switch in the conversation overview now visibly changes the panel: the exact values open at the top and the summary chips show figures instead of bands.
+
 ## 1.2.52 — 2026-09-09
 
 - The conversation overview now starts with a focused base view and an optional Advanced view for detailed simulation values.
