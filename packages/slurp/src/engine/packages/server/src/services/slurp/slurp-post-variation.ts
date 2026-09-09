@@ -20,12 +20,13 @@
  *
  * ## The approach
  *
- * A beat supplies an **axis of variation**, never a concrete scene. "Somewhere other than where
- * you usually post" lets the character's own life answer; "at a train station" would overwrite it.
+ * A variation supplies an **axis to differ along**, never a concrete scene. "Somewhere other than
+ * where you usually post" lets the character's own life answer; "at a train station" would
+ * overwrite it.
  * That is what keeps this from fighting the character card, and it is the maintainer's brief:
  * the same person, a different part of their life.
  *
- * Beats rotate rather than being drawn at random, so consecutive posts cannot land on the same
+ * Variations rotate rather than being drawn at random, so consecutive posts cannot land on the same
  * axis twice — which is exactly the failure being fixed.
  */
 
@@ -129,10 +130,10 @@ export function slurpStorySlots(rate: SlurpStoryRate | undefined): ReadonlySet<n
   }
 }
 
-export type SlurpPostBeat = {
+export type SlurpPostVariation = {
   format: SlurpPostFormat;
   /**
-   * Publish this beat as a Story. Advisory: the caller must clear it when the run produces no
+   * Publish this variation as a Story. Advisory: the caller must clear it when the run produces no
    * image, because a Story with no picture is not a Story.
    */
   story: boolean;
@@ -143,7 +144,7 @@ export type SlurpPostBeat = {
 };
 
 /**
- * The beat for one post.
+ * The variation for one post.
  *
  * `sequence` is how many posts this Creator has already made. Rotating on it — rather than drawing
  * at random — is what guarantees consecutive posts differ, which random selection does not.
@@ -151,13 +152,13 @@ export type SlurpPostBeat = {
  * The offset by creator id stops two Creators set up on the same day from marching through the
  * cycle in lockstep.
  */
-export function slurpPostBeat(
+export function slurpPostVariation(
   creatorAccountId: string,
   sequence: number,
   storyRate: SlurpStoryRate = SLURP_DEFAULT_STORY_RATE,
-): SlurpPostBeat {
+): SlurpPostVariation {
   const offset = hash(creatorAccountId);
-  // Math.floor(NaN) is NaN and indexes nothing, which would hand every caller an undefined beat.
+  // Math.floor(NaN) is NaN and indexes nothing, which would hand every caller an undefined variation.
   // Third time this shape has bitten in this package; guard it at the boundary rather than trust
   // the caller's arithmetic.
   const step = Number.isFinite(sequence) ? Math.max(0, Math.floor(sequence)) : 0;
@@ -175,16 +176,16 @@ export function slurpPostBeat(
   };
 }
 
-/** The beat as prompt text. One block, so the caller does not assemble it in three places. */
-export function slurpPostBeatInstruction(beat: SlurpPostBeat): string {
+/** The variation as prompt text. One block, so the caller does not assemble it in three places. */
+export function slurpPostVariationInstruction(variation: SlurpPostVariation): string {
   return [
     "# This post's angle",
     "Keep the person exactly as the character card describes them — face, body, style, voice. Change the situation, not the person.",
-    `Place: ${beat.place}.`,
-    `Moment: ${beat.moment}.`,
-    `Framing for the image: ${beat.framing}.`,
-    `Company: ${beat.company}.`,
-    ...(beat.story
+    `Place: ${variation.place}.`,
+    `Moment: ${variation.moment}.`,
+    `Framing for the image: ${variation.framing}.`,
+    `Company: ${variation.company}.`,
+    ...(variation.story
       ? [
           "This one is a Story, not a feed post: the picture carries it and the text is one short line under it. Write for something that disappears in a day, not for the profile grid.",
         ]

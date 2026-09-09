@@ -39,7 +39,7 @@ import type { NoodleImagePromptReviewItem } from "./slurp-public-images.service.
 import { getErrorMessage } from "./slurp-public-support.js";
 import { noodleResponseFormat } from "./slurp-response-format.js";
 import { buildSlurpPostTimingContext } from "./slurp-post-timing.js";
-import { slurpPostBeat, slurpPostBeatInstruction } from "./slurp-post-beat.js";
+import { slurpPostVariation, slurpPostVariationInstruction } from "./slurp-post-variation.js";
 import { resolveSlurpCreatorScheduleContext } from "./slurp-creator-schedule.js";
 import { createChatsStorage } from "../storage/chats.storage.js";
 import { NOODLER_FORMAT_MAX_LENGTH, type NoodlerContentFormat } from "./slurp-content-format.js";
@@ -220,7 +220,7 @@ export function buildNoodlerPostMessages(input: {
   generationGuidance: string;
   scheduleContext?: string;
   /** The rotating angle for this post. Absent when the player has directed the post themselves. */
-  beatInstruction?: string;
+  variationInstruction?: string;
   generatedAt?: Date;
   publicationTime?: Date;
 }): ChatMessage[] {
@@ -280,7 +280,7 @@ export function buildNoodlerPostMessages(input: {
     "",
     "# Recent Slurp posts",
     formatNoodlerPostHistory(input.recentPosts, protect),
-    ...(input.beatInstruction ? ["", input.beatInstruction] : []),
+    ...(input.variationInstruction ? ["", input.variationInstruction] : []),
     ...(input.request.noodlerPostGuide ? ["", "# Post direction", protect(input.request.noodlerPostGuide)] : []),
   ].join("\n");
   return [
@@ -380,10 +380,10 @@ export async function generateNoodlerPost(
   const sourceCharacterContext = await resolveNoodlerCharacterCanon(db, linkedPublicAccount, disclosureMode);
   // The rotating angle for this post. Skipped when the player has directed the post themselves —
   // their direction is the angle, and a second one would fight it.
-  const beat = input.request.noodlerPostGuide?.trim()
+  const variation = input.request.noodlerPostGuide?.trim()
     ? null
-    : slurpPostBeat(account.id, await noodle.countNoodlerPostsByAccount(account.id), settings.storyRate);
-  const format = input.request.format ?? beat?.format ?? "caption";
+    : slurpPostVariation(account.id, await noodle.countNoodlerPostsByAccount(account.id), settings.storyRate);
+  const format = input.request.format ?? variation?.format ?? "caption";
   const messages = buildNoodlerPostMessages({
     account,
     sourceCharacterContext,
@@ -391,9 +391,9 @@ export async function generateNoodlerPost(
     disclosureMode,
     publicIdentity,
     recentPosts,
-    // A beat carries its own format, so an automatic post stops always being a caption.
+    // A variation carries its own format, so an automatic post stops always being a caption.
     request: { ...input.request, format },
-    beatInstruction: beat ? slurpPostBeatInstruction(beat) : undefined,
+    variationInstruction: variation ? slurpPostVariationInstruction(variation) : undefined,
     allowImagePrompt: imagesEnabled,
     generationGuidance: settings.generationGuidance,
     scheduleContext,
@@ -488,7 +488,7 @@ export async function generateNoodlerPost(
 
   // A Story is a picture with a line under it, so a run that produces no image publishes an
   // ordinary post instead. The flag is only honoured on the path that commits an image below.
-  const storyBeat = beat?.story === true && imagesEnabled;
+  const storyVariation = variation?.story === true && imagesEnabled;
 
   // Identity protection applies to the image prompt too, not only post text.
   const draftImagePrompt = imagesEnabled
@@ -522,7 +522,7 @@ export async function generateNoodlerPost(
       // so a scheduled Story used to publish as an ordinary post. Carry the intent in the prepared
       // payload instead; publishDueNoodlerPreparedPosts drops it again if no image ever attached,
       // which keeps the "a Story is a picture with a line under it" rule intact.
-      metadata: { ...baseInput.metadata, ...(storyBeat ? { noodlerPostType: "story" } : {}) },
+      metadata: { ...baseInput.metadata, ...(storyVariation ? { noodlerPostType: "story" } : {}) },
     };
   }
 
@@ -594,7 +594,7 @@ export async function generateNoodlerPost(
     admissionMode: input.admissionMode,
     // A Story is shown in a tall frame and cropped to portrait in the composer, so generate it at
     // 4:5 rather than at the feed post size the player configured.
-    ...(storyBeat ? { width: settings.storyImageWidth, height: settings.storyImageHeight } : {}),
+    ...(storyVariation ? { width: settings.storyImageWidth, height: settings.storyImageHeight } : {}),
   };
 
   // Manual Guide review path: persist a pending prompt and hand back a preview for the
@@ -666,7 +666,7 @@ export async function generateNoodlerPost(
       id: postId,
       imagePrompt: draftImagePrompt,
       imageUrl: noodlerPostMediaUrl(postId),
-      metadata: { ...image.metadata, ...(storyBeat ? { noodlerPostType: "story" } : {}) },
+      metadata: { ...image.metadata, ...(storyVariation ? { noodlerPostType: "story" } : {}) },
     });
     return { post, imagePromptReview: null };
   } catch (err) {

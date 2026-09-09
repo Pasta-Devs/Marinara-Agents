@@ -80,7 +80,7 @@ import {
   SLURP_WORLD_ACTIVITY,
 } from "../slurp/slurp-scale.js";
 import { resolveSlurpCreatorScheduleStatus } from "../slurp/slurp-creator-schedule-context.js";
-import { SLURP_DEFAULT_STORY_RATE, SLURP_STORY_RATE } from "../slurp/slurp-post-beat.js";
+import { SLURP_DEFAULT_STORY_RATE, SLURP_STORY_RATE } from "../slurp/slurp-post-variation.js";
 import { createSlurpEventsStorage } from "./slurp-events.storage.js";
 import { createSlurpPopulationStorage } from "./slurp-population.storage.js";
 import type { SlurpFunnelStage } from "../slurp/slurp-population.js";
@@ -3860,7 +3860,7 @@ export function createSlurpStorage(db: DB) {
     /**
      * How many posts this Creator has made, ever.
      *
-     * Used as the rotation index for the post beat, so consecutive posts land on different angles.
+     * Used as the rotation index for the post variation, so consecutive posts land on different angles.
      * Counting rather than sampling matters: a random draw can repeat, and repetition is the whole
      * failure being fixed.
      */

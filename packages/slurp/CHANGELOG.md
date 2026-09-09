@@ -1,5 +1,10 @@
 # Slurp release notes
 
+## 1.2.50 — 2026-09-09
+
+- The per-post rotation that varies place, moment, framing, company, and format is now called the post variation.
+- Generated posts are unchanged; only the internal names and the prompt input field are renamed.
+
 ## 1.2.49 — 2026-09-09
 
 - The audience relationship direction is now named the audience arc in the database, the API, and the interface.

@@ -61,7 +61,7 @@ assert.doesNotMatch(storage, /trim\(\)\.slice\(0, 4000\)/u, "no flat 4000-charac
 assert.match(generation, /NOODLER_FORMAT_MAX_LENGTH\[format\]/u);
 assert.match(generation, /noodlerContentFormat: input\.request\.format \?\? "caption"/u);
 assert.match(operations, /format: "caption",\s+access: "locked"/u);
-// The reserve path deliberately passes no format: pinning `caption` there defeated the beat
+// The reserve path deliberately passes no format: pinning `caption` there defeated the variation
 // rotation, so an automatic post was always a caption.
 assert.match(reserve, /access: "locked"/u);
 assert.doesNotMatch(reserve, /format: "caption"/u, "automatic posts must not pin a format");

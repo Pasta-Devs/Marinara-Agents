@@ -3,20 +3,20 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 
 import {
-  slurpPostBeat,
-  slurpPostBeatInstruction,
+  slurpPostVariation,
+  slurpPostVariationInstruction,
   slurpStorySlots,
   SLURP_POST_FORMATS,
   SLURP_STORY_RATE,
-} from "../packages/slurp/src/engine/packages/server/src/services/slurp/slurp-post-beat.js";
+} from "../packages/slurp/src/engine/packages/server/src/services/slurp/slurp-post-variation.js";
 
 // ── Consecutive posts must differ ───────────────────────────────────────────
 // This is the whole point. A random draw can repeat; rotation cannot, and repetition of situation
 // is exactly what made an office worker post from the same desk in the same pose every time.
 for (const creator of ["creator-a", "creator-b", "creator-c"]) {
   for (let index = 0; index < 400; index += 1) {
-    const current = slurpPostBeat(creator, index);
-    const next = slurpPostBeat(creator, index + 1);
+    const current = slurpPostVariation(creator, index);
+    const next = slurpPostVariation(creator, index + 1);
     assert.notEqual(current.place, next.place, `${creator} repeated a place at ${index}`);
     assert.notEqual(current.framing, next.framing, `${creator} repeated a framing at ${index}`);
     assert.notEqual(current.moment, next.moment, `${creator} repeated a moment at ${index}`);
@@ -24,15 +24,18 @@ for (const creator of ["creator-a", "creator-b", "creator-c"]) {
 }
 
 // Deterministic, so the same post always carries the same angle rather than shifting on re-read.
-assert.deepEqual(slurpPostBeat("creator-a", 7), slurpPostBeat("creator-a", 7));
+assert.deepEqual(slurpPostVariation("creator-a", 7), slurpPostVariation("creator-a", 7));
 // Two Creators set up together must not march through the cycle in lockstep.
-assert.notDeepEqual(slurpPostBeat("creator-a", 0), slurpPostBeat("creator-b", 0));
+assert.notDeepEqual(slurpPostVariation("creator-a", 0), slurpPostVariation("creator-b", 0));
 
-// Nonsense sequence numbers must still produce a usable beat.
+// Nonsense sequence numbers must still produce a usable variation.
 for (const sequence of [-5, 0.5, Number.NaN]) {
-  const beat = slurpPostBeat("creator-a", sequence);
-  assert.ok(beat.place && beat.framing && beat.moment && beat.company, `no beat for ${sequence}`);
-  assert.ok(SLURP_POST_FORMATS.includes(beat.format));
+  const variation = slurpPostVariation("creator-a", sequence);
+  assert.ok(
+    variation.place && variation.framing && variation.moment && variation.company,
+    `no variation for ${sequence}`,
+  );
+  assert.ok(SLURP_POST_FORMATS.includes(variation.format));
 }
 
 // ── The format mix stays believable ─────────────────────────────────────────
@@ -40,7 +43,7 @@ for (const sequence of [-5, 0.5, Number.NaN]) {
 // cheapest change to the feed — but a page of essays is as monotonous as a page of one-liners.
 const formats = new Map<string, number>();
 for (let index = 0; index < 800; index += 1) {
-  const format = slurpPostBeat("creator-a", index).format;
+  const format = slurpPostVariation("creator-a", index).format;
   formats.set(format, (formats.get(format) ?? 0) + 1);
 }
 assert.equal(formats.size, SLURP_POST_FORMATS.length, "every format must appear");
@@ -51,7 +54,7 @@ assert.ok((formats.get("long_form") ?? 0) / 800 < 0.25, "long form must not take
 // "Somewhere other than where you usually post" lets the character's own life answer. A concrete
 // setting would overwrite the character card, which is the opposite of "same person, different
 // life".
-const instruction = slurpPostBeatInstruction(slurpPostBeat("creator-a", 3));
+const instruction = slurpPostVariationInstruction(slurpPostVariation("creator-a", 3));
 assert.match(instruction, /Keep the person exactly as the character card describes them/u);
 assert.match(instruction, /directions to vary along, not a scene to copy/u);
 
@@ -66,7 +69,7 @@ assert.match(generation, /post\.imagePrompt \? .*showed:.* : line/u);
 assert.match(generation, /Do not repeat a recent post's setting, activity, framing, or wardrobe/u);
 assert.match(
   generation,
-  /slurpPostBeat\(account\.id, await noodle\.countNoodlerPostsByAccount\(account\.id\), settings\.storyRate\)/u,
+  /slurpPostVariation\(account\.id, await noodle\.countNoodlerPostsByAccount\(account\.id\), settings\.storyRate\)/u,
 );
 
 // The automatic path pinned the format and passed a constant guide. Between them they defeated
@@ -89,21 +92,24 @@ assert.match(timing, /A Tuesday morning and a Saturday night are different posts
   for (const creator of ["creator-a", "creator-b", "creator-c", "creator-d"]) {
     let stories = 0;
     for (let index = 0; index < 400; index += 1) {
-      const beat = slurpPostBeat(creator, index);
-      if (!beat.story) continue;
+      const variation = slurpPostVariation(creator, index);
+      if (!variation.story) continue;
       stories += 1;
       // A Story is a picture with one line under it. An announcement or an essay is not one.
-      assert.equal(beat.format, "caption", `${creator} made a ${beat.format} a Story at ${index}`);
+      assert.equal(variation.format, "caption", `${creator} made a ${variation.format} a Story at ${index}`);
     }
     assert.ok(stories > 0, `${creator} never posts a Story`);
     assert.ok(stories < 200, `${creator} posts too many Stories: ${stories}/400`);
   }
   const storyIndex = Array.from({ length: 40 }, (_, index) => index).find(
-    (index) => slurpPostBeat("creator-a", index).story,
+    (index) => slurpPostVariation("creator-a", index).story,
   );
   assert.notEqual(storyIndex, undefined);
-  assert.match(slurpPostBeatInstruction(slurpPostBeat("creator-a", storyIndex!)), /This one is a Story/u);
-  assert.doesNotMatch(slurpPostBeatInstruction(slurpPostBeat("creator-a", storyIndex!, "off")), /This one is a Story/u);
+  assert.match(slurpPostVariationInstruction(slurpPostVariation("creator-a", storyIndex!)), /This one is a Story/u);
+  assert.doesNotMatch(
+    slurpPostVariationInstruction(slurpPostVariation("creator-a", storyIndex!, "off")),
+    /This one is a Story/u,
+  );
 }
 
 // The Stories setting is a real dial: `off` means off, and the rate is monotonic.
@@ -111,7 +117,7 @@ assert.match(timing, /A Tuesday morning and a Saturday night are different posts
   const share = (rate: (typeof SLURP_STORY_RATE)[number]) => {
     let stories = 0;
     for (const creator of ["creator-a", "creator-b", "creator-c"]) {
-      for (let index = 0; index < 400; index += 1) if (slurpPostBeat(creator, index, rate).story) stories += 1;
+      for (let index = 0; index < 400; index += 1) if (slurpPostVariation(creator, index, rate).story) stories += 1;
     }
     return stories;
   };
@@ -124,8 +130,8 @@ assert.match(timing, /A Tuesday morning and a Saturday night are different posts
     for (const slot of slurpStorySlots(rate)) assert.ok(slot % 2 === 0, `${rate} put a Story on slot ${slot}`);
     for (const creator of ["creator-a", "creator-b"]) {
       for (let index = 0; index < 100; index += 1) {
-        const beat = slurpPostBeat(creator, index, rate);
-        if (beat.story) assert.equal(beat.format, "caption");
+        const variation = slurpPostVariation(creator, index, rate);
+        if (variation.story) assert.equal(variation.format, "caption");
       }
     }
   }
@@ -133,4 +139,4 @@ assert.match(timing, /A Tuesday morning and a Saturday night are different posts
   assert.deepEqual([...slurpStorySlots(undefined)], [...slurpStorySlots("regular")]);
 }
 
-console.log("slurp post beat regression passed");
+console.log("slurp post variation regression passed");
