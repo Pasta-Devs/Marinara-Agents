@@ -322,7 +322,10 @@ export function readSlurpCreatorState(raw: unknown, fallbackUpdatedAt: string): 
     needs,
     intent,
     strategy,
-    updatedAt: typeof record.updatedAt === "string" ? record.updatedAt : fallbackUpdatedAt,
+    updatedAt:
+      typeof record.updatedAt === "string" && Number.isFinite(Date.parse(record.updatedAt))
+        ? record.updatedAt
+        : fallbackUpdatedAt,
   };
 }
 
@@ -335,7 +338,10 @@ function parseSlurpStateJson(raw: string): unknown {
 }
 
 export function slurpCreatorStateCanUseMedia(creator: SlurpCreatorState, thread: SlurpThreadState): boolean {
-  return creator.energy >= 25 && (creator.arousal >= 36 || thread.adultLevel !== "ordinary");
+  if (creator.energy < 25 || thread.stance === "rejecting") return false;
+  const adultStateActive = creator.arousal >= 36 || thread.adultLevel !== "ordinary";
+  if (!adultStateActive) return true;
+  return thread.sexualComfort >= 36 && thread.respect >= 36 && thread.stance !== "defensive";
 }
 
 /** Apply one bounded delta. The server, not the model, owns the limits. */

@@ -124,6 +124,6 @@ const operation = readFileSync(
 assert.match(operation, /status: "cooling"/u);
 assert.match(operation, /thread\.coolUntil && thread\.coolUntil > new Date\(\)\.toISOString\(\)/u);
 // The words the creator left them with are written before the door closes.
-assert.match(operation, /recordReplyOutcome[\s\S]{0,400}?applyBoundary/u);
+assert.match(operation, /recordReplyOutcome[\s\S]{0,1200}?applyBoundary/u);
 
 console.log("slurp stance regression passed");

@@ -1,5 +1,12 @@
 # Slurp release notes
 
+## 1.2.44 — 2026-09-09
+
+- Creators now keep separate emotional, energy, arousal, adult-intent, and platform-strategy state.
+- Direct-message relationships now track familiarity, interest, sexual comfort, commercial trust, emotional trust, respect, resentment, desire, stance, and adult interaction level.
+- The model can report bounded relationship signals, while the server owns all state changes, decay, limits, and adult-behavior gates.
+- Low energy limits reply bursts and generated media. Arousal and adult intent never override relationship comfort, boundaries, or privacy rules.
+
 ## 1.2.43 — 2026-09-09
 
 - Direct-message memory is now two lists: recent facts the creator can rewrite or forget, and long-term facts that stay until they are named by id.

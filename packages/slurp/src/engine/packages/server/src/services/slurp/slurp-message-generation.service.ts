@@ -43,7 +43,7 @@ import {
   type SlurpGeneratedDmReply,
 } from "./slurp-dm-response.js";
 import { notesForPrompt, type SlurpNoteOperation, type SlurpThreadNote } from "./slurp-thread-notes.js";
-import { slurpIntensityBand, type SlurpThreadState } from "./slurp-creator-state.js";
+import { slurpIntensityBand, type SlurpCreatorState, type SlurpThreadState } from "./slurp-creator-state.js";
 import { slurpArcDescription } from "./slurp-arc.js";
 import { SLURP_PLATFORM_CONTEXT } from "./slurp-prompt.js";
 import { createSlurpPopulationStorage } from "../storage/slurp-population.storage.js";
@@ -77,6 +77,7 @@ export function buildSlurpMessageChat(input: {
   /** Facts kept from earlier in this conversation, beyond the history window. */
   notes?: SlurpThreadNote[];
   threadState?: SlurpThreadState;
+  creatorState?: SlurpCreatorState;
   generationGuidance: string;
   scheduleContext?: string;
   disclosureMode: Parameters<typeof noodlerIdentityInstruction>[0];
@@ -108,6 +109,12 @@ export function buildSlurpMessageChat(input: {
     input.notes && input.notes.length > 0
       ? "You already know some things about this fan from earlier conversations. Working memory is recent and may change. Long-term memory is stable. Use them when they fit, and never recite them back as a list."
       : "",
+    input.creatorState
+      ? "The Creator state describes current feeling, energy, sexual attention, intent, and platform strategy. Let it shape behavior without replacing the supplied personality. Arousal is not permission. A sales intent is not personal intimacy. A high value never overrides a boundary, cool-off, privacy rule, or the relationship state."
+      : "",
+    input.threadState
+      ? "The relationship state is specific to this fan. Keep adult behavior at or below its adultLevel. Low sexualComfort, low respect, high resentment, a defensive stance, or a rejecting stance must reduce or stop adult escalation even when the Creator is aroused."
+      : "",
     "This is a private chat, so write like one: lowercase is fine, contractions are fine, emojis are fine if they suit the persona.",
     "Keep it to a chat message, not an essay. One to four sentences unless the fan asked something that needs more.",
     'Return exactly one JSON object with six fields: "content", "moodShift", "remember", "stateSignals", "sharePost" and "image". Use "image" for a generated picture and "sharePost" for a post preview.',
@@ -117,7 +124,7 @@ export function buildSlurpMessageChat(input: {
     // outright, one sentence could end a two-year relationship.
     '"moodShift" is how this last message changed your feeling about the conversation: "up" if you enjoyed it, "same" for anything ordinary, "down" if they were rude, pushy, or tiring, "sharp_down" only for something you would genuinely take offence at. Most messages are "same".',
     `"remember" is an array of at most ${SLURP_NOTES_PER_REPLY} memory operations. Each item is {"op":"add"|"replace"|"forget"|"keep","id":string|null,"text":string|null}. Use add with text for a new working fact. Use replace with the fact's id and new text when a fact changed. Use forget with the fact's id when it is no longer true. Use keep with a working id to move that fact into long-term memory. Use an empty array when nothing changed. Never record your own words, and never record anything about payment.`,
-    '"stateSignals" is an array of up to three exact signals that describe what the fan did in this message. Use only signals that are true. Do not invent a signal to justify the reply.',
+    '"stateSignals" is an array of up to three exact signals that describe what the fan did in this message. Allowed values: fan_shared_personal_fact, fan_remembered_creator_detail, fan_gave_respectful_compliment, fan_gave_welcome_adult_attention, fan_ignored_creator_question, fan_pushed_after_refusal, fan_requested_free_content, fan_paid_for_content, fan_completed_commission, fan_returned_after_silence, fan_mentioned_another_creator, fan_apologized, fan_broke_a_promise. Use only signals that are true. Do not invent a signal to justify the reply.',
     '"sharePost" is an optional zero-based index into yourRecentPosts. Use it only when sharing one of your recent posts fits the conversation. A non-subscriber may receive a friendly locked preview sometimes. Otherwise use null.',
     '"image" is either null or an object with a concrete visual "prompt" and optional short "caption". Use it only when a picture would feel natural, such as showing something, rewarding a warm fan, or making a pointed hostile gesture. Never use it for every reply.',
     "When the conversation is warm or close and the fan has shared something personal, ask one natural follow-up question sometimes. Do not ask a question in every reply, and do not use a question to avoid answering.",
@@ -164,19 +171,16 @@ export function buildSlurpMessageChat(input: {
           },
         }
       : {}),
-    ...(input.threadState
+    ...(input.creatorState
       ? {
-          relationshipState: {
-            stance: input.threadState.stance,
-            familiarity: slurpIntensityBand(input.threadState.familiarity),
-            interest: slurpIntensityBand(input.threadState.interest),
-            sexualComfort: slurpIntensityBand(input.threadState.sexualComfort),
-            commercialTrust: slurpIntensityBand(input.threadState.commercialTrust),
-            emotionalTrust: slurpIntensityBand(input.threadState.emotionalTrust),
-            respect: slurpIntensityBand(input.threadState.respect),
-            resentment: slurpIntensityBand(input.threadState.resentment),
-            threadDesire: slurpIntensityBand(input.threadState.threadDesire),
-            adultLevel: input.threadState.adultLevel,
+          creatorState: {
+            emotion: input.creatorState.emotion,
+            emotionIntensity: slurpIntensityBand(input.creatorState.emotionIntensity),
+            energy: slurpIntensityBand(input.creatorState.energy),
+            arousal: slurpIntensityBand(input.creatorState.arousal),
+            needs: input.creatorState.needs,
+            intent: input.creatorState.intent,
+            strategy: input.creatorState.strategy,
           },
         }
       : {}),
@@ -231,6 +235,8 @@ export type SlurpMessagePromptInput = {
   moodUpdatedAt?: string | null;
   /** What the creator already knows about this fan, beyond the last sixteen turns. */
   notes?: SlurpThreadNote[];
+  threadState?: SlurpThreadState;
+  creatorState?: SlurpCreatorState;
   /** What kind of day the creator is having, already phrased. */
   dayVibe?: string | null;
   coolingOff?: boolean;

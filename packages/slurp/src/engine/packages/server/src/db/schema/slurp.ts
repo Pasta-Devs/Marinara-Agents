@@ -235,8 +235,6 @@ export const slurpThreads = fileTable(
     coolUntil: text("cool_until"),
     /** Per-fan Creator state, separate from global mood and lifetime rapport. */
     threadState: text("thread_state").notNull().default("{}"),
-    /** Per-fan Creator state, separate from global mood and lifetime rapport. */
-    threadState: text("thread_state").notNull().default("{}"),
     /** Cool-off periods this thread has had. Two inside the strike window closes it for good. */
     strikes: text("strikes").notNull().default("0"),
     lastStrikeAt: text("last_strike_at"),

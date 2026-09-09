@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 
 import {
   addSlurpDeltas,
@@ -35,7 +36,21 @@ assert.equal(refusal.adultLevel, "ordinary");
 assert.equal(refusal.stance, "defensive");
 assert.equal(creatorStateDeltaForSignal("fan_gave_welcome_adult_attention").intent, "tease");
 assert.equal(slurpCreatorStateCanUseMedia({ ...creator, energy: 20, arousal: 100 }, thread), false);
-assert.equal(slurpCreatorStateCanUseMedia({ ...creator, energy: 50, arousal: 40 }, thread), true);
+assert.equal(slurpCreatorStateCanUseMedia({ ...creator, energy: 50, arousal: 25 }, thread), true);
+assert.equal(
+  slurpCreatorStateCanUseMedia(
+    { ...creator, energy: 50, arousal: 40 },
+    { ...thread, sexualComfort: 40, respect: 50, adultLevel: "suggestive" },
+  ),
+  true,
+);
+assert.equal(
+  slurpCreatorStateCanUseMedia(
+    { ...creator, energy: 50, arousal: 100 },
+    { ...thread, sexualComfort: 0, adultLevel: "intimate" },
+  ),
+  false,
+);
 
 const improved = applySlurpThreadStateSignals(
   thread,
@@ -72,5 +87,20 @@ assert.deepEqual(addSlurpDeltas({ interest: 2, resentment: 3 }, { interest: -1, 
   resentment: 3,
   stance: "guarded",
 });
+
+const messageOperation = readFileSync(
+  "packages/slurp/src/engine/packages/server/src/services/slurp/slurp-message.operation.ts",
+  "utf8",
+);
+assert.match(messageOperation, /creatorState\.energy >= 35/u);
+assert.match(messageOperation, /slurpCreatorStateCanUseMedia\(creatorState, thread\.threadState\)/u);
+
+const generation = readFileSync(
+  "packages/slurp/src/engine/packages/server/src/services/slurp/slurp-message-generation.service.ts",
+  "utf8",
+);
+assert.match(generation, /creatorState\?: SlurpCreatorState/u);
+assert.match(generation, /Arousal is not permission/u);
+assert.match(generation, /A sales intent is not personal intimacy/u);
 
 console.log("slurp creator state regression passed");

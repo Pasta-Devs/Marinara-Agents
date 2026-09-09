@@ -21,6 +21,7 @@ import {
 import {
   SLURP_THREAD_STATE_DEFAULT,
   applySlurpThreadStateSignals,
+  decaySlurpThreadState,
   type SlurpCreatorStateSignal,
   type SlurpThreadState as SlurpConversationState,
 } from "../slurp/slurp-creator-state.js";
@@ -136,7 +137,7 @@ const json = (value: string | null | undefined): Record<string, unknown> => {
   }
 };
 
-function readThreadState(raw: unknown, fallbackUpdatedAt: string): SlurpThreadState {
+function readThreadState(raw: unknown, fallbackUpdatedAt: string): SlurpConversationState {
   let parsed: Record<string, unknown> = {};
   if (typeof raw === "string") {
     try {
@@ -160,7 +161,7 @@ function readThreadState(raw: unknown, fallbackUpdatedAt: string): SlurpThreadSt
     ["ordinary", "suggestive", "provocative", "intimate", "explicit"].includes(parsed.adultLevel)
       ? (parsed.adultLevel as SlurpConversationState["adultLevel"])
       : SLURP_THREAD_STATE_DEFAULT.adultLevel;
-  return {
+  const state: SlurpConversationState = {
     stance,
     familiarity: number("familiarity", SLURP_THREAD_STATE_DEFAULT.familiarity),
     interest: number("interest", SLURP_THREAD_STATE_DEFAULT.interest),
@@ -171,8 +172,14 @@ function readThreadState(raw: unknown, fallbackUpdatedAt: string): SlurpThreadSt
     resentment: number("resentment", SLURP_THREAD_STATE_DEFAULT.resentment),
     threadDesire: number("threadDesire", SLURP_THREAD_STATE_DEFAULT.threadDesire),
     adultLevel,
-    updatedAt: typeof parsed.updatedAt === "string" ? parsed.updatedAt : fallbackUpdatedAt,
+    updatedAt:
+      typeof parsed.updatedAt === "string" && Number.isFinite(Date.parse(parsed.updatedAt))
+        ? parsed.updatedAt
+        : fallbackUpdatedAt,
   };
+  const parsedUpdatedAt = Date.parse(state.updatedAt);
+  const elapsedHours = Number.isFinite(parsedUpdatedAt) ? Math.max(0, (Date.now() - parsedUpdatedAt) / 3_600_000) : 0;
+  return elapsedHours > 0 ? decaySlurpThreadState(state, elapsedHours, new Date().toISOString()) : state;
 }
 
 const DAY = 86_400_000;

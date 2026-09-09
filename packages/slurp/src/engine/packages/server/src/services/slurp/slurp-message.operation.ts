@@ -23,6 +23,7 @@ import { slurpReplyPacing, splitSlurpReplyBurst, type SlurpReplyPacing } from ".
 import { generateSlurpCommissionImage } from "./slurp-commission-image.operation.js";
 import { slurpMessageMediaUrl } from "./slurp-media.js";
 import { resolveSlurpMediaOffer } from "./slurp-media-offer.js";
+import { slurpCreatorStateCanUseMedia } from "./slurp-creator-state.js";
 
 export type SlurpReplyOutcome =
   | { status: "replied"; message: SlurpMessage; pacing: SlurpReplyPacing }
@@ -138,7 +139,11 @@ export async function replyToSlurpMessage(
       });
       // Two or three messages when the conversation is going well, one when it is not. A creator
       // who always answers in exactly one tidy block reads as a form letter.
-      const bubbles = splitSlurpReplyBurst(reply.content, reply.latitude === "normal" && reply.moodShift !== "down");
+      const bubbles = splitSlurpReplyBurst(
+        reply.content,
+        creatorState.energy >= 35 && reply.latitude === "normal" && reply.moodShift !== "down",
+        creatorState.energy >= 70 ? 3 : 2,
+      );
       let stored = null;
       for (const bubble of bubbles) {
         stored =
@@ -170,7 +175,12 @@ export async function replyToSlurpMessage(
             },
           })) ?? stored;
       }
-      if (reply.image && reply.canSendImage && input.force !== true) {
+      if (
+        reply.image &&
+        reply.canSendImage &&
+        slurpCreatorStateCanUseMedia(creatorState, thread.threadState) &&
+        input.force !== true
+      ) {
         const imageAllowedBySettings = settings.enableImagePrompts === true;
         const recentGeneratedImage = history.some(
           (message) =>

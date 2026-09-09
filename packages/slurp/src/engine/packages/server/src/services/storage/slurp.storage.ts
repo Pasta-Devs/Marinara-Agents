@@ -1819,7 +1819,10 @@ export function createSlurpStorage(db: DB) {
       const raw = await settingsStore.get(`${SLURP_CREATOR_STATE_KEY}.${creatorAccountId}`);
       const fallback = new Date().toISOString();
       const state = readSlurpCreatorState(raw, fallback);
-      const elapsedHours = state.updatedAt ? Math.max(0, (Date.now() - Date.parse(state.updatedAt)) / 3_600_000) : 0;
+      const parsedUpdatedAt = Date.parse(state.updatedAt);
+      const elapsedHours = Number.isFinite(parsedUpdatedAt)
+        ? Math.max(0, (Date.now() - parsedUpdatedAt) / 3_600_000)
+        : 0;
       if (elapsedHours <= 0) return state;
       const recovered = decaySlurpCreatorState(state, elapsedHours, fallback);
       await settingsStore.set(`${SLURP_CREATOR_STATE_KEY}.${creatorAccountId}`, JSON.stringify(recovered));
