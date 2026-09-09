@@ -4,6 +4,12 @@
     "long-term-memory": {
       "versions": [
         {
+          "version": "1.2.24",
+          "date": "2026-09-09",
+          "notes": "- Kept drafts with missing source notes visibly blocked without preventing review of other sources.\n- Showed context-loading error details alongside Retry and kept orphaned rejected suggestions accessible.",
+          "highlight": true
+        },
+        {
           "version": "1.2.23",
           "date": "2026-09-06",
           "notes": "- Restored responsive Memory Vault and Sources loading by deferring local-character discovery.\n- Reused one aggregate local-character catalog and kept its loading and retry state visible.",

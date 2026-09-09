@@ -559,6 +559,7 @@ async function main() {
       let pendingDraftCount = 2;
       let failSecondReviewAccept = false;
       let failReviewContext = false;
+      let missingSourceReview = false;
       const omitReviewContextId: string | null = null;
       let reviewPreflightBlocked = false;
       let confirmReviewDiscard = false;
@@ -1179,7 +1180,7 @@ async function main() {
                 {
                   id: thirdRejectedSuggestionId,
                   fingerprint: "c".repeat(64),
-                  source: { sourceNoteId: "source_mobile_blank" },
+                  source: { sourceNoteId: missingSourceReview ? "source_orphaned_suggestion" : "source_mobile_blank" },
                   scope: {},
                   modes: ["roleplay"],
                   candidate: {
@@ -2297,12 +2298,48 @@ async function main() {
         // switches, keeping the flow working in both the narrow tabbed and wider column layouts.
         await tab.evaluate((element) => (element as HTMLElement).click());
       };
+      const missingSources = ["source_deleted", "source_vanished"];
+      for (const [index, sourceNoteId] of missingSources.entries()) {
+        const draft = makeReviewDraft(
+          `10000000-0000-4000-8000-00000000003${index}`,
+          `10000000-0000-4000-8000-00000000004${index}`,
+          "Missing-source memory",
+        );
+        draft.source.sourceNoteId = sourceNoteId;
+        const mutation = draft.mutations[0] as any;
+        reviewSources.push({
+          sourceNoteId,
+          modes: ["roleplay"],
+          drafts: [
+            {
+              draft,
+              // Also cover a source disappearing after the server's freshness check.
+              freshness: index === 0 ? "missing" : "fresh",
+              blockReasons:
+                index === 0 ? [{ code: "source_missing", message: "The source note no longer exists." }] : [],
+              diagnostics: [],
+              candidateRejections: [],
+              deduplications: [],
+            },
+          ],
+          targets: [
+            {
+              noteId: mutation.note.id,
+              title: mutation.note.title,
+              noteType: "world",
+              rows: [{ draftId: draft.id, mutation, disposition: "new", diagnostics: [], changes: [] }],
+            },
+          ],
+        });
+      }
+      missingSourceReview = true;
       failReviewContext = true;
       await page.locator('[data-ltm-navigation="mobile"] [data-ltm-destination="review"]').click();
       const reviewContextError = page
         .locator('[data-ltm-status="danger"]')
         .filter({ hasText: "Memory context could not load." });
       await reviewContextError.waitFor();
+      assert.match(await reviewContextError.innerText(), /review context temporarily unavailable/u);
       assert.equal(await page.locator("[data-ltm-workspace]").isVisible(), false);
       assert.equal(await page.locator('[data-ltm-review-action="apply"]').count(), 0);
       const reviewUtilitySizes = await page
@@ -2321,6 +2358,44 @@ async function main() {
       // request settles, restores the workspace. (world_second_mobile is an optional context note fetched
       // with allowMissing=true, so it must not be omitted here or the later review content assertions fail.)
       await reviewContextError.getByRole("button", { name: "Retry" }).click();
+      await page.locator('[data-ltm-review-source-select="source_deleted"]').waitFor();
+      assert.equal(await reviewContextError.isVisible(), false);
+      for (const sourceNoteId of [...missingSources, "source_orphaned_suggestion"]) {
+        await showWorkspacePane("navigator");
+        const source = page.locator(`[data-ltm-review-source-select="${sourceNoteId}"]`);
+        assert.match(await source.innerText(), /Missing source/u);
+        await source.click();
+        await showWorkspacePane("workbench");
+        const warning = page.locator("[data-ltm-review-source-missing]");
+        await warning.waitFor();
+        assert.match(await warning.innerText(), /cannot be accepted/u);
+        assert.equal(await page.getByRole("button", { name: "Open source", exact: true }).count(), 0);
+        if (missingSources.includes(sourceNoteId)) {
+          assert.equal(await page.locator("[data-ltm-review-mutation]").count(), 1);
+          assert.equal(await page.locator("[data-ltm-review-action]").isDisabled(), true);
+          await page.locator("[data-ltm-review-mutation]").getByRole("checkbox").check();
+          assert.equal(await page.locator("[data-ltm-review-batch-actions] button").first().isDisabled(), true);
+          await page.locator("[data-ltm-review-mutation]").getByRole("checkbox").uncheck();
+        } else {
+          await page.locator("[data-ltm-rejected-suggestions] > summary").click();
+          assert.equal(await page.locator("[data-ltm-clear-rejected-suggestions]").isEnabled(), true);
+        }
+      }
+      if (visualOutputDir) {
+        await showWorkspacePane("navigator");
+        await page.locator('[data-ltm-review-source-select="source_deleted"]').click();
+        await showWorkspacePane("workbench");
+        await page.screenshot({
+          path: join(visualOutputDir, "long-term-memory-missing-source-mobile.png"),
+          fullPage: true,
+        });
+        await page.setViewportSize({ width: 1280, height: 900 });
+        await page.screenshot({
+          path: join(visualOutputDir, "long-term-memory-missing-source-desktop.png"),
+          fullPage: true,
+        });
+        await page.setViewportSize({ width: 390, height: 844 });
+      }
       await showWorkspacePane("navigator");
       await page.locator('[data-ltm-review-source-select="source_mobile_review"]').waitFor();
       const restoredContextSource = page.locator('[data-ltm-review-source-select="source_mobile_review"]');
@@ -2354,6 +2429,8 @@ async function main() {
         (mutationId) => !document.querySelector(`[data-ltm-review-mutation="${mutationId}"]`),
         reviewMutationIds.first,
       );
+      reviewSources = reviewSources.filter((source) => !missingSources.includes(source.sourceNoteId));
+      missingSourceReview = false;
       const mergeSource = page.locator('[data-ltm-review-source-select="source_mobile_review"]');
       if ((await mergeSource.getAttribute("aria-expanded")) === "false") {
         await mergeSource.click();

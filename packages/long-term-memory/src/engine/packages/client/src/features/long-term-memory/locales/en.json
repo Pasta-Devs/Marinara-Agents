@@ -572,6 +572,8 @@
   "ui.longTermMemory.reviewqueue.sourceReextractionFailed": "Source could not be re-extracted.",
   "ui.longTermMemory.reviewqueue.pendingReviewDraftsCouldNotLoad": "Pending review drafts could not load.",
   "ui.longTermMemory.reviewqueue.memoryContextCouldNotLoad": "Memory context could not load.",
+  "ui.longTermMemory.reviewqueue.missingSourceTitle": "Missing source: {{id}}",
+  "ui.longTermMemory.reviewqueue.missingSourceHelp": "This source note no longer exists. Its drafts cannot be accepted. You can discard pending proposals or clear rejected suggestions here, or import and extract the source again in Sources. Other sources can still be reviewed.",
   "ui.longTermMemory.reviewqueue.memoryContextUnavailable": "Memory context unavailable",
   "ui.longTermMemory.reviewqueue.previewUnavailable": "Preview unavailable",
   "ui.longTermMemory.reviewqueue.projectionPreviewIsStaleBecauseThisTargetHasEdited": "Projection preview is stale because this target has edited mutations. Accept will re-project the edited values.",
