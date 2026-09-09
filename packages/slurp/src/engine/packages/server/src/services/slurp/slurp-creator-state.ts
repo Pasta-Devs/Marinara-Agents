@@ -275,6 +275,69 @@ export function stateDeltaForSignal(signal: SlurpCreatorStateSignal): SlurpState
   return delta;
 }
 
+/** Changes to the Creator's shared state. Relationship changes stay on the thread. */
+export function creatorStateDeltaForSignal(signal: SlurpCreatorStateSignal): SlurpStateDelta {
+  switch (signal) {
+    case "fan_gave_welcome_adult_attention":
+      return { arousal: 3, emotion: "playful", emotionIntensity: 2, intent: "tease" };
+    case "fan_paid_for_content":
+      return { energy: -1, emotion: "proud", emotionIntensity: 1 };
+    case "fan_completed_commission":
+      return { energy: -5, emotion: "content", emotionIntensity: 2 };
+    case "fan_mentioned_another_creator":
+      return { emotion: "jealous", emotionIntensity: 4 };
+    case "fan_pushed_after_refusal":
+      return { emotion: "irritated", emotionIntensity: 5, arousal: -6 };
+    case "fan_returned_after_silence":
+      return { emotion: "warm", emotionIntensity: 2, arousal: 1 };
+    default:
+      return {};
+  }
+}
+
+export function readSlurpCreatorState(raw: unknown, fallbackUpdatedAt: string): SlurpCreatorState {
+  const value = typeof raw === "string" ? parseSlurpStateJson(raw) : raw;
+  const record = value && typeof value === "object" && !Array.isArray(value) ? (value as Record<string, unknown>) : {};
+  const number = (key: keyof SlurpCreatorState, fallback: number): number =>
+    typeof record[key] === "number" && Number.isFinite(record[key]) ? clamp(Number(record[key])) : fallback;
+  const emotion = SLURP_CREATOR_EMOTIONS.includes(record.emotion as SlurpCreatorEmotion)
+    ? (record.emotion as SlurpCreatorEmotion)
+    : SLURP_CREATOR_STATE_DEFAULT.emotion;
+  const intent = SLURP_ADULT_INTENTS.includes(record.intent as SlurpAdultIntent)
+    ? (record.intent as SlurpAdultIntent)
+    : SLURP_CREATOR_STATE_DEFAULT.intent;
+  const strategy = SLURP_PLATFORM_STRATEGIES.includes(record.strategy as SlurpPlatformStrategy)
+    ? (record.strategy as SlurpPlatformStrategy)
+    : SLURP_CREATOR_STATE_DEFAULT.strategy;
+  const needs = Array.isArray(record.needs)
+    ? record.needs
+        .filter((need): need is SlurpCreatorNeed => SLURP_CREATOR_NEEDS.includes(need as SlurpCreatorNeed))
+        .slice(0, 2)
+    : SLURP_CREATOR_STATE_DEFAULT.needs;
+  return {
+    emotion,
+    emotionIntensity: number("emotionIntensity", SLURP_CREATOR_STATE_DEFAULT.emotionIntensity),
+    energy: number("energy", SLURP_CREATOR_STATE_DEFAULT.energy),
+    arousal: number("arousal", SLURP_CREATOR_STATE_DEFAULT.arousal),
+    needs,
+    intent,
+    strategy,
+    updatedAt: typeof record.updatedAt === "string" ? record.updatedAt : fallbackUpdatedAt,
+  };
+}
+
+function parseSlurpStateJson(raw: string): unknown {
+  try {
+    return JSON.parse(raw);
+  } catch {
+    return null;
+  }
+}
+
+export function slurpCreatorStateCanUseMedia(creator: SlurpCreatorState, thread: SlurpThreadState): boolean {
+  return creator.energy >= 25 && (creator.arousal >= 36 || thread.adultLevel !== "ordinary");
+}
+
 /** Apply one bounded delta. The server, not the model, owns the limits. */
 export function applySlurpCreatorStateDelta(
   state: SlurpCreatorState,
@@ -288,9 +351,8 @@ export function applySlurpCreatorStateDelta(
       continue;
     }
     if (typeof value !== "number") continue;
-    next[key as "emotionIntensity" | "energy" | "arousal"] = clamp(
-      value + next[key as "emotionIntensity" | "energy" | "arousal"],
-    );
+    const numericKey = key as "emotionIntensity" | "energy" | "arousal";
+    next[numericKey] = clamp(value + next[numericKey]);
   }
   next.updatedAt = now;
   return next;

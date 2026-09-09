@@ -12,6 +12,8 @@ import {
   SLURP_CREATOR_STATE_DEFAULT,
   SLURP_THREAD_STATE_DEFAULT,
   stateDeltaForSignal,
+  creatorStateDeltaForSignal,
+  slurpCreatorStateCanUseMedia,
   type SlurpCreatorState,
   type SlurpThreadState,
 } from "../packages/slurp/src/engine/packages/server/src/services/slurp/slurp-creator-state.js";
@@ -31,6 +33,9 @@ const refusal = stateDeltaForSignal("fan_pushed_after_refusal");
 assert.equal(refusal.resentment, 18);
 assert.equal(refusal.adultLevel, "ordinary");
 assert.equal(refusal.stance, "defensive");
+assert.equal(creatorStateDeltaForSignal("fan_gave_welcome_adult_attention").intent, "tease");
+assert.equal(slurpCreatorStateCanUseMedia({ ...creator, energy: 20, arousal: 100 }, thread), false);
+assert.equal(slurpCreatorStateCanUseMedia({ ...creator, energy: 50, arousal: 40 }, thread), true);
 
 const improved = applySlurpThreadStateSignals(
   thread,

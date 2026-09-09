@@ -158,6 +158,14 @@ import {
 import { pruneNoodleRefreshRuns } from "./slurp-refresh-run-retention.js";
 import { noodlerPostImageRetryAttempts, NOODLER_POST_IMAGE_RETRY_LIMIT } from "../slurp/slurp-image-retry.js";
 import { enqueueSlurpFinancial } from "./slurp-financial-queue.js";
+import {
+  applySlurpCreatorStateDelta,
+  creatorStateDeltaForSignal,
+  decaySlurpCreatorState,
+  readSlurpCreatorState,
+  type SlurpCreatorState,
+  type SlurpCreatorStateSignal,
+} from "../slurp/slurp-creator-state.js";
 
 /** Newest candidates the image-retry poll inspects per pass. */
 const IMAGE_RETRY_SCAN_LIMIT = 200;
@@ -170,6 +178,7 @@ import {
 } from "../slurp/slurp-post-page.js";
 
 const SLURP_SETTINGS_KEY = "slurp.settings";
+const SLURP_CREATOR_STATE_KEY = "slurp.creator.state";
 const NOODLE_REFRESH_SCHEDULE_KEY = "slurp.refresh-schedule";
 const NOODLER_SOURCE_SNAPSHOT_MIGRATION_KEY = "slurp.migration.noodler-source-snapshots-v1";
 const slurpViewerSettingsKey = (personaId: string) => `slurp.viewer.${personaId}.settings`;
@@ -1804,6 +1813,31 @@ export function createSlurpStorage(db: DB) {
     async getSettings(): Promise<SlurpSettings> {
       const raw = await settingsStore.get(SLURP_SETTINGS_KEY);
       return normalizeSlurpSettings(raw);
+    },
+
+    async getCreatorState(creatorAccountId: string): Promise<SlurpCreatorState> {
+      const raw = await settingsStore.get(`${SLURP_CREATOR_STATE_KEY}.${creatorAccountId}`);
+      const fallback = new Date().toISOString();
+      const state = readSlurpCreatorState(raw, fallback);
+      const elapsedHours = state.updatedAt ? Math.max(0, (Date.now() - Date.parse(state.updatedAt)) / 3_600_000) : 0;
+      if (elapsedHours <= 0) return state;
+      const recovered = decaySlurpCreatorState(state, elapsedHours, fallback);
+      await settingsStore.set(`${SLURP_CREATOR_STATE_KEY}.${creatorAccountId}`, JSON.stringify(recovered));
+      return recovered;
+    },
+
+    async recordCreatorStateSignals(
+      creatorAccountId: string,
+      signals: SlurpCreatorStateSignal[],
+    ): Promise<SlurpCreatorState> {
+      const current = await this.getCreatorState(creatorAccountId);
+      const next = signals.reduce(
+        (state, signal) =>
+          applySlurpCreatorStateDelta(state, creatorStateDeltaForSignal(signal), new Date().toISOString()),
+        current,
+      );
+      await settingsStore.set(`${SLURP_CREATOR_STATE_KEY}.${creatorAccountId}`, JSON.stringify(next));
+      return next;
     },
 
     async getSlurpSettings() {

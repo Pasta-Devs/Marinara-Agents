@@ -115,6 +115,7 @@ export async function replyToSlurpMessage(
       );
       if (!connection) return { status: "connection_not_found" } as const;
       const messaging = await messagesStore.getCreatorMessaging(thread.creatorAccountId);
+      const creatorState = await slurp.getCreatorState(thread.creatorAccountId);
       const reply = await generateSlurpMessageReply({
         db,
         creator,
@@ -128,6 +129,7 @@ export async function replyToSlurpMessage(
         moodUpdatedAt: thread.moodUpdatedAt,
         notes: thread.notes,
         threadState: thread.threadState,
+        creatorState,
         dayVibe: await describeSlurpDayVibe(db, thread.creatorAccountId),
         coolingOff: false,
         strikes: activeSlurpStrikes(thread.strikes, thread.lastStrikeAt),
@@ -223,6 +225,9 @@ export async function replyToSlurpMessage(
             stateSignals: reply.stateSignals,
           })
           .catch((error: unknown) => logger.warn(error, "[slurp-message] Could not record the reply outcome"));
+        await slurp
+          .recordCreatorStateSignals(thread.creatorAccountId, reply.stateSignals)
+          .catch((error: unknown) => logger.warn(error, "[slurp-message] Could not record creator state signals"));
         // The reply is written first and the boundary applied after it, so the fan always receives
         // the words the creator actually left them with rather than silence.
         await applyBoundary(messagesStore, thread.id, reply.latitude).catch((error: unknown) =>
