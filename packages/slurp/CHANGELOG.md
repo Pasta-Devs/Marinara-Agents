@@ -1,5 +1,14 @@
 # Slurp release notes
 
+## 1.2.51 — 2026-09-09
+
+- Creators can now run projects: a titled thread with free-text direction and an optional list of chapters.
+- Automatic posts continue a project on part of the posting rotation, so several projects and ordinary posts interleave in one feed.
+- A project post is never also a Story, and a post you direct yourself ignores the project.
+- The Studio shows each Creator's projects with their chapter and post count, and can pause, resume, finish, or delete one.
+- Deleting a project keeps the posts it produced, and editing a project does not change what published posts were about.
+- A new Projects setting controls how much of a Creator's automatic posting continues a project. Creators with no project are unaffected.
+
 ## 1.2.50 — 2026-09-09
 
 - The per-post rotation that varies place, moment, framing, company, and format is now called the post variation.

@@ -36,6 +36,12 @@
     "slurp": {
       "versions": [
         {
+          "version": "1.2.51",
+          "date": "2026-09-09",
+          "notes": "- Creators can now run projects: a titled thread with free-text direction and an optional list of chapters.\n- Automatic posts continue a project on part of the posting rotation, so several projects and ordinary posts interleave in one feed.\n- A project post is never also a Story, and a post you direct yourself ignores the project.\n- The Studio shows each Creator's projects with their chapter and post count, and can pause, resume, finish, or delete one.\n- Deleting a project keeps the posts it produced, and editing a project does not change what published posts were about.\n- A new Projects setting controls how much of a Creator's automatic posting continues a project. Creators with no project are unaffected.",
+          "highlight": false
+        },
+        {
           "version": "1.2.50",
           "date": "2026-09-09",
           "notes": "- The per-post rotation that varies place, moment, framing, company, and format is now called the post variation.\n- Generated posts are unchanged; only the internal names and the prompt input field are renamed.",
@@ -147,12 +153,6 @@
           "version": "1.2.32",
           "date": "2026-09-08",
           "notes": "- Commission requests now wait for Creator review instead of receiving an instant quote.\n- Creators can revise an unpaid quote or decline a request before payment.\n- Commission payment now shows loading, success, balance, and error feedback.\n- Delivery cards show image loading feedback while protected artwork is fetched.",
-          "highlight": false
-        },
-        {
-          "version": "1.2.31",
-          "date": "2026-09-08",
-          "notes": "- Commission delivery text and artwork now render inside the commission card without repeating as chat messages.\n- Delivery media URLs now use the same persona-scoped loading path as other Slurp images.",
           "highlight": false
         }
       ]
