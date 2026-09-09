@@ -364,7 +364,9 @@ export function buildNoodlerPostMessages(input: {
       ? [
           "Return one JSON object with title, content, and imagePrompt. imagePrompt is required and must be a concrete visual description of one photo or image the creator would post now (subject, pose, setting, lighting, framing). Never return null or an empty imagePrompt, and never put the post text or field names in it. Do not create a poll.",
           ...(imageGenerationPrompt
-            ? [`Apply these image directions when writing imagePrompt. They are instructions to you, not text to copy into imagePrompt: ${imageGenerationPrompt}`]
+            ? [
+                `Apply these image directions when writing imagePrompt. They are instructions to you, not text to copy into imagePrompt: ${imageGenerationPrompt}`,
+              ]
             : []),
         ].join("\n")
       : "Return one JSON object with title and content only. Do not create a poll or image prompt.",
