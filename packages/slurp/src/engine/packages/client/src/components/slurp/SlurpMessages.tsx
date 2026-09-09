@@ -446,6 +446,8 @@ function SlurpThreadView({
   const [typing, setTyping] = useState(false);
   const [toolsOpen, setToolsOpen] = useState(false);
   const [activeTipAmount, setActiveTipAmount] = useState<number | null>(null);
+  const [customTipAmount, setCustomTipAmount] = useState("");
+  const [customTipNote, setCustomTipNote] = useState("");
   // The fan's own words, held on screen until the server's copy of them arrives.
   const [pending, setPending] = useState<{ content: string; id: string | null } | null>(null);
   // Why no answer came. The send route has always reported this and nothing ever read it, so a
@@ -595,11 +597,7 @@ function SlurpThreadView({
         setPending({ content, id: written.message.id });
         return;
       }
-      const result = await send.mutateAsync({
-        personaId,
-        creatorAccountId: targetCreatorAccountId,
-        content,
-      });
+      const result = await send.mutateAsync({ personaId, creatorAccountId: targetCreatorAccountId, content });
       setPending({ content, id: result.message.id });
       setReplyStatus(result.replyStatus ?? null);
       holdTyping(result.reply ? (result.typingMs ?? 0) : 0, startedAt);
@@ -617,14 +615,18 @@ function SlurpThreadView({
     }
   };
 
-  const sendTip = async (amount: number) => {
+  const sendTip = async (amount: number, note = "", restore?: { amount: string; note: string }) => {
     if (!personaId || !targetCreatorAccountId || busy) return;
     setError(null);
     setActiveTipAmount(amount);
     try {
-      const result = await tip.mutateAsync({ personaId, creatorAccountId: targetCreatorAccountId, amount });
+      const result = await tip.mutateAsync({ personaId, creatorAccountId: targetCreatorAccountId, amount, note });
       if (result.reply) holdTyping(result.typingMs ?? 0);
     } catch (cause) {
+      if (restore) {
+        setCustomTipAmount(restore.amount);
+        setCustomTipNote(restore.note);
+      }
       setError(
         cause instanceof Error
           ? cause.message
@@ -935,6 +937,52 @@ function SlurpThreadView({
                     {localizeUi("ui.slurp.messages.tipAmount", { defaultValue: "Tip {{amount}}", amount })}
                   </button>
                 ))}
+                <label className="sr-only" htmlFor="slurp-custom-tip-amount">
+                  {localizeUi("ui.slurp.messages.customTipAmount", { defaultValue: "Custom tip amount" })}
+                </label>
+                <input
+                  id="slurp-custom-tip-amount"
+                  type="number"
+                  min={1}
+                  max={9999}
+                  value={customTipAmount}
+                  onChange={(event) => setCustomTipAmount(event.target.value)}
+                  placeholder={localizeUi("ui.slurp.messages.customTipPlaceholder", { defaultValue: "Other" })}
+                  className="h-11 w-20 rounded-full bg-[var(--slurp-surface)] px-3 text-xs tabular-nums outline-none ring-1 ring-inset ring-[var(--noodle-divider)] focus:ring-2 focus:ring-[var(--slurp-focus)]"
+                />
+                <label className="sr-only" htmlFor="slurp-custom-tip-note">
+                  {localizeUi("ui.slurp.messages.customTipNote", { defaultValue: "Tip note" })}
+                </label>
+                <input
+                  id="slurp-custom-tip-note"
+                  value={customTipNote}
+                  maxLength={280}
+                  onChange={(event) => setCustomTipNote(event.target.value)}
+                  placeholder={localizeUi("ui.slurp.messages.tipNotePlaceholder", { defaultValue: "Note" })}
+                  className="h-11 min-w-28 flex-1 rounded-full bg-[var(--slurp-surface)] px-3 text-xs outline-none ring-1 ring-inset ring-[var(--noodle-divider)] focus:ring-2 focus:ring-[var(--slurp-focus)]"
+                />
+                <button
+                  type="button"
+                  disabled={
+                    busy ||
+                    !personaId ||
+                    !targetCreatorAccountId ||
+                    !Number.isInteger(Number(customTipAmount)) ||
+                    Number(customTipAmount) < 1 ||
+                    Number(customTipAmount) > 9999
+                  }
+                  onClick={() => {
+                    void sendTip(Number(customTipAmount), customTipNote.trim(), {
+                      amount: customTipAmount,
+                      note: customTipNote,
+                    });
+                    setCustomTipAmount("");
+                    setCustomTipNote("");
+                  }}
+                  className="min-h-11 rounded-full bg-[var(--noodle-accent)] px-3 text-xs font-bold text-zinc-950 disabled:opacity-50"
+                >
+                  {localizeUi("ui.slurp.messages.sendCustomTip", { defaultValue: "Send tip" })}
+                </button>
               </div>
             </div>
           )}
