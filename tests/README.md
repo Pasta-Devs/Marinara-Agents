@@ -34,23 +34,28 @@ pnpm --filter @marinara-engine/server exec tsx ../Marinara-Agents/tests/noodle-p
 ```
 
 The Long-Term Memory regressions cover storage, extraction, runtime recall,
-privileged routes, debug logging, and the exact release artifact lifecycle:
+privileged routes, debug logging, and the exact release artifact lifecycle.
+The local LTM gate runs `index-keys`, `browser`, `conversation-summary-import`,
+`debug-log`, `extraction-graph`, `extraction-reliability`, `installation`,
+`local-characters`, `routes-backup`, `routes-drafts`, `routes-imports`,
+`routes-notes`, `routes-scope-identity`, `runtime`, `scope-fallback-labels`,
+`scope-targets`, `source-task`, `storage`, `feedback-clarity-ui`, `loading`,
+and the completion-watchdog proof. It deliberately skips the pre-split route
+and lifecycle aggregators:
 
 ```bash
-cd ../Marinara-Engine
- set -e
-for test in storage extraction-graph extraction-reliability runtime routes-notes routes-imports routes-drafts routes-scope-identity routes-backup routes conversation-summary-import debug-log browser installation lifecycle local-characters scope-targets scope-fallback-labels source-task index-keys; do
-  MARINARA_ENGINE_ROOT="$PWD" pnpm --filter @marinara-engine/server exec tsx \
-    "$PWD/../Marinara-Agents/tests/long-term-memory-${test}.regression.ts"
-done
- node "$PWD/../Marinara-Agents/tests/long-term-memory-loading.regression.mjs"
-node "$PWD/../Marinara-Agents/tests/long-term-memory-feedback-clarity-ui.regression.mjs"
+MARINARA_AGENTS_ROOT=/absolute/path/to/Marinara-Agents \
+MARINARA_ENGINE_ROOT=/absolute/path/to/Marinara-Engine \
+  ~/.config/opencode/marinara-agents-local/test-ltm.sh all
 ```
+
+This is a local workflow gate; `.github/workflows/pull-request-checks.yml`
+does not run these Engine-backed suites.
 
 The completion watchdog proof is a direct Node test:
 
 ```bash
-node "$PWD/../Marinara-Agents/tests/regression-helpers.regression.mjs"
+node /absolute/path/to/Marinara-Agents/tests/regression-helpers.regression.mjs
 ```
 
 The lifecycle fixture compiles Engine's `globals.css` with Engine's installed
