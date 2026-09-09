@@ -8,6 +8,7 @@ import {
   Heart,
   Image as ImageIcon,
   Info,
+  Link,
   Loader2,
   Lock,
   MessageCircle,
@@ -50,10 +51,13 @@ import {
   useGenerateSlurpViewerImage,
   useSendSlurpMessage,
   useSlurpCompose,
+  useSlurpConnections,
+  useSlurpSettings,
   useSlurpThread,
   useSlurpMessagePrompt,
   useSlurpThreads,
   useTipInSlurpThread,
+  useUpdateSlurpSettings,
   useUnlockSlurpMessage,
   useReactToSlurpMessage,
   useSlurpWallet,
@@ -520,8 +524,12 @@ function SlurpThreadView({
   const [error, setError] = useState<string | null>(null);
   const [typing, setTyping] = useState(false);
   const [toolsOpen, setToolsOpen] = useState(false);
-  const [toolTab, setToolTab] = useState<"tip" | "commission" | "photo" | "generated-photo" | "creator">("tip");
+  const [connectionPickerOpen, setConnectionPickerOpen] = useState(false);
+  const [toolTab, setToolTab] = useState<"tip" | "commission" | "photo" | "generated-photo" | "creator" | null>(null);
   const [commissionPrefill, setCommissionPrefill] = useState("");
+  const settingsQuery = useSlurpSettings();
+  const connectionsQuery = useSlurpConnections(true);
+  const updateSlurpSettings = useUpdateSlurpSettings();
   const [tipMode, setTipMode] = useState<"now" | "with-message">("now");
   const [activeTipAmount, setActiveTipAmount] = useState<number | null>(null);
   const [customTipAmount, setCustomTipAmount] = useState("");
@@ -619,22 +627,62 @@ function SlurpThreadView({
     () =>
       (ownsCreator
         ? ([
-            { id: "generated-photo", icon: Palette, label: "Generate photo" },
-            { id: "creator", icon: Lock, label: "Locked content" },
+            {
+              id: "generated-photo",
+              icon: Palette,
+              label: localizeUi("ui.slurp.messages.createPhoto", { defaultValue: "Create a photo" }),
+              detail: localizeUi("ui.slurp.messages.createPhotoDetail", { defaultValue: "Generate and send an image" }),
+              group: "media" as const,
+            },
+            {
+              id: "creator",
+              icon: Lock,
+              label: localizeUi("ui.slurp.messages.lockedContent", { defaultValue: "Locked content" }),
+              detail: localizeUi("ui.slurp.messages.lockedContentDetail", { defaultValue: "Send a paid message" }),
+              group: "creator" as const,
+            },
           ] as const)
         : ([
-            { id: "photo", icon: ImageIcon, label: "Upload photo" },
-            { id: "generated-photo", icon: Palette, label: "Generate photo" },
-            { id: "commission", icon: BriefcaseBusiness, label: "Ask for commission" },
-            { id: "tip", icon: SlurpCoin, label: "Tip" },
+            {
+              id: "photo",
+              icon: ImageIcon,
+              label: localizeUi("ui.slurp.messages.sendPhoto", { defaultValue: "Send a photo" }),
+              detail: localizeUi("ui.slurp.messages.sendPhotoDetail", {
+                defaultValue: "Choose an image from your device",
+              }),
+              group: "media" as const,
+            },
+            {
+              id: "generated-photo",
+              icon: Palette,
+              label: localizeUi("ui.slurp.messages.createPhoto", { defaultValue: "Create a photo" }),
+              detail: localizeUi("ui.slurp.messages.createPhotoDetail", {
+                defaultValue: "Describe an image to generate",
+              }),
+              group: "media" as const,
+            },
+            {
+              id: "commission",
+              icon: BriefcaseBusiness,
+              label: localizeUi("ui.slurp.messages.askCommission", { defaultValue: "Ask for commission" }),
+              detail: localizeUi("ui.slurp.messages.askCommissionDetail", {
+                defaultValue: "Request made-to-order work",
+              }),
+              group: "conversation" as const,
+            },
+            {
+              id: "tip",
+              icon: SlurpCoin,
+              label: localizeUi("ui.slurp.messages.addTip", { defaultValue: "Add a tip" }),
+              detail: localizeUi("ui.slurp.messages.addTipDetail", {
+                defaultValue: "Attach coins to your next message",
+              }),
+              group: "payment" as const,
+            },
           ] as const)
       ).slice(),
-    [ownsCreator],
+    [localizeUi, ownsCreator],
   );
-
-  useEffect(() => {
-    if (!toolTabs.some((tab) => tab.id === toolTab)) setToolTab(toolTabs[0]!.id);
-  }, [toolTab, toolTabs]);
 
   useEffect(() => {
     if (ownsCreator) setTipMode("now");
@@ -1261,27 +1309,77 @@ function SlurpThreadView({
         <div className="mx-auto flex w-full max-w-2xl flex-col gap-2">
           {toolsOpen && (
             <div className="flex flex-col gap-2 rounded-2xl bg-[var(--slurp-surface-raised)] p-3 ring-1 ring-inset ring-[var(--noodle-divider)] shadow-[var(--slurp-shadow-floating)]">
-              {/* One tool at a time. The panel used to open every tool at once — a commission
-                  form, an image tool, three tip rows and a second tip row for the composer — and
-                  the one thing the player wanted was somewhere in the middle of it. */}
-              <div className="grid grid-cols-2 gap-2 sm:grid-cols-4" aria-label="Add to message">
-                {toolTabs.map((tab) => (
+              {!toolTab ? (
+                <div className="flex flex-col gap-3" aria-label="Message actions">
+                  <div className="flex items-center justify-between gap-3 px-1">
+                    <div>
+                      <h2 className="text-sm font-black">Add to your message</h2>
+                      <p className="mt-0.5 text-xs text-[var(--muted-foreground)]">Choose one action to continue.</p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setToolsOpen(false)}
+                      className="flex h-9 w-9 items-center justify-center rounded-lg text-[var(--muted-foreground)] hover:bg-[var(--slurp-surface)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--slurp-focus)]"
+                      aria-label="Close message actions"
+                    >
+                      <X size={16} aria-hidden="true" />
+                    </button>
+                  </div>
+                  {(["media", "conversation", "payment", "creator"] as const).map((group) => {
+                    const items = toolTabs.filter((tab) => tab.group === group);
+                    if (items.length === 0) return null;
+                    const heading =
+                      group === "media"
+                        ? localizeUi("ui.slurp.messages.mediaActions", { defaultValue: "Media" })
+                        : group === "conversation"
+                          ? localizeUi("ui.slurp.messages.conversationActions", { defaultValue: "Conversation" })
+                          : group === "payment"
+                            ? localizeUi("ui.slurp.messages.paymentActions", { defaultValue: "Payments" })
+                            : localizeUi("ui.slurp.messages.creatorActions", { defaultValue: "Creator tools" });
+                    return (
+                      <section key={group} className="flex flex-col gap-1.5">
+                        <h3 className="px-1 text-[0.65rem] font-bold uppercase tracking-[0.08em] text-[var(--muted-foreground)]">
+                          {heading}
+                        </h3>
+                        <div className="grid gap-2 sm:grid-cols-2">
+                          {items.map((tab) => (
+                            <button
+                              key={tab.id}
+                              type="button"
+                              onClick={() => setToolTab(tab.id)}
+                              className="flex min-h-16 items-center gap-3 rounded-xl bg-[var(--slurp-surface)] px-3 text-left ring-1 ring-inset ring-[var(--noodle-divider)] transition-[background-color,transform] hover:bg-[var(--noodle-accent)]/[0.08] active:scale-[0.96] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--slurp-focus)] motion-reduce:transition-none motion-reduce:active:scale-100"
+                            >
+                              <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-[var(--noodle-accent)]/12 text-[var(--noodle-accent)]">
+                                <tab.icon size={18} aria-hidden="true" />
+                              </span>
+                              <span className="min-w-0">
+                                <span className="block truncate text-xs font-bold">{tab.label}</span>
+                                <span className="mt-0.5 block text-[0.68rem] leading-4 text-[var(--muted-foreground)]">
+                                  {tab.detail}
+                                </span>
+                              </span>
+                            </button>
+                          ))}
+                        </div>
+                      </section>
+                    );
+                  })}
+                </div>
+              ) : (
+                <div className="flex items-center gap-2">
                   <button
-                    key={tab.id}
                     type="button"
-                    onClick={() => setToolTab(tab.id)}
-                    className={cn(
-                      "inline-flex min-h-11 items-center justify-center gap-1.5 rounded-xl px-2 text-xs font-bold text-[var(--muted-foreground)] transition-colors",
-                      toolTab === tab.id
-                        ? "bg-[var(--noodle-accent)] text-zinc-950"
-                        : "ring-1 ring-inset ring-[var(--noodle-divider)] hover:bg-[var(--slurp-surface)]",
-                    )}
+                    onClick={() => setToolTab(null)}
+                    className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-[var(--muted-foreground)] hover:bg-[var(--slurp-surface)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--slurp-focus)]"
+                    aria-label="Back to message actions"
                   >
-                    <tab.icon size={14} />
-                    <span className="truncate">{tab.label}</span>
+                    <ArrowLeft size={16} aria-hidden="true" />
                   </button>
-                ))}
-              </div>
+                  <h2 className="min-w-0 truncate text-sm font-black">
+                    {toolTabs.find((tab) => tab.id === toolTab)?.label ?? "Message action"}
+                  </h2>
+                </div>
+              )}
 
               {toolTab === "commission" && (
                 <CommissionRequest
@@ -1522,7 +1620,13 @@ function SlurpThreadView({
           >
             <button
               type="button"
-              onClick={() => setToolsOpen((value) => !value)}
+              onClick={() => {
+                setToolsOpen((value) => {
+                  const next = !value;
+                  if (next) setToolTab(null);
+                  return next;
+                });
+              }}
               aria-expanded={toolsOpen}
               aria-label={localizeUi("ui.slurp.messages.toggleTools", { defaultValue: "Message tools" })}
               className={cn(
@@ -1536,6 +1640,16 @@ function SlurpThreadView({
                 aria-hidden="true"
               />
             </button>
+            <SlurpConnectionSwitcher
+              connections={(connectionsQuery.data ?? []).filter(
+                (connection) => connection.provider !== "image_generation",
+              )}
+              activeConnectionId={settingsQuery.data?.generationConnectionId ?? null}
+              open={connectionPickerOpen}
+              onOpenChange={setConnectionPickerOpen}
+              pending={updateSlurpSettings.isPending}
+              onChange={(generationConnectionId) => updateSlurpSettings.mutate({ generationConnectionId })}
+            />
             <label className="sr-only" htmlFor="slurp-message-draft">
               {localizeUi("ui.slurp.messages.composerLabel", { defaultValue: "Write a message" })}
             </label>
@@ -1736,6 +1850,99 @@ function HeaderIconButton({
         </span>
       )}
     </button>
+  );
+}
+
+function SlurpConnectionSwitcher({
+  connections,
+  activeConnectionId,
+  open,
+  onOpenChange,
+  pending,
+  onChange,
+}: {
+  connections: Array<{ id: string; name?: string; model?: string; provider?: string }>;
+  activeConnectionId: string | null;
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  pending: boolean;
+  onChange: (connectionId: string | null) => void;
+}) {
+  const anchorRef = useRef<HTMLButtonElement | null>(null);
+  const active = connections.find((connection) => connection.id === activeConnectionId);
+  const label = active?.name ?? active?.model ?? "Default connection";
+
+  return (
+    <div className="relative shrink-0">
+      <button
+        ref={anchorRef}
+        type="button"
+        disabled={pending}
+        onClick={() => onOpenChange(!open)}
+        aria-expanded={open}
+        aria-haspopup="listbox"
+        aria-label={`Text connection: ${label}`}
+        title={`Text connection: ${label}`}
+        className={cn(
+          "inline-flex min-h-11 max-w-36 items-center gap-1.5 rounded-xl px-2 text-[0.68rem] text-[var(--muted-foreground)] ring-1 ring-inset ring-[var(--noodle-divider)] transition-colors hover:bg-[var(--slurp-surface)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--slurp-focus)] disabled:opacity-50",
+          open && "bg-[var(--noodle-accent)]/10 text-[var(--noodle-accent)] ring-[var(--noodle-accent)]/45",
+        )}
+      >
+        <Link size={14} aria-hidden="true" />
+        <span className="truncate">{label}</span>
+        <ChevronDown size={13} aria-hidden="true" />
+      </button>
+      {open && (
+        <div
+          role="listbox"
+          aria-label="Text connections"
+          className="absolute bottom-full start-0 z-20 mb-2 max-h-72 min-w-56 max-w-[calc(100vw-2rem)] overflow-y-auto rounded-xl bg-[var(--slurp-surface-raised)] p-1 shadow-[var(--slurp-shadow-floating)] ring-1 ring-inset ring-[var(--noodle-divider)]"
+        >
+          <button
+            type="button"
+            role="option"
+            aria-selected={activeConnectionId === null}
+            onClick={() => {
+              onChange(null);
+              onOpenChange(false);
+            }}
+            className="flex min-h-11 w-full items-center gap-2 rounded-lg px-3 text-left text-xs hover:bg-[var(--slurp-surface)]"
+          >
+            <span className="min-w-0 flex-1 truncate">Default connection</span>
+            {activeConnectionId === null && <Check size={14} aria-hidden="true" />}
+          </button>
+          {connections.map((connection) => {
+            const selected = connection.id === activeConnectionId;
+            return (
+              <button
+                key={connection.id}
+                type="button"
+                role="option"
+                aria-selected={selected}
+                onClick={() => {
+                  onChange(connection.id);
+                  onOpenChange(false);
+                }}
+                className="flex min-h-12 w-full items-center gap-2 rounded-lg px-3 text-left hover:bg-[var(--slurp-surface)]"
+              >
+                <span className="min-w-0 flex-1">
+                  <span className="block truncate text-xs font-semibold">{connection.name ?? connection.id}</span>
+                  {connection.model && (
+                    <span className="block truncate text-[0.65rem] text-[var(--muted-foreground)]">
+                      {connection.model}
+                    </span>
+                  )}
+                </span>
+                {selected && <Check size={14} aria-hidden="true" />}
+              </button>
+            );
+          })}
+          {connections.length === 0 && (
+            <p className="px-3 py-3 text-xs text-[var(--muted-foreground)]">No text connections found.</p>
+          )}
+        </div>
+      )}
+    </div>
   );
 }
 
