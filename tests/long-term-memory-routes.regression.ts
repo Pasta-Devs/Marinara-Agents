@@ -4344,6 +4344,44 @@ async function main(routeScenario: RouteScenario) {
         ],
         "accepted memories preserve their evidenced_by timeline link",
       );
+      await storageService.drafts.updateDraftStatus(groundingDraft.id, "invalidated");
+      const notesBeforeDismissal = await storageService.storage.listNotes();
+      const invalidatedAccept = await app.inject({
+        method: "POST",
+        url: `/api/long-term-memory/drafts/${groundingDraft.id}/accept`,
+        headers,
+        payload: { mutationIds: [groundingMutationId] },
+      });
+      assert.equal(invalidatedAccept.statusCode, 409, invalidatedAccept.body);
+      assert.equal(invalidatedAccept.json().code, "ltm_draft_invalidated");
+      const unauthorizedDismissal = await app.inject({
+        method: "DELETE",
+        url: `/api/long-term-memory/drafts/${groundingDraft.id}`,
+      });
+      assert.equal(unauthorizedDismissal.statusCode, 403, unauthorizedDismissal.body);
+      assert.ok(await storageService.drafts.getDraft(groundingDraft.id));
+      const dismissed = await app.inject({
+        method: "DELETE",
+        url: `/api/long-term-memory/drafts/${groundingDraft.id}`,
+        headers,
+      });
+      assert.equal(dismissed.statusCode, 200, dismissed.body);
+      assert.deepEqual(dismissed.json(), { deleted: true, id: groundingDraft.id });
+      assert.equal(await storageService.drafts.getDraft(groundingDraft.id), null);
+      const reviewAfterDismissal = await app.inject({
+        method: "GET",
+        url: "/api/long-term-memory/drafts/review?includeInvalidated=true",
+        headers,
+      });
+      assert.equal(reviewAfterDismissal.statusCode, 200, reviewAfterDismissal.body);
+      assert.equal(
+        reviewAfterDismissal
+          .json()
+          .sources.some((source: any) => source.drafts.some((item: any) => item.draft.id === groundingDraft.id)),
+        false,
+      );
+      assert.deepEqual(await storageService.storage.listNotes(), notesBeforeDismissal);
+      assert.equal((await storageService.drafts.getDraft(draft.id)).status, "accepted");
     }
     if (routeScenario === "all" || routeScenario === "backup") {
       const integrity = await app.inject({

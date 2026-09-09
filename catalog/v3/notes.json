@@ -4,6 +4,12 @@
     "long-term-memory": {
       "versions": [
         {
+          "version": "1.2.25",
+          "date": "2026-09-10",
+          "notes": "- Added a confirmed discard action for invalidated drafts, removing old proposals without changing saved memories.",
+          "highlight": false
+        },
+        {
           "version": "1.2.24",
           "date": "2026-09-09",
           "notes": "- Kept drafts with missing source notes visibly blocked without preventing review of other sources.\n- Showed context-loading error details alongside Retry and kept orphaned rejected suggestions accessible.",

@@ -2037,10 +2037,23 @@ export default function ReviewQueue({
     setMobilePaneAndFocus("workbench");
   };
 
-  const dismissReport = async (draftId: string) => {
+  const dismissReport = async (item: LtmDraftReviewDraft) => {
+    if (dismissingId !== null || running !== null) return;
+    const draftId = item.draft.id;
+    const invalidated = item.draft.status === "invalidated";
     setDismissingId(draftId);
-    setResult(null);
     try {
+      if (invalidated) {
+        const title = localizeUi("ui.longTermMemory.reviewqueue.discardInvalidatedDraft");
+        const message = localizeUi("ui.longTermMemory.reviewqueue.discardInvalidatedDraftDescription", {
+          title: reviewDraftTitle(item),
+        });
+        const confirmed = props.confirmAction
+          ? await props.confirmAction({ title, message, confirmLabel: title, tone: "destructive" })
+          : window.confirm(message);
+        if (!confirmed) return;
+      }
+      setResult(null);
       await request(`/drafts/${draftId}`, "DELETE");
       await invalidateLtmQueries(queryClient, [queryKeys.review, queryKeys.pendingDrafts]);
     } catch (error) {
@@ -2054,9 +2067,15 @@ export default function ReviewQueue({
         autoIncluded: 0,
         indexRebuildFailures: [],
         messages: [
-          localizeUi("ui.longTermMemory.reviewqueue.reportDismissalFailed", {
-            message: error instanceof Error ? error.message : localizeUi("ui.longTermMemory.reviewqueue.requestFailed"),
-          }),
+          localizeUi(
+            invalidated
+              ? "ui.longTermMemory.reviewqueue.draftDiscardFailed"
+              : "ui.longTermMemory.reviewqueue.reportDismissalFailed",
+            {
+              message:
+                error instanceof Error ? error.message : localizeUi("ui.longTermMemory.reviewqueue.requestFailed"),
+            },
+          ),
         ],
         cascadeMutationLabels: [],
         savedMemoryIds: [],
@@ -3232,15 +3251,17 @@ export default function ReviewQueue({
                                     ))}
                                   </div>
                                 ) : null}
-                                {diagnosticsOnly ? (
+                                {diagnosticsOnly || item.draft.status === "invalidated" ? (
                                   <Button
                                     destructive
                                     disabled={dismissingId !== null || running !== null}
-                                    onClick={() => void dismissReport(item.draft.id)}
+                                    onClick={() => void dismissReport(item)}
                                   >
                                     {dismissingId === item.draft.id
                                       ? localizeUi("ui.longTermMemory.reviewqueue.dismissing")
-                                      : localizeUi("ui.longTermMemory.reviewqueue.dismissReport")}
+                                      : item.draft.status === "invalidated"
+                                        ? localizeUi("ui.longTermMemory.reviewqueue.discardInvalidatedDraft")
+                                        : localizeUi("ui.longTermMemory.reviewqueue.dismissReport")}
                                   </Button>
                                 ) : null}
                                 <div className="space-y-3 pt-1">

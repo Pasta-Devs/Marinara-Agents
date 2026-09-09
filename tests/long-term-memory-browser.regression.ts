@@ -218,6 +218,8 @@ async function main() {
         mutationIds: string[];
       }> = [];
       const reviewEditedMutationIds: string[][] = [];
+      const deletedDraftIds: string[] = [];
+      let failDraftDeletion = false;
       const reviewDraftIds = {
         first: "10000000-0000-4000-8000-000000000011",
         second: "10000000-0000-4000-8000-000000000012",
@@ -1422,6 +1424,22 @@ async function main() {
                     : mutationIds,
               });
         }
+        if (request.method === "DELETE" && url.pathname.startsWith("/api/long-term-memory/drafts/")) {
+          if (failDraftDeletion) return send(503, { error: "Draft deletion fixture failed" });
+          const draftId = decodeURIComponent(url.pathname.split("/").at(-1)!);
+          deletedDraftIds.push(draftId);
+          reviewSources = reviewSources
+            .map((source) => ({
+              ...source,
+              drafts: source.drafts.filter((item: any) => item.draft.id !== draftId),
+              targets: source.targets.map((target: any) => ({
+                ...target,
+                rows: target.rows.filter((row: any) => row.draftId !== draftId),
+              })),
+            }))
+            .filter((source) => source.drafts.length > 0);
+          return send(200, { deleted: true, id: draftId });
+        }
         if (request.method === "DELETE" && url.pathname.includes("/rejected-suggestions/")) {
           deletedSuggestionId = decodeURIComponent(url.pathname.split("/").at(-1)!);
           return send(200, { deleted: true, id: deletedSuggestionId });
@@ -2624,8 +2642,124 @@ async function main() {
         };
         element.dispatchEvent(new CustomEvent("marinara-capability-props"));
       });
-      await mergeDiscardMutation.getByRole("button", { name: /^Discard proposal /u }).click();
+      await Promise.all([
+        page.waitForResponse(
+          (response) =>
+            response.request().method() === "POST" && response.url().endsWith(`/drafts/${reviewDraftIds.merge}/skip`),
+        ),
+        mergeDiscardMutation.getByRole("button", { name: /^Discard proposal /u }).click(),
+      ]);
       assert.equal(reviewActionCalls.at(-1)?.action, "skip");
+
+      const sourcesBeforeDismissal = reviewSources;
+      const invalidatedDraftId = "10000000-0000-4000-8000-000000000071";
+      const emptyReportId = "10000000-0000-4000-8000-000000000072";
+      const invalidatedDraft = {
+        ...makeReviewDraft(invalidatedDraftId, reviewMutationIds.first, "Old invalidated draft", [
+          makeExistingReviewMutation(),
+          makePartialReviewMutation(),
+          makeMergeCreateMutation(),
+        ]),
+        status: "invalidated",
+        source: { sourceNoteId: "source_mobile_single", chatId: "chat-a" },
+      };
+      reviewSources = [
+        {
+          sourceNoteId: "source_mobile_single",
+          modes: ["roleplay"],
+          targets: [],
+          drafts: [
+            {
+              draft: invalidatedDraft,
+              freshness: "invalidated",
+              blockReasons: [{ code: "draft_invalidated", message: "A targeted memory detail was deleted." }],
+              diagnostics: [],
+              candidateRejections: [],
+              deduplications: [],
+            },
+            {
+              draft: { ...makeReviewDraft(emptyReportId), source: invalidatedDraft.source },
+              freshness: "fresh",
+              blockReasons: [],
+              diagnostics: [],
+              candidateRejections: [],
+              deduplications: [],
+            },
+          ],
+        },
+      ];
+      await page.reload();
+      await page.evaluate((version) => {
+        const element = document.createElement("marinara-capability-long-term-memory") as HTMLElement & {
+          capabilityProps?: unknown;
+        };
+        element.setAttribute("view", "detail");
+        element.capabilityProps = {
+          agent: { name: "Long-Term Memory" },
+          package: { version },
+          confirmAction: (window as Window & { confirmReviewDiscard: unknown }).confirmReviewDiscard,
+        };
+        document.body.append(element);
+      }, packageManifest.version);
+      await page.locator('[data-ltm-navigation="mobile"] [data-ltm-destination="review"]').click();
+      await showWorkspacePane("navigator");
+      const invalidatedSource = page.locator('[data-ltm-review-source-select="source_mobile_single"]');
+      if ((await invalidatedSource.getAttribute("aria-expanded")) === "false") await invalidatedSource.click();
+      await page.locator(`[data-ltm-review-draft-select="${invalidatedDraftId}"]`).click();
+      await showWorkspacePane("workbench");
+      const invalidatedRows = page.locator("[data-ltm-review-mutation]");
+      assert.equal(await invalidatedRows.count(), 3);
+      for (const checkbox of await invalidatedRows.locator('[data-ltm-control="review-select"]').all()) {
+        await checkbox.check();
+      }
+      assert.equal(await page.getByRole("button", { name: "Accept eligible (0)" }).isDisabled(), true);
+      for (const action of await invalidatedRows.locator("[data-ltm-review-action]").all()) {
+        assert.equal(await action.isDisabled(), true);
+      }
+      const discardDraft = page.getByRole("button", { name: "Discard invalidated draft", exact: true });
+      assert.equal(
+        await discardDraft.count(),
+        1,
+        "non-empty invalidated drafts must have a whole-draft discard action",
+      );
+      confirmReviewDiscard = false;
+      await discardDraft.click();
+      await page.waitForFunction(() =>
+        [...document.querySelectorAll("button")].some(
+          (button) => button.textContent?.trim() === "Discard invalidated draft" && !button.disabled,
+        ),
+      );
+      assert.deepEqual(deletedDraftIds, []);
+      assert.match(lastReviewDiscardMessage, /Saved memories will not be changed/u);
+      assert.equal(await invalidatedRows.count(), 3, "cancel must preserve every proposal");
+      confirmReviewDiscard = true;
+      failDraftDeletion = true;
+      await discardDraft.click();
+      await page.getByText(/Draft deletion fixture failed/u).waitFor();
+      assert.deepEqual(deletedDraftIds, []);
+      assert.equal(await invalidatedRows.count(), 3, "failed deletion must leave a retryable draft");
+      failDraftDeletion = false;
+      if (visualOutputDir) {
+        await page.screenshot({
+          path: join(visualOutputDir, "long-term-memory-invalidated-mobile.png"),
+          fullPage: true,
+        });
+        await page.setViewportSize({ width: 1280, height: 900 });
+        await page.screenshot({
+          path: join(visualOutputDir, "long-term-memory-invalidated-desktop.png"),
+          fullPage: true,
+        });
+        await page.setViewportSize({ width: 390, height: 844 });
+      }
+      await discardDraft.focus();
+      await page.keyboard.press("Enter");
+      await page.locator(`[data-ltm-review-draft="${invalidatedDraftId}"]`).waitFor({ state: "detached" });
+      assert.deepEqual(deletedDraftIds, [invalidatedDraftId]);
+      const emptyReport = page.getByRole("button", { name: "Dismiss report", exact: true });
+      await emptyReport.click();
+      await page.locator(`[data-ltm-review-draft="${emptyReportId}"]`).waitFor({ state: "detached" });
+      assert.deepEqual(deletedDraftIds, [invalidatedDraftId, emptyReportId]);
+      reviewSources = sourcesBeforeDismissal;
 
       reviewQueueEmpty = true;
       await page.reload();
