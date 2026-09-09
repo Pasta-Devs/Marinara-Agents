@@ -14,6 +14,12 @@
     "slurp": {
       "versions": [
         {
+          "version": "1.0.31",
+          "date": "2026-09-09",
+          "notes": "- Include image generation guidance in the main Slurp post-generation prompt so image interpretation receives the generated image prompt and configured instructions.",
+          "highlight": false
+        },
+        {
           "version": "1.0.30",
           "date": "2026-09-08",
           "notes": "- Preserve the selected image style profile after image prompt interpretation.",
