@@ -28,5 +28,8 @@ assert.match(routes, /ownsCreator\(parsed\.data\.personaId, thread\.creatorAccou
 assert.match(routes, /messages\/threads\/:threadId\/image-upload/u);
 assert.match(routes, /readSlurpMessageImage/u);
 assert.match(media, /stageSlurpMessageMedia/u);
+assert.match(messages, /preparingImage/u);
+assert.match(messages, /onPreparingImage\(true\)/u);
+assert.match(messages, /onPreparingImage\(false\)/u);
 
 console.log("slurp chat media regression passed");

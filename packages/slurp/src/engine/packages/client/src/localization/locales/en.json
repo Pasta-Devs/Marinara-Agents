@@ -1419,6 +1419,7 @@
   "ui.slurp.messages.promptDebug": "Prompt details",
   "ui.slurp.messages.promptLoading": "Loading prompt details…",
   "ui.slurp.messages.promptUnavailable": "Prompt details are not available.",
+  "ui.slurp.messages.preparingImage": "{{name}} is preparing an image…",
   "ui.slurp.messages.relationshipImages": "Pictures",
   "ui.slurp.messages.relationshipStrikes": "Strikes",
   "ui.slurp.messages.relationshipTone": "Tone",

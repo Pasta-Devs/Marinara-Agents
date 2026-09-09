@@ -453,6 +453,7 @@ function SlurpThreadView({
   const [replyStatus, setReplyStatus] = useState<string | null>(null);
   const [infoOpen, setInfoOpen] = useState(false);
   const [debugOpen, setDebugOpen] = useState(false);
+  const [preparingImage, setPreparingImage] = useState(false);
   const bottomRef = useRef<HTMLDivElement | null>(null);
 
   const thread = threadQuery.data?.thread ?? null;
@@ -541,6 +542,7 @@ function SlurpThreadView({
     setReplyStatus(null);
     setInfoOpen(false);
     setDebugOpen(false);
+    setPreparingImage(false);
   }, [threadId, creatorAccountId]);
 
   // Follow the conversation down as it grows, the way every chat surface does.
@@ -828,6 +830,18 @@ function SlurpThreadView({
               })}
             </p>
           )}
+          {preparingImage && (
+            <p
+              aria-live="polite"
+              className="flex max-w-[88%] items-center gap-2 self-end rounded-2xl rounded-br-md bg-[var(--noodle-accent)]/15 px-3.5 py-2.5 text-xs text-[var(--muted-foreground)] ring-1 ring-inset ring-[var(--noodle-accent)]/25"
+            >
+              <Loader2 size={14} className="animate-spin text-[var(--noodle-accent)]" aria-hidden="true" />
+              {localizeUi("ui.slurp.messages.preparingImage", {
+                defaultValue: "{{name}} is preparing an image…",
+                name: creator?.displayName ?? "The Creator",
+              })}
+            </p>
+          )}
           <div ref={bottomRef} />
         </div>
       </div>
@@ -852,6 +866,7 @@ function SlurpThreadView({
                   personaId={personaId}
                   defaultPpvPrice={messaging?.ppvPrice ?? 0}
                   threadId={thread.id}
+                  onPreparingImage={setPreparingImage}
                 />
               ) : (
                 <>
@@ -1244,6 +1259,7 @@ function CreatorMessageTools({
   personaId,
   defaultPpvPrice,
   threadId,
+  onPreparingImage,
 }: {
   creatorAccountId: string;
   viewerAccountId: string;
@@ -1251,6 +1267,7 @@ function CreatorMessageTools({
   /** The creator's configured PPV price, used as the opening offer rather than a fixed one. */
   defaultPpvPrice: number;
   threadId: string;
+  onPreparingImage: (preparing: boolean) => void;
 }) {
   const { t: localizeUi } = useUiTranslation();
   const sendPpv = useSendSlurpCreatorPpv();
@@ -1364,7 +1381,8 @@ function CreatorMessageTools({
         <button
           type="button"
           disabled={!imagePrompt.trim() || sendImage.isPending}
-          onClick={() =>
+          onClick={() => {
+            onPreparingImage(true);
             void sendImage
               .mutateAsync({
                 threadId,
@@ -1375,10 +1393,16 @@ function CreatorMessageTools({
                 intent: imageIntent,
               })
               .then(
-                () => setImagePrompt(""),
-                (cause) => setError(cause instanceof Error ? cause.message : "Could not send that picture."),
-              )
-          }
+                () => {
+                  setImagePrompt("");
+                  onPreparingImage(false);
+                },
+                (cause) => {
+                  onPreparingImage(false);
+                  setError(cause instanceof Error ? cause.message : "Could not send that picture.");
+                },
+              );
+          }}
           className="mt-2 min-h-10 rounded-lg bg-[var(--noodle-accent)] px-3 text-xs font-bold text-zinc-950 disabled:opacity-50"
         >
           {sendImage.isPending ? "Making…" : "Generate and send"}
