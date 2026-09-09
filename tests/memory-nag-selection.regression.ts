@@ -321,7 +321,7 @@ const routeCollector = Object.fromEntries(
   ]),
 );
 void memoryNagRoutes(routeCollector as never, {});
-assert.equal(registeredRoutes.length, 8);
+assert.equal(registeredRoutes.length, 9);
 assert.ok(
   registeredRoutes.every((route) => typeof route.options.preHandler === "function"),
   "every Memory Nag route must carry its Roleplay-only guard without relying on package-level Fastify hooks",

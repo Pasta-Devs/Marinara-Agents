@@ -1,5 +1,8 @@
 {
-  "_meta": { "locale": "pl", "direction": "ltr" },
+  "_meta": {
+    "locale": "pl",
+    "direction": "ltr"
+  },
   "memoryNag.error.interface": "Memory Nag został zatrzymany.",
   "memoryNag.error.retry": "Spróbuj ponownie",
   "memoryNag.error.noChat": "Otwórz czat Roleplay, aby użyć Memory Nag.",
@@ -70,5 +73,12 @@
   "memoryNag.toolbar.emptyWord": "w głowie pusto, żadnych myśli",
   "memoryNag.toolbar.none": "Tym razem bez natrętnych wspomnień.",
   "memoryNag.tracker.title": "Natrętne wspomnienia",
-  "memoryNag.tracker.none": "W tej turze nie przywołano żadnych wspomnień."
+  "memoryNag.tracker.none": "W tej turze nie przywołano żadnych wspomnień.",
+  "memoryNag.settings.scanScope": "Wiadomości do przetworzenia",
+  "memoryNag.settings.scanAll": "Wszystkie nieprzetworzone wiadomości",
+  "memoryNag.settings.scanRange": "Zakres wiadomości",
+  "memoryNag.settings.rangeStart": "Pierwsza wiadomość",
+  "memoryNag.settings.rangeEnd": "Ostatnia wiadomość",
+  "memoryNag.settings.rangeHelp": "Licz wiadomości użytkownika i postaci od 1. Oba końce zakresu są uwzględniane. Wcześniejsze wiadomości zostaną pominięte, a kolejne skany automatyczne zaczną się po ostatniej przetworzonej wiadomości. Istniejące wspomnienia zostaną zachowane.",
+  "memoryNag.settings.rangeInvalid": "Wybierz całkowite numery wiadomości od 1 do {{count}}. Ostatnia wiadomość nie może poprzedzać pierwszej."
 }

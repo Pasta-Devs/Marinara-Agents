@@ -155,7 +155,34 @@ function memoryMatchesScan(current: MemoryNagMemory, scanned: MemoryNagMemory | 
   );
 }
 
-async function scanMemoryNagBatchUnlocked(chatId: string): Promise<MemoryNagScanProgress> {
+/** A manual range keeps stable message IDs across batches, even if earlier history is deleted. */
+export function memoryNagScanWindow(
+  messages: Array<{ id: string }>,
+  value: unknown,
+): { start: number; end: number; after: number } | null {
+  if (value === undefined || value === null) return null;
+  const fail = () => {
+    throw Object.assign(new Error("Choose a valid message range from this chat."), { statusCode: 400 });
+  };
+  if (typeof value !== "object" || Array.isArray(value)) return fail();
+  const range = value as Record<string, unknown>;
+  const index = (id: unknown) =>
+    typeof id === "string" && id.length <= 160 ? messages.findIndex((message) => message.id === id) : -1;
+  const start = index(range.startMessageId);
+  const end = index(range.endMessageId);
+  const after = range.afterMessageId === undefined ? start - 1 : index(range.afterMessageId);
+  if (
+    start < 0 ||
+    end < start ||
+    after < start - 1 ||
+    after > end ||
+    (range.afterMessageId !== undefined && after < start)
+  )
+    return fail();
+  return { start, end: end + 1, after: after + 1 };
+}
+
+async function scanMemoryNagBatchUnlocked(chatId: string, range?: unknown): Promise<MemoryNagScanProgress> {
   const runtime = getMemoryNagRuntime();
   const chat = await runtime.persistence.getChat(chatId);
   if (!chat || chat.mode !== "roleplay") throw new Error("Memory Nag is available only in Roleplay chats.");
@@ -163,12 +190,15 @@ async function scanMemoryNagBatchUnlocked(chatId: string): Promise<MemoryNagScan
     (message) => message.role === "user" || message.role === "assistant",
   );
   const vault = await readMemoryNagVault(chatId);
-  const start = memoryNagScanStart(vault, messages);
-  const batch = messages.slice(start, start + vault.settings.messagesPerBatch);
+  const window = memoryNagScanWindow(messages, range);
+  const start = window ? window.after : memoryNagScanStart(vault, messages);
+  const end = window?.end ?? messages.length;
+  const offset = window?.start ?? 0;
+  const batch = messages.slice(start, Math.min(end, start + vault.settings.messagesPerBatch));
   if (batch.length === 0) {
     return {
-      processed: start,
-      total: messages.length,
+      processed: start - offset,
+      total: end - offset,
       created: 0,
       resolved: 0,
       done: true,
@@ -245,19 +275,19 @@ async function scanMemoryNagBatchUnlocked(chatId: string): Promise<MemoryNagScan
       ],
     };
   });
-  const processed = memoryNagScanStart(saved, messages);
+  const processed = window ? start + batch.length : memoryNagScanStart(saved, messages);
   return {
-    processed,
-    total: messages.length,
+    processed: processed - offset,
+    total: end - offset,
     created: createdCount,
     resolved: resolvedCount,
-    done: processed >= messages.length,
-    checkpointMessageId: saved.checkpointMessageId,
+    done: processed >= end,
+    checkpointMessageId: window ? checkpointMessageId : saved.checkpointMessageId,
   };
 }
 
-export async function scanMemoryNagBatch(chatId: string): Promise<MemoryNagScanProgress> {
-  return withScanLock(chatId, () => scanMemoryNagBatchUnlocked(chatId));
+export async function scanMemoryNagBatch(chatId: string, range?: unknown): Promise<MemoryNagScanProgress> {
+  return withScanLock(chatId, () => scanMemoryNagBatchUnlocked(chatId, range));
 }
 
 export async function scanMemoryNagIfDue(chatId: string): Promise<void> {

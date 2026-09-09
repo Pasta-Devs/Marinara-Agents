@@ -1,3 +1,5 @@
+> September 2026 contract clarification (Engine #5903): the shipped GM weather verb in gm-verbs.json accepts only word and optional intensity. It sets the current global sky until changed again; it does not promise a weather history that rewinds with the story. Absolute sinceDay/untilDay arguments remain unavailable to the GM. The older day-range reader below describes legacy/manual metadata only. A future day-window API needs a trustworthy write-time anchor; advanceDays additionally needs repeat/regeneration semantics, and fishBite remains deferred (fair has no tuning row).
+
 # Pixelforge Roadmap
 
 **Revised 2026-08-21.** This replaces the flat 19-item discovery-order list. It folds in the design brief of the same date (missing pillars, new features, and per-item companions) and three maintainer rulings, recorded below so they are never re-litigated by accident. The old numbers survive as aliases — see the index — but the flat list itself is retired.
