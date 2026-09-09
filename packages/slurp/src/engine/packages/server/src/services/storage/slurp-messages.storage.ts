@@ -86,6 +86,8 @@ export type SlurpThread = {
   moodUpdatedAt: string | null;
   /** While in the future, the creator has stepped away from this conversation. */
   coolUntil: string | null;
+  /** While in the future, Creator stays online due to hot conversation momentum. */
+  extendedOnlineUntil: string | null;
   /** When this conversation was last emptied. Anything older is hidden from the chat. */
   clearedAt: string | null;
   threadState: SlurpConversationState;
@@ -244,6 +246,7 @@ export function createSlurpMessagesStorage(db: DB) {
     mood: Number.isFinite(Number(row.mood)) ? Number(row.mood) : 0,
     moodUpdatedAt: (row.moodUpdatedAt as string | null) ?? null,
     coolUntil: (row.coolUntil as string | null) ?? null,
+    extendedOnlineUntil: (row.extendedOnlineUntil as string | null) ?? null,
     clearedAt: (row.clearedAt as string | null) ?? null,
     threadState: readThreadState(row.threadState, String(row.updatedAt)),
     strikes: int(row.strikes as string),
@@ -410,7 +413,8 @@ export function createSlurpMessagesStorage(db: DB) {
     async rapportFor(viewerAccountId: string, creatorAccountId: string): Promise<SlurpRapport> {
       const messaging = await storage.getCreatorMessaging(creatorAccountId);
       const facts = await storage.rapportFactsFor(viewerAccountId, creatorAccountId);
-      return scoreSlurpRapport(facts, messaging.rapportWeights);
+      // Apply subscriber boost: subscribers gain rapport 1.5x faster from conversation and effort
+      return scoreSlurpRapport(facts, messaging.rapportWeights, { subscriberBoost: true });
     },
 
     /**
@@ -1677,6 +1681,13 @@ export function createSlurpMessagesStorage(db: DB) {
       await db
         .update(slurpThreads)
         .set({ replyNotBeforeAt: value, updatedAt: now() })
+        .where(eq(slurpThreads.id, threadId));
+    },
+
+    async setExtendedOnline(threadId: string, value: string | null): Promise<void> {
+      await db
+        .update(slurpThreads)
+        .set({ extendedOnlineUntil: value, updatedAt: now() })
         .where(eq(slurpThreads.id, threadId));
     },
 

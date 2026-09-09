@@ -13,6 +13,12 @@
  */
 export type SlurpCreatorStatus = "online" | "away" | "offline";
 
+/** Detailed status with availability information for UI display. */
+export type SlurpCreatorDetailedStatus =
+  | { state: "online"; activity: string | null }
+  | { state: "away"; backInMinutes: number | null }
+  | { state: "offline"; usuallyActiveAt: string | null };
+
 /** Posted within this long and the Creator reads as present. */
 const ONLINE_MS = 15 * 60_000;
 
@@ -37,4 +43,61 @@ export function slurpCreatorStatus(
   if (age <= ONLINE_MS) return "online";
   if (age <= AWAY_MS || input.autoPostingEnabled) return "away";
   return "offline";
+}
+
+/**
+ * Get detailed status with availability timing for enhanced UI display.
+ */
+export function slurpCreatorDetailedStatus(
+  input: {
+    lastActiveAt: string | number | null | undefined;
+    autoPostingEnabled: boolean;
+    scheduledOnline?: boolean;
+    activity?: string | null;
+    minutesUntilOnline?: number | null;
+  },
+  now: number = Date.now(),
+): SlurpCreatorDetailedStatus {
+  const basicStatus = slurpCreatorStatus(input, now);
+
+  if (basicStatus === "online") {
+    return {
+      state: "online",
+      activity: input.activity ?? null,
+    };
+  }
+
+  if (basicStatus === "away") {
+    return {
+      state: "away",
+      backInMinutes: input.minutesUntilOnline ?? null,
+    };
+  }
+
+  // Offline - try to infer usual active times
+  return {
+    state: "offline",
+    usuallyActiveAt: null, // Could be enhanced with historical data
+  };
+}
+
+/**
+ * Format detailed status for UI display.
+ */
+export function formatCreatorStatus(status: SlurpCreatorDetailedStatus): string {
+  switch (status.state) {
+    case "online":
+      return status.activity ? `Online • ${status.activity}` : "Online now";
+    case "away":
+      if (status.backInMinutes !== null) {
+        if (status.backInMinutes < 60) {
+          return `Away • Back in ~${Math.round(status.backInMinutes)}min`;
+        }
+        const hours = Math.round(status.backInMinutes / 60);
+        return `Away • Back in ~${hours}hr`;
+      }
+      return "Away";
+    case "offline":
+      return status.usuallyActiveAt ? `Offline • Usually active ${status.usuallyActiveAt}` : "Offline";
+  }
 }

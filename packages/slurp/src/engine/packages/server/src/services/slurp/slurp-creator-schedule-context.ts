@@ -167,8 +167,68 @@ export type SlurpCreatorAvailability = {
   minutesUntilOnline: number | null;
 };
 
-/** No schedule means always reachable: a creator without one must not read as permanently away. */
-const ALWAYS_AVAILABLE: SlurpCreatorAvailability = { online: true, activity: null, minutesUntilOnline: 0 };
+/**
+ * Infer availability from recent posting activity when no schedule exists.
+ *
+ * A Creator without a schedule shouldn't read as permanently online—that destroys realism.
+ * Instead, infer availability from when they last posted: recent activity suggests they're
+ * around, while stale activity suggests they're away.
+ *
+ * Uses deterministic randomness seeded by creatorId + day so Creators have consistent
+ * daily patterns without being perfectly predictable.
+ */
+function inferAvailabilityFromActivity(
+  creatorId: string,
+  lastPostedAt: string | null,
+  now: Date = new Date(),
+): SlurpCreatorAvailability {
+  if (!lastPostedAt) {
+    // Never posted = offline indefinitely
+    return { online: false, activity: null, minutesUntilOnline: null };
+  }
+
+  const ageMinutes = (now.getTime() - Date.parse(lastPostedAt)) / 60_000;
+
+  // Posted within 15 minutes = definitely online right now
+  if (ageMinutes <= 15) {
+    return { online: true, activity: "posting", minutesUntilOnline: 0 };
+  }
+
+  // Posted 15min-2hr ago = probably around but not actively posting
+  // Come back online in 30-90 minutes (deterministic randomness)
+  if (ageMinutes <= 120) {
+    const seed = simpleHash(creatorId + now.toDateString());
+    const variance = (seed % 60) / 100; // 0.0 to 0.6
+    const minutesUntilOnline = Math.round(30 + variance * 60); // 30-90 minutes
+    return { online: false, activity: null, minutesUntilOnline };
+  }
+
+  // Posted 2-12 hours ago = offline, back in a few hours
+  if (ageMinutes <= 720) {
+    const seed = simpleHash(creatorId + now.toDateString() + "midday");
+    const variance = (seed % 120) / 100; // 0.0 to 1.2
+    const minutesUntilOnline = Math.round(120 + variance * 120); // 120-240 minutes
+    return { online: false, activity: null, minutesUntilOnline };
+  }
+
+  // Posted >12 hours ago = offline for the day
+  return { online: false, activity: null, minutesUntilOnline: null };
+}
+
+/**
+ * Simple string hash for deterministic randomness.
+ *
+ * Not cryptographic, just needs to be consistent per input.
+ */
+function simpleHash(str: string): number {
+  let hash = 0;
+  for (let i = 0; i < str.length; i++) {
+    const char = str.charCodeAt(i);
+    hash = (hash << 5) - hash + char;
+    hash = hash & hash; // Convert to 32-bit integer
+  }
+  return Math.abs(hash);
+}
 
 const minutesOfDay = (time: string): number | null => {
   const match = /^(\d{1,2}):(\d{2})$/u.exec(time.trim());
@@ -191,16 +251,16 @@ export function slurpCreatorAvailability(
   schedule: WeekSchedule | null,
   localNow: Date,
   awayActivities: readonly string[] = SLURP_AWAY_ACTIVITIES,
-): SlurpCreatorAvailability {
-  if (!schedule) return ALWAYS_AVAILABLE;
+): SlurpCreatorAvailability | null {
+  if (!schedule) return null;
   const days = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
   const today = schedule.days[days[(localNow.getDay() + 6) % 7]!];
-  if (!today?.length) return ALWAYS_AVAILABLE;
+  if (!today?.length) return null;
   const blocks = today
     .map((block) => ({ at: minutesOfDay(block.time), activity: block.activity }))
     .filter((block): block is { at: number; activity: string } => block.at !== null)
     .sort((left, right) => left.at - right.at);
-  if (blocks.length === 0) return ALWAYS_AVAILABLE;
+  if (blocks.length === 0) return null;
 
   const nowMinutes = localNow.getHours() * 60 + localNow.getMinutes();
   let current: { at: number; activity: string } | null = null;
@@ -271,13 +331,23 @@ export async function resolveSlurpCreatorAvailability(
   source: CreatorSource,
   timeZone?: string,
   now: Date = new Date(),
+  lastPostedAt?: string | null,
 ): Promise<SlurpCreatorAvailability> {
-  if (source.kind !== "character") return ALWAYS_AVAILABLE;
-  const character = await characters.getById(source.entityId);
-  if (!scheduleEnabled(character)) return ALWAYS_AVAILABLE;
-  const schedule = parseSlurpWeekSchedule(record(record(character?.data).extensions).conversationSchedule);
-  if (!schedule || schedule.enabled === false) return ALWAYS_AVAILABLE;
-  const localNow = zonedDate(now, timeZone);
-  if (isStale(schedule, localNow, timeZone)) return ALWAYS_AVAILABLE;
-  return slurpCreatorAvailability(schedule, localNow);
+  // Persona-backed Creators: try to get schedule from character
+  if (source.kind === "character") {
+    const character = await characters.getById(source.entityId);
+
+    if (scheduleEnabled(character)) {
+      const schedule = parseSlurpWeekSchedule(record(record(character?.data).extensions).conversationSchedule);
+      const localNow = zonedDate(now, timeZone);
+
+      if (schedule && schedule.enabled !== false && !isStale(schedule, localNow, timeZone)) {
+        const availability = slurpCreatorAvailability(schedule, localNow);
+        if (availability) return availability;
+      }
+    }
+  }
+
+  // No schedule available: infer from posting activity
+  return inferAvailabilityFromActivity(source.entityId, lastPostedAt ?? null, now);
 }

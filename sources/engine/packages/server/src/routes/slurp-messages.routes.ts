@@ -175,7 +175,7 @@ export async function slurpMessageRoutes(app: FastifyInstance) {
     const latestPost = (await slurp.listNoodlerPostsByAccount(creator.id, 1))[0] ?? null;
     const source = await slurp.resolveAccountSource(creator);
     const availability = source
-      ? await resolveSlurpCreatorAvailability(createCharactersStorage(app.db), source, undefined, new Date())
+      ? await resolveSlurpCreatorAvailability(createCharactersStorage(app.db), source, undefined, new Date(), latestPost?.createdAt ?? null)
       : { online: true, activity: null, minutesUntilOnline: 0 };
     return {
       creatorLastActiveAt: latestPost?.createdAt ?? null,

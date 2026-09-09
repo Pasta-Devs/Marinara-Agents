@@ -20,12 +20,17 @@ import { recoverSlurpMood } from "./slurp-mood.js";
 import { activeSlurpStrikes, SLURP_COOL_OFF_HOURS, type SlurpStanceLatitude } from "./slurp-stance.js";
 import { resolveSlurpCreatorAvailability } from "./slurp-creator-schedule-context.js";
 import {
+  calculateConversationMomentum,
+  extendedOnlineDurationMinutes,
+  shouldPauseMoodRecovery,
+} from "./slurp-conversation-momentum.js";
+import { readTalkativenessProfile, allowMultiBubbleSplit } from "./slurp-talkativeness.js";
+import {
   slurpReplyBubbleDelayMs,
   slurpReplyPacing,
   splitSlurpReplyBurst,
   type SlurpReplyPacing,
 } from "./slurp-messaging.js";
-import { createSlurpReplyQueueStorage } from "../storage/slurp-reply-queue.storage.js";
 import { generateSlurpCommissionImage } from "./slurp-commission-image.operation.js";
 import { slurpMessageMediaUrl } from "./slurp-media.js";
 import { resolveSlurpMediaOffer } from "./slurp-media-offer.js";
@@ -52,7 +57,6 @@ export async function replyToSlurpMessage(
   input: { threadId: string; triggerMessageId: string; force?: boolean; debugMode?: boolean },
 ): Promise<SlurpReplyOutcome> {
   const messagesStore = createSlurpMessagesStorage(db);
-  const replyQueue = createSlurpReplyQueueStorage(db);
   const slurp = createSlurpStorage(db);
   const thread = await messagesStore.getThreadById(input.threadId);
   if (!thread || (thread.state !== "active" && thread.state !== "request")) return { status: "ineligible" };
@@ -70,11 +74,30 @@ export async function replyToSlurpMessage(
   }
 
   const source = await slurp.resolveAccountSource(creator);
-  const availability = source
-    ? await resolveSlurpCreatorAvailability(createCharactersStorage(db), source, undefined, new Date())
+  // TODO: Query lastActiveAt from population storage for better availability inference
+  let availability = source
+    ? await resolveSlurpCreatorAvailability(createCharactersStorage(db), source, undefined, new Date(), undefined)
     : { online: true, activity: null, minutesUntilOnline: 0 };
+
   const history = await messagesStore.listMessages(thread.id, 60);
-  if (await replyQueue.hasPending(thread.id)) return { status: "busy" };
+
+  // Calculate conversation momentum
+  const momentumAnalysis = calculateConversationMomentum(
+    thread.lastMessageAt,
+    history.map((m) => ({ role: m.role as "viewer" | "creator", createdAt: m.createdAt })),
+  );
+
+  // Hot momentum extends availability - Creator is still engaged
+  if (momentumAnalysis.momentum === "hot" && !availability.online) {
+    const extendedDuration = extendedOnlineDurationMinutes(momentumAnalysis.momentum, thread.rapport.score);
+    if (extendedDuration !== null) {
+      availability = { online: true, activity: "chatting", minutesUntilOnline: 0 };
+    }
+  }
+
+  // REMOVED: Busy check for pending replies - let fans send during Creator typing
+  // if (await replyQueue.hasPending(thread.id)) return { status: "busy" };
+
   // A request can receive one guarded first answer. Storing that Creator answer promotes the
   // thread to active, because replying is itself a clear acceptance; after that, schedule and
   // subscription shape pacing and tone but cannot strand an already-started conversation.
@@ -84,25 +107,45 @@ export async function replyToSlurpMessage(
   const triggerObligationCreatedAt = trigger?.createdAt ?? new Date().toISOString();
   const subscriptions = await slurp.listSubscriptionsForViewer(thread.viewerAccountId);
   const subscribed = subscriptions.some((entry) => entry.creatorAccountId === thread.creatorAccountId);
+
+  // Read talkativeness profile from generated schedule if available
+  const talkativenessProfile = readTalkativenessProfile(source?.kind === "character" ? {} : {});
+
+  // Calculate mood with recovery (but pause recovery if hot conversation + negative mood)
+  const minutesSinceMoodUpdate = thread.moodUpdatedAt
+    ? Math.max(0, (Date.now() - Date.parse(thread.moodUpdatedAt)) / 60_000)
+    : 0;
+
+  let currentMood = thread.mood;
+  if (!shouldPauseMoodRecovery(momentumAnalysis.momentum, thread.mood)) {
+    currentMood = recoverSlurpMood(thread.mood, minutesSinceMoodUpdate);
+  }
+
   const pacing = slurpReplyPacing({
     online: availability.online,
     rapport: thread.rapport,
     subscribed,
     messageLength: trigger?.content.length ?? 0,
     minutesUntilOnline: availability.minutesUntilOnline,
-    // Healed for the silence since it was written, so the wait is judged on how things stand now
-    // and not on an argument the fan has already slept off.
-    mood: recoverSlurpMood(
-      thread.mood,
-      thread.moodUpdatedAt ? Math.max(0, (Date.now() - Date.parse(thread.moodUpdatedAt)) / 60_000) : 0,
-    ),
+    mood: currentMood,
+    momentum: momentumAnalysis.momentum,
+    // replyLength will be filled in after generation
+    talkativeness: talkativenessProfile.talkativeness,
   });
-  if (pacing.mode === "queued" && input.force !== true) {
+  if ((pacing.mode === "queued" || pacing.mode === "delayed") && input.force !== true) {
     await messagesStore.setReplyNotBefore(thread.id, new Date(Date.now() + pacing.notBeforeMs).toISOString());
     // She has seen it and is not answering yet. That is the whole meaning of a queued reply, and
     // it was indistinguishable from the app being broken because nothing recorded the noticing.
     // "Seen, no reply" is the loudest thing this surface can say, and the timestamp already exists.
-    await messagesStore.markRead(thread.id, "creator");
+    // Mark read with slight delay for realism (not instant)
+    setTimeout(
+      () => {
+        messagesStore.markRead(thread.id, "creator").catch((err) => {
+          logger.error(err, "[slurp-message] Failed to mark thread %s as read", thread.id);
+        });
+      },
+      Math.round(5000 + Math.random() * 25000),
+    ); // 5-30 seconds
     return { status: "queued", pacing };
   }
 
@@ -151,22 +194,33 @@ export async function replyToSlurpMessage(
       // Settings caps the burst, energy still decides whether it earns the top of that cap. A limit
       // of one is a player asking for the tidy block instead of the texting rhythm.
       const burstLimit = Math.min(settings.messagesReplyBubbleLimit, creatorState.energy >= 70 ? 3 : 2);
+      const shouldSplit = allowMultiBubbleSplit(talkativenessProfile.talkativeness, currentMood);
       const bubbles = splitSlurpReplyBurst(
         reply.content,
-        burstLimit > 1 && creatorState.energy >= 35 && reply.latitude === "normal" && reply.moodShift !== "down",
+        burstLimit > 1 &&
+          shouldSplit &&
+          creatorState.energy >= 35 &&
+          reply.latitude === "normal" &&
+          reply.moodShift !== "down",
         burstLimit,
       );
       let stored = null;
       const queuedBubbles = [];
       for (const [index, bubble] of bubbles.entries()) {
         if (index === 0) continue;
-        const delayMs = bubbles
-          .slice(1, index + 1)
-          .reduce(
-            (total, _, offset) =>
-              total + slurpReplyBubbleDelayMs({ bubbleIndex: offset + 1, bubbleCount: bubbles.length }),
-            0,
-          );
+        const delayMs = bubbles.slice(1, index + 1).reduce(
+          (total, _, offset) =>
+            total +
+            slurpReplyBubbleDelayMs({
+              bubbleIndex: offset + 1,
+              bubbleCount: bubbles.length,
+              previousBubble: bubbles[offset],
+              nextBubble: bubbles[offset + 1]!,
+              momentum: momentumAnalysis.momentum,
+              mood: currentMood,
+            }),
+          0,
+        );
         queuedBubbles.push({
           batchId: claim.claimId,
           sequence: index,
@@ -264,6 +318,18 @@ export async function replyToSlurpMessage(
             stateSignals: reply.stateSignals,
           })
           .catch((error: unknown) => logger.warn(error, "[slurp-message] Could not record the reply outcome"));
+
+        // Set extended online duration if momentum is hot
+        if (momentumAnalysis.momentum === "hot") {
+          const extendedDuration = extendedOnlineDurationMinutes(momentumAnalysis.momentum, thread.rapport.score);
+          if (extendedDuration !== null) {
+            const extendedUntil = new Date(Date.now() + extendedDuration * 60_000).toISOString();
+            await messagesStore
+              .setExtendedOnline(thread.id, extendedUntil)
+              .catch((error: unknown) => logger.warn(error, "[slurp-message] Could not set extended online duration"));
+          }
+        }
+
         await slurp
           .recordCreatorStateSignals(thread.creatorAccountId, reply.stateSignals)
           .catch((error: unknown) => logger.warn(error, "[slurp-message] Could not record creator state signals"));

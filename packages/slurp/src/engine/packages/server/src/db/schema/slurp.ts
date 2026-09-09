@@ -238,6 +238,14 @@ export const slurpThreads = fileTable(
     /** While set, the creator has stepped away from this conversation and is not replying. */
     coolUntil: text("cool_until"),
     /**
+     * While set, Creator stays online for this conversation due to hot momentum.
+     *
+     * Active conversations extend availability: a Creator in the flow sticks around
+     * even if their schedule says they should be offline. Cleared when conversation
+     * goes cold or fan doesn't reply within inactivity threshold.
+     */
+    extendedOnlineUntil: text("extended_online_until"),
+    /**
      * When the pair last emptied this conversation.
      *
      * Commissions outlive a clear because coins moved, but they must not keep hanging in a chat

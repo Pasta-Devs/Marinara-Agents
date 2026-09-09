@@ -106,16 +106,23 @@ export function admitSlurpThread(
 /**
  * How long before the creator answers, in milliseconds.
  *
- * Online means near-instant: the reply is generated on send and only held behind the typing
- * indicator. Offline means queued, but rapport and a paid subscription buy an answer anyway —
- * a whale who writes at 3am is exactly the fan a creator picks the phone up for.
+ * Now incorporates conversation momentum, check-in behavior, and realistic typing delays.
+ * Subscribers get near-instant replies when online + high rapport, but delays when rapport is low.
+ * Non-subscribers need higher rapport for instant replies.
  */
 export type SlurpReplyPacing = {
-  mode: "instant" | "queued";
+  mode: "instant" | "delayed" | "queued";
   /** Milliseconds to hold an instant reply behind the typing indicator. */
   typingMs: number;
-  /** When queued, the earliest the scheduler may generate. */
+  /** When queued/delayed, the earliest the scheduler may generate. */
   notBeforeMs: number;
+  /** Debug info for pacing panel. */
+  debug?: {
+    reach: number;
+    moodDrag: number;
+    momentumBoost: string;
+    decision: string;
+  };
 };
 
 const MINUTE = 60_000;
@@ -136,25 +143,162 @@ export function slurpReplyPacing(input: {
    * before the words arrive.
    */
   mood?: number;
+  /** Conversation momentum from slurp-conversation-momentum.ts */
+  momentum?: "hot" | "warm" | "cold" | "frozen";
+  /** Reply content length (for realistic typing delay calculation). */
+  replyLength?: number;
+  /** Talkativeness 0-100 from generated schedule. */
+  talkativeness?: number;
 }): SlurpReplyPacing {
   const mood = Math.max(-100, Math.min(100, input.mood ?? 0));
-  // -0.4 when delighted, +0.6 when cold. Multiplies every wait in both branches.
-  const drag = mood >= 0 ? 1 - (mood / 100) * 0.4 : 1 + (-mood / 100) * 0.6;
-  const considered = Math.min(1, input.messageLength / 200);
-  if (input.online) {
-    // 1.2s to 4s before the mood is applied. Long enough to read as typing, short enough that
-    // nobody waits on it.
-    return { mode: "instant", typingMs: Math.round((1200 + considered * 2800) * drag), notBeforeMs: 0 };
-  }
-  // Off-hours reach: a stranger waits for the schedule, a whale gets an answer in minutes. A warm
-  // conversation reaches further, and a bad one does not get answered at midnight at all.
+  const momentum = input.momentum ?? "cold";
+  const replyLength = input.replyLength ?? 100;
+  const talkativeness = input.talkativeness ?? 50;
+
+  // Mood drag: -0.5 when delighted, +1.0 when cold
+  const moodDrag = mood > 60 ? 0.5 : mood < -20 ? 1.8 : 1.0;
+
+  // Calculate reach: rapport + subscription bonus + mood bonus
   const reach = Math.min(1, Math.max(0, input.rapport.score / 100 + (input.subscribed ? 0.2 : 0) + mood / 400));
-  if (reach >= 0.55) {
-    return { mode: "instant", typingMs: Math.round((2000 + (1 - reach) * 6000) * drag), notBeforeMs: 0 };
+
+  // ONLINE PATH: Creator is actively available
+  if (input.online) {
+    // Subscribers with high rapport get near-instant replies
+    if (input.subscribed && reach >= 0.7) {
+      const typingMs = calculateTypingDelay(replyLength, momentum, mood, talkativeness, "instant");
+      return {
+        mode: "instant",
+        typingMs,
+        notBeforeMs: 0,
+        debug: { reach, moodDrag, momentumBoost: momentum, decision: "subscriber + high rapport + online" },
+      };
+    }
+
+    // Subscribers with moderate rapport get fast replies
+    if (input.subscribed && reach >= 0.4) {
+      const typingMs = calculateTypingDelay(replyLength, momentum, mood, talkativeness, "fast");
+      return {
+        mode: "instant",
+        typingMs,
+        notBeforeMs: 0,
+        debug: { reach, moodDrag, momentumBoost: momentum, decision: "subscriber + moderate rapport + online" },
+      };
+    }
+
+    // High rapport non-subscribers get decent speed
+    if (reach >= 0.75) {
+      const typingMs = calculateTypingDelay(replyLength, momentum, mood, talkativeness, "normal");
+      return {
+        mode: "instant",
+        typingMs,
+        notBeforeMs: 0,
+        debug: { reach, moodDrag, momentumBoost: momentum, decision: "high rapport + online" },
+      };
+    }
+
+    // Everyone else when online gets slower but still instant replies
+    const typingMs = calculateTypingDelay(replyLength, momentum, mood, talkativeness, "slow");
+    return {
+      mode: "instant",
+      typingMs,
+      notBeforeMs: 0,
+      debug: { reach, moodDrag, momentumBoost: momentum, decision: "online (baseline)" },
+    };
   }
-  const scheduled = input.minutesUntilOnline === null ? 90 : Math.max(2, input.minutesUntilOnline);
-  // Warmth shortens the wait without ever erasing it, so the schedule still means something.
-  return { mode: "queued", typingMs: 0, notBeforeMs: Math.round(scheduled * MINUTE * (1 - reach * 0.7) * drag) };
+
+  // OFFLINE PATH: Creator is not actively available
+
+  // Hot momentum extends availability - they're still in the conversation
+  if (momentum === "hot") {
+    const typingMs = calculateTypingDelay(replyLength, momentum, mood, talkativeness, "normal");
+    return {
+      mode: "instant",
+      typingMs,
+      notBeforeMs: 0,
+      debug: { reach, moodDrag, momentumBoost: "hot", decision: "hot conversation extends availability" },
+    };
+  }
+
+  // High reach (subscriber + good rapport) gets check-in reply
+  if (reach >= 0.6) {
+    // They'll check messages and reply within 10-20 minutes
+    const checkInDelay = Math.round((10 + Math.random() * 10) * MINUTE * moodDrag);
+    const typingMs = calculateTypingDelay(replyLength, momentum, mood, talkativeness, "fast");
+    return {
+      mode: "delayed",
+      typingMs,
+      notBeforeMs: checkInDelay,
+      debug: { reach, moodDrag, momentumBoost: momentum, decision: "high rapport check-in reply" },
+    };
+  }
+
+  // Medium reach gets delayed check-in reply (30-60 min)
+  if (reach >= 0.4) {
+    const checkInDelay = Math.round((30 + Math.random() * 30) * MINUTE * moodDrag);
+    const typingMs = calculateTypingDelay(replyLength, momentum, mood, talkativeness, "normal");
+    return {
+      mode: "delayed",
+      typingMs,
+      notBeforeMs: checkInDelay,
+      debug: { reach, moodDrag, momentumBoost: momentum, decision: "medium rapport check-in reply" },
+    };
+  }
+
+  // Low reach waits for schedule
+  const scheduled = input.minutesUntilOnline === null ? 120 : Math.max(15, input.minutesUntilOnline);
+  // Reach still shortens wait a bit (max 50% reduction)
+  const reduction = 1 - reach * 0.5;
+  const finalDelay = Math.round(scheduled * MINUTE * reduction * moodDrag);
+
+  // Cap at 3 hours (180 minutes) per user config
+  const cappedDelay = Math.min(finalDelay, 180 * MINUTE);
+
+  return {
+    mode: "queued",
+    typingMs: 0,
+    notBeforeMs: cappedDelay,
+    debug: { reach, moodDrag, momentumBoost: momentum, decision: "wait for schedule" },
+  };
+}
+
+/**
+ * Calculate realistic typing delay based on content length and context.
+ *
+ * Simulates: reading the message, thinking, typing, maybe revising, random distractions.
+ */
+function calculateTypingDelay(
+  replyLength: number,
+  momentum: "hot" | "warm" | "cold" | "frozen",
+  mood: number,
+  talkativeness: number,
+  speed: "instant" | "fast" | "normal" | "slow",
+): number {
+  // Base thinking time: 3-11 seconds (reading + considering response)
+  const thinkingTime = 3000 + Math.random() * 8000;
+
+  // Typing time: ~40 words per minute = ~200 chars/min
+  let typingSpeed = momentum === "hot" ? 250 : 200; // chars per minute
+  if (speed === "instant") typingSpeed *= 1.5;
+  if (speed === "slow") typingSpeed *= 0.7;
+
+  const typingTime = (replyLength / typingSpeed) * 60_000;
+
+  // Revision time: longer replies = pause to reread
+  const revisionTime = replyLength > 100 ? Math.random() * 5000 : 0;
+
+  // Random distraction: 15% chance of +20-90 seconds
+  const distraction = Math.random() < 0.15 ? 20_000 + Math.random() * 70_000 : 0;
+
+  // Mood modifier: delighted = faster, cold = slower
+  const moodMultiplier = mood > 60 ? 0.6 : mood < -20 ? 1.8 : 1.0;
+
+  // Talkativeness: chatty people type faster (thoughts flow easily)
+  const talkMultiplier = 1 - talkativeness / 200; // 0.5x to 1.0x
+
+  const total = (thinkingTime + typingTime + revisionTime) * moodMultiplier * talkMultiplier + distraction;
+
+  // Clamp to 2s-90s range
+  return Math.round(Math.max(2000, Math.min(90_000, total)));
 }
 
 /**
@@ -185,11 +329,40 @@ export function splitSlurpReplyBurst(content: string, allow: boolean, limit = 3)
   return bubbles.filter(Boolean);
 }
 
-/** Delay between bubbles. It is deterministic and capped so a restart cannot extend the burst. */
-export function slurpReplyBubbleDelayMs(input: { bubbleIndex: number; bubbleCount: number }): number {
-  const index = Math.max(1, Math.trunc(input.bubbleIndex));
-  const count = Math.max(2, Math.trunc(input.bubbleCount));
-  return Math.min(8_000, 1_500 + Math.round((index / count) * 1_500));
+/**
+ * Delay between bubbles in a multi-message burst.
+ *
+ * Now content-aware and varied to feel natural, not robotic.
+ */
+export function slurpReplyBubbleDelayMs(input: {
+  bubbleIndex: number;
+  bubbleCount: number;
+  previousBubble?: string;
+  nextBubble: string;
+  momentum?: "hot" | "warm" | "cold" | "frozen";
+  mood?: number;
+}): number {
+  const momentum = input.momentum ?? "cold";
+  const mood = input.mood ?? 0;
+  const nextLength = input.nextBubble.length;
+
+  // Base delay: ~20ms per character (realistic typing speed)
+  const typingTime = nextLength * 20;
+
+  // Thinking pause between messages
+  const isAfterThought = /^(actually|also|oh|wait|and|but|plus|or|like)/i.test(input.nextBubble);
+  const thinkingPause = isAfterThought ? 2000 + Math.random() * 6000 : 500 + Math.random() * 2500;
+
+  // Momentum: hot conversation = sometimes rapid-fire
+  const pacing = momentum === "hot" && Math.random() < 0.3 ? 0.4 : 1.0;
+
+  // Mood: delighted = faster bubbles, cold = slower
+  const moodMultiplier = mood > 60 ? 0.7 : mood < -20 ? 1.5 : 1.0;
+
+  const totalDelay = (typingTime + thinkingPause) * pacing * moodMultiplier;
+
+  // Clamp to 500ms-30s range (much wider than old 1.5s-8s)
+  return Math.round(Math.max(500, Math.min(30_000, totalDelay)));
 }
 
 /**

@@ -274,7 +274,7 @@ export async function buildSlurpMessagePrompt(input: SlurpMessagePromptInput): P
   const [scheduleContext, availability] = await Promise.all([
     source ? resolveSlurpCreatorScheduleContext(characters, source, undefined, new Date()) : Promise.resolve(undefined),
     source
-      ? resolveSlurpCreatorAvailability(characters, source, undefined, new Date())
+      ? resolveSlurpCreatorAvailability(characters, source, undefined, new Date(), undefined)
       : Promise.resolve({ online: true, activity: null, minutesUntilOnline: 0 }),
   ]);
   const characterCanon = await resolveNoodlerCharacterCanon(input.db, source, disclosureMode);

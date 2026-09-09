@@ -127,8 +127,17 @@ export function slurpRapportTier(score: number): SlurpRapportTier {
 export function scoreSlurpRapport(
   facts: SlurpRapportFacts,
   weights: SlurpRapportWeights = SLURP_DEFAULT_RAPPORT_WEIGHTS,
+  options?: {
+    /** Apply subscriber rapport boost: conversation and effort gains are 1.5x. */
+    subscriberBoost?: boolean;
+  },
 ): SlurpRapport {
   const round = (value: number) => Math.round(value * 10) / 10;
+
+  // Subscriber boost: 1.5x gains from conversation and effort
+  const conversationMultiplier = options?.subscriberBoost && facts.subscribed ? 1.5 : 1.0;
+  const effortMultiplier = options?.subscriberBoost && facts.subscribed ? 1.5 : 1.0;
+
   const contributions: SlurpRapportContribution[] = [
     {
       key: "subscription",
@@ -162,15 +171,19 @@ export function scoreSlurpRapport(
     },
     {
       key: "conversation",
-      detail: `${Math.max(0, facts.viewerMessages)} messages sent`,
+      detail: `${Math.max(0, facts.viewerMessages)} messages sent${conversationMultiplier > 1 ? " (+50% subscriber bonus)" : ""}`,
       weight: weights.conversation,
-      points: round(weights.conversation * curve(facts.viewerMessages, SATURATION.viewerMessages)),
+      points: round(
+        weights.conversation * curve(facts.viewerMessages, SATURATION.viewerMessages) * conversationMultiplier,
+      ),
     },
     {
       key: "effort",
-      detail: `${Math.max(0, Math.round(facts.averageViewerMessageLength))} chars per message`,
+      detail: `${Math.max(0, Math.round(facts.averageViewerMessageLength))} chars per message${effortMultiplier > 1 ? " (+50% subscriber bonus)" : ""}`,
       weight: weights.effort,
-      points: round(weights.effort * linear(facts.averageViewerMessageLength, SATURATION.messageLength)),
+      points: round(
+        weights.effort * linear(facts.averageViewerMessageLength, SATURATION.messageLength) * effortMultiplier,
+      ),
     },
     {
       key: "reciprocity",
