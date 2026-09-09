@@ -1,5 +1,11 @@
 # Slurp release notes
 
+## 1.2.62 — 2026-09-09
+
+- Simplified the message plus menu into clear photo, generated photo, tip, commission, and locked-content actions.
+- Added commission entry points in the commission panel and from clear commission wording in a message draft.
+- Added viewer-generated photos to direct messages.
+
 ## 1.2.61 — 2026-09-09
 
 - Inbox is now a catch-up hub: current requests and commissions share one attention tray, recent messages stay visible, and activity is summarized without duplicating direct messages.

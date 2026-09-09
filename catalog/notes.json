@@ -36,6 +36,12 @@
     "slurp": {
       "versions": [
         {
+          "version": "1.2.62",
+          "date": "2026-09-09",
+          "notes": "- Simplified the message plus menu into clear photo, generated photo, tip, commission, and locked-content actions.\n- Added commission entry points in the commission panel and from clear commission wording in a message draft.\n- Added viewer-generated photos to direct messages.",
+          "highlight": false
+        },
+        {
           "version": "1.2.61",
           "date": "2026-09-09",
           "notes": "- Inbox is now a catch-up hub: current requests and commissions share one attention tray, recent messages stay visible, and activity is summarized without duplicating direct messages.\n- Repeated activity opens as a notification stack with its people and events intact.\n- Messages now use the full width, with a denser conversation list, match-by-match search, and a compact commission ribbon.\n- Details and prompt diagnostics overlay the chat as a desktop drawer or mobile sheet. Broadcast moved to each Creator's Studio card.\n- Conversation Details has separate Basic and Advanced views. Basic explains rapport, mood, availability, progress and memories in words; Advanced shows the complete simulation and exact values.\n- Progress uses ranked steps, mood uses a centred scale, memories use a readable list, and every state has text or an icon as well as colour.",
@@ -147,12 +153,6 @@
           "version": "1.2.43",
           "date": "2026-09-09",
           "notes": "- Direct-message memory is now two lists: recent facts the creator can rewrite or forget, and long-term facts that stay until they are named by id.\n- Existing thread notes migrate into working memory, with overflow kept as long-term facts.",
-          "highlight": false
-        },
-        {
-          "version": "1.2.42",
-          "date": "2026-09-09",
-          "notes": "- Shipped Steamy, Explicit, and image guidance now ask for thorough, graphic body descriptions when a post or picture is already nude or sexual. Unedited installs receive the new wording.",
           "highlight": false
         }
       ]
