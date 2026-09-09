@@ -2,8 +2,16 @@
  * The state that makes one Slurp Creator more than a single mood number.
  *
  * The values stay separate on purpose. Energy describes available effort. Arousal describes
- * sexual attention. Stance describes treatment of one fan. None of them grants permission or
+ * sexual attention. Posture describes treatment of one fan. None of them grants permission or
  * bypasses a boundary.
+ *
+ * Every value here must be moved by something and read by something. `needs` and `strategy` were
+ * neither: no code path ever wrote them, so every Creator reported an empty need list and the
+ * strategy `express_self` forever. `interest` and `commercialTrust` were written but duplicated
+ * work already done better elsewhere — mood already tracks how a conversation is going, and
+ * `slurp-rapport.ts` already scores tips, unlocks and commissions from the real ledger rather
+ * than from the model's claim about it. A dial the prompt cannot distinguish from its neighbour
+ * is not detail, it is the averaging problem `slurp-stance.ts` was written to avoid.
  */
 
 export const SLURP_CREATOR_EMOTIONS = [
@@ -25,21 +33,6 @@ export const SLURP_CREATOR_EMOTIONS = [
 
 export type SlurpCreatorEmotion = (typeof SLURP_CREATOR_EMOTIONS)[number];
 
-export const SLURP_CREATOR_NEEDS = [
-  "attention",
-  "reassurance",
-  "space",
-  "validation",
-  "money",
-  "creative_outlet",
-  "privacy",
-  "connection",
-  "control",
-  "rest",
-] as const;
-
-export type SlurpCreatorNeed = (typeof SLURP_CREATOR_NEEDS)[number];
-
 export const SLURP_ADULT_INTENTS = [
   "none",
   "invite_attention",
@@ -56,22 +49,7 @@ export const SLURP_ADULT_INTENTS = [
 
 export type SlurpAdultIntent = (typeof SLURP_ADULT_INTENTS)[number];
 
-export const SLURP_PLATFORM_STRATEGIES = [
-  "express_self",
-  "seek_reactions",
-  "build_tension",
-  "convert_attention",
-  "reward_subscribers",
-  "sell_custom_work",
-  "start_drama",
-  "recover_attention",
-  "protect_privacy",
-  "rest",
-] as const;
-
-export type SlurpPlatformStrategy = (typeof SLURP_PLATFORM_STRATEGIES)[number];
-
-export const SLURP_THREAD_STANCES = [
+export const SLURP_THREAD_POSTURES = [
   "open",
   "friendly",
   "playful",
@@ -83,7 +61,7 @@ export const SLURP_THREAD_STANCES = [
   "rejecting",
 ] as const;
 
-export type SlurpThreadStance = (typeof SLURP_THREAD_STANCES)[number];
+export type SlurpThreadPosture = (typeof SLURP_THREAD_POSTURES)[number];
 
 export const SLURP_ADULT_LEVELS = ["ordinary", "suggestive", "provocative", "intimate", "explicit"] as const;
 export type SlurpAdultLevel = (typeof SLURP_ADULT_LEVELS)[number];
@@ -93,18 +71,15 @@ export type SlurpCreatorState = {
   emotionIntensity: number;
   energy: number;
   arousal: number;
-  needs: SlurpCreatorNeed[];
   intent: SlurpAdultIntent;
-  strategy: SlurpPlatformStrategy;
   updatedAt: string;
 };
 
 export type SlurpThreadState = {
-  stance: SlurpThreadStance;
+  /** Named `posture`, not `stance`: `slurp-stance.ts` owns the word for the resolved position. */
+  posture: SlurpThreadPosture;
   familiarity: number;
-  interest: number;
   sexualComfort: number;
-  commercialTrust: number;
   emotionalTrust: number;
   respect: number;
   resentment: number;
@@ -147,51 +122,36 @@ export const SLURP_CREATOR_STATE_SIGNALS = [
 export type SlurpStateDelta = {
   emotion?: SlurpCreatorEmotion;
   intent?: SlurpAdultIntent;
-  strategy?: SlurpPlatformStrategy;
   energy?: number;
   arousal?: number;
   emotionIntensity?: number;
   familiarity?: number;
-  interest?: number;
   sexualComfort?: number;
-  commercialTrust?: number;
   emotionalTrust?: number;
   respect?: number;
   resentment?: number;
   threadDesire?: number;
   adultLevel?: SlurpAdultLevel;
-  stance?: SlurpThreadStance;
+  posture?: SlurpThreadPosture;
 };
 
 export type SlurpThreadStateDelta = Pick<
   SlurpStateDelta,
-  | "familiarity"
-  | "interest"
-  | "sexualComfort"
-  | "commercialTrust"
-  | "emotionalTrust"
-  | "respect"
-  | "resentment"
-  | "threadDesire"
-  | "adultLevel"
-> & { stance?: SlurpThreadStance };
+  "familiarity" | "sexualComfort" | "emotionalTrust" | "respect" | "resentment" | "threadDesire" | "adultLevel"
+> & { posture?: SlurpThreadPosture };
 
 export const SLURP_CREATOR_STATE_DEFAULT: Omit<SlurpCreatorState, "updatedAt"> = {
   emotion: "content",
   emotionIntensity: 35,
   energy: 60,
   arousal: 25,
-  needs: [],
   intent: "none",
-  strategy: "express_self",
 };
 
 export const SLURP_THREAD_STATE_DEFAULT: Omit<SlurpThreadState, "updatedAt"> = {
-  stance: "friendly",
+  posture: "friendly",
   familiarity: 0,
-  interest: 0,
   sexualComfort: 0,
-  commercialTrust: 0,
   emotionalTrust: 0,
   respect: 50,
   resentment: 0,
@@ -199,13 +159,15 @@ export const SLURP_THREAD_STATE_DEFAULT: Omit<SlurpThreadState, "updatedAt"> = {
   adultLevel: "ordinary",
 };
 
+/** The intensity every feeling returns to. Also the default, so a settled Creator reads as one. */
+const SLURP_EMOTION_BASE = 35;
+
+/** `toward` approaches the base without reaching it, so settling needs a little room above it. */
+const SLURP_EMOTION_SETTLED = 38;
+
 const MIN = 0;
 const MAX = 100;
 const clamp = (value: number): number => Math.max(MIN, Math.min(MAX, Math.round(value)));
-
-const delta = (changes: Record<string, number>, key: string, amount: number): void => {
-  changes[key] = (changes[key] ?? 0) + amount;
-};
 
 /** Translate a model signal into small server-owned changes. */
 export function stateDeltaForSignal(signal: SlurpCreatorStateSignal): SlurpStateDelta {
@@ -218,19 +180,15 @@ export function stateDeltaForSignal(signal: SlurpCreatorStateSignal): SlurpState
     case "fan_remembered_creator_detail":
       delta.familiarity = 3;
       delta.emotionalTrust = 3;
-      delta.interest = 2;
       break;
     case "fan_gave_respectful_compliment":
-      delta.interest = 2;
-      delta.emotionalTrust = 1;
+      delta.emotionalTrust = 2;
       break;
     case "fan_gave_welcome_adult_attention":
-      delta.interest = 3;
       delta.sexualComfort = 6;
       delta.threadDesire = 5;
       break;
     case "fan_ignored_creator_question":
-      delta.interest = -2;
       delta.emotionalTrust = -2;
       break;
     case "fan_pushed_after_refusal":
@@ -239,25 +197,22 @@ export function stateDeltaForSignal(signal: SlurpCreatorStateSignal): SlurpState
       delta.respect = -10;
       delta.resentment = 18;
       delta.adultLevel = "ordinary";
-      delta.stance = "defensive";
+      delta.posture = "defensive";
       break;
     case "fan_requested_free_content":
-      delta.commercialTrust = -5;
+      delta.respect = -3;
       break;
+    // Paying is not a thread dial. `slurp-rapport.ts` scores tips, unlocks and commissions from
+    // the wallet, so scoring the model's claim about them here only ever disagreed with the money.
     case "fan_paid_for_content":
-      delta.commercialTrust = 4;
-      delta.interest = 1;
       break;
     case "fan_completed_commission":
-      delta.commercialTrust = 6;
       delta.emotionalTrust = 2;
       break;
     case "fan_returned_after_silence":
-      delta.interest = 3;
       delta.familiarity = 1;
       break;
     case "fan_mentioned_another_creator":
-      delta.interest = -1;
       delta.resentment = 4;
       break;
     case "fan_apologized":
@@ -305,22 +260,12 @@ export function readSlurpCreatorState(raw: unknown, fallbackUpdatedAt: string): 
   const intent = SLURP_ADULT_INTENTS.includes(record.intent as SlurpAdultIntent)
     ? (record.intent as SlurpAdultIntent)
     : SLURP_CREATOR_STATE_DEFAULT.intent;
-  const strategy = SLURP_PLATFORM_STRATEGIES.includes(record.strategy as SlurpPlatformStrategy)
-    ? (record.strategy as SlurpPlatformStrategy)
-    : SLURP_CREATOR_STATE_DEFAULT.strategy;
-  const needs = Array.isArray(record.needs)
-    ? record.needs
-        .filter((need): need is SlurpCreatorNeed => SLURP_CREATOR_NEEDS.includes(need as SlurpCreatorNeed))
-        .slice(0, 2)
-    : SLURP_CREATOR_STATE_DEFAULT.needs;
   return {
     emotion,
     emotionIntensity: number("emotionIntensity", SLURP_CREATOR_STATE_DEFAULT.emotionIntensity),
     energy: number("energy", SLURP_CREATOR_STATE_DEFAULT.energy),
     arousal: number("arousal", SLURP_CREATOR_STATE_DEFAULT.arousal),
-    needs,
     intent,
-    strategy,
     updatedAt:
       typeof record.updatedAt === "string" && Number.isFinite(Date.parse(record.updatedAt))
         ? record.updatedAt
@@ -337,10 +282,10 @@ function parseSlurpStateJson(raw: string): unknown {
 }
 
 export function slurpCreatorStateCanUseMedia(creator: SlurpCreatorState, thread: SlurpThreadState): boolean {
-  if (creator.energy < 25 || thread.stance === "rejecting") return false;
+  if (creator.energy < 25 || thread.posture === "rejecting") return false;
   const adultStateActive = creator.arousal >= 36 || thread.adultLevel !== "ordinary";
   if (!adultStateActive) return true;
-  return thread.sexualComfort >= 36 && thread.respect >= 36 && thread.stance !== "defensive";
+  return thread.sexualComfort >= 36 && thread.respect >= 36 && thread.posture !== "defensive";
 }
 
 /** Apply one bounded delta. The server, not the model, owns the limits. */
@@ -351,7 +296,7 @@ export function applySlurpCreatorStateDelta(
 ): SlurpCreatorState {
   const next = { ...state };
   for (const [key, value] of Object.entries(changes)) {
-    if (key === "emotion" || key === "intent" || key === "strategy") {
+    if (key === "emotion" || key === "intent") {
       next[key] = value as never;
       continue;
     }
@@ -398,7 +343,7 @@ export function lowerSlurpAdultLevel(a: SlurpAdultLevel, b: SlurpAdultLevel): Sl
  * prompt said, hard, "keep adult behavior at or below its adultLevel".
  *
  * A rise is earned, never granted: one step at a time, never skipping, and only while the fan is
- * somebody she both wants and thinks well of. Respect, resentment and a defensive stance veto a
+ * somebody she both wants and thinks well of. Respect, resentment and a defensive posture veto a
  * rise outright. That veto is the whole difference between escalation and pressure paying off,
  * and it is why the fall is checked first: a level the thread no longer holds goes immediately,
  * whatever earned it.
@@ -412,7 +357,7 @@ export function nextSlurpAdultLevel(state: SlurpThreadState): SlurpAdultLevel {
   if (index > 0 && !holds(state.adultLevel)) return SLURP_ADULT_LEVELS[index - 1];
   if (state.respect < ADULT_RESPECT_FLOOR) return state.adultLevel;
   if (state.resentment > ADULT_RESENTMENT_CEILING) return state.adultLevel;
-  if (state.stance === "defensive" || state.stance === "rejecting") return state.adultLevel;
+  if (state.posture === "defensive" || state.posture === "rejecting") return state.adultLevel;
   const next = SLURP_ADULT_LEVELS[index + 1];
   return next && holds(next) ? next : state.adultLevel;
 }
@@ -424,7 +369,7 @@ export function applySlurpThreadStateDelta(
 ): SlurpThreadState {
   const next = { ...state } as SlurpThreadState & Record<string, unknown>;
   for (const [key, value] of Object.entries(changes)) {
-    if (key === "stance") {
+    if (key === "posture") {
       next[key] = value;
       continue;
     }
@@ -463,9 +408,16 @@ export function decaySlurpCreatorState(state: SlurpCreatorState, hours: number, 
     const distance = target - value;
     return clamp(value + distance * Math.min(1, (elapsed * rate) / 100));
   };
+  const emotionIntensity = toward(state.emotionIntensity, SLURP_EMOTION_BASE, 16);
+  // The intensity decayed but the emotion it belonged to never did, so one jealous afternoon left
+  // a Creator quietly jealous for the rest of the save. The two are one feeling: when the
+  // intensity settles she settles, and the intent that arrived with it goes with it.
+  const settled = emotionIntensity <= SLURP_EMOTION_SETTLED;
   return {
     ...state,
-    emotionIntensity: toward(state.emotionIntensity, 35, 16),
+    emotion: settled ? SLURP_CREATOR_STATE_DEFAULT.emotion : state.emotion,
+    intent: settled ? SLURP_CREATOR_STATE_DEFAULT.intent : state.intent,
+    emotionIntensity,
     energy: toward(state.energy, 60, 8),
     arousal: toward(state.arousal, 25, 20),
     updatedAt: now,
@@ -480,7 +432,6 @@ export function decaySlurpThreadState(state: SlurpThreadState, hours: number, no
   };
   const decayed: SlurpThreadState = {
     ...state,
-    interest: toward(state.interest, 0, 3),
     threadDesire: toward(state.threadDesire, 0, 5),
     resentment: toward(state.resentment, 0, 1),
     updatedAt: now,
@@ -498,18 +449,4 @@ export function slurpIntensityBand(value: number): "low" | "medium" | "high" | "
 
 export function slurpAdultLevelIndex(level: SlurpAdultLevel): number {
   return SLURP_ADULT_LEVELS.indexOf(level);
-}
-
-// Keep this tiny utility in the pure module so future action rules can combine deltas without
-// mutating state or inventing a second arithmetic convention.
-export function addSlurpDeltas(...deltas: SlurpStateDelta[]): SlurpStateDelta {
-  const numeric: Record<string, number> = {};
-  const categorical: SlurpStateDelta = {};
-  for (const current of deltas) {
-    for (const [key, value] of Object.entries(current)) {
-      if (typeof value === "number") delta(numeric, key, value);
-      else categorical[key as keyof SlurpStateDelta] = value as never;
-    }
-  }
-  return { ...numeric, ...categorical };
 }

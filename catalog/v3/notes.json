@@ -36,6 +36,12 @@
     "slurp": {
       "versions": [
         {
+          "version": "1.2.56",
+          "date": "2026-09-09",
+          "notes": "- Removed two simulation values that nothing in the game ever changed: the Creator's platform strategy and their current need. Both were shown in the conversation overview as though they meant something, and both were fixed forever at their starting value.\n- Removed two more that repeated work already done better elsewhere. Rapport already scores tips, unlocks and commissions from the real ledger, and the conversation mood already tracks how a conversation is going.\n- A strong feeling now ends. Until now the strength of a feeling faded but the feeling itself never did, so one jealous afternoon left a Creator quietly jealous for the rest of the save.\n- A fan asking for free content now costs a little standing instead of a trust score that no longer exists.\n- Existing conversations keep their guardedness through the change.",
+          "highlight": false
+        },
+        {
           "version": "1.2.55",
           "date": "2026-09-09",
           "notes": "- Conversations can now become more explicit over time. Until now a conversation could never pass \"suggestive\", however long it ran or however well it went, because nothing in the game could raise it any further.\n- How adult a conversation is allowed to get is now earned. It rises one step at a time, never skips a step, and needs both lasting comfort and present interest to hold where it is.\n- A creator will not escalate with somebody she does not think well of, is holding a grudge against, or has gone guarded with, whatever else is true of the conversation.\n- Interest fading now lowers the conversation back down, the same way it raised it.\n- Pushing after a refusal caps the conversation whichever order the rest of the message is read in.\n- Welcome adult attention builds comfort a little faster, so the full range is reachable in a real conversation.\n- The confirmation for clearing a conversation is translatable instead of English-only.",
@@ -147,12 +153,6 @@
           "version": "1.2.37",
           "date": "2026-09-08",
           "notes": "- Off-screen feed cards now skip rendering work, and sparkle particles stop entirely outside the viewport.\n- Feed and profile requests now cancel when abandoned and reuse fresh cached data when returning to Slurp.\n- Recent post media stays warm for back-scrolling, while feed sorting and search projections are reused across unrelated renders.",
-          "highlight": false
-        },
-        {
-          "version": "1.2.36",
-          "date": "2026-09-08",
-          "notes": "- Unlocking a post now flows from a creator-branded purchase sheet into the revealed post without the feed jumping.\n- Purchases sparkle around the Creator and post, while coin trails mark spends and earnings at the action and wallet.\n- Unlocks and subscriptions now refresh every visible wallet balance immediately after payment.",
           "highlight": false
         }
       ]

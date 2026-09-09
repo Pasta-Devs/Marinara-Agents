@@ -47,11 +47,20 @@ for (const field of [
   "creatorState.emotion",
   "creatorState.energy",
   "creatorState.intent",
-  "creatorState.strategy",
   "threadState.sexualComfort",
   "threadState.adultLevel",
+  "threadState.posture",
 ]) {
   assert.match(view, new RegExp(field.replace(".", "\\."), "u"));
+}
+// Dials nothing writes must not be rendered as though the panel were reporting something.
+for (const gone of [
+  "creatorState.strategy",
+  "creatorState.needs",
+  "threadState.interest",
+  "threadState.commercialTrust",
+]) {
+  assert.doesNotMatch(view, new RegExp(gone.replace(".", "\\."), "u"));
 }
 assert.match(view, /max-h-\[min\(78vh,44rem\)\]/u);
 assert.match(view, /State updated/u);

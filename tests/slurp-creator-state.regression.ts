@@ -2,7 +2,6 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 
 import {
-  addSlurpDeltas,
   applySlurpCreatorStateDelta,
   applySlurpThreadStateDelta,
   applySlurpThreadStateSignals,
@@ -35,7 +34,7 @@ assert.equal(slurpAdultLevelIndex("explicit"), 4);
 const refusal = stateDeltaForSignal("fan_pushed_after_refusal");
 assert.equal(refusal.resentment, 18);
 assert.equal(refusal.adultLevel, "ordinary");
-assert.equal(refusal.stance, "defensive");
+assert.equal(refusal.posture, "defensive");
 assert.equal(creatorStateDeltaForSignal("fan_gave_welcome_adult_attention").intent, "tease");
 assert.equal(slurpCreatorStateCanUseMedia({ ...creator, energy: 20, arousal: 100 }, thread), false);
 assert.equal(slurpCreatorStateCanUseMedia({ ...creator, energy: 50, arousal: 25 }, thread), true);
@@ -61,7 +60,6 @@ const improved = applySlurpThreadStateSignals(
 );
 assert.equal(improved.sexualComfort, 6);
 assert.equal(improved.threadDesire, 5);
-assert.equal(improved.commercialTrust, 4);
 // One welcome signal no longer grants a ceiling. It is earned below, or it is not held.
 assert.equal(improved.adultLevel, "ordinary");
 
@@ -90,7 +88,7 @@ assert.equal(
 const wanted = { adultLevel: "suggestive", sexualComfort: 100, threadDesire: 100 } as const;
 assert.equal(nextSlurpAdultLevel(earned({ ...wanted, respect: 10 })), "suggestive");
 assert.equal(nextSlurpAdultLevel(earned({ ...wanted, resentment: 90 })), "suggestive");
-assert.equal(nextSlurpAdultLevel(earned({ ...wanted, stance: "defensive" })), "suggestive");
+assert.equal(nextSlurpAdultLevel(earned({ ...wanted, posture: "defensive" })), "suggestive");
 // A level the thread stopped holding is lost, one step, whatever earned it.
 assert.equal(nextSlurpAdultLevel(earned({ adultLevel: "explicit", sexualComfort: 0, threadDesire: 0 })), "intimate");
 
@@ -121,9 +119,27 @@ const recoveredCreator = decaySlurpCreatorState({ ...creator, energy: 10, arousa
 assert.ok(recoveredCreator.energy > 10 && recoveredCreator.energy < 60);
 assert.ok(recoveredCreator.arousal < 90 && recoveredCreator.arousal > 25);
 assert.ok(recoveredCreator.emotionIntensity < 90 && recoveredCreator.emotionIntensity > 35);
+// A strong feeling still reads as itself while it lasts.
+assert.equal(recoveredCreator.emotion, creator.emotion);
 
-const recoveredThread = decaySlurpThreadState({ ...thread, interest: 80, threadDesire: 80, resentment: 80 }, 8, now);
-assert.ok(recoveredThread.interest < 80);
+// A feeling that has settled hands the Creator back to herself. Before this the intensity decayed
+// and the emotion never did, so one jealous afternoon lasted the rest of the save.
+const settled = decaySlurpCreatorState(
+  { ...creator, emotion: "jealous", intent: "tease", emotionIntensity: 90 },
+  200,
+  now,
+);
+assert.ok(settled.emotionIntensity <= 38);
+assert.equal(settled.emotion, "content");
+assert.equal(settled.intent, "none");
+
+// Deleted dials stay deleted: nothing writes them, so nothing may quietly read them back.
+assert.equal("needs" in SLURP_CREATOR_STATE_DEFAULT, false);
+assert.equal("strategy" in SLURP_CREATOR_STATE_DEFAULT, false);
+assert.equal("interest" in SLURP_THREAD_STATE_DEFAULT, false);
+assert.equal("commercialTrust" in SLURP_THREAD_STATE_DEFAULT, false);
+
+const recoveredThread = decaySlurpThreadState({ ...thread, threadDesire: 80, resentment: 80 }, 8, now);
 assert.ok(recoveredThread.threadDesire < 80);
 assert.ok(recoveredThread.resentment < 80);
 
@@ -134,12 +150,6 @@ const fadedCeiling = decaySlurpThreadState(
 );
 assert.equal(fadedCeiling.threadDesire, 0);
 assert.equal(fadedCeiling.adultLevel, "intimate");
-
-assert.deepEqual(addSlurpDeltas({ interest: 2, resentment: 3 }, { interest: -1, stance: "guarded" }), {
-  interest: 1,
-  resentment: 3,
-  stance: "guarded",
-});
 
 const messageOperation = readFileSync(
   "packages/slurp/src/engine/packages/server/src/services/slurp/slurp-message.operation.ts",

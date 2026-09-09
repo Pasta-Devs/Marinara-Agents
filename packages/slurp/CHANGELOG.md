@@ -1,5 +1,13 @@
 # Slurp release notes
 
+## 1.2.56 — 2026-09-09
+
+- Removed two simulation values that nothing in the game ever changed: the Creator's platform strategy and their current need. Both were shown in the conversation overview as though they meant something, and both were fixed forever at their starting value.
+- Removed two more that repeated work already done better elsewhere. Rapport already scores tips, unlocks and commissions from the real ledger, and the conversation mood already tracks how a conversation is going.
+- A strong feeling now ends. Until now the strength of a feeling faded but the feeling itself never did, so one jealous afternoon left a Creator quietly jealous for the rest of the save.
+- A fan asking for free content now costs a little standing instead of a trust score that no longer exists.
+- Existing conversations keep their guardedness through the change.
+
 ## 1.2.55 — 2026-09-09
 
 - Conversations can now become more explicit over time. Until now a conversation could never pass "suggestive", however long it ran or however well it went, because nothing in the game could raise it any further.

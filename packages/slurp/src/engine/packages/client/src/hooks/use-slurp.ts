@@ -2133,17 +2133,13 @@ export type SlurpThreadRelationship = {
     emotionIntensity: number;
     energy: number;
     arousal: number;
-    needs: string[];
     intent: string;
-    strategy: string;
     updatedAt: string;
   };
   threadState: {
-    stance: string;
+    posture: string;
     familiarity: number;
-    interest: number;
     sexualComfort: number;
-    commercialTrust: number;
     emotionalTrust: number;
     respect: number;
     resentment: number;

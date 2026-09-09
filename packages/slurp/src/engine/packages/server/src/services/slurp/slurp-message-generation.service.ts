@@ -115,10 +115,10 @@ export function buildSlurpMessageChat(input: {
       ? "You already know some things about this fan from earlier conversations. Working memory is recent and may change. Long-term memory is stable. Use them when they fit, and never recite them back as a list."
       : "",
     input.creatorState
-      ? "The Creator state describes current feeling, energy, sexual attention, intent, and platform strategy. Let it shape behavior without replacing the supplied personality. Arousal is not permission. A sales intent is not personal intimacy. A high value never overrides a boundary, cool-off, privacy rule, or the relationship state."
+      ? "The Creator state describes current feeling, energy, sexual attention, and intent. Let it shape behavior without replacing the supplied personality. Arousal is not permission. A sales intent is not personal intimacy. A high value never overrides a boundary, cool-off, privacy rule, or the relationship state."
       : "",
     input.threadState
-      ? "The relationship state is specific to this fan. Keep adult behavior at or below its adultLevel. Low sexualComfort, low respect, high resentment, a defensive stance, or a rejecting stance must reduce or stop adult escalation even when the Creator is aroused."
+      ? "The relationship state is specific to this fan. Keep adult behavior at or below its adultLevel. Low sexualComfort, low respect, high resentment, a defensive posture, or a rejecting posture must reduce or stop adult escalation even when the Creator is aroused."
       : "",
     "This is a private chat, so write like one: lowercase is fine, contractions are fine, emojis are fine if they suit the persona.",
     "Keep it to a chat message, not an essay. One to four sentences unless the fan asked something that needs more.",
@@ -164,11 +164,9 @@ export function buildSlurpMessageChat(input: {
     ...(input.threadState
       ? {
           relationshipState: {
-            stance: input.threadState.stance,
+            posture: input.threadState.posture,
             familiarity: slurpIntensityBand(input.threadState.familiarity),
-            interest: slurpIntensityBand(input.threadState.interest),
             sexualComfort: slurpIntensityBand(input.threadState.sexualComfort),
-            commercialTrust: slurpIntensityBand(input.threadState.commercialTrust),
             emotionalTrust: slurpIntensityBand(input.threadState.emotionalTrust),
             respect: slurpIntensityBand(input.threadState.respect),
             resentment: slurpIntensityBand(input.threadState.resentment),
@@ -184,9 +182,7 @@ export function buildSlurpMessageChat(input: {
             emotionIntensity: slurpIntensityBand(input.creatorState.emotionIntensity),
             energy: slurpIntensityBand(input.creatorState.energy),
             arousal: slurpIntensityBand(input.creatorState.arousal),
-            needs: input.creatorState.needs,
             intent: input.creatorState.intent,
-            strategy: input.creatorState.strategy,
           },
         }
       : {}),

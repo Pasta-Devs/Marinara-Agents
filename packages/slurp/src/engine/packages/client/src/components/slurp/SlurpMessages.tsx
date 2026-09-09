@@ -2037,14 +2037,14 @@ function SlurpRelationshipPanel({
   // Basic reads as a word, advanced reads as the number behind the word. Same value either way.
   const figure = (value: number) => (advanced ? `${value}/100` : humanize(band(value)));
   const boundary =
-    threadState.stance === "rejecting" ||
-    threadState.stance === "defensive" ||
+    threadState.posture === "rejecting" ||
+    threadState.posture === "defensive" ||
     threadState.sexualComfort < 36 ||
     threadState.respect < 36;
   const humanize = (value: string) =>
     value.replaceAll("_", " ").replace(/\b\w/gu, (character) => character.toUpperCase());
   const stateSummary = `${humanize(creatorState.emotion)} · ${humanize(band(creatorState.arousal))} arousal · ${humanize(band(creatorState.energy))} energy`;
-  const conversationSummary = `${humanize(moodLabel ?? "neutral")} · ${humanize(threadState.stance)} · ${humanize(threadState.adultLevel)}`;
+  const conversationSummary = `${humanize(moodLabel ?? "neutral")} · ${humanize(threadState.posture)} · ${humanize(threadState.adultLevel)}`;
   const boundarySummary = boundary ? "Adult escalation blocked" : "Adult escalation allowed";
   const contextSummary = `${relationship.availability.online ? "Available" : "Away"} · ${humanize(relationship.audienceTone)}`;
   const workingNotes = relationship.notes.filter((note) => note.tier === "working");
@@ -2148,16 +2148,7 @@ function SlurpRelationshipPanel({
               </p>
               <div className="grid grid-cols-2 gap-2">
                 {(
-                  [
-                    "familiarity",
-                    "interest",
-                    "sexualComfort",
-                    "commercialTrust",
-                    "emotionalTrust",
-                    "respect",
-                    "resentment",
-                    "threadDesire",
-                  ] as const
+                  ["familiarity", "sexualComfort", "emotionalTrust", "respect", "resentment", "threadDesire"] as const
                 ).map((key) => (
                   <InfoChip
                     key={key}
@@ -2166,11 +2157,6 @@ function SlurpRelationshipPanel({
                   />
                 ))}
               </div>
-              <InfoChip
-                label="Platform strategy"
-                value={humanize(creatorState.strategy)}
-                description="The creator's broader platform approach."
-              />
               <InfoChip label="State updated" value={creatorState.updatedAt} />
             </Section>
           )}
@@ -2193,7 +2179,7 @@ function SlurpRelationshipPanel({
               />
               <InfoChip
                 label="Stance"
-                value={humanize(threadState.stance)}
+                value={humanize(threadState.posture)}
                 description="How open or guarded the creator is with this fan."
               />
             </div>
@@ -2209,18 +2195,11 @@ function SlurpRelationshipPanel({
             />
           </Section>
           <Section icon={MessageCircle} title="Creator now" summary={stateSummary} open={advanced}>
-            <div className="grid grid-cols-2 gap-2">
-              <InfoChip
-                label="Intent"
-                value={humanize(creatorState.intent)}
-                description="The creator's current direction for this interaction."
-              />
-              <InfoChip
-                label="Need"
-                value={creatorState.needs.length ? creatorState.needs.map(humanize).join(", ") : "None recorded"}
-                description="A current need that may affect behavior."
-              />
-            </div>
+            <InfoChip
+              label="Intent"
+              value={humanize(creatorState.intent)}
+              description="The creator's current direction for this interaction."
+            />
             <StateMeter
               label="Arousal"
               value={creatorState.arousal}
@@ -2251,7 +2230,6 @@ function SlurpRelationshipPanel({
                 value={threadState.emotionalTrust}
                 description="Trust built through personal conversation."
               />
-              <StateMeter label="Commercial trust" value={threadState.commercialTrust} />
               <StateMeter
                 label="Resentment"
                 value={threadState.resentment}

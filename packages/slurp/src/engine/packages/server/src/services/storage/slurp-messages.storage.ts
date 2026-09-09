@@ -157,24 +157,25 @@ function readThreadState(raw: unknown, fallbackUpdatedAt: string): SlurpConversa
   }
   const number = (key: keyof SlurpConversationState, fallback: number) =>
     typeof parsed[key] === "number" && Number.isFinite(parsed[key]) ? Number(parsed[key]) : fallback;
-  const stance =
-    typeof parsed.stance === "string" &&
+  // `stance` is the pre-rename key. Threads stored before the rename still hold it, and dropping
+  // it silently would reset a defensive conversation to friendly on the next read.
+  const storedPosture = typeof parsed.posture === "string" ? parsed.posture : parsed.stance;
+  const posture =
+    typeof storedPosture === "string" &&
     ["open", "friendly", "playful", "teasing", "professional", "guarded", "distant", "defensive", "rejecting"].includes(
-      parsed.stance,
+      storedPosture,
     )
-      ? (parsed.stance as SlurpConversationState["stance"])
-      : SLURP_THREAD_STATE_DEFAULT.stance;
+      ? (storedPosture as SlurpConversationState["posture"])
+      : SLURP_THREAD_STATE_DEFAULT.posture;
   const adultLevel =
     typeof parsed.adultLevel === "string" &&
     ["ordinary", "suggestive", "provocative", "intimate", "explicit"].includes(parsed.adultLevel)
       ? (parsed.adultLevel as SlurpConversationState["adultLevel"])
       : SLURP_THREAD_STATE_DEFAULT.adultLevel;
   const state: SlurpConversationState = {
-    stance,
+    posture,
     familiarity: number("familiarity", SLURP_THREAD_STATE_DEFAULT.familiarity),
-    interest: number("interest", SLURP_THREAD_STATE_DEFAULT.interest),
     sexualComfort: number("sexualComfort", SLURP_THREAD_STATE_DEFAULT.sexualComfort),
-    commercialTrust: number("commercialTrust", SLURP_THREAD_STATE_DEFAULT.commercialTrust),
     emotionalTrust: number("emotionalTrust", SLURP_THREAD_STATE_DEFAULT.emotionalTrust),
     respect: number("respect", SLURP_THREAD_STATE_DEFAULT.respect),
     resentment: number("resentment", SLURP_THREAD_STATE_DEFAULT.resentment),
