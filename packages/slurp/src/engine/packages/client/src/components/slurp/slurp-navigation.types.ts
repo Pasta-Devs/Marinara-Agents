@@ -44,6 +44,7 @@ export const SLURP_SETTINGS_SECTIONS = [
   "overview",
   "general",
   "creators",
+  "messaging",
   "images",
   "audience",
   "ads",

@@ -158,7 +158,11 @@ import {
   slurpThreads,
   slurpCommissions,
 } from "../../db/schema/slurp.js";
-import { SLURP_CREATOR_MESSAGING_KEY } from "../slurp/slurp-messaging.js";
+import {
+  SLURP_CREATOR_MESSAGING_KEY,
+  SLURP_DEFAULT_CREATOR_MESSAGING,
+  SLURP_DM_POLICIES,
+} from "../slurp/slurp-messaging.js";
 import { noodlerContentLimitFor } from "../slurp/slurp-content-format.js";
 import { readNoodlerAccountMediaPath, readNoodlerAvatarMediaPath } from "../slurp/slurp-avatar.js";
 import { newId, now } from "../../utils/id-generator.js";
@@ -346,6 +350,20 @@ export const slurpSettingsSchema = z.object({
   walletEngagementDailyCap: z.number().int().min(0).max(9999),
   /** Share of a fan's payment that reaches the viewer's own creator, as a percentage. */
   walletCreatorRevenueSharePercent: z.number().int().min(0).max(100),
+  /**
+   * Creators answer a message you left unanswered while you were away.
+   *
+   * On by default, because a chat nobody ever answers is not a chat. Off leaves the whole
+   * background reply loop asleep: a creator then answers only while you are in the conversation.
+   * Commissions and the later bubbles of a reply already sent still arrive — those are owed.
+   */
+  messagesAwayRepliesEnabled: z.boolean(),
+  /** Messages one reply is broken into. One keeps a reply in a single bubble. */
+  messagesReplyBubbleLimit: z.number().int().min(1).max(4),
+  /** Where a creator nobody has configured by hand starts. */
+  messagesDefaultDmPolicy: z.enum(SLURP_DM_POLICIES as unknown as [string, ...string[]]),
+  messagesDefaultRequestFee: z.number().int().min(0).max(9999),
+  messagesDefaultPpvPrice: z.number().int().min(0).max(9999),
   nightQuiet: z.boolean(),
   onboarding: z.enum(["not_started", "in_progress", "completed"]),
 });
@@ -954,6 +972,11 @@ export const DEFAULT_SLURP_SETTINGS: SlurpSettings = {
     organicDiscovery: 1,
     freeResource: 1,
   },
+  messagesAwayRepliesEnabled: true,
+  messagesReplyBubbleLimit: 3,
+  messagesDefaultDmPolicy: SLURP_DEFAULT_CREATOR_MESSAGING.dmPolicy,
+  messagesDefaultRequestFee: SLURP_DEFAULT_CREATOR_MESSAGING.requestFee,
+  messagesDefaultPpvPrice: SLURP_DEFAULT_CREATOR_MESSAGING.ppvPrice,
   nightQuiet: false,
   onboarding: "not_started",
 };

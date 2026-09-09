@@ -37,16 +37,25 @@ export const SLURP_DEFAULT_CREATOR_MESSAGING: SlurpCreatorMessaging = {
   rapportWeights: readSlurpRapportWeights(undefined),
 };
 
-export function readSlurpCreatorMessaging(value: unknown): SlurpCreatorMessaging {
+/**
+ * A creator's messaging settings, falling back to `defaults`.
+ *
+ * The fallback is a parameter rather than the shipped constant so Settings can move the starting
+ * point for every creator nobody has configured by hand, without writing a row for each of them.
+ */
+export function readSlurpCreatorMessaging(
+  value: unknown,
+  defaults: SlurpCreatorMessaging = SLURP_DEFAULT_CREATOR_MESSAGING,
+): SlurpCreatorMessaging {
   const raw = value && typeof value === "object" && !Array.isArray(value) ? (value as Record<string, unknown>) : {};
   const coins = (input: unknown, fallback: number) =>
     typeof input === "number" && Number.isInteger(input) && input >= 0 && input <= 9999 ? input : fallback;
   return {
     dmPolicy: SLURP_DM_POLICIES.includes(raw.dmPolicy as SlurpDmPolicy)
       ? (raw.dmPolicy as SlurpDmPolicy)
-      : SLURP_DEFAULT_CREATOR_MESSAGING.dmPolicy,
-    requestFee: coins(raw.requestFee, SLURP_DEFAULT_CREATOR_MESSAGING.requestFee),
-    ppvPrice: coins(raw.ppvPrice, SLURP_DEFAULT_CREATOR_MESSAGING.ppvPrice),
+      : defaults.dmPolicy,
+    requestFee: coins(raw.requestFee, defaults.requestFee),
+    ppvPrice: coins(raw.ppvPrice, defaults.ppvPrice),
     rapportWeights: readSlurpRapportWeights(raw.rapportWeights),
   };
 }

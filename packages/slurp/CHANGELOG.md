@@ -1,5 +1,12 @@
 # Slurp release notes
 
+## 1.2.54 — 2026-09-09
+
+- Settings has a Messaging tab.
+- Creators can be told not to answer while you are away, so replies only happen while you are in the conversation. Commissions and the rest of a reply already sent still arrive.
+- How many messages one reply is broken into is now a setting. One keeps every reply in a single message.
+- The DM policy, request fee and paid message price a Creator starts with are now set once in Settings instead of per Creator.
+
 ## 1.2.53 — 2026-09-09
 
 - A creator no longer re-answers the same message once a minute. A conversation waits for a reply only while the fan spoke last, so an answered message is answered once.

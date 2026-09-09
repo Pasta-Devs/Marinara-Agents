@@ -1,6 +1,7 @@
 import type { FastifyInstance } from "fastify";
 import { logger } from "../../lib/logger.js";
 import { createSlurpMessagesStorage } from "../storage/slurp-messages.storage.js";
+import { createSlurpStorage } from "../storage/slurp.storage.js";
 import { createSlurpReplyQueueStorage } from "../storage/slurp-reply-queue.storage.js";
 import { deliverDueSlurpCommissions } from "./slurp-commission-delivery.service.js";
 import { replyToSlurpMessage } from "./slurp-message.operation.js";
@@ -57,7 +58,11 @@ export function startSlurpMessageScheduler(app: FastifyInstance, registerStop?: 
         });
         await replyQueue.remove(bubble.id);
       }
-      for (const thread of await storage.listThreadsAwaitingReply()) {
+      // Off means the background loop stays asleep. Queued bubbles and commissions above are not
+      // gated on it: those are already-sent and already-paid-for, and holding them back would lose
+      // half a reply rather than prevent one.
+      const awayReplies = (await createSlurpStorage(app.db).getSettings()).messagesAwayRepliesEnabled;
+      for (const thread of awayReplies ? await storage.listThreadsAwaitingReply() : []) {
         if (stopped) break;
         // `listThreadsAwaitingReply` only returns threads the fan spoke last in, so the newest
         // message is the one being answered.

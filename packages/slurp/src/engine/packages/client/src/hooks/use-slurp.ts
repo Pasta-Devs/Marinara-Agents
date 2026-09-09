@@ -330,6 +330,12 @@ export type SlurpSettings = {
   fanLikesPerRefresh: number;
   fanRepliesPerRefresh: number;
   fanArchetypeWeights: Record<string, number>;
+  /** Creators answer while you are away. Off leaves the background reply loop asleep. */
+  messagesAwayRepliesEnabled: boolean;
+  messagesReplyBubbleLimit: number;
+  messagesDefaultDmPolicy: "open" | "subscribers" | "paid" | "closed";
+  messagesDefaultRequestFee: number;
+  messagesDefaultPpvPrice: number;
   nightQuiet: boolean;
   onboarding: "not_started" | "in_progress" | "completed";
 };

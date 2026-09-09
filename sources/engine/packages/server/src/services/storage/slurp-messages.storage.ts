@@ -199,6 +199,17 @@ export function createSlurpMessagesStorage(db: DB) {
   const readMessagingBlob = async (): Promise<Record<string, unknown>> =>
     json(await settingsStore.get(SLURP_CREATOR_MESSAGING_KEY));
 
+  /** Where a creator nobody has configured by hand starts. Settings owns it, not a constant. */
+  const messagingDefaults = async (): Promise<SlurpCreatorMessaging> => {
+    const settings = await slurp.getSettings();
+    return {
+      ...SLURP_DEFAULT_CREATOR_MESSAGING,
+      dmPolicy: settings.messagesDefaultDmPolicy as SlurpCreatorMessaging["dmPolicy"],
+      requestFee: settings.messagesDefaultRequestFee,
+      ppvPrice: settings.messagesDefaultPpvPrice,
+    };
+  };
+
   const mapMessage = (row: Record<string, unknown>): SlurpMessage => ({
     id: String(row.id),
     threadId: String(row.threadId),
@@ -268,9 +279,9 @@ export function createSlurpMessagesStorage(db: DB) {
   }
 
   const storage = {
-    /** Per-creator messaging settings, falling back to the shipped defaults. */
+    /** Per-creator messaging settings, falling back to the defaults Settings holds. */
     async getCreatorMessaging(creatorAccountId: string): Promise<SlurpCreatorMessaging> {
-      return readSlurpCreatorMessaging((await readMessagingBlob())[creatorAccountId]);
+      return readSlurpCreatorMessaging((await readMessagingBlob())[creatorAccountId], await messagingDefaults());
     },
 
     async setCreatorMessaging(
@@ -278,7 +289,11 @@ export function createSlurpMessagesStorage(db: DB) {
       patch: Partial<SlurpCreatorMessaging>,
     ): Promise<SlurpCreatorMessaging> {
       const blob = await readMessagingBlob();
-      const next = readSlurpCreatorMessaging({ ...readSlurpCreatorMessaging(blob[creatorAccountId]), ...patch });
+      const defaults = await messagingDefaults();
+      const next = readSlurpCreatorMessaging(
+        { ...readSlurpCreatorMessaging(blob[creatorAccountId], defaults), ...patch },
+        defaults,
+      );
       await settingsStore.set(SLURP_CREATOR_MESSAGING_KEY, JSON.stringify({ ...blob, [creatorAccountId]: next }));
       return next;
     },

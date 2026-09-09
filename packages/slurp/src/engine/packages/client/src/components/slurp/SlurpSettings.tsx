@@ -1053,6 +1053,87 @@ export function SlurpSettings({
                 </div>
               )}
 
+              {section === "messaging" && (
+                <div className="space-y-5">
+                  <SectionTitle
+                    title={t("ui.slurp.settings.messaging.title")}
+                    detail={t("ui.slurp.settings.messaging.detail")}
+                  />
+                  <SettingsGroup title={t("ui.slurp.settings.messaging.repliesTitle")}>
+                    <Toggle
+                      label={t("ui.slurp.settings.messaging.awayReplies")}
+                      detail={t("ui.slurp.settings.messaging.awayRepliesDetail")}
+                      value={settings.messagesAwayRepliesEnabled}
+                      onChange={(value) => update("messagesAwayRepliesEnabled", value)}
+                    />
+                    <Field
+                      label={t("ui.slurp.settings.messaging.bubbleLimit")}
+                      detail={t("ui.slurp.settings.messaging.bubbleLimitDetail")}
+                    >
+                      <NumberSetting
+                        value={settings.messagesReplyBubbleLimit}
+                        min={1}
+                        max={4}
+                        onSave={(value) => update("messagesReplyBubbleLimit", value)}
+                      />
+                    </Field>
+                  </SettingsGroup>
+                  <SettingsGroup title={t("ui.slurp.settings.messaging.defaultsTitle")}>
+                    <p className="text-xs leading-5 text-[var(--muted-foreground)]">
+                      {t("ui.slurp.settings.messaging.defaultsDetail")}
+                    </p>
+                    <Field
+                      label={t("ui.slurp.settings.messaging.dmPolicy")}
+                      detail={t("ui.slurp.settings.messaging.dmPolicyDetail")}
+                    >
+                      <select
+                        value={settings.messagesDefaultDmPolicy}
+                        disabled={updateSettings.isPending}
+                        onChange={(event) =>
+                          void update(
+                            "messagesDefaultDmPolicy",
+                            event.target.value as SlurpSettings["messagesDefaultDmPolicy"],
+                          )
+                        }
+                        className="min-h-11 w-full rounded-lg border border-[var(--slurp-outline)] bg-[var(--slurp-canvas)] px-3 text-base focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--slurp-focus)] disabled:opacity-50 sm:text-sm"
+                      >
+                        <option value="open">{t("ui.slurp.settings.messaging.dmPolicyOpen")}</option>
+                        <option value="subscribers">{t("ui.slurp.settings.messaging.dmPolicySubscribers")}</option>
+                        <option value="paid">{t("ui.slurp.settings.messaging.dmPolicyPaid")}</option>
+                        <option value="closed">{t("ui.slurp.settings.messaging.dmPolicyClosed")}</option>
+                      </select>
+                    </Field>
+                    <div className="grid gap-4 sm:grid-cols-2">
+                      <Field
+                        label={t("ui.slurp.settings.messaging.requestFee")}
+                        detail={t("ui.slurp.settings.messaging.requestFeeDetail")}
+                      >
+                        <NumberSetting
+                          value={settings.messagesDefaultRequestFee}
+                          min={0}
+                          max={9999}
+                          onSave={(value) => update("messagesDefaultRequestFee", value)}
+                        />
+                      </Field>
+                      <Field
+                        label={t("ui.slurp.settings.messaging.ppvPrice")}
+                        detail={t("ui.slurp.settings.messaging.ppvPriceDetail")}
+                      >
+                        <NumberSetting
+                          value={settings.messagesDefaultPpvPrice}
+                          min={0}
+                          max={9999}
+                          onSave={(value) => update("messagesDefaultPpvPrice", value)}
+                        />
+                      </Field>
+                    </div>
+                  </SettingsGroup>
+                  <p className="text-xs leading-5 text-[var(--muted-foreground)]">
+                    {t("ui.slurp.settings.messaging.clearHint")}
+                  </p>
+                </div>
+              )}
+
               {section === "creators" && (
                 <div className="space-y-5">
                   <div className="flex flex-wrap items-end justify-between gap-3">
