@@ -526,6 +526,8 @@ function SlurpThreadView({
   const [draft, setDraft] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [typing, setTyping] = useState(false);
+  const [hiddenReplyIds, setHiddenReplyIds] = useState<Set<string>>(new Set());
+  const typingTimeoutRef = useRef<number | null>(null);
   const [toolsOpen, setToolsOpen] = useState(false);
   const [connectionPickerOpen, setConnectionPickerOpen] = useState(false);
   const [toolTab, setToolTab] = useState<"tip" | "commission" | "photo" | "generated-photo" | "creator" | null>(null);
@@ -601,6 +603,7 @@ function SlurpThreadView({
   const timeline = [
     ...messages
       .filter((message) => typeof message.metadata.commissionId !== "string")
+      .filter((message) => !hiddenReplyIds.has(message.id))
       .map((message) => ({ kind: "message" as const, at: message.createdAt, message })),
     ...commissionTimeline,
   ].sort((left, right) => left.at.localeCompare(right.at));
@@ -845,13 +848,51 @@ function SlurpThreadView({
    * before it answers and that wait is the real one. `typingMs` is a floor on how long the
    * creator appears to type, so only the part of it the request did not already cover is left.
    */
-  const holdTyping = (ms: number, startedAt: number) => {
+  const holdTyping = (ms: number, startedAt: number, replyId?: string) => {
     const remaining = ms - (Date.now() - startedAt);
     if (remaining <= 0) {
       setTyping(false);
+      if (replyId) {
+        setHiddenReplyIds((prev) => {
+          const next = new Set(prev);
+          next.delete(replyId);
+          return next;
+        });
+      }
       return;
     }
-    window.setTimeout(() => setTyping(false), remaining);
+    // Hide the reply message until typing delay finishes
+    if (replyId) {
+      setHiddenReplyIds((prev) => new Set(prev).add(replyId));
+    }
+    // Clear any existing typing timeout
+    if (typingTimeoutRef.current !== null) {
+      window.clearTimeout(typingTimeoutRef.current);
+    }
+    typingTimeoutRef.current = window.setTimeout(() => {
+      setTyping(false);
+      if (replyId) {
+        setHiddenReplyIds((prev) => {
+          const next = new Set(prev);
+          next.delete(replyId);
+          return next;
+        });
+      }
+      typingTimeoutRef.current = null;
+    }, remaining);
+  };
+
+  /**
+   * Cancel typing animation and reveal any hidden messages immediately.
+   * Used when the fan interrupts by sending another message.
+   */
+  const cancelTyping = () => {
+    if (typingTimeoutRef.current !== null) {
+      window.clearTimeout(typingTimeoutRef.current);
+      typingTimeoutRef.current = null;
+    }
+    setTyping(false);
+    setHiddenReplyIds(new Set());
   };
 
   const submit = async (force = false) => {
@@ -862,6 +903,10 @@ function SlurpThreadView({
       setToolsOpen(true);
       setToolTab("commission");
       return;
+    }
+    // Cancel any active typing animation when fan interrupts
+    if (typing) {
+      cancelTyping();
     }
     setError(null);
     setDraft("");
@@ -904,7 +949,7 @@ function SlurpThreadView({
       if (result.tipError) setError(result.tipError);
       setComposerTipAmount(0);
       setComposerTipNote("");
-      holdTyping(result.reply ? (result.typingMs ?? 0) : 0, startedAt);
+      holdTyping(result.reply ? (result.typingMs ?? 0) : 0, startedAt, result.reply?.id);
     } catch (cause) {
       // Put the words back in the box. Losing a typed message to a failed request is the one
       // thing a chat surface must never do.
@@ -923,9 +968,10 @@ function SlurpThreadView({
     if (!personaId || !targetCreatorAccountId || busy) return;
     setError(null);
     setActiveTipAmount(amount);
+    const startedAt = Date.now();
     try {
       const result = await tip.mutateAsync({ personaId, creatorAccountId: targetCreatorAccountId, amount, note });
-      if (result.reply) holdTyping(result.typingMs ?? 0);
+      if (result.reply) holdTyping(result.typingMs ?? 0, startedAt, result.reply.id);
     } catch (cause) {
       if (restore) {
         setCustomTipAmount(restore.amount);
@@ -968,14 +1014,26 @@ function SlurpThreadView({
                 @{headerAccount?.handle ?? ""}
               </span>
               {relationship && (
-                <span className="truncate text-[0.7rem] text-[var(--muted-foreground)]">
-                  ·{" "}
+                <span className="flex items-center gap-1 truncate text-[0.7rem] text-[var(--muted-foreground)]">
+                  <span>·</span>
+                  <span
+                    className={cn(
+                      "h-1.5 w-1.5 rounded-full shrink-0",
+                      relationship.availability.online
+                        ? "bg-green-500 shadow-[0_0_4px_rgba(34,197,94,0.6)]"
+                        : relationship.availability.minutesUntilOnline !== null &&
+                            relationship.availability.minutesUntilOnline < 120
+                          ? "bg-yellow-500 shadow-[0_0_4px_rgba(234,179,8,0.6)]"
+                          : "bg-gray-400",
+                    )}
+                    aria-hidden="true"
+                  />
                   {relationship.availability.online
                     ? localizeUi("ui.slurp.messages.availableNow", { defaultValue: "Available now" })
                     : relationship.availability.minutesUntilOnline !== null
                       ? relationship.availability.minutesUntilOnline < 60
-                        ? `Away • Back in ~${Math.round(relationship.availability.minutesUntilOnline)}min`
-                        : `Away • Back in ~${Math.round(relationship.availability.minutesUntilOnline / 60)}hr`
+                        ? `Back in ~${Math.round(relationship.availability.minutesUntilOnline)}min`
+                        : `Back in ~${Math.round(relationship.availability.minutesUntilOnline / 60)}hr`
                       : localizeUi("ui.slurp.messages.away", { defaultValue: "Away" })}
                 </span>
               )}
@@ -1280,15 +1338,31 @@ function SlurpThreadView({
             </p>
           )}
           {typing && (
-            <p
+            <div
               aria-live="polite"
-              className="self-start rounded-2xl rounded-bl-md bg-[var(--slurp-surface)] px-3 py-2 text-xs text-[var(--muted-foreground)] ring-1 ring-inset ring-[var(--noodle-divider)]"
+              className="self-start flex items-center gap-2 rounded-2xl rounded-bl-md bg-[var(--slurp-surface)] px-4 py-3 text-xs ring-1 ring-inset ring-[var(--noodle-divider)]"
             >
-              {localizeUi("ui.slurp.messages.typing", {
-                defaultValue: "{{name}} is typing…",
-                name: creator?.displayName ?? "",
-              })}
-            </p>
+              <div className="flex gap-1">
+                <span
+                  className="h-2 w-2 rounded-full bg-[var(--muted-foreground)] animate-[bounce_1.4s_ease-in-out_infinite]"
+                  style={{ animationDelay: "0ms" }}
+                />
+                <span
+                  className="h-2 w-2 rounded-full bg-[var(--muted-foreground)] animate-[bounce_1.4s_ease-in-out_infinite]"
+                  style={{ animationDelay: "160ms" }}
+                />
+                <span
+                  className="h-2 w-2 rounded-full bg-[var(--muted-foreground)] animate-[bounce_1.4s_ease-in-out_infinite]"
+                  style={{ animationDelay: "320ms" }}
+                />
+              </div>
+              <span className="text-[var(--muted-foreground)]">
+                {localizeUi("ui.slurp.messages.typing", {
+                  defaultValue: "{{name}} is typing…",
+                  name: creator?.displayName ?? "",
+                })}
+              </span>
+            </div>
           )}
           {preparingImage && (
             <p

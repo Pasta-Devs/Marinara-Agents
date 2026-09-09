@@ -4,10 +4,10 @@ import { createSlurpMessagesStorage } from "../storage/slurp-messages.storage.js
 import { createSlurpStorage } from "../storage/slurp.storage.js";
 import { isFollowUpDue, formatFollowUpContext, type ScheduledFollowUp } from "./slurp-follow-up.js";
 import { generateSlurpMessageReply } from "./slurp-message-generation.service.js";
-import { resolveSlurpTextConnection } from "./slurp-connections.js";
+import { resolveSlurpTextConnection } from "./slurp-connection.js";
 import { describeSlurpDayVibe } from "./slurp-day-vibe.service.js";
 import { createConnectionsStorage } from "../storage/connections.storage.js";
-import { newId, now } from "../../lib/id.js";
+import { newId, now } from "../../utils/id-generator.js";
 import { slurpPollBackoffMs } from "./slurp-poll-backoff.js";
 import { activeSlurpStrikes } from "./slurp-stance.js";
 
