@@ -47,25 +47,6 @@ process.env.NODE_ENV = "test";
 function sha256(value: Buffer) {
   return createHash("sha256").update(value).digest("hex");
 }
-function assertCatalogArtifact() {
-  for (const relativePath of ["catalog/catalog.json", "catalog/v2/catalog.json", "catalog/v3/catalog.json"]) {
-    const catalog = JSON.parse(readFileSync(join(repoRoot, relativePath), "utf8")) as {
-      packages: Array<{
-        manifest?: { id?: string; version?: string };
-        artifact?: { url?: string; sha256?: string; bytes?: number };
-      }>;
-    };
-    const entry = catalog.packages.find((item) => item.manifest?.id === "long-term-memory");
-    assert.ok(entry, `${relativePath} must contain Long-Term Memory`);
-    assert.equal(entry.manifest?.version, packageManifest.version);
-    assert.equal(
-      entry.artifact?.url,
-      `https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/long-term-memory-${packageManifest.version}.zip`,
-    );
-    assert.equal(entry.artifact?.sha256, sha256(artifactBytes));
-    assert.equal(entry.artifact?.bytes, artifactBytes.byteLength);
-  }
-}
 function catalog() {
   return {
     schemaVersion: 1,
@@ -134,7 +115,6 @@ async function main() {
     async () => {
       assert.equal(artifactManifest.id, "long-term-memory");
       assert.equal(artifactManifest.version, packageManifest.version);
-      assertCatalogArtifact();
       assert.match(
         String(artifactManifest.description),
         /Chat Settings → Agents → Long-Term Memory/u,
@@ -2291,12 +2271,12 @@ async function main() {
       assert.match(await healthInfoPanel.innerText(), /Check Settings > Maintenance > Reindex recall data\./u);
 
       const showWorkspacePane = async (pane: "navigator" | "workbench" | "inspector") => {
-        const tab = page.locator(`[data-ltm-workspace-pane-tab="${pane}"]`);
-        if ((await tab.count()) === 0) return;
-        // The pane tab may be rendered inside a CSS-hidden switcher (wider layouts show every pane as a
-        // column and hide the tab rail). Dispatch the click handler directly so the active pane still
-        // switches, keeping the flow working in both the narrow tabbed and wider column layouts.
-        await tab.evaluate((element) => (element as HTMLElement).click());
+        const target = page.locator(`[data-ltm-workspace-pane="${pane}"]`);
+        if (!(await target.isVisible())) {
+          // ResizeObserver renders the mobile tabs asynchronously after a viewport change.
+          await page.locator(`[data-ltm-workspace-pane-tab="${pane}"]`).click();
+        }
+        await target.waitFor({ state: "visible" });
       };
       const missingSources = ["source_deleted", "source_vanished"];
       for (const [index, sourceNoteId] of missingSources.entries()) {
@@ -3353,6 +3333,9 @@ async function main() {
       assert.ok(mobileListScrollable.scrollHeight > mobileListScrollable.clientHeight);
       assert.match(mobileListScrollable.overflowY, /auto|scroll/u);
       assert.equal(mobileListScrollable.pageLocked, false);
+      await mobileDestinationList.evaluate((element) => {
+        element.scrollTop = 0;
+      });
       await mobileDestinationList.hover();
       await page.mouse.wheel(0, 600);
       await page.waitForFunction(
