@@ -7133,6 +7133,7 @@ function NoodlerFrame({
   title,
   hideBack = false,
   action,
+  hideHeader = false,
   hideHeaderOnMobile = false,
 }: {
   children: ReactNode;
@@ -7140,6 +7141,8 @@ function NoodlerFrame({
   title: string;
   hideBack?: boolean;
   action?: ReactNode;
+  /** Set when the view below draws its own title bar, so this one would only duplicate it. */
+  hideHeader?: boolean;
   hideHeaderOnMobile?: boolean;
 }) {
   const { t: localizeUi } = useUiTranslation();
@@ -7149,6 +7152,7 @@ function NoodlerFrame({
         className={cn(
           "flex h-14 shrink-0 items-center gap-2 border-b border-[var(--noodle-divider)] px-2",
           hideHeaderOnMobile && "hidden md:flex",
+          hideHeader && "hidden md:hidden",
         )}
       >
         {!hideBack && (
@@ -7908,6 +7912,8 @@ function SlurpInboxView({
         defaultValue: workspaceOpen ? "Messages" : "Inbox",
       })}
       action={<span />}
+      // The workspace owns its own title bar, so the frame's would be a second one above it.
+      hideHeader={workspaceOpen}
       hideHeaderOnMobile={threadOpen}
     >
       <div className="h-full min-h-0">
@@ -7919,6 +7925,12 @@ function SlurpInboxView({
             ownedCreatorAccountIds={ownedCreatorAccountIds}
             onOpenProfile={onOpenProfile}
             onConversationOpenChange={setThreadOpen}
+            onExit={() => {
+              setWorkspaceOpen(false);
+              setComposeCreatorId(null);
+              setSelectedThreadId(null);
+            }}
+            exitTitle={localizeUi("ui.slurp.inbox.messagesTitle", { defaultValue: "Messages" })}
             workspace
           />
         ) : (

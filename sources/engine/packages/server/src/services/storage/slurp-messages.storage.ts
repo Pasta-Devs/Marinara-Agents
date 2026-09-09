@@ -86,6 +86,8 @@ export type SlurpThread = {
   moodUpdatedAt: string | null;
   /** While in the future, the creator has stepped away from this conversation. */
   coolUntil: string | null;
+  /** When this conversation was last emptied. Anything older is hidden from the chat. */
+  clearedAt: string | null;
   threadState: SlurpConversationState;
   strikes: number;
   lastStrikeAt: string | null;
@@ -242,6 +244,7 @@ export function createSlurpMessagesStorage(db: DB) {
     mood: Number.isFinite(Number(row.mood)) ? Number(row.mood) : 0,
     moodUpdatedAt: (row.moodUpdatedAt as string | null) ?? null,
     coolUntil: (row.coolUntil as string | null) ?? null,
+    clearedAt: (row.clearedAt as string | null) ?? null,
     threadState: readThreadState(row.threadState, String(row.updatedAt)),
     strikes: int(row.strikes as string),
     lastStrikeAt: (row.lastStrikeAt as string | null) ?? null,
@@ -606,7 +609,7 @@ export function createSlurpMessagesStorage(db: DB) {
           await tx
             .update(slurpThreads)
             .set({
-              state: input.role === "creator" && current.state === "request" ? "active" : current.state,
+              state: input.role === "creator" && thread.state === "request" ? "active" : thread.state,
               lastMessageAt: message.createdAt > current.lastMessageAt ? message.createdAt : current.lastMessageAt,
               lastMessagePreview:
                 message.createdAt >= current.lastMessageAt
@@ -1539,10 +1542,16 @@ export function createSlurpMessagesStorage(db: DB) {
      * Wipe the conversation and leave the pair where they started.
      *
      * Everything derived from the messages goes with them: the queued bubbles, the reply claim,
-     * the unread counts, the mood, the notes and the per-fan state. Keeping any of it would leave
-     * the creator remembering a conversation the fan can no longer see, which reads as a haunting
-     * rather than a reset. What money bought does not: spend, unlocks and commissions are ledgered
+     * the unread counts, the mood and the per-fan state.
+     *
+     * Memory stays. A clear is the player tidying a chat window, not the creator being made to
+     * forget a person they know, and wiping the notes made every clear cost the relationship its
+     * whole history. What money bought stays too: spend, unlocks and commissions are ledgered
      * outside this thread and rapport is computed from them.
+     *
+     * An unfinished commission is closed instead, because nobody is left to deliver against a
+     * brief whose conversation is gone, and `clearedAt` hides every commission the chat already
+     * showed. The rows remain readable from the commissions panel.
      */
     async resetThread(threadId: string): Promise<void> {
       const timestamp = now();
@@ -1552,6 +1561,13 @@ export function createSlurpMessagesStorage(db: DB) {
       }
       for (const row of await db.select().from(slurpMessages).where(eq(slurpMessages.threadId, threadId))) {
         await db.delete(slurpMessages).where(eq(slurpMessages.id, row.id));
+      }
+      for (const row of await db.select().from(slurpCommissions).where(eq(slurpCommissions.threadId, threadId))) {
+        if (row.state !== "brief" && row.state !== "quoted") continue;
+        await db
+          .update(slurpCommissions)
+          .set({ state: "declined", updatedAt: timestamp })
+          .where(eq(slurpCommissions.id, String(row.id)));
       }
       await db
         .update(slurpThreads)
@@ -1564,13 +1580,29 @@ export function createSlurpMessagesStorage(db: DB) {
           mood: "0",
           moodUpdatedAt: null,
           coolUntil: null,
+          clearedAt: timestamp,
           threadState: "{}",
           strikes: "0",
           lastStrikeAt: null,
-          notes: "[]",
           updatedAt: timestamp,
         })
         .where(eq(slurpThreads.id, threadId));
+    },
+
+    /**
+     * Replace what the creator remembers about this fan.
+     *
+     * The list is normalized and capped by `readStoredNotes`, the same door the model's own
+     * memory writes go through, so a hand-edited memory cannot be longer, more numerous or
+     * shaped differently than one the creator wrote herself.
+     */
+    async setThreadNotes(threadId: string, notes: unknown): Promise<SlurpThreadNote[]> {
+      const next = readStoredNotes(notes);
+      await db
+        .update(slurpThreads)
+        .set({ notes: JSON.stringify(next), updatedAt: now() })
+        .where(eq(slurpThreads.id, threadId));
+      return next;
     },
 
     /** Clear one side's unread count and stamp the messages the other side sent. */

@@ -2088,6 +2088,8 @@ export type SlurpThread = {
   state: "request" | "active" | "declined";
   openedBy: "viewer" | "creator";
   requestFeePaid: number;
+  /** When this conversation was last emptied. Anything older is hidden from the chat. */
+  clearedAt?: string | null;
   lastMessageAt: string;
   lastMessagePreview: string;
   viewerUnread: number;
@@ -2249,7 +2251,7 @@ export function useSlurpThread(threadId: string | null, personaId: string | null
         relationship?: SlurpThreadRelationship;
       }>(`/slurp/messages/threads/${encodeURIComponent(threadId!)}?personaId=${encodeURIComponent(personaId!)}`),
     enabled: Boolean(threadId && personaId),
-    refetchInterval: threadId && personaId ? 60_000 : false,
+    refetchInterval: threadId && personaId ? 30_000 : false,
     refetchIntervalInBackground: false,
   });
 }
@@ -2259,7 +2261,7 @@ export function useSlurpMessagePrompt(threadId: string | null, personaId: string
     queryKey: [...messageKeys.thread(threadId ?? "none", personaId), "prompt"],
     queryFn: () =>
       api.get<SlurpPromptDebug>(
-        `/slurp/messages/threads/${encodeURIComponent(threadId!)}\/prompt?personaId=${encodeURIComponent(personaId!)}`,
+        `/slurp/messages/threads/${encodeURIComponent(threadId!)}/prompt?personaId=${encodeURIComponent(personaId!)}`,
       ),
     enabled: enabled && Boolean(threadId && personaId),
     staleTime: 0,
@@ -2292,7 +2294,7 @@ export function useSlurpCompose(creatorAccountId: string | null, personaId: stri
     enabled: Boolean(creatorAccountId && personaId),
     // Same poll as `useSlurpThread`. Without it a chat opened from a profile never saw the
     // queued off-hours reply, which is most of what the pacing model exists to produce.
-    refetchInterval: creatorAccountId && personaId ? 60_000 : false,
+    refetchInterval: creatorAccountId && personaId ? 30_000 : false,
     refetchIntervalInBackground: false,
   });
 }
@@ -2546,6 +2548,28 @@ export function useResetSlurpThread() {
   return useMutation({
     mutationFn: (input: { threadId: string; personaId: string }) =>
       api.post<{ thread: SlurpThread }>(`/slurp/messages/threads/${encodeURIComponent(input.threadId)}/reset`, input),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: noodleKeys.noodlerRoot() }),
+  });
+}
+
+/**
+ * Rewrite what the creator remembers about this fan.
+ *
+ * The whole list goes up, because the panel edits it as a list. The server normalizes and caps it
+ * the same way it does the creator's own memory writes.
+ */
+export function useSetSlurpThreadNotes() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (input: {
+      threadId: string;
+      personaId: string;
+      notes: { id?: string; text: string; tier: "working" | "longterm" }[];
+    }) =>
+      api.put<{ notes: { id: string; text: string; tier: "working" | "longterm" }[] }>(
+        `/slurp/messages/threads/${encodeURIComponent(input.threadId)}/notes`,
+        { personaId: input.personaId, notes: input.notes },
+      ),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: noodleKeys.noodlerRoot() }),
   });
 }

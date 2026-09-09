@@ -13,6 +13,11 @@ import { createSlurpPopulationStorage } from "../services/storage/slurp-populati
 import { createCharactersStorage } from "../services/storage/characters.storage.js";
 import { replyToSlurpMessage } from "../services/slurp/slurp-message.operation.js";
 import { SLURP_DM_POLICIES } from "../services/slurp/slurp-messaging.js";
+import {
+  SLURP_NOTE_MAX_LENGTH,
+  SLURP_WORKING_NOTE_LIMIT,
+  SLURP_LONGTERM_NOTE_LIMIT,
+} from "../services/slurp/slurp-thread-notes.js";
 import { SLURP_DEFAULT_RAPPORT_WEIGHTS } from "../services/slurp/slurp-rapport.js";
 import { activeSlurpStrikes } from "../services/slurp/slurp-stance.js";
 import { readSlurpAudienceTone } from "../services/slurp/slurp-tone.js";
@@ -354,6 +359,42 @@ export async function slurpMessageRoutes(app: FastifyInstance) {
     // Empty, but read back through the masking helper all the same: every route that returns a
     // thread's messages goes through one door.
     return { thread: await freshView(thread.id, side), messages: await visibleMessages(thread.id, side) };
+  });
+
+  /**
+   * Rewrite what the creator remembers about this fan.
+   *
+   * Scoped exactly like reading and clearing the thread: either side of this pair may do it. The
+   * fan is allowed in because the memories are already shown to them in the conversation panel,
+   * and a memory the player can read but never correct is worse than none — a creator who has
+   * misremembered your job keeps saying it forever.
+   *
+   * The body is the whole list rather than a patch. It is short, capped, and read back through
+   * the same normalizer the model's own writes use, so there is one shape of stored memory.
+   */
+  app.put("/messages/threads/:threadId/notes", async (req, reply) => {
+    const parsed = z
+      .object({
+        personaId: z.string().min(1),
+        notes: z
+          .array(
+            z.object({
+              id: z.string().trim().max(32).optional(),
+              text: z.string().trim().min(1).max(SLURP_NOTE_MAX_LENGTH),
+              tier: z.enum(["working", "longterm"]),
+            }),
+          )
+          .max(SLURP_WORKING_NOTE_LIMIT + SLURP_LONGTERM_NOTE_LIMIT),
+      })
+      .safeParse(req.body ?? {});
+    if (!parsed.success) return reply.code(400).send({ error: parsed.error.flatten() });
+    const { threadId } = req.params as { threadId: string };
+    const viewer = await requireViewer(parsed.data.personaId);
+    if (!viewer) return reply.code(404).send({ error: "Slurp persona not found" });
+    const thread = await messages.getThreadById(threadId);
+    if (!thread || (thread.viewerAccountId !== viewer.id && !(await ownsCreator(viewer.id, thread.creatorAccountId))))
+      return reply.code(404).send({ error: "Thread not found" });
+    return { notes: await messages.setThreadNotes(thread.id, parsed.data.notes) };
   });
 
   /**

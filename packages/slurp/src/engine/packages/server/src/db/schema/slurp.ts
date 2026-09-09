@@ -237,6 +237,14 @@ export const slurpThreads = fileTable(
     moodUpdatedAt: text("mood_updated_at"),
     /** While set, the creator has stepped away from this conversation and is not replying. */
     coolUntil: text("cool_until"),
+    /**
+     * When the pair last emptied this conversation.
+     *
+     * Commissions outlive a clear because coins moved, but they must not keep hanging in a chat
+     * the player just emptied. The timestamp is what lets the thread hide what predates it while
+     * the ledger keeps every row.
+     */
+    clearedAt: text("cleared_at"),
     /** Per-fan Creator state, separate from global mood and lifetime rapport. */
     threadState: text("thread_state").notNull().default("{}"),
     /** Cool-off periods this thread has had. Two inside the strike window closes it for good. */
