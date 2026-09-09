@@ -2,8 +2,9 @@ import assert from "node:assert/strict";
 
 import {
   addSlurpDeltas,
-  applySlurpStateDelta,
-  applySlurpStateSignals,
+  applySlurpCreatorStateDelta,
+  applySlurpThreadStateDelta,
+  applySlurpThreadStateSignals,
   decaySlurpCreatorState,
   decaySlurpThreadState,
   slurpAdultLevelIndex,
@@ -31,17 +32,25 @@ assert.equal(refusal.resentment, 18);
 assert.equal(refusal.adultLevel, "ordinary");
 assert.equal(refusal.stance, "defensive");
 
-const improved = applySlurpStateSignals(thread, ["fan_gave_welcome_adult_attention", "fan_paid_for_content"], now);
+const improved = applySlurpThreadStateSignals(
+  thread,
+  ["fan_gave_welcome_adult_attention", "fan_paid_for_content"],
+  now,
+);
 assert.equal(improved.sexualComfort, 4);
 assert.equal(improved.threadDesire, 3);
 assert.equal(improved.commercialTrust, 4);
 assert.equal(improved.adultLevel, "suggestive");
 
-const harmed = applySlurpStateDelta({ ...thread, sexualComfort: 5, respect: 5, emotionalTrust: 5 }, refusal, now);
+const harmed = applySlurpThreadStateDelta({ ...thread, sexualComfort: 5, respect: 5, emotionalTrust: 5 }, refusal, now);
 assert.equal(harmed.sexualComfort, 0);
 assert.equal(harmed.respect, 0);
 assert.equal(harmed.emotionalTrust, 0);
 assert.equal(harmed.resentment, 18);
+
+const creatorShifted = applySlurpCreatorStateDelta({ ...creator, energy: 20 }, { energy: -10, arousal: 12 }, now);
+assert.equal(creatorShifted.energy, 10);
+assert.equal(creatorShifted.arousal, 37);
 
 const recoveredCreator = decaySlurpCreatorState({ ...creator, energy: 10, arousal: 90, emotionIntensity: 90 }, 2, now);
 assert.ok(recoveredCreator.energy > 10 && recoveredCreator.energy < 60);

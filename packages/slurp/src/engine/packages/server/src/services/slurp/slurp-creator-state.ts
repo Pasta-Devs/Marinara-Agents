@@ -134,6 +134,7 @@ export type SlurpStateDelta = {
   strategy?: SlurpPlatformStrategy;
   energy?: number;
   arousal?: number;
+  emotionIntensity?: number;
   familiarity?: number;
   interest?: number;
   sexualComfort?: number;
@@ -143,7 +144,21 @@ export type SlurpStateDelta = {
   resentment?: number;
   threadDesire?: number;
   adultLevel?: SlurpAdultLevel;
+  stance?: SlurpThreadStance;
 };
+
+export type SlurpThreadStateDelta = Pick<
+  SlurpStateDelta,
+  | "familiarity"
+  | "interest"
+  | "sexualComfort"
+  | "commercialTrust"
+  | "emotionalTrust"
+  | "respect"
+  | "resentment"
+  | "threadDesire"
+  | "adultLevel"
+> & { stance?: SlurpThreadStance };
 
 export const SLURP_CREATOR_STATE_DEFAULT: Omit<SlurpCreatorState, "updatedAt"> = {
   emotion: "content",
@@ -245,14 +260,34 @@ export function stateDeltaForSignal(signal: SlurpCreatorStateSignal): SlurpState
 }
 
 /** Apply one bounded delta. The server, not the model, owns the limits. */
-export function applySlurpStateDelta<T extends SlurpCreatorState | SlurpThreadState>(
-  state: T,
+export function applySlurpCreatorStateDelta(
+  state: SlurpCreatorState,
   changes: SlurpStateDelta,
   now: string,
-): T {
-  const next = { ...state } as T & Record<string, unknown>;
+): SlurpCreatorState {
+  const next = { ...state };
   for (const [key, value] of Object.entries(changes)) {
-    if (key === "emotion" || key === "intent" || key === "strategy" || key === "adultLevel" || key === "stance") {
+    if (key === "emotion" || key === "intent" || key === "strategy") {
+      next[key] = value as never;
+      continue;
+    }
+    if (typeof value !== "number") continue;
+    next[key as "emotionIntensity" | "energy" | "arousal"] = clamp(
+      value + next[key as "emotionIntensity" | "energy" | "arousal"],
+    );
+  }
+  next.updatedAt = now;
+  return next;
+}
+
+export function applySlurpThreadStateDelta(
+  state: SlurpThreadState,
+  changes: SlurpThreadStateDelta,
+  now: string,
+): SlurpThreadState {
+  const next = { ...state } as SlurpThreadState & Record<string, unknown>;
+  for (const [key, value] of Object.entries(changes)) {
+    if (key === "adultLevel" || key === "stance") {
       next[key] = value;
       continue;
     }
@@ -265,12 +300,15 @@ export function applySlurpStateDelta<T extends SlurpCreatorState | SlurpThreadSt
 }
 
 /** Apply a set of independent signals in order. */
-export function applySlurpStateSignals<T extends SlurpCreatorState | SlurpThreadState>(
-  state: T,
+export function applySlurpThreadStateSignals(
+  state: SlurpThreadState,
   signals: SlurpCreatorStateSignal[],
   now: string,
-): T {
-  return signals.reduce((current, signal) => applySlurpStateDelta(current, stateDeltaForSignal(signal), now), state);
+): SlurpThreadState {
+  return signals.reduce(
+    (current, signal) => applySlurpThreadStateDelta(current, stateDeltaForSignal(signal), now),
+    state,
+  );
 }
 
 /** Silence lowers short-lived drives but leaves trust, respect, and long-term rapport alone. */
