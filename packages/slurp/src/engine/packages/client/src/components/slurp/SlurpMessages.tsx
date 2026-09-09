@@ -1999,13 +1999,279 @@ function CommissionRow({
   );
 }
 
+/** Ordered, lowest to highest. The stepper and the basic reading both walk this. */
+const ADULT_LEVELS = ["ordinary", "suggestive", "provocative", "intimate", "explicit"] as const;
+
+/** What each level means in a sentence, so the word is never the only explanation. */
+const ADULT_LEVEL_HINT: Record<string, string> = {
+  ordinary: "Ordinary conversation. Nothing adult is on the table here yet.",
+  suggestive: "Flirting and innuendo. She will hint, but not more than that.",
+  provocative: "Openly forward. She will say what she means.",
+  intimate: "Explicitly intimate, and personal about it.",
+  explicit: "No limit beyond the ones she sets herself.",
+};
+
+/**
+ * The four tones a value can carry, as the whole ramp rather than one colour.
+ *
+ * `track` is a lighter step of the same hue rather than a neutral grey, so the state of a meter
+ * reads across the whole bar instead of only across the filled part.
+ */
+const PANEL_TONES = {
+  accent: {
+    fill: "bg-[var(--noodle-accent)]",
+    track: "bg-[color-mix(in_srgb,var(--noodle-accent)_18%,transparent)]",
+    text: "text-[var(--noodle-accent)]",
+    ring: "ring-[color-mix(in_srgb,var(--noodle-accent)_40%,transparent)]",
+  },
+  good: {
+    fill: "bg-emerald-500",
+    track: "bg-emerald-500/18",
+    text: "text-emerald-600 dark:text-emerald-400",
+    ring: "ring-emerald-500/40",
+  },
+  warning: {
+    fill: "bg-amber-500",
+    track: "bg-amber-500/18",
+    text: "text-amber-600 dark:text-amber-400",
+    ring: "ring-amber-500/40",
+  },
+  serious: {
+    fill: "bg-red-500",
+    track: "bg-red-500/18",
+    text: "text-red-600 dark:text-red-400",
+    ring: "ring-red-500/40",
+  },
+} as const;
+
+type PanelTone = keyof typeof PANEL_TONES;
+
+const humanizeValue = (value: string) =>
+  value.replaceAll("_", " ").replace(/\b\w/gu, (character) => character.toUpperCase());
+
+const clampPercent = (value: number) => Math.max(0, Math.min(100, value));
+
+/** The word behind a 0-100 dial. Basic never shows the number; this is what it shows instead. */
+const bandWord = (value: number) => (value <= 25 ? "low" : value <= 60 ? "medium" : value <= 80 ? "high" : "urgent");
+
+/** How a conversation is going, as a word. Mood runs -100 to 100 and starts at zero. */
+const moodWord = (mood: number) =>
+  mood >= 40 ? "warm" : mood >= 10 ? "open" : mood > -25 ? "neutral" : mood > -60 ? "cooling" : "cold";
+
+/**
+ * A labelled 0-100 bar.
+ *
+ * The figure sits beside the label rather than only inside the bar, because a value that is only
+ * reachable by reading a bar's length is not reachable at all.
+ */
+function Meter({
+  label,
+  value,
+  tone = "accent",
+  hint,
+}: {
+  label: string;
+  value: number;
+  tone?: PanelTone;
+  hint?: string;
+}) {
+  const tones = PANEL_TONES[tone];
+  return (
+    <div>
+      <div className="mb-1 flex items-baseline justify-between gap-2">
+        <span className="text-[0.7rem] text-[var(--muted-foreground)]">{label}</span>
+        <span className="text-[0.72rem] font-bold tabular-nums">{value}</span>
+      </div>
+      <div
+        role="meter"
+        aria-valuenow={clampPercent(value)}
+        aria-valuemin={0}
+        aria-valuemax={100}
+        aria-label={label}
+        className={cn("h-1.5 overflow-hidden rounded-full", tones.track)}
+      >
+        <div
+          className={cn("h-full rounded-r-[4px] transition-[width] motion-reduce:transition-none", tones.fill)}
+          style={{ width: `${clampPercent(value)}%` }}
+        />
+      </div>
+      {hint && <p className="mt-1 text-[0.65rem] leading-snug text-[var(--muted-foreground)]">{hint}</p>}
+    </div>
+  );
+}
+
+/**
+ * A value with a neutral middle and two directions, centred on that middle.
+ *
+ * Mood and a rapport contribution are both polarity rather than magnitude: what matters is which
+ * side of nothing they fall on. A left-anchored bar cannot say that, so this one grows out of the
+ * centre in the direction of its sign.
+ */
+function DivergingBar({
+  label,
+  value,
+  max,
+  negativeLabel,
+  positiveLabel,
+  reading,
+}: {
+  label: string;
+  value: number;
+  max: number;
+  negativeLabel?: string;
+  positiveLabel?: string;
+  reading?: string;
+}) {
+  const share = max > 0 ? Math.min(1, Math.abs(value) / max) : 0;
+  const tones = value < 0 ? PANEL_TONES.serious : PANEL_TONES.accent;
+  return (
+    <div>
+      <div className="mb-1 flex items-baseline justify-between gap-2">
+        <span className="text-[0.7rem] text-[var(--muted-foreground)]">{label}</span>
+        <span className={cn("text-[0.72rem] font-bold", value < 0 && tones.text)}>
+          {reading ?? (value > 0 ? `+${value}` : String(value))}
+        </span>
+      </div>
+      <div className="relative h-1.5 rounded-full bg-[color-mix(in_srgb,var(--muted-foreground)_16%,transparent)]">
+        {/* The midpoint is drawn, not implied: without it a short bar is unreadable. */}
+        <div className="absolute inset-y-[-2px] left-1/2 w-px -translate-x-1/2 bg-[var(--muted-foreground)]/45" />
+        <div
+          className={cn("absolute inset-y-0 rounded-full transition-[width] motion-reduce:transition-none", tones.fill)}
+          style={value < 0 ? { right: "50%", width: `${share * 50}%` } : { left: "50%", width: `${share * 50}%` }}
+        />
+      </div>
+      {(negativeLabel || positiveLabel) && (
+        <div className="mt-1 flex justify-between text-[0.6rem] text-[var(--muted-foreground)]">
+          <span>{negativeLabel}</span>
+          <span>{positiveLabel}</span>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/**
+ * An ordered scale of named steps, filled to the one currently held.
+ *
+ * The adult level is five ranked words, which is neither a magnitude nor a set of categories. A
+ * segmented track says both how far along it is and that there is somewhere further to go, which
+ * a single word on its own never did.
+ */
+function Stepper({ steps, current, label }: { steps: readonly string[]; current: string; label: string }) {
+  const index = steps.indexOf(current);
+  return (
+    <div>
+      <div className="mb-1 flex items-baseline justify-between gap-2">
+        <span className="text-[0.7rem] text-[var(--muted-foreground)]">{label}</span>
+        <span className="text-[0.72rem] font-bold capitalize">{humanizeValue(current)}</span>
+      </div>
+      {/* Gaps in the surface colour separate the segments; no borders are drawn around them. */}
+      <ol className="flex gap-[2px]" aria-label={`${label}: ${humanizeValue(current)}`}>
+        {steps.map((step, position) => (
+          <li
+            key={step}
+            title={humanizeValue(step)}
+            className={cn(
+              "h-1.5 flex-1 rounded-full",
+              position <= index
+                ? "bg-[var(--noodle-accent)]"
+                : "bg-[color-mix(in_srgb,var(--noodle-accent)_18%,transparent)]",
+            )}
+          />
+        ))}
+      </ol>
+    </div>
+  );
+}
+
+/**
+ * A state, with an icon and a sentence.
+ *
+ * Never colour alone: the tone is a third signal behind the icon and the words, so the row still
+ * says what it means in greyscale, in forced colours, and to somebody who cannot separate the hues.
+ */
+function StatusRow({
+  icon: Icon,
+  tone,
+  title,
+  detail,
+}: {
+  icon: typeof Activity;
+  tone: PanelTone;
+  title: string;
+  detail?: string;
+}) {
+  const tones = PANEL_TONES[tone];
+  return (
+    <div className={cn("flex items-start gap-2 rounded-xl px-2.5 py-2 ring-1 ring-inset", tones.ring)}>
+      <Icon size={14} className={cn("mt-px shrink-0", tones.text)} aria-hidden="true" />
+      <div className="min-w-0">
+        <p className={cn("font-bold", tones.text)}>{title}</p>
+        {detail && <p className="mt-0.5 leading-snug text-[var(--muted-foreground)]">{detail}</p>}
+      </div>
+    </div>
+  );
+}
+
+/** A label and a value. The workhorse of both views. */
+function Field({ label, value, hint }: { label: string; value: string; hint?: string }) {
+  return (
+    <div className="min-w-0 rounded-xl bg-[var(--slurp-surface-raised)] px-2.5 py-2">
+      <div className="text-[0.6rem] uppercase tracking-[0.08em] text-[var(--muted-foreground)]">{label}</div>
+      <div className="mt-0.5 break-words font-bold capitalize">{value}</div>
+      {hint && <div className="mt-1 text-[0.65rem] leading-snug text-[var(--muted-foreground)]">{hint}</div>}
+    </div>
+  );
+}
+
+/** One collapsible block. Native `details`, so keyboard and find-in-page work without help. */
+function PanelSection({
+  icon: Icon,
+  title,
+  summary,
+  children,
+  defaultOpen = false,
+}: {
+  icon: typeof Activity;
+  title: string;
+  summary: string;
+  children: ReactNode;
+  defaultOpen?: boolean;
+}) {
+  return (
+    <details open={defaultOpen} className="border-b border-[var(--noodle-divider)] last:border-b-0">
+      <summary className="group flex min-h-11 cursor-pointer list-none items-center justify-between gap-3 py-2.5 font-bold [&::-webkit-details-marker]:hidden">
+        <span className="flex min-w-0 items-center gap-2">
+          <Icon size={15} className="shrink-0 text-[var(--noodle-accent)]" aria-hidden="true" />
+          <span className="truncate">{title}</span>
+        </span>
+        <span className="flex shrink-0 items-center gap-1.5">
+          <span className="max-w-[9rem] truncate text-right text-[0.68rem] font-normal text-[var(--muted-foreground)]">
+            {summary}
+          </span>
+          <ChevronDown
+            size={13}
+            className="shrink-0 text-[var(--muted-foreground)] transition-transform group-open:rotate-180 motion-reduce:transition-none"
+            aria-hidden="true"
+          />
+        </span>
+      </summary>
+      <div className="space-y-2.5 pb-3.5">{children}</div>
+    </details>
+  );
+}
+
 /**
  * The dropdown the header opens.
  *
- * Two panels, not one, and the difference is deliberate. The fan's copy is qualitative: the server
- * never sends them the score or the mood, because `slurp-rapport.ts` says a number in a thread
- * turns a person into a progress bar and teaches the player to farm it. The Creator's operator is
- * looking at their own business, so they get every figure the simulation used.
+ * Two views, and the split is the one `slurp-rapport.ts` already argued for: a number in a thread
+ * turns a person into a progress bar and teaches the player to farm it. So Basic answers what a
+ * player needs to play the conversation, entirely in words — where they stand, how she is, what
+ * can happen here, what she remembers. Advanced is the whole simulation with every figure the
+ * prompt was built from, for somebody running the Creator rather than talking to her.
+ *
+ * They are separate views rather than one view with extra rows appended. The old panel added a
+ * section far below the fold, so pressing the button looked like nothing had happened.
  */
 function SlurpRelationshipPanel({
   relationship,
@@ -2017,307 +2283,385 @@ function SlurpRelationshipPanel({
   resetting: boolean;
 }) {
   const [advanced, setAdvanced] = useState(false);
-  const cooling = relationship.coolUntil && relationship.coolUntil > new Date().toISOString();
-  const mood = "mood" in relationship ? relationship.mood : null;
-  const moodLabel =
-    mood === null
-      ? null
-      : mood >= 40
-        ? "warm"
-        : mood >= 10
-          ? "open"
-          : mood > -25
-            ? "neutral"
-            : mood > -60
-              ? "cooling"
-              : "cold";
-  const creatorState = relationship.creatorState;
-  const threadState = relationship.threadState;
-  const band = (value: number) => (value <= 25 ? "low" : value <= 60 ? "medium" : value <= 80 ? "high" : "urgent");
-  // Basic reads as a word, advanced reads as the number behind the word. Same value either way.
-  const figure = (value: number) => (advanced ? `${value}/100` : humanize(band(value)));
-  const boundary =
-    threadState.posture === "rejecting" ||
-    threadState.posture === "defensive" ||
-    threadState.sexualComfort < 36 ||
-    threadState.respect < 36;
-  const humanize = (value: string) =>
-    value.replaceAll("_", " ").replace(/\b\w/gu, (character) => character.toUpperCase());
-  const stateSummary = `${humanize(creatorState.emotion)} · ${humanize(band(creatorState.arousal))} arousal · ${humanize(band(creatorState.energy))} energy`;
-  const conversationSummary = `${humanize(moodLabel ?? "neutral")} · ${humanize(threadState.posture)} · ${humanize(threadState.adultLevel)}`;
-  const boundarySummary = boundary ? "Adult escalation blocked" : "Adult escalation allowed";
-  const contextSummary = `${relationship.availability.online ? "Available" : "Away"} · ${humanize(relationship.audienceTone)}`;
+  const { creatorState, threadState, availability } = relationship;
+  const cooling = Boolean(relationship.coolUntil && relationship.coolUntil > new Date().toISOString());
+  const mood = relationship.mood ?? 0;
   const workingNotes = relationship.notes.filter((note) => note.tier === "working");
   const longTermNotes = relationship.notes.filter((note) => note.tier === "longterm");
-  const progress = (value: number) => `${Math.max(0, Math.min(100, value))}%`;
-  const StateMeter = ({
-    label,
-    value,
-    tone = "accent",
-    description,
-  }: {
-    label: string;
-    value: number;
-    tone?: "accent" | "amber" | "red";
-    description?: string;
-  }) => (
-    <div>
-      <div className="mb-1 flex justify-between gap-2 text-[0.7rem]">
-        <span className="text-[var(--muted-foreground)]">{label}</span>
-        <span className="font-bold tabular-nums">{value}/100</span>
-      </div>
-      <div className="h-1.5 overflow-hidden rounded-full bg-[var(--slurp-surface-raised)]">
-        <div
-          className={cn(
-            "h-full rounded-full transition-[width]",
-            tone === "amber" ? "bg-amber-500" : tone === "red" ? "bg-red-500" : "bg-[var(--noodle-accent)]",
-          )}
-          style={{ width: progress(value) }}
-        />
-      </div>
-      {description && <p className="mt-1 text-[0.65rem] text-[var(--muted-foreground)]">{description}</p>}
-    </div>
-  );
-  const Section = ({
-    icon: Icon,
-    title,
-    summary,
-    children,
-    open = false,
-  }: {
-    title: string;
-    summary: string;
-    children: ReactNode;
-    icon: typeof Activity;
-    open?: boolean;
-  }) => (
-    <details open={open} className="border-b border-[var(--noodle-divider)] last:border-b-0">
-      <summary className="group flex min-h-11 cursor-pointer list-none items-center justify-between gap-3 py-2.5 font-bold [&::-webkit-details-marker]:hidden">
-        <span className="flex min-w-0 items-center gap-2">
-          <Icon size={15} className="shrink-0 text-[var(--noodle-accent)]" aria-hidden="true" />
-          <span>{title}</span>
-        </span>
-        <span className="truncate text-right text-[0.68rem] font-normal text-[var(--muted-foreground)]">{summary}</span>
-      </summary>
-      <div className="space-y-2 pb-3">{children}</div>
-    </details>
-  );
+  const blockedBy =
+    threadState.posture === "rejecting" || threadState.posture === "defensive"
+      ? "She has gone guarded with this fan."
+      : threadState.sexualComfort < 36
+        ? "She is not comfortable enough with this fan yet."
+        : threadState.respect < 36
+          ? "She does not think well enough of this fan."
+          : null;
+  const modifiers = creatorState.modifiers ?? [];
+
   return (
     <div className="mx-3 mt-2 flex max-h-[min(78vh,44rem)] min-h-0 shrink-0 flex-col overflow-hidden rounded-2xl bg-[var(--slurp-surface)] text-xs ring-1 ring-inset ring-[var(--noodle-divider)]">
       <header className="shrink-0 border-b border-[var(--noodle-divider)] p-3">
         <div className="flex items-start justify-between gap-3">
-          <div>
+          <div className="min-w-0">
             <h2 className="text-sm font-bold">Conversation overview</h2>
-            <p className="mt-0.5 text-[0.68rem] text-[var(--muted-foreground)]">
-              State changes appear here without moving the chat.
+            {/* One hero figure, and it is the only thing at this size in the panel. */}
+            <p className="mt-1 text-3xl font-bold capitalize leading-none">{humanizeValue(relationship.tier)}</p>
+            <p className="mt-1.5 text-[0.68rem] text-[var(--muted-foreground)]">
+              {advanced
+                ? `Rapport ${relationship.score}/100 · mood ${mood > 0 ? `+${mood}` : mood}`
+                : `Where you stand with them · ${moodWord(mood)} right now`}
             </p>
           </div>
-          {/* One label, pressed or not. Swapping the word between "Advanced" and "Basic" left it
-              ambiguous whether the button named the current mode or the one it would switch to. */}
-          <button
-            type="button"
-            aria-pressed={advanced}
-            onClick={() => setAdvanced((open) => !open)}
-            className={cn(
-              "inline-flex min-h-9 shrink-0 items-center gap-1 rounded-lg px-2 text-[0.7rem] font-bold ring-1 ring-inset focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--slurp-focus)]",
-              advanced
-                ? "bg-[var(--noodle-accent)] text-zinc-950 ring-transparent"
-                : "text-[var(--noodle-accent)] ring-[var(--noodle-accent)]/30 hover:bg-[var(--noodle-accent)]/10",
-            )}
+          {/* Both words are on screen, one selected. A single button that swapped its own label
+              left it ambiguous whether it named the current mode or the one it would switch to. */}
+          <div
+            role="group"
+            aria-label="Detail level"
+            className="flex shrink-0 gap-0.5 rounded-lg bg-[var(--slurp-surface-raised)] p-0.5"
           >
-            <Activity size={14} aria-hidden="true" /> Advanced
-          </button>
-        </div>
-        {/* The toggle used to append one section far below the fold, so pressing it looked like
-            nothing happened. Advanced is a mode now: the summary chips swap the band word for the
-            figure the simulation actually used, and the exact-values section opens at the top. */}
-        <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-4">
-          <InfoChip label="Emotion" value={humanize(creatorState.emotion)} />
-          <InfoChip label="Arousal" value={figure(creatorState.arousal)} tone="amber" />
-          <InfoChip label="Energy" value={figure(creatorState.energy)} />
-          <InfoChip label="Conversation" value={humanize(threadState.adultLevel)} />
+            {([false, true] as const).map((mode) => (
+              <button
+                key={String(mode)}
+                type="button"
+                aria-pressed={advanced === mode}
+                onClick={() => setAdvanced(mode)}
+                className={cn(
+                  "min-h-9 rounded-[7px] px-2.5 text-[0.7rem] font-bold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--slurp-focus)] motion-reduce:transition-none",
+                  advanced === mode
+                    ? "bg-[var(--noodle-accent)] text-zinc-950"
+                    : "text-[var(--muted-foreground)] hover:text-[var(--foreground)]",
+                )}
+              >
+                {mode ? "Advanced" : "Basic"}
+              </button>
+            ))}
+          </div>
         </div>
       </header>
+
       <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-3 pb-4 [scrollbar-gutter:stable]">
-        <div className="flex flex-col">
-          {advanced && (
-            <Section icon={Activity} title="Advanced state" summary="Exact values and model inputs" open>
-              <p className="text-[0.68rem] text-[var(--muted-foreground)]">
-                Advanced state is diagnostic detail. These values guide behavior, but no single value decides the
-                conversation.
+        {advanced ? (
+          <div className="flex flex-col">
+            <PanelSection
+              icon={MessageCircle}
+              title="Creator right now"
+              summary={`${humanizeValue(creatorState.emotion)} · ${bandWord(creatorState.energy)} energy`}
+              defaultOpen
+            >
+              <div className="grid grid-cols-2 gap-2">
+                <Field label="Emotion" value={humanizeValue(creatorState.emotion)} />
+                <Field label="Intent" value={humanizeValue(creatorState.intent)} />
+              </div>
+              <Meter label="Energy" value={creatorState.energy} hint="Effort available for replies and pictures." />
+              <Meter
+                label="Arousal"
+                value={creatorState.arousal}
+                tone="warning"
+                hint="Sexual attention. It is never permission on its own."
+              />
+              <Meter label="Emotion intensity" value={creatorState.emotionIntensity} />
+              <Meter
+                label="Exposure"
+                value={creatorState.exposure}
+                tone="warning"
+                hint="How far out on a limb she is in public. It fades overnight."
+              />
+              <div>
+                <p className="mb-1 text-[0.7rem] text-[var(--muted-foreground)]">True right now ({modifiers.length})</p>
+                {modifiers.length === 0 ? (
+                  <p className="text-[0.68rem] text-[var(--muted-foreground)]">Nothing in particular today.</p>
+                ) : (
+                  <ul className="flex flex-wrap gap-1.5">
+                    {modifiers.map((modifier) => (
+                      <li
+                        key={`${modifier.kind}-${modifier.until}`}
+                        title={modifier.source || undefined}
+                        className="rounded-full bg-[color-mix(in_srgb,var(--noodle-accent)_15%,transparent)] px-2 py-0.5 text-[0.65rem] font-bold text-[var(--noodle-accent)]"
+                      >
+                        {humanizeValue(modifier.kind)}
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+            </PanelSection>
+
+            <PanelSection
+              icon={Sparkles}
+              title="This conversation"
+              summary={`${humanizeValue(threadState.posture)} · ${humanizeValue(threadState.adultLevel)}`}
+              defaultOpen
+            >
+              <DivergingBar
+                label="Mood"
+                value={mood}
+                max={100}
+                negativeLabel="Cold"
+                positiveLabel="Warm"
+                reading={`${mood > 0 ? `+${mood}` : mood} · ${humanizeValue(moodWord(mood))}`}
+              />
+              <Stepper steps={ADULT_LEVELS} current={threadState.adultLevel} label="Adult level" />
+              <p className="text-[0.65rem] leading-snug text-[var(--muted-foreground)]">
+                {ADULT_LEVEL_HINT[threadState.adultLevel]} It rises one step at a time and never skips.
               </p>
               <div className="grid grid-cols-2 gap-2">
-                {(
-                  ["familiarity", "sexualComfort", "emotionalTrust", "respect", "resentment", "threadDesire"] as const
-                ).map((key) => (
-                  <InfoChip
-                    key={key}
-                    label={humanize(key === "threadDesire" ? "conversation desire" : key)}
-                    value={`${threadState[key]}/100`}
-                  />
-                ))}
+                <Field label="Posture" value={humanizeValue(threadState.posture)} />
+                <Field label="Strikes" value={String(relationship.strikes)} />
               </div>
-              <InfoChip label="State updated" value={creatorState.updatedAt} />
-            </Section>
-          )}
-          <Section icon={Sparkles} title="Current situation" summary={conversationSummary} open>
-            <div className="grid grid-cols-2 gap-2">
-              <InfoChip
-                label="Emotion"
-                value={humanize(creatorState.emotion)}
-                description="The creator's current feeling."
+              <Meter label="Conversation desire" value={threadState.threadDesire} tone="warning" />
+              <Meter label="Familiarity" value={threadState.familiarity} />
+            </PanelSection>
+
+            <PanelSection
+              icon={ShieldCheck}
+              title="Boundaries and trust"
+              summary={blockedBy ? "Escalation blocked" : "Escalation allowed"}
+              defaultOpen={Boolean(blockedBy) || cooling}
+            >
+              <StatusRow
+                icon={ShieldCheck}
+                tone={blockedBy ? "serious" : "good"}
+                title={blockedBy ? "Adult escalation blocked" : "Adult escalation allowed"}
+                detail={blockedBy ?? "Comfort, respect and posture all clear the bar she sets."}
               />
-              <InfoChip
-                label="Intensity"
-                value={humanize(band(creatorState.emotionIntensity))}
-                description="How strongly the feeling is expressed."
-              />
-              <InfoChip
-                label="Mood"
-                value={humanize(moodLabel ?? "neutral")}
-                description="How the conversation feels right now."
-              />
-              <InfoChip
-                label="Stance"
-                value={humanize(threadState.posture)}
-                description="How open or guarded the creator is with this fan."
-              />
-            </div>
-            <InfoChip
-              label="Adult interaction"
-              value={humanize(threadState.adultLevel)}
-              description="The current level of adult conversation available here."
-            />
-            <InfoChip
-              label="Conversation desire"
-              value={humanize(band(threadState.threadDesire))}
-              description="How much the creator wants to continue this conversation."
-            />
-          </Section>
-          <Section icon={MessageCircle} title="Creator now" summary={stateSummary} open={advanced}>
-            <InfoChip
-              label="Intent"
-              value={humanize(creatorState.intent)}
-              description="The creator's current direction for this interaction."
-            />
-            <InfoChip
-              label="Right now"
-              value={
-                creatorState.modifiers.length
-                  ? creatorState.modifiers.map((modifier) => humanize(modifier.kind)).join(", ")
-                  : "Nothing in particular"
-              }
-              description="Short-lived things that are true today and will not be tomorrow."
-            />
-            <StateMeter
-              label="Arousal"
-              value={creatorState.arousal}
-              tone="amber"
-              description="Current sexual attention. It does not grant permission."
-            />
-            <StateMeter
-              label="Energy"
-              value={creatorState.energy}
-              description="Available effort for replies and media."
-            />
-            <StateMeter label="Emotion intensity" value={creatorState.emotionIntensity} />
-            <StateMeter
-              label="Exposure"
-              value={creatorState.exposure}
-              tone="amber"
-              description="How far out on a limb they are in public right now. It fades overnight."
-            />
-          </Section>
-          <Section icon={ShieldCheck} title="Boundaries" summary={boundarySummary} open={boundary}>
-            <div className="grid grid-cols-2 gap-2">
-              <StateMeter
+              {cooling && (
+                <StatusRow
+                  icon={Lock}
+                  tone="warning"
+                  title="Taking space from this conversation"
+                  detail="She is not answering until the cool-off ends."
+                />
+              )}
+              <Meter
                 label="Sexual comfort"
                 value={threadState.sexualComfort}
-                tone={threadState.sexualComfort < 36 ? "red" : "accent"}
+                tone={threadState.sexualComfort < 36 ? "serious" : "accent"}
               />
-              <StateMeter
+              <Meter
                 label="Respect"
                 value={threadState.respect}
-                tone={threadState.respect < 36 ? "red" : "accent"}
+                tone={threadState.respect < 36 ? "serious" : "accent"}
               />
-              <StateMeter
-                label="Emotional trust"
-                value={threadState.emotionalTrust}
-                description="Trust built through personal conversation."
-              />
-              <StateMeter
+              <Meter label="Emotional trust" value={threadState.emotionalTrust} />
+              <Meter
                 label="Resentment"
                 value={threadState.resentment}
-                tone={threadState.resentment > 60 ? "red" : "amber"}
+                tone={threadState.resentment > 60 ? "serious" : "warning"}
               />
-            </div>
-            <div className="grid grid-cols-2 gap-2">
-              <InfoChip label="Strikes" value={String(relationship.strikes)} />
-              <InfoChip label="Cool off" value={cooling ? "Active" : "None"} />
-            </div>
-          </Section>
-          <Section icon={Activity} title="Context" summary={contextSummary}>
-            <div className="grid grid-cols-2 gap-2">
-              <InfoChip
-                label="Availability"
-                value={relationship.availability.online ? "Available" : "Away"}
-                description="Whether the creator is available now."
-              />
-              <InfoChip label="Activity" value={relationship.availability.activity ?? "No current activity"} />
-              <InfoChip
-                label="Images"
-                value={relationship.imageMode === "none" ? "Not now" : humanize(relationship.imageMode)}
-              />
-              <InfoChip label="Day vibe" value={relationship.dayVibe ?? "Not recorded"} />
-            </div>
-            {cooling && (
-              <p className="font-semibold text-amber-600 dark:text-amber-400">Taking space from this conversation.</p>
-            )}
-          </Section>
-          <Section
-            icon={Brain}
-            title="Memories"
-            summary={`${workingNotes.length} working · ${longTermNotes.length} long-term`}
-          >
-            <p className="text-[0.68rem] text-[var(--muted-foreground)]">
-              Working memories may change. Long-term memories remain until updated.
-            </p>
-            <div className="grid gap-2 sm:grid-cols-2">
-              <InfoChip
-                label="Working memory"
-                value={workingNotes.length ? workingNotes.map((note) => note.text).join("; ") : "None yet"}
-              />
-              <InfoChip
-                label="Long-term memory"
-                value={longTermNotes.length ? longTermNotes.map((note) => note.text).join("; ") : "None yet"}
-              />
-            </div>
-          </Section>
-          <Section
-            icon={BriefcaseBusiness}
-            title="Business"
-            summary={`${humanize(relationship.tier)} · ${relationship.spentCoins} coins`}
-          >
-            <div className="grid grid-cols-2 gap-2">
-              <InfoChip label="Rapport" value={`${humanize(relationship.tier)} · ${relationship.score}/100`} />
-              <InfoChip label="Spent" value={`${relationship.spentCoins} coins`} />
-              <InfoChip label="Strikes" value={String(relationship.strikes)} />
-              <InfoChip label="Cool off" value={cooling ? "Active" : "None"} />
-            </div>
-            {relationship.contributions.length > 0 && (
-              <div className="grid gap-1.5">
-                {relationship.contributions.map((entry) => (
-                  <InfoChip
-                    key={entry.key}
-                    label={entry.detail}
-                    value={entry.points > 0 ? `+${entry.points}` : String(entry.points)}
-                  />
-                ))}
+            </PanelSection>
+
+            <PanelSection
+              icon={BriefcaseBusiness}
+              title="Rapport breakdown"
+              summary={`${relationship.score}/100 · ${relationship.spentCoins} coins`}
+            >
+              <div className="grid grid-cols-2 gap-2">
+                <Field label="Tier" value={humanizeValue(relationship.tier)} />
+                <Field label="Spent" value={`${relationship.spentCoins} coins`} />
               </div>
-            )}
-          </Section>
-        </div>
+              {relationship.contributions.length === 0 ? (
+                <p className="text-[0.68rem] text-[var(--muted-foreground)]">Nothing has moved the score yet.</p>
+              ) : (
+                <div className="space-y-2">
+                  {[...relationship.contributions]
+                    .sort((left, right) => Math.abs(right.points) - Math.abs(left.points))
+                    .map((entry) => (
+                      <DivergingBar
+                        key={entry.key}
+                        label={entry.detail}
+                        value={entry.points}
+                        max={Math.max(...relationship.contributions.map((row) => Math.abs(row.points)), 1)}
+                      />
+                    ))}
+                </div>
+              )}
+            </PanelSection>
+
+            <PanelSection icon={Activity} title="Context" summary={availability.online ? "Available" : "Away"}>
+              <div className="grid grid-cols-2 gap-2">
+                <Field label="Availability" value={availability.online ? "Available" : "Away"} />
+                <Field label="Activity" value={availability.activity ?? "Nothing recorded"} />
+                <Field label="Audience tone" value={humanizeValue(relationship.audienceTone)} />
+                <Field
+                  label="Pictures"
+                  value={relationship.imageMode === "none" ? "Not now" : humanizeValue(relationship.imageMode)}
+                />
+              </div>
+              <Field label="Day vibe" value={relationship.dayVibe ?? "An ordinary day"} />
+            </PanelSection>
+
+            <PanelSection
+              icon={Brain}
+              title="Memories"
+              summary={`${workingNotes.length} working · ${longTermNotes.length} long-term`}
+            >
+              <NoteList title="Working memory" notes={workingNotes} hint="These may change as you talk." />
+              <NoteList
+                title="Long-term memory"
+                notes={longTermNotes}
+                hint="These stay until something updates them."
+              />
+            </PanelSection>
+
+            {/* The table view every meter above is also readable from, and where the timestamps live. */}
+            <PanelSection icon={Search} title="Exact values" summary="Every figure, as text">
+              <dl className="grid grid-cols-2 gap-x-3 gap-y-1 tabular-nums">
+                {(
+                  [
+                    ["Rapport", `${relationship.score}/100`],
+                    ["Mood", String(mood)],
+                    ["Energy", String(creatorState.energy)],
+                    ["Arousal", String(creatorState.arousal)],
+                    ["Exposure", String(creatorState.exposure)],
+                    ["Emotion intensity", String(creatorState.emotionIntensity)],
+                    ["Familiarity", String(threadState.familiarity)],
+                    ["Sexual comfort", String(threadState.sexualComfort)],
+                    ["Emotional trust", String(threadState.emotionalTrust)],
+                    ["Respect", String(threadState.respect)],
+                    ["Resentment", String(threadState.resentment)],
+                    ["Conversation desire", String(threadState.threadDesire)],
+                    ["Strikes", String(relationship.strikes)],
+                    ["Spent", `${relationship.spentCoins} coins`],
+                  ] as const
+                ).map(([term, value]) => (
+                  <div key={term} className="flex justify-between gap-2 border-b border-[var(--noodle-divider)] py-0.5">
+                    <dt className="text-[var(--muted-foreground)]">{term}</dt>
+                    <dd className="font-bold">{value}</dd>
+                  </div>
+                ))}
+              </dl>
+              <p className="text-[0.65rem] text-[var(--muted-foreground)]">
+                Creator state updated {creatorState.updatedAt}. Conversation state updated {threadState.updatedAt}.
+              </p>
+            </PanelSection>
+          </div>
+        ) : (
+          <div className="flex flex-col">
+            <PanelSection icon={Sparkles} title="Right now" summary={humanizeValue(moodWord(mood))} defaultOpen>
+              <DivergingBar
+                label="How this conversation is going"
+                value={mood}
+                max={100}
+                negativeLabel="Cold"
+                positiveLabel="Warm"
+                reading={humanizeValue(moodWord(mood))}
+              />
+              {cooling ? (
+                <StatusRow
+                  icon={Lock}
+                  tone="warning"
+                  title="Taking space from this conversation"
+                  detail="Give them some time. They will pick it back up afterwards."
+                />
+              ) : (
+                <StatusRow
+                  icon={availability.online ? Check : Activity}
+                  tone={availability.online ? "good" : "accent"}
+                  title={availability.online ? "Around right now" : "Away right now"}
+                  detail={
+                    availability.activity ?? (availability.online ? undefined : "They will answer when they are back.")
+                  }
+                />
+              )}
+              {(modifiers.length > 0 || relationship.dayVibe) && (
+                <div>
+                  <p className="mb-1 text-[0.7rem] text-[var(--muted-foreground)]">What is going on for them today</p>
+                  <ul className="flex flex-wrap gap-1.5">
+                    {modifiers.map((modifier) => (
+                      <li
+                        key={`${modifier.kind}-${modifier.until}`}
+                        className="rounded-full bg-[color-mix(in_srgb,var(--noodle-accent)_15%,transparent)] px-2 py-0.5 text-[0.65rem] font-bold text-[var(--noodle-accent)]"
+                      >
+                        {humanizeValue(modifier.kind)}
+                      </li>
+                    ))}
+                  </ul>
+                  {relationship.dayVibe && (
+                    <p className="mt-1.5 text-[0.68rem] leading-snug text-[var(--muted-foreground)]">
+                      {relationship.dayVibe}
+                    </p>
+                  )}
+                </div>
+              )}
+            </PanelSection>
+
+            <PanelSection
+              icon={ShieldCheck}
+              title="What can happen here"
+              summary={humanizeValue(threadState.adultLevel)}
+              defaultOpen
+            >
+              <Stepper steps={ADULT_LEVELS} current={threadState.adultLevel} label="How far this has got" />
+              <p className="text-[0.68rem] leading-snug text-[var(--muted-foreground)]">
+                {ADULT_LEVEL_HINT[threadState.adultLevel]}
+              </p>
+              <StatusRow
+                icon={blockedBy ? Lock : Heart}
+                tone={blockedBy ? "warning" : "good"}
+                title={blockedBy ? "This is as far as it goes for now" : "There is room for this to go further"}
+                detail={
+                  blockedBy
+                    ? `${blockedBy} It moves when that does, and it never skips a step.`
+                    : "It rises a step at a time, and only while they are somebody she wants and thinks well of."
+                }
+              />
+              <StatusRow
+                icon={Palette}
+                tone={relationship.imageMode === "none" ? "accent" : "good"}
+                title={
+                  relationship.imageMode === "none" ? "Not sending pictures right now" : "Open to sending pictures"
+                }
+                detail={
+                  relationship.imageMode === "none"
+                    ? "This changes as the conversation warms up."
+                    : "She will send one if the conversation calls for it."
+                }
+              />
+            </PanelSection>
+
+            <PanelSection
+              icon={Brain}
+              title="What they remember about you"
+              summary={`${workingNotes.length + longTermNotes.length} noted`}
+            >
+              {workingNotes.length + longTermNotes.length === 0 ? (
+                <p className="text-[0.68rem] text-[var(--muted-foreground)]">
+                  Nothing yet. Tell them something about yourself and it will show up here.
+                </p>
+              ) : (
+                <>
+                  <NoteList title="Recently" notes={workingNotes} hint="These may change as you talk." />
+                  <NoteList title="For good" notes={longTermNotes} hint="These stay until something updates them." />
+                </>
+              )}
+            </PanelSection>
+
+            <PanelSection
+              icon={BriefcaseBusiness}
+              title="Between you"
+              summary={`${relationship.spentCoins} coins spent`}
+            >
+              <div className="grid grid-cols-2 gap-2">
+                <Field
+                  label="Where you stand"
+                  value={humanizeValue(relationship.tier)}
+                  hint="It moves with time, conversation and what you have spent."
+                />
+                <Field label="Spent with them" value={`${relationship.spentCoins} coins`} />
+              </div>
+              {relationship.strikes > 0 && (
+                <StatusRow
+                  icon={Lock}
+                  tone="warning"
+                  title={`${relationship.strikes} strike${relationship.strikes === 1 ? "" : "s"} on this conversation`}
+                  detail="Two inside a fortnight and they stop answering for good."
+                />
+              )}
+            </PanelSection>
+          </div>
+        )}
       </div>
+
       {onReset && (
         <footer className="shrink-0 border-t border-[var(--noodle-divider)] p-3">
           <button
@@ -2337,29 +2681,23 @@ function SlurpRelationshipPanel({
   );
 }
 
-function InfoChip({
-  label,
-  value,
-  description,
-  tone = "default",
-}: {
-  label: string;
-  value: string;
-  description?: string;
-  tone?: "default" | "amber";
-}) {
+/** Notes, as a list rather than joined with semicolons into one unreadable run. */
+function NoteList({ title, notes, hint }: { title: string; notes: { id: string; text: string }[]; hint: string }) {
   return (
-    <div
-      className={cn(
-        "min-w-0 rounded-xl bg-[var(--slurp-surface-raised)] px-2.5 py-2",
-        tone === "amber" && "ring-1 ring-inset ring-amber-500/40",
+    <div>
+      <p className="mb-1 text-[0.7rem] font-bold text-[var(--muted-foreground)]">{title}</p>
+      {notes.length === 0 ? (
+        <p className="text-[0.68rem] text-[var(--muted-foreground)]">None yet.</p>
+      ) : (
+        <ul className="space-y-1">
+          {notes.map((note) => (
+            <li key={note.id} className="rounded-xl bg-[var(--slurp-surface-raised)] px-2.5 py-1.5 leading-snug">
+              {note.text}
+            </li>
+          ))}
+        </ul>
       )}
-    >
-      <div className="text-[0.6rem] uppercase tracking-[0.08em] text-[var(--muted-foreground)]">{label}</div>
-      <div className="mt-0.5 break-words font-bold capitalize">{value}</div>
-      {description && (
-        <div className="mt-1 text-[0.65rem] leading-snug text-[var(--muted-foreground)]">{description}</div>
-      )}
+      <p className="mt-1 text-[0.62rem] text-[var(--muted-foreground)]">{hint}</p>
     </div>
   );
 }

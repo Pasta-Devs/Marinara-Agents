@@ -36,6 +36,12 @@
     "slurp": {
       "versions": [
         {
+          "version": "1.2.61",
+          "date": "2026-09-09",
+          "notes": "- The conversation Details panel is rebuilt as two views instead of one long list.\n- Basic is the default and answers what you need to play the conversation, in words rather than numbers: how it is going, whether they are around, how far things have got, what they remember, and where you stand.\n- Advanced switches the whole panel to the full simulation: every figure the reply was built from, what moved the rapport score, and an exact-values list in plain text.\n- Both view names are on the switch with the current one selected, so it is clear which you are looking at.\n- How far a conversation has got is drawn as five ranked steps, so you can see there is further to go.\n- How it is going is drawn from a centre point, so warm and cold read as opposite directions.\n- Every state carries an icon and a sentence as well as a colour, so none of it needs colour alone.\n- What they remember is a list again instead of one run-on line.",
+          "highlight": false
+        },
+        {
           "version": "1.2.60",
           "date": "2026-09-09",
           "notes": "- What happens on the platform now reaches the Creator it happens to. Publishing, being paid, reaching a goal and an audience reacting all change how she is, and that then shows in what she posts and how she writes back.\n- Publishing makes a Creator feel exposed for a while, and a locked post more than a public one.\n- Money arriving takes the edge off her day, once it is enough money to notice.\n- Reaching a tip goal is felt, and only when it is actually reached rather than on every coin after it.\n- A post the audience reacts to lands, and a Creator notices. A follow counts for more than a like.\n- None of this can fail the thing that caused it: a payment, a post and a reaction all still go through if the feeling cannot be recorded.",
@@ -147,12 +153,6 @@
           "version": "1.2.42",
           "date": "2026-09-09",
           "notes": "- Shipped Steamy, Explicit, and image guidance now ask for thorough, graphic body descriptions when a post or picture is already nude or sexual. Unedited installs receive the new wording.",
-          "highlight": false
-        },
-        {
-          "version": "1.2.41",
-          "date": "2026-09-08",
-          "notes": "- Automatic commissions are delivered through one shared path, so the accept route and the message scheduler always attach the artwork and queue the Creator's note in the same order.\n- A commission delivery note is drawn from a per-commission copy bank instead of one fixed sentence.\n- A failed delivery message refunds the fan instead of leaving the commission stuck.\n- Message threads show a \"commission arriving\" indicator while a delivery is in flight.",
           "highlight": false
         }
       ]

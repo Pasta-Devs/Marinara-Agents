@@ -1,5 +1,16 @@
 # Slurp release notes
 
+## 1.2.61 — 2026-09-09
+
+- The conversation Details panel is rebuilt as two views instead of one long list.
+- Basic is the default and answers what you need to play the conversation, in words rather than numbers: how it is going, whether they are around, how far things have got, what they remember, and where you stand.
+- Advanced switches the whole panel to the full simulation: every figure the reply was built from, what moved the rapport score, and an exact-values list in plain text.
+- Both view names are on the switch with the current one selected, so it is clear which you are looking at.
+- How far a conversation has got is drawn as five ranked steps, so you can see there is further to go.
+- How it is going is drawn from a centre point, so warm and cold read as opposite directions.
+- Every state carries an icon and a sentence as well as a colour, so none of it needs colour alone.
+- What they remember is a list again instead of one run-on line.
+
 ## 1.2.60 — 2026-09-09
 
 - What happens on the platform now reaches the Creator it happens to. Publishing, being paid, reaching a goal and an audience reacting all change how she is, and that then shows in what she posts and how she writes back.
