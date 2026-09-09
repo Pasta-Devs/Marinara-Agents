@@ -4,6 +4,8 @@ import {
   readSlurpCreatorMessaging,
   slurpMessagePreview,
   slurpReplyPacing,
+  slurpReplyBubbleDelayMs,
+  splitSlurpReplyBurst,
   SLURP_DEFAULT_CREATOR_MESSAGING,
 } from "../packages/slurp/src/engine/packages/server/src/services/slurp/slurp-messaging";
 import {
@@ -39,6 +41,16 @@ assert.ok(
   scoreSlurpRapport({ ...emptySlurpRapportFacts(), tippedCoins: 30 }).score >
     scoreSlurpRapport({ ...emptySlurpRapportFacts(), tippedCoins: 15 }).score,
   "More tipping must score higher",
+);
+assert.ok(
+  slurpReplyBubbleDelayMs({ bubbleIndex: 2, bubbleCount: 3 }) >
+    slurpReplyBubbleDelayMs({ bubbleIndex: 1, bubbleCount: 3 }),
+  "Delayed bubbles must arrive in order",
+);
+assert.deepEqual(
+  splitSlurpReplyBurst("A short reply.", true),
+  ["A short reply."],
+  "Short replies must keep their existing single-bubble behavior",
 );
 
 // Diminishing returns: the first coins must move the score more than the last.

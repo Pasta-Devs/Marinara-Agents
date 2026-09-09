@@ -291,6 +291,23 @@ export const slurpMessageClaims = fileTable(
   { uniqueBy: [{ keys: ["threadId"] }] },
 );
 
+/** Later bubbles from one generated reply. The row is the durable timer. */
+export const slurpReplyBubbles = fileTable(
+  "slurp_reply_bubbles",
+  {
+    id: text("id").primaryKey(),
+    batchId: text("batch_id").notNull(),
+    sequence: text("sequence").notNull(),
+    threadId: text("thread_id").notNull(),
+    senderAccountId: text("sender_account_id").notNull(),
+    messageId: text("message_id").notNull(),
+    content: text("content").notNull(),
+    deliverAt: text("deliver_at").notNull(),
+    createdAt: text("created_at").notNull(),
+  },
+  { uniqueBy: [{ keys: ["batchId", "sequence"] }, { keys: ["messageId"] }] },
+);
+
 export const slurpCommissions = fileTable("slurp_commissions", {
   id: text("id").primaryKey(),
   threadId: text("thread_id").notNull(),

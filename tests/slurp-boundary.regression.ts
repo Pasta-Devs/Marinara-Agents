@@ -77,6 +77,16 @@ const slurpStorage = readFileSync(
   join(root, "packages/slurp/src/engine/packages/server/src/services/storage/slurp.storage.ts"),
   "utf8",
 );
+const slurpReplyQueue = readFileSync(
+  join(root, "packages/slurp/src/engine/packages/server/src/services/storage/slurp-reply-queue.storage.ts"),
+  "utf8",
+);
+assert.match(slurpReplyQueue, /removeForThread/u, "Slurp delayed replies must have a package-owned cancellation path");
+assert.match(
+  slurpReplyQueue,
+  /isFileUniqueConstraintError/u,
+  "Slurp delayed reply enqueue must tolerate duplicate rows",
+);
 assert.match(
   slurpStorage,
   /slurp\.viewer\.\$\{personaId\}\.settings/u,

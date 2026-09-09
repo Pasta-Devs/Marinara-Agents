@@ -1,9 +1,9 @@
 /**
  * Generate and store one creator reply in a direct-message thread.
  *
- * Mirrors `slurp-creator-reply.operation.ts`: claim, resolve a connection, generate, store,
- * release on every exit. The claim is what stops the live send path and the offline scheduler
- * from both answering the same message.
+ * Mirrors `slurp-creator-reply.operation.ts`: claim, resolve a connection, generate, store, and
+ * release after the visible bubble plus delayed batch are durable. The claim is what stops the live
+ * send path and the offline scheduler from both answering the same message.
  */
 import type { DB } from "../../db/connection.js";
 import { logger } from "../../lib/logger.js";
@@ -19,7 +19,13 @@ import { describeSlurpDayVibe } from "./slurp-day-vibe.service.js";
 import { recoverSlurpMood } from "./slurp-mood.js";
 import { activeSlurpStrikes, SLURP_COOL_OFF_HOURS, type SlurpStanceLatitude } from "./slurp-stance.js";
 import { resolveSlurpCreatorAvailability } from "./slurp-creator-schedule-context.js";
-import { slurpReplyPacing, splitSlurpReplyBurst, type SlurpReplyPacing } from "./slurp-messaging.js";
+import {
+  slurpReplyBubbleDelayMs,
+  slurpReplyPacing,
+  splitSlurpReplyBurst,
+  type SlurpReplyPacing,
+} from "./slurp-messaging.js";
+import { createSlurpReplyQueueStorage } from "../storage/slurp-reply-queue.storage.js";
 import { generateSlurpCommissionImage } from "./slurp-commission-image.operation.js";
 import { slurpMessageMediaUrl } from "./slurp-media.js";
 import { resolveSlurpMediaOffer } from "./slurp-media-offer.js";
@@ -46,6 +52,7 @@ export async function replyToSlurpMessage(
   input: { threadId: string; triggerMessageId: string; force?: boolean; debugMode?: boolean },
 ): Promise<SlurpReplyOutcome> {
   const messagesStore = createSlurpMessagesStorage(db);
+  const replyQueue = createSlurpReplyQueueStorage(db);
   const slurp = createSlurpStorage(db);
   const thread = await messagesStore.getThreadById(input.threadId);
   if (!thread || (thread.state !== "active" && thread.state !== "request")) return { status: "ineligible" };
@@ -67,12 +74,14 @@ export async function replyToSlurpMessage(
     ? await resolveSlurpCreatorAvailability(createCharactersStorage(db), source, undefined, new Date())
     : { online: true, activity: null, minutesUntilOnline: 0 };
   const history = await messagesStore.listMessages(thread.id, 60);
+  if (await replyQueue.hasPending(thread.id)) return { status: "busy" };
   // A request can receive one guarded first answer. Storing that Creator answer promotes the
   // thread to active, because replying is itself a clear acceptance; after that, schedule and
   // subscription shape pacing and tone but cannot strand an already-started conversation.
   const isRequest = thread.state === "request";
   if (isRequest && history.some((message) => message.role === "creator")) return { status: "ineligible" };
   const trigger = history.find((message) => message.id === input.triggerMessageId) ?? history[history.length - 1];
+  const triggerObligationCreatedAt = trigger?.createdAt ?? new Date().toISOString();
   const subscriptions = await slurp.listSubscriptionsForViewer(thread.viewerAccountId);
   const subscribed = subscriptions.some((entry) => entry.creatorAccountId === thread.creatorAccountId);
   const pacing = slurpReplyPacing({
@@ -145,14 +154,31 @@ export async function replyToSlurpMessage(
         creatorState.energy >= 70 ? 3 : 2,
       );
       let stored = null;
-      for (const bubble of bubbles) {
-        stored =
-          (await messagesStore.appendMessage(thread.id, {
-            senderAccountId: thread.creatorAccountId,
-            role: "creator",
-            content: bubble,
-          })) ?? stored;
+      const queuedBubbles = [];
+      for (const [index, bubble] of bubbles.entries()) {
+        if (index === 0) continue;
+        const delayMs = bubbles
+          .slice(1, index + 1)
+          .reduce(
+            (total, _, offset) =>
+              total + slurpReplyBubbleDelayMs({ bubbleIndex: offset + 1, bubbleCount: bubbles.length }),
+            0,
+          );
+        queuedBubbles.push({
+          batchId: claim.claimId,
+          sequence: index,
+          threadId: thread.id,
+          senderAccountId: thread.creatorAccountId,
+          content: bubble,
+          deliverAt: new Date(Date.now() + delayMs).toISOString(),
+          createdAt: triggerObligationCreatedAt,
+        });
       }
+      stored = await messagesStore.appendReplyBatch(thread.id, {
+        first: { id: claim.claimId, senderAccountId: thread.creatorAccountId, content: bubbles[0] },
+        delayed: queuedBubbles.map((bubble) => ({ ...bubble, id: `${claim.claimId}:${bubble.sequence}` })),
+      });
+      if (!stored) return { status: "ineligible" } as const;
       if (reply.sharedPost) {
         const postAccess = reply.sharedPost.access === "locked" ? "locked" : "public";
         const previewLocked =

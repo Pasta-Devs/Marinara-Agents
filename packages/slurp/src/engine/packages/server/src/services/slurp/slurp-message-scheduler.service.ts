@@ -1,6 +1,7 @@
 import type { FastifyInstance } from "fastify";
 import { logger } from "../../lib/logger.js";
 import { createSlurpMessagesStorage } from "../storage/slurp-messages.storage.js";
+import { createSlurpReplyQueueStorage } from "../storage/slurp-reply-queue.storage.js";
 import { deliverDueSlurpCommissions } from "./slurp-commission-delivery.service.js";
 import { replyToSlurpMessage } from "./slurp-message.operation.js";
 import { slurpPollBackoffMs } from "./slurp-poll-backoff.js";
@@ -33,13 +34,38 @@ export function startSlurpMessageScheduler(app: FastifyInstance, registerStop?: 
       } catch (error) {
         logger.warn(error, "[slurp-commission] scheduled delivery failed");
       }
+      const replyQueue = createSlurpReplyQueueStorage(app.db);
+      for (const bubble of await replyQueue.listDue()) {
+        if (stopped) break;
+        const thread = await storage.getThreadById(bubble.threadId);
+        if (
+          !thread ||
+          thread.state === "declined" ||
+          bubble.senderAccountId !== thread.creatorAccountId ||
+          (thread.coolUntil && thread.coolUntil > new Date().toISOString())
+        ) {
+          await replyQueue.remove(bubble.id);
+          continue;
+        }
+        await storage.appendMessage(bubble.threadId, {
+          id: bubble.messageId,
+          senderAccountId: bubble.senderAccountId,
+          role: "creator",
+          content: bubble.content,
+          createdAt: bubble.createdAt,
+          replyObligationCreatedAt: bubble.createdAt,
+        });
+        await replyQueue.remove(bubble.id);
+      }
       for (const thread of await storage.listThreadsAwaitingReply()) {
         if (stopped) break;
-        const latest = (await storage.listMessages(thread.id, 1))[0];
-        if (latest?.role === "viewer") {
+        const unreadViewer = (await storage.listMessages(thread.id)).findLast(
+          (message) => message.role === "viewer" && !message.readAt,
+        );
+        if (unreadViewer) {
           const outcome = await replyToSlurpMessage(app.db, {
             threadId: thread.id,
-            triggerMessageId: latest.id,
+            triggerMessageId: unreadViewer.id,
             force: true,
           });
           // `replyToSlurpMessage` reports a provider failure instead of rejecting. Discarding it

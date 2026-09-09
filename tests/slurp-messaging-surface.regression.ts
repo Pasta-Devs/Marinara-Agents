@@ -12,6 +12,8 @@ const hooks = read("client/src/hooks/use-slurp.ts");
 const messageRoutes = read("server/src/routes/slurp-messages.routes.ts");
 const slurpRoutes = read("server/src/routes/slurp.routes.ts");
 const messageStorage = read("server/src/services/storage/slurp-messages.storage.ts");
+const replyScheduler = read("server/src/services/slurp/slurp-message-scheduler.service.ts");
+const slurpStorage = read("server/src/services/storage/slurp.storage.ts");
 
 // The creator-side messaging tools and the commission flow shipped as endpoints and hooks with no
 // UI behind them. Every one of those hooks must be reachable from the Messages tab.
@@ -91,5 +93,17 @@ assert.match(messages, /useDraftSlurpCreatorReply/u);
 // to discharge it.
 assert.match(messageStorage, /const counterpartExists =/u);
 assert.match(messageStorage, /createSlurpPopulationStorage\(db\)\.get\(viewerAccountId\)/u);
+
+// Delayed Creator bubbles must not erase a Viewer message that arrived after the batch started.
+assert.match(messageStorage, /const currentRows = await tx\.select\(\)\.from\(slurpThreads\)/u);
+assert.match(messageStorage, /newerViewerMessage/u);
+assert.match(messageStorage, /creatorUnread: newerViewerMessage \? current\.creatorUnread : "0"/u);
+assert.match(messageStorage, /\.slice\(0, limit\)/u, "pending filtering must happen before the reply limit");
+assert.match(
+  replyScheduler,
+  /bubble\.senderAccountId !== thread\.creatorAccountId[\s\S]*?await replyQueue\.remove\(bubble\.id\)/u,
+  "queued bubbles from a different Creator must be discarded",
+);
+assert.match(slurpStorage, /slurpMessages,[\s\S]*?slurpReplyBubbles,[\s\S]*?slurpCommissions/u);
 
 console.log("slurp messaging surface regression passed");

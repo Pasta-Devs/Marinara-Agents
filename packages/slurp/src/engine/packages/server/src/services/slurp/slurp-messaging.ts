@@ -176,6 +176,13 @@ export function splitSlurpReplyBurst(content: string, allow: boolean, limit = 3)
   return bubbles.filter(Boolean);
 }
 
+/** Delay between bubbles. It is deterministic and capped so a restart cannot extend the burst. */
+export function slurpReplyBubbleDelayMs(input: { bubbleIndex: number; bubbleCount: number }): number {
+  const index = Math.max(1, Math.trunc(input.bubbleIndex));
+  const count = Math.max(2, Math.trunc(input.bubbleCount));
+  return Math.min(8_000, 1_500 + Math.round((index / count) * 1_500));
+}
+
 /**
  * How long a character Creator takes to finish a commissioned piece, in milliseconds.
  *

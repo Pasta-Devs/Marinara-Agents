@@ -5,6 +5,7 @@ import { readFileSync } from "node:fs";
 
 import {
   slurpReplyPacing,
+  slurpReplyBubbleDelayMs,
   splitSlurpReplyBurst,
 } from "../packages/slurp/src/engine/packages/server/src/services/slurp/slurp-messaging.js";
 import { scoreSlurpRapport } from "../packages/slurp/src/engine/packages/server/src/services/slurp/slurp-rapport.js";
@@ -86,6 +87,13 @@ assert.deepEqual(splitSlurpReplyBurst("sure", true), ["sure"]);
 const oneSentence =
   "i have been thinking about what you said all afternoon and i still do not really know how to answer it properly";
 assert.deepEqual(splitSlurpReplyBurst(oneSentence, true), [oneSentence]);
+
+// Later bubbles have fixed, bounded delays that can be persisted as absolute due times.
+const firstDelay = slurpReplyBubbleDelayMs({ bubbleIndex: 1, bubbleCount: 3 });
+const secondDelay = slurpReplyBubbleDelayMs({ bubbleIndex: 2, bubbleCount: 3 });
+assert.ok(firstDelay > 0 && secondDelay > firstDelay, "bubble delays must preserve order");
+assert.ok(secondDelay <= 8_000, "bubble delays must stay bounded");
+assert.equal(slurpReplyBubbleDelayMs({ bubbleIndex: 999, bubbleCount: 3 }), 8_000);
 
 const operation = readFileSync(
   "packages/slurp/src/engine/packages/server/src/services/slurp/slurp-message.operation.ts",

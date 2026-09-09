@@ -134,6 +134,7 @@ import {
   noodlerFirstPostJobs,
   slurpMessageClaims,
   slurpMessages,
+  slurpReplyBubbles,
   slurpThreads,
   slurpCommissions,
 } from "../../db/schema/slurp.js";
@@ -1799,6 +1800,7 @@ export function createSlurpStorage(db: DB) {
         for (const thread of threads) {
           await tx.delete(slurpMessageClaims).where(eq(slurpMessageClaims.threadId, thread.id));
           await tx.delete(slurpMessages).where(eq(slurpMessages.threadId, thread.id));
+          await tx.delete(slurpReplyBubbles).where(eq(slurpReplyBubbles.threadId, thread.id));
           await tx.delete(slurpThreads).where(eq(slurpThreads.id, thread.id));
         }
         await tx.delete(noodleAccountSubscriptions).where(eq(noodleAccountSubscriptions.viewerAccountId, personaId));
@@ -1872,6 +1874,7 @@ export function createSlurpStorage(db: DB) {
           // every thread and leave the next install reading someone else's conversations.
           slurpMessageClaims,
           slurpMessages,
+          slurpReplyBubbles,
           slurpCommissions,
           slurpThreads,
           // Everything below had no deletion path at all, not even in this full reset. A fresh
@@ -2299,6 +2302,7 @@ export function createSlurpStorage(db: DB) {
         const threadIds = threadRows.map((row) => row.id);
         if (threadIds.length > 0) {
           await tx.delete(slurpMessages).where(inArray(slurpMessages.threadId, threadIds));
+          await tx.delete(slurpReplyBubbles).where(inArray(slurpReplyBubbles.threadId, threadIds));
           await tx.delete(slurpMessageClaims).where(inArray(slurpMessageClaims.threadId, threadIds));
           await tx.delete(slurpThreads).where(inArray(slurpThreads.id, threadIds));
         }
