@@ -7,73 +7,81 @@ const version = JSON.parse(readFileSync(resolve(engineRoot, "package.json"), "ut
 test.use({ actionTimeout: 10000 });
 
 test("installed Memory Nag exposes and validates message ranges", async ({ page, request }, info) => {
-  const character = await (
-    await request.post("/api/characters", { data: { data: { name: "Dottore", first_mes: "" } } })
-  ).json();
-  const chat = await (
-    await request.post("/api/chats", {
-      data: { name: "Memory range proof", mode: "roleplay", characterIds: [character.id] },
-    })
-  ).json();
-  for (let i = 0; i < 12; i++)
-    await request.post(`/api/chats/${chat.id}/messages`, {
-      data: {
-        role: i % 2 ? "assistant" : "user",
-        characterId: i % 2 ? character.id : null,
-        content: `Message ${i + 1}`,
-      },
-    });
-  await request.patch(`/api/chats/${chat.id}/metadata`, {
-    data: { enableAgents: true, activeAgentIds: ["memory-nag"] },
-  });
-  const prompts: string[] = [];
-  const provider = createServer(async (req, res) => {
-    if (req.method !== "POST") {
-      res.writeHead(404).end();
-      return;
-    }
-    const chunks: Buffer[] = [];
-    for await (const chunk of req) chunks.push(Buffer.from(chunk));
-    prompts.push(Buffer.concat(chunks).toString());
-    res.writeHead(200, { "content-type": "application/json" });
-    res.end(
-      JSON.stringify({
-        choices: [
-          {
-            message: {
-              role: "assistant",
-              content: JSON.stringify({
-                memories: [
-                  { text: "Dottore promised to keep the latest experiment private.", characterIds: [character.id] },
-                ],
-                resolvedMemoryIds: [],
-              }),
-            },
-            finish_reason: "stop",
-          },
-        ],
-      }),
-    );
-  });
-  await new Promise<void>((done) => provider.listen(0, "127.0.0.1", done));
-  const address = provider.address();
-  if (!address || typeof address === "string") throw new Error("Fixture provider unavailable");
-  const connection = await (
-    await request.post("/api/connections", {
-      data: {
-        name: "Memory range fixture",
-        provider: "custom",
-        model: "fixture",
-        apiKey: "",
-        baseUrl: `http://127.0.0.1:${address.port}/v1`,
-      },
-    })
-  ).json();
-  await request.patch(`/api/memory-nag/settings/${chat.id}`, {
-    headers: { "x-marinara-csrf": "1" },
-    data: { scanConnectionId: connection.id, messagesPerBatch: 5 },
-  });
+  const cleanup: Array<() => Promise<unknown>> = [];
   try {
+    const character = await (
+      await request.post("/api/characters", { data: { data: { name: "Dottore", first_mes: "" } } })
+    ).json();
+    cleanup.push(() => request.delete(`/api/characters/${character.id}`));
+    const chat = await (
+      await request.post("/api/chats", {
+        data: { name: "Memory range proof", mode: "roleplay", characterIds: [character.id] },
+      })
+    ).json();
+    cleanup.push(() => request.delete(`/api/chats/${chat.id}`));
+    for (let i = 0; i < 12; i++)
+      await request.post(`/api/chats/${chat.id}/messages`, {
+        data: {
+          role: i % 2 ? "assistant" : "user",
+          characterId: i % 2 ? character.id : null,
+          content: `Message ${i + 1}`,
+        },
+      });
+    await request.patch(`/api/chats/${chat.id}/metadata`, {
+      data: { enableAgents: true, activeAgentIds: ["memory-nag"] },
+    });
+    const prompts: string[] = [];
+    const provider = createServer(async (req, res) => {
+      if (req.method !== "POST") {
+        res.writeHead(404).end();
+        return;
+      }
+      const chunks: Buffer[] = [];
+      for await (const chunk of req) chunks.push(Buffer.from(chunk));
+      prompts.push(Buffer.concat(chunks).toString());
+      res.writeHead(200, { "content-type": "application/json" });
+      res.end(
+        JSON.stringify({
+          choices: [
+            {
+              message: {
+                role: "assistant",
+                content: JSON.stringify({
+                  memories: [
+                    { text: "Dottore promised to keep the latest experiment private.", characterIds: [character.id] },
+                  ],
+                  resolvedMemoryIds: [],
+                }),
+              },
+              finish_reason: "stop",
+            },
+          ],
+        }),
+      );
+    });
+    cleanup.push(async () => {
+      provider.closeAllConnections();
+      if (provider.listening) await new Promise<void>((done) => provider.close(() => done()));
+    });
+    await new Promise<void>((done) => provider.listen(0, "127.0.0.1", done));
+    const address = provider.address();
+    if (!address || typeof address === "string") throw new Error("Fixture provider unavailable");
+    const connection = await (
+      await request.post("/api/connections", {
+        data: {
+          name: "Memory range fixture",
+          provider: "custom",
+          model: "fixture",
+          apiKey: "",
+          baseUrl: `http://127.0.0.1:${address.port}/v1`,
+        },
+      })
+    ).json();
+    cleanup.push(() => request.delete(`/api/connections/${connection.id}`));
+    await request.patch(`/api/memory-nag/settings/${chat.id}`, {
+      headers: { "x-marinara-csrf": "1" },
+      data: { scanConnectionId: connection.id, messagesPerBatch: 5 },
+    });
     await page.route("**/api/app-settings/ui", (route) => route.fulfill({ json: { value: "" } }));
     await page.addInitScript(
       ({ chatId, version }) => {
@@ -143,10 +151,6 @@ test("installed Memory Nag exposes and validates message ranges", async ({ page,
     await settings.getByLabel("Messages to process").selectOption("all");
     await expect(settings.getByLabel("First message", { exact: true })).toHaveCount(0);
   } finally {
-    provider.closeAllConnections();
-    await new Promise<void>((done) => provider.close(() => done()));
-    await request.delete(`/api/connections/${connection.id}`);
-    await request.delete(`/api/chats/${chat.id}`);
-    await request.delete(`/api/characters/${character.id}`);
+    for (const release of cleanup.reverse()) await release().catch(() => undefined);
   }
 });
