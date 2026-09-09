@@ -1902,6 +1902,7 @@ export function createSlurpStorage(db: DB) {
           await tx.delete(noodleAccounts).where(inArray(noodleAccounts.id, accountIds));
         }
         const settings = createAppSettingsStorage(tx);
+        for (const accountId of accountIds) await settings.remove(`${SLURP_CREATOR_STATE_KEY}.${accountId}`);
         for (const personaId of personaIds) await settings.remove(slurpViewerSettingsKey(personaId));
         await settings.remove(SLURP_SETTINGS_KEY);
         await settings.remove(NOODLE_REFRESH_SCHEDULE_KEY);

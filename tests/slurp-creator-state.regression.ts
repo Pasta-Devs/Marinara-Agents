@@ -102,5 +102,14 @@ const generation = readFileSync(
 assert.match(generation, /creatorState\?: SlurpCreatorState/u);
 assert.match(generation, /Arousal is not permission/u);
 assert.match(generation, /A sales intent is not personal intimacy/u);
+assert.match(generation, /stateSignals: generated\.stateSignals/u);
+const storage = readFileSync("packages/slurp/src/engine/packages/server/src/services/storage/slurp.storage.ts", "utf8");
+assert.match(storage, /for \(const accountId of accountIds\)[\s\S]{0,160}?SLURP_CREATOR_STATE_KEY/u);
+
+const routes = readFileSync("packages/slurp/src/engine/packages/server/src/routes/slurp-messages.routes.ts", "utf8");
+assert.match(
+  routes,
+  /app\.get\("\/messages\/threads\/:threadId\/prompt"[\s\S]{0,700}?ownsCreator\(viewer\.id, thread\.creatorAccountId\)/u,
+);
 
 console.log("slurp creator state regression passed");
