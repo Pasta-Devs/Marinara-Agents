@@ -907,7 +907,7 @@ PF.brief = (() => {
    *
    *  `onFailure(kind)` reports WHY, once, so the retry screen can say something
    *  truer than "something went wrong" — a deterministic refusal and a busy engine
-   *  want different sentences from the player. Kinds: "unavailable" (404/409/429/
+   *  want different sentences from the player. Kinds: "context_limit" (selected prompt too large), "unavailable" (404/409/429/
    *  5xx), "refused" (400/422 with nothing salvageable), "network", "timeout". */
   async function generate(
     chatId,
@@ -951,6 +951,10 @@ PF.brief = (() => {
         await new Promise((resolve) => setTimeout(resolve, busyWaitMs));
         if (!controller.signal.aborted)
           response = await PF.api.postExperienceGeneration(chatId, base, controller.signal);
+      }
+      if (response.status === 422 && response.body?.code === "context_limit") {
+        onFailure?.("context_limit");
+        return null;
       }
       const rawOf = (r) =>
         r.status === 422 && r.body?.truncated && typeof r.body.raw === "string" ? r.body.raw : null;

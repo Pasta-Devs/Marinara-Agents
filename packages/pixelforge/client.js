@@ -1,4 +1,4 @@
-// Pixelforge 0.16.2 — Marinara Engine game-surface Experience (single-file client bundle)
+// Pixelforge 0.16.3 — Marinara Engine game-surface Experience (single-file client bundle)
 // Built from packages/pixelforge/src (20 modules) by scripts/build-pixelforge-package.mjs. Do not edit; edit src/ and rebuild.
 (() => {
 "use strict";
@@ -2865,7 +2865,7 @@ PF.brief = (() => {
    *
    *  `onFailure(kind)` reports WHY, once, so the retry screen can say something
    *  truer than "something went wrong" — a deterministic refusal and a busy engine
-   *  want different sentences from the player. Kinds: "unavailable" (404/409/429/
+   *  want different sentences from the player. Kinds: "context_limit" (selected prompt too large), "unavailable" (404/409/429/
    *  5xx), "refused" (400/422 with nothing salvageable), "network", "timeout". */
   async function generate(
     chatId,
@@ -2909,6 +2909,10 @@ PF.brief = (() => {
         await new Promise((resolve) => setTimeout(resolve, busyWaitMs));
         if (!controller.signal.aborted)
           response = await PF.api.postExperienceGeneration(chatId, base, controller.signal);
+      }
+      if (response.status === 422 && response.body?.code === "context_limit") {
+        onFailure?.("context_limit");
+        return null;
       }
       const rawOf = (r) =>
         r.status === 422 && r.body?.truncated && typeof r.body.raw === "string" ? r.body.raw : null;
@@ -16612,6 +16616,8 @@ PF.save = {
       // generic below rather than borrowing another stage's sentence.
       case "unavailable":
         return "The engine could not take the request just now — it may be busy with something else.";
+      case "context_limit":
+        return "The selected lore and world request exceed the model’s context limit. Choose fewer lorebook entries or a connection with a larger context.";
       case "network":
         return "The request did not get through.";
       case "timeout":
@@ -17491,15 +17497,8 @@ PF.save = {
    *  is not a migration: an empty list here sends no key at all, and the brief
    *  call is byte-identical to the one this package sent before the picker.
    *
-   *  CLIPPED AT THE READER, on `_configWorldName`'s precedent and for a sharper
-   *  reason than tidiness. The route's own field is
-   *  `z.array(z.string()).max(100)`, so a list past 100 is a 400 on the whole
-   *  call — the retry screen, for a chat whose config the picker's own ceiling
-   *  never saw. `/game/create`'s reuse-an-existing-chat arm rewrites
-   *  `gameSetupConfig` wholesale, so "the picker wrote it" is not something a
-   *  read site may assume. */
-  LORE_ENTRY_IDS_MAX: 100,
-
+   *  Preserve all valid selections. Engine bounds the request body and checks
+   *  model context; clipping here would silently discard the player's choices. */
   _configLoreEntryIds(meta) {
     const setup =
       meta && typeof meta.gameSetupConfig === "object" && meta.gameSetupConfig !== null ? meta.gameSetupConfig : null;
@@ -17513,10 +17512,9 @@ PF.save = {
         : null;
     for (const candidate of [inner?.loreEntryIds, outer?.loreEntryIds]) {
       if (!Array.isArray(candidate)) continue;
-      // Deduped as well as filtered: the server counts a repeated id once and the
-      // wire cap counts it twice, so a duplicated id is a slot spent on nothing.
+      // The same entry belongs in the request only once.
       const ids = [...new Set(candidate.filter((id) => typeof id === "string" && id))];
-      if (ids.length) return ids.slice(0, this.LORE_ENTRY_IDS_MAX);
+      if (ids.length) return ids;
     }
     return [];
   },
@@ -25729,107 +25727,9 @@ PF.mountSetup = (el, props) => {
   // package-side re-implementation of any of it would silently disagree with the
   // Engine's lore in the same chat.
   //
-  // ── THE WALLS, AND WHY THE PICKER REFUSES INSTEAD OF LETTING THEM DROP ──────
-  // The route drops whole entries when a selection overruns, and it says which —
-  // but a budget the player only meets after paying for the call is the invisible
-  // budget this control exists to remove. So each wall is enforced here, at the
-  // tick, in the Engine's own arithmetic and against the Engine's own numbers:
-  //
-  //   the call's own budget   3,000 tokens across the WHOLE selection. This is
-  //                           the route's `EXPERIENCE_LORE_TOKEN_BUDGET`, which
-  //                           it passes as `currentLocationTokenBudget` for this
-  //                           call alone (every other caller keeps 2,048). It is
-  //                           the first wall applied and the only global one that
-  //                           binds — the chat-wide DEFAULT is 8,192 tokens and
-  //                           sits well above it.
-  //   the book's own budget   each book's `tokenBudget`, default 2,048 tokens,
-  //                           and ZERO MEANS THE BOOK HAS NO WALL OF ITS OWN.
-  //                           NOT overridable by any caller: it belongs to
-  //                           whoever owns the book, so it is the wall the player
-  //                           has to be shown per book rather than in one total.
-  //                           ~3,000 tokens is honest across two or more books,
-  //                           or one book whose owner raised its figure; it is
-  //                           NOT honest inside a single default book, and the
-  //                           readout must not pretend otherwise.
-  //   the book's entry limit  each book's `entryLimit`, default 100.
-  //   the wire's own count    `LIMITS.MAX_LOREBOOK_ENTRIES` = 100 across the
-  //                           whole selection, and it is INDEPENDENT of every
-  //                           budget above. Measured: a 200-entry book of
-  //                           50-character entries costs ~2,600 tokens, clears
-  //                           every budget here, and emits a 200-id body that the
-  //                           route's own `z.array().max(100)` refuses outright —
-  //                           a 400, which the brief ladder turns into the
-  //                           unwinnable retry screen the budgets exist to
-  //                           prevent, arriving through the one door no character
-  //                           count watches.
-  //
-  // `GET /lorebooks/` returns `tokenBudget` and `entryLimit` per book, so all four
-  // are read rather than assumed; the two literals below are the schema defaults,
-  // used only when a row does not carry a usable number.
-  //
-  // ── TWO WAYS THESE MIRRORED CONSTANTS CAN GO STALE, NAMED SO THE ENGINE HALF
-  //    HAS TO ANSWER THEM (0.16.2 review) ──────────────────────────────────────
-  // Neither is a bug here today and neither is fixable here: both are facts about
-  // a server route that does not exist yet, and both would make the arithmetic
-  // above OVER-promise, which is the direction that costs the player the call.
-  //
-  //   the 3,000 is a FLOOR THE CHAT CAN UNDERCUT. `resolveLorebookTokenBudget`
-  //   honours a per-chat `lorebookTokenBudget` override, and only its DEFAULT is
-  //   the 8,192 the bullet above leans on. A chat whose owner set 500 makes this
-  //   ceiling far too generous, and the player is told they have 3,000 tokens
-  //   they will not get. If the route ends up passing the chat's own figure, this
-  //   constant has to be read off the response — or the route has to pin 3,000
-  //   for this call regardless of the chat, which is the simpler contract and the
-  //   one the bullet above assumes.
-  //
-  //   the budget state is SHARED WITH LORE NOBODY PICKED. `scanLorebooks` merges
-  //   forced entries with the normally-active ones into one per-book/global
-  //   budget state, so on a chat with auto-activating entries the picks are not
-  //   alone in the budget they are being measured against. This arithmetic counts
-  //   the picks and only the picks. If the new route reuses that path rather than
-  //   resolving the picked ids into a state of their own, an entry this form
-  //   accepted can still be dropped by an entry the player never saw.
-  const LORE_MAX_ENTRIES = 100;
-  const LORE_CALL_TOKENS = 3_000;
-  const LORE_BOOK_TOKENS = 2_048;
-  const LORE_BOOK_ENTRIES = 100;
-  /** The Engine's own estimate, copied rather than approximated:
-   *  `estimateLorebookTokens` is `ceil(length / 4)` PER ENTRY, so a sum of
-   *  characters divided by four is a different (smaller) number and would let
-   *  through selections the server then drops. */
+  // World-generation selections use the complete entries. Engine checks the
+  // final macro-expanded prompt against the model context before sending it.
   const loreTokens = (text) => Math.ceil(String(text ?? "").length / 4);
-  /** A row's number when it has a usable one, the schema default when it does
-   *  not. This is the `entryLimit` reader, and it may floor at 1 because the
-   *  route's own `normalizeLorebookEntryLimit` clamps into
-   *  `[LOREBOOK_ENTRY_LIMIT_MIN = 1, MAX = 1000]` — a stored 0 comes back as 1,
-   *  so 0 is a shape this reader only ever sees off a projection the parse never
-   *  touched, and the default is the honest answer to it. */
-  const loreNumber = (value, fallback) =>
-    typeof value === "number" && Number.isFinite(value) && value > 0 ? Math.floor(value) : fallback;
-  /** THE BOOK'S TOKEN BUDGET, AND `null` IS "THIS BOOK HAS NO WALL OF ITS OWN".
-   *
-   *  Zero is a real, storable, SHIPPED value here and it does not mean "unset":
-   *  `tokenBudget` is normalized with `Math.max(0, …)` and a default of 2,048 for
-   *  anything unparseable, so `GET /lorebooks/` answers 0 for a book whose owner
-   *  set 0 and 2,048 for a book that never had a number. The Engine then reads
-   *  that 0 as NO per-book budget — `lorebookBudget > 0 && lorebookTokens +
-   *  entryTokens > lorebookBudget` — so the wall simply does not run for it.
-   *
-   *  Folding 0 into the 2,048 default (which this reader used to do) is not the
-   *  safe direction it looks like. It refuses selections the server would have
-   *  kept, and the refusal NAMES A NUMBER THE OWNER NEVER SET — "Gazetteer has
-   *  248 of its 2048 left" for a book with no budget at all. Measured: ten
-   *  300-token entries in a 0-budget book, which the call's own 3,000 fits
-   *  exactly, came out six accepted and four refused.
-   *
-   *  A negative reaches the same answer for the same reason: the Engine's gate is
-   *  `> 0`, so anything at or below zero is no wall there and must be no wall
-   *  here. The call's 3,000 and the two count ceilings still bind. */
-  const loreBookTokens = (value) => {
-    if (typeof value !== "number" || !Number.isFinite(value)) return LORE_BOOK_TOKENS;
-    const floored = Math.floor(value);
-    return floored > 0 ? floored : null;
-  };
 
   const loreBox = PF.el("div", {
     style: "display:flex;flex-direction:column;gap:4px;max-height:180px;overflow:auto;" + S.input,
@@ -25838,52 +25738,21 @@ PF.mountSetup = (el, props) => {
   const loreBudgetEl = PF.el("div", { style: "font:11px/1.5 inherit;opacity:0.75;margin-top:3px;" });
   /** id → {bookId, tokens} for every entry the player has been offered. */
   const loreEntries = new Map();
-  /** bookId → {name, tokens, entries, noteEl} for every book the picker rendered. */
+  /** bookId → {name, noteEl, rows} for every book the picker rendered. */
   const loreBooks = new Map();
   /** The picked ids IN PICKING ORDER, which is the order they go on the wire. */
   const lorePicked = [];
-  const loreUsedIn = (bookId) =>
-    lorePicked.reduce(
-      (sum, id) => (loreEntries.get(id)?.bookId === bookId ? sum + loreEntries.get(id).tokens : sum),
-      0,
-    );
-  const loreCountIn = (bookId) => lorePicked.filter((id) => loreEntries.get(id)?.bookId === bookId).length;
   const loreUsedAll = () => lorePicked.reduce((sum, id) => sum + (loreEntries.get(id)?.tokens ?? 0), 0);
-  /** THE RUNNING COUNT IS PER BOOK AND NAMES THE BOOK, because one total over two
-   *  books with different budgets is the invisible-budget lie in a new place. The
-   *  call's own ceiling follows it, so the player can see which of the two they
-   *  are about to hit.
-   *
-   *  A book with no budget of its own gets no denominator, because there is no
-   *  number to divide by and inventing one is how the old reading came to name a
-   *  figure the owner never set. Its tokens still count toward the call's. */
   const syncLoreBudget = () => {
     if (!lorePicked.length) {
       loreBudgetEl.textContent = "No entries picked — the world is written from your setting alone.";
       return;
     }
-    const parts = [];
-    for (const [bookId, book] of loreBooks) {
-      if (!loreCountIn(bookId)) continue;
-      parts.push(
-        book.tokens === null
-          ? `${loreUsedIn(bookId)} tokens from ${book.name} (no budget of its own)`
-          : `${loreUsedIn(bookId)} / ${book.tokens} tokens from ${book.name}`,
-      );
-    }
     const noun = lorePicked.length === 1 ? "entry" : "entries";
-    parts.push(`${loreUsedAll()} / ${LORE_CALL_TOKENS} tokens for the call (${lorePicked.length} ${noun})`);
-    loreBudgetEl.textContent = parts.join(" · ");
+    loreBudgetEl.textContent = `${lorePicked.length} ${noun} · about ${loreUsedAll()} tokens for the call. The engine checks the model's context limit before generation.`;
   };
   syncLoreBudget();
-  /** THE ONE PATH INTO THE SELECTION, and every control writes through it — the
-   *  entry checkboxes and the select-all button alike (R-D10). That is what keeps
-   *  the four walls, the per-book readout and the picking order on a single code
-   *  path, and what keeps the wire format a flat list of entry ids however the
-   *  ticks were made.
-   *
-   *  Returns null when the selection changed, or the REASON it refused. Select-all
-   *  reads the reason and writes ONE summary line instead of a hundred. */
+  // Individual ticks and select-all preserve the same entry order.
   const toggleEntry = (id, cb, quiet) => {
     const entry = loreEntries.get(id);
     const book = entry ? loreBooks.get(entry.bookId) : null;
@@ -25901,25 +25770,6 @@ PF.mountSetup = (el, props) => {
     }
     if (!entry || !book) return refuse("That entry is no longer on the form — reopen its book and try again.");
     if (lorePicked.includes(id)) return null;
-    if (lorePicked.length >= LORE_MAX_ENTRIES)
-      return refuse(`${LORE_MAX_ENTRIES} entries is the most the game reads at once. Untick something first.`);
-    if (loreCountIn(entry.bookId) >= book.entries)
-      return refuse(`${book.name} allows ${book.entries} entries at a time. Untick one of its own first.`);
-    // …and this wall is SKIPPED ENTIRELY for a book with no budget of its own,
-    // exactly as the Engine skips it. The call's own ceiling below is what stops
-    // such a book, and it is the wall the refusal will then correctly name.
-    if (book.tokens !== null && loreUsedIn(entry.bookId) + entry.tokens > book.tokens)
-      return refuse(
-        `That entry needs ${entry.tokens} tokens and ${book.name} has ${
-          book.tokens - loreUsedIn(entry.bookId)
-        } of its ${book.tokens} left. Untick one of its own first.`,
-      );
-    if (loreUsedAll() + entry.tokens > LORE_CALL_TOKENS)
-      return refuse(
-        `That entry needs ${entry.tokens} tokens and the call has ${
-          LORE_CALL_TOKENS - loreUsedAll()
-        } of its ${LORE_CALL_TOKENS} left. Untick something first.`,
-      );
     lorePicked.push(id);
     book.noteEl.textContent = "";
     syncLoreBudget();
@@ -26071,15 +25921,6 @@ PF.mountSetup = (el, props) => {
         const noteEl = PF.el("div", { style: "font:11px/1.5 inherit;opacity:0.75;padding-left:16px;" });
         loreBooks.set(book.id, {
           name,
-          // `null` here is a book with no budget of its own, which is a value its
-          // owner can set and the Engine honours — see `loreBookTokens`.
-          tokens: loreBookTokens(book.tokenBudget),
-          // NOT clamped against the wire's own 100. The two ceilings are separate
-          // walls and the refusal message names which one bit, so folding them
-          // into one number would make a book whose owner allows 200 entries
-          // report the wire's limit as the BOOK's rule. `toggleEntry` checks the
-          // wire count first, so the smaller of the two still wins.
-          entries: loreNumber(book.entryLimit, LORE_BOOK_ENTRIES),
           noteEl,
           rows: [],
         });
@@ -26182,15 +26023,7 @@ PF.mountSetup = (el, props) => {
           setOpen(!open);
           if (open) await loadEntries();
         });
-        // SELECT ALL IN THIS BOOK (R-D10), and it TICKS ENTRIES INDIVIDUALLY —
-        // it writes through `toggleEntry` like every other control, so the walls
-        // and the picking order hold and the wire format does not change.
-        //
-        // AND IT NEEDS A MESSAGE, NOT JUST A TICK. With a 100-entry ceiling real,
-        // select-all on a book bigger than what is left takes a PREFIX and refuses
-        // the rest — and a silent prefix selection is the same class of lie as a
-        // budget the player cannot see. So the note says how many it took, out of
-        // how many, and which wall stopped it.
+        // Select every eligible row using the same path as an individual tick.
         selectAllBtn.addEventListener("click", async () => {
           setOpen(true);
           await loadEntries();
