@@ -36,6 +36,12 @@
     "slurp": {
       "versions": [
         {
+          "version": "1.2.48",
+          "date": "2026-09-09",
+          "notes": "- Mobile message headers now contain long creator names, handles, status text, and controls without widening the viewport.\n- Commission cards now wrap their progress labels and actions within the available mobile width.",
+          "highlight": false
+        },
+        {
           "version": "1.2.47",
           "date": "2026-09-09",
           "notes": "- The conversation overview now has a sticky summary, readable state labels, and independent scrolling.\n- Creator state, conversation state, boundaries, memories, context, and business data now use expandable sections and information boxes.\n- Working memory and long-term memory are shown separately with an explanation of how they differ.",
@@ -147,12 +153,6 @@
           "version": "1.2.29",
           "date": "2026-09-08",
           "notes": "- Commission briefs, quotes, and state changes no longer repeat as ordinary chat messages. The commission card now contains its delivered text and artwork directly.",
-          "highlight": false
-        },
-        {
-          "version": "1.2.28",
-          "date": "2026-09-08",
-          "notes": "- Pending messages now enter the Creator's paced reply queue. A Creator reply accepts the request, so conversations continue even when they began while the Creator was away or the fan was not subscribed.\n- Character-controlled Creators can quote fan commissions themselves and generate the finished commission after the fan explicitly accepts and pays.\n- Refined the chat and commission cards with clearer state guidance, larger controls, stronger focus and press feedback, and cleaner coin labels.",
           "highlight": false
         }
       ]

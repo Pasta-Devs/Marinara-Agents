@@ -63,6 +63,12 @@ assert.match(view, /Long-term memory/u);
 // Opening a different conversation must not inherit the last one's open panel.
 assert.match(view, /setInfoOpen\(false\);[\s\S]{0,120}setDebugOpen\(false\)/u);
 
+// The mobile conversation must contain its header and commission controls instead of widening the viewport.
+assert.match(view, /min-w-0 min-w-0|max-w-full flex-1 items-center gap-2 overflow-hidden/u);
+assert.match(view, /overflow-x-hidden overflow-y-auto/u);
+assert.match(view, /min-w-0 max-w-full overflow-hidden rounded-xl/u);
+assert.match(view, /grid min-w-0 grid-cols-4/u);
+
 for (const key of [
   "relationshipToggle",
   "relationshipTier",

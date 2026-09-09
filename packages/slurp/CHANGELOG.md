@@ -1,5 +1,10 @@
 # Slurp release notes
 
+## 1.2.48 — 2026-09-09
+
+- Mobile message headers now contain long creator names, handles, status text, and controls without widening the viewport.
+- Commission cards now wrap their progress labels and actions within the available mobile width.
+
 ## 1.2.47 — 2026-09-09
 
 - The conversation overview now has a sticky summary, readable state labels, and independent scrolling.
