@@ -248,11 +248,43 @@ async function main() {
         new AbortController().signal,
       );
       assert.equal(importedCharacter.imported[0]?.note.modes[0], "roleplay");
+      const unrelatedScope = {
+        chatId: "chat-unrelated",
+        chatIds: ["chat-unrelated"],
+        characterIds: ["character-unrelated"],
+      };
       const characterPreview = await previewPackageInterop(
         { source: "characters", limit: 100 },
         join(dataDir, "long-term-memory"),
       );
       assert.equal(characterPreview.samples[0]?.importMode, "roleplay");
+      const scopedCharacterPreview = await previewPackageInterop(
+        { source: "characters", sourceScope: unrelatedScope, limit: 100 },
+        join(dataDir, "long-term-memory"),
+      );
+      assert.deepEqual(
+        scopedCharacterPreview.samples.map((sample) => sample.sourceId),
+        ["character-import"],
+      );
+      const scopedCharacterDetails = await sourcePackageDetails(
+        { source: "characters", sourceIds: ["character-import"], sourceScope: unrelatedScope },
+        join(dataDir, "long-term-memory"),
+      );
+      assert.deepEqual(scopedCharacterDetails.missingSourceIds, []);
+      const scopedCharacterImport = await importPackageInterop(
+        {
+          source: "characters",
+          sourceIds: ["character-import"],
+          sourceScope: unrelatedScope,
+          destinationScope: { characterIds: ["character-import"] },
+          extract: false,
+          limit: 100,
+        },
+        join(dataDir, "long-term-memory"),
+        new AbortController().signal,
+      );
+      assert.deepEqual(scopedCharacterImport.missingSourceIds, []);
+      assert.equal(scopedCharacterImport.imported.length, 1);
       const explicitCharacter = await importPackageInterop(
         {
           source: "characters",
@@ -271,6 +303,34 @@ async function main() {
         { query: "Imported", limit: 100 },
         join(dataDir, "long-term-memory"),
       );
+      const scopedLorebookPreview = await previewPackageLorebooks(
+        { sourceScope: unrelatedScope, limit: 100 },
+        join(dataDir, "long-term-memory"),
+      );
+      assert.equal(
+        scopedLorebookPreview.books.some((book) => book.id === "lorebook-import"),
+        true,
+      );
+      const scopedLorebookSourceId = scopedLorebookPreview.books[0]?.entries[0]?.candidates[0]?.sourceId;
+      assert.ok(scopedLorebookSourceId, "scoped lorebook preview must expose an importable candidate");
+      const scopedLorebookDetails = await sourcePackageDetails(
+        { source: "lorebooks", sourceIds: [scopedLorebookSourceId], sourceScope: unrelatedScope },
+        join(dataDir, "long-term-memory"),
+      );
+      assert.deepEqual(scopedLorebookDetails.missingSourceIds, []);
+      const scopedLorebookImport = await importPackageInterop(
+        {
+          source: "lorebooks",
+          sourceIds: [scopedLorebookSourceId],
+          sourceScope: unrelatedScope,
+          extract: false,
+          limit: 100,
+        },
+        join(dataDir, "long-term-memory"),
+        new AbortController().signal,
+      );
+      assert.deepEqual(scopedLorebookImport.missingSourceIds, []);
+      assert.equal(scopedLorebookImport.imported.length, 1);
       const limitedLorebookPreview = await previewPackageLorebooks(
         { query: "Imported", limit: 1 },
         join(dataDir, "long-term-memory"),

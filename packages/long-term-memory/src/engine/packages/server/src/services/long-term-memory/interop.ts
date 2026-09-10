@@ -19,7 +19,6 @@ import {
   getLtmScopeGroupIds,
   getLtmScopePersonaIds,
   isGlobalLtmScope,
-  ltmScopesOverlap,
   normalizeLtmScope,
   withMergedLtmScopeLinks,
 } from "../../../../shared/src/features/agents/long-term-memory/scope.js";
@@ -313,12 +312,7 @@ function scopeKey(scope: LtmScope | undefined) {
 }
 
 function matchesScope(candidate: Candidate, scope?: LtmScope) {
-  if (!scope) return true;
-  if (candidate.provenance.kind === "character") {
-    return Boolean(candidate.scope.characterIds?.some((id) => scope.characterIds?.includes(id)));
-  }
-  if (candidate.provenance.kind === "chat_summary") return matchesChatSummaryScope(candidate.scope, scope);
-  return matchesImportScope(candidate.scope, scope);
+  return !scope || candidate.provenance.kind !== "chat_summary" || matchesChatSummaryScope(candidate.scope, scope);
 }
 
 function candidateVisibleInScope(candidate: Candidate, scope: LtmScope | undefined) {
@@ -349,11 +343,6 @@ function matchesChatSummaryScope(candidateScope: LtmScope, scope?: LtmScope) {
     if (![...candidatePersonaIds].some((id) => scopePersonaIds.has(id))) return false;
   }
   return true;
-}
-
-function matchesImportScope(candidateScope: LtmScope, scope?: LtmScope) {
-  if (!scope) return true;
-  return ltmScopesOverlap(candidateScope, scope, { includeGlobal: false });
 }
 
 function lorebookScope(data: Record<string, unknown>) {
@@ -701,11 +690,7 @@ export async function previewPackageLorebooks(
           entries,
         };
       })
-      .filter(
-        (book) =>
-          (matchesImportScope(book.scope, sourceScope) || book.counts.candidates > 0) &&
-          (!request.query || book.counts.candidates > 0),
-      ),
+      .filter((book) => !request.query || book.counts.candidates > 0),
     totalEntries = matchingBooks.reduce((count, book) => count + book.counts.entries, 0),
     totalCandidates = matchingBooks.reduce((count, book) => count + book.counts.candidates, 0),
     totalImported = matchingBooks.reduce((count, book) => count + book.counts.imported, 0);
