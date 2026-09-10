@@ -42,6 +42,8 @@ async function prepareFreshClient(page: Page) {
           hasCompletedOnboarding: true,
           rightPanelOpen: false,
           sidebarOpen: false,
+          // Fixed package-color assertions need a non-animated host accent.
+          appAccentPulseMode: false,
         },
         version: 65,
       }),
@@ -1803,11 +1805,20 @@ test.describe("package-owned Noodle interface", () => {
       element.scrollTo({ top: element.scrollHeight });
     });
     expect(await timelineScroller.evaluate((element) => element.scrollTop)).toBeGreaterThan(0);
-    const headerTopAfterScroll = await homeHeader.evaluate((element) => element.getBoundingClientRect().bottom);
-    const scrollerTop = await timelineScroller.evaluate((element) => element.getBoundingClientRect().top);
-    expect(headerTopAfterScroll).toBeLessThanOrEqual(scrollerTop + 1);
-    const tabsTopAfterScroll = await timelineTabs.evaluate((element) => element.getBoundingClientRect().top);
-    expect(tabsTopAfterScroll).toBeLessThan(scrollerTop);
+    await expect
+      .poll(async () => {
+        const headerBottom = await homeHeader.evaluate((element) => element.getBoundingClientRect().bottom);
+        const scrollerTop = await timelineScroller.evaluate((element) => element.getBoundingClientRect().top);
+        return headerBottom - scrollerTop;
+      })
+      .toBeLessThanOrEqual(1);
+    await expect
+      .poll(async () => {
+        const tabsTop = await timelineTabs.evaluate((element) => element.getBoundingClientRect().top);
+        const scrollerTop = await timelineScroller.evaluate((element) => element.getBoundingClientRect().top);
+        return tabsTop - scrollerTop;
+      })
+      .toBeLessThan(0);
     await bottomNav.getByRole("button", { name: "Noodle home" }).click();
     await expect(homeHeader).toBeVisible();
     await expect.poll(() => timelineScroller.evaluate((element) => element.scrollTop)).toBe(0);
