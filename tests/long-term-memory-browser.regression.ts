@@ -209,6 +209,7 @@ async function main() {
       const scopeTargetQueries: string[] = [];
       const noteQueries: string[] = [];
       const sourcePreviewRequests: Record<string, unknown>[] = [];
+      const lorebookPreviewRequests: Record<string, unknown>[] = [];
       const reviewContextQueries: string[] = [];
       const reviewQueries: string[] = [];
       const rejectedSuggestionQueries: string[] = [];
@@ -1462,6 +1463,8 @@ async function main() {
         if (request.method() !== "POST") return;
         const body = request.postDataJSON() as Record<string, unknown>;
         if (request.url().endsWith("/api/long-term-memory/import/preview")) sourcePreviewRequests.push(body);
+        if (request.url().endsWith("/api/long-term-memory/import/lorebooks/preview"))
+          lorebookPreviewRequests.push(body);
       });
       const desktopActivationChanges: boolean[] = [];
       const chatSummarySettingsOpens: number[] = [];
@@ -3606,6 +3609,9 @@ async function main() {
       await page.locator('[data-ltm-source-tab="lorebooks"]').click();
       await page.locator('[data-ltm-source-preview="lorebooks"]').waitFor();
       await page.locator('[data-ltm-lorebook-id="lorebook_outside_current_chat"]').waitFor();
+      const lorebookPreviewRequest = lorebookPreviewRequests.at(-1);
+      assert.ok(lorebookPreviewRequest);
+      assert.equal(Object.hasOwn(lorebookPreviewRequest, "sourceScope"), false);
       const sourcesWorkspace = page.locator('[data-ltm-surface="sources"] [data-ltm-workspace]');
       await sourcesWorkspace.waitFor();
       assert.equal(

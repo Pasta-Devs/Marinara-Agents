@@ -1610,10 +1610,7 @@ export default function SourcesWorkspace({
     };
   }, [destinationTargets, props.chatId, scopeIndexes.chatsById, scopeTargets.data?.currentScope?.chatId]);
   const sourceScope = sourceTarget?.sourceScope;
-  const previewScope =
-    source === "chats" || source === "lorebooks" || (source === "characters" && sourceTarget?.kind === "character")
-      ? sourceScope
-      : undefined;
+  const previewScope = source === "chats" ? sourceScope : undefined;
   const effectiveImportScope = `${sourceTargetId}:${[...selectedDestinationTargetIds].sort().join(",")}`;
   const preview = useQuery({
     queryKey: [...queryKeys.preview, source, previewScope, modeFilter, sourceQuery],
