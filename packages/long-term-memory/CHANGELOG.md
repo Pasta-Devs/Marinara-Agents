@@ -1,5 +1,9 @@
 # Long-Term Memory changelog
 
+## 1.2.26 - 2026-09-10
+
+- Added persistent chat-mode availability selection to Sources for memory imports.
+
 ## 1.2.25 - 2026-09-10
 
 - Added a confirmed discard action for invalidated drafts, removing old proposals without changing saved memories.

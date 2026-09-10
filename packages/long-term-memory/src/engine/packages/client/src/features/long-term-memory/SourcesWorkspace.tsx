@@ -40,6 +40,7 @@ import type {
   LtmSourceDetailsResponse,
   LtmScope,
   LtmExtractSourceNoteResponse,
+  LtmGlobalSettings,
 } from "../../../../shared/src/features/agents/long-term-memory/schema.js";
 import { invalidateLtmQueries, ltmScopeTargetsKey, queryKeys, request } from "./api";
 import { Button, ClickSurface, IconButton, InfoPopover, StatusSurface, inputClass } from "./shared-controls";
@@ -58,9 +59,11 @@ import {
 } from "./source-task";
 import { buildScopeIndexes, type ScopeTargetChat, type ScopeTargets } from "./scope-targets";
 import {
+  ltmModeForChatMode,
   normalizeLtmScope,
   withMergedLtmScopeLinks,
 } from "../../../../shared/src/features/agents/long-term-memory/scope.js";
+import { DEFAULT_LTM_IMPORTED_SOURCE_MODE } from "../../../../shared/src/features/agents/long-term-memory/constants.js";
 
 type Source = SourceTab;
 type SourceStatusFilter = "all" | "ready" | "imported";
@@ -76,6 +79,7 @@ type ImportContract = {
   sourceTargetLabel: string;
   destinationTargetLabel: string;
   mode?: LtmMode;
+  modes?: LtmMode[];
   chatId?: string;
   selectionKey: string;
 };
@@ -364,6 +368,17 @@ function targetFitsDestinationScope(scope: LtmScope | undefined, target: ScopeTa
 
 type DestinationCategoryKind = "all" | Exclude<ScopeTargetKind, "all">;
 
+const ALL_LTM_MODES: LtmMode[] = ["conversation", "roleplay", "game"];
+
+function chatModeLabel(mode: LtmMode, localizeUi: LtmTranslationFunction) {
+  const labels: Record<LtmMode, string> = {
+    conversation: "ui.longTermMemory.sourcesworkspace.conversation",
+    roleplay: "ui.longTermMemory.sourcesworkspace.roleplay",
+    game: "ui.longTermMemory.sourcesworkspace.game",
+  };
+  return localizeUi(labels[mode]);
+}
+
 function DestinationScopePanel({
   targets,
   selectedIds,
@@ -371,6 +386,9 @@ function DestinationScopePanel({
   onChange,
   mode,
   source,
+  availabilityModes,
+  onAvailabilityModesChange,
+  modesError = "",
   disabled = false,
 }: {
   targets: ScopeTarget[];
@@ -379,6 +397,9 @@ function DestinationScopePanel({
   onChange: (ids: string[]) => void;
   mode: LtmMode | "all";
   source: Source;
+  availabilityModes: LtmMode[];
+  onAvailabilityModesChange: (modes: LtmMode[]) => void;
+  modesError?: string;
   disabled?: boolean;
 }) {
   const { t: localizeUi } = useLtmTranslation();
@@ -582,6 +603,49 @@ function DestinationScopePanel({
           content={localizeUi("ui.longTermMemory.sourcesworkspace.bulkDestinationHelp")}
         />
       </div>
+      <fieldset
+        className="shrink-0 space-y-1.5 border-b border-[var(--border)] pb-2.5"
+        data-ltm-availability-modes-fieldset
+      >
+        <legend className="text-xs font-semibold text-[var(--muted-foreground)]">
+          {localizeUi("ui.longTermMemory.memoryvault.chatModes")}
+        </legend>
+        <div className="flex flex-wrap gap-3" data-ltm-availability-modes>
+          {ALL_LTM_MODES.map((chatMode) => {
+            const checked = availabilityModes.includes(chatMode);
+            const isLastSelected = checked && availabilityModes.length === 1;
+            return (
+              <label
+                key={chatMode}
+                className="flex min-h-11 items-center gap-2 text-xs font-medium"
+                data-ltm-availability-mode-label={chatMode}
+              >
+                <input
+                  type="checkbox"
+                  className={sourceCheckboxClass}
+                  data-ltm-availability-mode-checkbox={chatMode}
+                  checked={checked}
+                  disabled={disabled || isLastSelected}
+                  onChange={() => {
+                    const next = checked
+                      ? availabilityModes.filter((m) => m !== chatMode)
+                      : [...availabilityModes, chatMode];
+                    if (next.length > 0) {
+                      onAvailabilityModesChange(next);
+                    }
+                  }}
+                />
+                <span>{chatModeLabel(chatMode, localizeUi)}</span>
+              </label>
+            );
+          })}
+        </div>
+        {modesError ? (
+          <p role="alert" className="text-xs text-[var(--destructive)]">
+            {modesError}
+          </p>
+        ) : null}
+      </fieldset>
       {selectedTargets.length ? (
         <div className="shrink-0 space-y-2">
           <p className="text-xs font-semibold">{localizeUi("ui.longTermMemory.sourcesworkspace.selectedLocations")}</p>
@@ -680,11 +744,15 @@ function DestinationScopePanel({
         </span>
       ) : null}
       <p className="shrink-0 text-xs text-[var(--muted-foreground)]" data-ltm-import-mode-summary>
-        {mode === "all"
-          ? source === "chats"
-            ? localizeUi("ui.longTermMemory.sourcesworkspace.automatic")
-            : localizeUi("ui.longTermMemory.sourcesworkspace.importsDefaultToRoleplay")
-          : sourceModeLabel(mode, localizeUi)}
+        {availabilityModes.length > 1
+          ? `${localizeUi("ui.longTermMemory.memoryvault.availableIn")}: ${availabilityModes
+              .map((m) => chatModeLabel(m, localizeUi))
+              .join(", ")}`
+          : mode === "all"
+            ? source === "chats"
+              ? localizeUi("ui.longTermMemory.sourcesworkspace.automatic")
+              : localizeUi("ui.longTermMemory.sourcesworkspace.importsDefaultToRoleplay")
+            : sourceModeLabel(mode, localizeUi)}
       </p>
     </div>
   );
@@ -1399,6 +1467,8 @@ export default function SourcesWorkspace({
     props.chatId ? [`chat:${props.chatId}`] : [],
   );
   const [modeFilter, setModeFilter] = useState<LtmMode | "all">("all");
+  const [customAvailabilityModes, setCustomAvailabilityModes] = useState<LtmMode[] | null>(null);
+  const [modesError, setModesError] = useState("");
   const [sourceQuery, setSourceQuery] = useState("");
   const [sourceStatusFilter, setSourceStatusFilter] = useState<SourceStatusFilter>("all");
   const [selectionMode, setSelectionMode] = useState(false);
@@ -1491,6 +1561,42 @@ export default function SourcesWorkspace({
         `/scope-targets?includeAllChats=true${props.chatId ? `&chatId=${encodeURIComponent(props.chatId)}` : ""}`,
       ),
   });
+  const settingsQuery = useQuery({
+    queryKey: queryKeys.settings,
+    queryFn: () => request<LtmGlobalSettings>("/settings"),
+  });
+
+  const defaultAvailabilityMode: LtmMode =
+    modeFilter !== "all"
+      ? modeFilter
+      : source === "chats"
+        ? ltmModeForChatMode(props.chatMode ?? "conversation")
+        : DEFAULT_LTM_IMPORTED_SOURCE_MODE;
+  const effectiveAvailabilityModes: LtmMode[] =
+    customAvailabilityModes ??
+    (settingsQuery.data?.sourcesAvailabilityModes?.length
+      ? settingsQuery.data.sourcesAvailabilityModes
+      : [defaultAvailabilityMode]);
+  const savedAvailabilityModes =
+    customAvailabilityModes ??
+    (settingsQuery.data?.sourcesAvailabilityModes?.length ? settingsQuery.data.sourcesAvailabilityModes : null);
+
+  const changeAvailabilityModes = async (nextModes: LtmMode[]) => {
+    if (!nextModes.length) return;
+    setModesError("");
+    setCustomAvailabilityModes(nextModes);
+    try {
+      await request<LtmGlobalSettings>("/settings", "PUT", {
+        sourcesAvailabilityModes: nextModes,
+      });
+      await invalidateLtmQueries(client, [queryKeys.settings, queryKeys.chatDefaults]);
+    } catch (error) {
+      setCustomAvailabilityModes(settingsQuery.data?.sourcesAvailabilityModes ?? null);
+      setModesError(
+        error instanceof Error ? error.message : localizeUi("ui.longTermMemory.memoryvault.couldNotSaveAvailability"),
+      );
+    }
+  };
   const scopeIndexes = useMemo(() => buildScopeIndexes(scopeTargets.data?.chats ?? []), [scopeTargets.data?.chats]);
   const scopeTargetOptions = useMemo(() => {
     const currentChatId = props.chatId ?? scopeTargets.data?.currentScope?.chatId;
@@ -2108,6 +2214,8 @@ export default function SourcesWorkspace({
     }
     const destinationTargetLabel = effectiveDestination.destinationLabel;
     const effectiveAction = retryContract?.action ?? action;
+    const effectiveModes =
+      effectiveAction === "refresh" ? undefined : (retryContract?.modes ?? savedAvailabilityModes ?? undefined);
     const contract: ImportContract = retryContract
       ? {
           ...retryContract,
@@ -2115,6 +2223,8 @@ export default function SourcesWorkspace({
           action: effectiveAction,
           destinationScope,
           destinationTargetLabel,
+          modes: effectiveModes,
+          ...(effectiveAction === "refresh" ? { mode: undefined } : {}),
         }
       : {
           source,
@@ -2139,7 +2249,8 @@ export default function SourcesWorkspace({
             : {}),
           sourceTargetLabel: sourceTarget?.label ?? localizeUi("ui.longTermMemory.sourcesworkspace.allAvailable"),
           destinationTargetLabel,
-          ...(modeFilter !== "all" ? { mode: modeFilter } : {}),
+          ...(effectiveAction !== "refresh" && modeFilter !== "all" ? { mode: modeFilter } : {}),
+          ...(effectiveModes?.length ? { modes: effectiveModes } : {}),
           ...(props.chatId ? { chatId: props.chatId } : {}),
           selectionKey: selectionKeyOverride ?? selectionKey,
         };
@@ -2168,6 +2279,7 @@ export default function SourcesWorkspace({
               ...(contract.sourceScope ? { sourceScope: contract.sourceScope } : {}),
               ...(contract.destinationScope ? { destinationScope: contract.destinationScope } : {}),
               ...(contract.mode ? { mode: contract.mode } : {}),
+              ...(contract.modes?.length ? { modes: contract.modes } : {}),
               ...(contract.chatId ? { chatId: contract.chatId } : {}),
             },
             signal,
@@ -3100,6 +3212,9 @@ export default function SourcesWorkspace({
                     onChange={changeDestinationIds}
                     mode={modeFilter}
                     source={source}
+                    availabilityModes={effectiveAvailabilityModes}
+                    onAvailabilityModesChange={(modes) => void changeAvailabilityModes(modes)}
+                    modesError={modesError}
                     disabled={sourceTask.active?.status === "running"}
                   />
                   {focusedImportedSource ? (
@@ -3560,6 +3675,9 @@ export default function SourcesWorkspace({
                     onChange={changeDestinationIds}
                     mode={modeFilter}
                     source={source}
+                    availabilityModes={effectiveAvailabilityModes}
+                    onAvailabilityModesChange={(modes) => void changeAvailabilityModes(modes)}
+                    modesError={modesError}
                     disabled={sourceTask.active?.status === "running"}
                   />
                   {focusedImportedSource ? (

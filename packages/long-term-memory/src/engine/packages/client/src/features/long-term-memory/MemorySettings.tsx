@@ -31,6 +31,7 @@ type GlobalForm = {
   longTermMemoryIncludeResolved: boolean;
   longTermMemoryRecallPreamble: string;
   longTermMemoryDebug: boolean;
+  sourcesAvailabilityModes?: ("conversation" | "roleplay" | "game")[];
 };
 type ExtractionForm = Required<LtmExtractionSettingsPatch> & {
   systemPrompt?: string;
@@ -129,6 +130,7 @@ function settingsForm(settings: LtmGlobalSettings): GlobalForm {
     longTermMemoryIncludeResolved: settings.longTermMemoryIncludeResolved ?? false,
     longTermMemoryRecallPreamble: settings.longTermMemoryRecallPreamble ?? "",
     longTermMemoryDebug: settings.longTermMemoryDebug ?? false,
+    ...(settings.sourcesAvailabilityModes ? { sourcesAvailabilityModes: settings.sourcesAvailabilityModes } : {}),
   };
 }
 

@@ -88,6 +88,7 @@ const ltmGlobalSettingsShape = z
     longTermMemoryIncludeResolved: z.boolean().optional(),
     longTermMemoryRecallPreamble: z.string().max(500).optional(),
     longTermMemoryDebug: z.boolean().optional(),
+    sourcesAvailabilityModes: z.array(ltmModeSchema).min(1).max(3).optional(),
   })
   .strict();
 
@@ -131,6 +132,7 @@ export const ltmResolvedGlobalSettingsSchema = z
     longTermMemoryIncludeResolved: z.boolean(),
     longTermMemoryRecallPreamble: z.string().max(500),
     longTermMemoryDebug: z.boolean(),
+    sourcesAvailabilityModes: z.array(ltmModeSchema).min(1).max(3).optional(),
   })
   .strict();
 
@@ -2654,6 +2656,7 @@ export const ltmImportSourceNotesRequestSchema = z
     extract: z.boolean().default(true),
     importConcurrency: z.number().int().min(1).max(10).optional(),
     mode: ltmModeSchema.optional(),
+    modes: z.array(ltmModeSchema).min(1).max(3).optional(),
   })
   .strict();
 

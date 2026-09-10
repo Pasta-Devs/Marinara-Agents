@@ -19,6 +19,7 @@ const contract = {
   sourceScope: { chatId: "chat-a", chatIds: ["chat-a"] },
   destinationScope: { chatId: "chat-a", chatIds: ["chat-a"] },
   mode: "roleplay" as const,
+  modes: ["conversation", "roleplay"] as ("conversation" | "roleplay" | "game")[],
 };
 
 async function main() {

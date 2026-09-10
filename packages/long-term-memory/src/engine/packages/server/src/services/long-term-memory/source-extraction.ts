@@ -46,6 +46,7 @@ export type ExtractLongTermMemoryFromSourceNoteOptions = {
   scope?: LtmScope;
   modes?: LtmMode[];
   mode?: LtmMode;
+  extractionMode?: LtmMode;
   instruction?: string;
   signal?: AbortSignal;
   operationId?: string;
@@ -381,11 +382,18 @@ async function extractLongTermMemoryFromSourceNoteInner(
     !options.chatId && (sourceNote.provenance?.kind === "character" || sourceNote.provenance?.kind === "lorebook");
   const requestedModes = options.modes?.length
     ? options.modes
-    : importedWithoutChatContext && !options.mode
-      ? [DEFAULT_LTM_IMPORTED_SOURCE_MODE]
-      : sourceNote.modes;
-  const resolvedMode = options.mode ?? requestedModes[0] ?? "roleplay";
-  if (!requestedModes.includes(resolvedMode)) {
+    : sourceNote.modes?.length
+      ? sourceNote.modes
+      : importedWithoutChatContext && !options.mode
+        ? [DEFAULT_LTM_IMPORTED_SOURCE_MODE]
+        : sourceNote.modes;
+  const resolvedMode =
+    options.extractionMode ??
+    options.mode ??
+    sourceNote.extractionFingerprint?.extractionMode ??
+    requestedModes[0] ??
+    "roleplay";
+  if (!options.extractionMode && !requestedModes.includes(resolvedMode)) {
     throw new LtmServiceError(
       `Long-term memory extraction mode is not enabled for source note: ${resolvedMode}`,
       400,
@@ -585,7 +593,7 @@ async function extractLongTermMemoryFromSourceNoteInner(
     sourceNote,
     existingNotes: compilerExistingNotes,
     scope,
-    modes: [resolvedMode],
+    modes: requestedModes,
     mode: resolvedMode,
     sourceHash,
     allowedBuckets,

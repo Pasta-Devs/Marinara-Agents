@@ -391,6 +391,49 @@ async function main() {
       assert.equal(explicitLorebook.imported[0]?.note.modes[0], "game");
       assert.equal(explicitLorebook.imported[0]?.extractionStatus, "succeeded");
 
+      const multiModeLorebook = await importPackageInterop(
+        {
+          source: "lorebooks",
+          sourceIds: [lorebookSourceId],
+          modes: ["conversation"],
+          extract: true,
+          limit: 100,
+        },
+        join(dataDir, "long-term-memory"),
+        new AbortController().signal,
+      );
+      assert.deepEqual(multiModeLorebook.imported[0]?.note.modes, ["conversation"]);
+      assert.equal(multiModeLorebook.imported[0]?.extractionStatus, "succeeded");
+      assert.equal(multiModeLorebook.imported[0]?.note.extractionFingerprint?.extractionMode, "roleplay");
+
+      const refreshedLorebook = await importPackageInterop(
+        {
+          source: "lorebooks",
+          sourceIds: [lorebookSourceId],
+          extract: false,
+          limit: 100,
+        },
+        join(dataDir, "long-term-memory"),
+        new AbortController().signal,
+      );
+      assert.deepEqual(refreshedLorebook.imported[0]?.note.modes, ["conversation"]);
+
+      const { getLtmGlobalSettings, updateLtmGlobalSettings } =
+        await import("../packages/long-term-memory/src/engine/packages/server/src/services/long-term-memory/settings.ts");
+      const initialSettings = await getLtmGlobalSettings(join(dataDir, "long-term-memory"));
+      assert.equal(initialSettings.sourcesAvailabilityModes, undefined);
+      const updatedSettings = await updateLtmGlobalSettings(
+        { sourcesAvailabilityModes: ["conversation", "roleplay"] },
+        join(dataDir, "long-term-memory"),
+      );
+      assert.deepEqual(updatedSettings.sourcesAvailabilityModes, ["conversation", "roleplay"]);
+      const updatedAgain = await updateLtmGlobalSettings(
+        { longTermMemoryBudgetTokens: 2048 },
+        join(dataDir, "long-term-memory"),
+      );
+      assert.deepEqual(updatedAgain.sourcesAvailabilityModes, ["conversation", "roleplay"]);
+      assert.equal(updatedAgain.longTermMemoryBudgetTokens, 2048);
+
       for (const [chat, expectedMode] of [
         [roleplayChat, "roleplay"],
         [gameChat, "game"],
@@ -458,6 +501,21 @@ async function main() {
       assert.equal(importedAgain.counts.sourceNotesWritten, 3);
       assert.ok(importedAgain.imported.every((item) => !item.created));
       assert.equal((await storage.listNotes({ type: "source" })).length, 7);
+
+      const multiModeChatImport = await importPackageInterop(
+        {
+          source: "chats",
+          chatId: conversationChat.id,
+          sourceIds: ["chat-conversation:day:27.07.2026"],
+          modes: ["conversation", "roleplay"],
+          extract: true,
+          limit: 100,
+        },
+        join(dataDir, "long-term-memory"),
+        new AbortController().signal,
+      );
+      assert.deepEqual(multiModeChatImport.imported[0]?.note.modes, ["conversation", "roleplay"]);
+      assert.equal(multiModeChatImport.imported[0]?.note.extractionFingerprint?.extractionMode, "conversation");
     },
     [() => releaseRuntime?.(), () => rm(dataDir, { recursive: true, force: true })],
   );
