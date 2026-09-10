@@ -2078,6 +2078,7 @@ export type SlurpMessage = {
   unlockedAt: string | null;
   readAt: string | null;
   metadata: Record<string, unknown>;
+  senderSnapshot: Record<string, unknown>;
   createdAt: string;
 };
 
@@ -2094,6 +2095,8 @@ export type SlurpThread = {
   lastMessagePreview: string;
   viewerUnread: number;
   creatorUnread: number;
+  needsReply: boolean;
+  generationEpoch: number;
   rapport: SlurpRapport;
   createdAt: string;
   updatedAt: string;
@@ -2239,6 +2242,7 @@ export function useSlurpThread(threadId: string | null, personaId: string | null
       api.get<{
         thread: SlurpThread;
         messages: SlurpMessage[];
+        nextCursor: { createdAt: string; id: string } | null;
         creator: { id: string; handle: string; displayName: string; avatarUrl: string | null } | null;
         counterpart: { id: string; handle: string; displayName: string; avatarUrl: string | null } | null;
         creatorLastActiveAt: string | null;
@@ -2253,6 +2257,18 @@ export function useSlurpThread(threadId: string | null, personaId: string | null
     enabled: Boolean(threadId && personaId),
     refetchInterval: threadId && personaId ? 30_000 : false,
     refetchIntervalInBackground: false,
+  });
+}
+
+export function useSlurpOlderMessages() {
+  return useMutation({
+    mutationFn: (input: { threadId: string; personaId: string; cursor: { createdAt: string; id: string } }) =>
+      api.get<{
+        messages: SlurpMessage[];
+        nextCursor: { createdAt: string; id: string } | null;
+      }>(
+        `/slurp/messages/threads/${encodeURIComponent(input.threadId)}?personaId=${encodeURIComponent(input.personaId)}&cursorAt=${encodeURIComponent(input.cursor.createdAt)}&cursorId=${encodeURIComponent(input.cursor.id)}`,
+      ),
   });
 }
 
@@ -2279,6 +2295,7 @@ export function useSlurpCompose(creatorAccountId: string | null, personaId: stri
       api.get<{
         thread: SlurpThread | null;
         messages: SlurpMessage[];
+        nextCursor: { createdAt: string; id: string } | null;
         creator: { id: string; handle: string; displayName: string; avatarUrl: string | null } | null;
         creatorLastActiveAt?: string | null;
         creatorLastMessageAt?: string | null;

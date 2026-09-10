@@ -42,11 +42,8 @@ assert.ok(
     scoreSlurpRapport({ ...emptySlurpRapportFacts(), tippedCoins: 15 }).score,
   "More tipping must score higher",
 );
-assert.ok(
-  slurpReplyBubbleDelayMs({ bubbleIndex: 2, bubbleCount: 3 }) >
-    slurpReplyBubbleDelayMs({ bubbleIndex: 1, bubbleCount: 3 }),
-  "Delayed bubbles must arrive in order",
-);
+const bubbleDelay = slurpReplyBubbleDelayMs({ bubbleIndex: 1, bubbleCount: 3, nextBubble: "next bubble" });
+assert.ok(bubbleDelay >= 500 && bubbleDelay <= 30_000, "A delayed bubble must use the documented delay range");
 assert.deepEqual(
   splitSlurpReplyBurst("A short reply.", true),
   ["A short reply."],
@@ -151,7 +148,7 @@ const online = slurpReplyPacing({
   minutesUntilOnline: 0,
 });
 assert.equal(online.mode, "instant", "An online creator must answer without a queue");
-assert.ok(online.typingMs >= 1200 && online.typingMs <= 4000, "The typing hold must stay short");
+assert.ok(online.typingMs >= 2000 && online.typingMs <= 90_000, "The typing hold must stay in its bounded range");
 
 const offlineStranger = slurpReplyPacing({
   online: false,
@@ -170,7 +167,8 @@ const offlineWhale = slurpReplyPacing({
   messageLength: 200,
   minutesUntilOnline: 120,
 });
-assert.equal(offlineWhale.mode, "instant", "High rapport must buy an off-hours reply");
+assert.equal(offlineWhale.mode, "delayed", "High rapport must buy an off-hours check-in reply");
+assert.ok(offlineWhale.notBeforeMs > 0 && offlineWhale.notBeforeMs < 20 * 60_000);
 
 const offlineRegular = slurpReplyPacing({
   online: false,
@@ -180,7 +178,7 @@ const offlineRegular = slurpReplyPacing({
   minutesUntilOnline: 120,
 });
 assert.ok(
-  offlineRegular.mode === "queued" && offlineRegular.notBeforeMs < offlineStranger.notBeforeMs,
+  offlineRegular.mode === "delayed" && offlineRegular.notBeforeMs < offlineStranger.notBeforeMs,
   "Warmth must shorten the wait without erasing it",
 );
 
@@ -214,11 +212,11 @@ assert.equal(
   null,
   "Nothing reachable left today must report an unknown wait, not a negative one",
 );
-assert.equal(slurpCreatorAvailability(null, weekday).online, true, "No schedule must mean always reachable");
+assert.equal(slurpCreatorAvailability(null, weekday), null, "No schedule must report no resolved availability");
 assert.equal(
-  slurpCreatorAvailability({ weekStart: schedule.weekStart, days: {} } as never, weekday).online,
-  true,
-  "An empty day must not read as permanently away",
+  slurpCreatorAvailability({ weekStart: schedule.weekStart, days: {} } as never, weekday),
+  null,
+  "An empty schedule must report no resolved availability",
 );
 
 // ── Previews ─────────────────────────────────────────────

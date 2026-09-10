@@ -36,8 +36,9 @@ const offHours = (mood: number) =>
     minutesUntilOnline: 300,
     mood,
   });
-assert.equal(offHours(60).mode, "instant");
-assert.equal(offHours(-90).mode, "queued");
+assert.equal(offHours(60).mode, "delayed");
+assert.equal(offHours(-90).mode, "delayed");
+assert.ok(offHours(-90).notBeforeMs > offHours(60).notBeforeMs);
 
 // Omitting the mood must behave exactly as before it existed.
 const withoutMood = slurpReplyPacing({
@@ -89,20 +90,23 @@ const oneSentence =
 assert.deepEqual(splitSlurpReplyBurst(oneSentence, true), [oneSentence]);
 
 // Later bubbles have fixed, bounded delays that can be persisted as absolute due times.
-const firstDelay = slurpReplyBubbleDelayMs({ bubbleIndex: 1, bubbleCount: 3 });
-const secondDelay = slurpReplyBubbleDelayMs({ bubbleIndex: 2, bubbleCount: 3 });
-assert.ok(firstDelay > 0 && secondDelay > firstDelay, "bubble delays must preserve order");
-assert.ok(secondDelay <= 8_000, "bubble delays must stay bounded");
-assert.equal(slurpReplyBubbleDelayMs({ bubbleIndex: 999, bubbleCount: 3 }), 8_000);
+const firstDelay = slurpReplyBubbleDelayMs({ bubbleIndex: 1, bubbleCount: 3, nextBubble: "one more thing" });
+const secondDelay = slurpReplyBubbleDelayMs({
+  bubbleIndex: 2,
+  bubbleCount: 3,
+  nextBubble: "and this is the last part",
+});
+assert.ok(firstDelay >= 500 && secondDelay >= 500, "bubble delays must be positive");
+assert.ok(firstDelay <= 30_000 && secondDelay <= 30_000, "bubble delays must stay bounded");
 
 const operation = readFileSync(
   "packages/slurp/src/engine/packages/server/src/services/slurp/slurp-message.operation.ts",
   "utf8",
 );
 // The mood the pacing reads is healed first, so a fan is not kept waiting over an old argument.
-assert.match(operation, /mood: recoverSlurpMood\(/u);
+assert.match(operation, /currentMood = recoverSlurpMood\([\s\S]*?mood: currentMood,/u);
 // Only a conversation going well bursts.
-assert.match(operation, /reply\.latitude === "normal" && reply\.moodShift !== "down"/u);
+assert.match(operation, /reply\.latitude === "normal"[\s\S]{0,80}?reply\.moodShift !== "down"/u);
 
 // Being rude in public counts as much as being rude in private. A creator who forgave in the
 // comments what she would not forgive in a DM would not read as one person.

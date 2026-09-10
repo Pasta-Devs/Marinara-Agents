@@ -14,6 +14,7 @@ export type SlurpReplyBubble = {
   messageId: string;
   content: string;
   deliverAt: string;
+  generationEpoch: number;
   createdAt: string;
 };
 
@@ -27,6 +28,7 @@ export function createSlurpReplyQueueStorage(db: DB) {
     messageId: row.messageId,
     content: row.content,
     deliverAt: row.deliverAt,
+    generationEpoch: Number(row.generationEpoch ?? 0),
     createdAt: row.createdAt,
   });
   const storage = {

@@ -224,6 +224,10 @@ export const slurpThreads = fileTable(
     lastMessagePreview: text("last_message_preview").notNull().default(""),
     viewerUnread: text("viewer_unread").notNull().default("0"),
     creatorUnread: text("creator_unread").notNull().default("0"),
+    /** Reply work is separate from whether the Creator has opened the thread. */
+    needsReply: text("needs_reply").notNull().default("false"),
+    /** Invalidates model work that started before a reset or terminal close. */
+    generationEpoch: text("generation_epoch").notNull().default("0"),
     replyNotBeforeAt: text("reply_not_before_at"),
     /** Cached rapport, recomputed on every send. Kept here so the inbox sorts without a scan. */
     rapport: text("rapport").notNull().default("{}"),
@@ -280,6 +284,33 @@ export const slurpThreads = fileTable(
   { uniqueBy: [{ keys: ["viewerAccountId", "creatorAccountId"] }] },
 );
 
+/** One durable Creator follow-up job. The thread JSON field remains a legacy import source only. */
+export const slurpFollowUps = fileTable(
+  "slurp_follow_ups",
+  {
+    id: text("id").primaryKey(),
+    threadId: text("thread_id").notNull(),
+    viewerAccountId: text("viewer_account_id").notNull(),
+    creatorAccountId: text("creator_account_id").notNull(),
+    scheduledAt: text("scheduled_at").notNull(),
+    type: text("type").notNull(),
+    reason: text("reason").notNull(),
+    context: text("context").notNull().default(""),
+    relatedNoteId: text("related_note_id"),
+    sequenceNumber: text("sequence_number"),
+    totalInSequence: text("total_in_sequence"),
+    recurringPattern: text("recurring_pattern"),
+    status: text("status").notNull().default("pending"),
+    claimedAt: text("claimed_at"),
+    sentAt: text("sent_at"),
+    cancelledAt: text("cancelled_at"),
+    failedAt: text("failed_at"),
+    createdAt: text("created_at").notNull(),
+    updatedAt: text("updated_at").notNull(),
+  },
+  { uniqueBy: [{ keys: ["id"] }] },
+);
+
 /**
  * One message. The image columns are copied from `slurp_posts` verbatim so a DM attachment
  * moves through the same claim-token and lease machinery the post pipeline already runs.
@@ -320,6 +351,7 @@ export const slurpMessageClaims = fileTable(
     triggerMessageId: text("trigger_message_id").notNull(),
     creatorAccountId: text("creator_account_id").notNull(),
     replyMessageId: text("reply_message_id"),
+    generationEpoch: text("generation_epoch").notNull().default("0"),
     claimedAt: text("claimed_at").notNull(),
   },
   { uniqueBy: [{ keys: ["threadId"] }] },
@@ -337,6 +369,7 @@ export const slurpReplyBubbles = fileTable(
     messageId: text("message_id").notNull(),
     content: text("content").notNull(),
     deliverAt: text("deliver_at").notNull(),
+    generationEpoch: text("generation_epoch").notNull().default("0"),
     createdAt: text("created_at").notNull(),
   },
   { uniqueBy: [{ keys: ["batchId", "sequence"] }, { keys: ["messageId"] }] },

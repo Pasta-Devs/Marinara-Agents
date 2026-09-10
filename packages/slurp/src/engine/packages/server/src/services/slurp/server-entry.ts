@@ -8,6 +8,7 @@ import { startSlurpFollowUpScheduler } from "./slurp-follow-up-scheduler.service
 import { startSlurpWorldScheduler } from "./slurp-world-scheduler.service.js";
 import { createSlurpActivationLifecycle } from "./slurp-activation-lifecycle.js";
 import { createSlurpStorage } from "../storage/slurp.storage.js";
+import { createSlurpMessagesStorage } from "../storage/slurp-messages.storage.js";
 import * as slurpSchema from "../../db/schema/slurp.js";
 import { createSlurpFirstPostQueue } from "./slurp-first-post-queue.service.js";
 
@@ -41,6 +42,7 @@ export async function activate({
     else app.log?.warn("[slurp] host cannot register package tables; newer Slurp features are off");
 
     await createSlurpStorage(app.db).migrateLegacyNoodlerSourceSnapshots();
+    await createSlurpMessagesStorage(app.db).migrateLegacyFollowUps();
     // Capability routes are registered through the host's revocable privileged route slots.
     // Noodle's existing plugin creates storage adapters while it registers, so expose only the
     // host database on the otherwise constrained collector.

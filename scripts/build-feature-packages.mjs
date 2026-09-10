@@ -155,6 +155,7 @@ const slurpOwnedSourcePaths = [
   "packages/client/src/slurp-package-entry.tsx",
   "packages/client/src/stores/slurp-package.store.ts",
   "packages/server/src/db/schema/slurp.ts",
+  "packages/server/src/routes/slurp-messages.routes.ts",
   "packages/server/src/routes/slurp.routes.ts",
   "packages/server/src/services/slurp",
   "packages/server/src/services/storage/slurp.storage.ts",
@@ -331,7 +332,7 @@ const features = [
   },
   {
     id: "slurp",
-    version: "1.2.63",
+    version: "1.2.64",
     minEngineVersion: "2.4.3",
     maxEngineExclusive: MAX_ENGINE_EXCLUSIVE,
     name: "Slurp",

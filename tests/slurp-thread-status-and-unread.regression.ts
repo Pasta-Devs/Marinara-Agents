@@ -7,8 +7,9 @@ const read = (path: string) => readFileSync(path, "utf8");
 const messagesStorage = read(
   "packages/slurp/src/engine/packages/server/src/services/storage/slurp-messages.storage.ts",
 );
+const replyMethods = read("packages/slurp/src/engine/packages/server/src/services/storage/slurp-reply-methods.ts");
 const messagesRoutes = read("packages/slurp/src/engine/packages/server/src/routes/slurp-messages.routes.ts");
-const messagesUi = read("packages/slurp/src/engine/packages/client/src/components/slurp/SlurpMessages.tsx");
+const profileUi = read("packages/slurp/src/engine/packages/client/src/components/slurp/SlurpProfileSurface.tsx");
 const homeUi = read("packages/slurp/src/engine/packages/client/src/components/slurp/SlurpHome.tsx");
 const locale = JSON.parse(read("packages/slurp/src/engine/packages/client/src/localization/locales/en.json")) as Record<
   string,
@@ -23,24 +24,25 @@ const locale = JSON.parse(read("packages/slurp/src/engine/packages/client/src/lo
 // creator's reply on top, and the badge never cleared.
 assert.match(
   messagesStorage,
-  /creatorUnread: input\.role === "viewer" \? String\(thread\.creatorUnread \+ 1\) : "0",/u,
+  /creatorUnread:[\s\S]*?input\.role === "viewer"[\s\S]*?current\.creatorUnread[\s\S]*?: "0"/u,
   "a creator message must zero creatorUnread, not carry it forward",
 );
 assert.match(
   messagesStorage,
-  /state: input\.role === "creator" && thread\.state === "request" \? "active" : thread\.state,/u,
+  /state: input\.role === "creator" && current\.state === "request" \? "active" : current\.state,/u,
   "a Creator reply must turn a pending request into an active conversation",
 );
 // The other direction is deliberately untouched: a creator reply must not clear what the viewer
 // has yet to read, which is a different count with a different owner.
 assert.match(
   messagesStorage,
-  /viewerUnread: input\.role === "creator" \? String\(thread\.viewerUnread \+ 1\) : String\(thread\.viewerUnread\),/u,
+  /viewerUnread: input\.role === "creator" \? String\(Number\(current\.viewerUnread\) \+ 1\) : current\.viewerUnread,/u,
 );
 // The queue must also pick up pending first contacts. Their first Creator reply promotes them to
 // active; excluding requests here left every off-hours non-subscriber message pending forever.
-assert.match(messagesStorage, /inArray\(slurpThreads\.state, \["active", "request"\]\)/u);
-assert.match(messagesStorage, /thread\.creatorUnread > 0 && \(!thread\.replyNotBeforeAt/u);
+assert.match(replyMethods, /inArray\(slurpThreads\.state, \["active", "request"\]\)/u);
+assert.match(replyMethods, /thread\.needsReply[\s\S]*?thread\.replyNotBeforeAt/u);
+assert.doesNotMatch(replyMethods, /thread\.creatorUnread > 0/u);
 
 // ── Creator status reaches the message thread ───────────────────────────────
 // The rule lived inline in the profile header, so the surface where a player most wants to know
@@ -49,8 +51,7 @@ assert.match(messagesRoutes, /creatorLastActiveAt: latestPost\?\.createdAt \?\? 
 assert.match(messagesRoutes, /creatorLastMessageAt: latestMessage,/u);
 assert.match(messagesRoutes, /creatorAvailability: availability,/u);
 assert.match(messagesRoutes, /creatorAutoPosting: Boolean\(creator\.settings\.scheduler\.autoPosting\?\.enabled\),/u);
-assert.match(messagesUi, /slurpCreatorStatus\(\{/u, "the thread header must derive a status");
-assert.match(messagesUi, /ui\.slurp\.profile\.status\.\$\{creatorStatus\}/u);
+assert.match(profileUi, /localizeUi\(`ui\.slurp\.profile\.status\.\$\{status\}/u, "the profile must render a status");
 // One rule, two callers. Two copies would drift.
 assert.match(homeUi, /slurpCreatorStatus\(/u);
 assert.doesNotMatch(homeUi, /activityAge <= 15 \* 60_000/u, "the inline copy of the rule must be gone");

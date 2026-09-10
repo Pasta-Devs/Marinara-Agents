@@ -81,6 +81,7 @@ export const mapMessage = (row: Record<string, unknown>): SlurpMessage => ({
   unlockedAt: (row.unlockedAt as string | null) ?? null,
   readAt: (row.readAt as string | null) ?? null,
   metadata: json(row.metadata as string),
+  senderSnapshot: json(row.senderSnapshot as string),
   createdAt: String(row.createdAt),
 });
 
@@ -103,6 +104,11 @@ export const mapThread = (row: Record<string, unknown>): SlurpThread => ({
   lastMessagePreview: String(row.lastMessagePreview ?? ""),
   viewerUnread: int(row.viewerUnread as string),
   creatorUnread: int(row.creatorUnread as string),
+  needsReply:
+    row.needsReply == null
+      ? int(row.creatorUnread as string) > 0
+      : row.needsReply === true || row.needsReply === "true",
+  generationEpoch: int(row.generationEpoch as string),
   replyNotBeforeAt: (row.replyNotBeforeAt as string | null) ?? null,
   rapport: readStoredRapport(json(row.rapport as string)),
   mood: Number.isFinite(Number(row.mood)) ? Number(row.mood) : 0,

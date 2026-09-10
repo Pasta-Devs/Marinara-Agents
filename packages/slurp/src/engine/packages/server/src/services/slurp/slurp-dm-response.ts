@@ -125,5 +125,16 @@ export function readSlurpDmReply(value: unknown): SlurpDmReply {
           },
         }
       : {}),
+    ...(parsed.data.followUp
+      ? {
+          followUp: {
+            type: parsed.data.followUp.type,
+            timing: parsed.data.followUp.timing,
+            count: parsed.data.followUp.count,
+            reason: parsed.data.followUp.reason,
+            context: parsed.data.followUp.context,
+          },
+        }
+      : {}),
   };
 }

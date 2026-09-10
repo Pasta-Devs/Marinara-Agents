@@ -6,7 +6,7 @@
 // lines. It composes that storage for accounts, subscriptions, and the wallet instead of
 // reimplementing them, so a DM tip and a profile tip move coins through exactly one code path.
 import { tolerateMissingTables } from "./slurp-host-tables.js";
-import { and, asc, desc, eq, gt, isNotNull } from "../../db/file-query.js";
+import { and, asc, desc, eq, gt, inArray, isNotNull, lt, lte, or } from "../../db/file-query.js";
 import { newId } from "../../utils/id-generator.js";
 import type { DB } from "../../db/connection.js";
 import { isFileUniqueConstraintError } from "../../db/file-schema.js";
@@ -15,6 +15,7 @@ import {
   slurpMessageClaims,
   slurpMessages,
   slurpReplyBubbles,
+  slurpFollowUps,
   slurpThreads,
 } from "../../db/schema/slurp.js";
 import { applySlurpMood, type SlurpMoodShift } from "../slurp/slurp-mood.js";
@@ -122,7 +123,46 @@ export function createSlurpMessagesStorage(db: DB) {
 
     async getThreadById(threadId: string): Promise<SlurpThread | null> {
       const rows = await db.select().from(slurpThreads).where(eq(slurpThreads.id, threadId));
-      return rows[0] ? mapThread(rows[0]) : null;
+      return rows[0] ? storage.withFollowUps(mapThread(rows[0])) : null;
+    },
+
+    async withFollowUps(thread: SlurpThread): Promise<SlurpThread> {
+      const rows = await db.select().from(slurpFollowUps).where(eq(slurpFollowUps.threadId, thread.id));
+      if (rows.length === 0 && thread.scheduledFollowUps.length > 0) {
+        await storage.addScheduledFollowUps(thread.id, thread.scheduledFollowUps);
+        return { ...thread, scheduledFollowUps: thread.scheduledFollowUps };
+      }
+      return {
+        ...thread,
+        scheduledFollowUps: rows
+          .filter((row) => row.status === "pending")
+          .map((row) => ({
+            id: row.id,
+            scheduledAt: row.scheduledAt,
+            type: row.type,
+            reason: row.reason,
+            context: row.context,
+            ...(row.relatedNoteId ? { relatedNoteId: row.relatedNoteId } : {}),
+            ...(row.sequenceNumber == null ? {} : { sequenceNumber: Number(row.sequenceNumber) }),
+            ...(row.totalInSequence == null ? {} : { totalInSequence: Number(row.totalInSequence) }),
+            ...(row.recurringPattern ? { recurringPattern: row.recurringPattern } : {}),
+          })),
+      };
+    },
+
+    /** Import pre-table follow-ups once, while keeping the old column readable during upgrade. */
+    async migrateLegacyFollowUps(): Promise<number> {
+      let migrated = 0;
+      const threads = await db.select().from(slurpThreads);
+      for (const thread of threads) {
+        const existing = await db.select().from(slurpFollowUps).where(eq(slurpFollowUps.threadId, thread.id));
+        if (existing.length > 0) continue;
+        const legacy = mapThread(thread).scheduledFollowUps;
+        if (legacy.length === 0) continue;
+        await storage.addScheduledFollowUps(thread.id, legacy);
+        migrated += legacy.length;
+      }
+      return migrated;
     },
 
     async getThread(viewerAccountId: string, creatorAccountId: string): Promise<SlurpThread | null> {
@@ -132,7 +172,7 @@ export function createSlurpMessagesStorage(db: DB) {
         .where(
           and(eq(slurpThreads.viewerAccountId, viewerAccountId), eq(slurpThreads.creatorAccountId, creatorAccountId)),
         );
-      return rows[0] ? mapThread(rows[0]) : null;
+      return rows[0] ? storage.withFollowUps(mapThread(rows[0])) : null;
     },
 
     async listMessages(threadId: string, limit = 120): Promise<SlurpMessage[]> {
@@ -143,6 +183,37 @@ export function createSlurpMessagesStorage(db: DB) {
         .orderBy(desc(slurpMessages.createdAt))
         .limit(limit);
       return rows.map(mapMessage).reverse();
+    },
+
+    async listMessagePage(
+      threadId: string,
+      limit = 120,
+      cursor?: { createdAt: string; id: string } | null,
+    ): Promise<{ messages: SlurpMessage[]; nextCursor: { createdAt: string; id: string } | null }> {
+      const bounded = Math.max(1, Math.min(120, Math.trunc(limit)));
+      const rows = await db
+        .select()
+        .from(slurpMessages)
+        .where(
+          and(
+            eq(slurpMessages.threadId, threadId),
+            cursor
+              ? or(
+                  lt(slurpMessages.createdAt, cursor.createdAt),
+                  and(eq(slurpMessages.createdAt, cursor.createdAt), lt(slurpMessages.id, cursor.id)),
+                )
+              : undefined,
+          ),
+        )
+        .orderBy(desc(slurpMessages.createdAt), desc(slurpMessages.id))
+        .limit(bounded + 1);
+      const page = rows.slice(0, bounded);
+      const oldest = page[page.length - 1];
+      return {
+        messages: page.map(mapMessage).reverse(),
+        nextCursor:
+          rows.length > bounded && oldest ? { createdAt: String(oldest.createdAt), id: String(oldest.id) } : null,
+      };
     },
 
     /**
@@ -178,7 +249,7 @@ export function createSlurpMessagesStorage(db: DB) {
       const rows = await db.select().from(slurpThreads).orderBy(desc(slurpThreads.lastMessageAt));
       const out: SlurpThreadView[] = [];
       for (const row of rows) {
-        const thread = mapThread(row);
+        const thread = await storage.withFollowUps(mapThread(row));
         if (!wanted.has(thread.creatorAccountId)) continue;
         // A thread the player opened with their own Creator would otherwise appear on both sides.
         if (wanted.has(thread.viewerAccountId)) continue;
@@ -205,7 +276,7 @@ export function createSlurpMessagesStorage(db: DB) {
       );
       const views: SlurpThreadView[] = [];
       for (const row of rows) {
-        const thread = mapThread(row);
+        const thread = await storage.withFollowUps(mapThread(row));
         const creator = await slurp.getNoodlerAccountById(thread.creatorAccountId);
         if (!creator) continue;
         views.push({
@@ -340,6 +411,8 @@ export function createSlurpMessagesStorage(db: DB) {
         lastMessagePreview: "",
         viewerUnread: "0",
         creatorUnread: "0",
+        needsReply: "false",
+        generationEpoch: "0",
         replyNotBeforeAt: null,
         rapport: "{}",
         threadState: "{}",
@@ -376,6 +449,8 @@ export function createSlurpMessagesStorage(db: DB) {
         metadata?: Record<string, unknown>;
         createdAt?: string;
         replyObligationCreatedAt?: string;
+        preserveReplyObligation?: boolean;
+        scheduledFollowUpId?: string;
       },
     ): Promise<SlurpMessage | null> {
       const thread = await storage.getThreadById(threadId);
@@ -384,6 +459,12 @@ export function createSlurpMessagesStorage(db: DB) {
       const content = input.content ?? "";
       const price = Math.max(0, Math.trunc(input.price ?? 0));
       const timestamp = now();
+      if (input.role === "creator" && thread.state === "declined") return null;
+      const sender =
+        input.role === "creator"
+          ? await slurp.getNoodlerAccountById(input.senderAccountId)
+          : ((await slurp.getViewer(input.senderAccountId).catch(() => null)) ??
+            (await slurp.getNoodlerAccountById(input.senderAccountId)));
       const message = {
         id: input.id ?? newId(),
         threadId,
@@ -399,36 +480,50 @@ export function createSlurpMessagesStorage(db: DB) {
         unlockedAt: input.unlockedAt ?? null,
         readAt: null,
         metadata: JSON.stringify(input.metadata ?? {}),
-        senderSnapshot: "{}",
+        senderSnapshot: JSON.stringify(
+          sender ? { displayName: sender.displayName, handle: sender.handle, avatarUrl: sender.avatarUrl ?? null } : {},
+        ),
         createdAt: input.createdAt ?? timestamp,
       };
       const rapport = await storage.rapportFor(thread.viewerAccountId, thread.creatorAccountId);
+      let stored = false;
       try {
         await db.transaction(async (tx) => {
-          await tx.insert(slurpMessages).values(message);
           const currentRows = await tx.select().from(slurpThreads).where(eq(slurpThreads.id, threadId));
           const current = currentRows[0];
           if (!current) return;
+          if (input.role === "creator" && current.state === "declined") return;
+          if (input.scheduledFollowUpId) {
+            const followUp = await tx
+              .select({ status: slurpFollowUps.status })
+              .from(slurpFollowUps)
+              .where(and(eq(slurpFollowUps.id, input.scheduledFollowUpId), eq(slurpFollowUps.threadId, threadId)))
+              .get();
+            if (followUp?.status !== "claimed") return;
+          }
+          await tx.insert(slurpMessages).values(message);
           const newerViewer =
-            input.role === "creator" && input.replyObligationCreatedAt
-              ? (
-                  await tx
-                    .select()
-                    .from(slurpMessages)
-                    .where(
-                      and(
-                        eq(slurpMessages.threadId, threadId),
-                        eq(slurpMessages.role, "viewer"),
-                        gt(slurpMessages.createdAt, input.replyObligationCreatedAt),
-                      ),
-                    )
-                    .limit(1)
-                ).length > 0
-              : false;
+            input.role === "creator" && input.preserveReplyObligation
+              ? current.needsReply === "true"
+              : input.role === "creator" && input.replyObligationCreatedAt
+                ? (
+                    await tx
+                      .select()
+                      .from(slurpMessages)
+                      .where(
+                        and(
+                          eq(slurpMessages.threadId, threadId),
+                          eq(slurpMessages.role, "viewer"),
+                          gt(slurpMessages.createdAt, input.replyObligationCreatedAt),
+                        ),
+                      )
+                      .limit(1)
+                  ).length > 0
+                : false;
           await tx
             .update(slurpThreads)
             .set({
-              state: input.role === "creator" && thread.state === "request" ? "active" : thread.state,
+              state: input.role === "creator" && current.state === "request" ? "active" : current.state,
               lastMessageAt: message.createdAt > current.lastMessageAt ? message.createdAt : current.lastMessageAt,
               lastMessagePreview:
                 message.createdAt >= current.lastMessageAt
@@ -436,19 +531,31 @@ export function createSlurpMessagesStorage(db: DB) {
                   : current.lastMessagePreview,
               viewerUnread: input.role === "creator" ? String(Number(current.viewerUnread) + 1) : current.viewerUnread,
               creatorUnread:
-                input.role === "viewer" ? String(Number(current.creatorUnread) + 1) : current.creatorUnread,
+                input.role === "viewer"
+                  ? String(Number(current.creatorUnread) + 1)
+                  : newerViewer
+                    ? current.creatorUnread
+                    : "0",
+              needsReply: input.role === "viewer" || newerViewer ? "true" : "false",
               replyNotBeforeAt: input.role === "creator" && !newerViewer ? null : current.replyNotBeforeAt,
               rapport: JSON.stringify(rapport),
               updatedAt: timestamp,
             })
             .where(eq(slurpThreads.id, threadId));
+          if (input.scheduledFollowUpId) {
+            await tx
+              .update(slurpFollowUps)
+              .set({ status: "sent", sentAt: timestamp, updatedAt: timestamp })
+              .where(eq(slurpFollowUps.id, input.scheduledFollowUpId));
+          }
+          stored = true;
         });
       } catch (error) {
         if (input.id && isFileUniqueConstraintError(error, "slurp_messages", ["id"]))
           return storage.getMessageById(input.id);
         throw error;
       }
-      return mapMessage(message);
+      return stored ? mapMessage(message) : null;
     },
 
     /** Persist the visible bubble and its delayed siblings as one recoverable unit. */
@@ -463,6 +570,7 @@ export function createSlurpMessagesStorage(db: DB) {
           senderAccountId: string;
           content: string;
           deliverAt: string;
+          generationEpoch: number;
           createdAt: string;
         }>;
       },
@@ -471,6 +579,7 @@ export function createSlurpMessagesStorage(db: DB) {
       if (!thread) return null;
       const rapport = await storage.rapportFor(thread.viewerAccountId, thread.creatorAccountId);
       const timestamp = now();
+      const creator = await slurp.getNoodlerAccountById(input.first.senderAccountId);
       const first = {
         id: input.first.id ?? newId(),
         threadId,
@@ -486,7 +595,11 @@ export function createSlurpMessagesStorage(db: DB) {
         unlockedAt: null,
         readAt: null,
         metadata: "{}",
-        senderSnapshot: "{}",
+        senderSnapshot: JSON.stringify(
+          creator
+            ? { displayName: creator.displayName, handle: creator.handle, avatarUrl: creator.avatarUrl ?? null }
+            : {},
+        ),
         createdAt: timestamp,
       };
       const rows = input.delayed.map((bubble) => ({
@@ -498,6 +611,7 @@ export function createSlurpMessagesStorage(db: DB) {
         messageId: bubble.id,
         content: bubble.content,
         deliverAt: bubble.deliverAt,
+        generationEpoch: String(bubble.generationEpoch),
         createdAt: bubble.createdAt,
       }));
       let stored = false;
@@ -509,14 +623,22 @@ export function createSlurpMessagesStorage(db: DB) {
           .select()
           .from(slurpMessageClaims)
           .where(eq(slurpMessageClaims.id, input.first.id ?? "__missing_claim__"));
+        const claim = claimRows[0];
+        if (
+          !claim ||
+          String(claim.threadId) !== threadId ||
+          String(claim.generationEpoch ?? "0") !== String(current.generationEpoch ?? "0") ||
+          (current.state !== "active" && current.state !== "request")
+        )
+          return;
         const latestRows = await tx
           .select()
           .from(slurpMessages)
           .where(eq(slurpMessages.threadId, threadId))
-          .orderBy(desc(slurpMessages.createdAt))
+          .orderBy(desc(slurpMessages.createdAt), desc(slurpMessages.id))
           .limit(1);
-        const newerViewerMessage =
-          latestRows[0]?.role === "viewer" && latestRows[0].id !== claimRows[0]?.triggerMessageId;
+        if (latestRows[0]?.id !== claim.triggerMessageId) return;
+        const newerViewerMessage = false;
         await tx.insert(slurpMessages).values(first);
         if (rows.length > 0) await tx.insert(slurpReplyBubbles).values(rows);
         // Answering is reading. Nothing cleared this before, so `listThreadsAwaitingReply` kept
@@ -544,6 +666,7 @@ export function createSlurpMessagesStorage(db: DB) {
             lastMessagePreview: slurpMessagePreview("text", first.content, 0),
             viewerUnread: String(Number(current.viewerUnread) + 1),
             creatorUnread: newerViewerMessage ? current.creatorUnread : "0",
+            needsReply: newerViewerMessage ? "true" : "false",
             replyNotBeforeAt: newerViewerMessage ? current.replyNotBeforeAt : null,
             rapport: JSON.stringify(rapport),
             updatedAt: timestamp,
@@ -1352,7 +1475,13 @@ export function createSlurpMessagesStorage(db: DB) {
       const timestamp = now();
       await db
         .update(slurpThreads)
-        .set({ state: "declined", coolUntil: null, updatedAt: timestamp })
+        .set({
+          state: "declined",
+          coolUntil: null,
+          needsReply: "false",
+          generationEpoch: String(Number((await storage.getThreadById(threadId))?.generationEpoch ?? 0) + 1),
+          updatedAt: timestamp,
+        })
         .where(eq(slurpThreads.id, threadId));
       await createSlurpReplyQueueStorage(db).removeForThread(threadId);
     },
@@ -1386,30 +1515,114 @@ export function createSlurpMessagesStorage(db: DB) {
     ): Promise<void> {
       const thread = await db.select().from(slurpThreads).where(eq(slurpThreads.id, threadId)).get();
       if (!thread) return;
-
-      const existing = thread.scheduledFollowUps ? JSON.parse(thread.scheduledFollowUps) : [];
-      const updated = [...existing, ...followUps];
-
-      await db
-        .update(slurpThreads)
-        .set({ scheduledFollowUps: JSON.stringify(updated), updatedAt: now() })
-        .where(eq(slurpThreads.id, threadId));
+      const timestamp = now();
+      for (const followUp of followUps) {
+        await db.insert(slurpFollowUps).values({
+          ...followUp,
+          threadId,
+          viewerAccountId: String(thread.viewerAccountId),
+          creatorAccountId: String(thread.creatorAccountId),
+          sequenceNumber: followUp.sequenceNumber == null ? null : String(followUp.sequenceNumber),
+          totalInSequence: followUp.totalInSequence == null ? null : String(followUp.totalInSequence),
+          status: "pending",
+          claimedAt: null,
+          sentAt: null,
+          cancelledAt: null,
+          failedAt: null,
+          createdAt: timestamp,
+          updatedAt: timestamp,
+        });
+      }
     },
 
     /**
      * Remove a specific follow-up by ID.
      */
     async removeScheduledFollowUp(threadId: string, followUpId: string): Promise<void> {
-      const thread = await db.select().from(slurpThreads).where(eq(slurpThreads.id, threadId)).get();
-      if (!thread) return;
-
-      const existing = thread.scheduledFollowUps ? JSON.parse(thread.scheduledFollowUps) : [];
-      const updated = existing.filter((f: { id: string }) => f.id !== followUpId);
-
+      await storage.cancelScheduledFollowUp(threadId, followUpId);
+    },
+    async claimScheduledFollowUp(followUpId: string): Promise<boolean> {
+      const timestamp = now();
+      const staleBefore = new Date(Date.now() - 10 * 60_000).toISOString();
+      return db.transaction(async (tx) => {
+        const current = (
+          await tx
+            .select({ status: slurpFollowUps.status, claimedAt: slurpFollowUps.claimedAt })
+            .from(slurpFollowUps)
+            .where(eq(slurpFollowUps.id, followUpId))
+        )[0];
+        if (
+          !current ||
+          (current.status !== "pending" &&
+            !(current.status === "claimed" && current.claimedAt && current.claimedAt <= staleBefore))
+        )
+          return false;
+        await tx
+          .update(slurpFollowUps)
+          .set({ status: "claimed", claimedAt: timestamp, updatedAt: timestamp })
+          .where(
+            and(
+              eq(slurpFollowUps.id, followUpId),
+              or(
+                eq(slurpFollowUps.status, "pending"),
+                and(eq(slurpFollowUps.status, "claimed"), lte(slurpFollowUps.claimedAt, staleBefore)),
+              ),
+            ),
+          );
+        const after = (
+          await tx
+            .select({ status: slurpFollowUps.status, claimedAt: slurpFollowUps.claimedAt })
+            .from(slurpFollowUps)
+            .where(eq(slurpFollowUps.id, followUpId))
+        )[0];
+        return after?.status === "claimed" && after.claimedAt === timestamp;
+      });
+    },
+    async isScheduledFollowUpClaimed(followUpId: string): Promise<boolean> {
+      const rows = await db
+        .select({ status: slurpFollowUps.status })
+        .from(slurpFollowUps)
+        .where(eq(slurpFollowUps.id, followUpId));
+      return rows[0]?.status === "claimed";
+    },
+    async completeScheduledFollowUp(threadId: string, followUpId: string): Promise<void> {
+      const timestamp = now();
       await db
-        .update(slurpThreads)
-        .set({ scheduledFollowUps: JSON.stringify(updated), updatedAt: now() })
-        .where(eq(slurpThreads.id, threadId));
+        .update(slurpFollowUps)
+        .set({ status: "sent", sentAt: timestamp, updatedAt: timestamp })
+        .where(
+          and(
+            eq(slurpFollowUps.id, followUpId),
+            eq(slurpFollowUps.threadId, threadId),
+            eq(slurpFollowUps.status, "claimed"),
+          ),
+        );
+    },
+    async cancelScheduledFollowUp(threadId: string, followUpId: string): Promise<void> {
+      const timestamp = now();
+      await db
+        .update(slurpFollowUps)
+        .set({ status: "cancelled", cancelledAt: timestamp, updatedAt: timestamp })
+        .where(
+          and(
+            eq(slurpFollowUps.id, followUpId),
+            eq(slurpFollowUps.threadId, threadId),
+            inArray(slurpFollowUps.status, ["pending", "claimed"]),
+          ),
+        );
+    },
+    async failScheduledFollowUp(threadId: string, followUpId: string): Promise<void> {
+      const timestamp = now();
+      await db
+        .update(slurpFollowUps)
+        .set({ status: "pending", claimedAt: null, failedAt: timestamp, updatedAt: timestamp })
+        .where(
+          and(
+            eq(slurpFollowUps.id, followUpId),
+            eq(slurpFollowUps.threadId, threadId),
+            eq(slurpFollowUps.status, "claimed"),
+          ),
+        );
     },
 
     /**
@@ -1433,41 +1646,50 @@ export function createSlurpMessagesStorage(db: DB) {
         };
       }>
     > {
-      const threads = await db
+      const rows = await db
         .select({
-          id: slurpThreads.id,
-          viewerAccountId: slurpThreads.viewerAccountId,
-          creatorAccountId: slurpThreads.creatorAccountId,
-          scheduledFollowUps: slurpThreads.scheduledFollowUps,
+          id: slurpFollowUps.id,
+          threadId: slurpFollowUps.threadId,
+          viewerAccountId: slurpFollowUps.viewerAccountId,
+          creatorAccountId: slurpFollowUps.creatorAccountId,
+          scheduledAt: slurpFollowUps.scheduledAt,
+          type: slurpFollowUps.type,
+          reason: slurpFollowUps.reason,
+          context: slurpFollowUps.context,
+          relatedNoteId: slurpFollowUps.relatedNoteId,
+          sequenceNumber: slurpFollowUps.sequenceNumber,
+          totalInSequence: slurpFollowUps.totalInSequence,
+          recurringPattern: slurpFollowUps.recurringPattern,
         })
-        .from(slurpThreads)
-        .where(eq(slurpThreads.state, "active"));
-
-      const results: Array<{
-        id: string;
-        viewerAccountId: string;
-        creatorAccountId: string;
-        dueFollowUp: any;
-      }> = [];
-
-      for (const thread of threads) {
-        try {
-          const followUps = JSON.parse(thread.scheduledFollowUps);
-          const dueFollowUp = followUps.find((f: { scheduledAt: string }) => f.scheduledAt <= now);
-          if (dueFollowUp) {
-            results.push({
-              id: thread.id,
-              viewerAccountId: thread.viewerAccountId,
-              creatorAccountId: thread.creatorAccountId,
-              dueFollowUp,
-            });
-          }
-        } catch {
-          // Invalid JSON, skip
-        }
-      }
-
-      return results;
+        .from(slurpFollowUps)
+        .where(
+          and(
+            lte(slurpFollowUps.scheduledAt, now),
+            or(
+              eq(slurpFollowUps.status, "pending"),
+              and(
+                eq(slurpFollowUps.status, "claimed"),
+                lte(slurpFollowUps.claimedAt, new Date(Date.now() - 10 * 60_000).toISOString()),
+              ),
+            ),
+          ),
+        );
+      return rows.map((row) => ({
+        id: row.threadId,
+        viewerAccountId: row.viewerAccountId,
+        creatorAccountId: row.creatorAccountId,
+        dueFollowUp: {
+          id: row.id,
+          scheduledAt: row.scheduledAt,
+          type: row.type,
+          reason: row.reason,
+          context: row.context,
+          relatedNoteId: row.relatedNoteId ?? undefined,
+          sequenceNumber: row.sequenceNumber == null ? undefined : Number(row.sequenceNumber),
+          totalInSequence: row.totalInSequence == null ? undefined : Number(row.totalInSequence),
+          recurringPattern: row.recurringPattern ?? undefined,
+        },
+      }));
     },
 
     /**
@@ -1480,35 +1702,36 @@ export function createSlurpMessagesStorage(db: DB) {
       byType: Record<string, { scheduled: number; sent: number }>;
       avgResponseRate: number;
     }> {
-      // Count currently scheduled
-      const threads = await db
-        .select({ scheduledFollowUps: slurpThreads.scheduledFollowUps })
-        .from(slurpThreads)
-        .where(eq(slurpThreads.creatorAccountId, creatorAccountId));
+      const followUps = await db
+        .select()
+        .from(slurpFollowUps)
+        .where(eq(slurpFollowUps.creatorAccountId, creatorAccountId));
 
-      let totalScheduled = 0;
+      const totalScheduled = followUps.filter(
+        (followUp) => followUp.status === "pending" || followUp.status === "claimed",
+      ).length;
+      const totalCancelled = followUps.filter((followUp) => followUp.status === "cancelled").length;
       const byType: Record<string, { scheduled: number; sent: number }> = {};
-
-      for (const thread of threads) {
-        try {
-          const followUps = JSON.parse(thread.scheduledFollowUps);
-          totalScheduled += followUps.length;
-          for (const followUp of followUps) {
-            if (!byType[followUp.type]) {
-              byType[followUp.type] = { scheduled: 0, sent: 0 };
-            }
-            byType[followUp.type].scheduled += 1;
-          }
-        } catch {
-          // Invalid JSON, skip
-        }
+      for (const followUp of followUps) {
+        if (!byType[followUp.type]) byType[followUp.type] = { scheduled: 0, sent: 0 };
+        if (followUp.status === "pending" || followUp.status === "claimed") byType[followUp.type].scheduled += 1;
       }
 
       // Count sent follow-ups from message metadata
       const messages = await db
-        .select({ metadata: slurpMessages.metadata, threadId: slurpMessages.threadId })
+        .select({
+          metadata: slurpMessages.metadata,
+          threadId: slurpMessages.threadId,
+          createdAt: slurpMessages.createdAt,
+        })
         .from(slurpMessages)
-        .where(and(eq(slurpMessages.role, "creator"), isNotNull(slurpMessages.metadata)));
+        .where(
+          and(
+            eq(slurpMessages.role, "creator"),
+            eq(slurpMessages.senderAccountId, creatorAccountId),
+            isNotNull(slurpMessages.metadata),
+          ),
+        );
 
       let totalSent = 0;
       let responsesReceived = 0;
@@ -1528,7 +1751,13 @@ export function createSlurpMessagesStorage(db: DB) {
             const nextMessages = await db
               .select({ role: slurpMessages.role })
               .from(slurpMessages)
-              .where(and(eq(slurpMessages.threadId, msg.threadId), eq(slurpMessages.role, "viewer")))
+              .where(
+                and(
+                  eq(slurpMessages.threadId, msg.threadId),
+                  eq(slurpMessages.role, "viewer"),
+                  gt(slurpMessages.createdAt, msg.createdAt),
+                ),
+              )
               .limit(1);
 
             if (nextMessages.length > 0) {
@@ -1545,7 +1774,7 @@ export function createSlurpMessagesStorage(db: DB) {
       return {
         totalScheduled,
         totalSent,
-        totalCancelled: 0, // We don't track cancellations separately yet
+        totalCancelled,
         byType,
         avgResponseRate,
       };
@@ -1568,38 +1797,41 @@ export function createSlurpMessagesStorage(db: DB) {
      */
     async resetThread(threadId: string): Promise<void> {
       const timestamp = now();
-      await createSlurpReplyQueueStorage(db).removeForThread(threadId);
-      for (const row of await db.select().from(slurpMessageClaims).where(eq(slurpMessageClaims.threadId, threadId))) {
-        await db.delete(slurpMessageClaims).where(eq(slurpMessageClaims.id, row.id));
-      }
-      for (const row of await db.select().from(slurpMessages).where(eq(slurpMessages.threadId, threadId))) {
-        await db.delete(slurpMessages).where(eq(slurpMessages.id, row.id));
-      }
-      for (const row of await db.select().from(slurpCommissions).where(eq(slurpCommissions.threadId, threadId))) {
-        if (row.state !== "brief" && row.state !== "quoted") continue;
-        await db
-          .update(slurpCommissions)
-          .set({ state: "declined", updatedAt: timestamp })
-          .where(eq(slurpCommissions.id, String(row.id)));
-      }
-      await db
-        .update(slurpThreads)
-        .set({
-          lastMessageAt: timestamp,
-          lastMessagePreview: "",
-          viewerUnread: "0",
-          creatorUnread: "0",
-          replyNotBeforeAt: null,
-          mood: "0",
-          moodUpdatedAt: null,
-          coolUntil: null,
-          clearedAt: timestamp,
-          threadState: "{}",
-          strikes: "0",
-          lastStrikeAt: null,
-          updatedAt: timestamp,
-        })
-        .where(eq(slurpThreads.id, threadId));
+      await db.transaction(async (tx) => {
+        const thread = await tx.select().from(slurpThreads).where(eq(slurpThreads.id, threadId)).get();
+        if (!thread) return;
+        await tx.delete(slurpReplyBubbles).where(eq(slurpReplyBubbles.threadId, threadId));
+        await tx.delete(slurpMessageClaims).where(eq(slurpMessageClaims.threadId, threadId));
+        await tx.delete(slurpMessages).where(eq(slurpMessages.threadId, threadId));
+        await tx.delete(slurpFollowUps).where(eq(slurpFollowUps.threadId, threadId));
+        for (const row of await tx.select().from(slurpCommissions).where(eq(slurpCommissions.threadId, threadId))) {
+          if (row.state !== "brief" && row.state !== "quoted") continue;
+          await tx
+            .update(slurpCommissions)
+            .set({ state: "declined", updatedAt: timestamp })
+            .where(eq(slurpCommissions.id, String(row.id)));
+        }
+        await tx
+          .update(slurpThreads)
+          .set({
+            lastMessageAt: timestamp,
+            lastMessagePreview: "",
+            viewerUnread: "0",
+            creatorUnread: "0",
+            needsReply: "false",
+            generationEpoch: String(Number(thread.generationEpoch ?? 0) + 1),
+            replyNotBeforeAt: null,
+            mood: "0",
+            moodUpdatedAt: null,
+            coolUntil: null,
+            clearedAt: timestamp,
+            threadState: "{}",
+            strikes: "0",
+            lastStrikeAt: null,
+            updatedAt: timestamp,
+          })
+          .where(eq(slurpThreads.id, threadId));
+      });
     },
 
     /**
@@ -1667,6 +1899,8 @@ export function createSlurpMessagesStorage(db: DB) {
     rapportFactsFor: () => emptySlurpRapportFacts(),
     claimReply: () => ({ status: "busy" as const }),
     appendReplyBatch: () => null,
+    migrateLegacyFollowUps: () => 0,
+    claimScheduledFollowUp: () => false,
   });
 }
 

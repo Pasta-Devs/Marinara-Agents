@@ -55,6 +55,8 @@ export function startSlurpFollowUpScheduler(app: FastifyInstance, registerStop?:
           const followUp: ScheduledFollowUp = threadRow.dueFollowUp;
           if (!isFollowUpDue(followUp)) continue;
 
+          if (!(await messages.claimScheduledFollowUp(followUp.id))) continue;
+
           logger.info(
             "[slurp-follow-up] Generating follow-up for thread %s: %s (%s)",
             threadRow.id,
@@ -64,14 +66,14 @@ export function startSlurpFollowUpScheduler(app: FastifyInstance, registerStop?:
 
           const thread = await messages.getThreadById(threadRow.id);
           if (!thread || thread.state !== "active") {
-            await messages.removeScheduledFollowUp(threadRow.id, followUp.id);
+            await messages.cancelScheduledFollowUp(threadRow.id, followUp.id);
             continue;
           }
 
           const creator = await slurp.getNoodlerAccountById(threadRow.creatorAccountId);
           const viewer = await slurp.getViewer(threadRow.viewerAccountId);
           if (!creator || !viewer) {
-            await messages.removeScheduledFollowUp(threadRow.id, followUp.id);
+            await messages.cancelScheduledFollowUp(threadRow.id, followUp.id);
             continue;
           }
 
@@ -80,7 +82,7 @@ export function startSlurpFollowUpScheduler(app: FastifyInstance, registerStop?:
           const subscriptions = await slurp.listSubscriptionsForViewer(threadRow.viewerAccountId);
           const subscribed = subscriptions.some((entry) => entry.creatorAccountId === threadRow.creatorAccountId);
 
-          // Generate the follow-up message with special context
+          // Add the scheduled reason to the normal guidance so the model knows why it is writing.
           const reply = await generateSlurpMessageReply({
             db: app.db,
             creator,
@@ -94,12 +96,12 @@ export function startSlurpFollowUpScheduler(app: FastifyInstance, registerStop?:
             moodUpdatedAt: thread.moodUpdatedAt,
             notes: thread.notes,
             threadState: thread.threadState,
-            creatorState: thread.creatorState,
+            creatorState: await slurp.getCreatorState(threadRow.creatorAccountId),
             dayVibe: await describeSlurpDayVibe(app.db, threadRow.creatorAccountId),
             coolingOff: false,
             strikes: activeSlurpStrikes(thread.strikes, thread.lastStrikeAt),
             connection,
-            // TODO: Inject followUp context into prompt
+            generationGuidance: formatFollowUpContext(followUp),
           });
 
           // Store the follow-up message
@@ -124,19 +126,22 @@ export function startSlurpFollowUpScheduler(app: FastifyInstance, registerStop?:
             createdAt: timestamp,
           };
 
-          await messages.storeMessage(message);
-
-          // Update thread state
-          await messages.updateThreadAfterReply(
-            threadRow.id,
-            message.id,
-            message.content,
-            reply.moodShift,
-            thread.mood,
-          );
-
-          // Remove this follow-up
-          await messages.removeScheduledFollowUp(threadRow.id, followUp.id);
+          const stored = await messages.appendMessage(threadRow.id, {
+            id: message.id,
+            senderAccountId: threadRow.creatorAccountId,
+            role: "creator",
+            content: message.content,
+            createdAt: message.createdAt,
+            preserveReplyObligation: true,
+            scheduledFollowUpId: followUp.id,
+            metadata: JSON.parse(message.metadata),
+          });
+          if (!stored) throw new Error(`Thread ${threadRow.id} disappeared while storing follow-up`);
+          await messages.recordReplyOutcome(threadRow.id, {
+            moodShift: reply.moodShift,
+            remember: reply.remember,
+            stateSignals: reply.stateSignals,
+          });
 
           logger.info(
             "[slurp-follow-up] Sent %s follow-up for thread %s%s",
@@ -145,6 +150,7 @@ export function startSlurpFollowUpScheduler(app: FastifyInstance, registerStop?:
             followUp.sequenceNumber ? ` (${followUp.sequenceNumber}/${followUp.totalInSequence})` : "",
           );
         } catch (error) {
+          await messages.failScheduledFollowUp(threadRow.id, threadRow.dueFollowUp.id).catch(() => {});
           logger.error(error, "[slurp-follow-up] Failed to generate follow-up for thread %s", threadRow.id);
           failed = true;
         }

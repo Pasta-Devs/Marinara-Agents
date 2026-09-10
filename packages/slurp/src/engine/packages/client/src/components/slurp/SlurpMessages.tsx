@@ -38,6 +38,7 @@ import {
   useDeclineSlurpCommission,
   useBroadcastSlurpMessage,
   useCreateSlurpCommission,
+  useCancelSlurpFollowUp,
   useDeliverSlurpCommission,
   useQuoteSlurpCommission,
   useResolveSlurpMessageRequest,
@@ -54,6 +55,7 @@ import {
   useSlurpConnections,
   useSlurpSettings,
   useSlurpThread,
+  useSlurpOlderMessages,
   useSlurpMessagePrompt,
   useSlurpThreads,
   useTipInSlurpThread,
@@ -514,6 +516,7 @@ function SlurpThreadView({
 }) {
   const { t: localizeUi, i18n } = useUiTranslation();
   const byThread = useSlurpThread(threadId, personaId);
+  const olderMessages = useSlurpOlderMessages();
   const byCreator = useSlurpCompose(threadId ? null : creatorAccountId, personaId);
   const threadQuery = threadId ? byThread : byCreator;
   const send = useSendSlurpMessage();
@@ -555,6 +558,8 @@ function SlurpThreadView({
   const [preparingImage, setPreparingImage] = useState(false);
   // Only the tail of a long conversation is mounted. Everything above it is one button away.
   const [visibleCount, setVisibleCount] = useState(SLURP_MESSAGE_PAGE);
+  const [loadedOlderMessages, setLoadedOlderMessages] = useState<SlurpMessage[]>([]);
+  const [olderCursor, setOlderCursor] = useState<{ createdAt: string; id: string } | null | undefined>(undefined);
   const bottomRef = useRef<HTMLDivElement | null>(null);
   // Set when older entries are about to mount, so the viewport can be pinned to what it was on.
   const growAnchorRef = useRef<number | null>(null);
@@ -565,7 +570,16 @@ function SlurpThreadView({
   const messageSearchInputRef = useRef<HTMLInputElement | null>(null);
 
   const thread = threadQuery.data?.thread ?? null;
-  const messages = useMemo(() => threadQuery.data?.messages ?? [], [threadQuery.data?.messages]);
+  const messages = useMemo(() => {
+    const byId = new Map<string, SlurpMessage>();
+    for (const message of loadedOlderMessages) byId.set(message.id, message);
+    for (const message of threadQuery.data?.messages ?? []) byId.set(message.id, message);
+    return [...byId.values()].sort((left, right) =>
+      left.createdAt === right.createdAt
+        ? left.id.localeCompare(right.id)
+        : left.createdAt.localeCompare(right.createdAt),
+    );
+  }, [loadedOlderMessages, threadQuery.data?.messages]);
   const creator = threadQuery.data?.creator;
   const counterpart = threadQuery.data?.counterpart ?? creator;
   const targetCreatorAccountId = thread?.creatorAccountId ?? creator?.id ?? creatorAccountId;
@@ -822,11 +836,27 @@ function SlurpThreadView({
     container.scrollTop += container.scrollHeight - anchor;
   }, [visibleCount]);
 
-  const showOlder = () => {
+  const nextOlderCursor = olderCursor === undefined ? threadQuery.data?.nextCursor : olderCursor;
+  const showOlder = async () => {
     const container = messageScrollRef.current;
     growAnchorRef.current = container ? container.scrollHeight : null;
+    if (olderCount > 0) {
+      setVisibleCount((current) => current + SLURP_MESSAGE_PAGE);
+      return;
+    }
+    const activeThreadId = thread?.id ?? threadId;
+    if (!activeThreadId || !personaId || !nextOlderCursor || olderMessages.isPending) return;
+    const page = await olderMessages.mutateAsync({ threadId: activeThreadId, personaId, cursor: nextOlderCursor });
+    setLoadedOlderMessages((current) => [...page.messages, ...current]);
+    setOlderCursor(page.nextCursor);
     setVisibleCount((current) => current + SLURP_MESSAGE_PAGE);
   };
+
+  useEffect(() => {
+    setLoadedOlderMessages([]);
+    setOlderCursor(undefined);
+    setVisibleCount(SLURP_MESSAGE_PAGE);
+  }, [threadId, creatorAccountId, personaId]);
 
   // State refreshes must never move the message viewport. New content only scrolls when the user
   // was already reading the end of the conversation.
@@ -1250,20 +1280,21 @@ function SlurpThreadView({
         ref={messageScrollRef}
         onScroll={(event) => {
           // Reaching the top is the same request as pressing the button, so it does the same thing.
-          if (olderCount > 0 && event.currentTarget.scrollTop < 64) showOlder();
+          if ((olderCount > 0 || nextOlderCursor) && event.currentTarget.scrollTop < 64) void showOlder();
         }}
         className="min-h-0 min-w-0 flex-1 overflow-x-hidden overflow-y-auto px-3 py-4"
       >
         <div className="mx-auto flex min-w-0 w-full max-w-2xl flex-col gap-3">
-          {olderCount > 0 && (
+          {(olderCount > 0 || nextOlderCursor) && (
             <button
               type="button"
-              onClick={showOlder}
+              disabled={olderMessages.isPending}
+              onClick={() => void showOlder()}
               className="mx-auto min-h-9 shrink-0 rounded-full bg-[var(--slurp-surface)] px-4 text-xs font-bold text-[var(--muted-foreground)] ring-1 ring-inset ring-[var(--noodle-divider)] transition-colors hover:bg-[var(--noodle-accent)]/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--slurp-focus)]"
             >
               {localizeUi("ui.slurp.messages.loadOlder", {
                 defaultValue: "Show earlier messages ({{count}})",
-                count: olderCount,
+                count: olderCount || SLURP_MESSAGE_PAGE,
               })}
             </button>
           )}

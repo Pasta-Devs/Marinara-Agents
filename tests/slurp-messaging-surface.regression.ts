@@ -13,6 +13,7 @@ const messageRoutes = read("server/src/routes/slurp-messages.routes.ts");
 const slurpRoutes = read("server/src/routes/slurp.routes.ts");
 const messageStorage = read("server/src/services/storage/slurp-messages.storage.ts");
 const replyScheduler = read("server/src/services/slurp/slurp-message-scheduler.service.ts");
+const replyMethods = read("server/src/services/storage/slurp-reply-methods.ts");
 const slurpStorage = read("server/src/services/storage/slurp.storage.ts");
 
 // The creator-side messaging tools and the commission flow shipped as endpoints and hooks with no
@@ -99,9 +100,16 @@ assert.match(messageStorage, /const currentRows = await tx\.select\(\)\.from\(sl
 assert.match(messageStorage, /newerViewerMessage/u);
 assert.match(
   messageStorage,
-  /creatorUnread:\s*input\.role === "viewer" \? String\(Number\(current\.creatorUnread\) \+ 1\) : current\.creatorUnread/u,
+  /creatorUnread:[\s\S]*?input\.role === "viewer"[\s\S]*?current\.creatorUnread[\s\S]*?: "0"/u,
 );
-assert.match(messageStorage, /\.slice\(0, limit\)/u, "pending filtering must happen before the reply limit");
+assert.match(
+  replyMethods,
+  /for \(const thread of candidates\)/u,
+  "blocked old threads must not starve later ready threads",
+);
+assert.doesNotMatch(replyMethods, /candidates\.slice\(/u);
+assert.match(messageStorage, /generationEpoch:[\s\S]*?needsReply:/u);
+assert.match(messageStorage, /nextCursor:/u);
 assert.match(
   replyScheduler,
   /bubble\.senderAccountId !== thread\.creatorAccountId[\s\S]*?await replyQueue\.remove\(bubble\.id\)/u,

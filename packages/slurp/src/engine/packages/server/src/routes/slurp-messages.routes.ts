@@ -87,6 +87,12 @@ const sendSchema = z.object({
     .optional(),
 });
 
+const messagePageSchema = personaQuerySchema.extend({
+  cursorAt: z.string().datetime().optional(),
+  cursorId: z.string().trim().min(1).max(200).optional(),
+  limit: z.coerce.number().int().min(1).max(120).default(120),
+});
+
 const tipSchema = z.object({
   personaId: z.string().trim().min(1),
   creatorAccountId: z.string().trim().min(1),
@@ -298,8 +304,11 @@ export async function slurpMessageRoutes(app: FastifyInstance) {
   });
 
   app.get("/messages/threads/:threadId", async (req, reply) => {
-    const parsed = personaQuerySchema.safeParse(req.query);
+    const parsed = messagePageSchema.safeParse(req.query);
     if (!parsed.success) return reply.code(400).send({ error: parsed.error.flatten() });
+    if (Boolean(parsed.data.cursorAt) !== Boolean(parsed.data.cursorId)) {
+      return reply.code(400).send({ error: "cursorAt and cursorId must be provided together" });
+    }
     const { threadId } = req.params as { threadId: string };
     const viewer = await requireViewer(parsed.data.personaId);
     if (!viewer) return reply.code(404).send({ error: "Slurp persona not found" });
@@ -321,9 +330,28 @@ export async function slurpMessageRoutes(app: FastifyInstance) {
     // When the creator last posted, so the thread header can show the same online/away/offline
     // status the profile header does. The status rule is derived from posting activity, and the
     // thread view had no way to see it, which is why it showed nothing.
+    const page = await messages.listMessagePage(
+      thread.id,
+      parsed.data.limit,
+      parsed.data.cursorAt && parsed.data.cursorId
+        ? { createdAt: parsed.data.cursorAt, id: parsed.data.cursorId }
+        : null,
+    );
     return {
       thread: await freshView(thread.id, side),
-      messages: await visibleMessages(thread.id, side),
+      messages: page.messages.map((message) =>
+        side === "viewer" && message.kind === "ppv" && !message.unlockedAt
+          ? { ...message, content: "", imageUrl: null }
+          : side === "viewer" && message.kind === "post_preview" && message.metadata.previewLocked === true
+            ? {
+                ...message,
+                content: "",
+                imageUrl: null,
+                metadata: { ...message.metadata, content: "", imageUrl: null },
+              }
+            : message,
+      ),
+      nextCursor: page.nextCursor,
       creator,
       counterpart,
       ...(await creatorPresence(creator, thread.id)),
@@ -428,9 +456,22 @@ export async function slurpMessageRoutes(app: FastifyInstance) {
     if (!creator) return reply.code(404).send({ error: "Creator not found" });
     const thread = await messages.getThread(viewer.id, creator.id);
     if (thread) await messages.markRead(thread.id, "viewer");
+    const page = thread ? await messages.listMessagePage(thread.id) : { messages: [], nextCursor: null };
     return {
       thread: thread ? await freshView(thread.id) : null,
-      messages: thread ? await visibleMessages(thread.id, "viewer") : [],
+      messages: page.messages.map((message) =>
+        message.kind === "ppv" && !message.unlockedAt
+          ? { ...message, content: "", imageUrl: null }
+          : message.kind === "post_preview" && message.metadata.previewLocked === true
+            ? {
+                ...message,
+                content: "",
+                imageUrl: null,
+                metadata: { ...message.metadata, content: "", imageUrl: null },
+              }
+            : message,
+      ),
+      nextCursor: page.nextCursor,
       commissions: thread ? await messages.listCommissionsForThread(thread.id) : [],
       creator,
       ...(await creatorPresence(creator, thread?.id)),
@@ -1212,7 +1253,7 @@ export async function slurpMessageRoutes(app: FastifyInstance) {
       return reply.code(403).send({ error: "Only the Creator's owner can cancel follow-ups." });
     }
 
-    await messages.removeScheduledFollowUp(parsed.data.threadId, parsed.data.followUpId);
+    await messages.cancelScheduledFollowUp(parsed.data.threadId, parsed.data.followUpId);
     return { success: true };
   });
 

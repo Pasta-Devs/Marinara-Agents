@@ -144,6 +144,11 @@ export async function replyToSlurpMessage(
     // replyLength will be filled in after generation
     talkativeness: talkativenessProfile.talkativeness,
   });
+  const completedReplyId = await messagesStore.getCompletedReply(thread.id, input.triggerMessageId);
+  if (completedReplyId) {
+    const completedReply = await messagesStore.getMessageById(completedReplyId);
+    if (completedReply) return { status: "replied", message: completedReply, pacing };
+  }
   if ((pacing.mode === "queued" || pacing.mode === "delayed") && input.force !== true) {
     await messagesStore.setReplyNotBefore(thread.id, new Date(Date.now() + pacing.notBeforeMs).toISOString());
     // She has seen it and is not answering yet. That is the whole meaning of a queued reply, and
@@ -162,6 +167,10 @@ export async function replyToSlurpMessage(
   }
 
   const claim = await messagesStore.claimReply(thread.id, input.triggerMessageId, thread.creatorAccountId);
+  if (claim.status === "completed") {
+    const completedReply = await messagesStore.getMessageById(claim.messageId);
+    return completedReply ? { status: "replied", message: completedReply, pacing } : { status: "busy" };
+  }
   if (claim.status !== "claimed") return { status: "busy" };
   const release = async () => {
     try {
@@ -240,6 +249,7 @@ export async function replyToSlurpMessage(
           senderAccountId: thread.creatorAccountId,
           content: bubble,
           deliverAt: new Date(Date.now() + delayMs).toISOString(),
+          generationEpoch: thread.generationEpoch,
           createdAt: triggerObligationCreatedAt,
         });
       }

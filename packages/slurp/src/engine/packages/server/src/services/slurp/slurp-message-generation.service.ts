@@ -251,6 +251,8 @@ export type SlurpMessagePromptInput = {
   strikes?: number;
   connection: GenerationConnection;
   debugMode?: boolean;
+  /** Extra instruction for scheduled or otherwise specialized replies. */
+  generationGuidance?: string;
 };
 
 /**
@@ -330,7 +332,7 @@ export async function buildSlurpMessagePrompt(input: SlurpMessagePromptInput): P
     availability,
     disclosureMode,
     publicIdentity,
-    generationGuidance: settings.generationGuidance,
+    generationGuidance: [settings.generationGuidance, input.generationGuidance].filter(Boolean).join("\n"),
     scheduleContext,
     characterCanon,
   });
@@ -424,5 +426,6 @@ export async function generateSlurpMessageReply(input: SlurpMessagePromptInput):
     sharedPost:
       generated.sharePost !== undefined && recentPosts[generated.sharePost] ? recentPosts[generated.sharePost] : null,
     image: generated.image,
+    followUp: generated.followUp,
   };
 }

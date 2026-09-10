@@ -394,7 +394,10 @@ console.log("slurp review fixes regression passed");
 // indicator have to appear at send time. Without this the chat sat empty for the whole wait.
 assert.match(messagesView2, /setPending\(\{ content, id: null \}\)/u);
 assert.match(messagesView2, /if \(!ownsCreator\) setTyping\(true\)/u);
-assert.match(messagesView2, /holdTyping\(result\.reply \? \(result\.typingMs \?\? 0\) : 0, startedAt\)/u);
+assert.match(
+  messagesView2,
+  /holdTyping\(result\.reply \? \(result\.typingMs \?\? 0\) : 0, startedAt, result\.reply\?\.id\)/u,
+);
 assert.match(messagesView2, /pending && !messages\.some\(\(message\) => message\.id === pending\.id\)/u);
 
 const slurpHooks = readFileSync("packages/slurp/src/engine/packages/client/src/hooks/use-slurp.ts", "utf8");

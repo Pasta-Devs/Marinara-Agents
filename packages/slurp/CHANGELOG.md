@@ -1,5 +1,10 @@
 # Slurp release notes
 
+## 1.2.64 — 2026-09-10 [highlight]
+
+- Fixed duplicate, stale, and out-of-order direct-message replies during retries, resets, and delayed delivery.
+- Added durable follow-up delivery, separate reply obligations, sender snapshots, and older-message loading.
+
 ## 1.2.63 — 2026-09-09 [highlight]
 
 - Restored active AI updates for the two-list memory system and made each eight-item limit visible.

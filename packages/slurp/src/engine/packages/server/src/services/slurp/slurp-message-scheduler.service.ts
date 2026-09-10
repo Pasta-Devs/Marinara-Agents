@@ -38,25 +38,32 @@ export function startSlurpMessageScheduler(app: FastifyInstance, registerStop?: 
       const replyQueue = createSlurpReplyQueueStorage(app.db);
       for (const bubble of await replyQueue.listDue()) {
         if (stopped) break;
-        const thread = await storage.getThreadById(bubble.threadId);
-        if (
-          !thread ||
-          thread.state === "declined" ||
-          bubble.senderAccountId !== thread.creatorAccountId ||
-          (thread.coolUntil && thread.coolUntil > new Date().toISOString())
-        ) {
-          await replyQueue.remove(bubble.id);
-          continue;
+        try {
+          const thread = await storage.getThreadById(bubble.threadId);
+          if (
+            !thread ||
+            thread.state === "declined" ||
+            bubble.senderAccountId !== thread.creatorAccountId ||
+            bubble.generationEpoch !== thread.generationEpoch ||
+            (thread.coolUntil && thread.coolUntil > new Date().toISOString())
+          ) {
+            await replyQueue.remove(bubble.id);
+            continue;
+          }
+          const stored = await storage.appendMessage(bubble.threadId, {
+            id: bubble.messageId,
+            senderAccountId: bubble.senderAccountId,
+            role: "creator",
+            content: bubble.content,
+            // Keep the original trigger for obligation checks, but order the stored message by delivery.
+            createdAt: new Date().toISOString(),
+            replyObligationCreatedAt: bubble.createdAt,
+          });
+          if (stored) await replyQueue.remove(bubble.id);
+        } catch (error) {
+          failed = true;
+          logger.warn(error, "[slurp-message] Failed to deliver bubble %s", bubble.id);
         }
-        await storage.appendMessage(bubble.threadId, {
-          id: bubble.messageId,
-          senderAccountId: bubble.senderAccountId,
-          role: "creator",
-          content: bubble.content,
-          createdAt: bubble.createdAt,
-          replyObligationCreatedAt: bubble.createdAt,
-        });
-        await replyQueue.remove(bubble.id);
       }
       // Off means the background loop stays asleep. Queued bubbles and commissions above are not
       // gated on it: those are already-sent and already-paid-for, and holding them back would lose

@@ -15,6 +15,7 @@ export type SlurpMessage = {
   unlockedAt: string | null;
   readAt: string | null;
   metadata: Record<string, unknown>;
+  senderSnapshot: Record<string, unknown>;
   createdAt: string;
 };
 
@@ -29,6 +30,8 @@ export type SlurpThread = {
   lastMessagePreview: string;
   viewerUnread: number;
   creatorUnread: number;
+  needsReply: boolean;
+  generationEpoch: number;
   replyNotBeforeAt: string | null;
   rapport: SlurpRapport;
   mood: number;
