@@ -32,6 +32,7 @@ Error generating stack: `+r.message+`
           min-width: 2.75rem;
         }
         [data-ltm-workspace] [data-ltm-workspace-switcher] {
+          display: flex;
           background: var(--marinara-editor-control-bg);
         }
         [data-ltm-workspace] [data-ltm-workspace-pane-tab][data-active="true"] {

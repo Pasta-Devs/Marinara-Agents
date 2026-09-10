@@ -1456,7 +1456,7 @@ async function main() {
       await new Promise<void>((resolveListen) => browserServer!.listen(0, "127.0.0.1", resolveListen));
       const address = browserServer.address();
       assert.ok(address && typeof address !== "string");
-      browser = await chromium.launch();
+      browser = await chromium.launch({ args: ["--disable-gpu"] });
       const browserContext = await browser.newContext({ hasTouch: true });
       const page = await browserContext.newPage();
       page.on("request", (request) => {
@@ -2295,7 +2295,9 @@ async function main() {
         const target = page.locator(`[data-ltm-workspace-pane="${pane}"]`);
         if (!(await target.isVisible())) {
           // ResizeObserver renders the mobile tabs asynchronously after a viewport change.
-          await page.locator(`[data-ltm-workspace-pane-tab="${pane}"]`).click();
+          const tab = page.locator(`[data-ltm-workspace-pane-tab="${pane}"]`);
+          await tab.waitFor({ state: "visible" });
+          await tab.click();
         }
         await target.waitFor({ state: "visible" });
       };
