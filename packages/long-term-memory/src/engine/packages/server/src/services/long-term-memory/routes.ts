@@ -914,7 +914,13 @@ export function createLongTermMemoryRoutes(runtime: {
               sourceNote,
               languageModel,
               scope: sourceNote.destinationScope ?? (chat ? resolveChatLtmWriteScope(chat) : sourceNote.scope),
-              modes: chat ? [ltmModeForChatMode(chat.mode)] : body.mode ? [body.mode] : undefined,
+              modes: sourceNote.modes?.length
+                ? sourceNote.modes
+                : chat
+                  ? [ltmModeForChatMode(chat.mode)]
+                  : body.mode
+                    ? [body.mode]
+                    : undefined,
               mode: body.mode,
               instruction: body.instruction,
               operationId,

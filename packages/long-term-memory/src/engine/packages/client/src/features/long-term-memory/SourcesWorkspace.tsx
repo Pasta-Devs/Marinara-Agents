@@ -40,6 +40,7 @@ import type {
   LtmSourceDetailsResponse,
   LtmScope,
   LtmExtractSourceNoteResponse,
+  LtmGlobalSettings,
 } from "../../../../shared/src/features/agents/long-term-memory/schema.js";
 import { invalidateLtmQueries, ltmScopeTargetsKey, queryKeys, request } from "./api";
 import { Button, ClickSurface, IconButton, InfoPopover, StatusSurface, inputClass } from "./shared-controls";
@@ -58,9 +59,11 @@ import {
 } from "./source-task";
 import { buildScopeIndexes, type ScopeTargetChat, type ScopeTargets } from "./scope-targets";
 import {
+  ltmModeForChatMode,
   normalizeLtmScope,
   withMergedLtmScopeLinks,
 } from "../../../../shared/src/features/agents/long-term-memory/scope.js";
+import { DEFAULT_LTM_IMPORTED_SOURCE_MODE } from "../../../../shared/src/features/agents/long-term-memory/constants.js";
 
 type Source = SourceTab;
 type SourceStatusFilter = "all" | "ready" | "imported";
@@ -76,6 +79,7 @@ type ImportContract = {
   sourceTargetLabel: string;
   destinationTargetLabel: string;
   mode?: LtmMode;
+  modes?: LtmMode[];
   chatId?: string;
   selectionKey: string;
 };
@@ -364,6 +368,17 @@ function targetFitsDestinationScope(scope: LtmScope | undefined, target: ScopeTa
 
 type DestinationCategoryKind = "all" | Exclude<ScopeTargetKind, "all">;
 
+const ALL_LTM_MODES: LtmMode[] = ["conversation", "roleplay", "game"];
+
+function chatModeLabel(mode: LtmMode, localizeUi: LtmTranslationFunction) {
+  const labels: Record<LtmMode, string> = {
+    conversation: "ui.longTermMemory.sourcesworkspace.conversation",
+    roleplay: "ui.longTermMemory.sourcesworkspace.roleplay",
+    game: "ui.longTermMemory.sourcesworkspace.game",
+  };
+  return localizeUi(labels[mode]);
+}
+
 function DestinationScopePanel({
   targets,
   selectedIds,
@@ -371,6 +386,10 @@ function DestinationScopePanel({
   onChange,
   mode,
   source,
+  availabilityModes,
+  onAvailabilityModesChange,
+  modesError = "",
+  availabilityDisabled = false,
   disabled = false,
 }: {
   targets: ScopeTarget[];
@@ -379,6 +398,10 @@ function DestinationScopePanel({
   onChange: (ids: string[]) => void;
   mode: LtmMode | "all";
   source: Source;
+  availabilityModes: LtmMode[];
+  onAvailabilityModesChange: (modes: LtmMode[]) => void;
+  modesError?: string;
+  availabilityDisabled?: boolean;
   disabled?: boolean;
 }) {
   const { t: localizeUi } = useLtmTranslation();
@@ -582,6 +605,49 @@ function DestinationScopePanel({
           content={localizeUi("ui.longTermMemory.sourcesworkspace.bulkDestinationHelp")}
         />
       </div>
+      <fieldset
+        className="shrink-0 space-y-1.5 border-b border-[var(--border)] pb-2.5"
+        data-ltm-availability-modes-fieldset
+      >
+        <legend className="text-xs font-semibold text-[var(--muted-foreground)]">
+          {localizeUi("ui.longTermMemory.memoryvault.chatModes")}
+        </legend>
+        <div className="flex flex-wrap gap-3" data-ltm-availability-modes>
+          {ALL_LTM_MODES.map((chatMode) => {
+            const checked = availabilityModes.includes(chatMode);
+            const isLastSelected = checked && availabilityModes.length === 1;
+            return (
+              <label
+                key={chatMode}
+                className="flex min-h-11 items-center gap-2 text-xs font-medium"
+                data-ltm-availability-mode-label={chatMode}
+              >
+                <input
+                  type="checkbox"
+                  className={sourceCheckboxClass}
+                  data-ltm-availability-mode-checkbox={chatMode}
+                  checked={checked}
+                  disabled={disabled || availabilityDisabled || isLastSelected}
+                  onChange={() => {
+                    const next = checked
+                      ? availabilityModes.filter((m) => m !== chatMode)
+                      : [...availabilityModes, chatMode];
+                    if (next.length > 0) {
+                      onAvailabilityModesChange(next);
+                    }
+                  }}
+                />
+                <span>{chatModeLabel(chatMode, localizeUi)}</span>
+              </label>
+            );
+          })}
+        </div>
+        {modesError ? (
+          <p role="alert" className="text-xs text-[var(--destructive)]">
+            {modesError}
+          </p>
+        ) : null}
+      </fieldset>
       {selectedTargets.length ? (
         <div className="shrink-0 space-y-2">
           <p className="text-xs font-semibold">{localizeUi("ui.longTermMemory.sourcesworkspace.selectedLocations")}</p>
@@ -680,11 +746,15 @@ function DestinationScopePanel({
         </span>
       ) : null}
       <p className="shrink-0 text-xs text-[var(--muted-foreground)]" data-ltm-import-mode-summary>
-        {mode === "all"
-          ? source === "chats"
-            ? localizeUi("ui.longTermMemory.sourcesworkspace.automatic")
-            : localizeUi("ui.longTermMemory.sourcesworkspace.importsDefaultToRoleplay")
-          : sourceModeLabel(mode, localizeUi)}
+        {availabilityModes.length > 1
+          ? `${localizeUi("ui.longTermMemory.memoryvault.availableIn")}: ${availabilityModes
+              .map((m) => chatModeLabel(m, localizeUi))
+              .join(", ")}`
+          : mode === "all"
+            ? source === "chats"
+              ? localizeUi("ui.longTermMemory.sourcesworkspace.automatic")
+              : localizeUi("ui.longTermMemory.sourcesworkspace.importsDefaultToRoleplay")
+            : sourceModeLabel(mode, localizeUi)}
       </p>
     </div>
   );
@@ -1399,6 +1469,10 @@ export default function SourcesWorkspace({
     props.chatId ? [`chat:${props.chatId}`] : [],
   );
   const [modeFilter, setModeFilter] = useState<LtmMode | "all">("all");
+  const [customAvailabilityModes, setCustomAvailabilityModes] = useState<LtmMode[] | null>(null);
+  const [modesError, setModesError] = useState("");
+  const [availabilitySaving, setAvailabilitySaving] = useState(false);
+  const availabilitySavingRef = useRef(false);
   const [sourceQuery, setSourceQuery] = useState("");
   const [sourceStatusFilter, setSourceStatusFilter] = useState<SourceStatusFilter>("all");
   const [selectionMode, setSelectionMode] = useState(false);
@@ -1491,6 +1565,47 @@ export default function SourcesWorkspace({
         `/scope-targets?includeAllChats=true${props.chatId ? `&chatId=${encodeURIComponent(props.chatId)}` : ""}`,
       ),
   });
+  const settingsQuery = useQuery({
+    queryKey: queryKeys.settings,
+    queryFn: () => request<LtmGlobalSettings>("/settings"),
+  });
+
+  const defaultAvailabilityMode: LtmMode =
+    modeFilter !== "all"
+      ? modeFilter
+      : source === "chats"
+        ? ltmModeForChatMode(props.chatMode ?? "conversation")
+        : DEFAULT_LTM_IMPORTED_SOURCE_MODE;
+  const effectiveAvailabilityModes: LtmMode[] =
+    customAvailabilityModes ??
+    (settingsQuery.data?.sourcesAvailabilityModes?.length
+      ? settingsQuery.data.sourcesAvailabilityModes
+      : [defaultAvailabilityMode]);
+  const availabilityReady = settingsQuery.isSuccess && effectiveAvailabilityModes.length > 0;
+  const importDisabled = !availabilityReady || availabilitySaving || sourceTask.active?.status === "running";
+
+  const changeAvailabilityModes = async (nextModes: LtmMode[]) => {
+    if (!nextModes.length || !availabilityReady || availabilitySavingRef.current) return;
+    availabilitySavingRef.current = true;
+    setAvailabilitySaving(true);
+    setModesError("");
+    setCustomAvailabilityModes(nextModes);
+    try {
+      await request<LtmGlobalSettings>("/settings", "PUT", {
+        sourcesAvailabilityModes: nextModes,
+      });
+      await invalidateLtmQueries(client, [queryKeys.settings, queryKeys.chatDefaults]);
+    } catch (error) {
+      setCustomAvailabilityModes(null);
+      setModesError(
+        error instanceof Error ? error.message : localizeUi("ui.longTermMemory.memoryvault.couldNotSaveAvailability"),
+      );
+      await settingsQuery.refetch();
+    } finally {
+      availabilitySavingRef.current = false;
+      setAvailabilitySaving(false);
+    }
+  };
   const scopeIndexes = useMemo(() => buildScopeIndexes(scopeTargets.data?.chats ?? []), [scopeTargets.data?.chats]);
   const scopeTargetOptions = useMemo(() => {
     const currentChatId = props.chatId ?? scopeTargets.data?.currentScope?.chatId;
@@ -2084,7 +2199,13 @@ export default function SourcesWorkspace({
     selectionKeyOverride?: string,
   ) => {
     const ids = Array.from(new Set(sourceIds));
-    if (ids.length === 0 || importing || sourceTask.active?.status === "running") return;
+    if (
+      !availabilityReady ||
+      availabilitySavingRef.current ||
+      ids.length === 0 ||
+      sourceTask.active?.status === "running"
+    )
+      return;
     if (ids.length > 100) {
       setImportError(localizeUi("ui.longTermMemory.sourcesworkspace.selectUpTo100SourceParts"));
       return;
@@ -2108,6 +2229,8 @@ export default function SourcesWorkspace({
     }
     const destinationTargetLabel = effectiveDestination.destinationLabel;
     const effectiveAction = retryContract?.action ?? action;
+    const effectiveModes =
+      effectiveAction === "refresh" ? undefined : (retryContract?.modes ?? effectiveAvailabilityModes);
     const contract: ImportContract = retryContract
       ? {
           ...retryContract,
@@ -2115,6 +2238,8 @@ export default function SourcesWorkspace({
           action: effectiveAction,
           destinationScope,
           destinationTargetLabel,
+          modes: effectiveModes,
+          ...(effectiveAction === "refresh" ? { mode: undefined } : {}),
         }
       : {
           source,
@@ -2139,7 +2264,8 @@ export default function SourcesWorkspace({
             : {}),
           sourceTargetLabel: sourceTarget?.label ?? localizeUi("ui.longTermMemory.sourcesworkspace.allAvailable"),
           destinationTargetLabel,
-          ...(modeFilter !== "all" ? { mode: modeFilter } : {}),
+          ...(effectiveAction !== "refresh" && modeFilter !== "all" ? { mode: modeFilter } : {}),
+          ...(effectiveModes?.length ? { modes: effectiveModes } : {}),
           ...(props.chatId ? { chatId: props.chatId } : {}),
           selectionKey: selectionKeyOverride ?? selectionKey,
         };
@@ -2168,6 +2294,7 @@ export default function SourcesWorkspace({
               ...(contract.sourceScope ? { sourceScope: contract.sourceScope } : {}),
               ...(contract.destinationScope ? { destinationScope: contract.destinationScope } : {}),
               ...(contract.mode ? { mode: contract.mode } : {}),
+              ...(contract.modes?.length ? { modes: contract.modes } : {}),
               ...(contract.chatId ? { chatId: contract.chatId } : {}),
             },
             signal,
@@ -2396,7 +2523,7 @@ export default function SourcesWorkspace({
           <IconButton
             icon={importing ? Loader2 : FileInput}
             label={localizeUi("ui.longTermMemory.sourcesworkspace.importValue1", { value1: row.title })}
-            disabled={importing}
+            disabled={importDisabled}
             onClick={(event) => {
               stopRowAction(event);
               void runImport([row.sourceId]);
@@ -2469,6 +2596,7 @@ export default function SourcesWorkspace({
       {restoredRetryIds.length ? (
         <Button
           primary
+          disabled={importDisabled}
           onClick={() =>
             void runImport(
               restoredRetryIds,
@@ -2602,6 +2730,21 @@ export default function SourcesWorkspace({
           />
         </div>
       </div>
+      {!availabilityReady ? (
+        <StatusSurface tone={settingsQuery.isError ? "danger" : "neutral"} busy={!settingsQuery.isError}>
+          {settingsQuery.isError
+            ? settingsQuery.error instanceof Error
+              ? settingsQuery.error.message
+              : localizeUi("ui.longTermMemory.sourcesworkspace.availabilitySettingsCouldNotLoad")
+            : localizeUi("ui.longTermMemory.sourcesworkspace.loadingAvailabilitySettings")}
+          {settingsQuery.isError ? (
+            <Button disabled={settingsQuery.isFetching} onClick={() => void settingsQuery.refetch()}>
+              <RefreshCw aria-hidden="true" size="0.75rem" />
+              {localizeUi("ui.longTermMemory.activityview.retry")}
+            </Button>
+          ) : null}
+        </StatusSurface>
+      ) : null}
 
       <p
         className="text-xs text-[var(--muted-foreground)]"
@@ -2641,7 +2784,7 @@ export default function SourcesWorkspace({
           {cancelledImport ? (
             <Button
               onClick={() => void runImport(cancelledImport.sourceIds, "import", cancelledImport)}
-              disabled={importing}
+              disabled={importDisabled}
               data-ltm-source-action="retry-cancelled"
             >
               <RefreshCw aria-hidden="true" size="0.75rem" />
@@ -2903,7 +3046,7 @@ export default function SourcesWorkspace({
                       <div className={mobilePrimaryActionsClass} data-ltm-source-primary-actions>
                         <Button
                           primary
-                          disabled={!currentDestinationScope || importing || selectedBookImportIds.length === 0}
+                          disabled={!currentDestinationScope || importDisabled || selectedBookImportIds.length === 0}
                           onClick={() =>
                             void runImport(selectedBookImportIds, "import", undefined, lorebookImportSelectionKey)
                           }
@@ -2915,7 +3058,7 @@ export default function SourcesWorkspace({
                           })}
                         </Button>
                         <Button
-                          disabled={!currentDestinationScope || importing || selectedBookRefreshIds.length === 0}
+                          disabled={!currentDestinationScope || importDisabled || selectedBookRefreshIds.length === 0}
                           onClick={() =>
                             void runImport(selectedBookRefreshIds, "refresh", undefined, lorebookRefreshSelectionKey)
                           }
@@ -3029,7 +3172,7 @@ export default function SourcesWorkspace({
                                             label={localizeUi("ui.longTermMemory.sourcesworkspace.importValue1", {
                                               value1: candidate.title,
                                             })}
-                                            disabled={importing}
+                                            disabled={importDisabled}
                                             onClick={(event) => {
                                               stopRowAction(event);
                                               void runImport([candidate.sourceId]);
@@ -3100,6 +3243,10 @@ export default function SourcesWorkspace({
                     onChange={changeDestinationIds}
                     mode={modeFilter}
                     source={source}
+                    availabilityModes={effectiveAvailabilityModes}
+                    onAvailabilityModesChange={(modes) => void changeAvailabilityModes(modes)}
+                    modesError={modesError}
+                    availabilityDisabled={availabilitySaving || !availabilityReady}
                     disabled={sourceTask.active?.status === "running"}
                   />
                   {focusedImportedSource ? (
@@ -3298,7 +3445,7 @@ export default function SourcesWorkspace({
                         {selectedIds.size ? (
                           <Button
                             primary
-                            disabled={!currentDestinationScope || importing}
+                            disabled={!currentDestinationScope || importDisabled}
                             onClick={() => void runImport([...selectedIds])}
                             data-ltm-source-action="import-selected"
                           >
@@ -3308,7 +3455,7 @@ export default function SourcesWorkspace({
                         ) : null}
                         {selectedImportedIds.size ? (
                           <Button
-                            disabled={!currentDestinationScope || importing}
+                            disabled={!currentDestinationScope || importDisabled}
                             onClick={() => void runImport([...selectedImportedIds], "refresh")}
                             data-ltm-source-action="refresh-selected"
                           >
@@ -3474,7 +3621,7 @@ export default function SourcesWorkspace({
                         {selectedIds.size ? (
                           <Button
                             primary
-                            disabled={!currentDestinationScope || importing}
+                            disabled={!currentDestinationScope || importDisabled}
                             onClick={() => void runImport([...selectedIds])}
                             data-ltm-source-action="import-selected"
                           >
@@ -3485,7 +3632,7 @@ export default function SourcesWorkspace({
                           </Button>
                         ) : selectedImportedIds.size ? (
                           <Button
-                            disabled={!currentDestinationScope || importing}
+                            disabled={!currentDestinationScope || importDisabled}
                             onClick={() => void runImport([...selectedImportedIds], "refresh")}
                             data-ltm-source-action="refresh-selected"
                           >
@@ -3497,7 +3644,7 @@ export default function SourcesWorkspace({
                         ) : focusedFlatRow.status === "pending" || retryableIdSet.has(focusedFlatRow.sourceId) ? (
                           <Button
                             primary
-                            disabled={!currentDestinationScope || importing}
+                            disabled={!currentDestinationScope || importDisabled}
                             onClick={() => void runImport([focusedFlatRow.sourceId])}
                             data-ltm-source-action="import"
                           >
@@ -3560,6 +3707,10 @@ export default function SourcesWorkspace({
                     onChange={changeDestinationIds}
                     mode={modeFilter}
                     source={source}
+                    availabilityModes={effectiveAvailabilityModes}
+                    onAvailabilityModesChange={(modes) => void changeAvailabilityModes(modes)}
+                    modesError={modesError}
+                    availabilityDisabled={availabilitySaving || !availabilityReady}
                     disabled={sourceTask.active?.status === "running"}
                   />
                   {focusedImportedSource ? (
@@ -3619,7 +3770,7 @@ export default function SourcesWorkspace({
                 {retryableIds.length ? (
                   <Button
                     primary
-                    disabled={importing}
+                    disabled={importDisabled}
                     onClick={() => void runImport(retryableIds, "import", importResultContract ?? undefined)}
                     data-ltm-source-action="retry-failed"
                   >

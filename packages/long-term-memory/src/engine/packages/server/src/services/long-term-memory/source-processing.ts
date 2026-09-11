@@ -26,6 +26,7 @@ export type ImportedSourceItem = {
   title: string;
   note: LtmNote;
   created: boolean;
+  extractionMode: LtmMode;
   deterministicSourceText?: string;
 };
 type PreparedSource = {
@@ -46,6 +47,7 @@ type PrepareOptions = {
   scope?: LtmScope;
   modes?: LtmMode[];
   mode?: LtmMode;
+  extractionMode?: LtmMode;
   instruction?: string;
   operationId: string;
   signal?: AbortSignal;
@@ -134,7 +136,7 @@ function directGameUnits(sourceNote: LtmNote, sourceText: string, sourceHash: st
 export async function prepareLongTermMemorySource(options: PrepareOptions): Promise<PreparedSource> {
   throwIfAborted(options.signal);
   const scope = options.scope ?? options.sourceNote.destinationScope ?? options.sourceNote.scope;
-  const extractionMode = options.mode ?? options.sourceNote.modes[0] ?? "roleplay";
+  const extractionMode = options.extractionMode ?? options.mode ?? options.sourceNote.modes[0] ?? "roleplay";
   if (options.directGameMode && extractionMode === "game") {
     const sourceHash = sourceHashForEvidenceUnitExtraction(options.sourceNote);
     const sourceText = options.directSourceText ?? options.sourceNote.sections.source?.text ?? "";
@@ -151,7 +153,7 @@ export async function prepareLongTermMemorySource(options: PrepareOptions): Prom
       sourceNote: options.sourceNote,
       existingNotes,
       scope,
-      modes: options.modes ?? ["game"],
+      modes: options.modes ?? options.sourceNote.modes,
       mode: "game",
       sourceHash,
       skipStructuredBackfill: true,
@@ -177,6 +179,7 @@ export async function prepareLongTermMemorySource(options: PrepareOptions): Prom
     scope,
     modes: options.modes ?? options.sourceNote.modes,
     mode: options.mode,
+    extractionMode: options.extractionMode,
     instruction: options.instruction,
     operationId: options.operationId,
     signal: options.signal,
@@ -314,6 +317,7 @@ export async function processLongTermMemorySourceBatch(options: {
   items: ImportedSourceItem[];
   languageModel?: PackageLanguageModel | null;
   mode?: LtmMode;
+  modes?: LtmMode[];
   instruction?: string;
   operationId: string;
   signal: AbortSignal;
@@ -343,6 +347,8 @@ export async function processLongTermMemorySourceBatch(options: {
               sourceNote: item.note,
               languageModel: options.languageModel,
               mode: options.mode,
+              modes: options.modes,
+              extractionMode: item.extractionMode,
               instruction: options.instruction,
               operationId: options.operationId,
               signal: options.signal,

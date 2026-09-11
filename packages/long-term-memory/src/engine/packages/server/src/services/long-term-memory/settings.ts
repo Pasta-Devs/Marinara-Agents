@@ -15,7 +15,12 @@ export async function getLtmGlobalSettings(root = getLongTermMemoryRoot()) {
 }
 export async function updateLtmGlobalSettings(input: unknown, root = getLongTermMemoryRoot()) {
   return withLtmVaultLock(root, async () => {
-    const parsed: LtmGlobalSettings = ltmGlobalSettingsSchema.parse(input ?? {});
+    const existing = await readJsonFile<Record<string, unknown>>(ltmSettingsPath(root), { version: 1 });
+    const merged = {
+      ...(existing && typeof existing === "object" && !Array.isArray(existing) ? existing : {}),
+      ...(input && typeof input === "object" && !Array.isArray(input) ? input : {}),
+    };
+    const parsed: LtmGlobalSettings = ltmGlobalSettingsSchema.parse(merged);
     await writeJsonAtomic(ltmSettingsPath(root), parsed);
     return getLtmGlobalSettings(root);
   });
