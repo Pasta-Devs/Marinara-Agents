@@ -1016,7 +1016,7 @@
         },
         "id": "memory-nag",
         "name": "Memory Nag",
-        "version": "1.1.0",
+        "version": "1.1.1",
         "description": "Keeps a short per-chat vault of roleplay memories and recalls only the unresolved details that matter to the current turn. Add the Agent in Chat Settings → Agents → Tracker Agents for Roleplay mode. Once active, configure it in its standalone Memory Nag section.",
         "engine": {
           "min": "2.4.4",
@@ -1050,8 +1050,8 @@
           },
           {
             "path": "client.js",
-            "sha256": "e78f3de49c2c668ba8a18d2ed2624d674e4d727e96f73d4b819a7b282dced6a5",
-            "bytes": 374438
+            "sha256": "1cb32f7ef495e3ebdf1888917cb226ce0916ac19aea8ef83608d5be7a585e0a5",
+            "bytes": 376487
           }
         ],
         "permissions": [
@@ -1067,9 +1067,9 @@
       "category": "tracker",
       "iconUrl": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artwork/agent-covers/memory-nag.png",
       "artifact": {
-        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/memory-nag-1.1.0.zip",
-        "sha256": "2b579064767c5ec20c76368197c0f2589246a08614cbbf21a84ea1519c7307ee",
-        "bytes": 400346
+        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/memory-nag-1.1.1.zip",
+        "sha256": "3932c9281594a4efe9bb99905a4d5d6bff9eaedb5eb8a363bc2e59126b8e375b",
+        "bytes": 402395
       },
       "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Agents#memory-nag"
     },
