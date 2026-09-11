@@ -1,20 +1,7 @@
 import { useEffect, useId, useMemo, useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import {
-  Archive,
-  Braces,
-  Check,
-  ChevronRight,
-  Ellipsis,
-  FileText,
-  Link2,
-  Plus,
-  Search,
-  Sparkles,
-  Trash2,
-  X,
-} from "lucide-react";
+import { Archive, Check, ChevronRight, Ellipsis, FileText, Link2, Plus, Search, Trash2, X } from "lucide-react";
 import type {
   LtmGlobalSettings,
   LtmBulkNoteResult,
@@ -201,140 +188,187 @@ function bulkAvailabilityScope(targets: readonly string[]): Partial<LtmScope> | 
 }
 
 function ScopeTargetPicker({
-  kind,
-  label,
-  value,
-  selectedTargetId,
-  allLabel,
-  currentTargetId,
-  searchLabel,
-  searchable = true,
   targets,
-  onClear,
+  selectedId,
+  currentIds,
+  localizeUi,
   onSelect,
 }: {
-  kind: "character" | "chat" | "branch" | "status" | "sort";
-  label: string;
-  value: string;
-  selectedTargetId: string;
-  allLabel: string;
-  currentTargetId?: string;
-  searchLabel: string;
-  searchable?: boolean;
-  targets: Target[];
-  onClear: () => void;
+  targets: {
+    all: Target;
+    chat: Target[];
+    branch: Target[];
+    character: Target[];
+    persona: Target[];
+  };
+  selectedId: string;
+  currentIds: { chat?: string; branch?: string; character?: string; persona?: string };
+  localizeUi: LtmTranslationFunction;
   onSelect: (target: Target) => void;
 }) {
+  const categories = [
+    ["all", localizeUi("ui.longTermMemory.sourcesworkspace.all")],
+    ["chat", localizeUi("ui.longTermMemory.sourcesworkspace.chats")],
+    ["branch", localizeUi("ui.longTermMemory.sourcesworkspace.branches")],
+    ["character", localizeUi("ui.longTermMemory.sourcesworkspace.characters")],
+    ["persona", localizeUi("ui.longTermMemory.memoryvault.personas")],
+  ] as const;
   const [query, setQuery] = useState("");
-  const detailsRef = useRef<HTMLDetailsElement>(null);
-  const summaryRef = useRef<HTMLElement>(null);
-  const currentTarget = currentTargetId ? targets.find((target) => target.id === currentTargetId) : undefined;
-  const filtered = targets.filter(
-    (target) =>
-      target.id === currentTargetId || target.label.toLocaleLowerCase().includes(query.trim().toLocaleLowerCase()),
-  );
-  const close = () => {
-    setQuery("");
-    const details = detailsRef.current;
-    if (!details) return;
-    details.open = false;
-    const restoreFocus = () => {
-      const currentDetails = detailsRef.current;
-      const currentSummary = summaryRef.current;
-      if (currentDetails?.isConnected && currentSummary?.isConnected) currentSummary.focus({ preventScroll: true });
-    };
-    restoreFocus();
-    requestAnimationFrame(restoreFocus);
-  };
+  const [activeKind, setActiveKind] = useState<(typeof categories)[number][0]>("all");
+  const flatTargets = [
+    targets.all,
+    ...targets.chat,
+    ...targets.branch,
+    ...targets.character,
+    ...targets.persona,
+  ].filter((target, index, items) => items.findIndex((item) => item.id === target.id) === index);
+  const selected = flatTargets.find((target) => target.id === selectedId);
+  const activeTargets =
+    activeKind === "all"
+      ? flatTargets.filter((target) => target.id !== "all")
+      : activeKind === "chat"
+        ? targets.chat
+        : activeKind === "branch"
+          ? targets.branch
+          : activeKind === "character"
+            ? targets.character
+            : targets.persona;
+  const needle = query.trim().toLocaleLowerCase();
+  const filtered = activeTargets.filter((target) => target.label.toLocaleLowerCase().includes(needle));
+  const pickerId = useId();
+  const currentTarget =
+    activeKind === "all" ? undefined : flatTargets.find((target) => target.id === currentIds[activeKind]);
   return (
-    <details ref={detailsRef} data-ltm-memory-scope-picker={kind} className="group relative">
-      <summary
-        ref={summaryRef}
-        className="mari-editor-action flex min-h-11 cursor-pointer list-none items-center gap-2 px-3 py-2 text-left text-[var(--marinara-editor-muted)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--ring)] [&::-webkit-details-marker]:hidden"
-      >
-        <span className="min-w-0 flex-1">
-          <span className="block text-[0.625rem] font-medium text-[var(--marinara-editor-muted)]">{label}</span>
-          <span className="block truncate text-xs font-semibold text-[var(--marinara-editor-text)]" title={value}>
-            {value}
-          </span>
-        </span>
-        <ChevronRight
-          aria-hidden="true"
-          size="0.875rem"
-          data-ltm-memory-scope-chevron
-          className="shrink-0 transition-transform"
-        />
-      </summary>
-      <div className="mt-2 space-y-2">
-        {searchable ? (
-          <label className="relative block">
-            <Search
-              aria-hidden="true"
-              size="0.875rem"
-              className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-[var(--muted-foreground)]"
-            />
-            <input
-              className={`${inputClass} pl-9`}
-              value={query}
-              placeholder={searchLabel}
-              aria-label={searchLabel}
-              onChange={(event) => setQuery(event.target.value)}
-            />
-          </label>
-        ) : null}
-        <div className="max-h-40 overflow-y-auto border-y border-[var(--marinara-editor-divider)] divide-y divide-[var(--marinara-editor-divider)] bg-[var(--marinara-editor-control-bg)]">
-          {currentTarget ? (
+    <div
+      id="ltm-vault-scope-control"
+      data-ltm-vault-scope-control
+      className="mari-editor-panel min-w-0 max-w-full space-y-3 p-3"
+    >
+      <div className="flex min-w-0 items-center gap-2 text-xs font-semibold">
+        <span className="min-w-0 truncate">{localizeUi("ui.longTermMemory.memoryvault.chooseScope")}</span>
+        {selected ? <span className="min-w-0 truncate text-[var(--muted-foreground)]">{selected.label}</span> : null}
+      </div>
+      {selected && selected.id !== "all" ? (
+        <div className="flex min-w-0 flex-wrap gap-1.5" data-ltm-vault-selected-scope>
+          <span className="inline-flex min-w-0 max-w-full items-center rounded-md border border-[var(--border)] bg-[var(--secondary)] px-2 py-1 text-xs">
+            <span className="min-w-0 truncate">{selected.label}</span>
             <button
               type="button"
-              data-ltm-memory-scope-target={currentTarget.id}
-              className="mari-editor-action mari-editor-action--compact flex min-h-11 w-full items-center justify-between rounded-none border-x-0 border-t-0 px-3 py-2 text-left text-xs last:border-b-0 hover:bg-[var(--secondary)]/35"
-              onClick={() => {
-                close();
-                onSelect(currentTarget);
-              }}
+              className="grid h-11 w-11 shrink-0 place-items-center"
+              aria-label={localizeUi("ui.longTermMemory.sourcesworkspace.removeLocationValue1", {
+                value1: selected.label,
+              })}
+              onClick={() => onSelect(targets.all)}
             >
-              <span className="min-w-0 flex-1 truncate font-medium">{currentTarget.label}</span>
-              {selectedTargetId === currentTarget.id ? (
-                <Check aria-hidden="true" size="0.875rem" className="shrink-0 text-[var(--primary)]" />
-              ) : null}
+              <X aria-hidden="true" size="0.75rem" />
             </button>
-          ) : null}
+          </span>
+        </div>
+      ) : null}
+      <label className="relative block min-w-0">
+        <Search
+          aria-hidden="true"
+          size="0.875rem"
+          className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-[var(--muted-foreground)]"
+        />
+        <input
+          className={`${inputClass} min-w-0 max-w-full pl-9`}
+          value={query}
+          placeholder={localizeUi("ui.longTermMemory.sourcesworkspace.searchScopes")}
+          aria-label={localizeUi("ui.longTermMemory.sourcesworkspace.searchScopes")}
+          data-ltm-vault-scope-search
+          onChange={(event) => setQuery(event.target.value)}
+        />
+      </label>
+      <div
+        role="tablist"
+        aria-label={localizeUi("ui.longTermMemory.memoryvault.chooseScope")}
+        className="grid min-w-0 grid-cols-2 gap-1"
+      >
+        {categories.map(([kind, label], index) => (
           <button
+            key={kind}
             type="button"
-            data-ltm-memory-scope-target={`${kind}:all`}
-            className="mari-editor-action mari-editor-action--compact flex min-h-11 w-full items-center justify-between rounded-none border-x-0 border-t-0 px-3 py-2 text-left text-xs last:border-b-0 hover:bg-[var(--secondary)]/35"
-            onClick={() => {
-              close();
-              onClear();
+            role="tab"
+            id={`${pickerId}-${kind}`}
+            aria-controls={`${pickerId}-panel`}
+            tabIndex={activeKind === kind ? 0 : -1}
+            aria-selected={activeKind === kind}
+            data-ltm-vault-scope-tab={kind}
+            data-active={activeKind === kind}
+            className="mari-editor-tab min-h-11 min-w-0 rounded-md border px-2 text-xs font-semibold"
+            onClick={() => setActiveKind(kind)}
+            onKeyDown={(event) => {
+              if (!["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)) return;
+              event.preventDefault();
+              const nextIndex =
+                event.key === "Home"
+                  ? 0
+                  : event.key === "End"
+                    ? categories.length - 1
+                    : (index + (event.key === "ArrowRight" ? 1 : -1) + categories.length) % categories.length;
+              const nextKind = categories[nextIndex]![0];
+              setActiveKind(nextKind);
+              document.getElementById(`${pickerId}-${nextKind}`)?.focus();
             }}
           >
-            <span className="min-w-0 flex-1 truncate font-medium">{allLabel}</span>
-            {selectedTargetId === `${kind}:all` ? (
-              <Check aria-hidden="true" size="0.875rem" className="shrink-0 text-[var(--primary)]" />
-            ) : null}
+            <span className="block truncate">{label}</span>
           </button>
-          {filtered
-            .filter((target) => target.id !== currentTargetId)
-            .map((target) => (
-              <button
-                key={target.id}
-                type="button"
-                data-ltm-memory-scope-target={target.id}
-                className="mari-editor-action mari-editor-action--compact flex min-h-11 w-full items-center justify-between rounded-none border-x-0 border-t-0 px-3 py-2 text-left text-xs last:border-b-0 hover:bg-[var(--secondary)]/35"
-                onClick={() => {
-                  close();
-                  onSelect(target);
-                }}
-              >
-                <span className="min-w-0 flex-1 truncate">{target.label}</span>
-                {selectedTargetId === target.id ? (
-                  <Check aria-hidden="true" size="0.875rem" className="shrink-0 text-[var(--primary)]" />
-                ) : null}
-              </button>
-            ))}
-        </div>
+        ))}
       </div>
-    </details>
+      <div
+        data-ltm-vault-scope-list
+        id={`${pickerId}-panel`}
+        role="tabpanel"
+        aria-labelledby={`${pickerId}-${activeKind}`}
+        className="min-w-0 max-h-52 overflow-y-auto overscroll-contain rounded-md border border-[var(--border)]"
+      >
+        {currentTarget ? (
+          <button
+            type="button"
+            data-ltm-vault-scope-current={activeKind}
+            aria-pressed={selectedId === currentTarget.id}
+            className="flex min-h-11 w-full items-center gap-2 px-3 py-2 text-left text-xs"
+            onClick={() => onSelect(currentTarget)}
+          >
+            <span>{localizeUi("ui.longTermMemory.memoryvault.current")}</span>
+            <span className="min-w-0 truncate">{currentTarget.label}</span>
+          </button>
+        ) : null}
+        {(activeKind === "all"
+          ? [{ id: "all", label: localizeUi("ui.longTermMemory.memoryvault.allMemories") }, ...filtered]
+          : filtered
+        ).map((option) => {
+          const optionTarget = option.id === "all" ? targets.all : option;
+          if (!optionTarget) return null;
+          return (
+            <button
+              key={option.id}
+              type="button"
+              data-ltm-vault-scope-target={option.id}
+              aria-pressed={selectedId === option.id}
+              data-selected={selectedId === option.id ? "true" : "false"}
+              className="mari-editor-action flex min-h-11 w-full min-w-0 items-center gap-3 rounded-none border-x-0 border-t-0 px-3 py-2 text-left text-sm last:border-b-0 data-[selected=true]:bg-[var(--primary)]/10"
+              onClick={() => onSelect(optionTarget)}
+            >
+              <Check
+                aria-hidden="true"
+                size="0.875rem"
+                className={selectedId === option.id ? "shrink-0 text-[var(--primary)]" : "shrink-0 opacity-0"}
+              />
+              <span className="min-w-0 flex-1 truncate">
+                {option.id === "all" ? localizeUi("ui.longTermMemory.memoryvault.allMemories") : option.label}
+              </span>
+            </button>
+          );
+        })}
+        {!filtered.length && activeKind !== "all" ? (
+          <p className="px-3 py-4 text-xs text-[var(--muted-foreground)]">
+            {localizeUi("ui.longTermMemory.memoryvault.noScopeTargets")}
+          </p>
+        ) : null}
+      </div>
+    </div>
   );
 }
 type NoteResponse = { note: LtmNote };
@@ -1231,7 +1265,6 @@ export default function MemoryVault({
   const [target, setTarget] = useState<Target | null>(() => sessionTargets.get(contextKey) ?? null);
   const targetContextKey = useRef(contextKey);
   const [statusFilter, setStatusFilter] = useState<LtmStatus | "all">(initialNavigatorState?.statusFilter ?? "all");
-  const [scopeModes, setScopeModes] = useState<LtmMode[]>(() => (props.chatMode ? [props.chatMode] : [...modes]));
   const [filterModes, setFilterModes] = useState<LtmMode[]>(() => initialNavigatorState?.filterModes ?? [...modes]);
   const [sourceFilter, setSourceFilter] = useState(initialNavigatorState?.sourceFilter ?? false);
   const [sort, setSort] = useState<"updated" | "title" | "created">(initialNavigatorState?.sort ?? "updated");
@@ -1319,9 +1352,6 @@ export default function MemoryVault({
       if (navigatorScrollRef.current) navigatorScrollRef.current.scrollTop = state.scrollTop;
     });
   }, [contextKey]);
-  useEffect(() => {
-    setScopeModes(props.chatMode ? [props.chatMode] : [...modes]);
-  }, [contextKey, props.chatMode]);
   useEffect(() => {
     if (!validation.length) return;
     requestAnimationFrame(() => validationRef.current?.focus({ preventScroll: true }));
@@ -1569,10 +1599,7 @@ export default function MemoryVault({
     : selectedChat
       ? `chat:${selectedChat.id}`
       : "";
-  const scopeChats = useMemo(
-    () => (scopeTargets.data?.chats ?? []).filter((chat) => scopeModes.includes(chat.mode)),
-    [scopeModes, scopeTargets.data?.chats],
-  );
+  const scopeChats = useMemo(() => scopeTargets.data?.chats ?? [], [scopeTargets.data?.chats]);
   const scopeGroups = useMemo(() => {
     const chatIds = new Set(scopeChats.map((chat) => chat.id));
     return (scopeTargets.data?.groups ?? [])
@@ -1582,7 +1609,7 @@ export default function MemoryVault({
       }))
       .filter((group) => group.chatIds.length);
   }, [scopeChats, scopeTargets.data?.groups]);
-  const { conversations, branches, selectedConversation } = useMemo(() => {
+  const { conversations, branches } = useMemo(() => {
     const conversations = deriveScopeConversations(
       scopeChats,
       scopeGroups,
@@ -1595,7 +1622,6 @@ export default function MemoryVault({
     );
     return {
       conversations,
-      selectedConversation: conversations.find((item) => item.id === selectedConversationId),
       branches: deriveScopeBranches(
         conversations.find((item) => item.id === selectedConversationId),
         scopeIndexes,
@@ -1610,7 +1636,6 @@ export default function MemoryVault({
     selectedCharacterId,
     selectedConversationId,
   ]);
-  const selectedCharacter = scopeTargets.data?.characters.find((character) => character.id === selectedCharacterId);
   const characterScopeTargets = (scopeTargets.data?.characters ?? []).map((character) =>
     targets.find((candidate) => candidate.id === `character:${character.id}`)!,
   );
@@ -1950,23 +1975,6 @@ export default function MemoryVault({
       : [...filterModes, mode];
     if (!nextModes.length) return;
     setFilterModes(nextModes);
-  }
-  async function toggleScopeMode(mode: LtmMode) {
-    const nextModes = scopeModes.includes(mode)
-      ? scopeModes.filter((current) => current !== mode)
-      : [...scopeModes, mode];
-    if (!nextModes.length) return;
-    if (selectedChat && !nextModes.includes(selectedChat.mode)) {
-      if (
-        !(await selectTarget(
-          selectedCharacter
-            ? characterScopeTargets.find((candidate) => candidate.id === `character:${selectedCharacter.id}`)!
-            : targets[0]!,
-        ))
-      )
-        return;
-    }
-    setScopeModes(nextModes);
   }
   async function openNote(note: LtmNote, expectedContextKey = targetContextKey.current) {
     if (expectedContextKey !== targetContextKey.current) return;
@@ -2759,10 +2767,18 @@ export default function MemoryVault({
       aria-label={localizeUi("ui.longTermMemory.memoryvault.memoryVault")}
     >
       <style>{`
-        [data-ltm-surface="vault"] [data-ltm-memory-scope] > summary,
-        [data-ltm-surface="vault"] [data-ltm-memory-scope-picker] > summary {
+        [data-ltm-surface="vault"] [data-ltm-memory-scope] > summary {
           display: flex;
           font-family: inherit;
+        }
+        [data-ltm-surface="vault"] [data-ltm-vault-scope-control],
+        [data-ltm-surface="vault"] [data-ltm-vault-scope-control] * {
+          min-width: 0;
+          max-width: 100%;
+          box-sizing: border-box;
+        }
+        [data-ltm-surface="vault"] [data-ltm-vault-scope-list] {
+          overflow-x: hidden;
         }
         [data-ltm-surface="vault"] [data-ltm-memory-scope-target] {
           display: flex;
@@ -2811,7 +2827,7 @@ export default function MemoryVault({
                 </div>
                 <details
                   data-ltm-memory-scope
-                  className="mari-editor-panel mari-editor-panel--soft group col-span-2 rounded-md"
+                  className="mari-editor-panel mari-editor-panel--soft group col-span-2 min-w-0 max-w-full rounded-md"
                 >
                   <summary className="mari-editor-action flex min-h-11 cursor-pointer list-none items-center gap-2 px-3 py-2 text-left text-[var(--marinara-editor-muted)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--ring)] [&::-webkit-details-marker]:hidden">
                     <span className="min-w-0 flex-1">
@@ -2829,100 +2845,26 @@ export default function MemoryVault({
                       className="shrink-0 transition-transform"
                     />
                   </summary>
-                  <div className="grid gap-2 border-t border-[var(--border)] p-3">
-                    {target && target.id !== "all" ? (
-                      <div className="flex flex-wrap gap-1.5 pb-1">
-                        <Pill label={target.label} onRemove={() => void selectTarget(targets[0]!)}>
-                          {target.label}
-                        </Pill>
-                      </div>
-                    ) : null}
-                    <div className="flex flex-wrap items-center justify-between gap-2 border-b border-[var(--border)] pb-2 text-xs">
-                      <span className="text-[var(--marinara-editor-muted)]">
-                        {localizeUi("ui.longTermMemory.memoryvault.chooseScope")}
-                      </span>
-                      <button
-                        type="button"
-                        data-ltm-memory-scope-target="all"
-                        className="mari-editor-action rounded px-2 py-1 text-xs font-semibold text-[var(--primary)] hover:bg-[var(--secondary)]/35"
-                        onClick={() => void selectTarget(targets[0]!)}
-                      >
-                        {localizeUi("ui.longTermMemory.memoryvault.allMemories")}
-                      </button>
-                    </div>
-                    <fieldset className="space-y-2 border-b border-[var(--border)] pb-2">
-                      <legend className="text-[0.625rem] font-medium text-[var(--marinara-editor-muted)]">
-                        {localizeUi("ui.longTermMemory.memoryvault.chatModes")}
-                      </legend>
-                      <div className="flex flex-wrap gap-x-3 gap-y-1">
-                        {modes.map((mode) => (
-                          <label key={mode} className="flex min-h-11 items-center gap-2 text-xs">
-                            <input
-                              type="checkbox"
-                              checked={scopeModes.includes(mode)}
-                              onChange={() => void toggleScopeMode(mode)}
-                            />
-                            {modeLabel(mode)}
-                          </label>
-                        ))}
-                      </div>
-                    </fieldset>
+                  <div className="min-w-0 max-w-full border-t border-[var(--border)]">
                     <ScopeTargetPicker
-                      kind="character"
-                      selectedTargetId={selectedCharacter ? `character:${selectedCharacter.id}` : "character:all"}
-                      label={localizeUi("ui.longTermMemory.memoryvault.character")}
-                      value={selectedCharacter?.label ?? localizeUi("ui.longTermMemory.memoryvault.allCharacters")}
-                      allLabel={localizeUi("ui.longTermMemory.memoryvault.all")}
-                      currentTargetId={currentCharacterTarget?.id}
-                      searchLabel={localizeUi("ui.longTermMemory.memoryvault.searchCharacters")}
-                      targets={pickerCharacterScopeTargets}
-                      onClear={() => void selectTarget(targets[0]!)}
-                      onSelect={(candidate) => void selectTarget(candidate)}
-                    />
-                    <ScopeTargetPicker
-                      kind="chat"
-                      selectedTargetId={selectedConversation?.id ?? "chat:all"}
-                      label={localizeUi("ui.longTermMemory.memoryvault.chat")}
-                      value={selectedConversation?.label ?? localizeUi("ui.longTermMemory.memoryvault.allChats")}
-                      allLabel={localizeUi("ui.longTermMemory.memoryvault.all")}
-                      currentTargetId={props.chatId ? `chat:${props.chatId}` : undefined}
-                      searchLabel={localizeUi("ui.longTermMemory.memoryvault.searchChats")}
-                      targets={pickerConversationScopeTargets}
-                      onClear={() =>
-                        void selectTarget(
-                          selectedCharacter
-                            ? characterScopeTargets.find(
-                                (candidate) => candidate.id === `character:${selectedCharacter.id}`,
-                              )!
-                            : targets[0]!,
-                        )
-                      }
-                      onSelect={(candidate) => void selectTarget(candidate)}
-                    />
-                    <ScopeTargetPicker
-                      kind="branch"
-                      selectedTargetId={selectedChat?.groupId ? `chat:${selectedChat.id}` : "branch:all"}
-                      label={localizeUi("ui.longTermMemory.memoryvault.branch")}
-                      value={
-                        selectedChat?.groupId
-                          ? selectedChat.label
-                          : localizeUi("ui.longTermMemory.memoryvault.allBranches")
-                      }
-                      allLabel={localizeUi("ui.longTermMemory.memoryvault.all")}
-                      currentTargetId={currentBranchTarget?.id}
-                      searchLabel={localizeUi("ui.longTermMemory.memoryvault.searchBranches")}
-                      targets={pickerBranchScopeTargets}
-                      onClear={() =>
-                        void selectTarget(
-                          selectedConversation
-                            ? conversationScopeTargets.find((candidate) => candidate.id === selectedConversation.id)!
-                            : selectedCharacter
-                              ? characterScopeTargets.find(
-                                  (candidate) => candidate.id === `character:${selectedCharacter.id}`,
-                                )!
-                              : targets[0]!,
-                        )
-                      }
+                      targets={{
+                        all: targets[0]!,
+                        chat: pickerConversationScopeTargets,
+                        branch: pickerBranchScopeTargets,
+                        character: pickerCharacterScopeTargets,
+                        persona: (scopeTargets.data?.personas ?? []).map((persona) => ({
+                          id: `persona:${persona.id}`,
+                          label: persona.label,
+                          scope: { personaId: persona.id },
+                        })),
+                      }}
+                      selectedId={target?.id ?? "all"}
+                      currentIds={{
+                        chat: currentConversationScopeTarget?.id,
+                        branch: currentBranchTarget?.id,
+                        character: currentCharacterTarget?.id,
+                      }}
+                      localizeUi={localizeUi}
                       onSelect={(candidate) => void selectTarget(candidate)}
                     />
                   </div>
@@ -2969,38 +2911,41 @@ export default function MemoryVault({
                     ))}
                   </div>
                 </fieldset>
-                <ScopeTargetPicker
-                  kind="status"
-                  selectedTargetId={statusFilter === "all" ? "status:all" : statusFilter}
-                  label={localizeUi("ui.longTermMemory.memoryvault.showMemories")}
-                  value={
-                    statusFilter === "all"
-                      ? localizeUi("ui.longTermMemory.memoryvault.allStatuses")
-                      : statusLabel(statusFilter)
-                  }
-                  allLabel={localizeUi("ui.longTermMemory.memoryvault.allStatuses")}
-                  searchLabel={localizeUi("ui.longTermMemory.memoryvault.searchStatuses")}
-                  searchable={false}
-                  targets={statusScopeTargets}
-                  onClear={() => setStatusFilter("all")}
-                  onSelect={(candidate) => setStatusFilter(candidate.id as LtmStatus)}
-                />
-                <ScopeTargetPicker
-                  kind="sort"
-                  selectedTargetId={sort === "updated" ? "sort:all" : sort}
-                  label={localizeUi("ui.longTermMemory.memoryvault.sortBy")}
-                  value={
-                    sort === "updated"
-                      ? localizeUi("ui.longTermMemory.memoryvault.recentlyUpdated")
-                      : (sortScopeTargets.find((candidate) => candidate.id === sort)?.label ?? sort)
-                  }
-                  allLabel={localizeUi("ui.longTermMemory.memoryvault.recentlyUpdated")}
-                  searchLabel={localizeUi("ui.longTermMemory.memoryvault.searchSortOptions")}
-                  searchable={false}
-                  targets={sortScopeTargets}
-                  onClear={() => setSort("updated")}
-                  onSelect={(candidate) => setSort(candidate.id as "title" | "created")}
-                />
+                <label className="col-span-1 min-w-0 space-y-1 text-xs font-medium">
+                  <span className="block text-[var(--marinara-editor-muted)]">
+                    {localizeUi("ui.longTermMemory.memoryvault.showMemories")}
+                  </span>
+                  <select
+                    className={`${inputClass} min-w-0 max-w-full`}
+                    value={statusFilter}
+                    onChange={(event) => setStatusFilter(event.target.value as LtmStatus | "all")}
+                  >
+                    {statusScopeTargets.map((option) => (
+                      <option key={option.id} value={option.id}>
+                        {option.label}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label className="col-span-1 min-w-0 space-y-1 text-xs font-medium">
+                  <span className="block text-[var(--marinara-editor-muted)]">
+                    {localizeUi("ui.longTermMemory.memoryvault.sortBy")}
+                  </span>
+                  <select
+                    className={`${inputClass} min-w-0 max-w-full`}
+                    value={sort}
+                    onChange={(event) => setSort(event.target.value as "updated" | "title" | "created")}
+                  >
+                    <option value="updated">{localizeUi("ui.longTermMemory.memoryvault.recentlyUpdated")}</option>
+                    {sortScopeTargets
+                      .filter((option) => option.id !== "updated")
+                      .map((option) => (
+                        <option key={option.id} value={option.id}>
+                          {option.label}
+                        </option>
+                      ))}
+                  </select>
+                </label>
                 <div className="col-span-2 flex flex-wrap items-center gap-3 border-t border-[var(--border)] pt-2">
                   <Button
                     onClick={() => {
