@@ -1522,12 +1522,12 @@ async function main() {
       assert.equal(await page.getByText("Memory outside current chat").count(), 0);
       await memoryScope.locator(":scope > summary").click();
       assert.equal(
-        await memoryScope.locator('[data-ltm-vault-scope-target="chat:desktop-chat"] svg').count(),
+        await memoryScope.locator('[data-ltm-vault-scope-target="chat:desktop-chat"][aria-checked="true"]').count(),
         1,
         "The contextual Current row is checked by selected ID",
       );
       assert.equal(
-        await memoryScope.locator('[data-ltm-vault-scope-target="all"] svg').count(),
+        await memoryScope.locator('[data-ltm-vault-scope-target="all"][aria-checked="false"]').count(),
         1,
         "The all option is present in the shared scope list",
       );
@@ -1551,9 +1551,9 @@ async function main() {
       assert.equal(await memoryScope.locator('[data-ltm-vault-scope-target="group:conversation-a"]').count(), 0);
       await memoryScope.locator("[data-ltm-vault-scope-search]").fill("");
       await memoryScope.locator('[data-ltm-vault-scope-target="group:conversation-a"]').click();
-      await memoryScope.locator('[data-ltm-vault-scope-target="group:conversation-a"][aria-pressed="true"]').waitFor();
+      await memoryScope.locator('[data-ltm-vault-scope-target="group:conversation-a"][aria-checked="true"]').waitFor();
       assert.equal(
-        await memoryScope.locator('[data-ltm-vault-scope-target="group:conversation-a"][aria-pressed="true"]').count(),
+        await memoryScope.locator('[data-ltm-vault-scope-target="group:conversation-a"][aria-checked="true"]').count(),
         1,
       );
       await memoryScope.locator('[data-ltm-vault-scope-tab="character"]').click();
@@ -1561,7 +1561,7 @@ async function main() {
       await memoryScope.locator('[data-ltm-vault-scope-target="character:character-a"]').focus();
       await memoryScope.locator('[data-ltm-vault-scope-target="character:character-a"]').press("Enter");
       assert.equal(
-        await memoryScope.locator('[data-ltm-vault-scope-target="character:character-a"][aria-pressed="true"]').count(),
+        await memoryScope.locator('[data-ltm-vault-scope-target="character:character-a"][aria-checked="true"]').count(),
         1,
       );
       await memoryScope.locator(":scope > summary").click();

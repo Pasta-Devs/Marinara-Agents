@@ -238,6 +238,9 @@ function ScopeTargetPicker({
   const pickerId = useId();
   const currentTarget =
     activeKind === "all" ? undefined : flatTargets.find((target) => target.id === currentIds[activeKind]);
+  const filteredCurrentTarget =
+    currentTarget && currentTarget.label.toLocaleLowerCase().includes(needle) ? currentTarget : undefined;
+  const displayedTargets = filtered.filter((target) => target.id !== currentTarget?.id);
   return (
     <div
       id="ltm-vault-scope-control"
@@ -323,11 +326,13 @@ function ScopeTargetPicker({
         aria-labelledby={`${pickerId}-${activeKind}`}
         className="min-w-0 max-h-52 overflow-y-auto overscroll-contain rounded-md border border-[var(--border)]"
       >
-        {currentTarget ? (
+        {filteredCurrentTarget ? (
           <button
             type="button"
             data-ltm-vault-scope-current={activeKind}
-            aria-pressed={selectedId === currentTarget.id}
+            data-ltm-vault-scope-target={currentTarget.id}
+            role="checkbox"
+            aria-checked={selectedId === currentTarget.id}
             className="flex min-h-11 w-full items-center gap-2 px-3 py-2 text-left text-xs"
             onClick={() => onSelect(currentTarget)}
           >
@@ -336,8 +341,8 @@ function ScopeTargetPicker({
           </button>
         ) : null}
         {(activeKind === "all"
-          ? [{ id: "all", label: localizeUi("ui.longTermMemory.memoryvault.allMemories") }, ...filtered]
-          : filtered
+          ? [{ id: "all", label: localizeUi("ui.longTermMemory.memoryvault.allMemories") }, ...displayedTargets]
+          : displayedTargets
         ).map((option) => {
           const optionTarget = option.id === "all" ? targets.all : option;
           if (!optionTarget) return null;
@@ -346,7 +351,8 @@ function ScopeTargetPicker({
               key={option.id}
               type="button"
               data-ltm-vault-scope-target={option.id}
-              aria-pressed={selectedId === option.id}
+              role="checkbox"
+              aria-checked={selectedId === option.id}
               data-selected={selectedId === option.id ? "true" : "false"}
               className="mari-editor-action flex min-h-11 w-full min-w-0 items-center gap-3 rounded-none border-x-0 border-t-0 px-3 py-2 text-left text-sm last:border-b-0 data-[selected=true]:bg-[var(--primary)]/10"
               onClick={() => onSelect(optionTarget)}
@@ -1591,14 +1597,8 @@ export default function MemoryVault({
     target?.id.startsWith("chat:") && target.scope?.chatIds?.length === 1
       ? scopeIndexes.chatsById.get(target.scope.chatIds[0])
       : undefined;
-  const selectedGroupId = target?.scope?.groupId ?? selectedChat?.groupId ?? "";
   const selectedCharacterId =
     target?.scope?.characterIds?.length === 1 ? target.scope.characterIds[0] : (selectedChat?.characterIds[0] ?? "");
-  const selectedConversationId = selectedGroupId
-    ? `group:${selectedGroupId}`
-    : selectedChat
-      ? `chat:${selectedChat.id}`
-      : "";
   const scopeChats = useMemo(() => scopeTargets.data?.chats ?? [], [scopeTargets.data?.chats]);
   const scopeGroups = useMemo(() => {
     const chatIds = new Set(scopeChats.map((chat) => chat.id));
@@ -1610,32 +1610,16 @@ export default function MemoryVault({
       .filter((group) => group.chatIds.length);
   }, [scopeChats, scopeTargets.data?.groups]);
   const { conversations, branches } = useMemo(() => {
-    const conversations = deriveScopeConversations(
-      scopeChats,
-      scopeGroups,
-      selectedCharacterId,
-      scopeIndexes,
-      (group) =>
-        localizeUi("ui.longTermMemory.memoryvault.groupBranches", {
-          group: group.label,
-        }),
+    const conversations = deriveScopeConversations(scopeChats, scopeGroups, "", scopeIndexes, (group) =>
+      localizeUi("ui.longTermMemory.memoryvault.groupBranches", {
+        group: group.label,
+      }),
     );
     return {
       conversations,
-      branches: deriveScopeBranches(
-        conversations.find((item) => item.id === selectedConversationId),
-        scopeIndexes,
-      ),
+      branches: deriveScopeBranches({ chatIds: scopeChats.map((chat) => chat.id) }, scopeIndexes),
     };
-  }, [
-    localizeUi,
-    scopeIndexes,
-    scopeTargets.data?.chats,
-    scopeChats,
-    scopeGroups,
-    selectedCharacterId,
-    selectedConversationId,
-  ]);
+  }, [localizeUi, scopeIndexes, scopeTargets.data?.chats, scopeChats, scopeGroups]);
   const characterScopeTargets = (scopeTargets.data?.characters ?? []).map((character) =>
     targets.find((candidate) => candidate.id === `character:${character.id}`)!,
   );
@@ -1643,7 +1627,9 @@ export default function MemoryVault({
     props.chatId && selectedChat?.characterIds.length
       ? {
           id: `character:${selectedChat.characterIds[0]}`,
-          label: localizeUi("ui.longTermMemory.memoryvault.current"),
+          label:
+            characterScopeTargets.find((candidate) => candidate.id === `character:${selectedChat.characterIds[0]}`)
+              ?.label ?? localizeUi("ui.longTermMemory.memoryvault.current"),
           scope: { characterIds: [selectedChat.characterIds[0]] },
         }
       : null;
@@ -1673,7 +1659,10 @@ export default function MemoryVault({
   const currentConversationScopeTarget: Target | null = props.chatId
     ? {
         id: `chat:${props.chatId}`,
-        label: localizeUi("ui.longTermMemory.memoryvault.current"),
+        label:
+          conversationScopeTargets.find((candidate) => candidate.id === `chat:${props.chatId}`)?.label ??
+          props.chatName ??
+          localizeUi("ui.longTermMemory.memoryvault.currentChat"),
         scope: scopeTargets.data?.currentScope ?? { chatId: props.chatId, chatIds: [props.chatId] },
       }
     : null;
@@ -1695,7 +1684,10 @@ export default function MemoryVault({
     props.chatId && selectedChat?.groupId
       ? {
           id: `chat:${props.chatId}`,
-          label: localizeUi("ui.longTermMemory.memoryvault.current"),
+          label:
+            branchScopeTargets.find((candidate) => candidate.id === `chat:${props.chatId}`)?.label ??
+            props.chatName ??
+            localizeUi("ui.longTermMemory.memoryvault.currentChat"),
           scope: scopeTargets.data?.currentScope ?? { chatId: props.chatId, chatIds: [props.chatId] },
         }
       : null;
@@ -2920,6 +2912,7 @@ export default function MemoryVault({
                     value={statusFilter}
                     onChange={(event) => setStatusFilter(event.target.value as LtmStatus | "all")}
                   >
+                    <option value="all">{localizeUi("ui.longTermMemory.memoryvault.all")}</option>
                     {statusScopeTargets.map((option) => (
                       <option key={option.id} value={option.id}>
                         {option.label}
