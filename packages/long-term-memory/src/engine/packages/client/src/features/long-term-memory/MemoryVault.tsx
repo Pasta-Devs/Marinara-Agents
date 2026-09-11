@@ -280,30 +280,36 @@ function ScopeTargetPicker({
             />
           </label>
         ) : null}
-        <div className="max-h-40 overflow-y-auto border-y border-[var(--marinara-editor-divider)] bg-[var(--marinara-editor-control-bg)]">
+        <div className="max-h-40 overflow-y-auto border-y border-[var(--marinara-editor-divider)] divide-y divide-[var(--marinara-editor-divider)] bg-[var(--marinara-editor-control-bg)]">
           {currentTarget ? (
             <button
               type="button"
               data-ltm-memory-scope-target={currentTarget.id}
-              className="mari-editor-action mari-editor-action--compact block min-h-11 w-full rounded-none border-x-0 border-t-0 px-3 py-2 text-left text-xs last:border-b-0"
+              className="mari-editor-action mari-editor-action--compact flex min-h-11 w-full items-center justify-between rounded-none border-x-0 border-t-0 px-3 py-2 text-left text-xs last:border-b-0 hover:bg-[var(--secondary)]/35"
               onClick={() => {
                 close();
                 onSelect(currentTarget);
               }}
             >
-              {currentTarget.label}
+              <span className="min-w-0 flex-1 truncate font-medium">{currentTarget.label}</span>
+              {value === currentTarget.label ? (
+                <Check aria-hidden="true" size="0.875rem" className="shrink-0 text-[var(--primary)]" />
+              ) : null}
             </button>
           ) : null}
           <button
             type="button"
             data-ltm-memory-scope-target={`${kind}:all`}
-            className="mari-editor-action mari-editor-action--compact block min-h-11 w-full rounded-none border-x-0 border-t-0 px-3 py-2 text-left text-xs last:border-b-0"
+            className="mari-editor-action mari-editor-action--compact flex min-h-11 w-full items-center justify-between rounded-none border-x-0 border-t-0 px-3 py-2 text-left text-xs last:border-b-0 hover:bg-[var(--secondary)]/35"
             onClick={() => {
               close();
               onClear();
             }}
           >
-            {allLabel}
+            <span className="min-w-0 flex-1 truncate font-medium">{allLabel}</span>
+            {value === allLabel ? (
+              <Check aria-hidden="true" size="0.875rem" className="shrink-0 text-[var(--primary)]" />
+            ) : null}
           </button>
           {filtered
             .filter((target) => target.id !== currentTargetId)
@@ -312,13 +318,16 @@ function ScopeTargetPicker({
                 key={target.id}
                 type="button"
                 data-ltm-memory-scope-target={target.id}
-                className="mari-editor-action mari-editor-action--compact block min-h-11 w-full rounded-none border-x-0 border-t-0 px-3 py-2 text-left text-xs last:border-b-0"
+                className="mari-editor-action mari-editor-action--compact flex min-h-11 w-full items-center justify-between rounded-none border-x-0 border-t-0 px-3 py-2 text-left text-xs last:border-b-0 hover:bg-[var(--secondary)]/35"
                 onClick={() => {
                   close();
                   onSelect(target);
                 }}
               >
-                {target.label}
+                <span className="min-w-0 flex-1 truncate">{target.label}</span>
+                {value === target.label ? (
+                  <Check aria-hidden="true" size="0.875rem" className="shrink-0 text-[var(--primary)]" />
+                ) : null}
               </button>
             ))}
         </div>
@@ -348,6 +357,7 @@ type NavigatorState = {
   sourceFilter: boolean;
   sort: "updated" | "title" | "created";
   scrollTop: number;
+  filterModes?: LtmMode[];
 };
 const navigatorStates = new Map<string, NavigatorState>();
 
@@ -1220,6 +1230,7 @@ export default function MemoryVault({
   const targetContextKey = useRef(contextKey);
   const [statusFilter, setStatusFilter] = useState<LtmStatus | "all">(initialNavigatorState?.statusFilter ?? "all");
   const [scopeModes, setScopeModes] = useState<LtmMode[]>(() => (props.chatMode ? [props.chatMode] : [...modes]));
+  const [filterModes, setFilterModes] = useState<LtmMode[]>(() => initialNavigatorState?.filterModes ?? [...modes]);
   const [sourceFilter, setSourceFilter] = useState(initialNavigatorState?.sourceFilter ?? false);
   const [sort, setSort] = useState<"updated" | "title" | "created">(initialNavigatorState?.sort ?? "updated");
   const [selectMode, setSelectMode] = useState(false);
@@ -1282,9 +1293,10 @@ export default function MemoryVault({
       statusFilter,
       sourceFilter,
       sort,
+      filterModes,
       scrollTop: navigatorScrollRef.current?.scrollTop ?? initialNavigatorState?.scrollTop ?? 0,
     });
-  }, [contextKey, initialNavigatorState?.scrollTop, search, sort, sourceFilter, statusFilter]);
+  }, [contextKey, filterModes, initialNavigatorState?.scrollTop, search, sort, sourceFilter, statusFilter]);
   useEffect(() => {
     navigatorContextRef.current = contextKey;
     const state = navigatorStates.get(contextKey) ?? {
@@ -1292,6 +1304,7 @@ export default function MemoryVault({
       statusFilter: "all" as const,
       sourceFilter: false,
       sort: "updated" as const,
+      filterModes: [...modes],
       scrollTop: 0,
     };
     navigatorStates.set(contextKey, state);
@@ -1299,6 +1312,7 @@ export default function MemoryVault({
     setStatusFilter(state.statusFilter);
     setSourceFilter(state.sourceFilter);
     setSort(state.sort);
+    setFilterModes(state.filterModes ?? [...modes]);
     requestAnimationFrame(() => {
       if (navigatorScrollRef.current) navigatorScrollRef.current.scrollTop = state.scrollTop;
     });
@@ -1468,6 +1482,7 @@ export default function MemoryVault({
       (note) =>
         (statusFilter === "all" || note.status === statusFilter) &&
         (sourceFilter ? note.type === "source" : note.type !== "source") &&
+        (!filterModes.length || filterModes.some((mode) => note.modes.includes(mode))) &&
         (!search.trim() || searchable(note, allNotes, subjectSearchLabel).includes(search.trim().toLocaleLowerCase())),
     )
     .sort((left, right) =>
@@ -1483,6 +1498,7 @@ export default function MemoryVault({
     setStatusFilter("all");
     setSourceFilter(false);
     setSort("updated");
+    setFilterModes([...modes]);
   };
   const hiddenChecked = [...checked].filter((id) => !visible.some((note) => note.id === id)).length;
   const toggleVisibleSelection = (selected: boolean) =>
@@ -1678,6 +1694,9 @@ export default function MemoryVault({
     search.trim() ? localizeUi("ui.longTermMemory.memoryvault.filteredEmptySearch", { value1: search.trim() }) : "",
     statusFilter !== "all"
       ? localizeUi("ui.longTermMemory.memoryvault.filteredEmptyStatus", { value1: statusLabel(statusFilter) })
+      : "",
+    filterModes.length < modes.length
+      ? `${localizeUi("ui.longTermMemory.memoryvault.availableModes")}: ${filterModes.map(modeLabel).join(", ")}`
       : "",
     sourceFilter ? localizeUi("ui.longTermMemory.memoryvault.filteredEmptySourcesOnly") : "",
     sort !== "updated"
@@ -1922,6 +1941,13 @@ export default function MemoryVault({
     setAddingSection(false);
     setMobilePane("navigator");
     return true;
+  }
+  function toggleFilterMode(mode: LtmMode) {
+    const nextModes = filterModes.includes(mode)
+      ? filterModes.filter((current) => current !== mode)
+      : [...filterModes, mode];
+    if (!nextModes.length) return;
+    setFilterModes(nextModes);
   }
   async function toggleScopeMode(mode: LtmMode) {
     const nextModes = scopeModes.includes(mode)
@@ -2802,6 +2828,26 @@ export default function MemoryVault({
                     />
                   </summary>
                   <div className="grid gap-2 border-t border-[var(--border)] p-3">
+                    {target && target.id !== "all" ? (
+                      <div className="flex flex-wrap gap-1.5 pb-1">
+                        <Pill label={target.label} onRemove={() => void selectTarget(targets[0]!)}>
+                          {target.label}
+                        </Pill>
+                      </div>
+                    ) : null}
+                    <div className="flex flex-wrap items-center justify-between gap-2 border-b border-[var(--border)] pb-2 text-xs">
+                      <span className="text-[var(--marinara-editor-muted)]">
+                        {localizeUi("ui.longTermMemory.memoryvault.chooseScope")}
+                      </span>
+                      <button
+                        type="button"
+                        data-ltm-memory-scope-target="all"
+                        className="mari-editor-action rounded px-2 py-1 text-xs font-semibold text-[var(--primary)] hover:bg-[var(--secondary)]/35"
+                        onClick={() => void selectTarget(targets[0]!)}
+                      >
+                        {localizeUi("ui.longTermMemory.memoryvault.allMemories")}
+                      </button>
+                    </div>
                     <fieldset className="space-y-2 border-b border-[var(--border)] pb-2">
                       <legend className="text-[0.625rem] font-medium text-[var(--marinara-editor-muted)]">
                         {localizeUi("ui.longTermMemory.memoryvault.chatModes")}
@@ -2901,6 +2947,23 @@ export default function MemoryVault({
                     </button>
                   ) : null}
                 </label>
+                <fieldset className="col-span-2 space-y-1" data-ltm-mode-filter>
+                  <legend className="text-[0.625rem] font-medium text-[var(--marinara-editor-muted)]">
+                    {localizeUi("ui.longTermMemory.memoryvault.availableModes")}
+                  </legend>
+                  <div className="flex flex-wrap gap-x-3 gap-y-1">
+                    {modes.map((mode) => (
+                      <label key={mode} className="flex min-h-11 items-center gap-2 text-xs">
+                        <input
+                          type="checkbox"
+                          checked={filterModes.includes(mode)}
+                          onChange={() => toggleFilterMode(mode)}
+                        />
+                        {modeLabel(mode)}
+                      </label>
+                    ))}
+                  </div>
+                </fieldset>
                 <ScopeTargetPicker
                   kind="status"
                   label={localizeUi("ui.longTermMemory.memoryvault.showMemories")}
