@@ -191,7 +191,8 @@ export function SlurpSettings({
   const [backupJob, setBackupJob] = useState<Awaited<ReturnType<typeof getSlurpBackupJob>> | null>(null);
   const [backupPending, setBackupPending] = useState(false);
   useEffect(() => {
-    if (!backupJob || backupJob.state === "completed" || backupJob.state === "error") return;
+    if (!backupJob || backupJob.state === "completed" || backupJob.state === "consumed" || backupJob.state === "error")
+      return;
     const timer = window.setInterval(() => {
       void getSlurpBackupJob(backupJob.id)
         .then(setBackupJob)

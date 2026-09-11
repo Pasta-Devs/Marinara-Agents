@@ -56,7 +56,7 @@ export async function tryNoodleOperation<T>(
 }
 
 export async function trySlurpWrite<T>(operation: () => Promise<T>) {
-  if (slurpDataDeletionActive || readSlurpBackupActive()) return { acquired: false as const };
+  if (slurpDataDeletionActive) return { acquired: false as const };
   return tryNoodleOperation("slurp-write", operation);
 }
 

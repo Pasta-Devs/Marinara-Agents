@@ -153,7 +153,7 @@ export function useSlurpSettings() {
 
 export type SlurpBackupJob = {
   id: string;
-  state: "queued" | "preparing" | "writing" | "completed" | "error";
+  state: "queued" | "preparing" | "writing" | "completed" | "consumed" | "error";
   stage: string;
   detail: string;
   creators: number;
@@ -181,16 +181,7 @@ export async function getSlurpBackupJob(id: string): Promise<SlurpBackupJob> {
 }
 
 export async function downloadSlurpBackup(id: string): Promise<void> {
-  const response = await apiFetch(`/slurp/backup/jobs/${encodeURIComponent(id)}/download`);
-  if (!response.ok)
-    throw new Error((await response.json().catch(() => null))?.error ?? "Could not download Slurp backup.");
-  const blob = await response.blob();
-  const url = URL.createObjectURL(blob);
-  const anchor = document.createElement("a");
-  anchor.href = url;
-  anchor.download = "slurp-backup.zip";
-  anchor.click();
-  URL.revokeObjectURL(url);
+  await api.download(`/slurp/backup/jobs/${encodeURIComponent(id)}/download`, "slurp-backup.zip");
 }
 
 export function useUpdateSlurpSettings() {
@@ -347,8 +338,7 @@ export function useNoodlerEligibleAccounts(
 }
 
 export type SlurpProfilePost =
-  | { managed: NoodlerManagedPost; viewerPost: NoodlerPostView | null }
-  | { viewerPost: NoodlerPostView };
+  { managed: NoodlerManagedPost; viewerPost: NoodlerPostView | null } | { viewerPost: NoodlerPostView };
 
 export function useNoodlerPosts(accountId: string | null, personaId: string | null) {
   return useQuery({

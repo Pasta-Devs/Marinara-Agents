@@ -98,11 +98,12 @@ import { generateNoodlerCreatorArtwork } from "../services/slurp/slurp-artwork.o
 import { jsonEntry, writeStoredZip, type StoredZipEntry } from "../services/slurp/slurp-backup.js";
 import { listNoodlerMediaFiles } from "../services/slurp/slurp-media.js";
 import { createReadStream, createWriteStream } from "node:fs";
-import { readFile, stat, unlink } from "node:fs/promises";
+import { readFile, readdir, stat, unlink } from "node:fs/promises";
 import { join } from "node:path";
 import { randomUUID } from "node:crypto";
 import { DATA_DIR } from "../utils/data-dir.js";
 import { PassThrough } from "node:stream";
+import { finished } from "node:stream/promises";
 import { pauseNoodleAutoPost } from "../services/slurp/slurp-autopost-scheduler.service.js";
 import { pauseNoodleRefreshScheduler } from "../services/slurp/slurp-refresh-scheduler.service.js";
 
@@ -312,8 +313,7 @@ async function importNoodlerMedia(imageUrl: string): Promise<NoodlerPostMediaUpl
 }
 
 type DecodedNoodlerMediaRequest<T> =
-  | { success: true; data: T; media: NoodlerPostMediaUpload | undefined }
-  | { success: false; error: z.ZodError };
+  { success: true; data: T; media: NoodlerPostMediaUpload | undefined } | { success: false; error: z.ZodError };
 
 async function decodeNoodlerMediaRequest<WithMediaSchema extends z.ZodTypeAny, WithoutMediaSchema extends z.ZodTypeAny>(
   req: FastifyRequest,
@@ -399,8 +399,35 @@ export async function slurpRoutes(app: FastifyInstance) {
       archiveBytes: number;
       error: string | null;
       filePath: string | null;
+      terminalAt: number | null;
     }
   >();
+
+  const BACKUP_RETENTION_MS = 24 * 60 * 60 * 1000;
+  const BACKUP_SWEEP_INTERVAL_MS = 60 * 60 * 1000;
+
+  async function sweepBackupArchives() {
+    const liveFilePaths = new Set<string>();
+    const now = Date.now();
+    for (const [id, job] of backupJobs) {
+      if (job.filePath) liveFilePaths.add(job.filePath);
+      if (job.terminalAt === null || now - job.terminalAt < BACKUP_RETENTION_MS) continue;
+      if (job.filePath) await unlink(job.filePath).catch(() => {});
+      backupJobs.delete(id);
+    }
+    for (const name of await readdir(DATA_DIR)) {
+      if (!name.startsWith("slurp-backup-") || !name.endsWith(".zip")) continue;
+      const stalePath = join(DATA_DIR, name);
+      if (liveFilePaths.has(stalePath)) continue;
+      await unlink(stalePath).catch(() => {});
+    }
+  }
+
+  // Sweep orphaned archives once at startup and again each hour. The timer is unref'd so a
+  // deactivated package never keeps the host process alive, and sweeps are idempotent.
+  void sweepBackupArchives();
+  const backupSweepTimer = setInterval(() => void sweepBackupArchives(), BACKUP_SWEEP_INTERVAL_MS);
+  backupSweepTimer.unref();
 
   const createBackupJob = async () => {
     const id = randomUUID();
@@ -418,6 +445,7 @@ export async function slurpRoutes(app: FastifyInstance) {
       archiveBytes: 0,
       error: null,
       filePath: null,
+      terminalAt: null,
     };
     backupJobs.set(id, job);
     void (async () => {
@@ -479,21 +507,27 @@ export async function slurpRoutes(app: FastifyInstance) {
         ];
         const filePath = join(DATA_DIR, `slurp-backup-${id}.zip`);
         const output = createWriteStream(filePath);
-        await writeStoredZip(output, entries, ({ index, total, name, bytes }) => {
-          job.mediaCompleted = Math.max(0, index - (entries.length - mediaFiles.length));
-          if (name.startsWith("media/")) job.mediaBytes += bytes;
-          job.detail = `Writing ${index} of ${total} archive entries. Last: ${name}.`;
-        });
+        const outputFinished = finished(output);
+        await Promise.all([
+          writeStoredZip(output, entries, ({ index, total, name, bytes }) => {
+            job.mediaCompleted = Math.max(0, index - (entries.length - mediaFiles.length));
+            if (name.startsWith("media/")) job.mediaBytes += bytes;
+            job.detail = `Writing ${index} of ${total} archive entries. Last: ${name}.`;
+          }),
+          outputFinished,
+        ]);
         job.filePath = filePath;
         job.archiveBytes = (await stat(filePath)).size;
         job.stage = "completed";
         job.state = "completed";
+        job.terminalAt = Date.now();
         job.detail = `Backup ready. ${job.archiveBytes} bytes written.`;
       } catch (error) {
         job.state = "error";
         job.stage = "error";
         job.error = error instanceof Error ? error.message : String(error);
         job.detail = job.error;
+        job.terminalAt = Date.now();
       } finally {
         releaseRefreshScheduler();
         releaseScheduler();
@@ -504,6 +538,7 @@ export async function slurpRoutes(app: FastifyInstance) {
       job.stage = "error";
       job.error = error instanceof Error ? error.message : String(error);
       job.detail = job.error;
+      job.terminalAt = Date.now();
     });
     return job;
   };
@@ -512,7 +547,7 @@ export async function slurpRoutes(app: FastifyInstance) {
   app.get("/backup/jobs/:id", async (req, reply) => {
     const job = backupJobs.get((req.params as { id: string }).id);
     if (!job) return reply.code(404).send({ error: "Backup job not found." });
-    const { filePath: _filePath, ...publicJob } = job;
+    const { filePath: _filePath, terminalAt: _terminalAt, ...publicJob } = job;
     return publicJob;
   });
   app.get("/backup/jobs/:id/download", async (req, reply) => {
@@ -520,7 +555,14 @@ export async function slurpRoutes(app: FastifyInstance) {
     if (!job) return reply.code(404).send({ error: "Backup job not found." });
     if (job.state !== "completed" || !job.filePath) return reply.code(409).send({ error: job.detail });
     const stream = createReadStream(job.filePath);
-    stream.once("close", () => void unlink(job.filePath!).catch(() => {}));
+    stream.once("close", () => {
+      void unlink(job.filePath!).catch(() => {});
+      job.filePath = null;
+      job.state = "consumed";
+      job.stage = "consumed";
+      job.detail = "Backup downloaded.";
+      job.terminalAt = Date.now();
+    });
     return reply
       .header("Content-Type", "application/zip")
       .header("Content-Disposition", `attachment; filename="slurp-backup-${job.id}.zip"`)
