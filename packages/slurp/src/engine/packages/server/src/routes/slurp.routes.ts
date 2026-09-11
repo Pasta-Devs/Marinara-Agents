@@ -57,7 +57,7 @@ import {
   updateNoodlerPostWithMedia,
 } from "../services/slurp/slurp-post.operation.js";
 import { tryNoodlerAccountOperation } from "../services/slurp/slurp-account-operation-lock.js";
-import { trySlurpDataDeletion, trySlurpWrite } from "../services/slurp/slurp-operation-lock.js";
+import { claimSlurpBackup, trySlurpDataDeletion, trySlurpWrite } from "../services/slurp/slurp-operation-lock.js";
 import { removeAllNoodlerMedia } from "../services/slurp/slurp-media.js";
 import { clearNoodlerImageConnections } from "../services/slurp/slurp-image-connections.js";
 import { generateAndApplyNoodlerCreatorReply } from "../services/slurp/slurp-creator-reply.operation.js";
@@ -95,6 +95,17 @@ import {
 } from "../services/slurp/slurp-avatar.js";
 import { getErrorMessage, resolvePersonaAccount } from "../services/slurp/slurp-public-support.js";
 import { generateNoodlerCreatorArtwork } from "../services/slurp/slurp-artwork.operation.js";
+import { jsonEntry, writeStoredZip, type StoredZipEntry } from "../services/slurp/slurp-backup.js";
+import { listNoodlerMediaFiles } from "../services/slurp/slurp-media.js";
+import { createReadStream, createWriteStream } from "node:fs";
+import { readFile, readdir, stat, unlink } from "node:fs/promises";
+import { join } from "node:path";
+import { randomUUID } from "node:crypto";
+import { DATA_DIR } from "../utils/data-dir.js";
+import { PassThrough } from "node:stream";
+import { finished } from "node:stream/promises";
+import { pauseNoodleAutoPost } from "../services/slurp/slurp-autopost-scheduler.service.js";
+import { pauseNoodleRefreshScheduler } from "../services/slurp/slurp-refresh-scheduler.service.js";
 
 const slurpTargetedRefreshSchema = noodlerTargetedRefreshSchema.extend({
   access: z.enum(["public", "locked"]).optional(),
@@ -102,6 +113,15 @@ const slurpTargetedRefreshSchema = noodlerTargetedRefreshSchema.extend({
 
 function requestRecord(value: unknown): Record<string, unknown> | null {
   return value && typeof value === "object" && !Array.isArray(value) ? (value as Record<string, unknown>) : null;
+}
+
+function parseBackupJson(value: string | null): unknown {
+  if (value === null) return null;
+  try {
+    return JSON.parse(value);
+  } catch {
+    return null;
+  }
 }
 
 const noodleImagePromptConfirmationSchema = z.object({
@@ -344,7 +364,6 @@ export async function slurpRoutes(app: FastifyInstance) {
   const connections = createConnectionsStorage(app.db);
   const noodlerImages = createNoodlerNoodleImagesService(app.db);
   const noodlerViewerSignalCache = new Map<string, { generationKey: string; value: NoodlerViewerSignalResponse }>();
-
   async function resolveNoodlerPublicIdentity(publicAccount: NoodleAccount) {
     const source =
       publicAccount.kind === "character"
@@ -362,6 +381,269 @@ export async function slurpRoutes(app: FastifyInstance) {
     const body = slurpSettingsSchema.partial().safeParse(req.body ?? {});
     if (!body.success) return reply.code(400).send({ error: body.error.flatten() });
     return noodle.updateSlurpSettings(body.data);
+  });
+
+  const backupJobs = new Map<
+    string,
+    {
+      id: string;
+      state: string;
+      stage: string;
+      detail: string;
+      creators: number;
+      posts: number;
+      interactions: number;
+      mediaFiles: number;
+      mediaCompleted: number;
+      mediaBytes: number;
+      archiveBytes: number;
+      error: string | null;
+      filePath: string | null;
+      terminalAt: number | null;
+    }
+  >();
+
+  const BACKUP_RETENTION_MS = 24 * 60 * 60 * 1000;
+  const BACKUP_SWEEP_INTERVAL_MS = 60 * 60 * 1000;
+
+  async function sweepBackupArchives() {
+    const liveFilePaths = new Set<string>();
+    const now = Date.now();
+    for (const [id, job] of backupJobs) {
+      if (job.filePath) liveFilePaths.add(job.filePath);
+      if (job.terminalAt === null || now - job.terminalAt < BACKUP_RETENTION_MS) continue;
+      if (job.filePath) await unlink(job.filePath).catch(() => {});
+      backupJobs.delete(id);
+    }
+    for (const name of await readdir(DATA_DIR)) {
+      if (!name.startsWith("slurp-backup-") || !name.endsWith(".zip")) continue;
+      const stalePath = join(DATA_DIR, name);
+      if (liveFilePaths.has(stalePath)) continue;
+      await unlink(stalePath).catch(() => {});
+    }
+  }
+
+  // Sweep orphaned archives once at startup and again each hour. The timer is unref'd so a
+  // deactivated package never keeps the host process alive, and sweeps are idempotent.
+  void sweepBackupArchives();
+  const backupSweepTimer = setInterval(() => void sweepBackupArchives(), BACKUP_SWEEP_INTERVAL_MS);
+  backupSweepTimer.unref();
+
+  const createBackupJob = async () => {
+    const id = randomUUID();
+    const job = {
+      id,
+      state: "queued",
+      stage: "queued",
+      detail: "Waiting for the backup worker.",
+      creators: 0,
+      posts: 0,
+      interactions: 0,
+      mediaFiles: 0,
+      mediaCompleted: 0,
+      mediaBytes: 0,
+      archiveBytes: 0,
+      error: null,
+      filePath: null,
+      terminalAt: null,
+    };
+    backupJobs.set(id, job);
+    void (async () => {
+      const release = claimSlurpBackup();
+      if (!release) throw new Error("Slurp data is busy. Try the backup again shortly.");
+      const releaseScheduler = await pauseNoodleAutoPost();
+      const releaseRefreshScheduler = await pauseNoodleRefreshScheduler();
+      try {
+        job.state = "preparing";
+        job.stage = "reading-data";
+        job.detail = "Reading Slurp database records.";
+        const backup = await noodle.exportSlurpBackup();
+        job.creators = backup.tables.accounts.length;
+        job.posts = backup.tables.posts.length;
+        job.interactions = backup.tables.interactions.length;
+        const mediaFiles = await listNoodlerMediaFiles();
+        job.mediaFiles = mediaFiles.length;
+        job.stage = "writing-archive";
+        job.state = "writing";
+        job.detail = `Writing archive. ${mediaFiles.length} media file${mediaFiles.length === 1 ? "" : "s"} found.`;
+        const entries: StoredZipEntry[] = [
+          {
+            name: "manifest.json",
+            read: async () =>
+              jsonEntry("manifest.json", {
+                format: "marinara-slurp-backup",
+                formatVersion: 1,
+                sourcePackage: "slurp",
+                exportedAt: new Date().toISOString(),
+                dataFiles: Object.keys(backup.tables),
+                mediaIncluded: true,
+              }).data,
+          },
+          {
+            name: "data/settings.json",
+            read: async () => jsonEntry("settings.json", parseBackupJson(backup.settings)).data,
+          },
+          {
+            name: "data/image-connections.json",
+            read: async () => jsonEntry("image-connections.json", backup.imageConnections).data,
+          },
+          {
+            name: "data/refresh-schedule.json",
+            read: async () => jsonEntry("refresh-schedule.json", parseBackupJson(backup.refreshSchedule)).data,
+          },
+          {
+            name: "data/source-snapshot-migration.json",
+            read: async () => jsonEntry("source-snapshot-migration.json", backup.sourceSnapshotMigration).data,
+          },
+          {
+            name: "data/viewer-settings.json",
+            read: async () => jsonEntry("viewer-settings.json", backup.viewerSettings).data,
+          },
+          ...Object.entries(backup.tables).map(([name, rows]) => ({
+            name: `data/${name}.json`,
+            read: async () => jsonEntry(`${name}.json`, rows).data,
+          })),
+          ...mediaFiles.map((media) => ({ name: media.relativePath, read: () => readFile(media.absolutePath) })),
+        ];
+        const filePath = join(DATA_DIR, `slurp-backup-${id}.zip`);
+        const output = createWriteStream(filePath);
+        const outputFinished = finished(output);
+        await Promise.all([
+          writeStoredZip(output, entries, ({ index, total, name, bytes }) => {
+            job.mediaCompleted = Math.max(0, index - (entries.length - mediaFiles.length));
+            if (name.startsWith("media/")) job.mediaBytes += bytes;
+            job.detail = `Writing ${index} of ${total} archive entries. Last: ${name}.`;
+          }),
+          outputFinished,
+        ]);
+        job.filePath = filePath;
+        job.archiveBytes = (await stat(filePath)).size;
+        job.stage = "completed";
+        job.state = "completed";
+        job.terminalAt = Date.now();
+        job.detail = `Backup ready. ${job.archiveBytes} bytes written.`;
+      } catch (error) {
+        job.state = "error";
+        job.stage = "error";
+        job.error = error instanceof Error ? error.message : String(error);
+        job.detail = job.error;
+        job.terminalAt = Date.now();
+      } finally {
+        releaseRefreshScheduler();
+        releaseScheduler();
+        release();
+      }
+    })().catch((error) => {
+      job.state = "error";
+      job.stage = "error";
+      job.error = error instanceof Error ? error.message : String(error);
+      job.detail = job.error;
+      job.terminalAt = Date.now();
+    });
+    return job;
+  };
+
+  app.post("/backup/jobs", async (_req, reply) => reply.code(202).send(await createBackupJob()));
+  app.get("/backup/jobs/:id", async (req, reply) => {
+    const job = backupJobs.get((req.params as { id: string }).id);
+    if (!job) return reply.code(404).send({ error: "Backup job not found." });
+    const { filePath: _filePath, terminalAt: _terminalAt, ...publicJob } = job;
+    return publicJob;
+  });
+  app.get("/backup/jobs/:id/download", async (req, reply) => {
+    const job = backupJobs.get((req.params as { id: string }).id);
+    if (!job) return reply.code(404).send({ error: "Backup job not found." });
+    if (job.state !== "completed" || !job.filePath) return reply.code(409).send({ error: job.detail });
+    const stream = createReadStream(job.filePath);
+    stream.once("close", () => {
+      void unlink(job.filePath!).catch(() => {});
+      job.filePath = null;
+      job.state = "consumed";
+      job.stage = "consumed";
+      job.detail = "Backup downloaded.";
+      job.terminalAt = Date.now();
+    });
+    return reply
+      .header("Content-Type", "application/zip")
+      .header("Content-Disposition", `attachment; filename="slurp-backup-${job.id}.zip"`)
+      .send(stream);
+  });
+
+  app.get("/backup", async (_req, reply) => {
+    const release = claimSlurpBackup();
+    if (!release) return reply.code(409).send({ error: "Slurp data is busy. Try the backup again shortly." });
+    const releaseScheduler = await pauseNoodleAutoPost();
+    const releaseRefreshScheduler = await pauseNoodleRefreshScheduler();
+    const exportedAt = new Date().toISOString();
+    try {
+      const backup = await noodle.exportSlurpBackup();
+      const mediaFiles = await listNoodlerMediaFiles();
+      const entries: StoredZipEntry[] = [
+        {
+          name: "manifest.json",
+          read: async () =>
+            jsonEntry("manifest.json", {
+              format: "marinara-slurp-backup",
+              formatVersion: 1,
+              sourcePackage: "slurp",
+              exportedAt,
+              dataFiles: Object.keys(backup.tables),
+              mediaIncluded: true,
+            }).data,
+        },
+        {
+          name: "data/settings.json",
+          read: async () => jsonEntry("settings.json", parseBackupJson(backup.settings)).data,
+        },
+        {
+          name: "data/image-connections.json",
+          read: async () => jsonEntry("image-connections.json", backup.imageConnections).data,
+        },
+        {
+          name: "data/refresh-schedule.json",
+          read: async () => jsonEntry("refresh-schedule.json", parseBackupJson(backup.refreshSchedule)).data,
+        },
+        {
+          name: "data/source-snapshot-migration.json",
+          read: async () => jsonEntry("source-snapshot-migration.json", backup.sourceSnapshotMigration).data,
+        },
+        {
+          name: "data/viewer-settings.json",
+          read: async () => jsonEntry("viewer-settings.json", backup.viewerSettings).data,
+        },
+        ...Object.entries(backup.tables).map(([name, rows]) => ({
+          name: `data/${name}.json`,
+          read: async () => jsonEntry(`${name}.json`, rows).data,
+        })),
+        ...mediaFiles.map((media) => ({
+          name: media.relativePath,
+          read: () => readFile(media.absolutePath),
+        })),
+      ];
+      const stream = new PassThrough();
+      let released = false;
+      const releaseAll = () => {
+        if (released) return;
+        released = true;
+        releaseRefreshScheduler();
+        releaseScheduler();
+        release();
+      };
+      stream.once("error", releaseAll);
+      stream.once("close", releaseAll);
+      void writeStoredZip(stream, entries)
+        .catch((error) => stream.destroy(error))
+        .finally(releaseAll);
+      return reply
+        .header("Content-Type", "application/zip")
+        .header("Content-Disposition", `attachment; filename="slurp-backup-${exportedAt.replace(/[:.]/gu, "-")}.zip"`)
+        .send(stream);
+    } catch (error) {
+      releaseScheduler();
+      releaseRefreshScheduler();
+      release();
+      throw error;
+    }
   });
 
   app.patch("/accounts/:id/settings", async (req, reply) => {

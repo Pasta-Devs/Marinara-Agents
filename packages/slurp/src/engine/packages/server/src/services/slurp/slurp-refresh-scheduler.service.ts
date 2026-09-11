@@ -22,6 +22,19 @@ const NOODLE_SCHEDULER_RATE_LIMIT_RETRY_MS = 5 * 60_000;
 const NOODLE_SCHEDULER_FAILURE_BASE_RETRY_MS = 5 * 60_000;
 const NOODLE_SCHEDULER_FAILURE_MAX_RETRY_MS = 60 * 60_000;
 const NOODLE_SCHEDULER_CONFIGURATION_STATUS_CODES = new Set([400, 401, 403, 404, 405, 410, 422]);
+let refreshPauseDepth = 0;
+let activeRefreshPoll: Promise<void> | null = null;
+
+export async function pauseNoodleRefreshScheduler(): Promise<() => void> {
+  refreshPauseDepth += 1;
+  await activeRefreshPoll?.catch(() => {});
+  let released = false;
+  return () => {
+    if (released) return;
+    released = true;
+    refreshPauseDepth -= 1;
+  };
+}
 
 function responseError(payload: string): string {
   try {
@@ -75,7 +88,9 @@ export function startNoodleRefreshScheduler(
       () => {
         active = poll().finally(() => {
           active = null;
+          activeRefreshPoll = null;
         });
+        activeRefreshPoll = active;
       },
       Math.max(1_000, delayMs),
     );
@@ -110,6 +125,10 @@ export function startNoodleRefreshScheduler(
 
   const poll = async () => {
     if (stopped || polling) return;
+    if (refreshPauseDepth > 0) {
+      scheduleNext(NOODLE_SCHEDULER_BUSY_RETRY_MS);
+      return;
+    }
     polling = true;
     let nextDelay = NOODLE_SCHEDULER_MAX_POLL_MS;
     try {
@@ -184,13 +203,6 @@ export function startNoodleRefreshScheduler(
   };
   registerStop?.(stop);
   scheduleNext(NOODLE_SCHEDULER_INITIAL_DELAY_MS);
-  app.addHook("onClose", async () => {
-    stopped = true;
-    if (timer) clearTimeout(timer);
-    timer = null;
-    await active?.catch(() => {});
-  });
-
   logger.info("[noodle-scheduler] Automatic timeline refresh scheduler started");
   return { stop };
 }

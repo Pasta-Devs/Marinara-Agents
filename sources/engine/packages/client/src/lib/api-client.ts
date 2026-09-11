@@ -184,7 +184,7 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   return res.json() as Promise<T>;
 }
 
-async function apiFetch(path: string, init?: RequestInit): Promise<Response> {
+export async function apiFetch(path: string, init?: RequestInit): Promise<Response> {
   const headers = new Headers(init?.headers);
   for (const [name, value] of Object.entries(getAdminSecretHeader())) {
     headers.set(name, value);

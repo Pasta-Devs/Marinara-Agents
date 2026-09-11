@@ -5,7 +5,7 @@ import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from "@tansta
 import { useEffect, useRef } from "react";
 import { toast } from "sonner";
 import { useTranslation as useUiTranslation } from "react-i18next";
-import { api } from "../lib/api-client";
+import { api, apiFetch } from "../lib/api-client";
 import { useSlurpUIStore } from "../stores/slurp-package.store";
 import type {
   NoodleAccount,
@@ -149,6 +149,39 @@ export function useSlurpSettings() {
     queryFn: () => api.get<SlurpSettings>("/slurp/settings"),
     staleTime: 10_000,
   });
+}
+
+export type SlurpBackupJob = {
+  id: string;
+  state: "queued" | "preparing" | "writing" | "completed" | "consumed" | "error";
+  stage: string;
+  detail: string;
+  creators: number;
+  posts: number;
+  interactions: number;
+  mediaFiles: number;
+  mediaCompleted: number;
+  mediaBytes: number;
+  archiveBytes: number;
+  error: string | null;
+};
+
+export async function startSlurpBackup(): Promise<SlurpBackupJob> {
+  const response = await apiFetch("/slurp/backup/jobs", { method: "POST" });
+  if (!response.ok)
+    throw new Error((await response.json().catch(() => null))?.error ?? "Could not start Slurp backup.");
+  return response.json() as Promise<SlurpBackupJob>;
+}
+
+export async function getSlurpBackupJob(id: string): Promise<SlurpBackupJob> {
+  const response = await apiFetch(`/slurp/backup/jobs/${encodeURIComponent(id)}`);
+  if (!response.ok)
+    throw new Error((await response.json().catch(() => null))?.error ?? "Could not read backup status.");
+  return response.json() as Promise<SlurpBackupJob>;
+}
+
+export async function downloadSlurpBackup(id: string): Promise<void> {
+  await api.download(`/slurp/backup/jobs/${encodeURIComponent(id)}/download`, "slurp-backup.zip");
 }
 
 export function useUpdateSlurpSettings() {
