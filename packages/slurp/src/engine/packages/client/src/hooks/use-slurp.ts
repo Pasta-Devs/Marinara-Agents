@@ -5,7 +5,7 @@ import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from "@tansta
 import { useEffect, useRef } from "react";
 import { toast } from "sonner";
 import { useTranslation as useUiTranslation } from "react-i18next";
-import { api } from "../lib/api-client";
+import { api, apiFetch } from "../lib/api-client";
 import { useSlurpUIStore } from "../stores/slurp-package.store";
 import type {
   NoodleAccount,
@@ -149,6 +149,48 @@ export function useSlurpSettings() {
     queryFn: () => api.get<SlurpSettings>("/slurp/settings"),
     staleTime: 10_000,
   });
+}
+
+export type SlurpBackupJob = {
+  id: string;
+  state: "queued" | "preparing" | "writing" | "completed" | "error";
+  stage: string;
+  detail: string;
+  creators: number;
+  posts: number;
+  interactions: number;
+  mediaFiles: number;
+  mediaCompleted: number;
+  mediaBytes: number;
+  archiveBytes: number;
+  error: string | null;
+};
+
+export async function startSlurpBackup(): Promise<SlurpBackupJob> {
+  const response = await apiFetch("/slurp/backup/jobs", { method: "POST" });
+  if (!response.ok)
+    throw new Error((await response.json().catch(() => null))?.error ?? "Could not start Slurp backup.");
+  return response.json() as Promise<SlurpBackupJob>;
+}
+
+export async function getSlurpBackupJob(id: string): Promise<SlurpBackupJob> {
+  const response = await apiFetch(`/slurp/backup/jobs/${encodeURIComponent(id)}`);
+  if (!response.ok)
+    throw new Error((await response.json().catch(() => null))?.error ?? "Could not read backup status.");
+  return response.json() as Promise<SlurpBackupJob>;
+}
+
+export async function downloadSlurpBackup(id: string): Promise<void> {
+  const response = await apiFetch(`/slurp/backup/jobs/${encodeURIComponent(id)}/download`);
+  if (!response.ok)
+    throw new Error((await response.json().catch(() => null))?.error ?? "Could not download Slurp backup.");
+  const blob = await response.blob();
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement("a");
+  anchor.href = url;
+  anchor.download = "slurp-backup.zip";
+  anchor.click();
+  URL.revokeObjectURL(url);
 }
 
 export function useUpdateSlurpSettings() {
@@ -305,7 +347,8 @@ export function useNoodlerEligibleAccounts(
 }
 
 export type SlurpProfilePost =
-  { managed: NoodlerManagedPost; viewerPost: NoodlerPostView | null } | { viewerPost: NoodlerPostView };
+  | { managed: NoodlerManagedPost; viewerPost: NoodlerPostView | null }
+  | { viewerPost: NoodlerPostView };
 
 export function useNoodlerPosts(accountId: string | null, personaId: string | null) {
   return useQuery({

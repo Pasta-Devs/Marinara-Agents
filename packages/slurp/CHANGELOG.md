@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.50.0 — 2026-09-11
+
+- Mark Slurp as the legacy version while it is being reworked.
+- Add a full ZIP backup export containing Slurp data and media for migration.
+- New development is moving to Slurp Remastered. Bug fixes are not planned for this version.
+
 ## 1.0.31 — 2026-09-09
 
 - Include image generation guidance in the main Slurp post-generation prompt so image interpretation receives the generated image prompt and configured instructions.

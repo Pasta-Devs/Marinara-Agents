@@ -19,13 +19,23 @@ let pauseDepth = 0;
 let activePoll: Promise<void> = Promise.resolve();
 
 export async function withNoodleAutoPostPaused<T>(run: () => Promise<T>): Promise<T> {
-  pauseDepth += 1;
+  const release = await pauseNoodleAutoPost();
   try {
-    await activePoll.catch(() => {});
     return await run();
   } finally {
-    pauseDepth -= 1;
+    release();
   }
+}
+
+export async function pauseNoodleAutoPost(): Promise<() => void> {
+  pauseDepth += 1;
+  await activePoll.catch(() => {});
+  let released = false;
+  return () => {
+    if (released) return;
+    released = true;
+    pauseDepth -= 1;
+  };
 }
 
 /** True when nothing can be prepared or published, so the poll only has existing rows to tidy. */
@@ -108,11 +118,6 @@ export function startNoodleAutoPostScheduler(app: FastifyInstance, registerStop?
   })().catch((error) => logger.error(error, "[noodle-autopost] Startup reconciliation failed"));
   activePoll = running;
   schedule(INITIAL_DELAY_MS);
-  app.addHook("onClose", async () => {
-    stopped = true;
-    if (timer) clearTimeout(timer);
-    await running.catch(() => {});
-  });
   logger.info("[noodle-autopost] Private reserve scheduler started");
   return { stop };
 }

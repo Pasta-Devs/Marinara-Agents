@@ -105,6 +105,7 @@ import {
 } from "../slurp/slurp-refresh-schedule.js";
 import { pruneNoodleRefreshRuns } from "./slurp-refresh-run-retention.js";
 import { noodlerPostImageRetryAttempts, NOODLER_POST_IMAGE_RETRY_LIMIT } from "../slurp/slurp-image-retry.js";
+import { getNoodlerImageConnections } from "../slurp/slurp-image-connections.js";
 
 /** Newest candidates the image-retry poll inspects per pass. */
 const IMAGE_RETRY_SCAN_LIMIT = 200;
@@ -1452,6 +1453,104 @@ export function createSlurpStorage(db: DB) {
 
     async getSlurpSettings() {
       return this.getSettings();
+    },
+
+    async exportSlurpBackup() {
+      const accounts = await db.select().from(noodleAccounts).where(eq(noodleAccounts.platform, "slurp"));
+      const accountIds = accounts.map((account) => account.id);
+      const personas = await characters.listPersonas();
+      const personaIds = personas.map((persona) => persona.id);
+      const posts = accountIds.length
+        ? await db.select().from(noodlePosts).where(inArray(noodlePosts.authorAccountId, accountIds))
+        : [];
+      const postIds = posts.map((post) => post.id);
+      const [
+        subscriptions,
+        unlocks,
+        interactions,
+        replyClaims,
+        preparedPosts,
+        attempts,
+        reserveState,
+        fanState,
+        digests,
+        refreshRuns,
+      ] = await Promise.all([
+        accountIds.length
+          ? db
+              .select()
+              .from(noodleAccountSubscriptions)
+              .where(
+                or(
+                  inArray(noodleAccountSubscriptions.viewerAccountId, accountIds),
+                  inArray(noodleAccountSubscriptions.creatorAccountId, accountIds),
+                  inArray(noodleAccountSubscriptions.viewerAccountId, personaIds),
+                ),
+              )
+          : [],
+        postIds.length
+          ? db
+              .select()
+              .from(noodlePostUnlocks)
+              .where(
+                and(
+                  inArray(noodlePostUnlocks.postId, postIds),
+                  or(
+                    inArray(noodlePostUnlocks.viewerAccountId, accountIds),
+                    inArray(noodlePostUnlocks.viewerAccountId, personaIds),
+                  ),
+                ),
+              )
+          : [],
+        accountIds.length || personaIds.length
+          ? db
+              .select()
+              .from(noodleInteractions)
+              .where(
+                or(
+                  ...(postIds.length ? [inArray(noodleInteractions.postId, postIds)] : []),
+                  ...(accountIds.length || personaIds.length
+                    ? [inArray(noodleInteractions.actorAccountId, [...accountIds, ...personaIds])]
+                    : []),
+                ),
+              )
+          : [],
+        postIds.length
+          ? db.select().from(noodlerCreatorReplyClaims).where(inArray(noodlerCreatorReplyClaims.postId, postIds))
+          : [],
+        db.select().from(noodlerPreparedPosts),
+        db.select().from(noodlerAutomaticAttempts),
+        db.select().from(noodlerReserveState),
+        db.select().from(noodlerFanActivityState),
+        db.select().from(noodleActivityDigests),
+        db.select().from(noodleRefreshRuns),
+      ]);
+      const viewerSettings: Record<string, string> = {};
+      for (const persona of personas) {
+        const raw = await settingsStore.get(slurpViewerSettingsKey(persona.id));
+        if (raw !== null) viewerSettings[persona.id] = raw;
+      }
+      return {
+        settings: await settingsStore.get(SLURP_SETTINGS_KEY),
+        imageConnections: await getNoodlerImageConnections(db),
+        refreshSchedule: await settingsStore.get(NOODLE_REFRESH_SCHEDULE_KEY),
+        sourceSnapshotMigration: await settingsStore.get(NOODLER_SOURCE_SNAPSHOT_MIGRATION_KEY),
+        viewerSettings,
+        tables: {
+          accounts,
+          posts,
+          subscriptions,
+          unlocks,
+          interactions,
+          replyClaims,
+          preparedPosts,
+          attempts,
+          reserveState,
+          fanState,
+          digests,
+          refreshRuns,
+        },
+      };
     },
 
     async updateSlurpSettings(input: SlurpSettingsUpdateInput) {
