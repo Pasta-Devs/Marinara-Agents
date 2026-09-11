@@ -1,29 +1,29 @@
 {
   "schemaVersion": 1,
   "id": "slurp",
-  "name": "Slurp",
-  "version": "1.0.31",
-  "description": "The standalone successor to NoodleR: create a local Creator profile from an Engine character or persona, publish public or locked posts, and simulate subscriptions and audience activity. Install it, restart Marinara Engine when prompted, then open Home → Slurp.",
+  "name": "Slurp Legacy",
+  "version": "1.50.0",
+  "description": "Legacy Slurp version. This package is being reworked and is on hold. New development is happening in Slurp Remastered. Bug fixes are not planned for this version. Install it, restart Marinara Engine when prompted, then open Home → Slurp.",
   "localizations": {
     "de": {
-      "name": "Slurp",
-      "description": "Erstelle ein lokales Creator-Profil aus einem Engine-Charakter oder einer Engine-Persona, veröffentliche öffentliche oder gesperrte Beiträge und simuliere Abonnements und Publikumsaktivität. Installiere das Paket, starte Marinara Engine nach Aufforderung neu und öffne dann unter Home den Tab Slurp.",
+      "name": "Slurp Legacy",
+      "description": "Legacy-Version von Slurp. Dieses Paket wird überarbeitet und ist pausiert. Die neue Entwicklung erfolgt in Slurp Remastered. Fehlerbehebungen sind für diese Version nicht geplant.",
       "homeBrowserTab": {
         "label": "Slurp",
         "ariaLabel": "Slurp öffnen"
       }
     },
     "ko": {
-      "name": "Slurp",
-      "description": "Engine 캐릭터나 Engine 페르소나로 로컬 크리에이터 프로필을 만들고, 공개 또는 잠긴 Slurp 게시물을 게시하며, 구독 및 청중 활동을 시뮬레이션합니다. 패키지를 설치하고 안내에 따라 Marinara Engine을 다시 시작한 다음 홈 → Slurp를 여세요.",
+      "name": "Slurp Legacy",
+      "description": "Slurp 레거시 버전입니다. 이 패키지는 재작업 중이며 보류 상태입니다. 새로운 개발은 Slurp Remastered에서 진행됩니다. 이 버전의 버그 수정은 계획되어 있지 않습니다.",
       "homeBrowserTab": {
         "label": "Slurp",
         "ariaLabel": "Slurp 열기"
       }
     },
     "pl": {
-      "name": "Slurp",
-      "description": "Utwórz lokalne profile twórców z postaci silnika lub person silnika, publikuj publiczne lub zablokowane posty Slurp i symuluj subskrypcje oraz aktywność publiczności. Zainstaluj pakiet, uruchom ponownie Marinara Engine po wyświetleniu monitu, a następnie otwórz zakładkę Slurp na stronie głównej.",
+      "name": "Slurp Legacy",
+      "description": "Starsza wersja Slurp. Ten pakiet jest przebudowywany i wstrzymany. Nowy rozwój odbywa się w Slurp Remastered. Poprawki błędów dla tej wersji nie są planowane.",
       "homeBrowserTab": {
         "label": "Slurp",
         "ariaLabel": "Otwórz Slurp"
@@ -57,18 +57,18 @@
   "files": [
     {
       "path": "agents.json",
-      "sha256": "05408a5f537cef354c9f4ef9340825c9427e1774d3cdd1f29435c3b1cf39a6c4",
-      "bytes": 625
+      "sha256": "c696709be778d9ab2e7257b49b59e3c0562227c17cd6aea8da3d094acf37ee8a",
+      "bytes": 608
     },
     {
       "path": "server.mjs",
-      "sha256": "c42d46ab7c116588926ea5df1f45ae874607c79ba82784c4b87e08d695991915",
-      "bytes": 2289381
+      "sha256": "f9ea94c60d83ec43051654b7de83db3fec7581c842ec11c664fa3921a25ca3d7",
+      "bytes": 2298506
     },
     {
       "path": "client.js",
-      "sha256": "aeff3381456f5f5b72c528a4793f018b1d54b28737b8863ef87e66e996b1c51f",
-      "bytes": 2364927
+      "sha256": "6f6aaba465afebd217702ead6312954d3a4c978c025c8cee70e3d313167a6072",
+      "bytes": 2369220
     },
     {
       "path": "slurp-logo.png",
@@ -76,9 +76,9 @@
       "bytes": 31677
     },
     {
-      "path": "slurpagent.png",
-      "sha256": "47805313b5ec8dbc608fec82c4d51f1f82020afe4f286a04919b59cc8ef06f37",
-      "bytes": 120424
+      "path": "slurplegacy.png",
+      "sha256": "faa892c48a14f7df1b8e1409ef12334061c1d94241124a9ff528d0796ba39734",
+      "bytes": 106482
     }
   ],
   "permissions": [

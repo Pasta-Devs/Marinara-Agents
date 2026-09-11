@@ -1,5 +1,6 @@
 import { existsSync, readFileSync, renameSync, rmSync, unlinkSync, writeFileSync } from "fs";
-import { join } from "path";
+import { readdir } from "fs/promises";
+import { dirname, join } from "path";
 import type { NoodlerManagedPost } from "@marinara-engine/shared";
 import { logger } from "../../lib/logger.js";
 import { DATA_DIR } from "../../utils/data-dir.js";
@@ -170,4 +171,21 @@ export function removeAllNoodlerMedia(): void {
   } catch (error) {
     logger.warn(error, "[noodler] Failed to remove all Slurp media");
   }
+}
+
+export async function listNoodlerMediaFiles(): Promise<Array<{ relativePath: string; absolutePath: string }>> {
+  const marker = resolveNoodlerMediaAbsolutePath(`${NOODLER_MEDIA_PREFIX}__slurp_backup_root__`);
+  const root = marker ? dirname(marker) : null;
+  if (!root || !existsSync(root)) return [];
+  const files: Array<{ relativePath: string; absolutePath: string }> = [];
+  const visit = async (directory: string, relativeDirectory: string): Promise<void> => {
+    for (const entry of await readdir(directory, { withFileTypes: true })) {
+      const absolutePath = join(directory, entry.name);
+      const relativePath = `${relativeDirectory}/${entry.name}`;
+      if (entry.isDirectory()) await visit(absolutePath, relativePath);
+      else if (entry.isFile() && !entry.name.endsWith(TEASER_SUFFIX)) files.push({ relativePath, absolutePath });
+    }
+  };
+  await visit(root, "media");
+  return files;
 }
