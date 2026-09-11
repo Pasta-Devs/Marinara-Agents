@@ -204,6 +204,7 @@ function ScopeTargetPicker({
   kind,
   label,
   value,
+  selectedTargetId,
   allLabel,
   currentTargetId,
   searchLabel,
@@ -215,6 +216,7 @@ function ScopeTargetPicker({
   kind: "character" | "chat" | "branch" | "status" | "sort";
   label: string;
   value: string;
+  selectedTargetId: string;
   allLabel: string;
   currentTargetId?: string;
   searchLabel: string;
@@ -292,7 +294,7 @@ function ScopeTargetPicker({
               }}
             >
               <span className="min-w-0 flex-1 truncate font-medium">{currentTarget.label}</span>
-              {value === currentTarget.label ? (
+              {selectedTargetId === currentTarget.id ? (
                 <Check aria-hidden="true" size="0.875rem" className="shrink-0 text-[var(--primary)]" />
               ) : null}
             </button>
@@ -307,7 +309,7 @@ function ScopeTargetPicker({
             }}
           >
             <span className="min-w-0 flex-1 truncate font-medium">{allLabel}</span>
-            {value === allLabel ? (
+            {selectedTargetId === `${kind}:all` ? (
               <Check aria-hidden="true" size="0.875rem" className="shrink-0 text-[var(--primary)]" />
             ) : null}
           </button>
@@ -325,7 +327,7 @@ function ScopeTargetPicker({
                 }}
               >
                 <span className="min-w-0 flex-1 truncate">{target.label}</span>
-                {value === target.label ? (
+                {selectedTargetId === target.id ? (
                   <Check aria-hidden="true" size="0.875rem" className="shrink-0 text-[var(--primary)]" />
                 ) : null}
               </button>
@@ -2867,6 +2869,7 @@ export default function MemoryVault({
                     </fieldset>
                     <ScopeTargetPicker
                       kind="character"
+                      selectedTargetId={selectedCharacter ? `character:${selectedCharacter.id}` : "character:all"}
                       label={localizeUi("ui.longTermMemory.memoryvault.character")}
                       value={selectedCharacter?.label ?? localizeUi("ui.longTermMemory.memoryvault.allCharacters")}
                       allLabel={localizeUi("ui.longTermMemory.memoryvault.all")}
@@ -2878,6 +2881,7 @@ export default function MemoryVault({
                     />
                     <ScopeTargetPicker
                       kind="chat"
+                      selectedTargetId={selectedConversation?.id ?? "chat:all"}
                       label={localizeUi("ui.longTermMemory.memoryvault.chat")}
                       value={selectedConversation?.label ?? localizeUi("ui.longTermMemory.memoryvault.allChats")}
                       allLabel={localizeUi("ui.longTermMemory.memoryvault.all")}
@@ -2897,6 +2901,7 @@ export default function MemoryVault({
                     />
                     <ScopeTargetPicker
                       kind="branch"
+                      selectedTargetId={selectedChat?.groupId ? `chat:${selectedChat.id}` : "branch:all"}
                       label={localizeUi("ui.longTermMemory.memoryvault.branch")}
                       value={
                         selectedChat?.groupId
@@ -2966,6 +2971,7 @@ export default function MemoryVault({
                 </fieldset>
                 <ScopeTargetPicker
                   kind="status"
+                  selectedTargetId={statusFilter === "all" ? "status:all" : statusFilter}
                   label={localizeUi("ui.longTermMemory.memoryvault.showMemories")}
                   value={
                     statusFilter === "all"
@@ -2981,6 +2987,7 @@ export default function MemoryVault({
                 />
                 <ScopeTargetPicker
                   kind="sort"
+                  selectedTargetId={sort === "updated" ? "sort:all" : sort}
                   label={localizeUi("ui.longTermMemory.memoryvault.sortBy")}
                   value={
                     sort === "updated"

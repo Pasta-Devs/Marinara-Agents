@@ -1521,6 +1521,20 @@ async function main() {
       );
       assert.equal(await page.getByText("Memory outside current chat").count(), 0);
       await memoryScope.locator(":scope > summary").click();
+      assert.equal(
+        await memoryScope
+          .locator('[data-ltm-memory-scope-picker="chat"] [data-ltm-memory-scope-target="chat:desktop-chat"] svg')
+          .count(),
+        1,
+        "The contextual Current row is checked by selected ID, not its different display label",
+      );
+      assert.equal(
+        await memoryScope
+          .locator('[data-ltm-memory-scope-picker="branch"] [data-ltm-memory-scope-target="branch:all"] svg')
+          .count(),
+        1,
+        "The all option is checked by its ID despite different summary and option labels",
+      );
       const scopeControlStyle = await memoryScope.locator(":scope > summary").evaluate((element) => {
         const chevron = element.querySelector<SVGElement>("[data-ltm-memory-scope-chevron]");
         const label = element.querySelector<HTMLElement>("span");
