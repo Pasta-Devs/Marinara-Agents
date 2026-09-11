@@ -465,6 +465,22 @@ assert.match(workspace, /className="space-y-2 border-t border-\[var\(--border\)\
 assert.match(workspace, /\[changeSource, onRequestedSourceHandled, requestedSource\]/u);
 assert.match(workspace, /importsAsMode/u);
 assert.equal(locale["ui.longTermMemory.sourcesworkspace.importsAsMode"], "Imports as {{mode}}");
+assert.match(
+  workspace,
+  /const availabilityReady = settingsQuery\.isSuccess && effectiveAvailabilityModes\.length > 0/u,
+);
+assert.match(workspace, /availabilitySavingRef\.current/u);
+assert.match(workspace, /availabilityDisabled=\{availabilitySaving \|\| !availabilityReady\}/u);
+assert.match(workspace, /disabled=\{importDisabled\}/u);
+assert.match(workspace, /settingsQuery\.refetch\(\)/u);
+assert.equal(
+  locale["ui.longTermMemory.sourcesworkspace.availabilitySettingsCouldNotLoad"],
+  "Availability settings could not load.",
+);
+assert.equal(
+  locale["ui.longTermMemory.sourcesworkspace.loadingAvailabilitySettings"],
+  "Loading availability settings...",
+);
 assert.equal(locale["ui.longTermMemory.sourceoperation.clearAll"], "Clear all");
 assert.match(locale["ui.longTermMemory.sourceoperation.linkedMemoriesCouldNotLoad"], /could not be loaded/u);
 assert.equal(

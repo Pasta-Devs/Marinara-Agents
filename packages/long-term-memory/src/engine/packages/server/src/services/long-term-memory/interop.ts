@@ -31,7 +31,7 @@ import {
 import { DEFAULT_LTM_IMPORTED_SOURCE_MODE } from "../../../../shared/src/features/agents/long-term-memory/constants.js";
 import { nowIso } from "./ltm-utils.js";
 import { getPackageLanguageModels, getPackagePersistence, getPackageResources } from "./package-runtime.js";
-import { processLongTermMemorySourceBatch } from "./source-processing.js";
+import { processLongTermMemorySourceBatch, type ImportedSourceItem } from "./source-processing.js";
 import { getLtmExtractionConfig } from "./extraction-config.js";
 import { extractionFingerprintForLtmSourceMaterial } from "./source-hash.js";
 import { inferSourceProvenance, sourceNoteIdForProvenance } from "./source-identity.js";
@@ -432,6 +432,7 @@ async function candidates(
     source: "characters" | "lorebooks" | "chats";
     sourceScope?: LtmScope;
     mode?: LtmMode;
+    modes?: LtmMode[];
     chatId?: string;
     query?: string;
     includeOutOfScope?: boolean;
@@ -846,13 +847,7 @@ export async function importPackageInterop(
     }
   }
   throwIfAborted(signal);
-  const written: Array<{
-      sourceId: string;
-      title: string;
-      note: LtmNote;
-      created: boolean;
-      deterministicSourceText?: string;
-    }> = [],
+  const written: ImportedSourceItem[] = [],
     writeFailures: LtmImportSourceNotesResponse["writeFailures"] = [];
   const conflictingSourceIds = new Set<string>();
   if (destinationScope) {
