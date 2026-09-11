@@ -198,7 +198,7 @@ export function LtmWorkspace({
         {availablePanes.length ? (
           <div
             data-ltm-workspace-switcher
-            className="mari-editor-tab-rail flex gap-1 rounded-lg border p-1"
+            className="ltm-workspace-switcher flex gap-1 rounded-lg border p-1"
             role="tablist"
             aria-label={switcherLabel}
           >
