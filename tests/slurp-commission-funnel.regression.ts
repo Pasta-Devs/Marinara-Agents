@@ -9,10 +9,6 @@ const storage = readFileSync(
   "packages/slurp2/src/engine/packages/server/src/services/storage/slurp-messages.storage.ts",
   "utf8",
 );
-const maintainedStorage = readFileSync(
-  "sources/engine/packages/server/src/services/storage/slurp-messages.storage.ts",
-  "utf8",
-);
 const world = readFileSync(
   "packages/slurp2/src/engine/packages/server/src/services/slurp/slurp-world.operation.ts",
   "utf8",
@@ -38,7 +34,7 @@ assert.match(routes, /commissionDeliveryRequests\.has\(commissionId\)/u);
 
 // A fresh delivery lease belongs to the other worker. A stale lease can be conditionally reclaimed,
 // while a persisted stable message completes without another send.
-for (const copy of [storage, maintainedStorage]) {
+for (const copy of [storage]) {
   const deliverySection = copy.match(/const deliveryId = `commission:\$\{id\}:delivery`[\s\S]*?let message/u)?.[0];
   const claimRecovery = deliverySection?.match(/if \(!claimed\) \{[\s\S]*?(?=\n\s*let message)/u)?.[0];
   assert.ok(deliverySection, "commission delivery claim must exist");

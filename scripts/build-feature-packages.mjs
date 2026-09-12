@@ -171,6 +171,11 @@ const slurp2OwnedSourcePaths = [
   "packages/server/src/services/storage/slurp-messages.types.ts",
   "packages/server/src/services/storage/slurp-reply-queue.storage.ts",
   "packages/server/src/services/storage/slurp-reply-methods.ts",
+  // Without these three the builder captures the remaster's own files into sources/engine as
+  // generic Engine material, which puts slurp2_* table names into Noodle's build input.
+  "packages/server/src/services/storage/slurp-events.storage.ts",
+  "packages/server/src/services/storage/slurp-population.storage.ts",
+  "packages/server/src/services/storage/slurp-refresh-run-retention.ts",
 ];
 // Release builds must bundle the current source; runtime reuse is for explicit non-release verification builds.
 const releaseBuild = process.env.MARINARA_RELEASE_BUILD !== "0";

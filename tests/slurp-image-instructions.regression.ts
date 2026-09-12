@@ -5,7 +5,6 @@ import { compileImagePrompt } from "../sources/engine/packages/shared/dist/utils
 import { normalizeImageGenerationProfile } from "../sources/engine/packages/shared/dist/constants/image-generation-defaults.js";
 import { normalizeImageStyleProfileSettings } from "../sources/engine/packages/shared/dist/constants/image-style-profiles.js";
 import {
-  prepareNoodleImageProviderPrompt,
   selectNoodleImageProviderPrompt,
 } from "../packages/slurp2/src/engine/packages/server/src/services/slurp/slurp-image-prompt";
 
@@ -23,16 +22,16 @@ const emptyPromptPreset = normalizeImageGenerationProfile(
   { styleProfileId: "anime", automatic1111: { promptPrefix: "", negativePromptPrefix: "" } },
   "automatic1111",
 ).profile;
-const rewrittenProviderPrompt = prepareNoodleImageProviderPrompt({
-  rewrittenPrompt: "A person reading beside a window.",
+// The remaster compiles the rewrite at the call site instead of behind a prepare helper, so the
+// style profile is applied to the interpretation model's output before the provider sees it.
+const rewrittenProviderPrompt = selectNoodleImageProviderPrompt({
+  rewrittenPrompt: compileImagePrompt({
+    kind: "illustration",
+    prompt: "A person reading beside a window.",
+    styleProfiles: animeStyles,
+    imageDefaults: emptyPromptPreset,
+  }).prompt,
   rawPrompt: "A person reading beside a window.",
-  compilePrompt: (prompt) =>
-    compileImagePrompt({
-      kind: "illustration",
-      prompt,
-      styleProfiles: animeStyles,
-      imageDefaults: emptyPromptPreset,
-    }).prompt,
 });
 assert.match(rewrittenProviderPrompt, /anime style/u);
 assert.match(rewrittenProviderPrompt, /visual novel CG/u);
@@ -166,7 +165,7 @@ for (const source of [images, publicImages]) {
     /privateContext: \[characterPersonality\],\s*guidanceContext: \[configuredImageInstructions, connectionImageInstructions\],/u,
     "art style and image preferences must reach the provider; personality is checked at any length",
   );
-  assert.match(source, /prepareNoodleImageProviderPrompt/u);
+  assert.match(source, /selectNoodleImageProviderPrompt/u);
   // Both fallback paths — interpretation disabled, and a rejected rewrite — must still carry style.
   assert.match(source, /compiledDraft|compiledPrompt/u);
   // A reviewed prompt is recompiled so the style profile survives the review path.

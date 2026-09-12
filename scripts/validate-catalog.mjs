@@ -223,6 +223,16 @@ for (const [packageId, ownedSourcePaths] of [
   }
 }
 
+// Hierarchical Maps and Long-Term Memory have always asserted this; Slurp never did, which is how
+// ten stale copies of package-owned files survived in sources/engine long after the split. A
+// captured copy is worse than dead weight now: the remaster's slurp2_* table names would become
+// build input for Noodle, and tests that read the snapshot would check the wrong tree.
+for (const relativePath of ["packages/server/src/db/schema/slurp.ts", ...slurp2OwnedSourcePaths]) {
+  if (existsSync(join(repoRoot, "sources/engine", relativePath))) {
+    throw new Error(`Slurp source must not be captured as generic Engine material: ${relativePath}`);
+  }
+}
+
 const longTermMemorySourceRoot = join(repoRoot, "packages/long-term-memory/src/engine");
 const longTermMemoryBoundary = await assertPackagePrivateImportBoundary({
   sourceRoot: longTermMemorySourceRoot,

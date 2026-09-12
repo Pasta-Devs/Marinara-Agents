@@ -23,7 +23,6 @@ assert.match(scheduler, /applyFollowUpBoundary\(messages, threadRow\.id, reply\.
 // 2.2 — the thread route and the client type both carry the scheduled follow-ups the UI renders.
 for (const route of [
   "packages/slurp2/src/engine/packages/server/src/routes/slurp-messages.routes.ts",
-  "sources/engine/packages/server/src/routes/slurp-messages.routes.ts",
 ]) {
   assert.match(read(route), /scheduledFollowUps: thread\.scheduledFollowUps/u, route);
 }

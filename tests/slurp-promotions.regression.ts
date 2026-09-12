@@ -18,7 +18,7 @@ const ads = readFileSync(
 assert.doesNotMatch(ads, /creatorAdForProfile/u);
 // The stored state key is deliberately unchanged by the garnish-ads rename, so
 // existing hidden-ad lists survive.
-assert.match(ads, /slurp\.viewer\.\$\{subjectId\}\.ads/u);
+assert.match(ads, /slurp2\.viewer\.\$\{subjectId\}\.ads/u);
 
 const seam = readFileSync(
   "packages/slurp2/src/engine/packages/server/src/services/slurp/slurp-garnish-context.ts",

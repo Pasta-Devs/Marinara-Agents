@@ -104,7 +104,7 @@ assert.doesNotMatch(replyGeneration, /"[^"\n]*NoodleR/u);
 
 // Creator settings must stay package-owned. The migration reads prior Slurp values once, but
 // active normalization and writes must not use the public Noodle schema, defaults, or key.
-assert.match(storage, /const SLURP_SETTINGS_KEY = "slurp\.settings";/u);
+assert.match(storage, /const SLURP_SETTINGS_KEY = "slurp2\.settings";/u);
 assert.match(storage, /export const slurpSettingsSchema = z\.object\(/u);
 assert.match(storage, /export type SlurpSettings = z\.infer<typeof slurpSettingsSchema>;/u);
 assert.doesNotMatch(storage, /DEFAULT_NOODLE_SETTINGS|noodleSettingsSchema|NoodleSettingsUpdateInput/u);

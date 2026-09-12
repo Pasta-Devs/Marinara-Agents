@@ -125,7 +125,7 @@ assert.match(routes, /first-posts\/enqueue/u, "Onboarding must enqueue first-pos
 assert.match(routes, /first-posts\/status/u, "Onboarding must expose first-post status polling");
 assert.match(queue, /const MAX_ATTEMPTS = 3/u, "First-post jobs must have bounded retries");
 assert.match(queue, /status: retry \? "queued" : "failed"/u, "Temporary first-post failures must return to the queue");
-assert.match(schema, /slurp_first_post_jobs/u, "First-post jobs must survive the request that created them");
+assert.match(schema, /slurp2_first_post_jobs/u, "First-post jobs must survive the request that created them");
 for (const key of [
   "ui.noodle.noodlerwizard.completion.creationFailed.title",
   "ui.noodle.noodlerwizard.completion.creationFailed.detail",

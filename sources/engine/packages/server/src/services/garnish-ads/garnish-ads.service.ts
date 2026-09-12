@@ -11,11 +11,11 @@ import {
 } from "./garnish-ads.types.js";
 
 /**
- * Storage key for a subject's ad state. The `slurp.viewer.` prefix is a stored
+ * Storage key for a subject's ad state. The `slurp2.viewer.` prefix is a stored
  * data key, not an identifier, and it is deliberately unchanged: renaming it
  * would silently drop every existing hidden-ad list.
  */
-const stateKey = (subjectId: string) => `slurp.viewer.${subjectId}.ads`;
+const stateKey = (subjectId: string) => `slurp2.viewer.${subjectId}.ads`;
 
 function cleanTags(tags: readonly string[] | undefined): string[] {
   return [...new Set((tags ?? []).map((tag) => tag.trim().toLowerCase()).filter(Boolean))];

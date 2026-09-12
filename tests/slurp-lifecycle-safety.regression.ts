@@ -306,17 +306,17 @@ assert.match(settings, /snap-x grid-flow-col/u, "creator settings must stay brow
 assert.match(settings, /xl:sticky xl:top-4/u, "the wide-screen Creator list must remain visible beside its detail");
 assert.match(settings, /ui\.slurp\.settings\.creators\.personaAutomationDetail/u);
 assert.match(settings, /ui\.slurp\.settings\.creators\.moreActions/u);
+// slurp2 runs no legacy migration: a legacy Slurp can be installed beside it, and reading or
+// rewriting its rows is exactly what the split exists to prevent. Listing stage profiles must
+// still be a pure read.
 const profileList = storage.slice(
   storage.indexOf("async listNoodlerStageProfiles"),
-  storage.indexOf("async migrateLegacyNoodlerSourceSnapshots"),
+  storage.indexOf("async createNoodlerAccount"),
 );
-assert.ok(profileList.length > 0, "listNoodlerStageProfiles must precede migrateLegacyNoodlerSourceSnapshots");
+assert.ok(profileList.length > 0, "listNoodlerStageProfiles must stay present");
 assert.doesNotMatch(profileList, /updateNoodlerSourceSnapshot|patchAccountSettings/u);
-assert.match(storage, /async migrateLegacyNoodlerSourceSnapshots/u);
-assert.match(storage, /minimizeNoodlerSourceSnapshot\(baseline, disclosureMode\)/u);
-assert.match(storage, /NOODLER_SOURCE_SNAPSHOT_MIGRATION_KEY/u);
-assert.match(storage, /settingsStore\.set\(NOODLER_SOURCE_SNAPSHOT_MIGRATION_KEY, "1"\)/u);
-assert.match(serverEntry, /await createSlurpStorage\(app\.db\)\.migrateLegacyNoodlerSourceSnapshots\(\)/u);
+assert.doesNotMatch(storage, /migrateLegacy/u, "slurp2 storage must not carry a legacy migration");
+assert.doesNotMatch(serverEntry, /migrateLegacy/u, "slurp2 activation must not run a legacy migration");
 const dismissRoute = routes.slice(
   routes.indexOf('app.post("/noodler/accounts/:id/source/dismiss"'),
   routes.indexOf('app.post("/noodler/accounts/:id/source/adopt-identity"'),

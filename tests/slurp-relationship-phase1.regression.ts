@@ -5,23 +5,12 @@ const storage = readFileSync(
   "packages/slurp2/src/engine/packages/server/src/services/storage/slurp-messages.storage.ts",
   "utf8",
 );
-const sourceStorage = readFileSync(
-  "sources/engine/packages/server/src/services/storage/slurp-messages.storage.ts",
-  "utf8",
-);
 const route = readFileSync("packages/slurp2/src/engine/packages/server/src/routes/slurp-messages.routes.ts", "utf8");
-const sourceRoute = readFileSync("sources/engine/packages/server/src/routes/slurp-messages.routes.ts", "utf8");
 const profileRoute = readFileSync("packages/slurp2/src/engine/packages/server/src/routes/slurp.routes.ts", "utf8");
 const client = readFileSync("packages/slurp2/src/engine/packages/client/src/components/slurp/SlurpMessages.tsx", "utf8");
 const slurpClientHook = readFileSync("packages/slurp2/src/engine/packages/client/src/hooks/use-slurp.ts", "utf8");
 const slurp = readFileSync("packages/slurp2/src/engine/packages/server/src/services/storage/slurp.storage.ts", "utf8");
 const packageSchema = readFileSync("packages/slurp2/src/engine/packages/server/src/db/schema/slurp.ts", "utf8");
-const sourceSchema = readFileSync("sources/engine/packages/server/src/db/schema/slurp.ts", "utf8");
-assert.equal(
-  sourceSchema.match(/export const slurpEvents = fileTable\([\s\S]*?\n\}\);/u)?.[0],
-  packageSchema.match(/export const slurpEvents = fileTable\([\s\S]*?\n\}\);/u)?.[0],
-  "captured slurpEvents schema must match the package definition",
-);
 
 // A paid request must compensate both sides when income or notification fails after the debit.
 assert.match(
@@ -64,7 +53,7 @@ assert.match(
   /if \(!current\.refundedAt\)[\s\S]*?`\$\{compensationId\}:refund`[\s\S]*?status: "partial"/u,
   "refund progress must persist independently so reversal retries cannot refund twice",
 );
-for (const copy of [storage, sourceStorage]) {
+for (const copy of [storage]) {
   const compensationFlow = copy.slice(
     copy.indexOf("async function compensateSlurpPayment("),
     copy.indexOf("async function persistSlurpPaymentCreditedAmount"),
@@ -77,7 +66,7 @@ assert.match(
   /creditedAmount === null[\s\S]*?Matching creator income credit amount was not found/u,
   "legacy compensation without credit proof must fail closed",
 );
-for (const copy of [storage, sourceStorage]) {
+for (const copy of [storage]) {
   const commissionAcceptance = copy.slice(
     copy.indexOf("async acceptCommissionUnlocked"),
     copy.indexOf("\n    /**", copy.indexOf("async acceptCommissionUnlocked")),
@@ -184,7 +173,7 @@ for (const copy of [storage, sourceStorage]) {
     /tipOperationId[\s\S]*?tipCreator\([\s\S]*?tipOperationId[\s\S]*?creditOperationId: tipOperationId/u,
   );
 }
-for (const copy of [storage, sourceStorage]) {
+for (const copy of [storage]) {
   assert.match(
     copy,
     /deliveryClaimToken = newId\(\)[\s\S]*?deliveryClaimedAt[\s\S]*?Date\.now\(\) - 5 \* 60 \* 1000/u,
@@ -221,7 +210,7 @@ assert.match(
   /note: "cancelled commission"[\s\S]*?new Error\("Commission cancellation requires payment compensation"\)/u,
 );
 assert.match(storage, /current\.deliveryId[\s\S]*?state: "cancellation_pending"[\s\S]*?deliverAt: null/u);
-for (const copy of [storage, sourceStorage]) {
+for (const copy of [storage]) {
   assert.match(
     copy,
     /current\.state === "cancellation_pending" && current\.cancellationId !== cancellationId[\s\S]*?pending\.cancellationId !== cancellationId/u,
@@ -251,7 +240,7 @@ assert.match(
   /id: `commission:\$\{(?:id|commission\.id)\}:cancellation-message`[\s\S]*?content: "The fan cancelled this commission\. The payment was refunded\."[\s\S]*?state: "declined"/u,
   "the cancellation message must use one stable ID and be durable before the terminal state update",
 );
-for (const copy of [storage, sourceStorage]) {
+for (const copy of [storage]) {
   const pendingRecoveryStart = copy.indexOf("async recoverPendingPayments");
   const pendingRecovery = copy.slice(pendingRecoveryStart, copy.indexOf("async getThread", pendingRecoveryStart));
   assert.match(
@@ -305,7 +294,7 @@ assert.deepEqual(
       /hasWalletSpendOperation\(viewer\.id, tipOperationId\)[\s\S]*?compensateSlurpPaymentForDatabase\([\s\S]*?tipOperationId,\s*\);/u.test(
         profileTipRoute,
       ),
-    dmCompensatesEveryProvenCharge: [storage, sourceStorage].every((copy) =>
+    dmCompensatesEveryProvenCharge: [storage].every((copy) =>
       /let charged = false[\s\S]*?tipCreator\([^)]*tipOperationId\)[\s\S]*?charged = true[\s\S]*?appendMessage[\s\S]*?catch \(error\) \{[\s\S]*?charged \|\| \(await slurp\.hasWalletSpendOperation\(viewerAccountId, tipOperationId\)\)[\s\S]*?compensateSlurpPayment/u.test(
         copy.slice(
           copy.indexOf("async tipInThreadUnlocked"),
@@ -327,7 +316,7 @@ assert.match(
   /claimSlurpPaymentIntentForDatabase\([\s\S]*?note: "profile tip"[\s\S]*?creditOperationId: tipOperationId[\s\S]*?tipOperationId,[\s\S]*?tipCreator\(/u,
   "profile tips must persist and claim their stable payment intent before debit",
 );
-for (const copy of [storage, sourceStorage]) {
+for (const copy of [storage]) {
   assert.match(
     copy,
     /existing\.viewerAccountId[\s\S]*?payment\.viewerAccountId[\s\S]*?existing\.creatorAccountId[\s\S]*?payment\.creatorAccountId[\s\S]*?existing\.amount[\s\S]*?payment\.price[\s\S]*?return "unpayable"/u,
@@ -364,7 +353,7 @@ assert.doesNotMatch(
   /recordCreatorEvent|advanceAudienceTie/u,
   "the shared tip transfer must not apply event or relationship effects before the business result is durable",
 );
-for (const copy of [storage, sourceStorage]) {
+for (const copy of [storage]) {
   assert.match(
     copy,
     /async function applySlurpTipEffects[\s\S]*?operationId: `\$\{paymentId\}:event`[\s\S]*?advanceTie[\s\S]*?effectsAppliedAt: now\(\)/u,
@@ -392,15 +381,13 @@ for (const field of [
   "deliveryClaimedAt",
 ]) {
   assert.match(packageSchema, new RegExp(`export const slurpCommissions[\\s\\S]*${field}:`, "u"));
-  assert.match(sourceSchema, new RegExp(`export const slurpCommissions[\\s\\S]*${field}:`, "u"));
 }
 for (const field of ["note", "creditOperationId", "creditedAmount", "effectsAppliedAt"]) {
   assert.match(packageSchema, new RegExp(`export const slurpPaymentCompensations[\\s\\S]*${field}:`, "u"));
-  assert.match(sourceSchema, new RegExp(`export const slurpPaymentCompensations[\\s\\S]*${field}:`, "u"));
 }
 assert.match(storage, /async recoverPendingPayments\(\)[\s\S]*status, "charged"[\s\S]*status, "failed"/u);
 assert.match(storage, /recoverPendingPayments\(\)/u);
-for (const copy of [storage, sourceStorage]) {
+for (const copy of [storage]) {
   assert.match(
     copy,
     /hasCompletedSlurpPaymentOperation[\s\S]*note === "message request"[\s\S]*slurpThreads[\s\S]*viewerAccountId[\s\S]*creatorAccountId/u,
@@ -447,7 +434,7 @@ for (const copy of [storage, sourceStorage]) {
   );
   assert.match(copy, /spendCoins\([\s\S]*?markSlurpPaymentIntentCharged\([\s\S]*?creditCreatorIncome/u);
 }
-for (const copy of [storage, sourceStorage]) {
+for (const copy of [storage]) {
   const dmTip = copy.slice(
     copy.indexOf("async tipInThreadUnlocked"),
     copy.indexOf("async resolveRequest", copy.indexOf("async tipInThreadUnlocked")),
@@ -464,7 +451,7 @@ for (const copy of [storage, sourceStorage]) {
   );
   assert.doesNotMatch(dmTip, /tip-compensation/u, "DM compensation must reuse the stable payment intent");
 }
-for (const copy of [route, sourceRoute]) {
+for (const copy of [route]) {
   assert.match(
     copy,
     /const tipSchema = z\.object\([\s\S]*?requestId: z\.string\(\)\.trim\(\)\.min\(8\)\.max\(100\)\.optional\(\)[\s\S]*?messages\.tipInThread\([\s\S]*?parsed\.data\.requestId/u,
@@ -486,7 +473,7 @@ assert.match(
   /getCreatorIncomeOperationAmount[\s\S]*?earnings\.receipts\[id\][\s\S]*?receipt\.amount > 0/u,
   "creator earnings lookup must expose the exact credited ledger amount",
 );
-for (const copy of [storage, sourceStorage]) {
+for (const copy of [storage]) {
   assert.match(
     copy,
     /creditCreatorIncome\(creatorAccountId, feePaid[\s\S]*?persistSlurpPaymentCreditedAmount\([\s\S]*?messageRequestId/u,

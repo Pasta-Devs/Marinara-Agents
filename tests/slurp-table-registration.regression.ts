@@ -13,15 +13,29 @@ assert.match(entry, /import \* as slurpSchema from "\.\.\/\.\.\/db\/schema\/slur
 assert.match(entry, /registerTables\(Object\.values\(slurpSchema\)\)/u);
 
 // Registration has to happen before anything reads or writes, or the first storage call still
-// throws. The legacy-snapshot migration is the earliest storage touch in activate().
+// throws. Creating the messages storage is the earliest storage touch in activate().
 const register = entry.indexOf("registerTables(Object.values(slurpSchema))");
-const firstStorage = entry.indexOf("migrateLegacyNoodlerSourceSnapshots");
+const firstStorage = entry.indexOf("createSlurpMessagesStorage(app.db)");
 assert.ok(register > 0 && register < firstStorage, "tables must be registered before storage use");
 
-// Hosts older than the Engine's registerTables API must keep working instead of failing to
-// activate. Anything that shipped with the host stays available there.
-assert.match(entry, /registerTables\?\./u, "the call must tolerate a host without the API");
-assert.match(entry, /else app\.log\?\.warn\(/u, "an unsupported host must be reported, not silent");
+// Unlike legacy Slurp, every slurp2 table is package-owned: the host image knows only the
+// legacy `slurp_*` names. A host without registerTables therefore has nowhere to put any of
+// this package's data, so activation must fail loudly instead of degrading into a Slurp with
+// no storage at all.
+assert.match(entry, /if \(!registerTables\) \{/u, "a host without the API must fail activation");
+assert.match(entry, /Update the Engine to 2\.4\.5 or newer/u, "the failure must name the fix");
+
+// No legacy migration may run: a legacy Slurp can be installed beside this package and its
+// rows are not ours to read, move, or rewrite.
+assert.doesNotMatch(entry, /migrateLegacy/u, "slurp2 must not touch legacy Slurp data");
+
+// Every table this package declares must carry the slurp2_ prefix. Sharing a name with the
+// host's built-in slurp_* tables makes registerTables keep the existing definition, which
+// silently hands legacy Slurp's rows to this package.
+const schemaSource = readFileSync(join(src, "db/schema/slurp.ts"), "utf8");
+for (const [, table] of schemaSource.matchAll(/fileTable\(\s*"([a-z0-9_]+)"/gu)) {
+  assert.ok(table.startsWith("slurp2_"), `table ${table} must be namespaced to slurp2`);
+}
 
 // The schema module is the single source of truth: no hand-maintained list to drift.
 const schema = readFileSync(join(src, "db/schema/slurp.ts"), "utf8");

@@ -1,37 +1,37 @@
 {
   "schemaVersion": 1,
-  "id": "slurp",
-  "name": "Slurp",
-  "version": "1.2.64",
-  "description": "The standalone successor to NoodleR: create a local Creator profile from an Engine character or persona, publish public or locked posts, and simulate subscriptions and audience activity. Install it, restart Marinara Engine when prompted, then open Home → Slurp.",
+  "id": "slurp2",
+  "name": "Slurp Remastered",
+  "version": "0.0.1",
+  "description": "The Slurp remaster. It installs beside Slurp Legacy and keeps its own separate data: create a local Creator profile from an Engine character or persona, publish public or locked posts, and simulate subscriptions and audience activity. Install it, restart Marinara Engine when prompted, then open Home → Slurp Remastered.",
   "localizations": {
     "de": {
-      "name": "Slurp",
-      "description": "Erstelle ein lokales Creator-Profil aus einem Engine-Charakter oder einer Engine-Persona, veröffentliche öffentliche oder gesperrte Beiträge und simuliere Abonnements und Publikumsaktivität. Installiere das Paket, starte Marinara Engine nach Aufforderung neu und öffne dann unter Home den Tab Slurp.",
+      "name": "Slurp Remastered",
+      "description": "Die Neufassung von Slurp. Sie wird neben Slurp Legacy installiert und behaelt eigene, getrennte Daten: Erstelle ein lokales Creator-Profil aus einem Engine-Charakter oder einer Engine-Persona, veroeffentliche oeffentliche oder gesperrte Beitraege und simuliere Abonnements und Publikumsaktivitaet.",
       "homeBrowserTab": {
-        "label": "Slurp",
-        "ariaLabel": "Slurp öffnen"
+        "label": "Slurp Remastered",
+        "ariaLabel": "Slurp Remastered oeffnen"
       }
     },
     "ko": {
-      "name": "Slurp",
-      "description": "Engine 캐릭터나 Engine 페르소나로 로컬 크리에이터 프로필을 만들고, 공개 또는 잠긴 Slurp 게시물을 게시하며, 구독 및 청중 활동을 시뮬레이션합니다. 패키지를 설치하고 안내에 따라 Marinara Engine을 다시 시작한 다음 홈 → Slurp를 여세요.",
+      "name": "Slurp Remastered",
+      "description": "Slurp의 리메이스터입니다. Slurp Legacy와 함께 설치되며 데이터를 따로 보관합니다. Engine 캐릭터나 Engine 페르소나로 로컬 크리에이터 프로필을 만들고, 공개 또는 잠긴 게시물을 게시하며, 구독 및 청중 활동을 시뮬레이션합니다.",
       "homeBrowserTab": {
-        "label": "Slurp",
-        "ariaLabel": "Slurp 열기"
+        "label": "Slurp Remastered",
+        "ariaLabel": "Slurp Remastered 열기"
       }
     },
     "pl": {
-      "name": "Slurp",
-      "description": "Utwórz lokalne profile twórców z postaci silnika lub person silnika, publikuj publiczne lub zablokowane posty Slurp i symuluj subskrypcje oraz aktywność publiczności. Zainstaluj pakiet, uruchom ponownie Marinara Engine po wyświetleniu monitu, a następnie otwórz zakładkę Slurp na stronie głównej.",
+      "name": "Slurp Remastered",
+      "description": "Odnowiona wersja Slurp. Instaluje sie obok Slurp Legacy i przechowuje wlasne, oddzielne dane: utworz lokalny profil tworcy z postaci silnika lub persony silnika, publikuj publiczne lub zablokowane posty i symuluj subskrypcje oraz aktywnosc publicznosci.",
       "homeBrowserTab": {
-        "label": "Slurp",
-        "ariaLabel": "Otwórz Slurp"
+        "label": "Slurp Remastered",
+        "ariaLabel": "Otworz Slurp Remastered"
       }
     }
   },
   "engine": {
-    "min": "2.4.3",
+    "min": "2.4.5",
     "maxExclusive": "4.0.0"
   },
   "kind": [
@@ -47,36 +47,36 @@
       "home-browser-tab"
     ],
     "homeBrowserTab": {
-      "label": "Slurp",
-      "ariaLabel": "Open Slurp",
+      "label": "Slurp Remastered",
+      "ariaLabel": "Open Slurp Remastered",
       "iconPaths": [
-        "slurp-logo.png"
+        "slurp2-logo.png"
       ]
     }
   },
   "files": [
     {
       "path": "agents.json",
-      "sha256": "05408a5f537cef354c9f4ef9340825c9427e1774d3cdd1f29435c3b1cf39a6c4",
-      "bytes": 625
+      "sha256": "8f6dffb7ebb68257303c3906fd283d4fad8d558c79a272c83eadda0d8328cca3",
+      "bytes": 685
     },
     {
       "path": "server.mjs",
-      "sha256": "4937ec06c267123978920cbbfa9caadcbcf8c9f6793a4e7d2ee4498df1995c0c",
-      "bytes": 2039633
+      "sha256": "30c9920089a033aae50a8ac727f90929840492c0155381159639fa49f24673fb",
+      "bytes": 2485195
     },
     {
       "path": "client.js",
-      "sha256": "1d469de4a0c298a1a3233d863337a10bfdd0d1b0fb89448d27625db64f85142d",
-      "bytes": 2881272
+      "sha256": "09b3e80d00581c7c0d9bd46bf78a717d8eee1e14029d71783254cd18efc2ceb0",
+      "bytes": 2963749
     },
     {
-      "path": "slurp-logo.png",
+      "path": "slurp2-logo.png",
       "sha256": "722def3c01846167c9979b0408f380f923c520e7515aed1584de0d879131a75b",
       "bytes": 31677
     },
     {
-      "path": "slurpagent.png",
+      "path": "slurp2agent.png",
       "sha256": "47805313b5ec8dbc608fec82c4d51f1f82020afe4f286a04919b59cc8ef06f37",
       "bytes": 120424
     }
