@@ -3302,12 +3302,6 @@ async function main() {
         1,
         "branch family is searchable by a member branch display name",
       );
-      await sourceScopePicker.locator("[data-ltm-scope-picker-popup] input").fill("Current Final Branch");
-      assert.equal(
-        await sourceScopePicker.locator('[data-ltm-scope-option="chat:desktop-chat"]').count(),
-        1,
-        "current target is searchable by its display name",
-      );
       await sourceScopePicker.locator("[data-ltm-scope-picker-popup] input").fill("");
       assert.equal(
         await sourceScopePicker.locator('[role="option"][data-ltm-scope-option="chat:memory-chat"]').count(),
@@ -3368,6 +3362,13 @@ async function main() {
       await destinationPanel.locator('[data-ltm-availability-tab="chat"]').click();
       assert.equal(await destinationPanel.locator('[data-ltm-availability-target="chat:desktop-chat"]').count(), 1);
       assert.equal(await destinationPanel.locator('[data-ltm-availability-target="persona:persona-a"]').count(), 0);
+      await destinationPanel.locator('[data-ltm-availability-search="chat"]').fill("Current Final Branch");
+      assert.equal(
+        await destinationPanel.locator('[data-ltm-availability-target="chat:desktop-chat"]').count(),
+        1,
+        "current target is searchable by its display name through the destination filter",
+      );
+      await destinationPanel.locator('[data-ltm-availability-search="chat"]').fill("");
       await destinationPanel.locator('[data-ltm-availability-tab="branch"]').click();
       assert.equal(await destinationPanel.locator('[data-ltm-availability-target="branch:conversation-a"]').count(), 1);
       assert.equal(await destinationPanel.locator('[data-ltm-availability-target="branch:valid-group"]').count(), 1);
